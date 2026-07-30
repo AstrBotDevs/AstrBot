@@ -47,31 +47,77 @@ _BLOCKED_COMMAND_PATTERNS = [
     " kill -9 ",
     " killall ",
 ]
-_LINUX_SANDBOX_MAX_CPU_SECONDS = 300
-_LINUX_SANDBOX_MAX_FILE_BYTES = 100 * 1024 * 1024
-_LINUX_SANDBOX_MAX_MEMORY_BYTES = 1024 * 1024 * 1024
-_LINUX_SANDBOX_MAX_OPEN_FILES = 256
-_LINUX_SANDBOX_MAX_PROCESSES = 256
-_LINUX_SANDBOX_MAX_OUTPUT_BYTES = 10 * 1024 * 1024
+_LOCAL_SANDBOX_MAX_CPU_SECONDS = 300
+_LOCAL_SANDBOX_MAX_FILE_BYTES = 100 * 1024 * 1024
+_LOCAL_SANDBOX_MAX_MEMORY_BYTES = 1024 * 1024 * 1024
+_LOCAL_SANDBOX_MAX_OPEN_FILES = 256
+_LOCAL_SANDBOX_MAX_PROCESSES = 256
+_LOCAL_SANDBOX_MAX_OUTPUT_BYTES = 10 * 1024 * 1024
 _LINUX_SANDBOX_TMP_BYTES = 256 * 1024 * 1024
-_LINUX_SANDBOX_LIMIT_LAUNCHER = f"""
+_LOCAL_SANDBOX_LIMIT_LAUNCHER = f"""
 import os
 import resource
 import sys
 
-limits = (
-    (resource.RLIMIT_CPU, {_LINUX_SANDBOX_MAX_CPU_SECONDS}),
-    (resource.RLIMIT_FSIZE, {_LINUX_SANDBOX_MAX_FILE_BYTES}),
-    (resource.RLIMIT_AS, {_LINUX_SANDBOX_MAX_MEMORY_BYTES}),
-    (resource.RLIMIT_NOFILE, {_LINUX_SANDBOX_MAX_OPEN_FILES}),
-    (resource.RLIMIT_NPROC, {_LINUX_SANDBOX_MAX_PROCESSES}),
+limits = [
+    (resource.RLIMIT_CPU, {_LOCAL_SANDBOX_MAX_CPU_SECONDS}),
+    (resource.RLIMIT_FSIZE, {_LOCAL_SANDBOX_MAX_FILE_BYTES}),
+    (resource.RLIMIT_NOFILE, {_LOCAL_SANDBOX_MAX_OPEN_FILES}),
+    (resource.RLIMIT_NPROC, {_LOCAL_SANDBOX_MAX_PROCESSES}),
     (resource.RLIMIT_CORE, 0),
-)
+]
+if sys.platform.startswith("linux"):
+    # macOS Python starts above this virtual-address limit, so lowering RLIMIT_AS
+    # there fails before the sandboxed payload can run.
+    limits.append((resource.RLIMIT_AS, {_LOCAL_SANDBOX_MAX_MEMORY_BYTES}))
 for kind, requested in limits:
     _, hard = resource.getrlimit(kind)
     value = requested if hard == resource.RLIM_INFINITY else min(requested, hard)
     resource.setrlimit(kind, (value, value))
 os.execvpe(sys.argv[1], sys.argv[1:], os.environ)
+"""
+_MACOS_SEATBELT_PROFILE = """
+(version 1)
+(deny default)
+(deny mach-priv-host-port)
+(import "system.sb")
+
+(allow process-fork)
+(allow process-exec)
+(allow process-info* (target self))
+(deny process-exec
+    (literal "/usr/bin/open")
+    (literal "/usr/bin/osascript"))
+(deny appleevent-send)
+(deny mach-lookup
+    (global-name "com.apple.coreservices.launchservicesd")
+    (global-name "com.apple.lsd.mapdb")
+    (global-name "com.apple.lsd.modifydb")
+    (global-name "com.apple.lsd.open")
+    (global-name "com.apple.lsd.xpc"))
+
+(allow file-read-metadata file-test-existence)
+(allow file-read* file-test-existence
+    (subpath "/bin")
+    (subpath "/usr/bin")
+    (subpath "/usr/libexec")
+    (subpath (param "WORKSPACE"))
+    (subpath (param "PYTHON_PREFIX"))
+    (subpath (param "PYTHON_BASE_PREFIX")))
+(allow file-map-executable
+    (subpath "/bin")
+    (subpath "/usr/bin")
+    (subpath "/usr/libexec")
+    (subpath (param "WORKSPACE"))
+    (subpath (param "PYTHON_PREFIX"))
+    (subpath (param "PYTHON_BASE_PREFIX")))
+(allow file-write*
+    (subpath (param "WORKSPACE")))
+
+(deny file-read*
+    (literal "/private/etc/master.passwd")
+    (literal "/private/etc/passwd"))
+(deny network*)
 """
 
 
@@ -80,13 +126,13 @@ def _is_safe_command(command: str) -> bool:
     return not any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS)
 
 
-def _build_linux_bwrap_command(
+def _build_local_sandbox_command(
     argv: list[str],
     *,
     workspace: Path,
     env: dict[str, str] | None = None,
 ) -> list[str]:
-    """Build a fail-closed bubblewrap command for non-admin Local execution.
+    """Build a fail-closed OS sandbox command for non-admin Local execution.
 
     Args:
         argv: Command and arguments to execute inside the sandbox.
@@ -94,25 +140,75 @@ def _build_linux_bwrap_command(
         env: Additional environment variables exposed inside the sandbox.
 
     Returns:
-        Bubblewrap arguments with namespace, mount, and resource restrictions.
+        Bubblewrap or Seatbelt arguments with filesystem and resource restrictions.
 
     Raises:
-        RuntimeError: If Linux, bubblewrap, or the workspace is unavailable.
-        ValueError: If no command was provided.
+        RuntimeError: If the platform sandbox or workspace is unavailable.
+        ValueError: If the command or an environment variable is invalid.
     """
     if not argv:
         raise ValueError("A sandbox command is required.")
+
+    resolved_workspace = workspace.resolve()
+    if not resolved_workspace.is_dir():
+        raise RuntimeError(f"Sandbox workspace does not exist: {resolved_workspace}")
+
+    normalized_env: dict[str, str] = {}
+    for raw_key, raw_value in (env or {}).items():
+        key = str(raw_key)
+        value = str(raw_value)
+        if not key or "=" in key or "\x00" in key or "\x00" in value:
+            raise ValueError(f"Invalid sandbox environment variable name: {key!r}.")
+        normalized_env[key] = value
+
+    if sys.platform == "darwin":
+        seatbelt_path = shutil.which("sandbox-exec", path="/usr/bin")
+        if seatbelt_path != "/usr/bin/sandbox-exec":
+            raise RuntimeError(
+                "Seatbelt (`/usr/bin/sandbox-exec`) is required for non-admin "
+                "Local execution on macOS."
+            )
+        python_prefix = str(Path(sys.prefix).resolve())
+        python_base_prefix = str(Path(sys.base_prefix).resolve())
+        sandbox_path = f"{Path(sys.executable).resolve().parent}:/usr/bin:/bin"
+        environment = [
+            *(f"{key}={value}" for key, value in sorted(normalized_env.items())),
+            f"PATH={sandbox_path}",
+            f"HOME={resolved_workspace}",
+            f"TMPDIR={resolved_workspace}",
+            "LANG=C.UTF-8",
+        ]
+        return [
+            seatbelt_path,
+            "-D",
+            f"WORKSPACE={resolved_workspace}",
+            "-D",
+            f"PYTHON_PREFIX={python_prefix}",
+            "-D",
+            f"PYTHON_BASE_PREFIX={python_base_prefix}",
+            "-p",
+            _MACOS_SEATBELT_PROFILE,
+            "/usr/bin/env",
+            "-i",
+            *environment,
+            sys.executable,
+            "-I",
+            "-S",
+            "-c",
+            _LOCAL_SANDBOX_LIMIT_LAUNCHER,
+            *argv,
+        ]
+
     if not sys.platform.startswith("linux"):
-        raise RuntimeError("The Local bubblewrap sandbox is only available on Linux.")
+        raise RuntimeError(
+            "The Local execution sandbox is only available on Linux and macOS."
+        )
     bwrap_path = shutil.which("bwrap")
     if not bwrap_path:
         raise RuntimeError(
             "bubblewrap (`bwrap`) is required for non-admin Local execution."
         )
 
-    resolved_workspace = workspace.resolve()
-    if not resolved_workspace.is_dir():
-        raise RuntimeError(f"Sandbox workspace does not exist: {resolved_workspace}")
     if not Path("/bin/sh").exists():
         raise RuntimeError("The Local bubblewrap sandbox requires /bin/sh.")
 
@@ -177,8 +273,8 @@ def _build_linux_bwrap_command(
             str(resolved_workspace),
         )
     )
-    for key, value in sorted((env or {}).items()):
-        command.extend(("--setenv", str(key), str(value)))
+    for key, value in sorted(normalized_env.items()):
+        command.extend(("--setenv", key, value))
     command.extend(
         (
             "--setenv",
@@ -198,7 +294,7 @@ def _build_linux_bwrap_command(
             "-I",
             "-S",
             "-c",
-            _LINUX_SANDBOX_LIMIT_LAUNCHER,
+            _LOCAL_SANDBOX_LIMIT_LAUNCHER,
             *argv,
         )
     )
@@ -382,14 +478,14 @@ class LocalShellComponent(ShellComponent):
             timeout: Hard process lifetime in seconds. None disables it.
             yield_time_ms: Maximum time to wait before returning a session ID.
             max_output_chars: Maximum output bytes returned in this call.
-            sandboxed: Whether to isolate the command with Linux bubblewrap.
+            sandboxed: Whether to isolate the command with the platform sandbox.
 
         Returns:
             Process result with output, status, and session metadata.
 
         Raises:
             PermissionError: If the command matches a blocked pattern.
-            RuntimeError: If the requested bubblewrap sandbox is unavailable.
+            RuntimeError: If the requested platform sandbox is unavailable.
             ValueError: If a timing or output limit is invalid.
         """
         if not _is_safe_command(command):
@@ -404,7 +500,7 @@ class LocalShellComponent(ShellComponent):
         working_dir = Path(cwd).resolve() if cwd else Path(get_astrbot_root()).resolve()
         if sandboxed:
             process_args = tuple(
-                _build_linux_bwrap_command(
+                _build_local_sandbox_command(
                     ["/bin/sh", "-c", command],
                     workspace=working_dir,
                     env={str(k): str(v) for k, v in (env or {}).items()},
@@ -470,7 +566,7 @@ class LocalShellComponent(ShellComponent):
             with output_path.open("ab") as output_file:
                 while chunk := await process.stdout.read(8192):
                     if sandboxed:
-                        remaining = _LINUX_SANDBOX_MAX_OUTPUT_BYTES - output_size
+                        remaining = _LOCAL_SANDBOX_MAX_OUTPUT_BYTES - output_size
                         if remaining <= 0:
                             session.output_limited = True
                             try:
@@ -950,7 +1046,7 @@ class LocalPythonComponent(PythonComponent):
         cwd: str | None = None,
         sandboxed: bool = False,
     ) -> dict[str, Any]:
-        """Execute Python locally, optionally inside the Linux sandbox.
+        """Execute Python locally, optionally inside the platform sandbox.
 
         Args:
             code: Python source to execute.
@@ -958,7 +1054,7 @@ class LocalPythonComponent(PythonComponent):
             timeout: Hard execution timeout in seconds.
             silent: Whether to suppress standard output.
             cwd: Working directory for the process.
-            sandboxed: Whether to isolate execution with Linux bubblewrap.
+            sandboxed: Whether to isolate execution with the platform sandbox.
 
         Returns:
             Python output and error data in the computer component format.
@@ -970,7 +1066,7 @@ class LocalPythonComponent(PythonComponent):
                     Path(cwd).resolve() if cwd else Path(get_astrbot_root()).resolve()
                 )
                 if sandboxed:
-                    run_command = _build_linux_bwrap_command(
+                    run_command = _build_local_sandbox_command(
                         [sys.executable, "-c", code],
                         workspace=working_dir,
                     )
@@ -993,23 +1089,23 @@ class LocalPythonComponent(PythonComponent):
                         else:
                             stdout_file.seek(0)
                             stdout_bytes = stdout_file.read(
-                                _LINUX_SANDBOX_MAX_OUTPUT_BYTES + 1
+                                _LOCAL_SANDBOX_MAX_OUTPUT_BYTES + 1
                             )
                             stdout_limited = (
-                                len(stdout_bytes) > _LINUX_SANDBOX_MAX_OUTPUT_BYTES
+                                len(stdout_bytes) > _LOCAL_SANDBOX_MAX_OUTPUT_BYTES
                             )
                             stdout = _decode_shell_output(
-                                stdout_bytes[:_LINUX_SANDBOX_MAX_OUTPUT_BYTES]
+                                stdout_bytes[:_LOCAL_SANDBOX_MAX_OUTPUT_BYTES]
                             )
                         stderr_file.seek(0)
                         stderr_bytes = stderr_file.read(
-                            _LINUX_SANDBOX_MAX_OUTPUT_BYTES + 1
+                            _LOCAL_SANDBOX_MAX_OUTPUT_BYTES + 1
                         )
                         stderr_limited = (
-                            len(stderr_bytes) > _LINUX_SANDBOX_MAX_OUTPUT_BYTES
+                            len(stderr_bytes) > _LOCAL_SANDBOX_MAX_OUTPUT_BYTES
                         )
                         stderr = _decode_shell_output(
-                            stderr_bytes[:_LINUX_SANDBOX_MAX_OUTPUT_BYTES]
+                            stderr_bytes[:_LOCAL_SANDBOX_MAX_OUTPUT_BYTES]
                         )
                 else:
                     run_command = [
@@ -1032,7 +1128,7 @@ class LocalPythonComponent(PythonComponent):
                 if stdout_limited or stderr_limited:
                     limit_error = (
                         "Execution output exceeded "
-                        f"{_LINUX_SANDBOX_MAX_OUTPUT_BYTES} bytes."
+                        f"{_LOCAL_SANDBOX_MAX_OUTPUT_BYTES} bytes."
                     )
                     stderr = f"{stderr}\n{limit_error}".strip()
                 execution_error = (

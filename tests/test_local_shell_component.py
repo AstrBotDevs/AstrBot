@@ -164,7 +164,7 @@ def test_linux_bwrap_command_is_workspace_only_and_clears_environment(
     monkeypatch.setattr(local_booter.sys, "platform", "linux")
     monkeypatch.setattr(local_booter.shutil, "which", lambda name: f"/usr/bin/{name}")
 
-    command = local_booter._build_linux_bwrap_command(
+    command = local_booter._build_local_sandbox_command(
         ["/bin/sh", "-c", "pwd"],
         workspace=tmp_path,
         env={"CUSTOM_VALUE": "visible"},
@@ -200,14 +200,154 @@ def test_linux_bwrap_command_fails_closed_when_bwrap_is_missing(
     monkeypatch.setattr(local_booter.shutil, "which", lambda _name: None)
 
     with pytest.raises(RuntimeError, match="bubblewrap"):
-        local_booter._build_linux_bwrap_command(
+        local_booter._build_local_sandbox_command(
             ["/bin/sh", "-c", "pwd"],
             workspace=tmp_path,
         )
 
 
+def test_macos_seatbelt_command_restricts_profile_and_environment(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(local_booter.sys, "platform", "darwin")
+    monkeypatch.setattr(
+        local_booter.shutil,
+        "which",
+        lambda name, **_kwargs: f"/usr/bin/{name}",
+    )
+
+    command = local_booter._build_local_sandbox_command(
+        ["/bin/sh", "-c", "pwd"],
+        workspace=tmp_path,
+        env={"CUSTOM_VALUE": "visible", "PATH": "untrusted"},
+    )
+
+    profile = command[command.index("-p") + 1]
+    environment_start = command.index("-i") + 1
+    launcher_start = command.index(sys.executable, environment_start)
+    environment = command[environment_start:launcher_start]
+    workspace = str(tmp_path.resolve())
+
+    assert command[0] == "/usr/bin/sandbox-exec"
+    assert f"WORKSPACE={workspace}" in command
+    assert '(import "system.sb")' in profile
+    assert "(deny default)" in profile
+    assert "(deny network*)" in profile
+    assert '(literal "/usr/bin/open")' in profile
+    assert "(deny appleevent-send)" in profile
+    assert '(global-name "com.apple.coreservices.launchservicesd")' in profile
+    assert "(allow file-write*" in profile
+    assert command[command.index("-p") + 2 : command.index("-p") + 4] == [
+        "/usr/bin/env",
+        "-i",
+    ]
+    assert "CUSTOM_VALUE=visible" in environment
+    assert environment[-4:] == [
+        f"PATH={Path(sys.executable).resolve().parent}:/usr/bin:/bin",
+        f"HOME={workspace}",
+        f"TMPDIR={workspace}",
+        "LANG=C.UTF-8",
+    ]
+    assert command[-3:] == ["/bin/sh", "-c", "pwd"]
+
+
+def test_macos_seatbelt_command_fails_closed_when_tool_is_missing(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(local_booter.sys, "platform", "darwin")
+    monkeypatch.setattr(
+        local_booter.shutil,
+        "which",
+        lambda _name, **_kwargs: None,
+    )
+
+    with pytest.raises(RuntimeError, match="Seatbelt"):
+        local_booter._build_local_sandbox_command(
+            ["/bin/sh", "-c", "pwd"],
+            workspace=tmp_path,
+        )
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Seatbelt is macOS-only")
+def test_macos_seatbelt_enforces_workspace_network_and_environment(tmp_path):
+    outside_file = tmp_path.parent / "seatbelt-outside.txt"
+    outside_file.write_text("host secret", encoding="utf-8")
+    (tmp_path / "input.txt").write_text("allowed", encoding="utf-8")
+    code = f"""
+import os
+import pathlib
+import socket
+import subprocess
+
+workspace = pathlib.Path.cwd()
+assert (workspace / "input.txt").read_text() == "allowed"
+(workspace / "output.txt").write_text("written")
+try:
+    pathlib.Path({str(outside_file)!r}).read_text()
+except OSError:
+    pass
+else:
+    raise SystemExit("host read unexpectedly allowed")
+try:
+    os.kill(int(os.environ["HOST_PID"]), 0)
+except OSError:
+    pass
+else:
+    raise SystemExit("host process unexpectedly visible")
+try:
+    opened = subprocess.run(
+        ["/usr/bin/open", "https://example.com"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    ).returncode == 0
+except OSError:
+    opened = False
+if opened:
+    raise SystemExit("URL broker unexpectedly available")
+try:
+    sock = socket.socket()
+    sock.settimeout(1)
+    connected = sock.connect_ex(("1.1.1.1", 53)) == 0
+except OSError:
+    connected = False
+if connected:
+    raise SystemExit("network unexpectedly available")
+assert os.environ.get("HOST_SECRET") is None
+"""
+    command = local_booter._build_local_sandbox_command(
+        [sys.executable, "-c", code],
+        workspace=tmp_path,
+        env={"HOST_PID": str(os.getpid())},
+    )
+
+    result = subprocess.run(
+        command,
+        cwd=tmp_path,
+        env={"PATH": os.defpath, "HOST_SECRET": "must-not-leak"},
+        capture_output=True,
+        timeout=10,
+    )
+
+    assert result.returncode == 0, local_booter._decode_shell_output(result.stderr)
+    assert (tmp_path / "output.txt").read_text(encoding="utf-8") == "written"
+
+
 @pytest.mark.asyncio
-async def test_managed_shell_uses_linux_bwrap_when_sandboxed(monkeypatch, tmp_path):
+@pytest.mark.parametrize(
+    ("platform_name", "sandbox_executable"),
+    [
+        ("linux", "/usr/bin/bwrap"),
+        ("darwin", "/usr/bin/sandbox-exec"),
+    ],
+)
+async def test_managed_shell_uses_platform_sandbox(
+    monkeypatch,
+    tmp_path,
+    platform_name,
+    sandbox_executable,
+):
     calls = []
 
     class FakeStdout:
@@ -235,8 +375,12 @@ async def test_managed_shell_uses_linux_bwrap_when_sandboxed(monkeypatch, tmp_pa
     async def fail_create_subprocess_shell(*_args, **_kwargs):
         raise AssertionError("Sandboxed commands must use an argument vector.")
 
-    monkeypatch.setattr(local_booter.sys, "platform", "linux")
-    monkeypatch.setattr(local_booter.shutil, "which", lambda _name: "/usr/bin/bwrap")
+    monkeypatch.setattr(local_booter.sys, "platform", platform_name)
+    monkeypatch.setattr(
+        local_booter.shutil,
+        "which",
+        lambda _name, **_kwargs: sandbox_executable,
+    )
     monkeypatch.setattr(
         local_booter.asyncio,
         "create_subprocess_exec",
@@ -258,7 +402,7 @@ async def test_managed_shell_uses_linux_bwrap_when_sandboxed(monkeypatch, tmp_pa
 
     assert result["status"] == "completed"
     assert result["stdout"] == "done\n"
-    assert calls[0][0][0] == "/usr/bin/bwrap"
+    assert calls[0][0][0] == sandbox_executable
     assert calls[0][0][-3:] == ("/bin/sh", "-c", "pwd")
     assert calls[0][1]["env"] == {"PATH": os.defpath}
     assert calls[0][1]["start_new_session"] is True
@@ -297,7 +441,7 @@ async def test_sandboxed_managed_shell_stops_at_output_limit(monkeypatch, tmp_pa
 
     monkeypatch.setattr(local_booter.sys, "platform", "linux")
     monkeypatch.setattr(local_booter.shutil, "which", lambda _name: "/usr/bin/bwrap")
-    monkeypatch.setattr(local_booter, "_LINUX_SANDBOX_MAX_OUTPUT_BYTES", 5)
+    monkeypatch.setattr(local_booter, "_LOCAL_SANDBOX_MAX_OUTPUT_BYTES", 5)
     monkeypatch.setattr(
         local_booter.asyncio,
         "create_subprocess_exec",
@@ -319,7 +463,19 @@ async def test_sandboxed_managed_shell_stops_at_output_limit(monkeypatch, tmp_pa
 
 
 @pytest.mark.asyncio
-async def test_local_python_uses_linux_bwrap_when_sandboxed(monkeypatch, tmp_path):
+@pytest.mark.parametrize(
+    ("platform_name", "sandbox_executable"),
+    [
+        ("linux", "/usr/bin/bwrap"),
+        ("darwin", "/usr/bin/sandbox-exec"),
+    ],
+)
+async def test_local_python_uses_platform_sandbox(
+    monkeypatch,
+    tmp_path,
+    platform_name,
+    sandbox_executable,
+):
     calls = []
 
     def fake_run(*args, **kwargs):
@@ -327,8 +483,12 @@ async def test_local_python_uses_linux_bwrap_when_sandboxed(monkeypatch, tmp_pat
         kwargs["stdout"].write(b"done\n")
         return subprocess.CompletedProcess(args[0], 0)
 
-    monkeypatch.setattr(local_booter.sys, "platform", "linux")
-    monkeypatch.setattr(local_booter.shutil, "which", lambda _name: "/usr/bin/bwrap")
+    monkeypatch.setattr(local_booter.sys, "platform", platform_name)
+    monkeypatch.setattr(
+        local_booter.shutil,
+        "which",
+        lambda _name, **_kwargs: sandbox_executable,
+    )
     monkeypatch.setattr(local_booter.subprocess, "run", fake_run)
 
     result = await LocalPythonComponent().exec(
@@ -338,7 +498,7 @@ async def test_local_python_uses_linux_bwrap_when_sandboxed(monkeypatch, tmp_pat
     )
 
     assert result["data"]["output"]["text"] == "done\n"
-    assert calls[0][0][0][0] == "/usr/bin/bwrap"
+    assert calls[0][0][0][0] == sandbox_executable
     assert calls[0][0][0][-3:] == [sys.executable, "-c", "print('done')"]
     assert calls[0][1]["env"] == {"PATH": os.defpath}
     assert "capture_output" not in calls[0][1]
@@ -352,7 +512,7 @@ async def test_sandboxed_local_python_caps_returned_output(monkeypatch, tmp_path
 
     monkeypatch.setattr(local_booter.sys, "platform", "linux")
     monkeypatch.setattr(local_booter.shutil, "which", lambda _name: "/usr/bin/bwrap")
-    monkeypatch.setattr(local_booter, "_LINUX_SANDBOX_MAX_OUTPUT_BYTES", 5)
+    monkeypatch.setattr(local_booter, "_LOCAL_SANDBOX_MAX_OUTPUT_BYTES", 5)
     monkeypatch.setattr(local_booter.subprocess, "run", fake_run)
 
     result = await LocalPythonComponent().exec(

@@ -79,8 +79,13 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_local_member_python_uses_linux_sandbox(tmp_path, monkeypatch):
-    """Local member Python execution should require the bubblewrap path."""
+@pytest.mark.parametrize("platform_name", ["linux", "darwin"])
+async def test_local_member_python_uses_platform_sandbox(
+    tmp_path,
+    monkeypatch,
+    platform_name,
+):
+    """Local member Python execution should require an OS sandbox."""
     from astrbot.core.tools.computer_tools import util as computer_util
 
     python_exec = AsyncMock(
@@ -92,7 +97,7 @@ async def test_local_member_python_uses_linux_sandbox(tmp_path, monkeypatch):
         "astrbot.core.tools.computer_tools.python.get_local_booter",
         lambda: SimpleNamespace(python=local_python),
     )
-    monkeypatch.setattr(computer_util.sys, "platform", "linux")
+    monkeypatch.setattr(computer_util.sys, "platform", platform_name)
     monkeypatch.setattr(
         "astrbot.core.tools.computer_tools.python.workspace_root_for_context",
         AsyncMock(return_value=tmp_path),
@@ -130,14 +135,14 @@ async def test_local_member_python_uses_linux_sandbox(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_local_member_python_is_denied_outside_linux(monkeypatch):
-    """Local member Python execution should fail closed outside Linux."""
+async def test_local_member_python_is_denied_without_supported_sandbox(monkeypatch):
+    """Local member Python execution should fail closed on other platforms."""
     from astrbot.core.tools.computer_tools import util as computer_util
 
-    monkeypatch.setattr(computer_util.sys, "platform", "darwin")
+    monkeypatch.setattr(computer_util.sys, "platform", "win32")
     monkeypatch.setattr(
         "astrbot.core.tools.computer_tools.python.get_local_booter",
-        lambda: pytest.fail("Local Python must not start outside Linux"),
+        lambda: pytest.fail("Local Python must not start without an OS sandbox"),
     )
     event = SimpleNamespace(
         unified_msg_origin="onebot:GroupMessage:12345",
@@ -160,4 +165,4 @@ async def test_local_member_python_is_denied_outside_linux(monkeypatch):
 
     result = await LocalPythonTool().call(context, code="print('ok')")
 
-    assert "only supported on Linux with bubblewrap" in result
+    assert "Linux with bubblewrap or macOS with Seatbelt" in result

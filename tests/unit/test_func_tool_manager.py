@@ -133,7 +133,12 @@ async def test_local_execute_shell_uses_managed_session(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_local_member_shell_uses_linux_sandbox(monkeypatch, tmp_path):
+@pytest.mark.parametrize("platform_name", ["linux", "darwin"])
+async def test_local_member_shell_uses_platform_sandbox(
+    monkeypatch,
+    tmp_path,
+    platform_name,
+):
     from astrbot.core.tools.computer_tools import shell as shell_tools
     from astrbot.core.tools.computer_tools import util as computer_util
 
@@ -175,7 +180,7 @@ async def test_local_member_shell_uses_linux_sandbox(monkeypatch, tmp_path):
     async def fake_get_booter(context, session_id):
         return booter
 
-    monkeypatch.setattr(computer_util.sys, "platform", "linux")
+    monkeypatch.setattr(computer_util.sys, "platform", platform_name)
     monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
     monkeypatch.setattr(
         shell_tools,
@@ -202,7 +207,7 @@ async def test_local_member_shell_uses_linux_sandbox(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_local_member_shell_is_denied_outside_linux(monkeypatch):
+async def test_local_member_shell_is_denied_without_supported_sandbox(monkeypatch):
     from astrbot.core.tools.computer_tools import util as computer_util
 
     class FakeConfig:
@@ -228,11 +233,11 @@ async def test_local_member_shell_is_denied_outside_linux(monkeypatch):
         },
     )()
 
-    monkeypatch.setattr(computer_util.sys, "platform", "darwin")
+    monkeypatch.setattr(computer_util.sys, "platform", "win32")
 
     result = await LocalExecuteShellTool().call(wrapper, command="pwd")
 
-    assert "only supported on Linux with bubblewrap" in result
+    assert "Linux with bubblewrap or macOS with Seatbelt" in result
 
 
 @pytest.mark.asyncio

@@ -76,7 +76,7 @@ def check_local_execution_permission(
     context: ContextWrapper[AstrAgentContext],
     operation_name: str,
 ) -> tuple[bool, str | None]:
-    """Resolve whether an execution tool needs the Linux Local sandbox.
+    """Resolve whether an execution tool needs an operating-system sandbox.
 
     Args:
         context: Tool call context.
@@ -89,9 +89,9 @@ def check_local_execution_permission(
         return False, permission_error
     if not is_local_runtime(context) or context.context.event.role == "admin":
         return False, None
-    if not sys.platform.startswith("linux"):
+    if not (sys.platform.startswith("linux") or sys.platform == "darwin"):
         return False, (
             "error: Permission denied. Non-admin Local execution is only supported "
-            "on Linux with bubblewrap."
+            "on Linux with bubblewrap or macOS with Seatbelt."
         )
     return True, None

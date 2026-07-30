@@ -174,7 +174,8 @@ class LocalExecuteShellTool(ExecuteShellTool):
     description: str = (
         "Execute a command in the shell. If it is still running after "
         "yield_time_ms, the tool returns a managed shell session ID. "
-        "Non-admin Linux calls run without network access in a workspace-only sandbox."
+        "Non-admin Linux and macOS calls run without network access in a "
+        "workspace-restricted sandbox."
     )
     parameters: dict = field(
         default_factory=lambda: {

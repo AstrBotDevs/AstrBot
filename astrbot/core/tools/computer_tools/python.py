@@ -121,8 +121,8 @@ class LocalPythonTool(FunctionTool):
     name: str = "astrbot_execute_python"
     description: str = (
         f"Execute codes in a Python environment. Current OS: {_OS_NAME}. "
-        "Use system-compatible commands. Non-admin Linux calls run without "
-        "network access in a workspace-only sandbox."
+        "Use system-compatible commands. Non-admin Linux and macOS calls run "
+        "without network access in a workspace-restricted sandbox."
     )
 
     parameters: dict = field(default_factory=lambda: param_schema)
