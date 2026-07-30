@@ -70,11 +70,13 @@ from astrbot.core.tools.computer_tools import (
     GrepTool,
     ListSkillCandidatesTool,
     ListSkillReleasesTool,
+    LocalExecuteShellTool,
     LocalPythonTool,
     PromoteSkillCandidateTool,
     PythonTool,
     RollbackSkillReleaseTool,
     RunBrowserSkillTool,
+    ShellSessionTool,
     SyncSkillReleaseTool,
 )
 from astrbot.core.tools.cron_tools import FutureTaskTool
@@ -430,7 +432,8 @@ def _apply_local_env_tools(req: ProviderRequest, plugin_context: Context) -> Non
     if req.func_tool is None:
         req.func_tool = ToolSet()
     tool_mgr = plugin_context.get_llm_tool_manager()
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
+    req.func_tool.add_tool(LocalExecuteShellTool())
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ShellSessionTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(LocalPythonTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileReadTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
@@ -450,7 +453,11 @@ def _build_local_mode_prompt() -> str:
     return (
         "You have access to the host local environment and can execute shell commands and Python code. "
         f"Current operating system: {system_name}. "
-        f"{shell_hint}"
+        f"{shell_hint} "
+        "Local shell commands automatically return a managed session when they "
+        "outlive the initial wait. Use `astrbot_shell_session` to list, poll, "
+        "write to, interrupt, or terminate those sessions. Do not add `&`, "
+        "`nohup`, or another detachment wrapper for ordinary long-running commands."
     )
 
 

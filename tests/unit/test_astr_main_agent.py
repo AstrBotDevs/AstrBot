@@ -801,9 +801,7 @@ class TestEnsurePersonaAndSkills:
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
             return_value=("conv-persona", persona, None, False)
         )
-        mock_event.get_extra.side_effect = (
-            lambda key: key == "enable_inline_genui"
-        )
+        mock_event.get_extra.side_effect = lambda key: key == "enable_inline_genui"
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id="conv-persona")
 
@@ -818,9 +816,7 @@ class TestEnsurePersonaAndSkills:
     ):
         """Test inline GenUI instructions are added before conversation setup."""
         module = ama
-        mock_event.get_extra.side_effect = (
-            lambda key: key == "enable_inline_genui"
-        )
+        mock_event.get_extra.side_effect = lambda key: key == "enable_inline_genui"
         req = ProviderRequest()
 
         await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
@@ -1156,7 +1152,14 @@ class TestEnsurePersonaAndSkills:
             assert result.provider_request.func_tool is not None
             tool_names = result.provider_request.func_tool.names()
             assert "astrbot_execute_shell" in tool_names
+            assert "astrbot_shell_session" in tool_names
             assert "astrbot_execute_python" in tool_names
+            shell_tool = result.provider_request.func_tool.get_tool(
+                "astrbot_execute_shell"
+            )
+            assert shell_tool is not None
+            assert "background" not in shell_tool.parameters["properties"]
+            assert "yield_time_ms" in shell_tool.parameters["properties"]
         finally:
             if result.reset_coro:
                 result.reset_coro.close()

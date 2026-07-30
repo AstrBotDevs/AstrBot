@@ -1,12 +1,19 @@
 import asyncio
+import inspect
 import json
+from unittest.mock import AsyncMock
 
 import pytest
 
 from astrbot.core import sp
+from astrbot.core.computer.booters.local import LocalShellComponent
 from astrbot.core.provider import func_tool_manager as ftm
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
-from astrbot.core.tools.computer_tools.shell import ExecuteShellTool
+from astrbot.core.tools.computer_tools.shell import (
+    ExecuteShellTool,
+    LocalExecuteShellTool,
+    ShellSessionTool,
+)
 from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.tools.web_search_tools import (
     FirecrawlExtractWebPageTool,
@@ -49,6 +56,120 @@ def test_computer_tools_are_registered_as_builtin_tools():
     assert tool.name == "astrbot_execute_shell"
     assert tool.parameters["properties"]["background"]["default"] is False
     assert manager.is_builtin_tool("astrbot_execute_shell") is True
+    assert manager.is_builtin_tool("astrbot_shell_session") is True
+
+
+def test_local_execute_shell_schema_replaces_background_with_yield():
+    tool = LocalExecuteShellTool()
+
+    assert tool.name == "astrbot_execute_shell"
+    assert "background" not in tool.parameters["properties"]
+    assert tool.parameters["properties"]["yield_time_ms"]["default"] == 10_000
+    assert "background" not in inspect.signature(tool.call).parameters
+
+
+@pytest.mark.asyncio
+async def test_local_execute_shell_uses_managed_session(monkeypatch, tmp_path):
+    from astrbot.core.tools.computer_tools import shell as shell_tools
+
+    shell = LocalShellComponent()
+    shell.exec_managed = AsyncMock(
+        return_value={
+            "session_id": "sh_test",
+            "status": "running",
+            "stdout": "ready\n",
+            "stderr": "",
+            "exit_code": None,
+        }
+    )
+
+    class FakeBooter:
+        pass
+
+    booter = FakeBooter()
+    booter.shell = shell
+
+    class FakeConfig:
+        def get_config(self, umo):
+            return {"provider_settings": {"computer_use_runtime": "local"}}
+
+    class FakeEvent:
+        unified_msg_origin = "umo"
+        role = "admin"
+
+    class FakeAstrContext:
+        context = FakeConfig()
+        event = FakeEvent()
+
+    class FakeWrapper:
+        context = FakeAstrContext()
+
+    async def fake_get_booter(context, session_id):
+        return booter
+
+    monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
+    monkeypatch.setattr(
+        shell_tools,
+        "workspace_root_for_context",
+        AsyncMock(return_value=tmp_path),
+    )
+
+    result = await LocalExecuteShellTool().call(
+        FakeWrapper(),
+        command="python server.py",
+        yield_time_ms=250,
+    )
+
+    assert json.loads(result)["session_id"] == "sh_test"
+    shell.exec_managed.assert_awaited_once_with(
+        "python server.py",
+        owner_id="umo",
+        cwd=str(tmp_path),
+        env={},
+        timeout=None,
+        yield_time_ms=250,
+    )
+
+
+@pytest.mark.asyncio
+async def test_shell_session_tool_lists_sessions_for_current_owner(monkeypatch):
+    from astrbot.core.tools.computer_tools import shell as shell_tools
+
+    shell = LocalShellComponent()
+    shell.list_sessions = AsyncMock(
+        return_value={"sessions": [{"session_id": "sh_test", "status": "running"}]}
+    )
+
+    class FakeBooter:
+        pass
+
+    booter = FakeBooter()
+    booter.shell = shell
+
+    class FakeConfig:
+        def get_config(self, umo):
+            return {"provider_settings": {"computer_use_runtime": "local"}}
+
+    class FakeEvent:
+        unified_msg_origin = "umo"
+        role = "admin"
+
+    class FakeAstrContext:
+        context = FakeConfig()
+        event = FakeEvent()
+
+    class FakeWrapper:
+        context = FakeAstrContext()
+
+    async def fake_get_booter(context, session_id):
+        return booter
+
+    monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
+
+    result = await ShellSessionTool().call(FakeWrapper(), action="list")
+
+    assert json.loads(result)["sessions"][0]["session_id"] == "sh_test"
+    shell.list_sessions.assert_awaited_once_with("umo")
 
 
 @pytest.mark.asyncio
