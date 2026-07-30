@@ -146,13 +146,20 @@ class SQLiteDatabase(BaseDatabase):
                     "ADD COLUMN llm_checkpoint_id VARCHAR DEFAULT NULL"
                 )
             )
-            await conn.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS "
-                    "ix_platform_message_history_llm_checkpoint_id "
-                    "ON platform_message_history (llm_checkpoint_id)"
-                )
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS "
+                "ix_platform_message_history_llm_checkpoint_id "
+                "ON platform_message_history (llm_checkpoint_id)"
             )
+        )
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS "
+                "ix_platform_message_history_platform_user_id "
+                "ON platform_message_history (platform_id, user_id, id)"
+            )
+        )
 
     async def _ensure_chatui_project_workspace_columns(self, conn) -> None:
         """Ensure chatui_projects has workspace configuration columns."""
@@ -621,6 +628,7 @@ class SQLiteDatabase(BaseDatabase):
         sender_id=None,
         sender_name=None,
         llm_checkpoint_id=None,
+        max_messages=None,
     ):
         """Insert a new platform message history record."""
         async with self.get_db() as session:
@@ -635,6 +643,24 @@ class SQLiteDatabase(BaseDatabase):
                     llm_checkpoint_id=llm_checkpoint_id,
                 )
                 session.add(new_history)
+                await session.flush()
+                if max_messages is not None:
+                    keep_ids = (
+                        select(PlatformMessageHistory.id)
+                        .where(
+                            col(PlatformMessageHistory.platform_id) == platform_id,
+                            col(PlatformMessageHistory.user_id) == user_id,
+                        )
+                        .order_by(desc(PlatformMessageHistory.id))
+                        .limit(max(1, int(max_messages)))
+                    )
+                    await session.execute(
+                        delete(PlatformMessageHistory).where(
+                            col(PlatformMessageHistory.platform_id) == platform_id,
+                            col(PlatformMessageHistory.user_id) == user_id,
+                            col(PlatformMessageHistory.id).not_in(keep_ids),
+                        )
+                    )
                 return new_history
 
     async def update_platform_message_history(
@@ -709,7 +735,10 @@ class SQLiteDatabase(BaseDatabase):
                     PlatformMessageHistory.platform_id == platform_id,
                     PlatformMessageHistory.user_id == user_id,
                 )
-                .order_by(desc(PlatformMessageHistory.created_at))
+                .order_by(
+                    desc(PlatformMessageHistory.created_at),
+                    desc(PlatformMessageHistory.id),
+                )
             )
             result = await session.execute(query.offset(offset).limit(page_size))
             return result.scalars().all()

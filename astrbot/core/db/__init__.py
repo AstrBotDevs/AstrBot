@@ -218,6 +218,7 @@ class BaseDatabase(abc.ABC):
         sender_id: str | None = None,
         sender_name: str | None = None,
         llm_checkpoint_id: str | None = None,
+        max_messages: int | None = None,
     ) -> PlatformMessageHistory:
         """Insert a new platform message history record."""
         ...

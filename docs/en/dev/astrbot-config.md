@@ -90,7 +90,7 @@ The default AstrBot configuration is as follows:
     },
     "provider_ltm_settings": {
         "group_icl_enable": False,
-        "group_message_max_cnt": 300,
+        "group_message_max_cnt": 1000,
         "image_caption": False,
         "active_reply": {
             "enable": False,
@@ -418,7 +418,7 @@ The context content is placed in the conversation's system prompt.
 
 #### `provider_ltm_settings.group_message_max_cnt`
 
-Maximum number of group chat messages to record. Default is `100`. Messages exceeding this count are discarded.
+Maximum number of group chat messages to record. Default is `1000`. Messages exceeding this count are discarded.
 
 #### `provider_ltm_settings.image_caption`
 

@@ -994,7 +994,14 @@
           "description": "Enable Group Chat Context Awareness"
         },
         "group_message_max_cnt": {
-          "description": "Maximum Message Count"
+          "description": "Maximum In-memory Context Messages"
+        },
+        "group_message_history_enable": {
+          "description": "Persist Group Chat Messages",
+          "hint": "Saves group messages and provides the model with a tool for querying the current group's history. Media content is not currently persisted; media messages are stored as placeholders such as [Image]."
+        },
+        "group_message_history_max_cnt": {
+          "description": "Maximum Persisted Messages"
         },
         "image_caption": {
           "description": "Auto-understand Images",

@@ -4,7 +4,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from astrbot.api.message_components import Plain
+from astrbot.api.provider import LLMResponse
 from astrbot.builtin_stars.astrbot.main import Main
+from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform.message_type import MessageType
 
 
 def make_main_with_conversation_manager(conv_mgr):
@@ -167,3 +170,37 @@ async def test_on_message_skips_recording_when_command_handler_matched():
 
     main.group_chat_context.need_active_reply.assert_awaited_once_with(event)
     main.group_chat_context.handle_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_llm_response_persists_final_complete_chain():
+    """Persist the final runner response for an enabled group session."""
+    main = Main.__new__(Main)
+    main.context = MagicMock()
+    main.context.get_config.return_value = {
+        "provider_ltm_settings": {
+            "group_message_history_enable": True,
+            "group_message_history_max_cnt": 700,
+        },
+    }
+    main.context.message_history_manager.insert_message_chain = AsyncMock()
+    event = make_event()
+    event.get_message_type.return_value = MessageType.GROUP_MESSAGE
+    event.get_platform_name.return_value = "aiocqhttp"
+    event.get_self_id.return_value = "bot-1"
+    response = LLMResponse(
+        role="assistant",
+        result_chain=MessageChain([Plain("complete response")]),
+    )
+
+    await main.persist_llm_response(event, response)
+
+    main.context.message_history_manager.insert_message_chain.assert_awaited_once_with(
+        platform_id="aiocqhttp",
+        user_id=event.unified_msg_origin,
+        message_chain=response.result_chain,
+        role="bot",
+        sender_id="bot-1",
+        sender_name="bot",
+        max_messages=700,
+    )

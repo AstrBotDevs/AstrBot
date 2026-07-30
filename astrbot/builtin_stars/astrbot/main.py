@@ -7,8 +7,10 @@ import astrbot.api.message_components as Comp
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import Image, Plain
-from astrbot.api.provider import ProviderRequest
+from astrbot.api.provider import LLMResponse, ProviderRequest
 from astrbot.core import logger
+from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.session_waiter import (
     FILTERS,
     USER_SESSIONS,
@@ -145,6 +147,52 @@ class Main(star.Star):
             or group_context_settings["active_reply"]["enable"]
         )
 
+    @filter.platform_adapter_type(
+        filter.PlatformAdapterType.ALL,
+        priority=maxsize - 2,
+    )
+    async def persist_group_message(self, event: AstrMessageEvent) -> None:
+        """Persist an incoming message for an enabled group session.
+
+        Args:
+            event: Current platform message event.
+        """
+        if (
+            event.get_message_type() != MessageType.GROUP_MESSAGE
+            or event.get_platform_name() == "webchat"
+        ):
+            return
+
+        settings = self.context.get_config(umo=event.unified_msg_origin).get(
+            "provider_ltm_settings",
+            {},
+        )
+        if not settings.get("group_message_history_enable", False):
+            return
+
+        try:
+            max_messages = max(
+                1,
+                int(settings.get("group_message_history_max_cnt", 700)),
+            )
+        except (TypeError, ValueError):
+            max_messages = 700
+
+        try:
+            history = await self.context.message_history_manager.insert_message_chain(
+                platform_id=event.get_platform_id(),
+                user_id=event.unified_msg_origin,
+                message_chain=MessageChain(chain=list(event.get_messages())),
+                role="user",
+                sender_id=event.get_sender_id(),
+                sender_name=event.get_sender_name(),
+                max_messages=max_messages,
+            )
+            if history and history.id is not None:
+                event.set_extra("_current_platform_message_history_id", history.id)
+        except Exception:
+            logger.exception("Failed to persist an incoming group message.")
+
     @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)
     async def on_message(self, event: AstrMessageEvent):
         """群聊上下文感知"""
@@ -221,6 +269,58 @@ class Main(star.Star):
                 except BaseException as e:
                     logger.error(traceback.format_exc())
                     logger.error(f"主动回复失败: {e}")
+
+    @filter.on_llm_response()
+    async def persist_llm_response(
+        self,
+        event: AstrMessageEvent,
+        response: LLMResponse,
+    ) -> None:
+        """Persist the final LLM response for an enabled group session.
+
+        Args:
+            event: Current platform message event.
+            response: Complete response produced when the agent finishes.
+        """
+        if (
+            event.get_message_type() != MessageType.GROUP_MESSAGE
+            or event.get_platform_name() == "webchat"
+        ):
+            return
+
+        settings = self.context.get_config(umo=event.unified_msg_origin).get(
+            "provider_ltm_settings",
+            {},
+        )
+        if not settings.get("group_message_history_enable", False):
+            return
+
+        chain = response.result_chain
+        if not chain and response.completion_text:
+            chain = MessageChain().message(response.completion_text)
+        if not chain or not chain.chain:
+            return
+
+        try:
+            max_messages = max(
+                1,
+                int(settings.get("group_message_history_max_cnt", 700)),
+            )
+        except (TypeError, ValueError):
+            max_messages = 700
+
+        try:
+            await self.context.message_history_manager.insert_message_chain(
+                platform_id=event.get_platform_id(),
+                user_id=event.unified_msg_origin,
+                message_chain=chain,
+                role="bot",
+                sender_id=event.get_self_id() or "bot",
+                sender_name="bot",
+                max_messages=max_messages,
+            )
+        except Exception:
+            logger.exception("Failed to persist an outgoing group message.")
 
     @filter.on_llm_request()
     async def decorate_llm_req(

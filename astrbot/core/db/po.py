@@ -238,8 +238,8 @@ class Preference(TimestampMixin, SQLModel, table=True):
 class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
     """This class represents the message history for a specific platform.
 
-    It is used to store messages that are not LLM-generated, such as user messages
-    or platform-specific messages.
+    It stores user, bot, and platform-specific messages independently from LLM
+    conversation checkpoints.
     """
 
     __tablename__: str = "platform_message_history"
@@ -257,6 +257,15 @@ class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
     )  # Name of the sender in the platform
     content: dict = Field(sa_type=JSON, nullable=False)  # a message chain list
     llm_checkpoint_id: str | None = Field(default=None, index=True)
+
+    __table_args__ = (
+        Index(
+            "ix_platform_message_history_platform_user_id",
+            "platform_id",
+            "user_id",
+            "id",
+        ),
+    )
 
 
 class WebChatThread(TimestampMixin, SQLModel, table=True):

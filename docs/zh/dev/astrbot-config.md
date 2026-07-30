@@ -90,7 +90,7 @@ AstrBot 默认配置如下：
     },
     "provider_ltm_settings": {
         "group_icl_enable": False,
-        "group_message_max_cnt": 300,
+        "group_message_max_cnt": 1000,
         "image_caption": False,
         "active_reply": {
             "enable": False,
@@ -418,7 +418,7 @@ Added in `v4.3.5`
 
 #### `provider_ltm_settings.group_message_max_cnt`
 
-群聊消息的最大记录数量。默认为 `100`。超过此数量的消息将被丢弃。
+群聊消息的最大记录数量。默认为 `1000`。超过此数量的消息将被丢弃。
 
 #### `provider_ltm_settings.image_caption`
 

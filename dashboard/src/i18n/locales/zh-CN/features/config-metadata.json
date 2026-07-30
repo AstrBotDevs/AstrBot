@@ -996,7 +996,14 @@
           "description": "启用群聊上下文感知"
         },
         "group_message_max_cnt": {
-          "description": "最大消息数量"
+          "description": "内存上下文最大消息数量"
+        },
+        "group_message_history_enable": {
+          "description": "持久化群聊消息",
+          "hint": "启用后保存群消息，并向模型提供当前群聊历史查询工具。暂时不支持媒体消息记录，媒体消息将保存为 [Image] 等占位文本。"
+        },
+        "group_message_history_max_cnt": {
+          "description": "持久化最大消息数量"
         },
         "image_caption": {
           "description": "自动理解图片",
