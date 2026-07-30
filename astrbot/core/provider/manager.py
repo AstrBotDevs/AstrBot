@@ -5,6 +5,8 @@ import traceback
 from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
+from deprecated import deprecated
+
 from astrbot.core import astrbot_config, logger, sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
@@ -136,6 +138,7 @@ class ProviderManager:
         return self.persona_mgr.personas_v3
 
     @property
+    @deprecated(reason="Use persona_mgr.get_default_persona_v3() instead.")
     def selected_default_persona(self):
         """动态获取最新的默认选中 persona。已弃用，请使用 context.persona_mgr.get_default_persona_v3()"""
         return self.persona_mgr.selected_default_persona_v3

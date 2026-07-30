@@ -654,6 +654,7 @@ class Context:
         """
         self.provider_manager.provider_insts.append(provider)
 
+    @deprecated(reason="Use decorator-based tool registration instead.")
     def register_llm_tool(
         self,
         name: str,
@@ -686,6 +687,9 @@ class Context:
         star_handlers_registry.append(md)
         self.provider_manager.llm_tools.add_func(name, func_args, desc, func_obj)
 
+    @deprecated(
+        reason="This method is deprecated and will be removed in a future version."
+    )
     def unregister_llm_tool(self, name: str) -> None:
         """[DEPRECATED]删除一个函数调用工具。
 
@@ -698,6 +702,7 @@ class Context:
         """
         self.provider_manager.llm_tools.remove_func(name)
 
+    @deprecated(reason="Use the command decorator (@filter.command) instead.")
     def register_commands(
         self,
         star_name: str,
@@ -739,6 +744,9 @@ class Context:
             )
         star_handlers_registry.append(md)
 
+    @deprecated(
+        reason="This method is deprecated and will be removed in a future version."
+    )
     def register_task(self, task: Awaitable, desc: str) -> None:
         """[DEPRECATED]注册一个异步任务。
 

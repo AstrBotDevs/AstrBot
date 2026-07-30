@@ -5,6 +5,7 @@ import typing as T
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 
+from deprecated import deprecated
 from sqlalchemy import CursorResult, Row, not_
 from sqlalchemy.dialects.sqlite import dialect as sqlite_dialect
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1617,6 +1618,7 @@ class SQLiteDatabase(BaseDatabase):
     # Deprecated Methods
     # ====
 
+    @deprecated(version="4.0.0", reason="Use get_platform_stats instead")
     def get_base_stats(self, offset_sec=86400):
         """Get base statistics within the specified offset in seconds."""
 
@@ -1651,6 +1653,7 @@ class SQLiteDatabase(BaseDatabase):
         t.join()
         return result
 
+    @deprecated(version="4.0.0", reason="Use get_platform_stats instead")
     def get_total_message_count(self):
         """Get the total message count from platform statistics."""
 
@@ -1674,6 +1677,7 @@ class SQLiteDatabase(BaseDatabase):
         t.join()
         return result
 
+    @deprecated(version="4.0.0", reason="Use get_platform_stats instead")
     def get_grouped_base_stats(self, offset_sec=86400):
         # group by platform_id
         async def _inner():

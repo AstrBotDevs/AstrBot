@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TypedDict
 
+from deprecated import deprecated
 from sqlalchemy import Index, desc
 from sqlmodel import JSON, Field, SQLModel, Text, UniqueConstraint
 
@@ -596,6 +597,7 @@ class Personality(TypedDict):
 # ====
 
 
+@deprecated(version="4.0.0", reason="Use PlatformStat instead.")
 @dataclass
 class Platform:
     """平台使用统计数据"""
@@ -605,6 +607,7 @@ class Platform:
     timestamp: int
 
 
+@deprecated(version="4.0.0", reason="Use get_platform_stats() instead.")
 @dataclass
 class Stats:
     platform: list[Platform] = field(default_factory=list)
