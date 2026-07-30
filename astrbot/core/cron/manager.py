@@ -286,6 +286,24 @@ class CronJobManager:
             return None
         return aps_job.next_run_time.astimezone(timezone.utc)
 
+    def get_next_run_time(self, job_id: str) -> datetime | None:
+        """Read the live next-run time straight from the scheduler.
+
+        The DB copy of ``next_run_time`` is written via a fire-and-forget
+        task in ``_schedule_job``, so it can still be stale/None right after
+        ``add_active_job``/``update_job`` return. The scheduler itself is
+        updated synchronously, so callers that need an immediate answer
+        should use this instead of the job row's ``next_run_time`` field.
+
+        Args:
+            job_id: The scheduled job's ID.
+
+        Returns:
+            The job's next scheduled run time in UTC, or None if the job
+            is not currently scheduled.
+        """
+        return self._get_next_run_time(job_id)
+
     async def run_job_now(self, job_id: str) -> None:
         await self._run_job(job_id, ignore_enabled=True, delete_run_once=False)
 
