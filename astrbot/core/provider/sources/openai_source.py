@@ -528,6 +528,58 @@ class ProviderOpenAIOfficial(Provider):
             )
         payloads["messages"] = final
 
+        ProviderOpenAIOfficial._reorder_tailing_tool_call_user(payloads)
+
+    @staticmethod
+    def _reorder_tailing_tool_call_user(payloads: dict) -> None:
+        """重排因伪造工具调用导致尾部 assistant(tc) → tool → user 乱序的消息。
+
+        此为轻量妥协修复。未来若实现专用的上下文操作钩子或伪造工具调用钩子，
+        可考虑移除此方法。
+        """
+        messages = payloads.get("messages")
+        if not isinstance(messages, list) or len(messages) < 2:
+            return
+
+        # 从尾部弹出 user 消息
+        if messages[-1].get("role") != "user":
+            return
+        user_msg = messages.pop()
+
+        # 从新尾部持续收集 assistant(tool_calls) + tool 成对消息
+        pairs: list[tuple[dict, dict]] = []
+        while len(messages) >= 2:
+            tool_msg = messages[-1]
+            asst_msg = messages[-2]
+
+            if asst_msg.get("role") != "assistant" or tool_msg.get("role") != "tool":
+                break
+
+            tool_calls = asst_msg.get("tool_calls")
+            if not tool_calls:
+                break
+
+            tc_ids = {tc.get("id") for tc in tool_calls if isinstance(tc, dict)}
+            if tool_msg.get("tool_call_id") not in tc_ids:
+                break
+
+            # 确认是一对，弹出
+            messages.pop()  # tool
+            messages.pop()  # assistant
+            pairs.append((asst_msg, tool_msg))
+
+        if not pairs:
+            # 没有伪造对，把 user 放回去
+            messages.append(user_msg)
+            return
+
+        # 重排：user → assistant_1, tool_1 → ... → assistant_N, tool_N
+        # pairs 是从外到内收集的（N, N-1, ..., 1），反转后按 1..N 顺序回插
+        messages.append(user_msg)
+        for asst_msg, tool_msg in reversed(pairs):
+            messages.append(asst_msg)
+            messages.append(tool_msg)
+
     async def _query(
         self,
         payloads: dict,
