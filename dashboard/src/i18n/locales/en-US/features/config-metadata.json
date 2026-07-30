@@ -600,6 +600,22 @@
         "description": "Telegram Polling Restart Delay",
         "hint": "Waiting time in seconds when the polling loop needs to restart after unexpected exits. Defaults to 5s."
       },
+      "telegram_connect_timeout": {
+        "description": "Telegram Connection Timeout",
+        "hint": "Timeout in seconds for establishing Telegram Bot API connections. Defaults to 15s."
+      },
+      "telegram_polling_watchdog_interval": {
+        "description": "Telegram Polling Watchdog Interval",
+        "hint": "Interval in seconds between polling progress checks. The minimum is 1s and the default is 15s."
+      },
+      "telegram_polling_watchdog_failure_threshold": {
+        "description": "Telegram Polling Watchdog Failure Threshold",
+        "hint": "Number of consecutive watchdog request failures before rebuilding the polling client. The minimum is 1 and the default is 3."
+      },
+      "telegram_polling_watchdog_pending_update_threshold": {
+        "description": "Telegram Pending Update Stall Threshold",
+        "hint": "Number of consecutive checks with pending updates and no delivery progress before rebuilding the polling client. The minimum is 1 and the default is 2."
+      },
       "telegram_token": {
         "description": "Bot Token",
         "hint": "If you are in mainland China, set a proxy or change api_base in Other Settings."

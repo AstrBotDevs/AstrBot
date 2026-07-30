@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import asyncio
 import os
 import re
 import sys
 import uuid
 from contextlib import suppress
+from math import isfinite
 from typing import cast
 
 from apscheduler.events import EVENT_JOB_ERROR
@@ -11,7 +14,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import BotCommand, Update
 from telegram.constants import ChatType
 from telegram.error import Forbidden, InvalidToken, NetworkError
-from telegram.ext import ApplicationBuilder, ContextTypes, ExtBot, filters
+from telegram.ext import Application, ApplicationBuilder, ContextTypes, ExtBot, filters
 from telegram.ext import MessageHandler as TelegramMessageHandler
 
 import astrbot.api.message_components as Comp
@@ -40,6 +43,50 @@ if sys.version_info >= (3, 12):
     from typing import override
 else:
     from typing_extensions import override
+
+
+def _get_bounded_config_number(
+    config: dict,
+    key: str,
+    default: int | float,
+    minimum: int | float,
+    value_type: type[int] | type[float],
+) -> int | float:
+    """Read and validate a bounded numeric adapter setting.
+
+    Args:
+        config: Telegram adapter configuration.
+        key: Configuration key to read.
+        default: Value used when the configured value is invalid.
+        minimum: Smallest accepted value.
+        value_type: Numeric type used to parse the configured value.
+
+    Returns:
+        Parsed value, clamped to the configured minimum.
+    """
+    raw_value = config.get(key, default)
+    try:
+        value = value_type(raw_value)
+        if not isfinite(value):
+            raise ValueError
+    except (TypeError, ValueError, OverflowError):
+        logger.warning(
+            "Invalid %r value %r in config, falling back to default %s",
+            key,
+            raw_value,
+            default,
+        )
+        value = default
+
+    if value < minimum:
+        logger.warning(
+            "Configured %r value %s is too small; enforcing minimum %s",
+            key,
+            value,
+            minimum,
+        )
+        value = minimum
+    return value
 
 
 @register_platform_adapter("telegram", "telegram 适配器")
@@ -95,41 +142,76 @@ class TelegramPlatformAdapter(Platform):
         self._polling_recovery_requested = asyncio.Event()
         self._consecutive_polling_failures = 0
         self._last_polling_failure_at = 0.0
-        raw_delay = self.config.get("telegram_polling_restart_delay", 5.0)
-        try:
-            delay = float(raw_delay)
-        except (TypeError, ValueError):
-            logger.warning(
-                "Invalid 'telegram_polling_restart_delay' value %r in config, "
-                "falling back to default 5.0s",
-                raw_delay,
-            )
-            delay = 5.0
-
-        if delay < 0.1:
-            logger.warning(
-                "Configured 'telegram_polling_restart_delay' (%s) is too small; "
-                "enforcing minimum of 0.1s to avoid tight restart loops",
-                delay,
-            )
-            delay = 0.1
-        self._polling_restart_delay = delay
+        self._polling_restart_delay = cast(
+            float,
+            _get_bounded_config_number(
+                self.config,
+                "telegram_polling_restart_delay",
+                5.0,
+                0.1,
+                float,
+            ),
+        )
         self._polling_recovery_threshold = 3
         self._polling_failure_window = 60.0
-        self._telegram_connect_timeout = 15.0
-        self._polling_watchdog_interval = 15.0
-        self._polling_watchdog_failure_threshold = 3
-        self._polling_pending_update_threshold = 2
+        self._telegram_connect_timeout = cast(
+            float,
+            _get_bounded_config_number(
+                self.config,
+                "telegram_connect_timeout",
+                15.0,
+                0.1,
+                float,
+            ),
+        )
+        self._polling_watchdog_interval = cast(
+            float,
+            _get_bounded_config_number(
+                self.config,
+                "telegram_polling_watchdog_interval",
+                15.0,
+                1.0,
+                float,
+            ),
+        )
+        self._polling_watchdog_failure_threshold = cast(
+            int,
+            _get_bounded_config_number(
+                self.config,
+                "telegram_polling_watchdog_failure_threshold",
+                3,
+                1,
+                int,
+            ),
+        )
+        self._polling_pending_update_threshold = cast(
+            int,
+            _get_bounded_config_number(
+                self.config,
+                "telegram_polling_watchdog_pending_update_threshold",
+                2,
+                1,
+                int,
+            ),
+        )
+        # Stopping an updater has a separate deadline so tuning network
+        # connections cannot make adapter termination excessively slow.
+        self._polling_shutdown_timeout = 15.0
         self._polling_watchdog_failures = 0
         self._polling_pending_update_checks = 0
         self._received_message_count = 0
         self._last_watchdog_message_count = 0
         self._last_pending_update_count: int | None = None
         self._next_polling_watchdog_at = 0.0
-        self._replace_outbound_client_on_recovery = False
+        self._replace_outbound_application_on_recovery = False
         self._application_started = False
-        self._outbound_application = None
-        self._outbound_client_initialized = False
+        # Lifecycle invariants:
+        # - application owns the active polling updater.
+        # - when _outbound_application exists, client is its bot.
+        # - polling recovery may preserve an initialized outbound application,
+        #   so application and _outbound_application can intentionally differ.
+        self._outbound_application: Application | None = None
+        self._outbound_application_initialized = False
         self._build_application()
 
         # Media group handling
@@ -141,6 +223,43 @@ class TelegramPlatformAdapter(Platform):
         self.media_group_max_wait = self.config.get(
             "telegram_media_group_max_wait", 10.0
         )  # max seconds - hard cap to prevent indefinite delay
+
+    def _set_outbound_application(
+        self,
+        application: Application | None,
+        *,
+        initialized: bool,
+    ) -> None:
+        """Update outbound application ownership as one lifecycle transition.
+
+        Args:
+            application: Application whose bot handles outbound requests, or
+                None after its resources have been released.
+            initialized: Whether the application completed initialization.
+
+        Raises:
+            ValueError: If None is marked as initialized.
+        """
+        if application is None and initialized:
+            raise ValueError("An absent outbound application cannot be initialized")
+        self._outbound_application = application
+        self._outbound_application_initialized = initialized
+        if application is not None:
+            self.client = application.bot
+
+    def _request_polling_recovery(
+        self,
+        replace_outbound_application: bool = False,
+    ) -> None:
+        """Request polling recovery and optionally escalate its scope.
+
+        Args:
+            replace_outbound_application: Whether recovery must also replace
+                the client used for outbound Bot API requests.
+        """
+        if replace_outbound_application:
+            self._replace_outbound_application_on_recovery = True
+        self._polling_recovery_requested.set()
 
     def _build_application(self) -> None:
         builder = ApplicationBuilder()
@@ -157,20 +276,19 @@ class TelegramPlatformAdapter(Platform):
         self.application.add_handler(message_handler)
         # Keep a healthy outbound client alive when only getUpdates needs recovery.
         if self._outbound_application is None:
-            self._outbound_application = self.application
-            self.client = self.application.bot
+            self._set_outbound_application(self.application, initialized=False)
         self._polling_watchdog_failures = 0
         self._polling_pending_update_checks = 0
         self._last_watchdog_message_count = self._received_message_count
         self._last_pending_update_count = None
         self._next_polling_watchdog_at = 0.0
-        self._replace_outbound_client_on_recovery = False
+        self._replace_outbound_application_on_recovery = False
         logger.debug(f"Telegram base url: {self.application.bot.base_url}")
 
     async def _start_application(self) -> None:
         await self.application.initialize()
         if self.application is self._outbound_application:
-            self._outbound_client_initialized = True
+            self._set_outbound_application(self.application, initialized=True)
         await self.application.start()
 
         if self.enable_command_register:
@@ -182,14 +300,14 @@ class TelegramPlatformAdapter(Platform):
         self,
         *,
         delete_commands: bool,
-        preserve_outbound_client: bool = False,
+        preserve_outbound_application: bool = False,
     ) -> None:
         """Stop the current Telegram polling application.
 
         Args:
             delete_commands: Whether to remove registered Telegram commands.
-            preserve_outbound_client: Whether to keep the outbound Bot API
-                client initialized while replacing only the polling client.
+            preserve_outbound_application: Whether to keep the outbound Bot API
+                application initialized while replacing only the polling client.
         """
         self._application_started = False
         application = self.application
@@ -200,7 +318,7 @@ class TelegramPlatformAdapter(Platform):
             with suppress(Exception):
                 await asyncio.wait_for(
                     updater.stop(),
-                    timeout=self._telegram_connect_timeout,
+                    timeout=self._polling_shutdown_timeout,
                 )
 
         if delete_commands and self.enable_command_register:
@@ -211,9 +329,9 @@ class TelegramPlatformAdapter(Platform):
             await application.stop()
 
         if (
-            preserve_outbound_client
+            preserve_outbound_application
             and is_outbound_application
-            and self._outbound_client_initialized
+            and self._outbound_application_initialized
         ):
             return
 
@@ -222,27 +340,26 @@ class TelegramPlatformAdapter(Platform):
             with suppress(Exception):
                 await shutdown()
         if is_outbound_application:
-            self._outbound_application = None
-            self._outbound_client_initialized = False
+            self._set_outbound_application(None, initialized=False)
 
     async def _recreate_application(self) -> None:
         if self._terminating:
             self._polling_recovery_requested.clear()
             return
 
-        replace_outbound_client = (
-            self._replace_outbound_client_on_recovery
+        replace_outbound_application = (
+            self._replace_outbound_application_on_recovery
             and self.application is self._outbound_application
         )
         logger.warning(
             "Telegram polling recovery requested; rebuilding %s.",
             "the polling and outbound clients"
-            if replace_outbound_client
+            if replace_outbound_application
             else "the polling client",
         )
         await self._shutdown_application(
             delete_commands=False,
-            preserve_outbound_client=not replace_outbound_client,
+            preserve_outbound_application=not replace_outbound_application,
         )
         self._build_application()
         self._consecutive_polling_failures = 0
@@ -269,9 +386,11 @@ class TelegramPlatformAdapter(Platform):
                 >= self._polling_watchdog_failure_threshold
             ):
                 # A failing regular Bot API pool must not remain the outbound client.
-                if self.application is self._outbound_application:
-                    self._replace_outbound_client_on_recovery = True
-                self._polling_recovery_requested.set()
+                self._request_polling_recovery(
+                    replace_outbound_application=(
+                        self.application is self._outbound_application
+                    )
+                )
             return
 
         self._polling_watchdog_failures = 0
@@ -302,7 +421,7 @@ class TelegramPlatformAdapter(Platform):
             self._polling_pending_update_checks
             >= self._polling_pending_update_threshold
         ):
-            self._polling_recovery_requested.set()
+            self._request_polling_recovery()
 
     def _start_command_scheduler(self) -> None:
         if not self.enable_command_refresh or not self.enable_command_register:
@@ -407,7 +526,7 @@ class TelegramPlatformAdapter(Platform):
                 with suppress(Exception):
                     await self._shutdown_application(
                         delete_commands=False,
-                        preserve_outbound_client=True,
+                        preserve_outbound_application=True,
                     )
                 self._build_application()
 
@@ -443,7 +562,7 @@ class TelegramPlatformAdapter(Platform):
         if self._loop.is_closed():
             return
         try:
-            self._loop.call_soon_threadsafe(self._polling_recovery_requested.set)
+            self._loop.call_soon_threadsafe(self._request_polling_recovery)
         except RuntimeError:
             return
 
@@ -907,8 +1026,7 @@ class TelegramPlatformAdapter(Platform):
             if outbound_application is not None:
                 with suppress(Exception):
                     await outbound_application.shutdown()
-                self._outbound_application = None
-                self._outbound_client_initialized = False
+                self._set_outbound_application(None, initialized=False)
 
             logger.info("Telegram adapter has been closed.")
         except Exception as e:

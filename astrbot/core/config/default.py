@@ -457,6 +457,10 @@ CONFIG_METADATA_2 = {
                         "telegram_command_auto_refresh": True,
                         "telegram_command_register_interval": 300,
                         "telegram_polling_restart_delay": 5.0,
+                        "telegram_connect_timeout": 15.0,
+                        "telegram_polling_watchdog_interval": 15.0,
+                        "telegram_polling_watchdog_failure_threshold": 3,
+                        "telegram_polling_watchdog_pending_update_threshold": 2,
                     },
                     "Discord": {
                         "id": "discord",
@@ -775,6 +779,26 @@ CONFIG_METADATA_2 = {
                         "description": "Telegram 轮询重启延迟",
                         "type": "float",
                         "hint": "当轮询意外结束尝试自动重启时的延迟时间，理论上越短恢复越快，但过短（<0.1s）可能导致死循环针对 API 服务器的请求阻断。单位为秒。默认为 5s。",
+                    },
+                    "telegram_connect_timeout": {
+                        "description": "Telegram 连接超时",
+                        "type": "float",
+                        "hint": "建立 Telegram Bot API 连接时的超时时间，单位为秒。默认为 15s。",
+                    },
+                    "telegram_polling_watchdog_interval": {
+                        "description": "Telegram 轮询看门狗检查间隔",
+                        "type": "float",
+                        "hint": "检查 Telegram 轮询是否仍有进展的间隔时间，单位为秒。最小为 1s，默认为 15s。",
+                    },
+                    "telegram_polling_watchdog_failure_threshold": {
+                        "description": "Telegram 轮询看门狗失败阈值",
+                        "type": "int",
+                        "hint": "看门狗连续请求失败多少次后重建轮询客户端。最小为 1，默认为 3。",
+                    },
+                    "telegram_polling_watchdog_pending_update_threshold": {
+                        "description": "Telegram 待处理更新停滞阈值",
+                        "type": "int",
+                        "hint": "看门狗连续多少次发现待处理更新没有投递进展后重建轮询客户端。最小为 1，默认为 2。",
                     },
                     "id": {
                         "description": "机器人名称",

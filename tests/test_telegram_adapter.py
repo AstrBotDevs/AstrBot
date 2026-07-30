@@ -320,6 +320,63 @@ async def test_telegram_polling_error_requests_rebuild_after_threshold():
     assert adapter._polling_recovery_requested.is_set()
 
 
+def test_telegram_polling_watchdog_uses_configured_settings():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    module_globals = TelegramPlatformAdapter.__init__.__globals__
+    builder = MagicMock()
+    builder.build.return_value = MockTelegramBuilder.create_application()
+
+    with patch.dict(
+        module_globals,
+        {
+            "ApplicationBuilder": MagicMock(return_value=builder),
+            "AsyncIOScheduler": MagicMock(
+                return_value=MockTelegramBuilder.create_scheduler()
+            ),
+        },
+    ):
+        adapter = TelegramPlatformAdapter(
+            make_platform_config(
+                "telegram",
+                telegram_connect_timeout=7.5,
+                telegram_polling_watchdog_interval=20.0,
+                telegram_polling_watchdog_failure_threshold=4,
+                telegram_polling_watchdog_pending_update_threshold=5,
+            ),
+            {},
+            asyncio.Queue(),
+        )
+
+    builder.connect_timeout.assert_called_once_with(7.5)
+    builder.get_updates_connect_timeout.assert_called_once_with(7.5)
+    assert adapter._polling_watchdog_interval == 20.0
+    assert adapter._polling_watchdog_failure_threshold == 4
+    assert adapter._polling_pending_update_threshold == 5
+    assert adapter._polling_shutdown_timeout == 15.0
+
+
+def test_telegram_polling_watchdog_validates_configured_settings():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config(
+            "telegram",
+            telegram_polling_restart_delay=float("inf"),
+            telegram_connect_timeout="invalid",
+            telegram_polling_watchdog_interval=0,
+            telegram_polling_watchdog_failure_threshold=0,
+            telegram_polling_watchdog_pending_update_threshold="invalid",
+        ),
+        {},
+        asyncio.Queue(),
+    )
+
+    assert adapter._polling_restart_delay == 5.0
+    assert adapter._telegram_connect_timeout == 15.0
+    assert adapter._polling_watchdog_interval == 1.0
+    assert adapter._polling_watchdog_failure_threshold == 1
+    assert adapter._polling_pending_update_threshold == 2
+
+
 @pytest.mark.asyncio
 async def test_telegram_polling_watchdog_tolerates_transient_network_error():
     TelegramPlatformAdapter = _load_telegram_adapter()
@@ -393,6 +450,7 @@ async def test_telegram_polling_watchdog_replaces_failed_outbound_client():
     app_one.shutdown.assert_awaited_once()
     assert adapter.client is app_two.bot
     assert adapter._outbound_application is app_two
+    assert adapter._outbound_application_initialized is False
 
 
 @pytest.mark.asyncio
@@ -474,6 +532,8 @@ async def test_telegram_polling_watchdog_preserves_sends_and_cleans_up():
 
     app_one.shutdown.assert_awaited_once()
     app_two.shutdown.assert_awaited_once()
+    assert adapter._outbound_application is None
+    assert adapter._outbound_application_initialized is False
 
 
 @pytest.mark.asyncio
@@ -559,7 +619,8 @@ async def test_telegram_initialization_failure_replaces_uninitialized_client():
 
     app_one.shutdown.assert_awaited_once()
     assert adapter.client is app_two.bot
-    assert adapter._outbound_client_initialized
+    assert adapter._outbound_application is app_two
+    assert adapter._outbound_application_initialized
 
 
 @pytest.mark.asyncio
@@ -585,13 +646,17 @@ async def test_telegram_shutdown_bounds_stalled_updater_stop():
         },
     ):
         adapter = TelegramPlatformAdapter(
-            make_platform_config("telegram"),
+            make_platform_config(
+                "telegram",
+                telegram_connect_timeout=120.0,
+            ),
             {},
             asyncio.Queue(),
         )
-        adapter._telegram_connect_timeout = 0.01
+        adapter._polling_shutdown_timeout = 0.01
         await adapter._shutdown_application(delete_commands=False)
 
+    builder.connect_timeout.assert_called_once_with(120.0)
     application.stop.assert_awaited_once()
     application.shutdown.assert_awaited_once()
 

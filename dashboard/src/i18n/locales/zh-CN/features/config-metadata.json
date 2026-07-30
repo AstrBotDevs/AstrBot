@@ -602,6 +602,22 @@
         "description": "Telegram 轮询重启延迟",
         "hint": "当轮询意外结束尝试自动重启时的延迟时间，单位为秒。默认为 5s。"
       },
+      "telegram_connect_timeout": {
+        "description": "Telegram 连接超时",
+        "hint": "建立 Telegram Bot API 连接时的超时时间，单位为秒。默认为 15s。"
+      },
+      "telegram_polling_watchdog_interval": {
+        "description": "Telegram 轮询看门狗检查间隔",
+        "hint": "检查 Telegram 轮询是否仍有进展的间隔时间，单位为秒。最小为 1s，默认为 15s。"
+      },
+      "telegram_polling_watchdog_failure_threshold": {
+        "description": "Telegram 轮询看门狗失败阈值",
+        "hint": "看门狗连续请求失败多少次后重建轮询客户端。最小为 1，默认为 3。"
+      },
+      "telegram_polling_watchdog_pending_update_threshold": {
+        "description": "Telegram 待处理更新停滞阈值",
+        "hint": "看门狗连续多少次发现待处理更新没有投递进展后重建轮询客户端。最小为 1，默认为 2。"
+      },
       "telegram_token": {
         "description": "Bot Token",
         "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。"
