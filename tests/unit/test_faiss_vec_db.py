@@ -66,7 +66,20 @@ async def test_insert_batch_raises_friendly_error_for_embedding_count_mismatch()
 
 
 @pytest.mark.asyncio
-async def test_insert_batch_embeds_context_but_stores_original_contents() -> None:
+@pytest.mark.parametrize(
+    ("embedding_contents", "expected_embedding_contents"),
+    [
+        (None, ["chunk one", "chunk two"]),
+        (
+            ["guide\n\nchunk one", "guide\n\nchunk two"],
+            ["guide\n\nchunk one", "guide\n\nchunk two"],
+        ),
+    ],
+)
+async def test_insert_batch_uses_embedding_contents_without_changing_storage(
+    embedding_contents: list[str] | None,
+    expected_embedding_contents: list[str],
+) -> None:
     vec_db = FaissVecDB.__new__(FaissVecDB)
     vec_db.embedding_provider = AsyncMock()
     vec_db.embedding_provider.get_embeddings_batch.return_value = [
@@ -83,11 +96,11 @@ async def test_insert_batch_embeds_context_but_stores_original_contents() -> Non
         contents=["chunk one", "chunk two"],
         metadatas=[{}, {}],
         ids=["doc-1", "doc-2"],
-        embedding_contents=["guide\n\nchunk one", "guide\n\nchunk two"],
+        embedding_contents=embedding_contents,
     )
 
     vec_db.embedding_provider.get_embeddings_batch.assert_awaited_once_with(
-        ["guide\n\nchunk one", "guide\n\nchunk two"],
+        expected_embedding_contents,
         batch_size=32,
         tasks_limit=3,
         max_retries=3,
@@ -98,6 +111,31 @@ async def test_insert_batch_embeds_context_but_stores_original_contents() -> Non
         ["chunk one", "chunk two"],
         [{}, {}],
     )
+
+
+@pytest.mark.asyncio
+async def test_insert_batch_rejects_embedding_content_count_mismatch() -> None:
+    vec_db = FaissVecDB.__new__(FaissVecDB)
+    vec_db.embedding_provider = AsyncMock()
+    vec_db.document_storage = AsyncMock()
+    vec_db.embedding_storage = AsyncMock()
+
+    with pytest.raises(KnowledgeBaseUploadError) as exc_info:
+        await FaissVecDB.insert_batch(
+            vec_db,
+            contents=["chunk one", "chunk two"],
+            metadatas=[{}, {}],
+            ids=["doc-1", "doc-2"],
+            embedding_contents=["guide\n\nchunk one"],
+        )
+
+    assert exc_info.value.stage == "storage"
+    assert exc_info.value.details == {
+        "expected_contents": 2,
+        "actual_embedding_contents": 1,
+    }
+    vec_db.embedding_provider.get_embeddings_batch.assert_not_awaited()
+    vec_db.document_storage.insert_documents_batch.assert_not_awaited()
 
 
 def test_embedding_storage_rejects_zero_dimension_for_a_fresh_index(tmp_path) -> None:
