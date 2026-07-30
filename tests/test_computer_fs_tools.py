@@ -344,6 +344,24 @@ async def test_restricted_local_member_can_read_plugin_skill_inventory_even_if_p
 
 
 @pytest.mark.asyncio
+async def test_local_member_stays_restricted_when_admin_requirement_is_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    _setup_local_fs_tools(monkeypatch, tmp_path)
+    outside_file = tmp_path / "outside.txt"
+    outside_file.write_text("host secret\n", encoding="utf-8")
+
+    result = await fs_tools.FileReadTool().call(
+        _make_context(role="member", require_admin=False),
+        path=str(outside_file),
+    )
+
+    assert "Read access is restricted for this user." in result
+    assert "host secret" not in result
+
+
+@pytest.mark.asyncio
 async def test_restricted_local_member_cannot_write_plugin_provided_skill(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,

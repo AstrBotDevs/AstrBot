@@ -16,7 +16,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 
 from ..registry import builtin_tool
 from .util import (
-    check_admin_permission,
+    check_local_execution_permission,
     is_local_runtime,
     workspace_root_for_context,
 )
@@ -98,7 +98,11 @@ class ExecuteShellTool(FunctionTool):
         env: dict[str, Any] | None = None,
         yield_time_ms: int = 10_000,
     ) -> ToolExecResult:
-        if permission_error := check_admin_permission(context, "Shell execution"):
+        sandboxed, permission_error = check_local_execution_permission(
+            context,
+            "Shell execution",
+        )
+        if permission_error:
             return permission_error
 
         sb = await get_booter(
@@ -125,8 +129,9 @@ class ExecuteShellTool(FunctionTool):
                         owner_id=context.context.event.unified_msg_origin,
                         cwd=cwd,
                         env=env,
-                        timeout=timeout,
+                        timeout=min(timeout or 300, 300) if sandboxed else timeout,
                         yield_time_ms=0 if background else yield_time_ms,
+                        sandboxed=sandboxed,
                     ),
                     ensure_ascii=False,
                 )
@@ -168,7 +173,8 @@ class LocalExecuteShellTool(ExecuteShellTool):
 
     description: str = (
         "Execute a command in the shell. If it is still running after "
-        "yield_time_ms, the tool returns a managed shell session ID."
+        "yield_time_ms, the tool returns a managed shell session ID. "
+        "Non-admin Linux calls run without network access in a workspace-only sandbox."
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -307,10 +313,11 @@ class ShellSessionTool(FunctionTool):
         Returns:
             JSON session operation result or a user-facing error.
         """
-        if permission_error := check_admin_permission(
+        _, permission_error = check_local_execution_permission(
             context,
             "Shell session management",
-        ):
+        )
+        if permission_error:
             return permission_error
         if not is_local_runtime(context):
             return "Error managing shell session: only local runtime is supported."

@@ -8,6 +8,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -46,11 +47,162 @@ _BLOCKED_COMMAND_PATTERNS = [
     " kill -9 ",
     " killall ",
 ]
+_LINUX_SANDBOX_MAX_CPU_SECONDS = 300
+_LINUX_SANDBOX_MAX_FILE_BYTES = 100 * 1024 * 1024
+_LINUX_SANDBOX_MAX_MEMORY_BYTES = 1024 * 1024 * 1024
+_LINUX_SANDBOX_MAX_OPEN_FILES = 256
+_LINUX_SANDBOX_MAX_PROCESSES = 256
+_LINUX_SANDBOX_MAX_OUTPUT_BYTES = 10 * 1024 * 1024
+_LINUX_SANDBOX_TMP_BYTES = 256 * 1024 * 1024
+_LINUX_SANDBOX_LIMIT_LAUNCHER = f"""
+import os
+import resource
+import sys
+
+limits = (
+    (resource.RLIMIT_CPU, {_LINUX_SANDBOX_MAX_CPU_SECONDS}),
+    (resource.RLIMIT_FSIZE, {_LINUX_SANDBOX_MAX_FILE_BYTES}),
+    (resource.RLIMIT_AS, {_LINUX_SANDBOX_MAX_MEMORY_BYTES}),
+    (resource.RLIMIT_NOFILE, {_LINUX_SANDBOX_MAX_OPEN_FILES}),
+    (resource.RLIMIT_NPROC, {_LINUX_SANDBOX_MAX_PROCESSES}),
+    (resource.RLIMIT_CORE, 0),
+)
+for kind, requested in limits:
+    _, hard = resource.getrlimit(kind)
+    value = requested if hard == resource.RLIM_INFINITY else min(requested, hard)
+    resource.setrlimit(kind, (value, value))
+os.execvpe(sys.argv[1], sys.argv[1:], os.environ)
+"""
 
 
 def _is_safe_command(command: str) -> bool:
     cmd = f" {command.strip().lower()} "
     return not any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS)
+
+
+def _build_linux_bwrap_command(
+    argv: list[str],
+    *,
+    workspace: Path,
+    env: dict[str, str] | None = None,
+) -> list[str]:
+    """Build a fail-closed bubblewrap command for non-admin Local execution.
+
+    Args:
+        argv: Command and arguments to execute inside the sandbox.
+        workspace: Only host directory mounted read-write.
+        env: Additional environment variables exposed inside the sandbox.
+
+    Returns:
+        Bubblewrap arguments with namespace, mount, and resource restrictions.
+
+    Raises:
+        RuntimeError: If Linux, bubblewrap, or the workspace is unavailable.
+        ValueError: If no command was provided.
+    """
+    if not argv:
+        raise ValueError("A sandbox command is required.")
+    if not sys.platform.startswith("linux"):
+        raise RuntimeError("The Local bubblewrap sandbox is only available on Linux.")
+    bwrap_path = shutil.which("bwrap")
+    if not bwrap_path:
+        raise RuntimeError(
+            "bubblewrap (`bwrap`) is required for non-admin Local execution."
+        )
+
+    resolved_workspace = workspace.resolve()
+    if not resolved_workspace.is_dir():
+        raise RuntimeError(f"Sandbox workspace does not exist: {resolved_workspace}")
+    if not Path("/bin/sh").exists():
+        raise RuntimeError("The Local bubblewrap sandbox requires /bin/sh.")
+
+    readonly_paths = {
+        Path("/usr"),
+        Path("/bin"),
+        Path("/sbin"),
+        Path("/lib"),
+        Path("/lib64"),
+        Path("/etc/alternatives"),
+        Path("/etc/ld.so.cache"),
+        Path("/etc/ld.so.conf"),
+        Path("/etc/ld.so.conf.d"),
+        Path("/etc/localtime"),
+        Path("/etc/nsswitch.conf"),
+        Path("/etc/passwd"),
+        Path("/etc/group"),
+        Path(sys.prefix).resolve(),
+        Path(sys.base_prefix).resolve(),
+    }
+    readonly_paths = {path for path in readonly_paths if path.exists()}
+
+    required_directories = {Path("/tmp"), Path("/tmp/home")}
+    for path in (*readonly_paths, resolved_workspace):
+        required_directories.update(
+            parent
+            for parent in path.parents
+            if parent != Path("/") and parent not in readonly_paths
+        )
+
+    command = [
+        bwrap_path,
+        "--unshare-all",
+        "--new-session",
+        "--die-with-parent",
+        "--clearenv",
+        "--dir",
+        "/tmp",
+        "--size",
+        str(_LINUX_SANDBOX_TMP_BYTES),
+        "--tmpfs",
+        "/tmp",
+    ]
+    for directory in sorted(required_directories, key=lambda path: len(path.parts)):
+        if directory == Path("/tmp"):
+            continue
+        command.extend(("--dir", str(directory)))
+    command.extend(("--proc", "/proc", "--dev", "/dev"))
+
+    for path in sorted(readonly_paths, key=lambda item: len(item.parts)):
+        if path.is_symlink():
+            command.extend(("--symlink", os.readlink(path), str(path)))
+        else:
+            command.extend(("--ro-bind", str(path), str(path)))
+
+    command.extend(
+        (
+            "--bind",
+            str(resolved_workspace),
+            str(resolved_workspace),
+            "--chdir",
+            str(resolved_workspace),
+        )
+    )
+    for key, value in sorted((env or {}).items()):
+        command.extend(("--setenv", str(key), str(value)))
+    command.extend(
+        (
+            "--setenv",
+            "PATH",
+            "/usr/local/bin:/usr/bin:/bin",
+            "--setenv",
+            "HOME",
+            "/tmp/home",
+            "--setenv",
+            "TMPDIR",
+            "/tmp",
+            "--setenv",
+            "LANG",
+            "C.UTF-8",
+            "--",
+            sys.executable,
+            "-I",
+            "-S",
+            "-c",
+            _LINUX_SANDBOX_LIMIT_LAUNCHER,
+            *argv,
+        )
+    )
+    return command
 
 
 def _decode_bytes_with_fallback(
@@ -108,6 +260,7 @@ class _LocalShellSession:
     cursor: int = 0
     timed_out: bool = False
     terminated: bool = False
+    output_limited: bool = False
 
 
 @dataclass
@@ -217,6 +370,7 @@ class LocalShellComponent(ShellComponent):
         timeout: int | None = None,
         yield_time_ms: int = 10_000,
         max_output_chars: int = 10_000,
+        sandboxed: bool = False,
     ) -> dict[str, Any]:
         """Start a locally managed shell process and briefly wait for it.
 
@@ -228,12 +382,14 @@ class LocalShellComponent(ShellComponent):
             timeout: Hard process lifetime in seconds. None disables it.
             yield_time_ms: Maximum time to wait before returning a session ID.
             max_output_chars: Maximum output bytes returned in this call.
+            sandboxed: Whether to isolate the command with Linux bubblewrap.
 
         Returns:
             Process result with output, status, and session metadata.
 
         Raises:
             PermissionError: If the command matches a blocked pattern.
+            RuntimeError: If the requested bubblewrap sandbox is unavailable.
             ValueError: If a timing or output limit is invalid.
         """
         if not _is_safe_command(command):
@@ -245,10 +401,21 @@ class LocalShellComponent(ShellComponent):
         if max_output_chars < 1:
             raise ValueError("`max_output_chars` must be greater than 0.")
 
-        run_env = os.environ.copy()
-        if env:
-            run_env.update({str(k): str(v) for k, v in env.items()})
         working_dir = Path(cwd).resolve() if cwd else Path(get_astrbot_root()).resolve()
+        if sandboxed:
+            process_args = tuple(
+                _build_linux_bwrap_command(
+                    ["/bin/sh", "-c", command],
+                    workspace=working_dir,
+                    env={str(k): str(v) for k, v in (env or {}).items()},
+                )
+            )
+            process_factory = asyncio.create_subprocess_exec
+            run_env = {"PATH": os.defpath}
+        else:
+            run_env = os.environ.copy()
+            if env:
+                run_env.update({str(k): str(v) for k, v in env.items()})
         session_id = f"sh_{uuid.uuid4().hex[:16]}"
         owner_digest = hashlib.sha256(owner_id.encode("utf-8")).hexdigest()[:16]
         output_dir = Path(get_astrbot_system_tmp_path()) / "shell" / owner_digest
@@ -267,19 +434,20 @@ class LocalShellComponent(ShellComponent):
             process_kwargs["start_new_session"] = True
 
         try:
-            if sys.platform == "win32":
-                process_factory = asyncio.create_subprocess_exec
-                process_args = (
-                    "powershell.exe",
-                    "-NoLogo",
-                    "-NoProfile",
-                    "-NonInteractive",
-                    "-Command",
-                    command,
-                )
-            else:
-                process_factory = asyncio.create_subprocess_shell
-                process_args = (command,)
+            if not sandboxed:
+                if sys.platform == "win32":
+                    process_factory = asyncio.create_subprocess_exec
+                    process_args = (
+                        "powershell.exe",
+                        "-NoLogo",
+                        "-NoProfile",
+                        "-NonInteractive",
+                        "-Command",
+                        command,
+                    )
+                else:
+                    process_factory = asyncio.create_subprocess_shell
+                    process_args = (command,)
             process = await process_factory(
                 *process_args,
                 cwd=working_dir,
@@ -298,11 +466,31 @@ class LocalShellComponent(ShellComponent):
         async def _capture_output() -> None:
             if process.stdout is None:
                 return
+            output_size = 0
             with output_path.open("ab") as output_file:
                 while chunk := await process.stdout.read(8192):
+                    if sandboxed:
+                        remaining = _LINUX_SANDBOX_MAX_OUTPUT_BYTES - output_size
+                        if remaining <= 0:
+                            session.output_limited = True
+                            try:
+                                os.killpg(process.pid, signal.SIGTERM)
+                            except ProcessLookupError:
+                                pass
+                            return
+                        if len(chunk) > remaining:
+                            chunk = chunk[:remaining]
+                            session.output_limited = True
                     output_file.write(chunk)
                     output_file.flush()
+                    output_size += len(chunk)
                     output_event.set()
+                    if session.output_limited:
+                        try:
+                            os.killpg(process.pid, signal.SIGTERM)
+                        except ProcessLookupError:
+                            pass
+                        return
 
         reader_task = asyncio.create_task(
             _capture_output(),
@@ -392,9 +580,13 @@ class LocalShellComponent(ShellComponent):
                     "timed_out"
                     if session.timed_out
                     else (
-                        "terminated"
-                        if session.terminated
-                        else ("completed" if exit_code == 0 else "failed")
+                        "output_limited"
+                        if session.output_limited
+                        else (
+                            "terminated"
+                            if session.terminated
+                            else ("completed" if exit_code == 0 else "failed")
+                        )
                     )
                 )
             )
@@ -507,9 +699,13 @@ class LocalShellComponent(ShellComponent):
                 "timed_out"
                 if session.timed_out
                 else (
-                    "terminated"
-                    if session.terminated
-                    else ("completed" if exit_code == 0 else "failed")
+                    "output_limited"
+                    if session.output_limited
+                    else (
+                        "terminated"
+                        if session.terminated
+                        else ("completed" if exit_code == 0 else "failed")
+                    )
                 )
             )
         )
@@ -752,26 +948,102 @@ class LocalPythonComponent(PythonComponent):
         timeout: int = 30,
         silent: bool = False,
         cwd: str | None = None,
+        sandboxed: bool = False,
     ) -> dict[str, Any]:
+        """Execute Python locally, optionally inside the Linux sandbox.
+
+        Args:
+            code: Python source to execute.
+            kernel_id: Reserved kernel identifier for protocol compatibility.
+            timeout: Hard execution timeout in seconds.
+            silent: Whether to suppress standard output.
+            cwd: Working directory for the process.
+            sandboxed: Whether to isolate execution with Linux bubblewrap.
+
+        Returns:
+            Python output and error data in the computer component format.
+        """
+
         def _run() -> dict[str, Any]:
             try:
-                working_dir = os.path.abspath(cwd) if cwd else get_astrbot_root()
-                result = subprocess.run(
-                    [os.environ.get("PYTHON", sys.executable), "-c", code],
-                    timeout=timeout,
-                    capture_output=True,
-                    cwd=working_dir,
+                working_dir = (
+                    Path(cwd).resolve() if cwd else Path(get_astrbot_root()).resolve()
                 )
-                stdout = "" if silent else _decode_shell_output(result.stdout)
-                stderr = (
-                    _decode_shell_output(result.stderr)
-                    if result.returncode != 0
+                if sandboxed:
+                    run_command = _build_linux_bwrap_command(
+                        [sys.executable, "-c", code],
+                        workspace=working_dir,
+                    )
+                    run_env = {"PATH": os.defpath}
+                    with (
+                        tempfile.TemporaryFile() as stdout_file,
+                        tempfile.TemporaryFile() as stderr_file,
+                    ):
+                        result = subprocess.run(
+                            run_command,
+                            timeout=timeout,
+                            stdout=subprocess.DEVNULL if silent else stdout_file,
+                            stderr=stderr_file,
+                            cwd=working_dir,
+                            env=run_env,
+                        )
+                        if silent:
+                            stdout = ""
+                            stdout_limited = False
+                        else:
+                            stdout_file.seek(0)
+                            stdout_bytes = stdout_file.read(
+                                _LINUX_SANDBOX_MAX_OUTPUT_BYTES + 1
+                            )
+                            stdout_limited = (
+                                len(stdout_bytes) > _LINUX_SANDBOX_MAX_OUTPUT_BYTES
+                            )
+                            stdout = _decode_shell_output(
+                                stdout_bytes[:_LINUX_SANDBOX_MAX_OUTPUT_BYTES]
+                            )
+                        stderr_file.seek(0)
+                        stderr_bytes = stderr_file.read(
+                            _LINUX_SANDBOX_MAX_OUTPUT_BYTES + 1
+                        )
+                        stderr_limited = (
+                            len(stderr_bytes) > _LINUX_SANDBOX_MAX_OUTPUT_BYTES
+                        )
+                        stderr = _decode_shell_output(
+                            stderr_bytes[:_LINUX_SANDBOX_MAX_OUTPUT_BYTES]
+                        )
+                else:
+                    run_command = [
+                        os.environ.get("PYTHON", sys.executable),
+                        "-c",
+                        code,
+                    ]
+                    run_env = None
+                    result = subprocess.run(
+                        run_command,
+                        timeout=timeout,
+                        capture_output=True,
+                        cwd=working_dir,
+                        env=run_env,
+                    )
+                    stdout = "" if silent else _decode_shell_output(result.stdout)
+                    stderr = _decode_shell_output(result.stderr)
+                    stdout_limited = False
+                    stderr_limited = False
+                if stdout_limited or stderr_limited:
+                    limit_error = (
+                        "Execution output exceeded "
+                        f"{_LINUX_SANDBOX_MAX_OUTPUT_BYTES} bytes."
+                    )
+                    stderr = f"{stderr}\n{limit_error}".strip()
+                execution_error = (
+                    stderr
+                    if result.returncode != 0 or stdout_limited or stderr_limited
                     else ""
                 )
                 return {
                     "data": {
                         "output": {"text": stdout, "images": []},
-                        "error": stderr,
+                        "error": execution_error,
                     }
                 }
             except subprocess.TimeoutExpired:

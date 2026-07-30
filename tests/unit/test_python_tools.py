@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.computer.booters.local import LocalPythonComponent
 from astrbot.core.tools.computer_tools.python import LocalPythonTool, PythonTool
 
 
@@ -32,9 +33,11 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
     python_exec = AsyncMock(
         return_value={"data": {"output": {"text": "ok", "images": []}, "error": ""}}
     )
+    local_python = LocalPythonComponent()
+    local_python.exec = python_exec
     monkeypatch.setattr(
         "astrbot.core.tools.computer_tools.python.get_local_booter",
-        lambda: SimpleNamespace(python=SimpleNamespace(exec=python_exec)),
+        lambda: SimpleNamespace(python=local_python),
     )
 
     async def fake_workspace_root_for_context(context):
@@ -71,4 +74,90 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
         timeout=30,
         silent=False,
         cwd=str(workspace.resolve(strict=False)),
+        sandboxed=False,
     )
+
+
+@pytest.mark.asyncio
+async def test_local_member_python_uses_linux_sandbox(tmp_path, monkeypatch):
+    """Local member Python execution should require the bubblewrap path."""
+    from astrbot.core.tools.computer_tools import util as computer_util
+
+    python_exec = AsyncMock(
+        return_value={"data": {"output": {"text": "ok", "images": []}, "error": ""}}
+    )
+    local_python = LocalPythonComponent()
+    local_python.exec = python_exec
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.python.get_local_booter",
+        lambda: SimpleNamespace(python=local_python),
+    )
+    monkeypatch.setattr(computer_util.sys, "platform", "linux")
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.python.workspace_root_for_context",
+        AsyncMock(return_value=tmp_path),
+    )
+
+    event = SimpleNamespace(
+        unified_msg_origin="onebot:GroupMessage:12345",
+        role="member",
+        get_platform_name=lambda: "onebot",
+    )
+    context = ContextWrapper(
+        context=SimpleNamespace(
+            event=event,
+            context=SimpleNamespace(
+                get_config=lambda **_kwargs: {
+                    "provider_settings": {
+                        "computer_use_runtime": "local",
+                        "computer_use_require_admin": False,
+                    }
+                }
+            ),
+        ),
+        tool_call_timeout=60,
+    )
+
+    await LocalPythonTool().call(context, code="print('ok')", timeout=30)
+
+    python_exec.assert_awaited_once_with(
+        "print('ok')",
+        timeout=30,
+        silent=False,
+        cwd=str(tmp_path.resolve(strict=False)),
+        sandboxed=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_local_member_python_is_denied_outside_linux(monkeypatch):
+    """Local member Python execution should fail closed outside Linux."""
+    from astrbot.core.tools.computer_tools import util as computer_util
+
+    monkeypatch.setattr(computer_util.sys, "platform", "darwin")
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.python.get_local_booter",
+        lambda: pytest.fail("Local Python must not start outside Linux"),
+    )
+    event = SimpleNamespace(
+        unified_msg_origin="onebot:GroupMessage:12345",
+        role="member",
+    )
+    context = ContextWrapper(
+        context=SimpleNamespace(
+            event=event,
+            context=SimpleNamespace(
+                get_config=lambda **_kwargs: {
+                    "provider_settings": {
+                        "computer_use_runtime": "local",
+                        "computer_use_require_admin": False,
+                    }
+                }
+            ),
+        ),
+        tool_call_timeout=60,
+    )
+
+    result = await LocalPythonTool().call(context, code="print('ok')")
+
+    assert "only supported on Linux with bubblewrap" in result

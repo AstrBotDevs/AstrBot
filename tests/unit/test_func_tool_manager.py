@@ -128,7 +128,111 @@ async def test_local_execute_shell_uses_managed_session(monkeypatch, tmp_path):
         env={},
         timeout=None,
         yield_time_ms=250,
+        sandboxed=False,
     )
+
+
+@pytest.mark.asyncio
+async def test_local_member_shell_uses_linux_sandbox(monkeypatch, tmp_path):
+    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.tools.computer_tools import util as computer_util
+
+    shell = LocalShellComponent()
+    shell.exec_managed = AsyncMock(
+        return_value={
+            "session_id": "sh_test",
+            "status": "running",
+            "stdout": "",
+            "stderr": "",
+            "exit_code": None,
+        }
+    )
+    booter = type("FakeBooter", (), {"shell": shell})()
+
+    class FakeConfig:
+        def get_config(self, umo):
+            return {
+                "provider_settings": {
+                    "computer_use_runtime": "local",
+                    "computer_use_require_admin": False,
+                }
+            }
+
+    class FakeEvent:
+        unified_msg_origin = "umo"
+        role = "member"
+
+    wrapper = type(
+        "FakeWrapper",
+        (),
+        {
+            "context": type(
+                "FakeAstrContext", (), {"context": FakeConfig(), "event": FakeEvent()}
+            )()
+        },
+    )()
+
+    async def fake_get_booter(context, session_id):
+        return booter
+
+    monkeypatch.setattr(computer_util.sys, "platform", "linux")
+    monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
+    monkeypatch.setattr(
+        shell_tools,
+        "workspace_root_for_context",
+        AsyncMock(return_value=tmp_path),
+    )
+
+    result = await LocalExecuteShellTool().call(
+        wrapper,
+        command="python server.py",
+        yield_time_ms=250,
+    )
+
+    assert json.loads(result)["session_id"] == "sh_test"
+    shell.exec_managed.assert_awaited_once_with(
+        "python server.py",
+        owner_id="umo",
+        cwd=str(tmp_path),
+        env={},
+        timeout=300,
+        yield_time_ms=250,
+        sandboxed=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_local_member_shell_is_denied_outside_linux(monkeypatch):
+    from astrbot.core.tools.computer_tools import util as computer_util
+
+    class FakeConfig:
+        def get_config(self, umo):
+            return {
+                "provider_settings": {
+                    "computer_use_runtime": "local",
+                    "computer_use_require_admin": False,
+                }
+            }
+
+    class FakeEvent:
+        unified_msg_origin = "umo"
+        role = "member"
+
+    wrapper = type(
+        "FakeWrapper",
+        (),
+        {
+            "context": type(
+                "FakeAstrContext", (), {"context": FakeConfig(), "event": FakeEvent()}
+            )()
+        },
+    )()
+
+    monkeypatch.setattr(computer_util.sys, "platform", "darwin")
+
+    result = await LocalExecuteShellTool().call(wrapper, command="pwd")
+
+    assert "only supported on Linux with bubblewrap" in result
 
 
 @pytest.mark.asyncio

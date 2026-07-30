@@ -24,8 +24,9 @@ Behavior when `provider_settings.computer_use_require_admin=True`:
 - Member + sandbox: read/write/edit/grep are also not path-restricted by this
   module. Upload/download are denied by `check_admin_permission` if invoked.
 
-When `computer_use_require_admin=False`, member behavior in this module matches
-admin behavior.
+When `computer_use_require_admin=False`, local members remain path-restricted.
+This is required because their shell and Python tools may be enabled inside a
+workspace-only operating-system sandbox.
 
 Local path resolution rule:
 - In local runtime, relative paths are resolved under the primary workspace.
@@ -149,14 +150,15 @@ def _write_allowed_roots(
 
 
 def _is_restricted_env(context: ContextWrapper[AstrAgentContext]) -> bool:
-    if not is_local_runtime(context):
-        return False
-    cfg = context.context.context.get_config(
-        umo=context.context.event.unified_msg_origin
-    )
-    provider_settings = cfg.get("provider_settings", {})
-    require_admin = provider_settings.get("computer_use_require_admin", True)
-    return require_admin and context.context.event.role != "admin"
+    """Return whether Local file access must stay within approved roots.
+
+    Args:
+        context: Tool call context.
+
+    Returns:
+        True for every non-admin Local tool call.
+    """
+    return is_local_runtime(context) and context.context.event.role != "admin"
 
 
 def _resolve_tool_path(

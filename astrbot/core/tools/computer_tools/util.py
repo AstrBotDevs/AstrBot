@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 from astrbot.core.agent.run_context import ContextWrapper
@@ -69,3 +70,28 @@ def check_admin_permission(
             f"User's ID is: {context.context.event.get_sender_id()}. User's ID can be found by using /sid command."
         )
     return None
+
+
+def check_local_execution_permission(
+    context: ContextWrapper[AstrAgentContext],
+    operation_name: str,
+) -> tuple[bool, str | None]:
+    """Resolve whether an execution tool needs the Linux Local sandbox.
+
+    Args:
+        context: Tool call context.
+        operation_name: User-facing name included in permission errors.
+
+    Returns:
+        A tuple of whether bubblewrap is required and an optional error.
+    """
+    if permission_error := check_admin_permission(context, operation_name):
+        return False, permission_error
+    if not is_local_runtime(context) or context.context.event.role == "admin":
+        return False, None
+    if not sys.platform.startswith("linux"):
+        return False, (
+            "error: Permission denied. Non-admin Local execution is only supported "
+            "on Linux with bubblewrap."
+        )
+    return True, None

@@ -5,11 +5,15 @@ import os
 import shlex
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
 from astrbot.core.computer.booters import local as local_booter
-from astrbot.core.computer.booters.local import LocalShellComponent
+from astrbot.core.computer.booters.local import (
+    LocalPythonComponent,
+    LocalShellComponent,
+)
 
 
 class _FakePopen:
@@ -151,6 +155,214 @@ async def test_managed_shell_uses_windows_powershell(monkeypatch, tmp_path):
         "Get-ChildItem",
     )
     assert "creationflags" in calls[0][1]
+
+
+def test_linux_bwrap_command_is_workspace_only_and_clears_environment(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(local_booter.sys, "platform", "linux")
+    monkeypatch.setattr(local_booter.shutil, "which", lambda name: f"/usr/bin/{name}")
+
+    command = local_booter._build_linux_bwrap_command(
+        ["/bin/sh", "-c", "pwd"],
+        workspace=tmp_path,
+        env={"CUSTOM_VALUE": "visible"},
+    )
+
+    workspace = str(tmp_path.resolve())
+    assert command[0] == "/usr/bin/bwrap"
+    assert "--unshare-all" in command
+    assert "--new-session" in command
+    assert "--clearenv" in command
+    assert "--share-net" not in command
+    assert command[command.index("--size") + 1] == str(256 * 1024 * 1024)
+    assert ["--bind", workspace, workspace] == command[
+        command.index("--bind") : command.index("--bind") + 3
+    ]
+    assert ["--setenv", "CUSTOM_VALUE", "visible"] == command[
+        command.index("CUSTOM_VALUE") - 1 : command.index("CUSTOM_VALUE") + 2
+    ]
+    assert command[-3:] == ["/bin/sh", "-c", "pwd"]
+    bind_sources = [
+        command[index + 1]
+        for index, value in enumerate(command)
+        if value in {"--bind", "--ro-bind"}
+    ]
+    assert str(Path.home()) not in bind_sources
+
+
+def test_linux_bwrap_command_fails_closed_when_bwrap_is_missing(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(local_booter.sys, "platform", "linux")
+    monkeypatch.setattr(local_booter.shutil, "which", lambda _name: None)
+
+    with pytest.raises(RuntimeError, match="bubblewrap"):
+        local_booter._build_linux_bwrap_command(
+            ["/bin/sh", "-c", "pwd"],
+            workspace=tmp_path,
+        )
+
+
+@pytest.mark.asyncio
+async def test_managed_shell_uses_linux_bwrap_when_sandboxed(monkeypatch, tmp_path):
+    calls = []
+
+    class FakeStdout:
+        def __init__(self):
+            self.chunks = [b"done\n", b""]
+
+        async def read(self, _limit):
+            return self.chunks.pop(0)
+
+    class FakeProcess:
+        def __init__(self):
+            self.pid = 12345
+            self.returncode = None
+            self.stdout = FakeStdout()
+            self.stdin = None
+
+        async def wait(self):
+            self.returncode = 0
+            return 0
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        calls.append((args, kwargs))
+        return FakeProcess()
+
+    async def fail_create_subprocess_shell(*_args, **_kwargs):
+        raise AssertionError("Sandboxed commands must use an argument vector.")
+
+    monkeypatch.setattr(local_booter.sys, "platform", "linux")
+    monkeypatch.setattr(local_booter.shutil, "which", lambda _name: "/usr/bin/bwrap")
+    monkeypatch.setattr(
+        local_booter.asyncio,
+        "create_subprocess_exec",
+        fake_create_subprocess_exec,
+    )
+    monkeypatch.setattr(
+        local_booter.asyncio,
+        "create_subprocess_shell",
+        fail_create_subprocess_shell,
+    )
+
+    result = await LocalShellComponent().exec_managed(
+        "pwd",
+        owner_id="owner-a",
+        cwd=str(tmp_path),
+        yield_time_ms=5_000,
+        sandboxed=True,
+    )
+
+    assert result["status"] == "completed"
+    assert result["stdout"] == "done\n"
+    assert calls[0][0][0] == "/usr/bin/bwrap"
+    assert calls[0][0][-3:] == ("/bin/sh", "-c", "pwd")
+    assert calls[0][1]["env"] == {"PATH": os.defpath}
+    assert calls[0][1]["start_new_session"] is True
+
+
+@pytest.mark.asyncio
+async def test_sandboxed_managed_shell_stops_at_output_limit(monkeypatch, tmp_path):
+    process_stopped = asyncio.Event()
+
+    class FakeStdout:
+        def __init__(self):
+            self.chunks = [b"123456", b""]
+
+        async def read(self, _limit):
+            return self.chunks.pop(0)
+
+    class FakeProcess:
+        def __init__(self):
+            self.pid = 12345
+            self.returncode = None
+            self.stdout = FakeStdout()
+            self.stdin = None
+
+        async def wait(self):
+            await process_stopped.wait()
+            self.returncode = -15
+            return self.returncode
+
+    async def fake_create_subprocess_exec(*_args, **_kwargs):
+        return FakeProcess()
+
+    def fake_killpg(pid, sig):
+        assert pid == 12345
+        assert sig == local_booter.signal.SIGTERM
+        process_stopped.set()
+
+    monkeypatch.setattr(local_booter.sys, "platform", "linux")
+    monkeypatch.setattr(local_booter.shutil, "which", lambda _name: "/usr/bin/bwrap")
+    monkeypatch.setattr(local_booter, "_LINUX_SANDBOX_MAX_OUTPUT_BYTES", 5)
+    monkeypatch.setattr(
+        local_booter.asyncio,
+        "create_subprocess_exec",
+        fake_create_subprocess_exec,
+    )
+    monkeypatch.setattr(local_booter.os, "killpg", fake_killpg)
+
+    result = await LocalShellComponent().exec_managed(
+        "yes",
+        owner_id="owner-a",
+        cwd=str(tmp_path),
+        yield_time_ms=5_000,
+        sandboxed=True,
+    )
+
+    assert result["status"] == "output_limited"
+    assert result["stdout"] == "12345"
+    assert result["session_closed"] is True
+
+
+@pytest.mark.asyncio
+async def test_local_python_uses_linux_bwrap_when_sandboxed(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_run(*args, **kwargs):
+        calls.append((args, kwargs))
+        kwargs["stdout"].write(b"done\n")
+        return subprocess.CompletedProcess(args[0], 0)
+
+    monkeypatch.setattr(local_booter.sys, "platform", "linux")
+    monkeypatch.setattr(local_booter.shutil, "which", lambda _name: "/usr/bin/bwrap")
+    monkeypatch.setattr(local_booter.subprocess, "run", fake_run)
+
+    result = await LocalPythonComponent().exec(
+        "print('done')",
+        cwd=str(tmp_path),
+        sandboxed=True,
+    )
+
+    assert result["data"]["output"]["text"] == "done\n"
+    assert calls[0][0][0][0] == "/usr/bin/bwrap"
+    assert calls[0][0][0][-3:] == [sys.executable, "-c", "print('done')"]
+    assert calls[0][1]["env"] == {"PATH": os.defpath}
+    assert "capture_output" not in calls[0][1]
+
+
+@pytest.mark.asyncio
+async def test_sandboxed_local_python_caps_returned_output(monkeypatch, tmp_path):
+    def fake_run(*args, **kwargs):
+        kwargs["stdout"].write(b"123456")
+        return subprocess.CompletedProcess(args[0], 0)
+
+    monkeypatch.setattr(local_booter.sys, "platform", "linux")
+    monkeypatch.setattr(local_booter.shutil, "which", lambda _name: "/usr/bin/bwrap")
+    monkeypatch.setattr(local_booter, "_LINUX_SANDBOX_MAX_OUTPUT_BYTES", 5)
+    monkeypatch.setattr(local_booter.subprocess, "run", fake_run)
+
+    result = await LocalPythonComponent().exec(
+        "print('large output')",
+        cwd=str(tmp_path),
+        sandboxed=True,
+    )
+
+    assert result["data"]["output"]["text"] == "12345"
+    assert result["data"]["error"] == "Execution output exceeded 5 bytes."
 
 
 def test_local_shell_component_prefers_utf8_before_windows_locale(
