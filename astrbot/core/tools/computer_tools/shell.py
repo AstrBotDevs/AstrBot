@@ -10,6 +10,7 @@ from astrbot.api import FunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.computer.booters.local import LocalShellComponent
 from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 
@@ -22,6 +23,9 @@ from .util import (
 
 _COMPUTER_RUNTIME_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": ("local", "sandbox"),
+}
+_LOCAL_RUNTIME_TOOL_CONFIG = {
+    "provider_settings.computer_use_runtime": "local",
 }
 
 
@@ -90,8 +94,9 @@ class ExecuteShellTool(FunctionTool):
         context: ContextWrapper[AstrAgentContext],
         command: str,
         background: bool = False,
-        timeout: int | None = 300,
+        timeout: int | None = None,
         env: dict[str, Any] | None = None,
+        yield_time_ms: int = 10_000,
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Shell execution"):
             return permission_error
@@ -102,17 +107,34 @@ class ExecuteShellTool(FunctionTool):
         )
         try:
             cwd: str | None = None
-            if is_local_runtime(context):
+            local_runtime = is_local_runtime(context)
+            if local_runtime:
                 current_workspace_root = await workspace_root_for_context(context)
                 current_workspace_root.mkdir(parents=True, exist_ok=True)
                 cwd = str(current_workspace_root)
 
             env = dict(env or {})
+            if local_runtime:
+                if not isinstance(sb.shell, LocalShellComponent):
+                    return (
+                        "Error executing command: local shell component is unavailable."
+                    )
+                return json.dumps(
+                    await sb.shell.exec_managed(
+                        command,
+                        owner_id=context.context.event.unified_msg_origin,
+                        cwd=cwd,
+                        env=env,
+                        timeout=timeout,
+                        yield_time_ms=0 if background else yield_time_ms,
+                    ),
+                    ensure_ascii=False,
+                )
+
             effective_background = background and not _is_self_detached_command(command)
 
             stdout_file: str | None = None
             if effective_background:
-                local_runtime = is_local_runtime(context)
                 stdout_file = _build_background_output_path(
                     local_runtime=local_runtime,
                 )
@@ -138,6 +160,211 @@ class ExecuteShellTool(FunctionTool):
         except Exception as e:
             detail = str(e) or type(e).__name__
             return f"Error executing command: {detail}"
+
+
+@dataclass
+class LocalExecuteShellTool(ExecuteShellTool):
+    """Local shell tool that automatically yields long-running commands."""
+
+    description: str = (
+        "Execute a command in the shell. If it is still running after "
+        "yield_time_ms, the tool returns a managed shell session ID."
+    )
+    parameters: dict = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": "The shell command to execute in the current workspace.",
+                },
+                "yield_time_ms": {
+                    "type": "integer",
+                    "description": "Maximum time to wait for completion before returning a managed shell session. This does not stop the process.",
+                    "default": 10000,
+                    "minimum": 0,
+                    "maximum": 30000,
+                },
+                "timeout": {
+                    "type": "integer",
+                    "description": "Optional hard process lifetime in seconds. Omit it to allow the managed session to keep running.",
+                    "minimum": 1,
+                },
+                "env": {
+                    "type": "object",
+                    "description": "Optional environment variables to set.",
+                    "additionalProperties": {"type": "string"},
+                    "default": {},
+                },
+            },
+            "required": ["command"],
+        }
+    )
+
+    async def call(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        command: str,
+        yield_time_ms: int = 10_000,
+        timeout: int | None = None,
+        env: dict[str, Any] | None = None,
+    ) -> ToolExecResult:
+        """Execute a local command without a background-mode argument.
+
+        Args:
+            context: Current agent tool context.
+            command: Shell command to execute.
+            yield_time_ms: Maximum initial wait before returning a session.
+            timeout: Optional hard process lifetime.
+            env: Additional environment variables.
+
+        Returns:
+            JSON command result or a user-facing error.
+        """
+        return await super().call(
+            context,
+            command,
+            background=False,
+            timeout=timeout,
+            env=env,
+            yield_time_ms=yield_time_ms,
+        )
+
+
+@builtin_tool(config=_LOCAL_RUNTIME_TOOL_CONFIG)
+@dataclass
+class ShellSessionTool(FunctionTool):
+    """Manage shell sessions created by the local shell execution tool."""
+
+    name: str = "astrbot_shell_session"
+    description: str = (
+        "List, poll, write to, interrupt, or terminate managed shell sessions. "
+        "Sessions are isolated to the current conversation."
+    )
+    parameters: dict = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["list", "poll", "write", "interrupt", "terminate"],
+                    "description": "Session operation to perform.",
+                },
+                "session_id": {
+                    "type": "string",
+                    "description": "Required for every action except list.",
+                },
+                "chars": {
+                    "type": "string",
+                    "description": "Text written verbatim when action is write.",
+                    "default": "",
+                },
+                "cursor": {
+                    "type": "integer",
+                    "description": "Optional byte cursor for poll. Omit to continue from the last returned output.",
+                    "minimum": 0,
+                },
+                "yield_time_ms": {
+                    "type": "integer",
+                    "description": "Maximum time poll or interrupt waits for output or exit.",
+                    "default": 5000,
+                    "minimum": 0,
+                    "maximum": 30000,
+                },
+                "max_output_chars": {
+                    "type": "integer",
+                    "description": "Maximum output bytes returned by poll, interrupt, or terminate.",
+                    "default": 10000,
+                    "minimum": 1,
+                    "maximum": 100000,
+                },
+            },
+            "required": ["action"],
+        }
+    )
+
+    async def call(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        action: str,
+        session_id: str | None = None,
+        chars: str = "",
+        cursor: int | None = None,
+        yield_time_ms: int = 5_000,
+        max_output_chars: int = 10_000,
+    ) -> ToolExecResult:
+        """Perform a conversation-scoped local shell session operation.
+
+        Args:
+            context: Current agent tool context.
+            action: Session operation to perform.
+            session_id: Managed session identifier, except for list.
+            chars: Text written for the write action.
+            cursor: Optional output byte cursor.
+            yield_time_ms: Maximum wait for output or process exit.
+            max_output_chars: Maximum output bytes to return.
+
+        Returns:
+            JSON session operation result or a user-facing error.
+        """
+        if permission_error := check_admin_permission(
+            context,
+            "Shell session management",
+        ):
+            return permission_error
+        if not is_local_runtime(context):
+            return "Error managing shell session: only local runtime is supported."
+
+        try:
+            sb = await get_booter(
+                context.context.context,
+                context.context.event.unified_msg_origin,
+            )
+            if not isinstance(sb.shell, LocalShellComponent):
+                return "Error managing shell session: local shell component is unavailable."
+
+            owner_id = context.context.event.unified_msg_origin
+            if action == "list":
+                result = await sb.shell.list_sessions(owner_id)
+            else:
+                if not session_id:
+                    return (
+                        "Error managing shell session: session_id is required "
+                        f"when action={action}."
+                    )
+                if action == "poll":
+                    result = await sb.shell.poll_session(
+                        owner_id=owner_id,
+                        session_id=session_id,
+                        cursor=cursor,
+                        yield_time_ms=yield_time_ms,
+                        max_output_chars=max_output_chars,
+                    )
+                elif action == "write":
+                    result = await sb.shell.write_session(
+                        owner_id=owner_id,
+                        session_id=session_id,
+                        chars=chars,
+                    )
+                elif action == "interrupt":
+                    result = await sb.shell.interrupt_session(
+                        owner_id=owner_id,
+                        session_id=session_id,
+                        yield_time_ms=yield_time_ms,
+                        max_output_chars=max_output_chars,
+                    )
+                elif action == "terminate":
+                    result = await sb.shell.terminate_session(
+                        owner_id=owner_id,
+                        session_id=session_id,
+                        max_output_chars=max_output_chars,
+                    )
+                else:
+                    return f"Error managing shell session: unsupported action {action}."
+            return json.dumps(result, ensure_ascii=False)
+        except Exception as exc:
+            detail = str(exc) or type(exc).__name__
+            return f"Error managing shell session: {detail}"
 
 
 def _is_self_detached_command(command: str) -> bool:
