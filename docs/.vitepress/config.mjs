@@ -45,8 +45,8 @@ export default defineConfig({
             items: [
               { text: "包管理器部署", link: "/astrbot/package" },
               { text: "雨云一键云部署", link: "/astrbot/rainyun" },
-              { text: "桌面客户端部署", link: "/astrbot/desktop" },
-              { text: "启动器一键部署", link: "/astrbot/launcher" },
+              { text: "桌面启动器", link: "/astrbot/launcher" },
+              { text: "AstrBot App", link: "/astrbot/desktop" },
               { text: "Docker 部署", link: "/astrbot/docker" },
               { text: "Kubernetes 部署", link: "/astrbot/kubernetes" },
               { text: "宝塔面板部署", link: "/astrbot/btpanel" },
@@ -298,8 +298,8 @@ export default defineConfig({
             collapsed: false,
             items: [
               { text: "Package Manager", link: "/astrbot/package" },
-              { text: "Desktop Client", link: "/astrbot/desktop" },
-              { text: "One-click Launcher", link: "/astrbot/launcher" },
+              { text: "Desktop Launcher", link: "/astrbot/launcher" },
+              { text: "AstrBot App", link: "/astrbot/desktop" },
               { text: "Docker", link: "/astrbot/docker" },
               { text: "Kubernetes", link: "/astrbot/kubernetes" },
               { text: "BT Panel", link: "/astrbot/btpanel" },

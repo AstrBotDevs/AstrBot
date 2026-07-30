@@ -105,17 +105,17 @@ For users familiar with containers and looking for a more stable, production-rea
 
 Please refer to the official documentation: [Deploy AstrBot with Docker](https://docs.astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot).
 
-### Desktop Application Deployment
+### Desktop Launcher
 
-For users who want to use AstrBot on desktop and mainly use ChatUI, we recommend AstrBot App.
+For users who want the standard AstrBot experience on their computer, we recommend AstrBot Desktop Launcher (formerly AstrBot Launcher). It supports quick setup and isolated multiple instances while preserving the standard AstrBot experience.
 
-Visit [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop) to download and install; this method is designed for desktop usage and is not recommended for server scenarios.
+Visit [AstrBot Desktop Launcher](https://github.com/Raven95676/astrbot-launcher) to download and install.
 
-### Launcher Deployment
+### AstrBot App
 
-For desktop users who also want fast deployment and isolated multi-instance usage, we recommend AstrBot Launcher.
+AstrBot App is an independent desktop product for exploring new interactions and capabilities beyond AstrBot's current feature set. Its experience may evolve with these explorations rather than strictly reproducing the standard AstrBot experience.
 
-Visit [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) to download and install.
+To use AstrBot as-is on desktop, choose AstrBot Desktop Launcher above. To try these new directions, visit [AstrBot App](https://github.com/AstrBotDevs/AstrBot-desktop) to download and install.
 
 ### Deploy on Replit
 

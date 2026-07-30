@@ -1,33 +1,31 @@
-# 使用 AstrBot 桌面客户端部署
+# AstrBot App
 
-`AstrBot-desktop` 适合在本地电脑快速部署和使用 AstrBot，支持 Windows、macOS、Linux。
+`AstrBot-desktop` 是面向桌面场景的独立应用，支持 Windows、macOS 和 Linux。它用于探索 AstrBot 现有能力之外的新交互和新功能，不以复刻标准 AstrBot 体验为唯一目标，具体体验可能随着这些探索不断演进。
 
-在多种部署方式中，桌面客户端更适合个人本地快速使用，不建议用于服务器长期运行或生产环境；如需生产部署，建议优先考虑 [Docker 部署](/deploy/astrbot/docker) 或 [Kubernetes 部署](/deploy/astrbot/kubernetes)。
-
-相比命令行或容器方案，桌面客户端更偏向「开箱即用」体验，适合希望少折腾环境、直接开始使用的用户。
+如果你希望在电脑上原样使用 AstrBot，请选择 [AstrBot 桌面启动器](/deploy/astrbot/launcher)。如需服务器长期运行或生产部署，建议使用 [Docker 部署](/deploy/astrbot/docker) 或 [Kubernetes 部署](/deploy/astrbot/kubernetes)。
 
 仓库地址：[AstrBotDevs/AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop)
 
 ## 适合谁
 
-- 想快速本地部署，优先使用图形化界面的用户。
-- 不想手动维护 Docker / Python 运行环境的新手用户。
-- 个人设备长期在线，主要用于个人或小团队日常使用的场景。
+- 想体验 AstrBot 现有能力之外的新功能和新交互的用户。
+- 以 ChatUI 为主要入口，希望尝试更完整桌面应用体验的用户。
+- 接受产品持续探索、体验可能与标准 AstrBot 不同的用户。
 
 ## 主要特点
 
 - 多平台安装包，下载后可直接安装使用。
-- 图形化界面配置，降低首次部署成本。
-- 适合作为本地常驻客户端。
+- 面向桌面场景的一体化图形界面。
+- 承载超越 AstrBot 现有功能边界的产品尝试。
 
 ## 下载并安装
 
 1. 打开 [AstrBot-desktop Releases](https://github.com/AstrBotDevs/AstrBot-desktop/releases)。
 2. 下载与你系统对应的安装包（如 `.exe`、`.dmg`、`.rpm`、`.deb`）。
-3. 安装完成后启动桌面客户端，按向导完成初始化。
+3. 安装完成后启动 AstrBot App，按向导完成初始化。
 
-## 与启动器部署的区别
+## 与 AstrBot 桌面启动器的区别
 
-- 桌面客户端：更偏向开箱即用的 GUI 体验。
-- 启动器部署：更偏向自动化脚本拉起，适合希望保持传统部署流程的用户。
-- 参考 [启动器部署](/deploy/astrbot/launcher)。
+- AstrBot 桌面启动器：在电脑上提供原样的标准 AstrBot 体验。
+- AstrBot App：探索 AstrBot 现有能力之外的新交互和新功能，体验可能与标准 AstrBot 不同。
+- 如果你只是想在电脑上使用原版 AstrBot，请选择 [AstrBot 桌面启动器](/deploy/astrbot/launcher)。

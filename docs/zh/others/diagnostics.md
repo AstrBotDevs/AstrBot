@@ -72,7 +72,7 @@ data/logs/event_loop_watchdog.log
 提交问题时，请尽量提供以下信息：
 
 - 问题发生的大致时间点和时区。
-- AstrBot 版本、部署方式（Docker、手动部署、桌面客户端等）、操作系统。
+- AstrBot 版本、部署方式（Docker、手动部署、AstrBot 桌面启动器、AstrBot App 等）、操作系统。
 - 触发方式：启动、普通聊天、群聊、平台回调、定时任务、MCP 工具、插件功能等。
 - 影响范围：所有会话、某个平台、某个群、某个用户，还是某个插件。
 - `data/logs/astrbot.log` 中问题发生前后 1 到 3 分钟的日志。
