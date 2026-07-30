@@ -4,7 +4,7 @@ import threading
 import dingtalk_stream
 import pytest
 
-from astrbot.api.message_components import At, Plain
+from astrbot.api.message_components import At, Plain, Reply
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.sources.dingtalk import dingtalk_adapter
 from astrbot.core.platform.sources.dingtalk.dingtalk_adapter import (
@@ -219,3 +219,90 @@ async def test_dingtalk_rich_text_preserves_other_leading_mention():
     assert result.message[1].qq == "bot"
     assert isinstance(result.message[2], Plain)
     assert result.message[2].text == "@AnotherUser"
+
+
+@pytest.mark.asyncio
+async def test_dingtalk_text_reply_preserves_quoted_message():
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    message = _dingtalk_group_message(
+        atUsers=[{"dingtalkId": "bot"}],
+        isInAtList=True,
+        msgtype="text",
+        text={
+            "content": "你能回答这个问题么",
+            "isReplyMsg": True,
+            "repliedMsg": {
+                "msgType": "text",
+                "msgId": "quoted-message",
+                "senderId": "$:LWCP_v1:$quoted-sender",
+                "senderNick": "Quoted User",
+                "createdAt": 1_700_000_000_000,
+                "content": {"text": "这个产品目前接入了哪些模型？"},
+            },
+        },
+    )
+
+    result = await adapter.convert_msg(message)
+
+    assert result.message_str == "你能回答这个问题么"
+    assert isinstance(result.message[0], Reply)
+    assert result.message[0].id == "quoted-message"
+    assert result.message[0].sender_id == "quoted-sender"
+    assert result.message[0].sender_nickname == "Quoted User"
+    assert result.message[0].time == 1_700_000_000
+    assert result.message[0].message_str == "这个产品目前接入了哪些模型？"
+    assert len(result.message[0].chain) == 1
+    assert isinstance(result.message[0].chain[0], Plain)
+    assert isinstance(result.message[1], At)
+    assert isinstance(result.message[2], Plain)
+
+
+@pytest.mark.asyncio
+async def test_dingtalk_legacy_quote_message_is_supported():
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    message = _dingtalk_group_message(
+        msgtype="text",
+        text={"content": "继续说"},
+        quoteMessage={
+            "msgId": "legacy-quoted-message",
+            "msgtype": "text",
+            "senderId": "legacy-sender",
+            "senderNick": "Legacy User",
+            "text": {"content": "旧格式引用内容"},
+        },
+    )
+
+    result = await adapter.convert_msg(message)
+
+    assert isinstance(result.message[0], Reply)
+    assert result.message[0].id == "legacy-quoted-message"
+    assert result.message[0].message_str == "旧格式引用内容"
+    assert result.message[0].sender_nickname == "Legacy User"
+
+
+@pytest.mark.asyncio
+async def test_dingtalk_rich_text_reply_builds_readable_quote():
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    message = _dingtalk_group_message(
+        msgtype="text",
+        text={
+            "content": "看一下引用",
+            "isReplyMsg": True,
+            "repliedMsg": {
+                "msgType": "richText",
+                "msgId": "rich-quoted-message",
+                "content": {
+                    "richText": [
+                        {"msgType": "text", "content": "第一段"},
+                        {"msgType": "picture", "downloadCode": "image-code"},
+                        {"type": "text", "text": "第二段"},
+                    ]
+                },
+            },
+        },
+    )
+
+    result = await adapter.convert_msg(message)
+
+    assert isinstance(result.message[0], Reply)
+    assert result.message[0].message_str == "第一段[Image]第二段"

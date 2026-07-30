@@ -13,7 +13,7 @@ from dingtalk_stream import AckMessage
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, File, Image, Plain, Record, Video
+from astrbot.api.message_components import At, File, Image, Plain, Record, Reply, Video
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -107,6 +107,115 @@ class DingtalkPlatformAdapter(Platform):
         if dingtalk_id.startswith(prefix):
             return dingtalk_id[len(prefix) :]
         return dingtalk_id or "unknown"
+
+    def _parse_reply(
+        self,
+        message: dingtalk_stream.ChatbotMessage,
+    ) -> Reply | None:
+        """Convert DingTalk quote metadata into an AstrBot reply component.
+
+        Args:
+            message: Parsed DingTalk chatbot callback message.
+
+        Returns:
+            A reply component when the callback contains a usable quote,
+            otherwise None.
+        """
+        text_content = getattr(message, "text", None)
+        text_extensions = getattr(text_content, "extensions", None)
+        if not isinstance(text_extensions, dict):
+            text_extensions = {}
+        message_extensions = getattr(message, "extensions", None)
+        if not isinstance(message_extensions, dict):
+            message_extensions = {}
+
+        replied_message = text_extensions.get("repliedMsg")
+        legacy_quote = message_extensions.get("quoteMessage")
+        quote = None
+        if text_extensions.get("isReplyMsg") and isinstance(replied_message, dict):
+            quote = replied_message
+        elif isinstance(legacy_quote, dict):
+            quote = legacy_quote
+        if quote is None:
+            return None
+
+        message_type = str(
+            quote.get("msgType") or quote.get("msgtype") or "text"
+        ).strip()
+        content = quote.get("content")
+        if not isinstance(content, (dict, str)):
+            content = quote.get("text")
+        if isinstance(content, str):
+            content = {"text": content}
+        if not isinstance(content, dict):
+            content = {}
+
+        quoted_text = ""
+        for key in ("text", "content"):
+            value = content.get(key)
+            if isinstance(value, str) and value.strip():
+                quoted_text = value.strip()
+                break
+
+        if not quoted_text and message_type == "richText":
+            parts = []
+            rich_text = content.get("richText")
+            if isinstance(rich_text, list):
+                for item in rich_text:
+                    if not isinstance(item, dict):
+                        continue
+                    item_text = item.get("content") or item.get("text")
+                    if isinstance(item_text, str) and item_text.strip():
+                        parts.append(item_text.strip())
+                    elif (item.get("msgType") or item.get("type")) == "picture":
+                        parts.append("[Image]")
+            quoted_text = "".join(parts)
+
+        if not quoted_text:
+            placeholders = {
+                "picture": "[Image]",
+                "audio": "[Audio]",
+                "voice": "[Audio]",
+                "video": "[Video]",
+                "interactiveCard": "[Card]",
+                "chatRecord": "[Chat history]",
+            }
+            if message_type == "file":
+                file_name = content.get("fileName")
+                quoted_text = (
+                    f"[File: {file_name}]"
+                    if isinstance(file_name, str) and file_name
+                    else "[File]"
+                )
+            else:
+                quoted_text = placeholders.get(message_type, "")
+
+        quote_id = str(
+            quote.get("msgId") or message_extensions.get("originalMsgId") or ""
+        ).strip()
+        if not quote_id and not quoted_text:
+            return None
+
+        sender_id = str(quote.get("senderId") or "")
+        if sender_id:
+            sender_id = self._id_to_sid(sender_id)
+        created_at = quote.get("createdAt") or 0
+        try:
+            quote_time = int(created_at)
+            if quote_time > 10_000_000_000:
+                quote_time //= 1000
+        except (TypeError, ValueError):
+            quote_time = 0
+
+        return Reply(
+            id=quote_id,
+            chain=[Plain(quoted_text)] if quoted_text else [],
+            sender_id=sender_id,
+            sender_nickname=str(quote.get("senderNick") or ""),
+            time=quote_time,
+            message_str=quoted_text,
+            text=quoted_text,
+        )
 
     async def send_by_session(
         self,
@@ -314,6 +423,9 @@ class DingtalkPlatformAdapter(Platform):
                         if not file_name:
                             file_name = Path(f_path).name
                         abm.message.append(File(name=file_name, file=f_path))
+
+        if reply := self._parse_reply(message):
+            abm.message.insert(0, reply)
 
         await self._remember_sender_binding(message, abm)
         return abm  # 别忘了返回转换后的消息对象
