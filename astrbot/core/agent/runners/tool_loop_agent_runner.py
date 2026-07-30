@@ -950,7 +950,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 parts = None
             tool_calls_result = ToolCallsResult(
                 tool_calls_info=AssistantMessageSegment(
-                    tool_calls=llm_resp.to_openai_to_calls_model(),
+                    tool_calls=llm_resp.to_openai_tool_calls_model(),
                     content=parts,
                 ),
                 tool_calls_result=tool_call_result_blocks,
