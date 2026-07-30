@@ -380,6 +380,12 @@ class KBHelper:
                         "chunk_index": idx,
                     },
                 )
+            document_title = Path(file_name).stem.strip()
+            embedding_contents = (
+                [f"{document_title}\n\n{chunk_text}" for chunk_text in chunks_text]
+                if document_title
+                else contents
+            )
 
             if progress_callback:
                 await progress_callback("chunking", 100, 100)
@@ -397,6 +403,7 @@ class KBHelper:
                     tasks_limit=tasks_limit,
                     max_retries=max_retries,
                     progress_callback=embedding_progress_callback,
+                    embedding_contents=embedding_contents,
                 )
             except KnowledgeBaseUploadError:
                 raise

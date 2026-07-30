@@ -384,6 +384,14 @@ async def test_upload_document_cleans_up_on_metadata_failure(
 
     assert exc_info.value.stage == "metadata"
     helper.vec_db.insert_batch.assert_awaited_once()
+    assert helper.vec_db.insert_batch.await_args.kwargs["contents"] == [
+        "chunk a",
+        "chunk b",
+    ]
+    assert helper.vec_db.insert_batch.await_args.kwargs["embedding_contents"] == [
+        "demo\n\nchunk a",
+        "demo\n\nchunk b",
+    ]
     helper.vec_db.delete_documents.assert_awaited()
 
 

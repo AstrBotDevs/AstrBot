@@ -65,6 +65,41 @@ async def test_insert_batch_raises_friendly_error_for_embedding_count_mismatch()
     vec_db.embedding_storage.insert_batch.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+async def test_insert_batch_embeds_context_but_stores_original_contents() -> None:
+    vec_db = FaissVecDB.__new__(FaissVecDB)
+    vec_db.embedding_provider = AsyncMock()
+    vec_db.embedding_provider.get_embeddings_batch.return_value = [
+        [0.1, 0.2],
+        [0.3, 0.4],
+    ]
+    vec_db.document_storage = AsyncMock()
+    vec_db.document_storage.insert_documents_batch.return_value = [11, 12]
+    vec_db.embedding_storage = AsyncMock()
+    vec_db.embedding_storage.dimension = 2
+
+    await FaissVecDB.insert_batch(
+        vec_db,
+        contents=["chunk one", "chunk two"],
+        metadatas=[{}, {}],
+        ids=["doc-1", "doc-2"],
+        embedding_contents=["guide\n\nchunk one", "guide\n\nchunk two"],
+    )
+
+    vec_db.embedding_provider.get_embeddings_batch.assert_awaited_once_with(
+        ["guide\n\nchunk one", "guide\n\nchunk two"],
+        batch_size=32,
+        tasks_limit=3,
+        max_retries=3,
+        progress_callback=None,
+    )
+    vec_db.document_storage.insert_documents_batch.assert_awaited_once_with(
+        ["doc-1", "doc-2"],
+        ["chunk one", "chunk two"],
+        [{}, {}],
+    )
+
+
 def test_embedding_storage_rejects_zero_dimension_for_a_fresh_index(tmp_path) -> None:
     with pytest.raises(ValueError, match="无效的嵌入向量维度"):
         EmbeddingStorage(0, str(tmp_path / "index.faiss"))
