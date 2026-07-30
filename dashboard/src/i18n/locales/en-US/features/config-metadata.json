@@ -988,13 +988,13 @@
       }
     },
     "ltm": {
-      "description": "Group Chat Context Awareness (formerly Chat Memory Enhancement)",
+      "description": "Group Chat Context Awareness",
       "provider_ltm_settings": {
         "group_icl_enable": {
-          "description": "Enable Group Chat Context Awareness"
+          "description": "Inject Group Chat Records into Context"
         },
         "group_message_max_cnt": {
-          "description": "Maximum Message Count"
+          "description": "Maximum Messages Injected into Context"
         },
         "image_caption": {
           "description": "Auto-understand Images",
@@ -1002,7 +1002,14 @@
         },
         "image_caption_provider_id": {
           "description": "Group Chat Image Caption Model",
-          "hint": "Used for image understanding in group chat context awareness, configured separately from the default image caption model."
+          "hint": "Used to understand images injected from group chat records, configured separately from the default image caption model."
+        },
+        "group_message_history_enable": {
+          "description": "Persist Group Chat Messages",
+          "hint": "Saves group messages and provides the model with a tool for querying the current group's history. Media content is not currently persisted; media messages are stored as placeholders such as [Image]."
+        },
+        "group_message_history_max_cnt": {
+          "description": "Maximum Persisted Messages"
         },
         "active_reply": {
           "enable": {

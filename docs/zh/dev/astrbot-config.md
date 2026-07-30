@@ -90,7 +90,7 @@ AstrBot 默认配置如下：
     },
     "provider_ltm_settings": {
         "group_icl_enable": False,
-        "group_message_max_cnt": 300,
+        "group_message_max_cnt": 1000,
         "image_caption": False,
         "active_reply": {
             "enable": False,
@@ -412,17 +412,17 @@ Added in `v4.3.5`
 
 #### `provider_ltm_settings.group_icl_enable`
 
-是否启用群聊上下文感知。默认为 `false`。启用后，机器人会记录群聊中的对话内容，以便更好地理解群聊的上下文。
+是否将群聊记录注入模型上下文。默认为 `false`。启用后，机器人会暂存群聊中的对话内容，并在下一次回复时注入模型上下文。
 
 上下文的内容会被放在对话的系统提示词中。
 
 #### `provider_ltm_settings.group_message_max_cnt`
 
-群聊消息的最大记录数量。默认为 `100`。超过此数量的消息将被丢弃。
+注入上下文所保留的最大群聊消息数量。默认为 `1000`。超过此数量的消息将被丢弃。仅在群聊记录注入上下文开启时生效。
 
 #### `provider_ltm_settings.image_caption`
 
-是否记录群聊中的图片，并自动使用图像描述模型生成图片的描述文本。默认为 `false`。此配置项依赖于 `provider_settings.default_image_caption_provider_id` 的配置。请谨慎使用，因为这可能会增加大量的 API 调用和 token 开销。
+是否自动使用群聊图片转述模型生成图片描述并注入上下文。默认为 `false`。仅在群聊记录注入上下文开启时生效。请谨慎使用，因为这可能会增加大量的 API 调用和 token 开销。
 
 #### `provider_ltm_settings.active_reply`
 

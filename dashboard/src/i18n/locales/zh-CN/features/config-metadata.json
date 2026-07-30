@@ -990,13 +990,13 @@
       }
     },
     "ltm": {
-      "description": "群聊上下文感知(原聊天记忆增强)",
+      "description": "群聊上下文感知",
       "provider_ltm_settings": {
         "group_icl_enable": {
-          "description": "启用群聊上下文感知"
+          "description": "群聊消息记录注入上下文"
         },
         "group_message_max_cnt": {
-          "description": "最大消息数量"
+          "description": "注入上下文最大消息数量"
         },
         "image_caption": {
           "description": "自动理解图片",
@@ -1004,7 +1004,14 @@
         },
         "image_caption_provider_id": {
           "description": "群聊图片转述模型",
-          "hint": "用于群聊上下文感知的图片理解，与默认图片转述模型分开配置。"
+          "hint": "用于群聊记录注入上下文的图片理解，与默认图片转述模型分开配置。"
+        },
+        "group_message_history_enable": {
+          "description": "持久化群聊消息记录",
+          "hint": "启用后保存群消息，并向模型提供当前群聊历史查询工具。暂时不支持媒体消息记录，媒体消息将保存为 [Image] 等占位文本。"
+        },
+        "group_message_history_max_cnt": {
+          "description": "持久化最大消息数量"
         },
         "active_reply": {
           "enable": {
