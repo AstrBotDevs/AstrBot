@@ -140,25 +140,35 @@ class LocalShellComponent(ShellComponent):
             if env:
                 run_env.update({str(k): str(v) for k, v in env.items()})
             working_dir = os.path.abspath(cwd) if cwd else get_astrbot_root()
-            if background:
-                # `command` is intentionally executed through the current shell so
-                # local computer-use behavior matches existing tool semantics.
-                # Safety relies on `_is_safe_command()` and the allowed-root checks.
-                proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
+            popen_command: str | list[str] = command
+            popen_shell = shell
+            if sys.platform == "win32" and shell:
+                popen_command = [
+                    "powershell.exe",
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
                     command,
-                    shell=shell,
+                ]
+                popen_shell = False
+            if background:
+                # Shell commands use PowerShell 5.1 on Windows and the platform
+                # shell elsewhere. Safety relies on `_is_safe_command()`.
+                proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
+                    popen_command,
+                    shell=popen_shell,
                     cwd=working_dir,
                     env=run_env,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
                 return {"pid": proc.pid, "stdout": "", "stderr": "", "exit_code": None}
-            # `command` is intentionally executed through the current shell so
-            # local computer-use behavior matches existing tool semantics.
-            # Safety relies on `_is_safe_command()` and the allowed-root checks.
+            # Shell commands use PowerShell 5.1 on Windows and the platform shell
+            # elsewhere. Safety relies on `_is_safe_command()`.
             proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
-                command,
-                shell=shell,
+                popen_command,
+                shell=popen_shell,
                 cwd=working_dir,
                 env=run_env,
                 stdout=subprocess.PIPE,
@@ -247,7 +257,7 @@ class LocalShellComponent(ShellComponent):
         output_path.touch()
 
         process_kwargs: dict[str, Any] = {}
-        if os.name == "nt":
+        if sys.platform == "win32":
             process_kwargs["creationflags"] = getattr(
                 subprocess,
                 "CREATE_NEW_PROCESS_GROUP",
@@ -257,8 +267,21 @@ class LocalShellComponent(ShellComponent):
             process_kwargs["start_new_session"] = True
 
         try:
-            process = await asyncio.create_subprocess_shell(
-                command,
+            if sys.platform == "win32":
+                process_factory = asyncio.create_subprocess_exec
+                process_args = (
+                    "powershell.exe",
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    command,
+                )
+            else:
+                process_factory = asyncio.create_subprocess_shell
+                process_args = (command,)
+            process = await process_factory(
+                *process_args,
                 cwd=working_dir,
                 env=run_env,
                 stdin=asyncio.subprocess.PIPE,
