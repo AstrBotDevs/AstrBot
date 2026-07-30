@@ -75,6 +75,9 @@ class RankFusion:
             List[FusedResult]: 融合后的结果列表
 
         """
+        if top_k <= 0:
+            return []
+
         # 1. 构建排名映射
         dense_ranks = {
             r.data["doc_id"]: (idx + 1) for idx, r in enumerate(dense_results)
@@ -167,37 +170,44 @@ class RankFusion:
                 sparse_ranks.get(cid, float("inf")),
                 cid,
             ),
-        )[:top_k]
+        )
 
-        # 6. 构建融合结果
+        # 6. 构建融合结果，每篇来源文档只保留得分最高的块。
         fused_results = []
+        seen_documents: set[tuple[str, str]] = set()
         for identifier in sorted_ids:
             # 优先从稀疏检索获取完整信息
             if identifier in chunk_id_to_sparse:
                 sr = chunk_id_to_sparse[identifier]
-                fused_results.append(
-                    FusedResult(
-                        chunk_id=sr.chunk_id,
-                        chunk_index=sr.chunk_index,
-                        doc_id=sr.doc_id,
-                        kb_id=sr.kb_id,
-                        content=sr.content,
-                        score=fusion_scores[identifier],
-                    ),
+                fused_result = FusedResult(
+                    chunk_id=sr.chunk_id,
+                    chunk_index=sr.chunk_index,
+                    doc_id=sr.doc_id,
+                    kb_id=sr.kb_id,
+                    content=sr.content,
+                    score=fusion_scores[identifier],
                 )
             elif identifier in vec_doc_id_to_dense:
                 # 从向量检索获取信息,需要从数据库获取块的详细信息
                 vec_result = vec_doc_id_to_dense[identifier]
                 chunk_md = dense_metadata[identifier]
-                fused_results.append(
-                    FusedResult(
-                        chunk_id=identifier,
-                        chunk_index=chunk_md["chunk_index"],
-                        doc_id=chunk_md["kb_doc_id"],
-                        kb_id=chunk_md["kb_id"],
-                        content=vec_result.data["text"],
-                        score=fusion_scores[identifier],
-                    ),
+                fused_result = FusedResult(
+                    chunk_id=identifier,
+                    chunk_index=chunk_md["chunk_index"],
+                    doc_id=chunk_md["kb_doc_id"],
+                    kb_id=chunk_md["kb_id"],
+                    content=vec_result.data["text"],
+                    score=fusion_scores[identifier],
                 )
+            else:
+                continue
+
+            document_key = (fused_result.kb_id, fused_result.doc_id)
+            if document_key in seen_documents:
+                continue
+            seen_documents.add(document_key)
+            fused_results.append(fused_result)
+            if len(fused_results) >= top_k:
+                break
 
         return fused_results

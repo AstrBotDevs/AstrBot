@@ -29,11 +29,12 @@ def make_sparse_result(
     kb_id: str,
     score: float,
     rank: int,
+    doc_id: str | None = None,
 ) -> SparseResult:
     return SparseResult(
         chunk_index=0,
         chunk_id=chunk_id,
-        doc_id=f"doc-{chunk_id}",
+        doc_id=doc_id or f"doc-{chunk_id}",
         kb_id=kb_id,
         content=chunk_id,
         score=score,
@@ -45,6 +46,17 @@ def make_sparse_result(
 def test_rank_fusion_rejects_invalid_dense_weight(dense_weight):
     with pytest.raises(ValueError, match="dense_weight"):
         RankFusion(kb_db=None, dense_weight=dense_weight)
+
+
+@pytest.mark.asyncio
+async def test_rank_fusion_returns_empty_for_non_positive_top_k():
+    results = await RankFusion(kb_db=None).fuse(
+        dense_results=[make_dense_result("chunk", 0.99)],
+        sparse_results=[],
+        top_k=0,
+    )
+
+    assert results == []
 
 
 @pytest.mark.asyncio
@@ -126,8 +138,7 @@ async def test_rank_fusion_uses_chunk_id_as_stable_final_tiebreaker():
 @pytest.mark.asyncio
 async def test_rank_fusion_does_not_overvalue_low_rank_source_overlap():
     dense_results = [make_dense_result("dense-best", 0.99)] + [
-        make_dense_result(f"dense-{rank}", 0.9 - rank / 100)
-        for rank in range(2, 51)
+        make_dense_result(f"dense-{rank}", 0.9 - rank / 100) for rank in range(2, 51)
     ]
     sparse_results = [
         make_sparse_result(f"sparse-{rank}", "kb", 51 - rank, rank)
@@ -143,3 +154,26 @@ async def test_rank_fusion_does_not_overvalue_low_rank_source_overlap():
 
     assert result_ids[0] == "dense-best"
     assert result_ids.index("dense-best") < result_ids.index("dense-50")
+
+
+@pytest.mark.asyncio
+async def test_rank_fusion_keeps_only_the_best_chunk_per_document():
+    dense_results = [
+        make_dense_result("doc-a-best", 0.99),
+        make_dense_result("doc-a-second", 0.98),
+        make_dense_result("doc-b", 0.97),
+    ]
+    sparse_results = [
+        make_sparse_result("doc-a-best", "kb", 10.0, 1, doc_id="doc-a"),
+        make_sparse_result("doc-a-second", "kb", 9.0, 2, doc_id="doc-a"),
+        make_sparse_result("doc-b", "kb", 8.0, 3, doc_id="doc-b"),
+    ]
+
+    results = await RankFusion(kb_db=None).fuse(
+        dense_results=dense_results,
+        sparse_results=sparse_results,
+        top_k=2,
+    )
+
+    assert [result.chunk_id for result in results] == ["doc-a-best", "doc-b"]
+    assert [result.doc_id for result in results] == ["doc-a", "doc-b"]
