@@ -439,17 +439,22 @@ class TelegramPlatformAdapter(Platform):
     async def _download_to_temp(self, file_path: str) -> str:
         """Download a Telegram file to a local temp path.
 
-        Telegram's file_path can be a relative path (self-hosted Bot API server
-        or reverse proxy setups), and the generic message components only
-        understand local paths or http(s) URLs. So we always fetch the file
-        ourselves instead of passing file_path straight into the component.
+        On the cloud Bot API (and non-local self-hosted servers), get_file()
+        returns an http(s) URL, which we fetch into a temp file so downstream
+        components get a readable local path. But when the Bot API server runs
+        in local mode, get_file() returns an absolute local path instead; that
+        file already lives on disk, so we return it as-is rather than feeding a
+        local path into download_file() (an aiohttp GET, which cannot resolve
+        it).
 
         Args:
             file_path: The file_path returned by Telegram's getFile API.
 
         Returns:
-            Local absolute path of the downloaded file.
+            Local absolute path of the file.
         """
+        if os.path.isfile(file_path):
+            return file_path
         file_basename = os.path.basename(file_path)
         temp_dir = get_astrbot_temp_path()
         temp_path = os.path.join(temp_dir, f"{uuid.uuid4().hex}_{file_basename}")

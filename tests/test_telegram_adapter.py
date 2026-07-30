@@ -232,8 +232,59 @@ async def test_telegram_video_caption_populates_message_text_and_plain(tmp_path)
 
 
 @pytest.mark.asyncio
+async def test_download_to_temp_returns_local_path_without_downloading(tmp_path):
+    """#9448: a local-mode Bot API server returns an absolute local path, which
+    should be reused as-is instead of being downloaded as a URL."""
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    local_file = tmp_path / "photos" / "file_10.jpg"
+    local_file.parent.mkdir(parents=True)
+    local_file.write_bytes(b"local-bytes")
+    convert_message_globals = adapter._download_to_temp.__func__.__globals__
+    mock_download = AsyncMock()
+
+    with patch.dict(convert_message_globals, {"download_file": mock_download}):
+        result = await adapter._download_to_temp(str(local_file))
+
+    assert result == str(local_file)
+    mock_download.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_download_to_temp_downloads_remote_url(tmp_path):
+    """A remote URL should still be downloaded to the temp dir, not returned as-is."""
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    url = "https://api.telegram.org/file/bot123/photos/file_10.jpg"
+    convert_message_globals = adapter._download_to_temp.__func__.__globals__
+    mock_download = AsyncMock()
+
+    with patch.dict(
+        convert_message_globals,
+        {
+            "get_astrbot_temp_path": MagicMock(return_value=str(tmp_path)),
+            "download_file": mock_download,
+        },
+    ):
+        result = await adapter._download_to_temp(url)
+
+    assert result.startswith(str(tmp_path))
+    assert result != url
+    mock_download.assert_awaited_once()
+    assert mock_download.await_args.args[0] == url
+
+
+@pytest.mark.asyncio
 async def test_telegram_document_downloads_to_local_temp_path(tmp_path):
-    """#9448: document 组件必须拿到本地路径，而不是原始 Telegram file_path/URL。"""
+    """#9448: the document component must hold a local path, not the raw Telegram file_path/URL."""
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(
         make_platform_config("telegram"),
@@ -269,7 +320,7 @@ async def test_telegram_document_downloads_to_local_temp_path(tmp_path):
 
 @pytest.mark.asyncio
 async def test_telegram_video_downloads_to_local_temp_path(tmp_path):
-    """#9448: video 组件必须拿到本地路径，而不是原始 Telegram file_path/URL。"""
+    """#9448: the video component must hold a local path, not the raw Telegram file_path/URL."""
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(
         make_platform_config("telegram"),
@@ -300,7 +351,7 @@ async def test_telegram_video_downloads_to_local_temp_path(tmp_path):
 
 @pytest.mark.asyncio
 async def test_telegram_photo_downloads_to_local_temp_path(tmp_path):
-    """#9448: photo 组件必须拿到本地路径，而不是原始 Telegram file_path/URL。"""
+    """#9448: the photo component must hold a local path, not the raw Telegram file_path/URL."""
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(
         make_platform_config("telegram"),
@@ -329,7 +380,7 @@ async def test_telegram_photo_downloads_to_local_temp_path(tmp_path):
 
 @pytest.mark.asyncio
 async def test_telegram_sticker_downloads_to_local_temp_path(tmp_path):
-    """#9448: sticker 组件必须拿到本地路径，而不是原始 Telegram file_path/URL。"""
+    """#9448: the sticker component must hold a local path, not the raw Telegram file_path/URL."""
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(
         make_platform_config("telegram"),
