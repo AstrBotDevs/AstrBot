@@ -1,11 +1,13 @@
 import asyncio
 import base64
+import hashlib
 import logging
 import os
 import random
 from typing import cast
 
 import aiofiles
+import aiohttp
 import botpy
 import botpy.errors
 import botpy.message
@@ -27,11 +29,8 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import File, Image, Plain, Record, Video
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
+
 from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path, is_file_uri
-
-
-class APIReturnNoneError(Exception):
-    pass
 
 
 def _patch_qq_botpy_formdata() -> None:
@@ -49,6 +48,10 @@ def _patch_qq_botpy_formdata() -> None:
             setattr(_FormData, "_is_processed", False)
     except Exception:
         logger.debug("[QQOfficial] Skip botpy FormData patch.")
+
+
+class APIReturnNoneError(Exception):
+    pass
 
 
 _patch_qq_botpy_formdata()
@@ -72,7 +75,6 @@ def _qqofficial_retry(max_attempts: int = 5):
         reraise=True,
     )
 
-
 _QQOFFICIAL_SEND_API_ERRORS = (
     botpy.errors.ForbiddenError,
     botpy.errors.MethodNotAllowedError,
@@ -80,6 +82,55 @@ _QQOFFICIAL_SEND_API_ERRORS = (
     botpy.errors.SequenceNumberError,
     botpy.errors.ServerError,
 )
+
+# URL 上传模式可用性缓存
+_url_upload_available: bool | None = None
+_media_upload_base_url: str = ""
+
+
+async def init_url_upload_probe(media_upload_url: str = "") -> None:
+    """启动时探测媒体上传地址是否可达，结果缓存。
+    应在适配器启动时调用一次。同时清理上次遗留的临时文件。
+    """
+    global _url_upload_available, _media_upload_base_url
+
+    # 等待 Web Server 启动完成
+    await asyncio.sleep(10)
+
+    # 清理上次遗留的临时文件
+    temp_dir = os.path.join(os.getcwd(), "data", "media_upload_cache")
+    if os.path.isdir(temp_dir):
+        try:
+            import glob
+            stale = glob.glob(os.path.join(temp_dir, "*"))
+            for f in stale:
+                try:
+                    os.unlink(f)
+                except OSError:
+                    pass
+            if stale:
+                logger.info(f"[QQOfficial] 清理遗留临时文件: {len(stale)} 个")
+        except Exception:
+            pass
+
+    if not media_upload_url:
+        _url_upload_available = False
+        logger.info("[QQOfficial] 未配置 media_upload_url，URL 上传模式不可用，将使用 Base64")
+        return
+
+    _media_upload_base_url = media_upload_url.rstrip('/')
+
+    for attempt in range(3):
+        _url_upload_available = await QQOfficialMessageEvent._probe_temp_url_reachable(_media_upload_base_url)
+        if _url_upload_available:
+            break
+        if attempt < 2:
+            await asyncio.sleep(3)
+
+    if _url_upload_available:
+        logger.info(f"[QQOfficial] URL 上传模式已启用 (callback_api_base={_media_upload_base_url})")
+    else:
+        logger.warning(f"[QQOfficial] callback_api_base 不可达 ({_media_upload_base_url})，回退 Base64 模式")
 
 
 class QQOfficialMessageEvent(AstrMessageEvent):
@@ -276,6 +327,17 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         if record_file_path:
             self.track_temporary_local_file(record_file_path)
 
+        logger.info(
+            f"[QQOfficial][DEBUG] _parse_to_qqofficial 返回: "
+            f"plain_text={'有' if plain_text else '无'}, "
+            f"image_base64={'有' if image_base64 else '无'}, "
+            f"image_path={'有' if image_path else '无'}, "
+            f"record={'有' if record_file_path else '无'}, "
+            f"video_file_source={video_file_source}, "
+            f"file_source={file_source}, "
+            f"file_name={file_name}"
+        )
+
         # C2C 流式仅用于文本分片，富媒体时降级为普通发送，避免平台侧流式校验报错。
         if stream and (
             image_base64 or record_file_path or video_file_source or file_source
@@ -322,6 +384,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         if not isinstance(source, botpy.message.Message | botpy.message.DirectMessage):
             payload["msg_seq"] = random.randint(1, 10000)
 
+        logger.info(
+            f"[QQOfficial][DEBUG] 初始 payload: msg_type={payload.get('msg_type')}, "
+            f"has_markdown={payload.get('markdown') is not None}"
+        )
+
         ret = None
 
         match source:
@@ -363,6 +430,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         payload.pop("markdown", None)
                         payload["content"] = plain_text or None
                 if file_source:
+                    logger.info(f"[QQOfficial][DEBUG] 开始上传文件: {file_source}, file_name={file_name}")
                     media = await self.upload_group_and_c2c_media(
                         file_source,
                         self.FILE_FILE_TYPE,
@@ -370,10 +438,18 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         group_openid=source.group_openid,
                     )
                     if media:
+                        logger.info(f"[QQOfficial][DEBUG] 文件上传成功: media={media}")
                         payload["media"] = media
                         payload["msg_type"] = 7
                         payload.pop("markdown", None)
                         payload["content"] = plain_text or None
+                    else:
+                        logger.warning(f"[QQOfficial][DEBUG] 文件上传失败, media=None")
+                logger.info(
+                    f"[QQOfficial][DEBUG] 发送前 payload 状态: msg_type={payload.get('msg_type')}, "
+                    f"has_media={payload.get('media') is not None}, "
+                    f"has_markdown={payload.get('markdown') is not None}"
+                )
                 ret = await self._send_with_markdown_fallback(
                     send_func=lambda retry_payload: self.bot.api.post_group_message(
                         group_openid=source.group_openid,  # type: ignore
@@ -418,6 +494,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         payload.pop("markdown", None)
                         payload["content"] = plain_text or None
                 if file_source:
+                    logger.info(f"[QQOfficial][DEBUG] 开始上传文件(C2C): {file_source}, file_name={file_name}")
                     media = await self.upload_group_and_c2c_media(
                         file_source,
                         self.FILE_FILE_TYPE,
@@ -425,10 +502,22 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         openid=source.author.user_openid,
                     )
                     if media:
+                        logger.info(f"[QQOfficial][DEBUG] 文件上传成功(C2C): media={media}")
                         payload["media"] = media
                         payload["msg_type"] = 7
                         payload.pop("markdown", None)
                         payload["content"] = plain_text or None
+                        logger.info(
+                            f"[QQOfficial][DEBUG] 文件消息 payload: msg_type={payload.get('msg_type')}, "
+                            f"has_media=True, file_info={getattr(media, 'file_info', '')[:32]}..."
+                        )
+                    else:
+                        logger.warning(f"[QQOfficial][DEBUG] 文件上传失败(C2C), media=None")
+                logger.info(
+                    f"[QQOfficial][DEBUG] 发送前 payload 状态(C2C): msg_type={payload.get('msg_type')}, "
+                    f"has_media={payload.get('media') is not None}, "
+                    f"has_markdown={payload.get('markdown') is not None}"
+                )
                 if stream:
                     ret = await self._send_with_markdown_fallback(
                         send_func=lambda retry_payload: self.post_c2c_message(
@@ -583,18 +672,12 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 )
             else:
                 raise ValueError("Invalid upload parameters")
-
             result = await self.bot.api._http.request(route, json=payload)
             if result is None:
-                err_msg = "上传图片API返回None，触发重试"
-                raise APIReturnNoneError(err_msg)
+                raise APIReturnNoneError("上传图片API返回None，触发重试")
             return result
 
-        try:
-            result = await _do_upload()
-        except APIReturnNoneError:
-            logger.warning(f"上传图片API返回None，共尝试5次后放弃: {payload}")
-            raise
+        result = await _do_upload()
 
         if not isinstance(result, dict):
             raise RuntimeError(
@@ -607,6 +690,329 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             ttl=result.get("ttl", 0),
         )
 
+    @staticmethod
+    async def _probe_temp_url_reachable(base_url: str) -> bool:
+        """探测 AstrBot Web Server 是否对外可达（GET 面板根路径）。"""
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    base_url,
+                    timeout=aiohttp.ClientTimeout(total=5),
+                    allow_redirects=True,
+                ) as resp:
+                    return resp.status == 200
+        except Exception:
+            return False
+
+    @staticmethod
+    async def _prepare_temp_file(file_source: str) -> tuple[str | None, str | None]:
+        """将本地文件复制到临时目录（UUID 文件名），返回 (temp_path, temp_url)。
+        失败返回 (None, None)。
+        """
+        if not _url_upload_available or not _media_upload_base_url:
+            return None, None
+
+        import shutil
+        import uuid as _uuid
+
+        ext = os.path.splitext(file_source)[1]
+        temp_name = f"{_uuid.uuid4().hex}{ext}"
+        temp_dir = os.path.join(os.getcwd(), "data", "media_upload_cache")
+        os.makedirs(temp_dir, exist_ok=True)
+        temp_path = os.path.join(temp_dir, temp_name)
+
+        try:
+            await asyncio.to_thread(shutil.copy2, file_source, temp_path)
+        except Exception as e:
+            logger.warning(f"[QQOfficial] 创建临时文件失败: {e}")
+            return None, None
+
+        url = f"{_media_upload_base_url}/api/media/{temp_name}"
+        logger.info(f"[QQOfficial] 临时文件: {temp_path}")
+        logger.info(f"[QQOfficial] 下载 URL: {url}")
+        return temp_path, url
+
+    @staticmethod
+    def _cleanup_temp_file(temp_path: str | None) -> None:
+        """删除临时文件。"""
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+                logger.info(f"[QQOfficial] 已清理临时文件: {temp_path}")
+            except OSError as e:
+                logger.warning(f"[QQOfficial] 清理临时文件失败: {temp_path} ({e})")
+
+    # ── 分片上传 (Chunked Upload) ────────────────────────────────────
+    _CHUNKED_MD5_10M_SIZE = 10_002_432  # 约9.54MB，与 QQ API 规范一致
+    _CHUNKED_PART_UPLOAD_TIMEOUT = 300.0
+    _CHUNKED_PART_UPLOAD_MAX_RETRIES = 2
+    _CHUNKED_PART_FINISH_RETRY_INTERVAL = 1.0
+    _CHUNKED_PART_FINISH_DEFAULT_TIMEOUT = 120.0
+    _CHUNKED_PART_FINISH_MAX_TIMEOUT = 600.0
+    _CHUNKED_COMPLETE_MAX_RETRIES = 2
+    _CHUNKED_COMPLETE_BASE_DELAY = 2.0
+    _CHUNKED_MAX_CONCURRENT_PARTS = 10
+
+    @staticmethod
+    def _compute_file_hashes(file_path: str) -> dict:
+        """计算文件的 md5, sha1, md5_10m（单次遍历）"""
+        file_size = os.path.getsize(file_path)
+        md5 = hashlib.md5()
+        sha1 = hashlib.sha1()
+        md5_10m = hashlib.md5()
+        need_10m = file_size > QQOfficialMessageEvent._CHUNKED_MD5_10M_SIZE
+        bytes_read = 0
+        with open(file_path, "rb") as fh:
+            while True:
+                chunk = fh.read(65536)
+                if not chunk:
+                    break
+                md5.update(chunk)
+                sha1.update(chunk)
+                if need_10m:
+                    remaining = QQOfficialMessageEvent._CHUNKED_MD5_10M_SIZE - bytes_read
+                    if remaining > 0:
+                        md5_10m.update(chunk[:remaining])
+                bytes_read += len(chunk)
+        full_md5 = md5.hexdigest()
+        return {
+            "md5": full_md5,
+            "sha1": sha1.hexdigest(),
+            "md5_10m": md5_10m.hexdigest() if need_10m else full_md5,
+        }
+
+    @staticmethod
+    def _read_file_chunk(file_path: str, offset: int, length: int) -> bytes:
+        with open(file_path, "rb") as fh:
+            fh.seek(offset)
+            data = fh.read(length)
+            if len(data) != length:
+                raise IOError(f"Short read from {file_path}: expected {length}, got {len(data)}")
+            return data
+
+    async def _chunked_upload(
+        self,
+        file_source: str,
+        file_type: int,
+        file_name: str,
+        **kwargs,
+    ) -> Media | None:
+        """分片上传：upload_prepare → PUT parts → complete_upload"""
+        try:
+            file_size = os.path.getsize(file_source)
+        except OSError as e:
+            logger.error(f"[QQOfficial] 分片上传: 无法读取文件 {file_source}: {e}")
+            return None
+
+        # 确定目标 (openid 或 group_openid)
+        openid = kwargs.get("openid")
+        group_openid = kwargs.get("group_openid")
+        if not openid and not group_openid:
+            return None
+
+        target_type = "c2c" if openid else "group"
+        target_id = openid or group_openid
+
+        logger.info(
+            f"[QQOfficial] 分片上传开始: file={file_name}, "
+            f"size={file_size / (1024*1024):.1f}MB, type={file_type}, target={target_type}"
+        )
+
+        # Step 1: 计算文件哈希
+        hashes = await asyncio.get_running_loop().run_in_executor(
+            None, self._compute_file_hashes, file_source
+        )
+        logger.info(f"[QQOfficial] 分片上传: md5={hashes['md5'][:16]}..., sha1={hashes['sha1'][:16]}..., md5_10m={hashes['md5_10m'][:16]}...")
+        logger.info(
+            f"[QQOfficial] 分片上传 prepare 请求: file_type={file_type}, file_size={file_size}, "
+            f"file_name={file_name or 'file'}"
+        )
+
+        # Step 2: upload_prepare
+        try:
+            prepare_payload = {
+                "file_type": file_type,
+                "file_size": file_size,
+                "file_name": file_name or "file",
+                "md5": hashes["md5"],
+                "sha1": hashes["sha1"],
+                "md5_10m": hashes["md5_10m"],
+            }
+            if openid:
+                prepare_route = Route("POST", "/v2/users/{openid}/upload_prepare", openid=openid)
+            else:
+                prepare_route = Route("POST", "/v2/groups/{group_openid}/upload_prepare", group_openid=group_openid)
+            prepare_result = await self.bot.api._http.request(prepare_route, json=prepare_payload)
+            if not isinstance(prepare_result, dict):
+                logger.error(f"[QQOfficial] upload_prepare 响应格式错误: {prepare_result}")
+                return None
+        except Exception as e:
+            logger.error(f"[QQOfficial] upload_prepare 失败: {e}")
+            return None
+
+        upload_id = prepare_result.get("upload_id", "")
+        block_size = int(prepare_result.get("block_size", 0))
+        parts = prepare_result.get("parts", [])
+        if not upload_id or not parts:
+            logger.error(f"[QQOfficial] upload_prepare 缺少必要字段: {prepare_result}")
+            return None
+
+        # 解析 upload_config
+        cfg = prepare_result.get("upload_config", {})
+        if isinstance(cfg, dict):
+            concurrency = min(int(cfg.get("concurrency", 3)), self._CHUNKED_MAX_CONCURRENT_PARTS)
+            retry_timeout_raw = int(cfg.get("retry_timeout", 0))
+        else:
+            concurrency = min(int(prepare_result.get("concurrency", 3)), self._CHUNKED_MAX_CONCURRENT_PARTS)
+            retry_timeout_raw = int(prepare_result.get("retry_timeout", 0))
+        retry_timeout = min(
+            retry_timeout_raw if retry_timeout_raw > 0 else self._CHUNKED_PART_FINISH_DEFAULT_TIMEOUT,
+            self._CHUNKED_PART_FINISH_MAX_TIMEOUT,
+        )
+
+        logger.info(
+            f"[QQOfficial] 分片上传: upload_id={upload_id}, block_size={block_size / 1024:.0f}KB, "
+            f"parts={len(parts)}, concurrency={concurrency}"
+        )
+
+        # Step 3: 上传每个分片
+        semaphore = asyncio.Semaphore(concurrency)
+        completed_parts = 0
+
+        async def _upload_one_part(part: dict):
+            nonlocal completed_parts
+            part_index = int(part.get("index", 0))
+            presigned_url = part.get("presigned_url", "")
+            part_block_size = int(part.get("block_size", 0)) or block_size
+            offset = (part_index - 1) * block_size
+            length = min(part_block_size, file_size - offset)
+
+            if not presigned_url:
+                logger.error(f"[QQOfficial] 分片 {part_index} 缺少 presigned_url")
+                return
+
+            # 读取分片数据
+            data = await asyncio.get_running_loop().run_in_executor(
+                None, self._read_file_chunk, file_source, offset, length
+            )
+            part_md5 = hashlib.md5(data).hexdigest()
+
+            async with semaphore:
+                # PUT 到预签名 URL
+                last_exc = None
+                for attempt in range(self._CHUNKED_PART_UPLOAD_MAX_RETRIES + 1):
+                    try:
+                        async with aiohttp.ClientSession() as sess:
+                            async with sess.put(
+                                presigned_url,
+                                data=data,
+                                headers={"Content-Length": str(len(data))},
+                                timeout=aiohttp.ClientTimeout(total=self._CHUNKED_PART_UPLOAD_TIMEOUT),
+                            ) as resp:
+                                resp.raise_for_status()
+                                logger.info(f"[QQOfficial] PUT 分片 {part_index}/{len(parts)}: {resp.status} OK, size={len(data)}")
+                                break
+                    except Exception as exc:
+                        last_exc = exc
+                        if attempt < self._CHUNKED_PART_UPLOAD_MAX_RETRIES:
+                            delay = 1.0 * (2 ** attempt)
+                            logger.warning(f"[QQOfficial] PUT 分片 {part_index} 失败, 重试 {attempt+1}: {exc}")
+                            await asyncio.sleep(delay)
+                else:
+                    logger.error(f"[QQOfficial] PUT 分片 {part_index} 最终失败: {last_exc}")
+                    raise RuntimeError(f"Part {part_index} upload failed: {last_exc}")
+
+                # 通知平台分片完成
+                # 发送 part 的 block_size（来自 prepare 响应），不是实际数据长度
+                part_finish_block_size = int(part.get("block_size", 0)) or block_size
+                part_finish_payload = {
+                    "upload_id": upload_id,
+                    "part_index": part_index,
+                    "block_size": part_finish_block_size,
+                    "md5": part_md5,
+                }
+                if openid:
+                    finish_route = Route("POST", "/v2/users/{openid}/upload_part_finish", openid=openid)
+                else:
+                    finish_route = Route("POST", "/v2/groups/{group_openid}/upload_part_finish", group_openid=group_openid)
+
+                logger.info(
+                    f"[QQOfficial] part_finish 请求: part={part_index}, block_size={part_finish_block_size}, length={length}, md5={part_md5[:16]}..."
+                )
+                finish_start = asyncio.get_running_loop().time()
+                finish_attempt = 0
+                max_finish_retries = 5
+                while True:
+                    try:
+                        await self.bot.api._http.request(finish_route, json=part_finish_payload)
+                        break
+                    except Exception as exc:
+                        err_msg = str(exc)
+                        finish_attempt += 1
+                        elapsed = asyncio.get_running_loop().time() - finish_start
+                        # 40093001 = retryable (平台侧还没收到分片)，其他错误也重试但次数更少
+                        if "40093001" in err_msg:
+                            if elapsed >= retry_timeout:
+                                raise RuntimeError(f"part_finish timeout after {elapsed:.0f}s: {exc}") from exc
+                            logger.debug(f"[QQOfficial] part_finish retryable(40093001), attempt {finish_attempt}")
+                            await asyncio.sleep(self._CHUNKED_PART_FINISH_RETRY_INTERVAL)
+                        else:
+                            if finish_attempt >= max_finish_retries:
+                                raise RuntimeError(f"part_finish failed after {finish_attempt} attempts: {exc}") from exc
+                            delay = 1.0 * (2 ** (finish_attempt - 1))
+                            logger.warning(f"[QQOfficial] part_finish 失败, 重试 {finish_attempt}/{max_finish_retries}: {exc}")
+                            await asyncio.sleep(delay)
+
+                completed_parts += 1
+                logger.info(
+                    f"[QQOfficial] 分片 {part_index}/{len(parts)} 完成 "
+                    f"({completed_parts}/{len(parts)} done)"
+                )
+
+        # 顺序上传所有分片（确保 part_finish 按序完成）
+        logger.info(f"[QQOfficial] 分片顺序: {[int(p.get('index', 0)) for p in parts]}")
+        for part in parts:
+            try:
+                await _upload_one_part(part)
+            except Exception as e:
+                logger.error(f"[QQOfficial] 分片上传失败: {e}")
+                return None
+
+        logger.info(f"[QQOfficial] 所有 {len(parts)} 个分片上传完成，调用 complete_upload")
+
+        # Step 4: complete_upload
+        complete_payload = {"upload_id": upload_id}
+        if openid:
+            complete_route = Route("POST", "/v2/users/{openid}/files", openid=openid)
+        else:
+            complete_route = Route("POST", "/v2/groups/{group_openid}/files", group_openid=group_openid)
+
+        last_exc = None
+        for attempt in range(self._CHUNKED_COMPLETE_MAX_RETRIES + 1):
+            try:
+                complete_result = await self.bot.api._http.request(complete_route, json=complete_payload)
+                if isinstance(complete_result, dict):
+                    logger.info(
+                        f"[QQOfficial] complete_upload 成功: file_info={complete_result.get('file_info', '')[:32]}..., "
+                        f"file_uuid={complete_result.get('file_uuid', '')}, ttl={complete_result.get('ttl', 0)}"
+                    )
+                    return Media(
+                        file_uuid=complete_result["file_uuid"],
+                        file_info=complete_result["file_info"],
+                        ttl=complete_result.get("ttl", 0),
+                    )
+                logger.error(f"[QQOfficial] complete_upload 响应格式错误: {complete_result}")
+                return None
+            except Exception as exc:
+                last_exc = exc
+                if attempt < self._CHUNKED_COMPLETE_MAX_RETRIES:
+                    delay = self._CHUNKED_COMPLETE_BASE_DELAY * (2 ** attempt)
+                    logger.warning(f"[QQOfficial] complete_upload 失败, 重试: {exc}")
+                    await asyncio.sleep(delay)
+
+        logger.error(f"[QQOfficial] complete_upload 最终失败: {last_exc}")
+        return None
+
     async def upload_group_and_c2c_media(
         self,
         file_source: str,
@@ -615,24 +1021,31 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         file_name: str | None = None,
         **kwargs,
     ) -> Media | None:
-        """上传媒体文件"""
-        # 构建基础payload
+        """上传媒体文件。
+
+        本地视频/文件：分片上传。
+        音频/远程 URL：Base64。
+        """
+        _file_type_name = {1: 'IMAGE', 2: 'VIDEO', 3: 'VOICE', 4: 'FILE'}.get(file_type, f'UNKNOWN({file_type})')
+        logger.info(
+            f"[QQOfficial][DEBUG] upload_group_and_c2c_media 入口: "
+            f"file_source={file_source}, file_type={_file_type_name}, "
+            f"file_name={file_name}, is_local={os.path.exists(file_source)}"
+        )
+
+        # 本地视频/文件：分片上传
+        if os.path.exists(file_source) and file_type in (self.VIDEO_FILE_TYPE, self.FILE_FILE_TYPE):
+            result = await self._chunked_upload(file_source, file_type, file_name or "file", **kwargs)
+            if result:
+                return result
+            logger.warning("[QQOfficial] 分片上传失败，回退 Base64")
+
+        # Base64 路径（音频、远程 URL、或分片上传失败回退）
         payload: dict = {"file_type": file_type, "srv_send_msg": srv_send_msg}
         if file_name:
             payload["file_name"] = file_name
 
-        # 处理文件数据
-        if os.path.exists(file_source):
-            # 读取本地文件
-            async with aiofiles.open(file_source, "rb") as f:
-                file_content = await f.read()
-                # use base64 encode
-                payload["file_data"] = base64.b64encode(file_content).decode("utf-8")
-        else:
-            # 使用URL
-            payload["url"] = file_source
-
-        # 添加接收者信息和确定路由
+        route: Route | None = None
         if "openid" in kwargs:
             payload["openid"] = kwargs["openid"]
             route = Route("POST", "/v2/users/{openid}/files", openid=kwargs["openid"])
@@ -646,29 +1059,31 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         else:
             return None
 
-        @_qqofficial_retry()
-        async def _do_upload():
-            result = await self.bot.api._http.request(route, json=payload)
-            if result is None:
-                err_msg = "上传文件API返回None，触发重试"
-                raise APIReturnNoneError(err_msg)
-            return result
-
         try:
-            result = await _do_upload()
+            if os.path.exists(file_source):
+                async with aiofiles.open(file_source, "rb") as f:
+                    file_content = await f.read()
+                    payload["file_data"] = base64.b64encode(file_content).decode("utf-8")
+            else:
+                payload["url"] = file_source
 
+            @_qqofficial_retry()
+            async def _do_upload():
+                result = await self.bot.api._http.request(route, json=payload)
+                if result is None:
+                    raise APIReturnNoneError("上传文件API返回None，触发重试")
+                return result
+
+            result = await _do_upload()
             if result:
                 if not isinstance(result, dict):
                     logger.error(f"上传文件响应格式错误: {result}")
                     return None
-
                 return Media(
                     file_uuid=result["file_uuid"],
                     file_info=result["file_info"],
                     ttl=result.get("ttl", 0),
                 )
-        except APIReturnNoneError:
-            logger.warning(f"上传文件API返回None，共尝试5次后放弃: {file_source}")
         except (botpy.errors.ServerError, botpy.errors.SequenceNumberError):
             logger.error(f"上传媒体文件失败，共尝试5次后放弃: {file_source}")
         except Exception as e:
@@ -776,6 +1191,41 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     video_file_source = file_uri_to_path(i.file)
                 else:
                     video_file_source = i.file
+                # QQ 视频上限 30MB，大于 28MB 的视频降级为文件发送
+                if video_file_source:
+                    should_downgrade = False
+                    if os.path.exists(video_file_source):
+                        # 本地文件：直接读大小
+                        file_size_mb = os.path.getsize(video_file_source) / (1024 * 1024)
+                        if file_size_mb > 28:
+                            should_downgrade = True
+                    elif video_file_source.startswith(("http://", "https://")):
+                        # 远程 URL：HEAD 请求获取大小
+                        try:
+                            async with aiohttp.ClientSession() as _sess:
+                                async with _sess.head(
+                                    video_file_source,
+                                    timeout=aiohttp.ClientTimeout(total=10),
+                                    allow_redirects=True,
+                                ) as _resp:
+                                    content_length = _resp.headers.get("Content-Length")
+                                    if content_length:
+                                        file_size_mb = int(content_length) / (1024 * 1024)
+                                        if file_size_mb > 28:
+                                            should_downgrade = True
+                        except Exception as _e:
+                            logger.debug(f"[QQOfficial] HEAD 请求失败，保持视频发送: {_e}")
+                    if should_downgrade:
+                        logger.info(
+                            f"[QQOfficial] 视频文件 {file_size_mb:.1f}MB 超过 28MB 限制，"
+                            f"降级为文件发送: {video_file_source}"
+                        )
+                        file_source = video_file_source
+                        if not file_name:
+                            # URL 时 basename 可能带查询参数，清理一下
+                            _base = os.path.basename(video_file_source.split('?')[0])
+                            file_name = _base or "video.mp4"
+                        video_file_source = None
             elif isinstance(i, File) and not file_source:
                 file_name = i.name
                 if i.file_:

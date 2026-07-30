@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 
@@ -117,3 +119,18 @@ async def get_dashboard_token_file(
     service: FileService = Depends(get_service),
 ):
     return await _serve_token_file(file_token, service)
+
+
+@legacy_router.get("/media/{filename}")
+async def get_media_cache_file(filename: str):
+    """按 UUID 文件名直接服务媒体缓存文件（无需 token，供 QQ 等平台下载）。"""
+    import re
+    if not re.match(r'^[0-9a-f]{32}\.[a-zA-Z0-9]+$', filename):
+        raise HTTPException(status_code=404)
+
+    media_cache_dir = os.path.join(os.getcwd(), "data", "media_upload_cache")
+    file_path = os.path.join(media_cache_dir, filename)
+    if not os.path.isfile(file_path):
+        raise HTTPException(status_code=404)
+
+    return FileResponse(file_path)
