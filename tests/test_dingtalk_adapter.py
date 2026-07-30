@@ -268,6 +268,7 @@ async def test_dingtalk_legacy_quote_message_is_supported():
             "msgtype": "text",
             "senderId": "legacy-sender",
             "senderNick": "Legacy User",
+            "createdAt": 1_700_000_000,
             "text": {"content": "旧格式引用内容"},
         },
     )
@@ -278,6 +279,7 @@ async def test_dingtalk_legacy_quote_message_is_supported():
     assert result.message[0].id == "legacy-quoted-message"
     assert result.message[0].message_str == "旧格式引用内容"
     assert result.message[0].sender_nickname == "Legacy User"
+    assert result.message[0].time == 1_700_000_000
 
 
 @pytest.mark.asyncio
@@ -293,7 +295,7 @@ async def test_dingtalk_rich_text_reply_builds_readable_quote():
                 "msgId": "rich-quoted-message",
                 "content": {
                     "richText": [
-                        {"msgType": "text", "content": "第一段"},
+                        {"msgType": "text", "content": "第一段 "},
                         {"msgType": "picture", "downloadCode": "image-code"},
                         {"type": "text", "text": "第二段"},
                     ]
@@ -305,4 +307,4 @@ async def test_dingtalk_rich_text_reply_builds_readable_quote():
     result = await adapter.convert_msg(message)
 
     assert isinstance(result.message[0], Reply)
-    assert result.message[0].message_str == "第一段[Image]第二段"
+    assert result.message[0].message_str == "第一段 [Image]第二段"

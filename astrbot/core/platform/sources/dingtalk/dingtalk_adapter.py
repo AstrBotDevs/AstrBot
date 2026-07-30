@@ -166,10 +166,10 @@ class DingtalkPlatformAdapter(Platform):
                         continue
                     item_text = item.get("content") or item.get("text")
                     if isinstance(item_text, str) and item_text.strip():
-                        parts.append(item_text.strip())
+                        parts.append(item_text)
                     elif (item.get("msgType") or item.get("type")) == "picture":
                         parts.append("[Image]")
-            quoted_text = "".join(parts)
+            quoted_text = "".join(parts).strip()
 
         if not quoted_text:
             placeholders = {
@@ -202,7 +202,8 @@ class DingtalkPlatformAdapter(Platform):
         created_at = quote.get("createdAt") or 0
         try:
             quote_time = int(created_at)
-            if quote_time > 10_000_000_000:
+            # DingTalk reports createdAt in milliseconds.
+            if quote_time > 1_000_000_000_000:
                 quote_time //= 1000
         except (TypeError, ValueError):
             quote_time = 0
