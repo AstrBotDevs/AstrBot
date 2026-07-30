@@ -208,9 +208,14 @@ class AiocqhttpAdapter(Platform):
         assert event.sender is not None
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
+        display_nickname = event.sender.get("card") or event.sender.get(
+            "nickname", "N/A"
+        )
+        account_nickname = event.sender.get("nickname")
         abm.sender = MessageMember(
-            str(event.sender["user_id"]),
-            event.sender.get("card") or event.sender.get("nickname", "N/A"),
+            user_id=str(event.sender["user_id"]),
+            nickname=display_nickname,
+            account_nickname=account_nickname,
         )
         if event["message_type"] == "group":
             abm.type = MessageType.GROUP_MESSAGE

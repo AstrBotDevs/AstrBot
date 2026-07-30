@@ -305,6 +305,14 @@
           "description": "User Identification",
           "hint": "When enabled, user ID information will be included in the prompt."
         },
+        "account_nickname_display": {
+          "description": "Append User Account Nickname",
+          "hint": "When enabled, the user's account nickname will be additionally provided to the model on supported platforms."
+        },
+        "account_nickname_only": {
+          "description": "Use Account Nickname Only",
+          "hint": "When enabled, the model will only see the user's account nickname instead of the group nickname. Falls back to the original nickname when unavailable."
+        },
         "group_name_display": {
           "description": "Display Group Name",
           "hint": "When enabled, group name information will be included in the prompt on supported platforms (OneBot v11)."
