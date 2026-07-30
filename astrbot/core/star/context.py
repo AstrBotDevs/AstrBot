@@ -687,9 +687,7 @@ class Context:
         star_handlers_registry.append(md)
         self.provider_manager.llm_tools.add_func(name, func_args, desc, func_obj)
 
-    @deprecated(
-        reason="This method is deprecated and will be removed in a future version."
-    )
+    @deprecated(reason="Use deactivate_llm_tool() to disable a tool instead.")
     def unregister_llm_tool(self, name: str) -> None:
         """[DEPRECATED]删除一个函数调用工具。
 
@@ -745,7 +743,7 @@ class Context:
         star_handlers_registry.append(md)
 
     @deprecated(
-        reason="This method is deprecated and will be removed in a future version."
+        reason="Start background tasks in the plugin's initialize() method instead."
     )
     def register_task(self, task: Awaitable, desc: str) -> None:
         """[DEPRECATED]注册一个异步任务。
