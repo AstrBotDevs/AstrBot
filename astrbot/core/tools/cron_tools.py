@@ -1,7 +1,7 @@
 from datetime import datetime
 from datetime import timezone as dt_timezone
 from typing import Any
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field
 from pydantic.dataclasses import dataclass
@@ -143,7 +143,7 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             if tz_name:
                 try:
                     tzinfo = ZoneInfo(tz_name)
-                except Exception:
+                except ZoneInfoNotFoundError:
                     logger.warning(
                         "Invalid timezone %r in config, falling back to system timezone.",
                         tz_name,
@@ -296,7 +296,7 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             if tz_name:
                 try:
                     tzinfo = ZoneInfo(tz_name)
-                except Exception:
+                except ZoneInfoNotFoundError:
                     logger.warning(
                         "Invalid timezone %r in config, falling back to system timezone.",
                         tz_name,
