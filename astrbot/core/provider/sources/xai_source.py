@@ -198,7 +198,7 @@ class ProviderXAI(ProviderOpenAIOfficial):
                 converted_content = self._convert_message_content(content, role)
 
                 # 模型可能同时返回文本和函数调用。
-                if converted_content not in {"", None}:
+                if converted_content not in ("", None):             
                     response_input.append(
                         {
                             "role": "assistant",
