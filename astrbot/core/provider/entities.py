@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from anthropic.types import Message as AnthropicMessage
+from deprecated import deprecated
 from google.genai.types import GenerateContentResponse
 from openai.types.chat.chat_completion import ChatCompletion
 
@@ -400,6 +401,7 @@ class LLMResponse:
         else:
             self._completion_text = value
 
+    @deprecated(reason="Use to_openai_to_calls_model instead.")
     def to_openai_tool_calls(self) -> list[dict]:
         """Convert to OpenAI tool calls format. Deprecated, use to_openai_to_calls_model instead."""
         ret = []
