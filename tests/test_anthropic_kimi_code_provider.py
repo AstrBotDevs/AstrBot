@@ -9,6 +9,7 @@ import astrbot.core.provider.sources.kimi_code_source as kimi_code_source
 import astrbot.core.provider.sources.request_retry as request_retry
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
+from tests.fixtures.fake_tool_call import FAKE_TOOL_CALL_CONTEXTS
 
 
 class _FakeAsyncAnthropic:
@@ -868,28 +869,6 @@ async def test_tool_choice_empty_tool_list_skips_tool_choice(monkeypatch):
 
 # ── fake tool call 重排 ───────────────────────────────────────────────────────
 
-_FAKE_TOOL_CALL_CONTEXTS = [
-    {
-        "role": "assistant",
-        "content": None,
-        "tool_calls": [
-            {
-                "id": "fake_recall_abc",
-                "type": "function",
-                "function": {
-                    "name": "recall_long_term_memory",
-                    "arguments": '{"query": "我的名字是？", "k": 5}',
-                },
-            }
-        ],
-    },
-    {
-        "role": "tool",
-        "tool_call_id": "fake_recall_abc",
-        "content": "memory json",
-    },
-]
-
 _EXPECTED_REORDERED_MESSAGES = [
     {"role": "user", "content": "我的名字是？"},
     {
@@ -921,7 +900,7 @@ async def test_text_chat_reorders_fake_tool_call_pair(monkeypatch):
     """伪造工具调用对应重排到用户消息之后，与真实工具调用时序对齐。"""
     provider = _setup_provider_with_mock_client(monkeypatch)
 
-    await provider.text_chat(prompt="我的名字是？", contexts=_FAKE_TOOL_CALL_CONTEXTS)
+    await provider.text_chat(prompt="我的名字是？", contexts=FAKE_TOOL_CALL_CONTEXTS)
 
     assert _capture_payloads_create.last_kwargs["messages"] == (
         _EXPECTED_REORDERED_MESSAGES
@@ -953,7 +932,7 @@ async def test_text_chat_stream_reorders_fake_tool_call_pair(monkeypatch):
     monkeypatch.setattr(provider, "_query_stream", fake_query_stream)
 
     async for _ in provider.text_chat_stream(
-        prompt="我的名字是？", contexts=_FAKE_TOOL_CALL_CONTEXTS
+        prompt="我的名字是？", contexts=FAKE_TOOL_CALL_CONTEXTS
     ):
         pass
 

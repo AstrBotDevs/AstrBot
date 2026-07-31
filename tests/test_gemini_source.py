@@ -7,6 +7,7 @@ import astrbot.core.provider.sources.request_retry as request_retry
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.gemini_source import ProviderGoogleGenAI
+from tests.fixtures.fake_tool_call import FAKE_TOOL_CALL_CONTEXTS
 
 
 def test_gemini_empty_output_raises_empty_model_output_error():
@@ -31,25 +32,6 @@ def test_gemini_reasoning_only_output_is_allowed():
         response_id="resp_reasoning",
         finish_reason="STOP",
     )
-
-
-_FAKE_TOOL_CALL_CONTEXTS = [
-    {
-        "role": "assistant",
-        "content": None,
-        "tool_calls": [
-            {
-                "id": "fake_recall_abc",
-                "type": "function",
-                "function": {
-                    "name": "recall_long_term_memory",
-                    "arguments": '{"query": "我的名字是？", "k": 5}',
-                },
-            }
-        ],
-    },
-    {"role": "tool", "tool_call_id": "fake_recall_abc", "content": "memory json"},
-]
 
 
 def _make_provider() -> ProviderGoogleGenAI:
@@ -82,7 +64,7 @@ async def test_text_chat_reorders_fake_tool_call_pair(monkeypatch):
     provider = _make_provider()
     monkeypatch.setattr(provider, "_query", fake_query)
 
-    await provider.text_chat(prompt="我的名字是？", contexts=_FAKE_TOOL_CALL_CONTEXTS)
+    await provider.text_chat(prompt="我的名字是？", contexts=FAKE_TOOL_CALL_CONTEXTS)
 
     messages = captured["payloads"]["messages"]
     _assert_reordered_tail(messages)
@@ -109,7 +91,7 @@ async def test_text_chat_stream_reorders_fake_tool_call_pair(monkeypatch):
 
     async for _ in provider.text_chat_stream(
         prompt="我的名字是？",
-        contexts=_FAKE_TOOL_CALL_CONTEXTS,
+        contexts=FAKE_TOOL_CALL_CONTEXTS,
     ):
         pass
 
