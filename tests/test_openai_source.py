@@ -14,7 +14,13 @@ import astrbot.core.provider.sources.request_retry as request_retry
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.groq_source import ProviderGroq
+from astrbot.core.provider.sources.longcat_source import ProviderLongCat
+from astrbot.core.provider.sources.oai_aihubmix_source import ProviderAIHubMix
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
+from astrbot.core.provider.sources.openrouter_source import ProviderOpenRouter
+from astrbot.core.provider.sources.xai_source import ProviderXAI
+from astrbot.core.provider.sources.xiaomi_source import ProviderXiaomi
+from astrbot.core.provider.sources.zhipu_source import ProviderZhipu
 from astrbot.core.utils.media_utils import ResolvedMediaData, file_uri_to_path
 
 
@@ -2201,3 +2207,283 @@ async def test_query_filters_empty_list_content_assistant_message(monkeypatch):
         assert messages[1] == {"role": "user", "content": "again"}
     finally:
         await provider.terminate()
+
+
+# ── _reorder_tailing_tool_call_user ──────────────────────────────────────────
+
+
+def test_reorder_single_fake_pair():
+    """Single fake tool call pair at tail: assistant(tc) → tool → user."""
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "hello"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {"id": "call_01", "type": "function", "function": {"name": "search", "arguments": "{}"}}
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call_01", "content": "mem result"},
+            {"role": "user", "content": "帮我处理"},
+        ]
+    }
+
+    ProviderOpenAIOfficial._reorder_tailing_tool_call_user(payloads)
+
+    assert payloads["messages"] == [
+        {"role": "user", "content": "hello"},
+        {"role": "user", "content": "帮我处理"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {"id": "call_01", "type": "function", "function": {"name": "search", "arguments": "{}"}}
+            ],
+        },
+        {"role": "tool", "tool_call_id": "call_01", "content": "mem result"},
+    ]
+
+
+def test_reorder_multiple_fake_pairs():
+    """Multiple fake pairs from different plugins: asst₁→tool₁→asst₂→tool₂→user."""
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "hello"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {"id": "call_01", "type": "function", "function": {"name": "plugin_a", "arguments": "{}"}}
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call_01", "content": "result_a"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {"id": "call_02", "type": "function", "function": {"name": "plugin_b", "arguments": "{}"}}
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call_02", "content": "result_b"},
+            {"role": "user", "content": "帮我处理"},
+        ]
+    }
+
+    ProviderOpenAIOfficial._reorder_tailing_tool_call_user(payloads)
+
+    assert payloads["messages"] == [
+        {"role": "user", "content": "hello"},
+        {"role": "user", "content": "帮我处理"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {"id": "call_01", "type": "function", "function": {"name": "plugin_a", "arguments": "{}"}}
+            ],
+        },
+        {"role": "tool", "tool_call_id": "call_01", "content": "result_a"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {"id": "call_02", "type": "function", "function": {"name": "plugin_b", "arguments": "{}"}}
+            ],
+        },
+        {"role": "tool", "tool_call_id": "call_02", "content": "result_b"},
+    ]
+
+
+def test_reorder_noop_when_no_fake_pair():
+    """No fake pair: normal user message at tail, should be unchanged."""
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "ok"},
+            {"role": "user", "content": "next"},
+        ]
+    }
+    expected = payloads["messages"][:]
+
+    ProviderOpenAIOfficial._reorder_tailing_tool_call_user(payloads)
+
+    assert payloads["messages"] == expected
+
+
+def test_reorder_noop_when_tool_call_id_mismatch():
+    """tool_call_id does not match assistant's tool_calls — stop collecting."""
+    payloads = {
+        "messages": [
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {"id": "call_01", "type": "function", "function": {"name": "search", "arguments": "{}"}}
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call_99", "content": "mismatched id"},
+            {"role": "user", "content": "hello"},
+        ]
+    }
+    expected = payloads["messages"][:]
+
+    ProviderOpenAIOfficial._reorder_tailing_tool_call_user(payloads)
+
+    assert payloads["messages"] == expected
+
+
+def test_reorder_noop_when_assistant_has_no_tool_calls():
+    """Assistant has no tool_calls — stop collecting."""
+    payloads = {
+        "messages": [
+            {"role": "assistant", "content": "some reply"},
+            {"role": "user", "content": "hello"},
+        ]
+    }
+    expected = payloads["messages"][:]
+
+    ProviderOpenAIOfficial._reorder_tailing_tool_call_user(payloads)
+
+    assert payloads["messages"] == expected
+
+
+def test_reorder_noop_when_no_trailing_user():
+    """Tail message is not user — no-op."""
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "reply"},
+        ]
+    }
+    expected = payloads["messages"][:]
+
+    ProviderOpenAIOfficial._reorder_tailing_tool_call_user(payloads)
+
+    assert payloads["messages"] == expected
+
+
+def test_reorder_noop_on_empty_or_short_list():
+    """Empty or too-short messages list — no-op, no crash."""
+    for msgs in [None, [], [{"role": "user", "content": "hi"}]]:
+        payloads = {"messages": msgs}
+        ProviderOpenAIOfficial._reorder_tailing_tool_call_user(payloads)
+        assert payloads.get("messages") is msgs
+
+
+def test_reorder_real_tool_call_not_affected():
+    """Real tool call: tool → assistant(content) before user — should not reorder."""
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "search plz"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {"id": "call_01", "type": "function", "function": {"name": "search", "arguments": "{}"}}
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call_01", "content": "results"},
+            {"role": "assistant", "content": "here are the results"},
+            {"role": "user", "content": "thanks"},
+        ]
+    }
+    expected = payloads["messages"][:]
+
+    ProviderOpenAIOfficial._reorder_tailing_tool_call_user(payloads)
+
+    assert payloads["messages"] == expected
+
+
+@pytest.mark.parametrize(
+    "provider_cls",
+    [
+        ProviderGroq,
+        ProviderLongCat,
+        ProviderAIHubMix,
+        ProviderOpenRouter,
+        ProviderXAI,
+        ProviderXiaomi,
+        ProviderZhipu,
+    ],
+)
+def test_reorder_applied_through_inherited_sanitize(provider_cls):
+    """All OpenAI-compatible subclasses inherit _sanitize_assistant_messages
+    which includes the reorder fix — verify it works on each."""
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "hello"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {"id": "call_01", "type": "function", "function": {"name": "search", "arguments": "{}"}}
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call_01", "content": "mem result"},
+            {"role": "user", "content": "帮我处理"},
+        ]
+    }
+
+    provider_cls._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"] == [
+        {"role": "user", "content": "hello"},
+        {"role": "user", "content": "帮我处理"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {"id": "call_01", "type": "function", "function": {"name": "search", "arguments": "{}"}}
+            ],
+        },
+        {"role": "tool", "tool_call_id": "call_01", "content": "mem result"},
+    ], f"{provider_cls.__name__} did not reorder fake tool call messages"
+
+
+def test_reorder_stops_at_first_non_pair():
+    """If a non-pair message sits between pairs, only collect from the outermost contiguous block."""
+    payloads = {
+        "messages": [
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {"id": "call_01", "type": "function", "function": {"name": "plugin_a", "arguments": "{}"}}
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call_01", "content": "result_a"},
+            {"role": "assistant", "content": "intermediate reply"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {"id": "call_02", "type": "function", "function": {"name": "plugin_b", "arguments": "{}"}}
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call_02", "content": "result_b"},
+            {"role": "user", "content": "thanks"},
+        ]
+    }
+
+    ProviderOpenAIOfficial._reorder_tailing_tool_call_user(payloads)
+
+    assert payloads["messages"] == [
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {"id": "call_01", "type": "function", "function": {"name": "plugin_a", "arguments": "{}"}}
+            ],
+        },
+        {"role": "tool", "tool_call_id": "call_01", "content": "result_a"},
+        {"role": "assistant", "content": "intermediate reply"},
+        {"role": "user", "content": "thanks"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {"id": "call_02", "type": "function", "function": {"name": "plugin_b", "arguments": "{}"}}
+            ],
+        },
+        {"role": "tool", "tool_call_id": "call_02", "content": "result_b"},
+    ]
