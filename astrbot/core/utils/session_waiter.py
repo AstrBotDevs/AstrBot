@@ -101,6 +101,41 @@ class DefaultSessionFilter(SessionFilter):
         return event.unified_msg_origin
 
 
+class SenderSessionFilter(SessionFilter):
+    """Scope a session by conversation origin plus sender.
+
+    In group chats unified_msg_origin is identical for every member, so with
+    DefaultSessionFilter the next message from any member hits a waiter created
+    by someone else. This filter appends the sender id so a waiter only responds
+    to the person who started it, while keeping the conversation origin so the
+    same user's messages in other conversations (other groups / DMs) do not
+    match either.
+
+    This is an opt-in filter and does not change the default behavior. Callers
+    that need per-sender isolation (e.g. the empty-mention waiter) should pass
+    it explicitly.
+    """
+
+    def filter(self, event: AstrMessageEvent) -> str:
+        """Build a session key scoped to both conversation and sender.
+
+        A length-prefixed encoding is used instead of plain concatenation:
+        both unified_msg_origin and the sender id are arbitrary platform
+        strings (e.g. Telegram topic-group origins contain "#"), so joining
+        them with a separator allows constructible key collisions
+        ("a#b" + "c" equals "a" + "b#c"), defeating the isolation. The length
+        prefix makes the encoding uniquely decodable.
+
+        Args:
+            event: The current message event.
+
+        Returns:
+            An unambiguous session key of the form "{len(umo)}:{umo}:{sender_id}".
+        """
+        umo = event.unified_msg_origin
+        return f"{len(umo)}:{umo}:{event.get_sender_id()}"
+
+
 class SessionWaiter:
     def __init__(
         self,
