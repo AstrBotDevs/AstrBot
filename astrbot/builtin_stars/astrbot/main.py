@@ -38,9 +38,10 @@ class _SenderSessionFilter(SessionFilter):
     def filter(self, ev: AstrMessageEvent) -> str:
         sender_id = ev.get_sender_id() or ""
         if not sender_id:
-            # Fall back to a value that will not accidentally collide with a
-            # legitimate session key from another member.
-            sender_id = "__unknown_sender__"
+            # Fall back to a sentinel that will not accidentally collide with a
+            # legitimate session key from another member. Angle brackets are
+            # used because no real platform sender id contains them.
+            sender_id = "<unknown>"
         return f"{ev.unified_msg_origin}:{sender_id}"
 
 
