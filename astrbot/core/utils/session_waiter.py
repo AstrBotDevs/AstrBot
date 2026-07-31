@@ -145,13 +145,20 @@ class SessionWaiter:
             await self._cleanup()
 
     async def _cleanup(self, error: Exception | None = None) -> None:
-        """清理会话"""
+        """清理会话。
+
+        这是一个内部私有 async 方法，调用方必须 ``await``。保持 async 是因为取消
+        ``_handler_task`` 需要在 ``self._lock`` 保护下进行以避免与 ``trigger`` 竞态；
+        不应移除 async 或额外增加同步兼容层（过度工程）。
+        """
         USER_SESSIONS.pop(self.session_id, None)
         try:
             FILTERS.remove(self.session_filter)
         except ValueError:
             pass
-        # 使用锁保护任务取消操作，防止与 trigger 方法竞态
+        # 在锁内取消任务：trigger 在锁内只做创建/取消任务的快速同步操作、不在锁内
+        # await handler，且 trigger 锁外 await 期间已释放锁；因此 _cleanup 总能及时
+        # 获得锁，两者不会互相阻塞等待对方持有的锁（不会死锁）。
         async with self._lock:
             if self._handler_task and not self._handler_task.done():
                 self._handler_task.cancel()
@@ -176,6 +183,8 @@ class SessionWaiter:
                     assert session.handler is not None
 
                     async def _run_handler():
+                        # 内层异常处理：把 handler 的普通异常转为 stop(e) 写入 future，
+                        # 使 register_wait 能感知；CancelledError 则重新抛出交由外层处理。
                         try:
                             await session.handler(session.session_controller, event)
                         except asyncio.CancelledError:
@@ -193,13 +202,21 @@ class SessionWaiter:
                     session.session_controller.stop(e)
                     return
 
-        # 在锁外等待任务完成，避免死锁
+        # 在锁外等待任务完成，避免死锁：trigger 在锁内只创建任务、不在锁内 await
+        # handler，锁已在进入此处前释放；而 _cleanup 仅在锁内取消任务，因此两者不会
+        # 互相阻塞等待对方持有的锁。
         if task_to_await:
             try:
                 await task_to_await
             except asyncio.CancelledError:
-                # 任务被取消时不需要处理
+                # 外层只静默处理任务被取消的情况：取消是预期行为（如被 _cleanup 或
+                # 后续 trigger 取消），不应上报为异常，也不应写入 future。
                 pass
+            finally:
+                # 清理已完成任务的引用，避免已完成任务残留在 _handler_task 上。
+                # 仅当 _handler_task 仍是当前任务时才置 None，防止并发 trigger 已替换它。
+                if session._handler_task is task_to_await:
+                    session._handler_task = None
 
 
 def session_waiter(timeout: int = 30, record_history_chains: bool = False):
