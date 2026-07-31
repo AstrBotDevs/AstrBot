@@ -236,6 +236,13 @@ def test_sender_filter_key_is_collision_free():
     key_d = f.filter(FakeEvent("p:GroupMessage:g", "x:y", ""))
     assert key_c != key_d
 
+    # The registry is shared with DefaultSessionFilter, so a sender key must
+    # never be parseable as a raw unified_msg_origin either. Platform ids may
+    # not contain "!", so the namespace prefix guarantees that.
+    sender_key = f.filter(FakeEvent("GroupMessage:FriendMessage:x", "y", ""))
+    assert sender_key.startswith("!"), "sender keys must be namespaced"
+    assert sender_key != "GroupMessage:FriendMessage:x"
+
 
 @pytest.mark.asyncio
 async def test_sender_filter_isolates_users_with_hash_in_umo(waiter_mod):

@@ -126,14 +126,19 @@ class SenderSessionFilter(SessionFilter):
         ("a#b" + "c" equals "a" + "b#c"), defeating the isolation. The length
         prefix makes the encoding uniquely decodable.
 
+        The key is also namespaced with a leading "!" so it can never equal a
+        raw unified_msg_origin produced by DefaultSessionFilter, since both
+        filters share the USER_SESSIONS registry and platform ids may not
+        contain "!" (see PlatformManager._is_valid_platform_id).
+
         Args:
             event: The current message event.
 
         Returns:
-            An unambiguous session key of the form "{len(umo)}:{umo}:{sender_id}".
+            A session key of the form "!sender:{len(umo)}:{umo}:{sender_id}".
         """
         umo = event.unified_msg_origin
-        return f"{len(umo)}:{umo}:{event.get_sender_id()}"
+        return f"!sender:{len(umo)}:{umo}:{event.get_sender_id()}"
 
 
 class SessionWaiter:
