@@ -769,6 +769,15 @@ class KnowledgeBaseService:
         if not query:
             raise KnowledgeBaseServiceError("缺少参数 query")
         kb_manager = self.get_kb_manager()
+        if not kb_names:
+            # The REST route identifies the knowledge base with the kb_id path
+            # parameter, so resolve it into the kb_names the manager expects.
+            kb_id = payload.get("kb_id")
+            if kb_id:
+                kb_helper = await kb_manager.get_kb(kb_id)
+                if not kb_helper:
+                    raise KnowledgeBaseServiceError("知识库不存在")
+                kb_names = [kb_helper.kb.kb_name]
         if not kb_names or not isinstance(kb_names, list):
             raise KnowledgeBaseServiceError("缺少参数 kb_names 或格式错误")
 

@@ -7,9 +7,11 @@ from fastapi import Request
 from astrbot.core.provider.provider import EmbeddingProvider
 from astrbot.dashboard.api.knowledge_bases import (
     list_knowledge_bases,
+    retrieve_knowledge_base,
 )
 from astrbot.dashboard.schemas import (
     KnowledgeBaseRequest,
+    KnowledgeBaseRetrieveRequest,
 )
 from astrbot.dashboard.services.knowledge_base_service import (
     KnowledgeBaseService,
@@ -252,6 +254,88 @@ async def test_create_kb_raises_when_embedding_provider_is_missing():
 
     with pytest.raises(KnowledgeBaseServiceError, match="缺少参数 embedding_provider_id"):
         await service.create_kb({"kb_name": "Test KB"})
+
+
+@pytest.mark.asyncio
+async def test_retrieve_resolves_kb_id_from_path_parameter():
+    kb = make_kb("kb-1", "Docs")
+    kb_manager = MagicMock()
+    kb_manager.get_kb = AsyncMock(return_value=SimpleNamespace(kb=kb))
+    kb_manager.retrieve = AsyncMock(return_value={"results": [{"chunk_id": "c-1"}]})
+    service = make_service(kb_manager)
+
+    result = await service.retrieve({"kb_id": "kb-1", "query": "hello", "top_k": 3})
+
+    kb_manager.get_kb.assert_awaited_once_with("kb-1")
+    kb_manager.retrieve.assert_awaited_once_with(
+        query="hello",
+        kb_names=["Docs"],
+        top_m_final=3,
+    )
+    assert result == {
+        "results": [{"chunk_id": "c-1"}],
+        "total": 1,
+        "query": "hello",
+    }
+
+
+@pytest.mark.asyncio
+async def test_retrieve_route_passes_kb_id_to_service():
+    kb = make_kb("kb-1", "Docs")
+    kb_manager = MagicMock()
+    kb_manager.get_kb = AsyncMock(return_value=SimpleNamespace(kb=kb))
+    kb_manager.retrieve = AsyncMock(return_value={"results": []})
+    service = make_service(kb_manager)
+
+    response = await retrieve_knowledge_base(
+        "kb-1",
+        KnowledgeBaseRetrieveRequest(query="hello"),
+        _auth=object(),
+        service=service,
+    )
+
+    assert response["status"] == "ok"
+    kb_manager.retrieve.assert_awaited_once_with(
+        query="hello",
+        kb_names=["Docs"],
+        top_m_final=5,
+    )
+
+
+@pytest.mark.asyncio
+async def test_retrieve_still_accepts_explicit_kb_names():
+    kb_manager = MagicMock()
+    kb_manager.get_kb = AsyncMock()
+    kb_manager.retrieve = AsyncMock(return_value={"results": []})
+    service = make_service(kb_manager)
+
+    await service.retrieve({"query": "hello", "kb_names": ["Docs", "Notes"]})
+
+    kb_manager.get_kb.assert_not_awaited()
+    kb_manager.retrieve.assert_awaited_once_with(
+        query="hello",
+        kb_names=["Docs", "Notes"],
+        top_m_final=5,
+    )
+
+
+@pytest.mark.asyncio
+async def test_retrieve_raises_when_kb_id_is_unknown():
+    kb_manager = MagicMock()
+    kb_manager.get_kb = AsyncMock(return_value=None)
+    service = make_service(kb_manager)
+
+    with pytest.raises(KnowledgeBaseServiceError, match="知识库不存在"):
+        await service.retrieve({"kb_id": "missing", "query": "hello"})
+
+
+@pytest.mark.asyncio
+async def test_retrieve_raises_when_no_knowledge_base_is_specified():
+    kb_manager = MagicMock()
+    service = make_service(kb_manager)
+
+    with pytest.raises(KnowledgeBaseServiceError, match="缺少参数 kb_names 或格式错误"):
+        await service.retrieve({"query": "hello"})
 
 
 @pytest.mark.asyncio
