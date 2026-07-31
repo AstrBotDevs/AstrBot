@@ -17,6 +17,7 @@ from astrbot.api.provider import Provider
 from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, TextPart
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.provider import reorder_tailing_tool_call_user
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.media_utils import (
@@ -857,6 +858,10 @@ class ProviderGoogleGenAI(Provider):
                 for tcr in tool_calls_result:
                     context_query.extend(tcr.to_openai_messages())
 
+        # 伪造工具调用对需前置到用户消息之后，与真实工具调用时序对齐。
+        # Gemini API 要求 functionCall 回合必须紧跟 user 回合，否则返回 400。
+        reorder_tailing_tool_call_user(context_query)
+
         model = model or self.get_model()
 
         payloads = {"messages": context_query, "model": model}
@@ -923,6 +928,10 @@ class ProviderGoogleGenAI(Provider):
             else:
                 for tcr in tool_calls_result:
                     context_query.extend(tcr.to_openai_messages())
+
+        # 伪造工具调用对需前置到用户消息之后，与真实工具调用时序对齐。
+        # Gemini API 要求 functionCall 回合必须紧跟 user 回合，否则返回 400。
+        reorder_tailing_tool_call_user(context_query)
 
         model = model or self.get_model()
 
