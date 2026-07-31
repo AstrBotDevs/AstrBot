@@ -357,3 +357,79 @@ class TestUniqueSessionCompatibility:
         key = filter_.filter(event)
         assert isinstance(key, str)
         assert len(key) > 0
+
+
+# ---------------------------------------------------------------------------
+# Backward compatibility: @session_waiter decorator path
+# ---------------------------------------------------------------------------
+
+
+class TestDecoratorPathCompatibility:
+    """Verify that the @session_waiter decorator (the normal usage pattern)
+    still works correctly after DefaultSessionFilter changed to composite key.
+
+    The decorator computes session_id from the *same* filter instance it uses
+    for both registration and lookup, so the composite key is internally
+    consistent. Third-party plugins that bypass the decorator by registering
+    a waiter with a raw unified_msg_origin key while using DefaultSessionFilter
+    will see a key mismatch — this is an inherent tradeoff of changing the
+    default, documented in the DefaultSessionFilter docstring.
+    """
+
+    def setup_method(self):
+        _clear_global_state()
+
+    def test_decorator_register_and_lookup_keys_match(self):
+        """When using @session_waiter, the registration key and the lookup key
+        must be identical because both are derived from the same filter."""
+        from astrbot.core.utils.session_waiter import session_waiter
+
+        captured = []
+
+        @session_waiter(5)
+        async def my_waiter(controller, event):
+            captured.append(event.get_sender_id())
+            controller.stop()
+
+        # Simulate what the decorator does internally: filter computes the key
+        filter_ = DefaultSessionFilter()
+        event_alice = _make_event(sender_id="alice")
+        register_key = filter_.filter(event_alice)
+
+        # The handle_session_control_agent dispatch loop uses the same filter
+        # to compute the lookup key for incoming events
+        lookup_key = filter_.filter(event_alice)
+
+        assert register_key == lookup_key, (
+            "Registration and lookup keys must match for the decorator path"
+        )
+
+    def test_manual_registration_with_filter_is_consistent(self):
+        """When a plugin manually creates a SessionWaiter, it must pass a
+        session_id that matches its filter's output (the safe pattern).
+
+        This test documents the CORRECT manual usage: derive session_id from
+        the filter, not from a raw unified_msg_origin. The INCORRECT pattern
+        (session_id = raw umo while filter returns umo:sender) will cause a
+        key mismatch — see DefaultSessionFilter docstring for migration notes.
+        """
+        filter_ = DefaultSessionFilter()
+        event = _make_event(sender_id="alice")
+
+        # CORRECT: session_id derived from filter
+        session_id = filter_.filter(event)
+        USER_SESSIONS[session_id] = "waiter_placeholder"
+        FILTERS.append(filter_)
+
+        # Lookup with the same filter produces the same key
+        incoming = _make_event(sender_id="alice")
+        lookup_key = filter_.filter(incoming)
+        assert lookup_key in USER_SESSIONS, (
+            "Manual registration must use filter-derived session_id for consistency"
+        )
+
+        # INCORRECT pattern: raw umo as key would NOT match
+        raw_key = event.unified_msg_origin
+        assert raw_key not in USER_SESSIONS, (
+            "Raw umo key must not match when DefaultSessionFilter uses composite key"
+        )

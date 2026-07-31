@@ -107,6 +107,13 @@ class DefaultSessionFilter(SessionFilter):
         (``f"{umo}:<unknown>"``) to avoid cross-user key collision, and a
         warning is logged.
 
+        Migration note for plugins that manually register a ``SessionWaiter``:
+        the ``session_id`` passed to ``SessionWaiter.__init__`` must match the
+        output of this filter (i.e. ``filter.filter(event)``).  Using a raw
+        ``unified_msg_origin`` as the registration key while relying on
+        ``DefaultSessionFilter`` for lookup will cause a key mismatch and the
+        waiter will never trigger.
+
         Args:
             event: The incoming message event.
 
