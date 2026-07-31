@@ -3,7 +3,7 @@ import aiohttp
 from astrbot import logger
 
 from ..entities import ProviderType
-from ..provider import EmbeddingProvider
+from ..provider import EmbeddingProvider, EmbeddingProviderError
 from ..register import register_provider_adapter
 
 
@@ -96,8 +96,10 @@ class NvidiaEmbeddingProvider(EmbeddingProvider):
                     logger.error(
                         f"[NVIDIA Embedding] API Error: {response.status} - {error_text}"
                     )
-                    raise Exception(
-                        f"NVIDIA Embedding API request failed: HTTP {response.status} - {error_text}"
+                    raise EmbeddingProviderError(
+                        f"NVIDIA Embedding API request failed: HTTP {response.status} - {error_text}",
+                        status_code=response.status,
+                        response=response,
                     )
 
                 response_data = await response.json()

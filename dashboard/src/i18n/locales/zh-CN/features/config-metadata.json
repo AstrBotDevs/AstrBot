@@ -1416,6 +1416,14 @@
       "embedding_api_base": {
         "description": "API Base URL"
       },
+      "embedding_max_requests_per_minute": {
+        "description": "Embedding 每分钟最大请求数",
+        "hint": "限制同一 Embedding Provider 的批量向量化请求速率。设置为 0 表示不限制；远程 API 建议按服务商限额填写。"
+      },
+      "embedding_rate_limit_cooldown": {
+        "description": "Embedding 限速冷却上限（秒）",
+        "hint": "当 Embedding API 返回 Retry-After 或限速错误时，同一 Provider 后续请求的最大等待秒数。"
+      },
       "openai_embedding": {
         "hint": "如果测试不通过，可以尝试添加 /v1 在末尾以兼容部分 OpenAI API 版本。"
       },

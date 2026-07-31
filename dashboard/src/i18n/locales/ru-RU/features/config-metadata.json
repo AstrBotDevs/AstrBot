@@ -1411,6 +1411,14 @@
             "embedding_api_base": {
                 "description": "Адрес прокси-сервера"
             },
+            "embedding_max_requests_per_minute": {
+                "description": "Максимум запросов Embedding в минуту",
+                "hint": "Ограничивает частоту пакетных запросов для одного провайдера Embedding. Значение 0 отключает ограничение; для удалённых API укажите лимит провайдера."
+            },
+            "embedding_rate_limit_cooldown": {
+                "description": "Максимальная пауза при ограничении Embedding (секунды)",
+                "hint": "Максимальная задержка последующих запросов к тому же провайдеру, если API Embedding возвращает Retry-After или ошибку ограничения частоты."
+            },
             "openai_embedding": {
                 "hint": "Если тест не проходит, попробуйте добавить /v1 в конец embedding_api_base для совместимости с некоторыми версиями OpenAI API."
             },

@@ -1,9 +1,14 @@
 import abc
 import asyncio
 import os
+import random
+import time
 from collections.abc import AsyncGenerator
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Literal, TypeAlias, Union
 
+from astrbot import logger
 from astrbot.core.agent.message import ContentPart, Message, is_checkpoint_message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.provider.entities import (
@@ -14,6 +19,8 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.provider.register import provider_cls_map
 from astrbot.core.utils.astrbot_path import get_astrbot_path
+from astrbot.core.utils.config_number import coerce_int_config
+from astrbot.core.utils.network_utils import is_connection_error
 
 Providers: TypeAlias = Union[
     "Provider",
@@ -317,11 +324,51 @@ class TTSProvider(AbstractProvider):
             pass
 
 
+class EmbeddingProviderError(Exception):
+    """Represent an Embedding API failure with HTTP response metadata.
+
+    Args:
+        message: Human-readable provider error message.
+        status_code: HTTP status code returned by the provider, if available.
+        response: Original provider response, used to read headers such as
+            ``Retry-After``.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        response: object | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.response = response
+
+
 class EmbeddingProvider(AbstractProvider):
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config)
         self.provider_config = provider_config
         self.provider_settings = provider_settings
+        max_rpm = coerce_int_config(
+            provider_config.get("embedding_max_requests_per_minute", 0),
+            default=0,
+            min_value=0,
+            field_name="embedding_max_requests_per_minute",
+            source=f"Embedding provider {provider_config.get('id', 'unknown')}",
+        )
+        cooldown_max_s = coerce_int_config(
+            provider_config.get("embedding_rate_limit_cooldown", 120),
+            default=120,
+            min_value=1,
+            field_name="embedding_rate_limit_cooldown",
+            source=f"Embedding provider {provider_config.get('id', 'unknown')}",
+        )
+        self._embedding_min_request_interval_s = 60.0 / max_rpm if max_rpm else 0.0
+        self._embedding_rate_limit_cooldown_max_s = float(cooldown_max_s)
+        self._embedding_request_lock = asyncio.Lock()
+        self._embedding_next_request_at = 0.0
 
     @abc.abstractmethod
     async def get_embedding(self, text: str) -> list[float]:
@@ -339,7 +386,69 @@ class EmbeddingProvider(AbstractProvider):
         ...
 
     async def test(self) -> None:
-        await self.get_embedding("astrbot")
+        await self.get_embedding_with_retry("astrbot")
+
+    async def get_embedding_with_retry(
+        self,
+        text: str,
+        *,
+        max_retries: int = 3,
+    ) -> list[float]:
+        """Get one embedding through the shared throttled retry path.
+
+        Args:
+            text: Input text to embed.
+            max_retries: Maximum attempts, including the first try.
+
+        Returns:
+            The embedding vector.
+
+        Raises:
+            Exception: When the provider returns no embedding or retries fail.
+        """
+        embeddings = await self.get_embeddings_batch(
+            [text],
+            batch_size=1,
+            tasks_limit=1,
+            max_retries=max_retries,
+        )
+        if not embeddings:
+            raise Exception("Embedding provider returned no vectors.")
+        return embeddings[0]
+
+    async def _wait_for_embedding_request_slot(self) -> None:
+        """Wait for the provider-level embedding request throttle.
+
+        This limiter is shared by all knowledge-base upload tasks using the same
+        provider instance, so separate large imports cannot bypass per-provider
+        pacing or a dynamic rate-limit cooldown by running concurrently.
+        """
+        async with self._embedding_request_lock:
+            while True:
+                now = time.monotonic()
+                wait_s = self._embedding_next_request_at - now
+                if wait_s <= 0:
+                    break
+                await asyncio.sleep(wait_s)
+            if self._embedding_min_request_interval_s > 0:
+                self._embedding_next_request_at = (
+                    time.monotonic() + self._embedding_min_request_interval_s
+                )
+
+    def _delay_embedding_requests(self, delay_s: float) -> None:
+        """Delay future embedding requests for this provider instance.
+
+        Args:
+            delay_s: Requested delay in seconds, typically from Retry-After or
+                a computed rate-limit retry backoff.
+        """
+        if delay_s <= 0:
+            return
+        capped_delay = min(delay_s, self._embedding_rate_limit_cooldown_max_s)
+        self._embedding_next_request_at = max(
+            self._embedding_next_request_at,
+            time.monotonic() + capped_delay,
+        )
 
     async def get_embeddings_batch(
         self,
@@ -349,30 +458,113 @@ class EmbeddingProvider(AbstractProvider):
         max_retries: int = 3,
         progress_callback=None,
     ) -> list[list[float]]:
-        """批量获取文本的向量，分批处理以节省内存
+        """Batch-embed texts with bounded concurrency and retry.
 
         Args:
-            texts: 文本列表
-            batch_size: 每批处理的文本数量
-            tasks_limit: 并发任务数量限制
-            max_retries: 失败时的最大重试次数
-            progress_callback: 进度回调函数，接收参数 (current, total)
+            texts: Input texts to embed.
+            batch_size: Number of texts per provider request.
+            tasks_limit: Maximum number of concurrent batch requests.
+            max_retries: Maximum attempts per batch (including the first try).
+            progress_callback: Optional async callback ``(current, total)``.
 
         Returns:
-            向量列表
+            Embedding vectors in the same order as ``texts``.
 
+        Raises:
+            Exception: When one or more batches fail after all retries.
         """
+        batch_size = max(1, int(batch_size or 1))
+        tasks_limit = max(1, int(tasks_limit or 1))
+        max_retries = max(1, int(max_retries or 1))
+
+        retry_status_codes = {408, 409, 429, 500, 502, 503, 504, 529}
+        retry_backoff_max_s = 30.0
+
         semaphore = asyncio.Semaphore(tasks_limit)
         batch_results: dict[int, list[list[float]]] = {}
-        failed_batches: list[tuple[int, list[str]]] = []
         completed_count = 0
         total_count = len(texts)
+
+        def _get_status_code(error: BaseException) -> int | None:
+            for attr in ("status_code", "status", "code"):
+                value = getattr(error, attr, None)
+                if isinstance(value, int):
+                    return value
+
+            response = getattr(error, "response", None)
+            if response is not None:
+                status_code = getattr(response, "status_code", None)
+                if isinstance(status_code, int):
+                    return status_code
+            return None
+
+        def _get_retry_after_seconds(error: BaseException) -> float | None:
+            candidates: list[object] = [
+                getattr(error, "retry_after", None),
+                getattr(error, "Retry-After", None),
+            ]
+            response = getattr(error, "response", None)
+            headers = (
+                getattr(response, "headers", None) if response is not None else None
+            )
+            if headers is not None:
+                try:
+                    candidates.append(headers.get("Retry-After"))
+                    candidates.append(headers.get("retry-after"))
+                except Exception:
+                    pass
+
+            for value in candidates:
+                if value is None:
+                    continue
+                try:
+                    seconds = float(value)
+                except (TypeError, ValueError):
+                    try:
+                        retry_at = parsedate_to_datetime(str(value))
+                    except (TypeError, ValueError):
+                        continue
+                    if retry_at.tzinfo is None:
+                        retry_at = retry_at.replace(tzinfo=timezone.utc)
+                    seconds = (
+                        retry_at - datetime.now(tz=retry_at.tzinfo)
+                    ).total_seconds()
+                if seconds >= 0:
+                    return seconds
+            return None
+
+        def _is_retryable_embedding_error(error: BaseException) -> bool:
+            if is_connection_error(error):
+                return True
+
+            error_type_name = type(error).__name__
+            if error_type_name in {"APIConnectionError", "APITimeoutError"}:
+                return True
+
+            status_code = _get_status_code(error)
+            if status_code is None:
+                # Preserve historical forgiving behavior: retry unknown errors.
+                return True
+            return status_code in retry_status_codes or 500 <= status_code <= 599
+
+        def _retry_delay_seconds(attempt: int, error: BaseException) -> float:
+            retry_after = _get_retry_after_seconds(error)
+            if retry_after is not None:
+                return min(retry_after, self._embedding_rate_limit_cooldown_max_s)
+
+            # Keep an exponential lower bound so rate-limit retries never happen
+            # immediately, then add a small jitter to avoid synchronized waves.
+            base = min(float(2**attempt), retry_backoff_max_s)
+            jitter = random.uniform(0.0, min(1.0, base))
+            return min(base + jitter, retry_backoff_max_s)
 
         async def process_batch(batch_idx: int, batch_texts: list[str]) -> None:
             nonlocal completed_count
             async with semaphore:
+                last_error: Exception | None = None
                 for attempt in range(max_retries):
                     try:
+                        await self._wait_for_embedding_request_slot()
                         batch_embeddings = await self.get_embeddings(batch_texts)
                         batch_results[batch_idx] = batch_embeddings
                         completed_count += len(batch_texts)
@@ -380,25 +572,46 @@ class EmbeddingProvider(AbstractProvider):
                             await progress_callback(completed_count, total_count)
                         return
                     except Exception as e:
-                        if attempt == max_retries - 1:
-                            # 最后一次重试失败，记录失败的批次
-                            failed_batches.append((batch_idx, batch_texts))
-                            raise Exception(
-                                f"批次 {batch_idx} 处理失败，已重试 {max_retries} 次: {e!s}",
-                            )
-                        # 等待一段时间后重试，使用指数退避
-                        await asyncio.sleep(2**attempt)
+                        last_error = e
+                        if (
+                            attempt >= max_retries - 1
+                            or not _is_retryable_embedding_error(e)
+                        ):
+                            break
+
+                        delay = _retry_delay_seconds(attempt, e)
+                        retry_after = _get_retry_after_seconds(e)
+                        status_code = _get_status_code(e)
+                        if (
+                            retry_after is not None
+                            or status_code in retry_status_codes
+                            or (status_code is not None and 500 <= status_code <= 599)
+                        ):
+                            self._delay_embedding_requests(delay)
+                        logger.warning(
+                            "Embedding batch %s failed (attempt %s/%s): %s; "
+                            "retrying in %.2fs",
+                            batch_idx,
+                            attempt + 1,
+                            max_retries,
+                            e,
+                            delay,
+                        )
+                        await asyncio.sleep(delay)
+
+                raise Exception(
+                    f"批次 {batch_idx} 处理失败，共尝试 {attempt + 1} 次: "
+                    f"{last_error!s}",
+                ) from last_error
 
         tasks = []
-        for i in range(0, len(texts), batch_size):
+        for batch_idx, i in enumerate(range(0, len(texts), batch_size)):
             batch_texts = texts[i : i + batch_size]
-            batch_idx = i // batch_size
-            tasks.append(process_batch(batch_idx, batch_texts))
+            tasks.append(asyncio.create_task(process_batch(batch_idx, batch_texts)))
 
-        # 收集所有任务的结果，包括失败的任务
+        # Collect all task outcomes, including failures.
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # 检查是否有失败的任务
         errors = [r for r in results if isinstance(r, Exception)]
         if errors:
             error_msg = (
