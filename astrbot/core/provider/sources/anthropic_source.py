@@ -24,6 +24,7 @@ from astrbot.core.utils.network_utils import (
     create_proxy_client,
     is_connection_error,
     log_connection_failure,
+    resolve_anthropic_httpx_module,
 )
 
 from ..register import register_provider_adapter
@@ -114,31 +115,20 @@ class ProviderAnthropic(Provider):
             http_client=self._create_http_client(provider_config),
         )
 
-    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
+    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient:
         """Create an HTTP client with optional proxy and system SSL trust store.
 
-        The Anthropic SDK validates ``http_client`` with
-        ``isinstance(..., httpx.AsyncClient)`` against its own ``httpx`` import.
-        When multiple ``httpx`` installations are present on ``sys.path``
-        (e.g. bundled Python + system Python), constructing the client from a
-        different ``httpx`` module makes that check fail. We therefore prefer
-        the SDK's own ``httpx`` module when available.
+        A client is always built, even without a proxy, so that every request
+        goes through the ``x-stainless-*`` stripping hook that
+        ``create_proxy_client`` installs. Letting the SDK fall back to its own
+        default client would leave those telemetry headers in place and keep
+        relays that reject them unusable.
         """
-        proxy = provider_config.get("proxy", "")
-        if not proxy:
-            return None
-        httpx_module: Any = httpx
-        try:
-            from anthropic import _base_client as anthropic_base_client
-
-            httpx_module = getattr(anthropic_base_client, "httpx", httpx)
-        except ImportError:
-            pass
         return create_proxy_client(
             "Anthropic",
-            proxy,
+            provider_config.get("proxy", ""),
             headers=self.custom_headers,
-            httpx_module=httpx_module,
+            httpx_module=resolve_anthropic_httpx_module(),
         )
 
     def _apply_thinking_config(self, payloads: dict) -> None:

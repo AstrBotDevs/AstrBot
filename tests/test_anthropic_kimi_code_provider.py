@@ -9,6 +9,7 @@ import astrbot.core.provider.sources.kimi_code_source as kimi_code_source
 import astrbot.core.provider.sources.request_retry as request_retry
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.utils import network_utils
 
 
 class _FakeAsyncAnthropic:
@@ -40,13 +41,18 @@ def test_anthropic_provider_passes_custom_headers_via_default_headers(monkeypatc
         "User-Agent": "custom-agent/1.0",
         "X-Test-Header": "123",
     }
-    # Custom headers are forwarded via the SDK's `default_headers` parameter,
-    # not via a custom http_client (which is reserved for proxy configuration).
+    # Custom headers are forwarded via the SDK's `default_headers` parameter.
     assert provider.client.kwargs["default_headers"] == {
         "User-Agent": "custom-agent/1.0",
         "X-Test-Header": "123",
     }
-    assert provider.client.kwargs["http_client"] is None
+    # An http_client is always supplied, even without a proxy, so that the
+    # x-stainless-* stripping hook applies to every request.
+    http_client = provider.client.kwargs["http_client"]
+    assert isinstance(http_client, httpx.AsyncClient)
+    assert http_client._event_hooks["request"] == [
+        network_utils.strip_sdk_telemetry_headers
+    ]
 
 
 def test_kimi_code_provider_sets_defaults_and_preserves_custom_headers(monkeypatch):
@@ -92,18 +98,34 @@ def test_kimi_code_provider_restores_required_user_agent_when_blank(monkeypatch)
     }
 
 
-def test_create_http_client_returns_none_when_no_proxy(monkeypatch):
-    def fail_if_called(*args, **kwargs):
-        raise AssertionError("create_proxy_client should not be called without a proxy")
+def test_create_http_client_builds_client_without_proxy(monkeypatch):
+    """A client is required even without a proxy so telemetry headers get stripped."""
+    captured: dict[str, object] = {}
+    sentinel = object()
 
-    monkeypatch.setattr(anthropic_source, "create_proxy_client", fail_if_called)
+    def fake_create_proxy_client(
+        provider_label: str,
+        proxy: str | None = None,
+        headers: dict[str, str] | None = None,
+        verify=None,
+        httpx_module=None,
+    ):
+        captured["proxy"] = proxy
+        captured["headers"] = headers
+        return sentinel
+
+    monkeypatch.setattr(
+        anthropic_source, "create_proxy_client", fake_create_proxy_client
+    )
 
     provider = anthropic_source.ProviderAnthropic.__new__(
         anthropic_source.ProviderAnthropic
     )
     provider.custom_headers = {"X-Trace-Id": "abc"}
 
-    assert provider._create_http_client({"proxy": ""}) is None
+    assert provider._create_http_client({"proxy": ""}) is sentinel
+    assert captured["proxy"] == ""
+    assert captured["headers"] == {"X-Trace-Id": "abc"}
 
 
 def test_create_http_client_uses_anthropic_httpx_module(monkeypatch):
