@@ -4,7 +4,7 @@ import threading
 import dingtalk_stream
 import pytest
 
-from astrbot.api.message_components import At, Plain, Reply
+from astrbot.api.message_components import At, Image, Plain, Reply
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.sources.dingtalk import dingtalk_adapter
 from astrbot.core.platform.sources.dingtalk.dingtalk_adapter import (
@@ -285,7 +285,15 @@ async def test_dingtalk_legacy_quote_message_is_supported():
 @pytest.mark.asyncio
 async def test_dingtalk_rich_text_reply_builds_readable_quote():
     adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    downloads = []
+
+    async def fake_download(download_code, robot_code, ext):
+        downloads.append((download_code, robot_code, ext))
+        return "/tmp/quoted-rich-image.jpg"
+
+    adapter.download_ding_file = fake_download
     message = _dingtalk_group_message(
+        robotCode="robot",
         msgtype="text",
         text={
             "content": "看一下引用",
@@ -308,3 +316,43 @@ async def test_dingtalk_rich_text_reply_builds_readable_quote():
 
     assert isinstance(result.message[0], Reply)
     assert result.message[0].message_str == "第一段 [Image]第二段"
+    assert [type(item) for item in result.message[0].chain] == [
+        Plain,
+        Image,
+        Plain,
+    ]
+    assert downloads == [("image-code", "robot", "jpg")]
+
+
+@pytest.mark.asyncio
+async def test_dingtalk_picture_reply_downloads_quoted_image():
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    downloads = []
+
+    async def fake_download(download_code, robot_code, ext):
+        downloads.append((download_code, robot_code, ext))
+        return "/tmp/quoted-picture.jpg"
+
+    adapter.download_ding_file = fake_download
+    message = _dingtalk_group_message(
+        robotCode="robot",
+        msgtype="text",
+        text={
+            "content": "What does this image show?",
+            "isReplyMsg": True,
+            "repliedMsg": {
+                "msgType": "picture",
+                "msgId": "quoted-picture-message",
+                "content": {"downloadCode": "quoted-picture-code"},
+            },
+        },
+    )
+
+    result = await adapter.convert_msg(message)
+
+    reply = result.message[0]
+    assert isinstance(reply, Reply)
+    assert reply.message_str == "[Image]"
+    assert len(reply.chain) == 1
+    assert isinstance(reply.chain[0], Image)
+    assert downloads == [("quoted-picture-code", "robot", "jpg")]

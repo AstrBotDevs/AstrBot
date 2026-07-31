@@ -108,14 +108,16 @@ class DingtalkPlatformAdapter(Platform):
             return dingtalk_id[len(prefix) :]
         return dingtalk_id or "unknown"
 
-    def _parse_reply(
+    async def _parse_reply(
         self,
         message: dingtalk_stream.ChatbotMessage,
+        robot_code: str,
     ) -> Reply | None:
         """Convert DingTalk quote metadata into an AstrBot reply component.
 
         Args:
             message: Parsed DingTalk chatbot callback message.
+            robot_code: Robot code used to download quoted media.
 
         Returns:
             A reply component when the callback contains a usable quote,
@@ -149,6 +151,11 @@ class DingtalkPlatformAdapter(Platform):
             content = {"text": content}
         if not isinstance(content, dict):
             content = {}
+        else:
+            content = content.copy()
+        for key in ("downloadCode", "download_code", "pictureDownloadCode"):
+            if key not in content and quote.get(key):
+                content[key] = quote[key]
 
         quoted_text = ""
         for key in ("text", "content"):
@@ -208,9 +215,68 @@ class DingtalkPlatformAdapter(Platform):
         except (TypeError, ValueError):
             quote_time = 0
 
+        reply_chain: list[Plain | Image] = []
+        if message_type == "picture":
+            nested_picture = content.get("picture")
+            if not isinstance(nested_picture, dict):
+                nested_picture = {}
+            download_code = str(
+                content.get("downloadCode")
+                or content.get("download_code")
+                or content.get("pictureDownloadCode")
+                or nested_picture.get("downloadCode")
+                or ""
+            ).strip()
+            if download_code and robot_code:
+                image_path = await self.download_ding_file(
+                    download_code,
+                    robot_code,
+                    "jpg",
+                )
+                if image_path:
+                    reply_chain.append(Image.fromFileSystem(image_path))
+            if not reply_chain and quoted_text:
+                reply_chain.append(Plain(quoted_text))
+        elif message_type == "richText":
+            rich_text = content.get("richText")
+            if isinstance(rich_text, list):
+                for item in rich_text:
+                    if not isinstance(item, dict):
+                        continue
+                    item_type = item.get("msgType") or item.get("type")
+                    if item_type == "picture":
+                        nested_picture = item.get("picture")
+                        if not isinstance(nested_picture, dict):
+                            nested_picture = {}
+                        download_code = str(
+                            item.get("downloadCode")
+                            or item.get("download_code")
+                            or item.get("pictureDownloadCode")
+                            or nested_picture.get("downloadCode")
+                            or ""
+                        ).strip()
+                        if download_code and robot_code:
+                            image_path = await self.download_ding_file(
+                                download_code,
+                                robot_code,
+                                "jpg",
+                            )
+                            if image_path:
+                                reply_chain.append(Image.fromFileSystem(image_path))
+                                continue
+                        reply_chain.append(Plain("[Image]"))
+                        continue
+                    item_text = item.get("content") or item.get("text")
+                    if isinstance(item_text, str) and item_text:
+                        reply_chain.append(Plain(item_text))
+            if not reply_chain and quoted_text:
+                reply_chain.append(Plain(quoted_text))
+        elif quoted_text:
+            reply_chain.append(Plain(quoted_text))
+
         return Reply(
             id=quote_id,
-            chain=[Plain(quoted_text)] if quoted_text else [],
+            chain=reply_chain,
             sender_id=sender_id,
             sender_nickname=str(quote.get("senderNick") or ""),
             time=quote_time,
@@ -425,7 +491,7 @@ class DingtalkPlatformAdapter(Platform):
                             file_name = Path(f_path).name
                         abm.message.append(File(name=file_name, file=f_path))
 
-        if reply := self._parse_reply(message):
+        if reply := await self._parse_reply(message, robot_code):
             abm.message.insert(0, reply)
 
         await self._remember_sender_binding(message, abm)
