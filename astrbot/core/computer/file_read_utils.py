@@ -4,6 +4,7 @@ import base64
 import hashlib
 import io
 import json
+import os
 import zipfile
 from asyncio import to_thread
 from dataclasses import dataclass
@@ -24,6 +25,7 @@ from astrbot.core.utils.media_utils import (
 )
 
 from .booters.base import ComputerBooter
+from .local_file_security import open_file_in_allowed_roots
 
 _MAX_FILE_READ_BYTES = 128 * 1024
 _MAX_FILE_READ_TOKENS = 25_000
@@ -210,11 +212,22 @@ def read_local_text_range_sync(
     encoding: str,
     offset: int | None,
     limit: int | None,
+    file_descriptor: int | None = None,
 ) -> str:
     lines: list[str] = []
     start = 0 if offset is None else offset
     end = None if limit is None else start + limit
-    with open(path, encoding=encoding, newline="") as file_obj:
+    if file_descriptor is None:
+        file_obj = open(path, encoding=encoding, newline="")
+    else:
+        file_obj = os.fdopen(
+            os.dup(file_descriptor),
+            mode="r",
+            encoding=encoding,
+            newline="",
+        )
+        file_obj.seek(0)
+    with file_obj:
         for index, line in enumerate(file_obj):
             if index < start:
                 continue
@@ -230,6 +243,7 @@ async def read_local_text_range(
     encoding: str,
     offset: int | None,
     limit: int | None,
+    file_descriptor: int | None = None,
 ) -> str:
     return await to_thread(
         read_local_text_range_sync,
@@ -237,6 +251,7 @@ async def read_local_text_range(
         encoding=encoding,
         offset=offset,
         limit=limit,
+        file_descriptor=file_descriptor,
     )
 
 
@@ -271,8 +286,18 @@ async def _exec_python_json(
     return payload
 
 
-async def _probe_local_file(path: str) -> dict[str, str | int]:
+async def _probe_local_file(
+    path: str,
+    file_descriptor: int | None = None,
+) -> dict[str, str | int]:
     def _run() -> dict[str, str | int]:
+        if file_descriptor is not None:
+            return {
+                "size_bytes": os.fstat(file_descriptor).st_size,
+                "sample_b64": base64.b64encode(
+                    os.pread(file_descriptor, _FILE_SNIFF_BYTES, 0)
+                ).decode("utf-8"),
+            }
         file_path = Path(path)
         with file_path.open("rb") as file_obj:
             sample = file_obj.read(_FILE_SNIFF_BYTES)
@@ -284,9 +309,17 @@ async def _probe_local_file(path: str) -> dict[str, str | int]:
     return await to_thread(_run)
 
 
-async def _read_local_image_base64(path: str) -> dict[str, str | int]:
+async def _read_local_image_base64(
+    path: str,
+    file_descriptor: int | None = None,
+) -> dict[str, str | int]:
     def _run() -> dict[str, str | int]:
-        data = Path(path).read_bytes()
+        if file_descriptor is None:
+            data = Path(path).read_bytes()
+        else:
+            with os.fdopen(os.dup(file_descriptor), "rb") as file_obj:
+                file_obj.seek(0)
+                data = file_obj.read()
         return {
             "size_bytes": len(data),
             "base64": base64.b64encode(data).decode("utf-8"),
@@ -295,8 +328,19 @@ async def _read_local_image_base64(path: str) -> dict[str, str | int]:
     return await to_thread(_run)
 
 
-async def _read_local_file_bytes(path: str) -> bytes:
-    return await to_thread(Path(path).read_bytes)
+async def _read_local_file_bytes(
+    path: str,
+    file_descriptor: int | None = None,
+) -> bytes:
+    if file_descriptor is None:
+        return await to_thread(Path(path).read_bytes)
+
+    def _run() -> bytes:
+        with os.fdopen(os.dup(file_descriptor), "rb") as file_obj:
+            file_obj.seek(0)
+            return file_obj.read()
+
+    return await to_thread(_run)
 
 
 async def _compress_image_bytes_to_base64(data: bytes) -> dict[str, str | int]:
@@ -409,30 +453,31 @@ async def _parse_local_epub_text(file_bytes: bytes, file_name: str) -> str:
 async def _parse_local_supported_document(
     path: str,
     sample: bytes,
+    file_descriptor: int | None = None,
 ) -> ParsedDocument | None:
     file_name = Path(path).name
     suffix = Path(path).suffix.lower()
     if _looks_like_pdf(path, sample):
-        file_bytes = await _read_local_file_bytes(path)
+        file_bytes = await _read_local_file_bytes(path, file_descriptor)
         text = await _parse_local_pdf_text(file_bytes, file_name)
         return ParsedDocument(kind="pdf", file_bytes=file_bytes, text=text)
 
     if suffix == ".epub":
-        file_bytes = await _read_local_file_bytes(path)
+        file_bytes = await _read_local_file_bytes(path, file_descriptor)
         if not _is_epub_bytes(file_bytes):
             return None
         text = await _parse_local_epub_text(file_bytes, file_name)
         return ParsedDocument(kind="epub", file_bytes=file_bytes, text=text)
 
     if suffix == ".docx":
-        file_bytes = await _read_local_file_bytes(path)
+        file_bytes = await _read_local_file_bytes(path, file_descriptor)
         if not _is_docx_bytes(file_bytes):
             return None
         text = await _parse_local_docx_text(file_bytes, file_name)
         return ParsedDocument(kind="docx", file_bytes=file_bytes, text=text)
 
     if _looks_like_zip_container(sample):
-        file_bytes = await _read_local_file_bytes(path)
+        file_bytes = await _read_local_file_bytes(path, file_descriptor)
         if _is_epub_bytes(file_bytes):
             text = await _parse_local_epub_text(file_bytes, file_name)
             return ParsedDocument(kind="epub", file_bytes=file_bytes, text=text)
@@ -534,6 +579,7 @@ async def _store_converted_text_for_workspace(
     original_path: str,
     original_bytes: bytes,
     content: str,
+    restricted: bool,
 ) -> str:
     def _run() -> str:
         original_name = Path(original_path).name
@@ -541,9 +587,28 @@ async def _store_converted_text_for_workspace(
         target_dir = (
             Path(workspace_dir) / "converted_files" / f"{original_name}_{digest_suffix}"
         )
-        target_dir.mkdir(parents=True, exist_ok=True)
         target_path = target_dir / "text.txt"
-        target_path.write_text(content, encoding="utf-8")
+        if restricted:
+            target_fd = open_file_in_allowed_roots(
+                str(target_path),
+                (Path(workspace_dir),),
+                access="write",
+                create_parents=True,
+            )
+            try:
+                os.ftruncate(target_fd, 0)
+                os.lseek(target_fd, 0, os.SEEK_SET)
+                with os.fdopen(
+                    os.dup(target_fd),
+                    mode="w",
+                    encoding="utf-8",
+                ) as file_obj:
+                    file_obj.write(content)
+            finally:
+                os.close(target_fd)
+        else:
+            target_dir.mkdir(parents=True, exist_ok=True)
+            target_path.write_text(content, encoding="utf-8")
         return str(target_path)
 
     return await to_thread(_run)
@@ -583,6 +648,7 @@ async def _read_local_supported_document_result(
     workspace_dir: str | None,
     offset: int | None,
     limit: int | None,
+    restricted: bool,
 ) -> ToolExecResult:
     content = parsed_document.text
     if not content:
@@ -607,6 +673,7 @@ async def _read_local_supported_document_result(
         original_path=path,
         original_bytes=parsed_document.file_bytes,
         content=content,
+        restricted=restricted,
     )
 
     if offset is None and limit is None:
@@ -650,9 +717,10 @@ async def read_file_tool_result(
     offset: int | None,
     limit: int | None,
     workspace_dir: str | None = None,
+    local_file_descriptor: int | None = None,
 ) -> ToolExecResult:
     if local_mode:
-        probe_payload = await _probe_local_file(path)
+        probe_payload = await _probe_local_file(path, local_file_descriptor)
     else:
         probe_payload = await _exec_python_json(
             booter,
@@ -666,7 +734,11 @@ async def read_file_tool_result(
 
     if local_mode:
         try:
-            parsed_document = await _parse_local_supported_document(path, sample)
+            parsed_document = await _parse_local_supported_document(
+                path,
+                sample,
+                local_file_descriptor,
+            )
         except Exception as exc:
             return f"Error reading file: failed to parse document: {exc}"
 
@@ -677,6 +749,7 @@ async def read_file_tool_result(
                 workspace_dir=workspace_dir,
                 offset=offset,
                 limit=limit,
+                restricted=local_file_descriptor is not None,
             )
 
     if probe.kind == "binary":
@@ -684,7 +757,10 @@ async def read_file_tool_result(
 
     if probe.kind == "image":
         if local_mode:
-            image_payload = await _read_local_image_base64(path)
+            image_payload = await _read_local_image_base64(
+                path,
+                local_file_descriptor,
+            )
         else:
             image_payload = await _exec_python_json(
                 booter,
@@ -721,6 +797,7 @@ async def read_file_tool_result(
             encoding=probe.encoding or "utf-8",
             offset=offset,
             limit=limit,
+            file_descriptor=local_file_descriptor,
         )
     else:
         text_payload = await _exec_python_json(

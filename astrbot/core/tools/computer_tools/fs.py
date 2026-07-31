@@ -35,9 +35,11 @@ Local path resolution rule:
 
 import os
 import stat
+import sys
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, cast
 
 from astrbot.api import FunctionTool, logger
 from astrbot.api.event import MessageChain
@@ -46,6 +48,7 @@ from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.computer.file_read_utils import read_file_tool_result
+from astrbot.core.computer.local_file_security import open_file_in_allowed_roots
 from astrbot.core.message.components import File, Image
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_plugin_path,
@@ -70,6 +73,9 @@ _SANDBOX_RUNTIME_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": "sandbox",
 }
 _IMAGE_FILE_SUFFIXES = {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".webp"}
+_RACE_RESISTANT_LOCAL_ACCESS = sys.platform.startswith("linux") or (
+    sys.platform == "darwin"
+)
 
 
 def _remote_basename(path: str) -> str:
@@ -369,20 +375,41 @@ class FileReadTool(FunctionTool):
                 context.context.context,
                 context.context.event.unified_msg_origin,
             )
-            return await read_file_tool_result(
-                sb,
-                local_mode=local_env,
-                path=normalized_path,
-                offset=offset,
-                limit=limit,
-                workspace_dir=(
-                    str(
-                        current_workspace_root
-                        or _workspace_root(context.context.event.unified_msg_origin)
-                    )
-                    if local_env
-                    else None
-                ),
+            file_descriptor = None
+            if restricted and _RACE_RESISTANT_LOCAL_ACCESS:
+                file_descriptor = open_file_in_allowed_roots(
+                    normalized_path,
+                    _read_allowed_roots(
+                        context.context.event.unified_msg_origin,
+                        current_workspace_root,
+                    ),
+                    access="read",
+                )
+            try:
+                return await read_file_tool_result(
+                    sb,
+                    local_mode=local_env,
+                    path=normalized_path,
+                    offset=offset,
+                    limit=limit,
+                    workspace_dir=(
+                        str(
+                            current_workspace_root
+                            or _workspace_root(context.context.event.unified_msg_origin)
+                        )
+                        if local_env
+                        else None
+                    ),
+                    local_file_descriptor=file_descriptor,
+                )
+            finally:
+                if file_descriptor is not None:
+                    os.close(file_descriptor)
+        except IsADirectoryError:
+            return (
+                f"Error: '{normalized_path}' is a directory, not a file. "
+                "Use a file path instead, or use 'astrbot_execute_shell' to list "
+                "directory contents."
             )
         except PermissionError as exc:
             return f"Error: {exc}"
@@ -443,12 +470,36 @@ class FileWriteTool(FunctionTool):
                 context.context.context,
                 context.context.event.unified_msg_origin,
             )
-            result = await sb.fs.write_file(
-                path=normalized_path,
-                content=content,
-                mode="w",
-                encoding="utf-8",
-            )
+            file_descriptor = None
+            if restricted and _RACE_RESISTANT_LOCAL_ACCESS:
+                file_descriptor = open_file_in_allowed_roots(
+                    normalized_path,
+                    _write_allowed_roots(
+                        context.context.event.unified_msg_origin,
+                        current_workspace_root,
+                    ),
+                    access="write",
+                    create_parents=True,
+                )
+            try:
+                if file_descriptor is None:
+                    result = await sb.fs.write_file(
+                        path=normalized_path,
+                        content=content,
+                        mode="w",
+                        encoding="utf-8",
+                    )
+                else:
+                    result = await cast(Any, sb.fs).write_file(
+                        path=normalized_path,
+                        content=content,
+                        mode="w",
+                        encoding="utf-8",
+                        file_descriptor=file_descriptor,
+                    )
+            finally:
+                if file_descriptor is not None:
+                    os.close(file_descriptor)
             if not result.get("success", False):
                 error_detail = str(result.get("error", "") or "").strip()
                 return (
@@ -528,13 +579,34 @@ class FileEditTool(FunctionTool):
                 context.context.context,
                 context.context.event.unified_msg_origin,
             )
-            result = await sb.fs.edit_file(
-                path=normalized_path,
-                old_string=normalized_old,
-                new_string=normalized_new,
-                replace_all=replace_all,
-                encoding="utf-8",
-            )
+            file_descriptor = None
+            if restricted and _RACE_RESISTANT_LOCAL_ACCESS:
+                file_descriptor = open_file_in_allowed_roots(
+                    normalized_path,
+                    _write_allowed_roots(umo, current_workspace_root),
+                    access="edit",
+                )
+            try:
+                if file_descriptor is None:
+                    result = await sb.fs.edit_file(
+                        path=normalized_path,
+                        old_string=normalized_old,
+                        new_string=normalized_new,
+                        replace_all=replace_all,
+                        encoding="utf-8",
+                    )
+                else:
+                    result = await cast(Any, sb.fs).edit_file(
+                        path=normalized_path,
+                        old_string=normalized_old,
+                        new_string=normalized_new,
+                        replace_all=replace_all,
+                        encoding="utf-8",
+                        file_descriptor=file_descriptor,
+                    )
+            finally:
+                if file_descriptor is not None:
+                    os.close(file_descriptor)
             if not result.get("success", False):
                 error_detail = str(result.get("error", "") or "").strip()
                 return (
@@ -760,13 +832,42 @@ class GrepTool(FunctionTool):
             )
             contents: list[str] = []
             for search_path in search_paths:
-                result = await sb.fs.search_files(
-                    pattern=normalized_pattern,
-                    path=search_path,
-                    glob=glob,
-                    after_context=after_context,
-                    before_context=before_context,
-                )
+                sandboxed = restricted and _RACE_RESISTANT_LOCAL_ACCESS
+                if sandboxed:
+                    path_object = Path(search_path)
+                    matching_roots = [
+                        root
+                        for root in _read_allowed_roots(
+                            context.context.event.unified_msg_origin,
+                            current_workspace_root,
+                        )
+                        if path_object == root or path_object.is_relative_to(root)
+                    ]
+                    if not matching_roots:
+                        raise PermissionError(
+                            "Access denied: search path is outside restricted roots. "
+                            f"Blocked path: {search_path}."
+                        )
+                    sandbox_root = str(
+                        max(matching_roots, key=lambda root: len(root.parts))
+                    )
+                    result = await cast(Any, sb.fs).search_files(
+                        pattern=normalized_pattern,
+                        path=search_path,
+                        glob=glob,
+                        after_context=after_context,
+                        before_context=before_context,
+                        sandboxed=True,
+                        sandbox_root=sandbox_root,
+                    )
+                else:
+                    result = await sb.fs.search_files(
+                        pattern=normalized_pattern,
+                        path=search_path,
+                        glob=glob,
+                        after_context=after_context,
+                        before_context=before_context,
+                    )
                 if not result.get("success", False):
                     error_detail = str(result.get("error", "") or "").strip()
                     logger.error("GrepTool search failed: %s", error_detail)

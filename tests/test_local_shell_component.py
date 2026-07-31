@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -11,6 +12,7 @@ import pytest
 
 from astrbot.core.computer.booters import local as local_booter
 from astrbot.core.computer.booters.local import (
+    LocalFileSystemComponent,
     LocalPythonComponent,
     LocalShellComponent,
 )
@@ -191,6 +193,15 @@ def test_linux_bwrap_command_is_workspace_only_and_clears_environment(
     ]
     assert str(Path.home()) not in bind_sources
 
+    read_only_command = local_booter._build_local_sandbox_command(
+        ["/usr/bin/rg", "needle", "."],
+        workspace=tmp_path,
+        workspace_writable=False,
+    )
+    assert ["--ro-bind", workspace, workspace] == read_only_command[
+        read_only_command.index(workspace) - 1 : read_only_command.index(workspace) + 2
+    ]
+
 
 def test_linux_bwrap_command_fails_closed_when_bwrap_is_missing(
     monkeypatch,
@@ -225,7 +236,10 @@ def test_macos_seatbelt_command_restricts_profile_and_environment(
 
     profile = command[command.index("-p") + 1]
     environment_start = command.index("-i") + 1
-    launcher_start = command.index(sys.executable, environment_start)
+    launcher_start = command.index(
+        str(Path(sys.executable).resolve()),
+        environment_start,
+    )
     environment = command[environment_start:launcher_start]
     workspace = str(tmp_path.resolve())
 
@@ -250,6 +264,15 @@ def test_macos_seatbelt_command_restricts_profile_and_environment(
         "LANG=C.UTF-8",
     ]
     assert command[-3:] == ["/bin/sh", "-c", "pwd"]
+
+    read_only_command = local_booter._build_local_sandbox_command(
+        ["/usr/bin/rg", "needle", "."],
+        workspace=tmp_path,
+        workspace_writable=False,
+    )
+    read_only_profile = read_only_command[read_only_command.index("-p") + 1]
+    assert "(deny file-write*)" in read_only_profile
+    assert "(allow file-write*" not in read_only_profile
 
 
 def test_macos_seatbelt_command_fails_closed_when_tool_is_missing(
@@ -332,6 +355,100 @@ assert os.environ.get("HOST_SECRET") is None
 
     assert result.returncode == 0, local_booter._decode_shell_output(result.stderr)
     assert (tmp_path / "output.txt").read_text(encoding="utf-8") == "written"
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Seatbelt is macOS-only")
+def test_macos_read_only_seatbelt_grep_cannot_follow_outside_ancestor_symlink(
+    tmp_path,
+):
+    rg_path = shutil.which("rg")
+    if not rg_path:
+        pytest.skip("ripgrep is unavailable")
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    inside_file = workspace / "inside.txt"
+    inside_file.write_text("visible-needle\n", encoding="utf-8")
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    outside_file = outside_dir / "secret.txt"
+    outside_file.write_text("host-secret-needle\n", encoding="utf-8")
+    (workspace / "redirect").symlink_to(outside_dir, target_is_directory=True)
+
+    positive_command = local_booter._build_local_sandbox_command(
+        [str(Path(rg_path).resolve()), "visible-needle", "--", str(inside_file)],
+        workspace=workspace,
+        workspace_writable=False,
+    )
+    positive = subprocess.run(
+        positive_command,
+        cwd=workspace,
+        env={"PATH": os.defpath},
+        capture_output=True,
+        timeout=10,
+    )
+    assert positive.returncode == 0
+    assert b"visible-needle" in positive.stdout
+
+    escaped_path = workspace / "redirect" / "secret.txt"
+    escaped_command = local_booter._build_local_sandbox_command(
+        [str(Path(rg_path).resolve()), "host-secret-needle", "--", str(escaped_path)],
+        workspace=workspace,
+        workspace_writable=False,
+    )
+    escaped = subprocess.run(
+        escaped_command,
+        cwd=workspace,
+        env={"PATH": os.defpath},
+        capture_output=True,
+        timeout=10,
+    )
+    assert b"host-secret-needle" not in escaped.stdout
+
+
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux"),
+    reason="bubblewrap is Linux-only",
+)
+def test_linux_read_only_bwrap_grep_cannot_follow_outside_ancestor_symlink(
+    tmp_path,
+):
+    if not shutil.which("bwrap"):
+        pytest.skip("bubblewrap is unavailable")
+    if sys.version_info >= (3, 14) and not shutil.which("rg"):
+        pytest.skip("ripgrep is unavailable")
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    inside_file = workspace / "inside.txt"
+    inside_file.write_text("visible-needle\n", encoding="utf-8")
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    outside_file = outside_dir / "secret.txt"
+    outside_file.write_text("host-secret-needle\n", encoding="utf-8")
+    (workspace / "redirect").symlink_to(outside_dir, target_is_directory=True)
+
+    positive = asyncio.run(
+        LocalFileSystemComponent().search_files(
+            "visible-needle",
+            path=str(inside_file),
+            sandboxed=True,
+            sandbox_root=str(workspace),
+        )
+    )
+    assert positive["success"] is True
+    assert "visible-needle" in positive["content"]
+
+    escaped_path = workspace / "redirect" / "secret.txt"
+    escaped = asyncio.run(
+        LocalFileSystemComponent().search_files(
+            "host-secret-needle",
+            path=str(escaped_path),
+            sandboxed=True,
+            sandbox_root=str(workspace),
+        )
+    )
+    assert "host-secret-needle" not in escaped.get("content", "")
 
 
 @pytest.mark.asyncio
@@ -499,7 +616,11 @@ async def test_local_python_uses_platform_sandbox(
 
     assert result["data"]["output"]["text"] == "done\n"
     assert calls[0][0][0][0] == sandbox_executable
-    assert calls[0][0][0][-3:] == [sys.executable, "-c", "print('done')"]
+    assert calls[0][0][0][-3:] == [
+        str(Path(sys.executable).resolve()),
+        "-c",
+        "print('done')",
+    ]
     assert calls[0][1]["env"] == {"PATH": os.defpath}
     assert "capture_output" not in calls[0][1]
 

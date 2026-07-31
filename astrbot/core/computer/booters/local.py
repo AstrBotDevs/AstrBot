@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 if sys.version_info < (3, 14):
+    import python_ripgrep
     from python_ripgrep import search
 
 from astrbot.api import logger
@@ -54,6 +55,24 @@ _LOCAL_SANDBOX_MAX_OPEN_FILES = 256
 _LOCAL_SANDBOX_MAX_PROCESSES = 256
 _LOCAL_SANDBOX_MAX_OUTPUT_BYTES = 10 * 1024 * 1024
 _LINUX_SANDBOX_TMP_BYTES = 256 * 1024 * 1024
+_SANDBOXED_PYTHON_RIPGREP = """
+import sys
+
+sys.path.insert(0, sys.argv[1])
+from python_ripgrep import search
+
+after_context = int(sys.argv[5]) if sys.argv[5] else None
+before_context = int(sys.argv[6]) if sys.argv[6] else None
+results = search(
+    patterns=[sys.argv[2]],
+    paths=[sys.argv[3]] if sys.argv[3] else None,
+    globs=[sys.argv[4]] if sys.argv[4] else None,
+    after_context=after_context,
+    before_context=before_context,
+    line_number=True,
+)
+sys.stdout.write("".join(results))
+"""
 _LOCAL_SANDBOX_LIMIT_LAUNCHER = f"""
 import os
 import resource
@@ -101,6 +120,7 @@ _MACOS_SEATBELT_PROFILE = """
     (subpath "/bin")
     (subpath "/usr/bin")
     (subpath "/usr/libexec")
+    (literal (param "EXECUTABLE"))
     (subpath (param "WORKSPACE"))
     (subpath (param "PYTHON_PREFIX"))
     (subpath (param "PYTHON_BASE_PREFIX")))
@@ -108,6 +128,7 @@ _MACOS_SEATBELT_PROFILE = """
     (subpath "/bin")
     (subpath "/usr/bin")
     (subpath "/usr/libexec")
+    (literal (param "EXECUTABLE"))
     (subpath (param "WORKSPACE"))
     (subpath (param "PYTHON_PREFIX"))
     (subpath (param "PYTHON_BASE_PREFIX")))
@@ -119,6 +140,10 @@ _MACOS_SEATBELT_PROFILE = """
     (literal "/private/etc/passwd"))
 (deny network*)
 """
+_MACOS_SEATBELT_READ_ONLY_PROFILE = _MACOS_SEATBELT_PROFILE.replace(
+    '(allow file-write*\n    (subpath (param "WORKSPACE")))',
+    "(deny file-write*)",
+)
 
 
 def _is_safe_command(command: str) -> bool:
@@ -126,18 +151,79 @@ def _is_safe_command(command: str) -> bool:
     return not any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS)
 
 
+def _macos_executable_read_paths(executable_path: Path) -> tuple[Path, ...]:
+    """Collect concrete executable and dynamic-library paths for Seatbelt.
+
+    Args:
+        executable_path: Executable launched inside Seatbelt.
+
+    Returns:
+        Existing absolute files that the dynamic loader may need to read.
+    """
+    read_paths = {executable_path, executable_path.resolve()}
+    resolved_executable = executable_path.resolve()
+    if any(
+        resolved_executable.is_relative_to(root)
+        for root in (
+            Path("/bin"),
+            Path("/usr"),
+            Path(sys.prefix).resolve(),
+            Path(sys.base_prefix).resolve(),
+        )
+    ):
+        return tuple(sorted(read_paths, key=str))
+    pending = [resolved_executable]
+    inspected: set[Path] = set()
+    while pending and len(inspected) < 64:
+        current = pending.pop()
+        if current in inspected:
+            continue
+        inspected.add(current)
+        try:
+            result = subprocess.run(
+                ["/usr/bin/otool", "-L", str(current)],
+                capture_output=True,
+                check=False,
+                timeout=5,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if result.returncode != 0:
+            continue
+        for line in _decode_bytes_with_fallback(
+            result.stdout,
+            preferred_encoding="utf-8",
+        ).splitlines()[1:]:
+            dependency_text = line.strip().split(" (", 1)[0]
+            if not dependency_text.startswith("/"):
+                continue
+            dependency = Path(dependency_text)
+            if not dependency.exists():
+                continue
+            resolved_dependency = dependency.resolve()
+            read_paths.update((dependency, resolved_dependency))
+            if not (
+                resolved_dependency.is_relative_to("/usr")
+                or resolved_dependency.is_relative_to("/System")
+            ):
+                pending.append(resolved_dependency)
+    return tuple(sorted(read_paths, key=str))
+
+
 def _build_local_sandbox_command(
     argv: list[str],
     *,
     workspace: Path,
     env: dict[str, str] | None = None,
+    workspace_writable: bool = True,
 ) -> list[str]:
     """Build a fail-closed OS sandbox command for non-admin Local execution.
 
     Args:
         argv: Command and arguments to execute inside the sandbox.
-        workspace: Only host directory mounted read-write.
+        workspace: Only additional host directory exposed to the process.
         env: Additional environment variables exposed inside the sandbox.
+        workspace_writable: Whether the exposed directory may be modified.
 
     Returns:
         Bubblewrap or Seatbelt arguments with filesystem and resource restrictions.
@@ -149,9 +235,18 @@ def _build_local_sandbox_command(
     if not argv:
         raise ValueError("A sandbox command is required.")
 
+    sandbox_argv = list(argv)
+    if Path(sandbox_argv[0]) == Path(sys.executable):
+        sandbox_argv[0] = str(Path(sys.executable).resolve())
     resolved_workspace = workspace.resolve()
     if not resolved_workspace.is_dir():
         raise RuntimeError(f"Sandbox workspace does not exist: {resolved_workspace}")
+    executable_path = (
+        Path(sandbox_argv[0]).resolve()
+        if Path(sandbox_argv[0]).is_absolute() and Path(sandbox_argv[0]).exists()
+        else Path(sys.executable).resolve()
+    )
+    sandbox_python = str(Path(sys.executable).resolve())
 
     normalized_env: dict[str, str] = {}
     for raw_key, raw_value in (env or {}).items():
@@ -171,6 +266,23 @@ def _build_local_sandbox_command(
         python_prefix = str(Path(sys.prefix).resolve())
         python_base_prefix = str(Path(sys.base_prefix).resolve())
         sandbox_path = f"{Path(sys.executable).resolve().parent}:/usr/bin:/bin"
+        profile = (
+            _MACOS_SEATBELT_PROFILE
+            if workspace_writable
+            else _MACOS_SEATBELT_READ_ONLY_PROFILE
+        )
+        executable_definitions: list[str] = []
+        executable_rules: list[str] = []
+        for index, read_path in enumerate(
+            _macos_executable_read_paths(executable_path)
+        ):
+            parameter = f"EXECUTABLE_{index}"
+            executable_definitions.extend(("-D", f"{parameter}={read_path}"))
+            executable_rules.append(f'(literal (param "{parameter}"))')
+        profile = profile.replace(
+            '(literal (param "EXECUTABLE"))',
+            "\n    ".join(executable_rules),
+        )
         environment = [
             *(f"{key}={value}" for key, value in sorted(normalized_env.items())),
             f"PATH={sandbox_path}",
@@ -182,21 +294,22 @@ def _build_local_sandbox_command(
             seatbelt_path,
             "-D",
             f"WORKSPACE={resolved_workspace}",
+            *executable_definitions,
             "-D",
             f"PYTHON_PREFIX={python_prefix}",
             "-D",
             f"PYTHON_BASE_PREFIX={python_base_prefix}",
             "-p",
-            _MACOS_SEATBELT_PROFILE,
+            profile,
             "/usr/bin/env",
             "-i",
             *environment,
-            sys.executable,
+            sandbox_python,
             "-I",
             "-S",
             "-c",
             _LOCAL_SANDBOX_LIMIT_LAUNCHER,
-            *argv,
+            *sandbox_argv,
         ]
 
     if not sys.platform.startswith("linux"):
@@ -229,6 +342,11 @@ def _build_local_sandbox_command(
         Path(sys.prefix).resolve(),
         Path(sys.base_prefix).resolve(),
     }
+    if not any(
+        executable_path == path or executable_path.is_relative_to(path)
+        for path in readonly_paths
+    ):
+        readonly_paths.add(executable_path)
     readonly_paths = {path for path in readonly_paths if path.exists()}
 
     required_directories = {Path("/tmp"), Path("/tmp/home")}
@@ -266,7 +384,7 @@ def _build_local_sandbox_command(
 
     command.extend(
         (
-            "--bind",
+            "--bind" if workspace_writable else "--ro-bind",
             str(resolved_workspace),
             str(resolved_workspace),
             "--chdir",
@@ -290,12 +408,12 @@ def _build_local_sandbox_command(
             "LANG",
             "C.UTF-8",
             "--",
-            sys.executable,
+            sandbox_python,
             "-I",
             "-S",
             "-c",
             _LOCAL_SANDBOX_LIMIT_LAUNCHER,
-            *argv,
+            *sandbox_argv,
         )
     )
     return command
@@ -1201,9 +1319,11 @@ class LocalFileSystemComponent(FileSystemComponent):
         glob: str | None = None,
         after_context: int | None = None,
         before_context: int | None = None,
+        sandboxed: bool = False,
+        sandbox_root: str | None = None,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            if sys.version_info < (3, 14):
+            if not sandboxed and sys.version_info < (3, 14):
                 results = search(
                     patterns=[pattern],
                     paths=[path] if path else None,
@@ -1217,33 +1337,76 @@ class LocalFileSystemComponent(FileSystemComponent):
                     "content": _truncate_long_lines("".join(results)),
                 }
 
-            rg_path = shutil.which("rg")
-            if not rg_path:
-                return {
-                    "success": False,
-                    "content": "",
-                    "error": (
-                        "The ripgrep (rg) executable is required for file search on "
-                        "Python 3.14 or later because python-ripgrep 0.0.8 is "
-                        "incompatible."
-                    ),
-                }
+            if sandboxed and sys.version_info < (3, 14):
+                site_packages = str(
+                    Path(python_ripgrep.__file__).resolve().parent.parent
+                )
+                command = [
+                    sys.executable,
+                    "-I",
+                    "-S",
+                    "-c",
+                    _SANDBOXED_PYTHON_RIPGREP,
+                    site_packages,
+                    pattern,
+                    path or "",
+                    glob or "",
+                    "" if after_context is None else str(after_context),
+                    "" if before_context is None else str(before_context),
+                ]
+            else:
+                rg_path = shutil.which("rg")
+                if not rg_path:
+                    return {
+                        "success": False,
+                        "content": "",
+                        "error": (
+                            "The ripgrep (rg) executable is required for file search "
+                            "on Python 3.14 or later because python-ripgrep 0.0.8 is "
+                            "incompatible."
+                        ),
+                    }
 
-            command = [rg_path, "--color=never", "-n", "-e", pattern]
-            if glob:
-                command.extend(["-g", glob])
-            if after_context is not None:
-                command.extend(["-A", str(after_context)])
-            if before_context is not None:
-                command.extend(["-B", str(before_context)])
-            command.extend(["--", path or "."])
+                command = [
+                    str(Path(rg_path).resolve()) if sandboxed else rg_path,
+                    "--color=never",
+                    "-n",
+                    "-e",
+                    pattern,
+                ]
+                if glob:
+                    command.extend(["-g", glob])
+                if after_context is not None:
+                    command.extend(["-A", str(after_context)])
+                if before_context is not None:
+                    command.extend(["-B", str(before_context)])
+                command.extend(["--", path or "."])
+            run_command = command
+            run_kwargs: dict[str, Any] = {
+                "capture_output": True,
+                "timeout": 30,
+            }
+            if sandboxed:
+                if not sandbox_root:
+                    return {
+                        "success": False,
+                        "content": "",
+                        "error": "A sandbox root is required for restricted Local search.",
+                    }
+                run_command = _build_local_sandbox_command(
+                    command,
+                    workspace=Path(sandbox_root),
+                    workspace_writable=False,
+                )
+                run_kwargs.update(
+                    {
+                        "cwd": str(Path(sandbox_root).resolve()),
+                        "env": {"PATH": os.defpath},
+                    }
+                )
 
             try:
-                result = subprocess.run(
-                    command,
-                    capture_output=True,
-                    timeout=30,
-                )
+                result = subprocess.run(run_command, **run_kwargs)
             except subprocess.TimeoutExpired:
                 return {
                     "success": False,
@@ -1287,24 +1450,43 @@ class LocalFileSystemComponent(FileSystemComponent):
         new_string: str,
         replace_all: bool = False,
         encoding: str = "utf-8",
+        file_descriptor: int | None = None,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             abs_path = os.path.abspath(path)
-            with open(abs_path, encoding=encoding) as f:
-                content = f.read()
-            occurrences = content.count(old_string)
-            if occurrences == 0:
-                return {
-                    "success": False,
-                    "error": "old string not found in file",
-                    "replacements": 0,
-                }
-            if replace_all:
-                updated = content.replace(old_string, new_string)
-                replacements = occurrences
+            if file_descriptor is None:
+                file_obj = open(abs_path, encoding=encoding)
             else:
-                updated = content.replace(old_string, new_string, 1)
-                replacements = 1
+                file_obj = os.fdopen(
+                    os.dup(file_descriptor),
+                    mode="r+",
+                    encoding=encoding,
+                )
+                file_obj.seek(0)
+            with file_obj as f:
+                content = f.read()
+                occurrences = content.count(old_string)
+                if occurrences == 0:
+                    return {
+                        "success": False,
+                        "error": "old string not found in file",
+                        "replacements": 0,
+                    }
+                if replace_all:
+                    updated = content.replace(old_string, new_string)
+                    replacements = occurrences
+                else:
+                    updated = content.replace(old_string, new_string, 1)
+                    replacements = 1
+                if file_descriptor is not None:
+                    f.seek(0)
+                    f.truncate()
+                    f.write(updated)
+                    return {
+                        "success": True,
+                        "path": abs_path,
+                        "replacements": replacements,
+                    }
             with open(abs_path, "w", encoding=encoding) as f:
                 f.write(updated)
             return {
@@ -1316,12 +1498,30 @@ class LocalFileSystemComponent(FileSystemComponent):
         return await asyncio.to_thread(_run)
 
     async def write_file(
-        self, path: str, content: str, mode: str = "w", encoding: str = "utf-8"
+        self,
+        path: str,
+        content: str,
+        mode: str = "w",
+        encoding: str = "utf-8",
+        file_descriptor: int | None = None,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             abs_path = os.path.abspath(path)
-            os.makedirs(os.path.dirname(abs_path), exist_ok=True)
-            with open(abs_path, mode, encoding=encoding) as f:
+            if file_descriptor is None:
+                os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+                file_obj = open(abs_path, mode, encoding=encoding)
+            else:
+                file_obj = os.fdopen(
+                    os.dup(file_descriptor),
+                    mode=mode,
+                    encoding=encoding,
+                )
+                if mode == "w":
+                    file_obj.seek(0)
+                    file_obj.truncate()
+                elif mode == "a":
+                    file_obj.seek(0, os.SEEK_END)
+            with file_obj as f:
                 f.write(content)
             return {"success": True, "path": abs_path}
 
