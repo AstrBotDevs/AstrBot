@@ -14,6 +14,7 @@ from astrbot import logger
 from astrbot.api.provider import Provider
 from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, TextPart
 from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.provider import reorder_tailing_tool_call_user
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.media_utils import (
@@ -789,6 +790,8 @@ class ProviderAnthropic(Provider):
                 for tool_call_result in tool_calls_result:
                     context_query.extend(tool_call_result.to_openai_messages())
 
+        # 伪造工具调用对需前置到用户消息之后，与真实工具调用时序对齐
+        reorder_tailing_tool_call_user(context_query)
         system_prompt, new_messages = self._prepare_payload(context_query)
 
         model = model or self.get_model()
@@ -861,6 +864,8 @@ class ProviderAnthropic(Provider):
                 for tool_call_result in tool_calls_result:
                     context_query.extend(tool_call_result.to_openai_messages())
 
+        # 伪造工具调用对需前置到用户消息之后，与真实工具调用时序对齐
+        reorder_tailing_tool_call_user(context_query)
         system_prompt, new_messages = self._prepare_payload(context_query)
 
         model = model or self.get_model()

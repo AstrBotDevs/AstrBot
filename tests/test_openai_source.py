@@ -12,6 +12,7 @@ from PIL import Image as PILImage
 import astrbot.core.provider.sources.openai_source as openai_source_module
 import astrbot.core.provider.sources.request_retry as request_retry
 from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.provider import reorder_tailing_tool_call_user
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.longcat_source import ProviderLongCat
@@ -2209,7 +2210,7 @@ async def test_query_filters_empty_list_content_assistant_message(monkeypatch):
         await provider.terminate()
 
 
-# ── _reorder_tailing_tool_call_user ──────────────────────────────────────────
+# ── reorder_tailing_tool_call_user ───────────────────────────────────────────
 
 
 def test_reorder_single_fake_pair():
@@ -2221,7 +2222,11 @@ def test_reorder_single_fake_pair():
                 "role": "assistant",
                 "content": None,
                 "tool_calls": [
-                    {"id": "call_01", "type": "function", "function": {"name": "search", "arguments": "{}"}}
+                    {
+                        "id": "call_01",
+                        "type": "function",
+                        "function": {"name": "search", "arguments": "{}"},
+                    }
                 ],
             },
             {"role": "tool", "tool_call_id": "call_01", "content": "mem result"},
@@ -2229,7 +2234,7 @@ def test_reorder_single_fake_pair():
         ]
     }
 
-    ProviderOpenAIOfficial._reorder_tailing_tool_call_user(payloads)
+    reorder_tailing_tool_call_user(payloads["messages"])
 
     assert payloads["messages"] == [
         {"role": "user", "content": "hello"},
@@ -2238,7 +2243,11 @@ def test_reorder_single_fake_pair():
             "role": "assistant",
             "content": None,
             "tool_calls": [
-                {"id": "call_01", "type": "function", "function": {"name": "search", "arguments": "{}"}}
+                {
+                    "id": "call_01",
+                    "type": "function",
+                    "function": {"name": "search", "arguments": "{}"},
+                }
             ],
         },
         {"role": "tool", "tool_call_id": "call_01", "content": "mem result"},
@@ -2254,7 +2263,11 @@ def test_reorder_multiple_fake_pairs():
                 "role": "assistant",
                 "content": None,
                 "tool_calls": [
-                    {"id": "call_01", "type": "function", "function": {"name": "plugin_a", "arguments": "{}"}}
+                    {
+                        "id": "call_01",
+                        "type": "function",
+                        "function": {"name": "plugin_a", "arguments": "{}"},
+                    }
                 ],
             },
             {"role": "tool", "tool_call_id": "call_01", "content": "result_a"},
@@ -2262,7 +2275,11 @@ def test_reorder_multiple_fake_pairs():
                 "role": "assistant",
                 "content": None,
                 "tool_calls": [
-                    {"id": "call_02", "type": "function", "function": {"name": "plugin_b", "arguments": "{}"}}
+                    {
+                        "id": "call_02",
+                        "type": "function",
+                        "function": {"name": "plugin_b", "arguments": "{}"},
+                    }
                 ],
             },
             {"role": "tool", "tool_call_id": "call_02", "content": "result_b"},
@@ -2270,7 +2287,7 @@ def test_reorder_multiple_fake_pairs():
         ]
     }
 
-    ProviderOpenAIOfficial._reorder_tailing_tool_call_user(payloads)
+    reorder_tailing_tool_call_user(payloads["messages"])
 
     assert payloads["messages"] == [
         {"role": "user", "content": "hello"},
@@ -2279,7 +2296,11 @@ def test_reorder_multiple_fake_pairs():
             "role": "assistant",
             "content": None,
             "tool_calls": [
-                {"id": "call_01", "type": "function", "function": {"name": "plugin_a", "arguments": "{}"}}
+                {
+                    "id": "call_01",
+                    "type": "function",
+                    "function": {"name": "plugin_a", "arguments": "{}"},
+                }
             ],
         },
         {"role": "tool", "tool_call_id": "call_01", "content": "result_a"},
@@ -2287,7 +2308,11 @@ def test_reorder_multiple_fake_pairs():
             "role": "assistant",
             "content": None,
             "tool_calls": [
-                {"id": "call_02", "type": "function", "function": {"name": "plugin_b", "arguments": "{}"}}
+                {
+                    "id": "call_02",
+                    "type": "function",
+                    "function": {"name": "plugin_b", "arguments": "{}"},
+                }
             ],
         },
         {"role": "tool", "tool_call_id": "call_02", "content": "result_b"},
@@ -2305,7 +2330,7 @@ def test_reorder_noop_when_no_fake_pair():
     }
     expected = payloads["messages"][:]
 
-    ProviderOpenAIOfficial._reorder_tailing_tool_call_user(payloads)
+    reorder_tailing_tool_call_user(payloads["messages"])
 
     assert payloads["messages"] == expected
 
@@ -2318,7 +2343,11 @@ def test_reorder_noop_when_tool_call_id_mismatch():
                 "role": "assistant",
                 "content": None,
                 "tool_calls": [
-                    {"id": "call_01", "type": "function", "function": {"name": "search", "arguments": "{}"}}
+                    {
+                        "id": "call_01",
+                        "type": "function",
+                        "function": {"name": "search", "arguments": "{}"},
+                    }
                 ],
             },
             {"role": "tool", "tool_call_id": "call_99", "content": "mismatched id"},
@@ -2327,7 +2356,7 @@ def test_reorder_noop_when_tool_call_id_mismatch():
     }
     expected = payloads["messages"][:]
 
-    ProviderOpenAIOfficial._reorder_tailing_tool_call_user(payloads)
+    reorder_tailing_tool_call_user(payloads["messages"])
 
     assert payloads["messages"] == expected
 
@@ -2342,7 +2371,7 @@ def test_reorder_noop_when_assistant_has_no_tool_calls():
     }
     expected = payloads["messages"][:]
 
-    ProviderOpenAIOfficial._reorder_tailing_tool_call_user(payloads)
+    reorder_tailing_tool_call_user(payloads["messages"])
 
     assert payloads["messages"] == expected
 
@@ -2357,7 +2386,7 @@ def test_reorder_noop_when_no_trailing_user():
     }
     expected = payloads["messages"][:]
 
-    ProviderOpenAIOfficial._reorder_tailing_tool_call_user(payloads)
+    reorder_tailing_tool_call_user(payloads["messages"])
 
     assert payloads["messages"] == expected
 
@@ -2365,9 +2394,7 @@ def test_reorder_noop_when_no_trailing_user():
 def test_reorder_noop_on_empty_or_short_list():
     """Empty or too-short messages list — no-op, no crash."""
     for msgs in [None, [], [{"role": "user", "content": "hi"}]]:
-        payloads = {"messages": msgs}
-        ProviderOpenAIOfficial._reorder_tailing_tool_call_user(payloads)
-        assert payloads.get("messages") is msgs
+        reorder_tailing_tool_call_user(msgs)
 
 
 def test_reorder_real_tool_call_not_affected():
@@ -2379,7 +2406,11 @@ def test_reorder_real_tool_call_not_affected():
                 "role": "assistant",
                 "content": None,
                 "tool_calls": [
-                    {"id": "call_01", "type": "function", "function": {"name": "search", "arguments": "{}"}}
+                    {
+                        "id": "call_01",
+                        "type": "function",
+                        "function": {"name": "search", "arguments": "{}"},
+                    }
                 ],
             },
             {"role": "tool", "tool_call_id": "call_01", "content": "results"},
@@ -2389,7 +2420,7 @@ def test_reorder_real_tool_call_not_affected():
     }
     expected = payloads["messages"][:]
 
-    ProviderOpenAIOfficial._reorder_tailing_tool_call_user(payloads)
+    reorder_tailing_tool_call_user(payloads["messages"])
 
     assert payloads["messages"] == expected
 
@@ -2416,7 +2447,11 @@ def test_reorder_applied_through_inherited_sanitize(provider_cls):
                 "role": "assistant",
                 "content": None,
                 "tool_calls": [
-                    {"id": "call_01", "type": "function", "function": {"name": "search", "arguments": "{}"}}
+                    {
+                        "id": "call_01",
+                        "type": "function",
+                        "function": {"name": "search", "arguments": "{}"},
+                    }
                 ],
             },
             {"role": "tool", "tool_call_id": "call_01", "content": "mem result"},
@@ -2433,7 +2468,11 @@ def test_reorder_applied_through_inherited_sanitize(provider_cls):
             "role": "assistant",
             "content": None,
             "tool_calls": [
-                {"id": "call_01", "type": "function", "function": {"name": "search", "arguments": "{}"}}
+                {
+                    "id": "call_01",
+                    "type": "function",
+                    "function": {"name": "search", "arguments": "{}"},
+                }
             ],
         },
         {"role": "tool", "tool_call_id": "call_01", "content": "mem result"},
@@ -2448,7 +2487,11 @@ def test_reorder_stops_at_first_non_pair():
                 "role": "assistant",
                 "content": None,
                 "tool_calls": [
-                    {"id": "call_01", "type": "function", "function": {"name": "plugin_a", "arguments": "{}"}}
+                    {
+                        "id": "call_01",
+                        "type": "function",
+                        "function": {"name": "plugin_a", "arguments": "{}"},
+                    }
                 ],
             },
             {"role": "tool", "tool_call_id": "call_01", "content": "result_a"},
@@ -2457,7 +2500,11 @@ def test_reorder_stops_at_first_non_pair():
                 "role": "assistant",
                 "content": None,
                 "tool_calls": [
-                    {"id": "call_02", "type": "function", "function": {"name": "plugin_b", "arguments": "{}"}}
+                    {
+                        "id": "call_02",
+                        "type": "function",
+                        "function": {"name": "plugin_b", "arguments": "{}"},
+                    }
                 ],
             },
             {"role": "tool", "tool_call_id": "call_02", "content": "result_b"},
@@ -2465,14 +2512,18 @@ def test_reorder_stops_at_first_non_pair():
         ]
     }
 
-    ProviderOpenAIOfficial._reorder_tailing_tool_call_user(payloads)
+    reorder_tailing_tool_call_user(payloads["messages"])
 
     assert payloads["messages"] == [
         {
             "role": "assistant",
             "content": None,
             "tool_calls": [
-                {"id": "call_01", "type": "function", "function": {"name": "plugin_a", "arguments": "{}"}}
+                {
+                    "id": "call_01",
+                    "type": "function",
+                    "function": {"name": "plugin_a", "arguments": "{}"},
+                }
             ],
         },
         {"role": "tool", "tool_call_id": "call_01", "content": "result_a"},
@@ -2482,7 +2533,11 @@ def test_reorder_stops_at_first_non_pair():
             "role": "assistant",
             "content": None,
             "tool_calls": [
-                {"id": "call_02", "type": "function", "function": {"name": "plugin_b", "arguments": "{}"}}
+                {
+                    "id": "call_02",
+                    "type": "function",
+                    "function": {"name": "plugin_b", "arguments": "{}"},
+                }
             ],
         },
         {"role": "tool", "tool_call_id": "call_02", "content": "result_b"},
