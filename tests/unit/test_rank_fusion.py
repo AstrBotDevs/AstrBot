@@ -57,3 +57,52 @@ async def test_rank_fusion_uses_source_rank_for_independent_sparse_indexes():
         "large-2",
     ]
     assert results[0].score == pytest.approx(2 / 61)
+
+
+@pytest.mark.asyncio
+async def test_rank_fusion_prefers_dense_rank_when_scores_are_equal():
+    dense_results = [
+        make_dense_result("dense-first", 0.99),
+        make_dense_result("sparse-first", 0.98),
+    ]
+    sparse_results = [
+        make_sparse_result("sparse-first", "kb", 10.0, 1),
+        make_sparse_result("dense-first", "kb", 9.0, 2),
+    ]
+
+    results = await RankFusion(kb_db=None).fuse(
+        dense_results=dense_results,
+        sparse_results=sparse_results,
+    )
+
+    assert results[0].score == pytest.approx(results[1].score)
+    assert [result.chunk_id for result in results] == [
+        "dense-first",
+        "sparse-first",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_rank_fusion_uses_chunk_id_as_stable_final_tiebreaker():
+    sparse_results = [
+        make_sparse_result("chunk-b", "kb", 10.0, 1),
+        make_sparse_result("chunk-a", "kb", 10.0, 1),
+    ]
+
+    forward_results = await RankFusion(kb_db=None).fuse(
+        dense_results=[],
+        sparse_results=sparse_results,
+    )
+    reverse_results = await RankFusion(kb_db=None).fuse(
+        dense_results=[],
+        sparse_results=list(reversed(sparse_results)),
+    )
+
+    assert [result.chunk_id for result in forward_results] == [
+        "chunk-a",
+        "chunk-b",
+    ]
+    assert [result.chunk_id for result in reverse_results] == [
+        "chunk-a",
+        "chunk-b",
+    ]
