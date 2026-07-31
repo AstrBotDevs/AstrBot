@@ -82,6 +82,12 @@ class ProviderManager:
             Callable[[str, ProviderType, str | None], None]
         ] = []
         self._mcp_init_task: asyncio.Task | None = None
+        self._fallback_warned: set[tuple[str, str, str]] = set()
+        """Deduplicates the "configured provider unavailable" warning.
+
+        Keyed by (provider_type, configured_id, fallback_id) so a recurring
+        request does not flood the log while the situation persists.
+        """
 
     def set_provider_change_callback(
         self,
@@ -230,6 +236,7 @@ class ProviderManager:
         """
         provider = None
         provider_id = None
+        fell_back = False
         if umo:
             provider_id = sp.get(
                 f"provider_perf_{provider_type.value}",
@@ -247,6 +254,7 @@ class ProviderManager:
                 provider = self.inst_map.get(provider_id)
                 if not provider:
                     provider = self.provider_insts[0] if self.provider_insts else None
+                    fell_back = provider is not None
             elif provider_type == ProviderType.SPEECH_TO_TEXT:
                 provider_id = config["provider_stt_settings"].get("provider_id")
                 if not config["provider_stt_settings"].get("enable"):
@@ -258,6 +266,7 @@ class ProviderManager:
                     provider = (
                         self.stt_provider_insts[0] if self.stt_provider_insts else None
                     )
+                    fell_back = provider is not None
             elif provider_type == ProviderType.TEXT_TO_SPEECH:
                 provider_id = config["provider_tts_settings"].get("provider_id")
                 if not config["provider_tts_settings"].get("enable"):
@@ -269,6 +278,7 @@ class ProviderManager:
                     provider = (
                         self.tts_provider_insts[0] if self.tts_provider_insts else None
                     )
+                    fell_back = provider is not None
             else:
                 raise ValueError(f"Unknown provider type: {provider_type}")
 
@@ -277,8 +287,40 @@ class ProviderManager:
                 f"Provider {provider_id} was not found. Its provider or model ID "
                 "may have been changed."
             )
+        elif fell_back and provider_id:
+            self._warn_provider_fallback(provider_type, provider_id, provider)
 
         return provider
+
+    def _warn_provider_fallback(
+        self,
+        provider_type: ProviderType,
+        configured_id: str,
+        fallback: Providers,
+    ) -> None:
+        """Warn that a configured provider was silently replaced.
+
+        Substituting a different provider keeps AstrBot responsive, but the
+        replacement may have completely different capabilities (for example a
+        vision-only chat model answering plain text), so the user needs to know
+        it happened. The warning is emitted once per distinct situation to avoid
+        flooding the log while the condition persists.
+        """
+        fallback_config = getattr(fallback, "provider_config", None) or {}
+        fallback_id = fallback_config.get("id") or "unknown"
+        key = (provider_type.value, str(configured_id), str(fallback_id))
+        if key in self._fallback_warned:
+            return
+        self._fallback_warned.add(key)
+        logger.warning(
+            "Configured %s provider `%s` is not available; falling back to `%s`. "
+            "This can happen while providers are still loading at startup, or "
+            "when the configured provider was renamed, disabled or removed. "
+            "The fallback may behave differently from the provider you selected.",
+            provider_type.value,
+            configured_id,
+            fallback_id,
+        )
 
     async def initialize(self) -> None:
         # 逐个初始化提供商
@@ -755,6 +797,9 @@ class ProviderManager:
 
     async def reload(self, provider_config: dict) -> None:
         async with self.reload_lock:
+            # The available providers change here, so a previously reported
+            # fallback may be resolved (or start happening again).
+            self._fallback_warned.clear()
             await self.terminate_provider(provider_config["id"])
             if provider_config["enable"]:
                 await self.load_provider(provider_config)
