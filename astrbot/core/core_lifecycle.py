@@ -29,13 +29,14 @@ from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.pipeline.scheduler import PipelineContext, PipelineScheduler
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
+from astrbot.core.process_restart import restart_process
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
 from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.umop_config_router import UmopConfigRouter
-from astrbot.core.updator import AstrBotUpdator
+from astrbot.core.updater import AstrBotUpdater
 from astrbot.core.utils.event_loop_diagnostics import (
     create_event_loop_diagnostic_tasks,
 )
@@ -157,7 +158,7 @@ class AstrBotCoreLifecycle:
     async def initialize(self) -> None:
         """初始化 AstrBot 核心生命周期管理类.
 
-        负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus、AstrBotUpdator等。
+        负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus、AstrBotUpdater等。
         """
         # 初始化日志代理
         logger.info("AstrBot v" + VERSION)
@@ -268,7 +269,7 @@ class AstrBotCoreLifecycle:
         self.pipeline_scheduler_mapping = await self.load_pipeline_scheduler()
 
         # 初始化更新器
-        self.astrbot_updator = AstrBotUpdator()
+        self.astrbot_updater = AstrBotUpdater()
 
         # 初始化事件总线
         self.event_bus = EventBus(
@@ -427,7 +428,7 @@ class AstrBotCoreLifecycle:
         await self.kb_manager.terminate()
         self.dashboard_shutdown_event.set()
         threading.Thread(
-            target=self.astrbot_updator._reboot,
+            target=restart_process,
             name="restart",
             daemon=True,
         ).start()

@@ -18,15 +18,9 @@ from hypercorn.logging import Logger as HypercornLogger
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.dashboard_assets import resolve_dashboard_dist
 from astrbot.core.db import BaseDatabase
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-from astrbot.core.utils.io import (
-    get_bundled_dashboard_dist_path,
-    get_dashboard_dist_version,
-    get_local_ip_addresses,
-    is_dashboard_dist_compatible,
-    should_use_bundled_dashboard_dist,
-)
+from astrbot.core.utils.io import get_local_ip_addresses
 from astrbot.dashboard.asgi_runtime import (
     DashboardRequestState,
     FastAPIAppAdapter,
@@ -182,46 +176,8 @@ class AstrBotDashboard:
         self.config = core_lifecycle.astrbot_config
         self.db = db
 
-        # Path priority:
-        # 1. Explicit webui_dir argument
-        # 2. data/dist/ when it matches the core version
-        # 3. astrbot/dashboard/dist/ when it matches the core version
-        if webui_dir and os.path.exists(webui_dir):
-            self.data_path = os.path.abspath(webui_dir)
-        else:
-            user_dist = os.path.join(get_astrbot_data_path(), "dist")
-            bundled_dist = get_bundled_dashboard_dist_path()
-            user_version = get_dashboard_dist_version(user_dist)
-            if os.path.exists(user_dist) and is_dashboard_dist_compatible(
-                user_dist,
-                VERSION,
-            ):
-                self.data_path = os.path.abspath(user_dist)
-            elif should_use_bundled_dashboard_dist(
-                user_dist,
-                VERSION,
-            ) or is_dashboard_dist_compatible(bundled_dist, VERSION):
-                self.data_path = str(bundled_dist)
-                logger.info("Using bundled dashboard dist: %s", self.data_path)
-            elif (
-                os.path.exists(user_dist) and (Path(user_dist) / "index.html").is_file()
-            ):
-                logger.warning(
-                    "Using existing data/dist as a fallback even though WebUI version mismatches core: %s, expected v%s. "
-                    "Some dashboard features may not work until the matching WebUI is available.",
-                    user_version,
-                    VERSION,
-                )
-                self.data_path = os.path.abspath(user_dist)
-            elif os.path.exists(user_dist):
-                logger.warning(
-                    "Ignoring data/dist because WebUI files are incomplete for core v%s.",
-                    VERSION,
-                )
-                self.data_path = None
-            else:
-                # Fall back to expected user path (will fail gracefully later)
-                self.data_path = os.path.abspath(user_dist)
+        dashboard_dist = resolve_dashboard_dist(webui_dir)
+        self.data_path = str(dashboard_dist) if dashboard_dist else None
 
         self._rate_limiter_registry = _RateLimiterRegistry()
         self._init_jwt_secret()

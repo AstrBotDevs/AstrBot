@@ -222,7 +222,7 @@
       "supportPlatformsCount": "Supports {count} Platforms",
       "sectionTitle": "Install",
       "downloadSource": "The plugin package will be installed from:",
-      "githubSecurityWarning": "AstrBot cannot guarantee the safety of plugins downloaded from GitHub. Install only if you trust the plugin source."
+      "repositorySecurityWarning": "AstrBot cannot guarantee the safety of plugins downloaded from a code repository. Install only if you trust the plugin source."
     },
     "update": {
       "title": "Update Extension",
@@ -295,7 +295,7 @@
     "resolveSourceFirst": "Resolve and validate the source URL first",
     "sourceResolveFailed": "Failed to resolve source",
     "invalidUrl": "Please enter a valid URL",
-    "invalidGithubRepo": "Please enter a valid GitHub repository URL",
+    "invalidRepositoryUrl": "Please enter a valid Git repository URL",
     "enterJsonUrl": "Please enter a URL that returns plugin list JSON data",
     "pluginNotFound": "Plugin not found",
     "pluginDisabled": "This plugin is disabled. Enable it before opening its page.",

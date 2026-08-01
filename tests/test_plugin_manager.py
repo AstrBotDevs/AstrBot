@@ -389,7 +389,7 @@ def plugin_manager_pm(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def local_updator(plugin_manager_pm):
+def local_updater(plugin_manager_pm):
     """Helper to setup a local plugin directory simulating a download."""
     path = Path(plugin_manager_pm.plugin_store_path) / TEST_PLUGIN_DIR
     _write_local_test_plugin(path, TEST_PLUGIN_REPO)
@@ -414,7 +414,7 @@ async def test_install_plugin_dependency_install_flow(
         _write_requirements(plugin_path)
         return str(plugin_path)
 
-    monkeypatch.setattr(plugin_manager_pm.updator, "install", mock_install)
+    monkeypatch.setattr(plugin_manager_pm._updater, "install", mock_install)
     monkeypatch.setattr(
         "astrbot.core.star.star_manager.pip_installer.install",
         _build_dependency_install_mock(events, dependency_install_fails),
@@ -465,7 +465,11 @@ async def test_install_plugin_from_file_dependency_install_flow(
         _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)
         _write_requirements(plugin_path)
 
-    monkeypatch.setattr(plugin_manager_pm.updator, "unzip_file", mock_unzip_file)
+    monkeypatch.setattr(
+        plugin_manager_pm._updater,
+        "_extract_plugin_archive",
+        mock_unzip_file,
+    )
     monkeypatch.setattr(
         "astrbot.core.star.star_manager.pip_installer.install",
         _build_dependency_install_mock(events, dependency_install_fails),
@@ -490,7 +494,7 @@ async def test_install_plugin_from_file_dependency_install_flow(
 @pytest.mark.asyncio
 async def test_install_plugin_from_file_conflict_keeps_failed_plugins_clean(
     plugin_manager_pm: PluginManager,
-    local_updator: Path,
+    local_updater: Path,
     monkeypatch,
     tmp_path: Path,
 ):
@@ -507,8 +511,12 @@ async def test_install_plugin_from_file_conflict_keeps_failed_plugins_clean(
             version="2.0.0",
         )
 
-    assert local_updator.is_dir()
-    monkeypatch.setattr(plugin_manager_pm.updator, "unzip_file", mock_unzip_file)
+    assert local_updater.is_dir()
+    monkeypatch.setattr(
+        plugin_manager_pm._updater,
+        "_extract_plugin_archive",
+        mock_unzip_file,
+    )
 
     with pytest.raises(Exception, match=f"安装失败：目录 {TEST_PLUGIN_DIR} 已存在。"):
         await plugin_manager_pm.install_plugin_from_file(str(zip_file_path))
@@ -526,11 +534,11 @@ async def test_install_plugin_from_file_conflict_keeps_failed_plugins_clean(
 @pytest.mark.parametrize("dependency_install_fails", [False, True])
 async def test_reload_failed_plugin_dependency_install_flow(
     plugin_manager_pm: PluginManager,
-    local_updator: Path,
+    local_updater: Path,
     monkeypatch,
     dependency_install_fails: bool,
 ):
-    _write_requirements(local_updator)
+    _write_requirements(local_updater)
     plugin_manager_pm.failed_plugin_dict[TEST_PLUGIN_DIR] = {"error": "init fail"}
     events = []
     _mock_missing_requirements(monkeypatch, {"networkx"})
@@ -552,7 +560,7 @@ async def test_reload_failed_plugin_dependency_install_flow(
         assert len(events) == 1
         _assert_dependency_install_event_matches(
             events[0],
-            expected_original_path=local_updator / "requirements.txt",
+            expected_original_path=local_updater / "requirements.txt",
             expected_content="networkx\n",
         )
     else:
@@ -560,7 +568,7 @@ async def test_reload_failed_plugin_dependency_install_flow(
         assert len(events) == 2
         _assert_dependency_install_event_matches(
             events[0],
-            expected_original_path=local_updator / "requirements.txt",
+            expected_original_path=local_updater / "requirements.txt",
             expected_content="networkx\n",
         )
         assert events[1] == ("load", TEST_PLUGIN_DIR)
@@ -988,9 +996,9 @@ async def test_load_reports_unregistered_plugin_without_index_error(
 
 @pytest.mark.asyncio
 async def test_ensure_plugin_requirements_reraises_cancelled_error(
-    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+    plugin_manager_pm: PluginManager, local_updater: Path, monkeypatch
 ):
-    _write_requirements(local_updator)
+    _write_requirements(local_updater)
     _mock_missing_requirements(monkeypatch, {"networkx"})
 
     async def mock_install_requirements(*args, **kwargs):
@@ -1003,16 +1011,16 @@ async def test_ensure_plugin_requirements_reraises_cancelled_error(
 
     with pytest.raises(asyncio.CancelledError):
         await plugin_manager_pm._ensure_plugin_requirements(
-            str(local_updator),
+            str(local_updater),
             TEST_PLUGIN_DIR,
         )
 
 
 @pytest.mark.asyncio
 async def test_ensure_plugin_requirements_wraps_generic_dependency_install_failure(
-    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+    plugin_manager_pm: PluginManager, local_updater: Path, monkeypatch
 ):
-    _write_requirements(local_updator)
+    _write_requirements(local_updater)
     _mock_missing_requirements(monkeypatch, {"networkx"})
 
     async def mock_install_requirements(*args, **kwargs):
@@ -1025,20 +1033,20 @@ async def test_ensure_plugin_requirements_wraps_generic_dependency_install_failu
 
     with pytest.raises(PluginDependencyInstallError, match="pip failed") as exc_info:
         await plugin_manager_pm._ensure_plugin_requirements(
-            str(local_updator),
+            str(local_updater),
             TEST_PLUGIN_DIR,
         )
 
     assert exc_info.value.plugin_label == TEST_PLUGIN_DIR
-    assert exc_info.value.requirements_path == str(local_updator / "requirements.txt")
+    assert exc_info.value.requirements_path == str(local_updater / "requirements.txt")
     assert isinstance(exc_info.value.__cause__, RuntimeError)
 
 
 @pytest.mark.asyncio
 async def test_ensure_plugin_requirements_wraps_pip_install_error(
-    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+    plugin_manager_pm: PluginManager, local_updater: Path, monkeypatch
 ):
-    _write_requirements(local_updator)
+    _write_requirements(local_updater)
     _mock_missing_requirements(monkeypatch, {"networkx"})
 
     async def mock_install_requirements(*args, **kwargs):
@@ -1053,7 +1061,7 @@ async def test_ensure_plugin_requirements_wraps_pip_install_error(
         PluginDependencyInstallError, match="install failed"
     ) as exc_info:
         await plugin_manager_pm._ensure_plugin_requirements(
-            str(local_updator),
+            str(local_updater),
             TEST_PLUGIN_DIR,
         )
 
@@ -1062,9 +1070,9 @@ async def test_ensure_plugin_requirements_wraps_pip_install_error(
 
 @pytest.mark.asyncio
 async def test_ensure_plugin_requirements_logs_requirements_file_install_for_missing_dependencies(
-    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+    plugin_manager_pm: PluginManager, local_updater: Path, monkeypatch
 ):
-    _write_requirements(local_updator)
+    _write_requirements(local_updater)
     _mock_missing_requirements(monkeypatch, {"networkx"})
     logged_lines = []
 
@@ -1081,7 +1089,7 @@ async def test_ensure_plugin_requirements_logs_requirements_file_install_for_mis
     )
 
     await plugin_manager_pm._ensure_plugin_requirements(
-        str(local_updator),
+        str(local_updater),
         TEST_PLUGIN_DIR,
     )
 
@@ -1098,12 +1106,12 @@ async def test_ensure_plugin_requirements_logs_requirements_file_install_for_mis
 )
 async def test_ensure_plugin_requirements_sets_target_upgrade_based_on_version_mismatch(
     plugin_manager_pm: PluginManager,
-    local_updator: Path,
+    local_updater: Path,
     monkeypatch,
     version_mismatch_names,
     expected_allow_target_upgrade: bool,
 ):
-    _write_requirements(local_updator)
+    _write_requirements(local_updater)
     _mock_missing_requirements_plan(
         monkeypatch,
         {"networkx"},
@@ -1121,7 +1129,7 @@ async def test_ensure_plugin_requirements_sets_target_upgrade_based_on_version_m
     )
 
     await plugin_manager_pm._ensure_plugin_requirements(
-        str(local_updator),
+        str(local_updater),
         TEST_PLUGIN_DIR,
     )
 
@@ -1131,9 +1139,9 @@ async def test_ensure_plugin_requirements_sets_target_upgrade_based_on_version_m
 
 @pytest.mark.asyncio
 async def test_import_plugin_prefers_installed_dependencies_before_first_import(
-    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+    plugin_manager_pm: PluginManager, local_updater: Path, monkeypatch
 ):
-    requirements_path = local_updator / "requirements.txt"
+    requirements_path = local_updater / "requirements.txt"
     requirements_path.write_text("networkx\n", encoding="utf-8")
     events = []
     sentinel_module = object()
@@ -1174,9 +1182,9 @@ async def test_import_plugin_prefers_installed_dependencies_before_first_import(
 
 @pytest.mark.asyncio
 async def test_import_reserved_plugin_skips_preloading_user_site_dependencies(
-    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+    plugin_manager_pm: PluginManager, local_updater: Path, monkeypatch
 ):
-    requirements_path = local_updator / "requirements.txt"
+    requirements_path = local_updater / "requirements.txt"
     requirements_path.write_text("networkx\n", encoding="utf-8")
     events = []
     sentinel_module = object()
@@ -1209,9 +1217,9 @@ async def test_import_reserved_plugin_skips_preloading_user_site_dependencies(
 
 @pytest.mark.asyncio
 async def test_import_plugin_skips_preloading_when_requirements_version_mismatch_detected(
-    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+    plugin_manager_pm: PluginManager, local_updater: Path, monkeypatch
 ):
-    requirements_path = local_updator / "requirements.txt"
+    requirements_path = local_updater / "requirements.txt"
     requirements_path.write_text("networkx>=3\n", encoding="utf-8")
     events = []
     sentinel_module = object()
@@ -1251,9 +1259,9 @@ async def test_import_plugin_skips_preloading_when_requirements_version_mismatch
 
 @pytest.mark.asyncio
 async def test_import_plugin_reinstalls_when_version_mismatch_import_fails(
-    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+    plugin_manager_pm: PluginManager, local_updater: Path, monkeypatch
 ):
-    requirements_path = local_updator / "requirements.txt"
+    requirements_path = local_updater / "requirements.txt"
     requirements_path.write_text("networkx>=3\n", encoding="utf-8")
     events = []
     sentinel_module = object()
@@ -1308,9 +1316,9 @@ async def test_import_plugin_reinstalls_when_version_mismatch_import_fails(
 
 @pytest.mark.asyncio
 async def test_import_plugin_skips_preloading_when_requirement_precheck_is_unavailable(
-    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+    plugin_manager_pm: PluginManager, local_updater: Path, monkeypatch
 ):
-    requirements_path = local_updator / "requirements.txt"
+    requirements_path = local_updater / "requirements.txt"
     requirements_path.write_text("networkx\n", encoding="utf-8")
     events = []
     sentinel_module = object()
@@ -1346,9 +1354,9 @@ async def test_import_plugin_skips_preloading_when_requirement_precheck_is_unava
 
 @pytest.mark.asyncio
 async def test_import_plugin_attempts_dependency_recovery_when_precheck_is_unavailable(
-    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+    plugin_manager_pm: PluginManager, local_updater: Path, monkeypatch
 ):
-    requirements_path = local_updator / "requirements.txt"
+    requirements_path = local_updater / "requirements.txt"
     requirements_path.write_text("networkx\n", encoding="utf-8")
     events = []
     sentinel_module = object()
@@ -1399,9 +1407,9 @@ async def test_import_plugin_attempts_dependency_recovery_when_precheck_is_unava
 
 @pytest.mark.asyncio
 async def test_import_plugin_does_not_recover_from_plain_import_error(
-    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+    plugin_manager_pm: PluginManager, local_updater: Path, monkeypatch
 ):
-    requirements_path = local_updator / "requirements.txt"
+    requirements_path = local_updater / "requirements.txt"
     requirements_path.write_text("networkx\n", encoding="utf-8")
     events = []
 
@@ -1450,9 +1458,9 @@ async def test_import_plugin_does_not_recover_from_plain_import_error(
 
 @pytest.mark.asyncio
 async def test_import_plugin_surfaces_unexpected_recovery_errors(
-    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+    plugin_manager_pm: PluginManager, local_updater: Path, monkeypatch
 ):
-    requirements_path = local_updator / "requirements.txt"
+    requirements_path = local_updater / "requirements.txt"
     requirements_path.write_text("networkx\n", encoding="utf-8")
     events = []
 
@@ -1503,22 +1511,22 @@ async def test_import_plugin_surfaces_unexpected_recovery_errors(
 @pytest.mark.parametrize("dependency_install_fails", [False, True])
 async def test_update_plugin_dependency_install_flow(
     plugin_manager_pm: PluginManager,
-    local_updator: Path,
+    local_updater: Path,
     monkeypatch,
     dependency_install_fails: bool,
 ):
     mock_star = MockStar()
     cast(Any, plugin_manager_pm.context).stars.append(mock_star)
 
-    _write_requirements(local_updator)
+    _write_requirements(local_updater)
     events = []
     _mock_missing_requirements(monkeypatch, {"networkx"})
 
-    async def mock_update(plugin, proxy="", download_url=""):
-        del proxy, download_url
+    async def mock_update(plugin, proxy="", download_url="", repo_url=""):
+        del proxy, download_url, repo_url
         events.append(("update", plugin.name))
 
-    monkeypatch.setattr(plugin_manager_pm.updator, "update", mock_update)
+    monkeypatch.setattr(plugin_manager_pm._updater, "update", mock_update)
     monkeypatch.setattr(
         "astrbot.core.star.star_manager.pip_installer.install",
         _build_dependency_install_mock(events, dependency_install_fails),
@@ -1531,7 +1539,7 @@ async def test_update_plugin_dependency_install_flow(
         dep_event = next(event for event in events if event[0] == "deps")
         _assert_dependency_install_event_matches(
             dep_event,
-            expected_original_path=local_updator / "requirements.txt",
+            expected_original_path=local_updater / "requirements.txt",
             expected_content="networkx\n",
         )
     else:
@@ -1539,7 +1547,7 @@ async def test_update_plugin_dependency_install_flow(
         dep_event = next(event for event in events if event[0] == "deps")
         _assert_dependency_install_event_matches(
             dep_event,
-            expected_original_path=local_updator / "requirements.txt",
+            expected_original_path=local_updater / "requirements.txt",
             expected_content="networkx\n",
         )
         assert ("reload", TEST_PLUGIN_DIR) in events
@@ -1558,7 +1566,7 @@ async def test_install_plugin_skips_dependency_install_when_no_requirements_miss
         _write_requirements(plugin_path)
         return str(plugin_path)
 
-    monkeypatch.setattr(plugin_manager_pm.updator, "install", mock_install)
+    monkeypatch.setattr(plugin_manager_pm._updater, "install", mock_install)
     monkeypatch.setattr(
         "astrbot.core.star.star_manager.pip_installer.install",
         _build_dependency_install_mock(events, False),
@@ -1589,7 +1597,7 @@ async def test_install_plugin_runs_dependency_install_when_precheck_fails(
         return str(plugin_path)
 
     _mock_precheck_fails(monkeypatch)
-    monkeypatch.setattr(plugin_manager_pm.updator, "install", mock_install)
+    monkeypatch.setattr(plugin_manager_pm._updater, "install", mock_install)
     monkeypatch.setattr(
         "astrbot.core.star.star_manager.pip_installer.install",
         _build_dependency_install_mock(events, False),
@@ -1613,9 +1621,9 @@ async def test_install_plugin_runs_dependency_install_when_precheck_fails(
 
 @pytest.mark.asyncio
 async def test_ensure_plugin_requirements_installs_only_missing_requirement_lines(
-    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+    plugin_manager_pm: PluginManager, local_updater: Path, monkeypatch
 ):
-    requirements_path = local_updator / "requirements.txt"
+    requirements_path = local_updater / "requirements.txt"
     requirements_path.write_text(
         "aiohttp>=3.0\nboto3==1.2\nbotocore\n",
         encoding="utf-8",
@@ -1631,7 +1639,7 @@ async def test_ensure_plugin_requirements_installs_only_missing_requirement_line
     )
 
     await plugin_manager_pm._ensure_plugin_requirements(
-        str(local_updator),
+        str(local_updater),
         TEST_PLUGIN_DIR,
     )
 
@@ -1645,9 +1653,9 @@ async def test_ensure_plugin_requirements_installs_only_missing_requirement_line
 
 @pytest.mark.asyncio
 async def test_ensure_plugin_requirements_creates_temp_dir_before_filtered_install(
-    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch, tmp_path
+    plugin_manager_pm: PluginManager, local_updater: Path, monkeypatch, tmp_path
 ):
-    requirements_path = local_updator / "requirements.txt"
+    requirements_path = local_updater / "requirements.txt"
     requirements_path.write_text("boto3\n", encoding="utf-8")
     temp_dir = tmp_path / "missing-temp-dir"
     events = []
@@ -1663,7 +1671,7 @@ async def test_ensure_plugin_requirements_creates_temp_dir_before_filtered_insta
     )
 
     await plugin_manager_pm._ensure_plugin_requirements(
-        str(local_updator),
+        str(local_updater),
         TEST_PLUGIN_DIR,
     )
 
@@ -1673,9 +1681,9 @@ async def test_ensure_plugin_requirements_creates_temp_dir_before_filtered_insta
 
 @pytest.mark.asyncio
 async def test_ensure_plugin_requirements_falls_back_when_missing_names_have_no_install_lines(
-    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+    plugin_manager_pm: PluginManager, local_updater: Path, monkeypatch
 ):
-    requirements_path = local_updator / "requirements.txt"
+    requirements_path = local_updater / "requirements.txt"
     requirements_path.write_text("boto3\n", encoding="utf-8")
     events = []
 
@@ -1693,7 +1701,7 @@ async def test_ensure_plugin_requirements_falls_back_when_missing_names_have_no_
     )
 
     await plugin_manager_pm._ensure_plugin_requirements(
-        str(local_updator),
+        str(local_updater),
         TEST_PLUGIN_DIR,
     )
 
@@ -1702,9 +1710,9 @@ async def test_ensure_plugin_requirements_falls_back_when_missing_names_have_no_
 
 @pytest.mark.asyncio
 async def test_ensure_plugin_requirements_fallback_full_install_keeps_upgrade_for_version_mismatch(
-    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+    plugin_manager_pm: PluginManager, local_updater: Path, monkeypatch
 ):
-    requirements_path = local_updator / "requirements.txt"
+    requirements_path = local_updater / "requirements.txt"
     requirements_path.write_text("boto3>=2\n", encoding="utf-8")
     observed_calls = []
 
@@ -1727,7 +1735,7 @@ async def test_ensure_plugin_requirements_fallback_full_install_keeps_upgrade_fo
     )
 
     await plugin_manager_pm._ensure_plugin_requirements(
-        str(local_updator),
+        str(local_updater),
         TEST_PLUGIN_DIR,
     )
 
@@ -1738,9 +1746,9 @@ async def test_ensure_plugin_requirements_fallback_full_install_keeps_upgrade_fo
 
 @pytest.mark.asyncio
 async def test_ensure_plugin_requirements_does_not_mask_install_error_when_cleanup_fails(
-    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch, tmp_path
+    plugin_manager_pm: PluginManager, local_updater: Path, monkeypatch, tmp_path
 ):
-    requirements_path = local_updator / "requirements.txt"
+    requirements_path = local_updater / "requirements.txt"
     requirements_path.write_text("boto3\n", encoding="utf-8")
     temp_dir = tmp_path / "cleanup-fails"
     _mock_missing_requirements_plan(monkeypatch, {"boto3"}, ["boto3"])
@@ -1775,7 +1783,7 @@ async def test_ensure_plugin_requirements_does_not_mask_install_error_when_clean
 
     with pytest.raises(PluginDependencyInstallError, match="pip failed"):
         await plugin_manager_pm._ensure_plugin_requirements(
-            str(local_updator),
+            str(local_updater),
             TEST_PLUGIN_DIR,
         )
 

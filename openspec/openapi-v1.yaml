@@ -2366,7 +2366,7 @@ paths:
   /api/v1/plugins/validate/repo:
     post:
       tags: [Plugins]
-      summary: Validate a GitHub plugin repository before installation
+      summary: Validate a plugin repository before installation
       operationId: validatePluginRepo
       x-astrbot-scope: plugin
       requestBody:
@@ -2436,7 +2436,22 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/PluginGithubInstallRequest"
+              $ref: "#/components/schemas/PluginRepositoryInstallRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+  /api/v1/plugins/install/git:
+    post:
+      tags: [Plugins]
+      summary: Install a plugin with a shallow Git clone
+      operationId: installPluginFromGit
+      x-astrbot-scope: plugin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginRepositoryInstallRequest"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -5675,18 +5690,18 @@ components:
           type: string
       additionalProperties: false
 
-    PluginGithubInstallRequest:
+    PluginRepositoryInstallRequest:
       type: object
       required: [repository]
       properties:
         repository:
           type: string
-          description: GitHub URL or owner/repository slug.
+          description: GitHub shorthand, HTTP(S), SSH, or SCP-style Git repository locator.
         ref:
           type: string
         download_url:
           type: string
-          description: Optional downloadable ZIP URL to use instead of GitHub archive resolution.
+          description: Optional downloadable ZIP URL to use instead of repository archive resolution.
         proxy:
           type: string
         ignore_version_check:

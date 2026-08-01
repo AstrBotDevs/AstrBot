@@ -6,7 +6,7 @@ from .basic import (
 from .plugin import (
     PluginStatus,
     build_plug_list,
-    get_git_repo,
+    download_repository,
     install_local_plugin,
     manage_plugin,
 )
@@ -18,8 +18,8 @@ __all__ = [
     "build_plug_list",
     "check_astrbot_root",
     "check_dashboard",
+    "download_repository",
     "get_astrbot_root",
-    "get_git_repo",
     "install_local_plugin",
     "manage_plugin",
 ]

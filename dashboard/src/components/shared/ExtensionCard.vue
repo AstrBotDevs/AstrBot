@@ -68,7 +68,7 @@ const hasKnownInstallSource = computed(() => {
   return Boolean(
     source &&
       source.implicit !== true &&
-      ["market", "github"].includes(installMethod),
+      ["market", "repository"].includes(installMethod),
   );
 });
 

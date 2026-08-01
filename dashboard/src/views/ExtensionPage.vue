@@ -161,12 +161,14 @@ const {
   selectedInstallPlugin,
   selectedInstallDownloadUrl,
   selectedInstallSourceUrl,
-  installUsesGithubSource,
+  installUsesRepositorySource,
+  installUsesGithubArchiveSource,
   selectedUpdateExtension,
   selectedUpdateMarketPlugin,
   selectedUpdateDownloadUrl,
   selectedUpdateSourceUrl,
-  updateUsesGithubSource,
+  updateUsesRepositorySource,
+  updateUsesGithubArchiveSource,
   checkInstallVersionSupport,
   refreshPluginMarket,
   handleLocaleChange,
@@ -804,16 +806,19 @@ const updateDialogPluginLogo = computed(() => {
           </div>
 
           <v-alert
-            v-if="installUsesGithubSource"
+            v-if="installUsesRepositorySource"
             type="warning"
             variant="tonal"
             density="comfortable"
             class="market-install-alert mt-4 mb-4"
           >
-            {{ tm("dialogs.install.githubSecurityWarning") }}
+            {{ tm("dialogs.install.repositorySecurityWarning") }}
           </v-alert>
 
-          <ProxySelector v-if="!selectedInstallDownloadUrl" class="mt-4" />
+          <ProxySelector
+            v-if="installUsesGithubArchiveSource"
+            class="mt-4"
+          />
         </div>
 
         <template v-else>
@@ -876,7 +881,7 @@ const updateDialogPluginLogo = computed(() => {
                   prepend-inner-icon="mdi-link"
                   hide-details
                   class="rounded-lg mb-4"
-                  placeholder="https://github.com/username/repo"
+                  placeholder="https://github.com/owner/repo or git@host:owner/repo.git"
                 ></v-text-field>
 
                 <div v-if="selectedInstallPlugin" class="mb-3">
@@ -979,17 +984,17 @@ const updateDialogPluginLogo = computed(() => {
                 </div>
 
                 <v-alert
-                  v-if="installUsesGithubSource"
+                  v-if="installUsesRepositorySource"
                   type="warning"
                   variant="tonal"
                   density="comfortable"
                   class="market-install-alert mb-4"
                 >
-                  {{ tm("dialogs.install.githubSecurityWarning") }}
+                  {{ tm("dialogs.install.repositorySecurityWarning") }}
                 </v-alert>
 
                 <ProxySelector
-                  v-if="!selectedInstallDownloadUrl"
+                  v-if="installUsesGithubArchiveSource"
                 ></ProxySelector>
               </div>
             </v-window-item>
@@ -1263,16 +1268,19 @@ const updateDialogPluginLogo = computed(() => {
           </div>
 
           <v-alert
-            v-if="updateUsesGithubSource"
+            v-if="updateUsesRepositorySource"
             type="warning"
             variant="tonal"
             density="comfortable"
             class="market-install-alert mt-4 mb-4"
           >
-            {{ tm("dialogs.install.githubSecurityWarning") }}
+            {{ tm("dialogs.install.repositorySecurityWarning") }}
           </v-alert>
 
-          <ProxySelector v-if="!selectedUpdateDownloadUrl" class="mt-4" />
+          <ProxySelector
+            v-if="updateUsesGithubArchiveSource"
+            class="mt-4"
+          />
         </div>
       </v-card-text>
       <v-card-actions>
