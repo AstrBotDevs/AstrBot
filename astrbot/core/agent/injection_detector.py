@@ -20,7 +20,12 @@ _PATTERNS: list[tuple[str, str]] = [
     (
         "identity_override",
         r"忽略之前|忽略.?所有|ignore\s+all\s+previous|从现在开始|你的身份是|"
-        r"你是(一个|一名|我的|新的|现在)|you\s+are\s+now\s+(a|an|my)",
+        r"你是(一个|一名|我的|新的|现在)|you\s+are\s+now\s+(a|an|my)|"
+        r"以(系统|管理员|开发者|root|管理).*身份|"
+        r"扮演.*(系统|管理员|开发者|root)|"
+        r"你现在是|你作为(一个|一名|系统|管理员|开发者|root)|"
+        r"请你(以|作为).*(系统|管理员|开发者|root).*身份|"
+        r"担当.*(系统|管理员|root)",
     ),
     # 秘密索取
     (
