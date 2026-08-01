@@ -263,7 +263,7 @@ class InternalAgentSubStage(Stage):
                         )
                         return
 
-                    api_base
+                    api_base = provider.provider_config.get("api_base", "")
                     for host in decoded_blocked:
                         if host in api_base:
                             error_message = (
