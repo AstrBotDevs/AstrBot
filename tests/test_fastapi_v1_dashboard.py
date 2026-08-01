@@ -3213,7 +3213,38 @@ async def test_v1_mcp_scope_accepts_api_key(
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
-    assert any(server["name"] == "demo-server" for server in data["data"])
+    demo_server = next(
+        server for server in data["data"] if server["name"] == "demo-server"
+    )
+    assert demo_server["connected"] is False
+
+
+@pytest.mark.asyncio
+async def test_v1_mcp_list_reports_connected_runtime(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    fake_tools = fake_core_lifecycle.provider_manager.llm_tools
+    fake_tools.mcp_server_runtime_view["demo-server"] = SimpleNamespace(
+        client=SimpleNamespace(
+            tools=[SimpleNamespace(name="demo_tool")],
+            server_errlogs=[],
+        ),
+    )
+
+    response = await asgi_client.get(
+        "/api/v1/mcp/servers",
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    demo_server = next(
+        server
+        for server in response.json()["data"]
+        if server["name"] == "demo-server"
+    )
+    assert demo_server["connected"] is True
+    assert demo_server["tools"] == ["demo_tool"]
 
 
 @pytest.mark.asyncio
@@ -3485,6 +3516,30 @@ async def test_v1_persona_by_id_update_preserves_explicit_null_tools_and_skills(
     assert response.json()["data"] == {"message": "人格更新成功"}
     assert persona.tools is None
     assert persona.skills is None
+
+
+@pytest.mark.asyncio
+async def test_v1_persona_create_preserves_explicit_empty_tools_and_skills(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    persona_id = "persona-empty-capabilities"
+
+    response = await asgi_client.post(
+        "/api/v1/personas",
+        json={
+            "persona_id": persona_id,
+            "system_prompt": "A persona with no optional capabilities.",
+            "tools": [],
+            "skills": [],
+        },
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    persona = fake_core_lifecycle.persona_mgr.personas[persona_id]
+    assert persona.tools == []
+    assert persona.skills == []
 
 
 @pytest.mark.asyncio

@@ -9,7 +9,7 @@
         "handlersOperation": "Управление поведением"
     },
     "titles": {
-        "installedAstrBotPlugins": "Установленные плагины AstrBot"
+        "installedAstrBotPlugins": "Установленные"
     },
     "failedPlugins": {
         "title": "Ошибка загрузки ({count})",
@@ -39,6 +39,8 @@
         "reload": "Перезагрузить",
         "enable": "Включить",
         "disable": "Выключить",
+        "load": "Открыть плагин",
+        "stop": "Закрыть плагин",
         "configure": "Настроить",
         "viewInfo": "Детали",
         "viewDocs": "Документация",
@@ -64,9 +66,12 @@
     "status": {
         "enabled": "Включен",
         "disabled": "Выключен",
+        "loaded": "Открыт",
+        "stopped": "Закрыт",
         "system": "Системный",
         "loading": "Загрузка...",
         "installed": "Установлен",
+        "preset": "Предустановлен",
         "unknown": "Неизвестно",
         "unsupported": "Не поддерживается"
     },
@@ -312,6 +317,8 @@
         "modeLocal": "Локальные навыки",
         "modeNeo": "Навыки Neo",
         "actions": "Действия",
+        "enable": "Включить навык",
+        "disable": "Отключить навык",
         "upload": "Загрузить навыки",
         "refresh": "Обновить",
         "empty": "Навыки не найдены",
@@ -420,7 +427,7 @@
     "card": {
         "actions": {
             "pluginConfig": "Настройки",
-            "uninstallPlugin": "Удалить",
+            "uninstallPlugin": "Удалить плагин",
             "reloadPlugin": "Перезагрузить",
             "togglePlugin": "Плагин",
             "viewHandlers": "Действия",
@@ -430,7 +437,7 @@
         },
         "status": {
             "hasUpdate": "Доступно обновление",
-            "disabled": "Плагин выключен",
+            "disabled": "Плагин закрыт",
             "handlersCount": "действий",
             "supportPlatform": "Платформы",
             "supportPlatformsCount": "Платформ: {count}",
