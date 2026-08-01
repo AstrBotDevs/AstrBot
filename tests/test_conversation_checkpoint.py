@@ -284,6 +284,79 @@ async def test_terminal_tool_result_persists_history_without_checkpoint():
 
 
 @pytest.mark.asyncio
+async def test_terminal_tool_result_with_checkpoint_uses_none_token_usage():
+    conversation_manager = AsyncMock()
+    stage = InternalAgentSubStage()
+    stage.conv_manager = conversation_manager
+    event = SimpleNamespace(
+        unified_msg_origin="qq:GroupMessage:test",
+        get_extra=lambda key: {"llm_checkpoint_id": "cp-1"}.get(key),
+    )
+    tool_call = ToolCall(
+        id="call-1",
+        function=ToolCall.FunctionBody(name="stay_silent", arguments="{}"),
+    )
+    assistant_message = AssistantMessageSegment(tool_calls=[tool_call])
+    tool_message = ToolCallMessageSegment(
+        content="The tool has no return value.",
+        tool_call_id="call-1",
+    )
+    request = ProviderRequest(
+        conversation=Conversation(
+            platform_id="qq",
+            user_id="qq:GroupMessage:test",
+            cid="conversation-1",
+            token_usage=1234,
+        ),
+        tool_calls_result=ToolCallsResult(
+            tool_calls_info=assistant_message,
+            tool_calls_result=[tool_message],
+        ),
+    )
+
+    await stage._save_to_history(
+        event,
+        request,
+        None,
+        [
+            Message(role="user", content="latest group observation"),
+            assistant_message,
+            tool_message,
+        ],
+        runner_stats=None,
+    )
+
+    conversation_manager.update_conversation.assert_awaited_once_with(
+        "qq:GroupMessage:test",
+        "conversation-1",
+        history=[
+            {"role": "user", "content": "latest group observation"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "id": "call-1",
+                        "function": {
+                            "name": "stay_silent",
+                            "arguments": "{}",
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "content": "The tool has no return value.",
+                "tool_call_id": "call-1",
+            },
+            {"role": "_checkpoint", "content": {"id": "cp-1"}},
+        ],
+        token_usage=None,
+    )
+
+
+@pytest.mark.asyncio
 async def test_empty_response_without_tool_result_skips_history_save():
     conversation_manager = AsyncMock()
     stage = InternalAgentSubStage()
