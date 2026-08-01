@@ -436,7 +436,7 @@ const updateDialogPluginLogo = computed(() => {
   </v-row>
 
   <!-- 配置对话框 -->
-  <v-dialog v-model="configDialog" max-width="900">
+  <v-dialog v-model="configDialog" max-width="900" scrollable>
     <v-card>
       <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{
         tm("dialogs.config.title")
@@ -466,7 +466,7 @@ const updateDialogPluginLogo = computed(() => {
           ></v-select>
         </div>
         <v-divider class="my-4"></v-divider>
-        <div style="max-height: 60vh; overflow-y: auto; padding-right: 8px">
+        <div>
           <AstrBotConfig
             v-if="extension_config.metadata"
             :metadata="extension_config.metadata"
