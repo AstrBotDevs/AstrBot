@@ -15,9 +15,9 @@ from astrbot.core.agent.message import (
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.astr_main_agent import (
     LLM_ERROR_MESSAGE_EXTRA_KEY,
-    MainAgentBuildConfig,
     MainAgentBuildResult,
     build_main_agent,
+    build_proactive_agent_config,
 )
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.message.message_event_result import (
@@ -128,30 +128,13 @@ class InternalAgentSubStage(Stage):
 
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
 
-        self.main_agent_cfg = MainAgentBuildConfig(
-            tool_call_timeout=self.tool_call_timeout,
-            tool_schema_mode=self.tool_schema_mode,
-            sanitize_context_by_modalities=self.sanitize_context_by_modalities,
-            kb_agentic_mode=self.kb_agentic_mode,
-            file_extract_enabled=self.file_extract_enabled,
-            file_extract_prov=self.file_extract_prov,
-            file_extract_msh_api_key=self.file_extract_msh_api_key,
-            context_limit_reached_strategy=self.context_limit_reached_strategy,
-            llm_compress_instruction=self.llm_compress_instruction,
-            llm_compress_keep_recent_ratio=self.llm_compress_keep_recent_ratio,
-            llm_compress_provider_id=self.llm_compress_provider_id,
-            max_context_length=self.max_context_length,
-            dequeue_context_length=self.dequeue_context_length,
-            fallback_max_context_tokens=self.fallback_max_context_tokens,
-            llm_safety_mode=self.llm_safety_mode,
-            safety_mode_strategy=self.safety_mode_strategy,
-            computer_use_runtime=self.computer_use_runtime,
-            sandbox_cfg=self.sandbox_cfg,
-            add_cron_tools=self.add_cron_tools,
+        self.main_agent_cfg = build_proactive_agent_config(
+            plugin_context=ctx.plugin_manager.context,
+            app_config=conf,
             provider_settings=settings,
-            subagent_orchestrator=conf.get("subagent_orchestrator", {}),
-            timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
-            max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
+            tool_call_timeout=self.tool_call_timeout,
+            streaming_response=self.streaming_response,
+            llm_safety_mode=self.llm_safety_mode,
         )
 
     async def _send_llm_error_message(

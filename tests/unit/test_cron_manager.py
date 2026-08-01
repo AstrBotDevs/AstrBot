@@ -610,7 +610,7 @@ class TestRunActiveAgentJob:
                 return gen()
 
             def get_final_llm_resp(self):
-                return None
+                return MagicMock(role="assistant", completion_text="done")
 
         captured = {}
 
@@ -645,6 +645,26 @@ class TestRunActiveAgentJob:
         assert config.tool_call_timeout == 77
         assert config.provider_settings is provider_settings
         assert config.provider_settings["fallback_chat_models"] == ["fallback-provider"]
+
+    @pytest.mark.asyncio
+    async def test_run_job_marks_agent_error_as_failed_and_keeps_one_shot_job(
+        self, cron_manager, mock_db, sample_cron_job
+    ):
+        sample_cron_job.job_type = "active_agent"
+        sample_cron_job.run_once = True
+        mock_db.get_cron_job.return_value = sample_cron_job
+        cron_manager._run_active_agent_job = AsyncMock(
+            side_effect=RuntimeError("agent failed")
+        )
+        cron_manager.delete_job = AsyncMock()
+
+        await cron_manager._run_job(sample_cron_job.job_id)
+
+        assert mock_db.update_cron_job.call_args_list[-1].kwargs["status"] == "failed"
+        assert mock_db.update_cron_job.call_args_list[-1].kwargs["last_error"] == (
+            "agent failed"
+        )
+        cron_manager.delete_job.assert_not_awaited()
 
 
 class TestGetNextRunTime:

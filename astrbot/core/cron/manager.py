@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 
 _CRONTAB_WEEKDAY_NAMES = ("sun", "mon", "tue", "wed", "thu", "fri", "sat")
 _CRONTAB_WEEKDAY_PATTERN = re.compile(r"^(?:(\*)|(\d+)(?:-(\d+))?)(?:/(\d+))?$")
+DEFAULT_CRON_JOB_TIMEOUT = 3600
 
 
 def _normalize_crontab_day_of_week(day_of_week: str) -> str:
@@ -129,6 +130,21 @@ class CronJobManager:
     async def sync_from_db(self) -> None:
         jobs = await self.db.list_cron_jobs()
         for job in jobs:
+            if job.status == "running":
+                interrupted_error = (
+                    "Cron job was interrupted before the process restarted."
+                )
+                logger.warning(
+                    "Resetting interrupted cron job %s from running to failed.",
+                    job.job_id,
+                )
+                await self.db.update_cron_job(
+                    job.job_id,
+                    status="failed",
+                    last_error=interrupted_error,
+                )
+                job.status = "failed"
+                job.last_error = interrupted_error
             if not job.enabled or not job.persistent:
                 continue
             if job.job_type == "basic" and job.job_id not in self._basic_handlers:
@@ -269,6 +285,7 @@ class CronJobManager:
                 trigger=trigger,
                 args=[job.job_id],
                 replace_existing=True,
+                max_instances=1,
                 misfire_grace_time=30,
             )
             asyncio.create_task(
@@ -343,8 +360,8 @@ class CronJobManager:
                 last_error=last_error,
                 next_run_time=next_run,
             )
-            if job.run_once and delete_run_once:
-                # one-shot: remove after execution regardless of success
+            if job.run_once and delete_run_once and status == "completed":
+                # Keep failed one-shot jobs available for inspection and retry.
                 await self.delete_job(job_id)
 
     async def _run_basic_job(self, job: CronJob) -> None:
@@ -385,12 +402,24 @@ class CronJobManager:
             "cron_payload": payload,
         }
 
-        await self._woke_main_agent(
-            message=note,
-            session_str=session_str,
-            extras=extras,
-            delivery_session_str=delivery_session_str,
+        provider_settings = (
+            self.ctx.get_config(umo=session_str).get("provider_settings", {}) or {}
         )
+        job_timeout = int(
+            provider_settings.get("cron_job_timeout", DEFAULT_CRON_JOB_TIMEOUT)
+        )
+        try:
+            async with asyncio.timeout(job_timeout):
+                await self._woke_main_agent(
+                    message=note,
+                    session_str=session_str,
+                    extras=extras,
+                    delivery_session_str=delivery_session_str,
+                )
+        except TimeoutError as exc:
+            raise RuntimeError(
+                f"Cron job agent exceeded the {job_timeout}s execution timeout"
+            ) from exc
 
     async def _woke_main_agent(
         self,
@@ -402,9 +431,10 @@ class CronJobManager:
     ) -> None:
         """Woke the main agent to handle the cron job message."""
         from astrbot.core.astr_main_agent import (
-            MainAgentBuildConfig,
             _get_session_conv,
+            append_proactive_history,
             build_main_agent,
+            build_proactive_agent_config,
         )
         from astrbot.core.astr_main_agent_resources import (
             PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT,
@@ -418,8 +448,7 @@ class CronJobManager:
                 else MessageSession.from_str(session_str)
             )
         except Exception as e:  # noqa: BLE001
-            logger.error(f"Invalid session for cron job: {e}")
-            return
+            raise RuntimeError(f"Invalid session for cron job: {e}") from e
 
         cron_event = CronMessageEvent(
             context=self.ctx,
@@ -441,28 +470,18 @@ class CronJobManager:
             cron_event.role = "admin"
 
         provider_settings = cfg.get("provider_settings", {}) or {}
-        tool_call_timeout = provider_settings.get("tool_call_timeout", 120)
-        config = MainAgentBuildConfig(
-            tool_call_timeout=tool_call_timeout,
-            llm_safety_mode=False,
-            streaming_response=False,
+        config = build_proactive_agent_config(
+            plugin_context=self.ctx,
+            app_config=cfg,
             provider_settings=provider_settings,
+            streaming_response=False,
+            llm_safety_mode=False,
         )
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
         req.conversation = conv
         # finetine the messages
-        context = json.loads(conv.history)
-        if context:
-            req.contexts = context
-            context_dump = req._print_friendly_context()
-            req.contexts = []
-            req.system_prompt += (
-                "\n\nBellow is you and user previous conversation history:\n"
-                f"---\n"
-                f"{context_dump}\n"
-                f"---\n"
-            )
+        append_proactive_history(req, conv, config)
         cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
         req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
             cron_job=cron_job_str
@@ -484,14 +503,21 @@ class CronJobManager:
             event=cron_event, plugin_context=self.ctx, config=config, req=req
         )
         if not result:
-            logger.error("Failed to build main agent for cron job.")
-            return
+            raise RuntimeError("Failed to build main agent for cron job")
 
         runner = result.agent_runner
-        async for _ in runner.step_until_done(30):
+        async for _ in runner.step_until_done(config.max_agent_step):
             # agent will send message to user via using tools
             pass
         llm_resp = runner.get_final_llm_resp()
+        if not llm_resp or llm_resp.role == "err":
+            error_text = (
+                llm_resp.completion_text
+                if llm_resp and llm_resp.completion_text
+                else "Cron agent returned no usable response"
+            )
+            raise RuntimeError(error_text)
+
         cron_meta = extras.get("cron_job", {}) if extras else {}
         summary_note = (
             f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
@@ -508,9 +534,6 @@ class CronJobManager:
             req=req,
             summary_note=summary_note,
         )
-        if not llm_resp:
-            logger.warning("Cron job agent got no response")
-            return
 
 
 __all__ = ["CronJobManager"]

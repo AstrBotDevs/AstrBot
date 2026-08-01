@@ -37,7 +37,6 @@ class CronService:
         data["note"] = payload.get("note") or data.get("description") or ""
         data["run_at"] = payload.get("run_at")
         data["run_once"] = data.get("run_once", False)
-        data.pop("status", None)
         return data
 
     async def list_jobs(self, job_type: str | None = None) -> list[dict]:
