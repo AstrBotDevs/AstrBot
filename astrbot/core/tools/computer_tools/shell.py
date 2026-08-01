@@ -244,7 +244,8 @@ class ShellSessionTool(FunctionTool):
 
     name: str = "astrbot_shell_session"
     description: str = (
-        "List, poll, write to, interrupt, or terminate managed shell sessions. "
+        "List, poll, write raw text or complete lines to, interrupt, or terminate "
+        "managed shell sessions. "
         "Sessions are isolated to the current conversation and sender. "
         "Administrators can manage all sessions in the conversation."
     )
@@ -254,7 +255,14 @@ class ShellSessionTool(FunctionTool):
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["list", "poll", "write", "interrupt", "terminate"],
+                    "enum": [
+                        "list",
+                        "poll",
+                        "write",
+                        "write_line",
+                        "interrupt",
+                        "terminate",
+                    ],
                     "description": "Session operation to perform.",
                 },
                 "session_id": {
@@ -263,7 +271,10 @@ class ShellSessionTool(FunctionTool):
                 },
                 "chars": {
                     "type": "string",
-                    "description": "Text written verbatim when action is write.",
+                    "description": (
+                        "Text sent verbatim by write. For write_line, provide one "
+                        "line without a line ending; a real LF is appended automatically."
+                    ),
                     "default": "",
                 },
                 "cursor": {
@@ -306,7 +317,7 @@ class ShellSessionTool(FunctionTool):
             context: Current agent tool context.
             action: Session operation to perform.
             session_id: Managed session identifier, except for list.
-            chars: Text written for the write action.
+            chars: Text written verbatim for write or with a trailing LF for write_line.
             cursor: Optional output byte cursor.
             yield_time_ms: Maximum wait for output or process exit.
             max_output_chars: Maximum output bytes to return.
@@ -357,13 +368,13 @@ class ShellSessionTool(FunctionTool):
                         yield_time_ms=yield_time_ms,
                         max_output_chars=max_output_chars,
                     )
-                elif action == "write":
+                elif action in {"write", "write_line"}:
                     result = await sb.shell.write_session(
                         owner_id=owner_id,
                         requester_id=requester_id,
                         requester_is_admin=requester_is_admin,
                         session_id=session_id,
-                        chars=chars,
+                        chars=f"{chars}\n" if action == "write_line" else chars,
                     )
                 elif action == "interrupt":
                     result = await sb.shell.interrupt_session(
