@@ -1,5 +1,62 @@
 <template>
   <div class="persona-manager">
+    <div class="persona-page-header">
+      <div>
+        <h1 class="text-h2 mb-1">
+          {{ t("core.navigation.persona") }}
+        </h1>
+        <p class="text-body-2 text-medium-emphasis mb-0">
+          {{ tm("page.description") }}
+        </p>
+      </div>
+
+      <div class="toolbar-actions d-flex ga-1">
+        <v-btn-group
+          class="create-persona-button-group"
+          color="primary"
+          variant="tonal"
+          divided
+        >
+          <v-btn prepend-icon="mdi-plus" @click="openCreatePersonaDialog">
+            {{ tm("buttons.create") }}
+          </v-btn>
+          <v-menu location="bottom end">
+            <template #activator="{ props }">
+              <v-btn
+                v-bind="props"
+                icon="mdi-chevron-down"
+                size="small"
+                :title="tm('buttons.more')"
+              />
+            </template>
+            <v-list density="compact">
+              <v-list-item prepend-icon="mdi-upload" @click="triggerImport">
+                <v-list-item-title>
+                  {{ tm("buttons.import") }}
+                </v-list-item-title>
+              </v-list-item>
+              <v-list-item
+                v-if="!hasFolders"
+                prepend-icon="mdi-folder-plus"
+                @click="showCreateFolderDialog = true"
+              >
+                <v-list-item-title>
+                  {{ tm("folder.createButton") }}
+                </v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-menu>
+        </v-btn-group>
+        <input
+          ref="importFileInput"
+          type="file"
+          accept=".json"
+          style="display: none"
+          @change="handleImportFile"
+        />
+      </div>
+    </div>
+
     <!-- 移动端顶部导航 -->
     <div v-if="hasFolders" class="mobile-nav d-md-none mb-4">
       <FolderBreadcrumb />
@@ -28,62 +85,8 @@
 
       <!-- 主内容区 -->
       <div class="main-content">
-        <!-- 顶部工具栏 -->
-        <div
-          class="toolbar d-flex flex-wrap justify-space-between align-center mb-5 ga-2"
-        >
-          <!-- 面包屑 - 仅桌面端显示 -->
-          <div v-if="hasFolders" class="d-none d-md-block">
-            <FolderBreadcrumb />
-          </div>
-          <v-spacer />
-
-          <!-- 操作按钮组 -->
-          <div class="toolbar-actions d-flex ga-1">
-            <v-btn-group
-              class="create-persona-button-group"
-              color="primary"
-              variant="tonal"
-              divided
-            >
-              <v-btn prepend-icon="mdi-plus" @click="openCreatePersonaDialog">
-                {{ tm("buttons.create") }}
-              </v-btn>
-              <v-menu location="bottom end">
-                <template #activator="{ props }">
-                  <v-btn
-                    v-bind="props"
-                    icon="mdi-chevron-down"
-                    size="small"
-                    :title="tm('buttons.more')"
-                  />
-                </template>
-                <v-list density="compact">
-                  <v-list-item prepend-icon="mdi-upload" @click="triggerImport">
-                    <v-list-item-title>
-                      {{ tm("buttons.import") }}
-                    </v-list-item-title>
-                  </v-list-item>
-                  <v-list-item
-                    v-if="!hasFolders"
-                    prepend-icon="mdi-folder-plus"
-                    @click="showCreateFolderDialog = true"
-                  >
-                    <v-list-item-title>
-                      {{ tm("folder.createButton") }}
-                    </v-list-item-title>
-                  </v-list-item>
-                </v-list>
-              </v-menu>
-            </v-btn-group>
-            <input
-              ref="importFileInput"
-              type="file"
-              accept=".json"
-              style="display: none"
-              @change="handleImportFile"
-            />
-          </div>
+        <div v-if="hasFolders" class="d-none d-md-block mb-5">
+          <FolderBreadcrumb />
         </div>
 
         <!-- 加载状态 - 只有加载超过阈值才显示骨架屏 -->
@@ -855,6 +858,14 @@ export default defineComponent({
   height: 100%;
 }
 
+.persona-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0 24px;
+}
+
 .manager-layout {
   display: flex;
   gap: 28px;
@@ -882,10 +893,6 @@ export default defineComponent({
 .main-content {
   flex: 1;
   min-width: 0;
-}
-
-.toolbar {
-  min-height: 40px;
 }
 
 .create-persona-button-group,
@@ -954,6 +961,13 @@ export default defineComponent({
   .toolbar-actions {
     width: 100%;
     overflow-x: auto;
+  }
+}
+
+@media (max-width: 600px) {
+  .persona-page-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
   }
 }
 
