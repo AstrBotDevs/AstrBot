@@ -16,6 +16,8 @@
     "buttons": {
       "refresh": "刷新",
       "add": "新增服务器",
+      "connect": "连接",
+      "disconnect": "断开连接",
       "useTemplateStdio": "Stdio 模板",
       "useTemplateStreamableHttp": "Streamable HTTP 模板",
       "useTemplateSse": "SSE 模板",
@@ -25,6 +27,8 @@
     "status": {
       "noTools": "无可用工具",
       "availableTools": "可用工具",
+      "connected": "已连接",
+      "disconnected": "未连接",
       "configSummary": "配置: {keys}",
       "noConfig": "未设置配置"
     }
@@ -94,7 +98,7 @@
       "fields": {
         "name": "服务器名称",
         "nameRequired": "名称是必填项",
-        "enable": "启用服务器",
+        "enable": "保存后连接服务器",
         "config": "服务器配置"
       },
       "errors": {

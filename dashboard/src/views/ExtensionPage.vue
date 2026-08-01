@@ -4,18 +4,29 @@ import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
 import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
 import ProxySelector from "@/components/shared/ProxySelector.vue";
 import UninstallConfirmDialog from "@/components/shared/UninstallConfirmDialog.vue";
-import McpServersSection from "@/components/extension/McpServersSection.vue";
-import SkillsSection from "@/components/extension/SkillsSection.vue";
-import ComponentPanel from "@/components/extension/componentPanel/index.vue";
-import InstalledPluginsTab from "./extension/InstalledPluginsTab.vue";
-import MarketPluginsTab from "./extension/MarketPluginsTab.vue";
-import PluginDetailPage from "./extension/PluginDetailPage.vue";
 import { useExtensionPage } from "./extension/useExtensionPage";
-import { computed } from "vue";
+import { computed, defineAsyncComponent } from "vue";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 import { usePluginI18n } from "@/utils/pluginI18n";
 
-const pageState = useExtensionPage();
+const props = defineProps({
+  initialTab: {
+    type: String,
+    default: "installed",
+  },
+});
+
+const InstalledPluginsTab = defineAsyncComponent(
+  () => import("./extension/InstalledPluginsTab.vue"),
+);
+const MarketPluginsTab = defineAsyncComponent(
+  () => import("./extension/MarketPluginsTab.vue"),
+);
+const PluginDetailPage = defineAsyncComponent(
+  () => import("./extension/PluginDetailPage.vue"),
+);
+
+const pageState = useExtensionPage(props.initialTab);
 const { pluginName, pluginDesc } = usePluginI18n();
 
 const {
@@ -30,11 +41,6 @@ const {
   handleConflictConfirm,
   fileInput,
   activeTab,
-  validTabs,
-  isValidTab,
-  getLocationHash,
-  extractTabFromHash,
-  syncTabFromHash,
   extension_data,
   getInitialShowReserved,
   showReserved,
@@ -189,8 +195,8 @@ const selectedPluginId = computed(() => {
   return Array.isArray(pluginId) ? pluginId[0] : pluginId || "";
 });
 
-const selectedDetailTab = computed(
-  () => extractTabFromHash(route.hash) || "installed",
+const selectedDetailTab = computed(() =>
+  props.initialTab === "market" ? "market" : "installed",
 );
 
 const selectedInstalledPlugin = computed(() => {
@@ -305,7 +311,12 @@ const updateDialogPluginLogo = computed(() => {
         variant="text"
         density="comfortable"
         @click="
-          router.push({ name: 'Extensions', hash: `#${selectedDetailTab}` })
+          router.push({
+            name:
+              selectedDetailTab === 'market'
+                ? 'ExtensionMarketplace'
+                : 'Extensions',
+          })
         "
       />
       <h2 class="text-h3 mb-0 ml-2">
@@ -328,77 +339,11 @@ const updateDialogPluginLogo = computed(() => {
       <v-card variant="flat" style="background-color: transparent">
         <!-- 标签页 -->
         <v-card-text style="padding: 0px 12px">
-          <!-- 已安装插件标签页内容 -->
-          <InstalledPluginsTab :state="pageState" />
-
-          <!-- 指令面板标签页内容 -->
-          <v-tab-item v-if="activeTab === 'components'">
-            <div class="mb-4 pt-4 pb-4">
-              <div class="d-flex align-center flex-wrap" style="gap: 12px">
-                <h2 class="text-h2 mb-0">{{ tm("tabs.handlersOperation") }}</h2>
-              </div>
-            </div>
-            <v-card
-              class="rounded-lg"
-              variant="flat"
-              style="background-color: transparent"
-            >
-              <v-card-text class="pa-0">
-                <ComponentPanel :active="activeTab === 'components'" />
-              </v-card-text>
-            </v-card>
-          </v-tab-item>
-
-          <!-- 已安装的 MCP 服务器标签页内容 -->
-          <v-tab-item v-if="activeTab === 'mcp'">
-            <div class="extension-detail-width">
-              <div class="mb-4 pt-4 pb-4">
-                <div class="d-flex flex-column" style="gap: 6px">
-                  <h2 class="text-h2 mb-0">
-                    {{ tm("tabs.installedMcpServers") }}
-                  </h2>
-                  <div class="text-body-2 text-medium-emphasis">
-                    {{ t("features.tooluse.mcpServers.description") }}
-                  </div>
-                </div>
-              </div>
-              <v-card
-                class="rounded-lg"
-                variant="flat"
-                style="background-color: transparent"
-              >
-                <v-card-text class="pa-0">
-                  <McpServersSection />
-                </v-card-text>
-              </v-card>
-            </div>
-          </v-tab-item>
-
-          <!-- Skills 标签页内容 -->
-          <v-tab-item v-if="activeTab === 'skills'">
-            <div class="extension-detail-width">
-              <div class="mb-4 pt-4 pb-4">
-                <div class="d-flex flex-column" style="gap: 6px">
-                  <h2 class="text-h2 mb-0">{{ tm("tabs.skills") }}</h2>
-                  <div class="text-body-2 text-medium-emphasis">
-                    {{ tm("skills.runtimeHint") }}
-                  </div>
-                </div>
-              </div>
-              <v-card
-                class="rounded-lg"
-                variant="flat"
-                style="background-color: transparent"
-              >
-                <v-card-text class="pa-0">
-                  <SkillsSection />
-                </v-card-text>
-              </v-card>
-            </div>
-          </v-tab-item>
-
-          <!-- 插件市场标签页内容 -->
-          <MarketPluginsTab :state="pageState" />
+          <InstalledPluginsTab
+            v-if="activeTab === 'installed'"
+            :state="pageState"
+          />
+          <MarketPluginsTab v-else :state="pageState" />
         </v-card-text>
       </v-card>
     </v-col>
@@ -1323,6 +1268,12 @@ const updateDialogPluginLogo = computed(() => {
 </template>
 
 <style scoped>
+.extension-page {
+  margin: 0 auto;
+  max-width: 1200px;
+  width: 100%;
+}
+
 .plugin-handler-item {
   margin-bottom: 10px;
   padding: 5px;
@@ -1338,12 +1289,6 @@ const updateDialogPluginLogo = computed(() => {
 .fab-button:hover {
   transform: translateY(-4px) scale(1.05);
   box-shadow: 0 12px 20px rgba(var(--v-theme-primary), 0.4);
-}
-
-.extension-detail-width {
-  margin: 0 auto;
-  max-width: 1040px;
-  width: 100%;
 }
 
 .market-install-confirm {

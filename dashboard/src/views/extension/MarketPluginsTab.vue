@@ -176,9 +176,8 @@ const marketCategorySelectItems = computed(() =>
 const openMarketPluginDetail = (plugin) => {
   if (!plugin?.name) return;
   router.push({
-    name: "ExtensionDetails",
+    name: "ExtensionMarketDetails",
     params: { pluginId: plugin.name },
-    hash: "#market",
   });
 };
 </script>
@@ -186,9 +185,31 @@ const openMarketPluginDetail = (plugin) => {
 <template>
   <v-tab-item v-show="activeTab === 'market'">
     <div class="mb-6 pt-4 pb-4">
-      <div class="d-flex align-center" style="gap: 12px">
-        <div class="d-flex align-center" style="gap: 12px; min-width: 0">
-          <h2 class="text-h2 mb-0">{{ tm("tabs.market") }}</h2>
+      <div class="market-header-row d-flex align-center">
+        <div class="market-header-primary d-flex align-center">
+          <v-tabs
+            model-value="market"
+            bg-color="transparent"
+            class="plugin-view-tabs"
+            height="42"
+          >
+            <v-tab
+              value="installed"
+              :to="{ name: 'Extensions' }"
+              class="plugin-view-tab text-none"
+              :ripple="false"
+            >
+              {{ tm("titles.installedAstrBotPlugins") }}
+            </v-tab>
+            <v-tab
+              value="market"
+              :to="{ name: 'ExtensionMarketplace' }"
+              class="plugin-view-tab text-none"
+              :ripple="false"
+            >
+              {{ tm("tabs.market") }}
+            </v-tab>
+          </v-tabs>
 
           <v-tooltip location="top" :text="tm('market.sourceManagement')">
             <template v-slot:activator="{ props }">
@@ -197,7 +218,7 @@ const openMarketPluginDetail = (plugin) => {
                 variant="tonal"
                 rounded="md"
                 color="primary"
-                class="text-none px-2"
+                class="market-source-button text-none px-2"
                 @click="openSourceManagerDialog"
               >
                 <v-icon size="18" class="mr-1">mdi-source-branch</v-icon>
@@ -212,7 +233,7 @@ const openMarketPluginDetail = (plugin) => {
         <v-text-field
           :model-value="marketSearch"
           @update:model-value="marketSearch = normalizeTextInput($event)"
-          class="ml-auto"
+          class="market-search-field ml-auto"
           density="compact"
           :label="tm('search.marketPlaceholder')"
           prepend-inner-icon="mdi-magnify"
@@ -221,7 +242,6 @@ const openMarketPluginDetail = (plugin) => {
           flat
           hide-details
           single-line
-          style="width: 340px; min-width: 220px; max-width: 340px"
         >
         </v-text-field>
       </div>
@@ -286,7 +306,7 @@ const openMarketPluginDetail = (plugin) => {
           </v-btn>
         </div>
 
-        <div class="d-flex align-center" style="gap: 8px; flex-wrap: wrap">
+        <div class="market-filter-group d-flex align-center">
           <v-select
             v-if="marketCategoryItems.length > 0"
             v-model="marketCategoryFilter"
@@ -302,6 +322,7 @@ const openMarketPluginDetail = (plugin) => {
           ></v-select>
 
           <PluginSortControl
+            class="market-sort-control"
             v-model="sortBy"
             :items="marketSortItems"
             :label="tm('sort.by')"
@@ -387,6 +408,56 @@ const openMarketPluginDetail = (plugin) => {
 </template>
 
 <style scoped>
+.plugin-view-tabs {
+  background: transparent;
+  flex: 0 0 auto;
+}
+
+.plugin-view-tab {
+  color: rgba(var(--v-theme-on-surface), 0.54);
+  font-size: 1.25rem;
+  font-weight: 650;
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.plugin-view-tab:first-child {
+  padding-left: 0;
+}
+
+.plugin-view-tab.v-tab--selected {
+  color: rgba(var(--v-theme-on-surface), 0.92);
+}
+
+.plugin-view-tabs :deep(.v-tabs-slider) {
+  background: rgba(var(--v-theme-on-surface), 0.5);
+  height: 2px;
+}
+
+.market-header-row,
+.market-header-primary,
+.market-filter-group {
+  gap: 12px;
+}
+
+.market-header-primary {
+  min-width: 0;
+}
+
+.market-source-button {
+  max-width: 220px;
+}
+
+.market-search-field {
+  flex: 0 1 340px;
+  max-width: 340px;
+  min-width: 220px;
+}
+
+.market-filter-group {
+  flex-wrap: wrap;
+}
+
 .market-filter-control {
   min-width: 190px;
   max-width: 220px;
@@ -397,5 +468,54 @@ const openMarketPluginDetail = (plugin) => {
 .market-filter-control :deep(.v-select__selection-text),
 .market-filter-control :deep(.v-field__prepend-inner) {
   font-size: 0.875rem;
+}
+
+@media (max-width: 700px) {
+  .market-header-row {
+    align-items: stretch !important;
+    flex-direction: column;
+  }
+
+  .market-header-primary {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .market-search-field {
+    flex: none;
+    margin-left: 0 !important;
+    max-width: none;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .market-filter-group {
+    align-items: stretch !important;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .market-filter-control {
+    max-width: none;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .market-filter-group :deep(.plugin-sort-control) {
+    flex-wrap: nowrap;
+    width: 100%;
+  }
+
+  .market-filter-group :deep(.plugin-sort-control__select) {
+    flex: 1;
+    max-width: none;
+    min-width: 0;
+    width: auto;
+  }
+
+  .plugin-view-tab {
+    font-size: 1.125rem;
+    padding-inline: 8px;
+  }
 }
 </style>

@@ -16,6 +16,8 @@
     "buttons": {
       "refresh": "Refresh",
       "add": "Add Server",
+      "connect": "Connect",
+      "disconnect": "Disconnect",
       "useTemplateStdio": "Stdio Template",
       "useTemplateStreamableHttp": "Streamable HTTP Template",
       "useTemplateSse": "SSE Template",
@@ -25,6 +27,8 @@
     "status": {
       "noTools": "No available tools",
       "availableTools": "Available tools",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
       "configSummary": "Config: {keys}",
       "noConfig": "No configuration set"
     }
@@ -94,7 +98,7 @@
       "fields": {
         "name": "Server Name",
         "nameRequired": "Name is required",
-        "enable": "Enable Server",
+        "enable": "Connect after saving",
         "config": "Server Configuration"
       },
       "errors": {

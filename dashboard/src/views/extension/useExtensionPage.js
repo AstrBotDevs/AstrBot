@@ -30,7 +30,7 @@ const buildFailedPluginItems = (raw) => {
   });
 };
 
-export const useExtensionPage = () => {
+export const useExtensionPage = (initialTab = "installed") => {
   const commonStore = useCommonStore();
   const { t } = useI18n();
   const { tm } = useModuleI18n("features/extension");
@@ -64,12 +64,15 @@ export const useExtensionPage = () => {
     }
   };
   const handleConflictConfirm = () => {
-    activeTab.value = "commands";
+    conflictDialog.show = false;
+    void router.push({ name: "ExtensionComponents" });
   };
 
   const fileInput = ref(null);
-  const activeTab = ref("installed");
   const validTabs = ["installed", "market", "mcp", "skills", "components"];
+  const activeTab = ref(
+    validTabs.includes(initialTab) ? initialTab : "installed",
+  );
   const isValidTab = (tab) => validTabs.includes(tab);
   const getLocationHash = () => route.hash || "";
   const extractTabFromHash = (hash) => getValidHashTab(hash, validTabs);
@@ -2325,15 +2328,13 @@ export const useExtensionPage = () => {
 
   // 生命周期
   onMounted(async () => {
-    if (!syncTabFromHash(getLocationHash())) {
+    const hasRouteTab = isValidTab(route.meta.extensionTab);
+    if (!hasRouteTab && !syncTabFromHash(getLocationHash())) {
       await replaceTabRoute(router, route, activeTab.value);
     }
     loading_.value = true;
     try {
       await getExtensions({ withLoading: false });
-
-      // 加载自定义插件源
-      await loadCustomSources();
 
       // 检查是否有 open_config 参数
       const plugin_name = Array.isArray(route.query.open_config)
@@ -2344,20 +2345,43 @@ export const useExtensionPage = () => {
         openExtensionConfig(plugin_name);
       }
 
-      const data = await commonStore.getPluginCollections(
-        false,
-        selectedSource.value,
-      );
-      pluginMarketData.value = data;
-      trimExtensionName();
-      checkAlreadyInstalled();
-      await annotateMarketVersionSupport();
-      await checkUpdate();
-      refreshRandomPlugins();
+      if (activeTab.value === "market") {
+        await loadCustomSources();
+        const data = await commonStore.getPluginCollections(
+          false,
+          selectedSource.value,
+        );
+        pluginMarketData.value = data;
+        trimExtensionName();
+        checkAlreadyInstalled();
+        await annotateMarketVersionSupport();
+        await checkUpdate();
+        refreshRandomPlugins();
+      }
     } catch (err) {
       toast(tm("messages.getMarketDataFailed") + " " + err, "error");
     } finally {
       loading_.value = false;
+    }
+
+    if (activeTab.value === "installed") {
+      void (async () => {
+        try {
+          await loadCustomSources();
+          const data = await commonStore.getPluginCollections(
+            false,
+            selectedSource.value,
+          );
+          pluginMarketData.value = data;
+          trimExtensionName();
+          checkAlreadyInstalled();
+          await annotateMarketVersionSupport();
+          await checkUpdate();
+          refreshRandomPlugins();
+        } catch (err) {
+          console.debug("Failed to load plugin update metadata:", err);
+        }
+      })();
     }
   });
 
@@ -2429,6 +2453,7 @@ export const useExtensionPage = () => {
   watch(
     () => route.hash,
     (newHash) => {
+      if (isValidTab(route.meta.extensionTab)) return;
       const tab = extractTabFromHash(newHash);
       if (tab && tab !== activeTab.value) {
         activeTab.value = tab;
@@ -2437,6 +2462,7 @@ export const useExtensionPage = () => {
   );
 
   watch(activeTab, (newTab) => {
+    if (isValidTab(route.meta.extensionTab)) return;
     if (!isValidTab(newTab)) return;
     if (route.hash === `#${newTab}`) return;
     void replaceTabRoute(router, route, newTab);
