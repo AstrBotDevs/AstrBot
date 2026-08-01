@@ -47,111 +47,113 @@
           <small class="text-grey">{{ tm("skills.emptyHint") }}</small>
         </div>
 
-        <div v-else class="skills-list pb-3">
-          <OutlinedActionListItem
-            v-for="skill in skills"
-            :key="skill.name"
-            :title="skill.name"
-            clickable
-            @click="openSkillEditor(skill)"
-          >
-            <template #title-extra>
-              <div class="d-flex align-center ga-1">
-                <v-chip
-                  size="x-small"
-                  variant="tonal"
-                  :color="
-                    skill.source_type === 'sandbox_only'
-                      ? 'secondary'
-                      : 'success'
-                  "
-                >
-                  {{
-                    skill.source_type === "sandbox_only"
-                      ? tm("status.preset")
-                      : tm("status.installed")
-                  }}
-                </v-chip>
-                <CapabilitySourceChip
-                  :label="sourceTypeLabel(skill.source_type, skill)"
-                  :tone="sourceTypeTone(skill.source_type)"
-                />
+        <div v-else class="pb-3">
+          <h3 class="skills-list-title text-h3">
+            {{ tm("status.installed") }}
+          </h3>
+
+          <div class="skills-list">
+            <OutlinedActionListItem
+              v-for="skill in skills"
+              :key="skill.name"
+              :title="skill.name"
+              class="skill-list-item"
+              clickable
+              @click="openSkillEditor(skill)"
+            >
+              <template #title-extra>
+                <div class="d-flex align-center ga-1">
+                  <v-chip
+                    v-if="skill.source_type === 'sandbox_only'"
+                    size="x-small"
+                    variant="tonal"
+                    color="secondary"
+                  >
+                    {{ tm("status.preset") }}
+                  </v-chip>
+                  <CapabilitySourceChip
+                    :label="sourceTypeLabel(skill.source_type, skill)"
+                    :tone="sourceTypeTone(skill.source_type)"
+                  />
+                </div>
+              </template>
+
+              <div class="skill-description text-body-2 text-medium-emphasis">
+                {{ skill.description || tm("skills.noDescription") }}
               </div>
-            </template>
 
-            <div class="skill-description text-body-2 text-medium-emphasis">
-              {{ skill.description || tm("skills.noDescription") }}
-            </div>
+              <div class="skill-path text-caption text-medium-emphasis">
+                <v-icon size="small" class="me-1">mdi-file-document</v-icon>
+                {{ tm("skills.path") }}: {{ skill.path }}
+              </div>
 
-            <div class="skill-path text-caption text-medium-emphasis">
-              <v-icon size="small" class="me-1">mdi-file-document</v-icon>
-              {{ tm("skills.path") }}: {{ skill.path }}
-            </div>
+              <template #actions>
+                <v-tooltip :text="tm('skills.download')" location="top">
+                  <template #activator="{ props }">
+                    <v-btn
+                      v-bind="props"
+                      icon="mdi-download-outline"
+                      variant="text"
+                      size="small"
+                      class="list-action-icon-btn"
+                      :disabled="
+                        itemLoading[skill.name] || isReadOnlySourceSkill(skill)
+                      "
+                      @click.stop="downloadSkill(skill)"
+                    />
+                  </template>
+                </v-tooltip>
 
-            <template #actions>
-              <v-tooltip :text="tm('skills.download')" location="top">
-                <template #activator="{ props }">
-                  <v-btn
-                    v-bind="props"
-                    icon="mdi-download-outline"
-                    variant="text"
-                    size="small"
-                    class="list-action-icon-btn"
-                    :disabled="
-                      itemLoading[skill.name] || isReadOnlySourceSkill(skill)
-                    "
-                    @click.stop="downloadSkill(skill)"
-                  />
-                </template>
-              </v-tooltip>
+                <v-tooltip
+                  :text="t('core.common.itemCard.delete')"
+                  location="top"
+                >
+                  <template #activator="{ props }">
+                    <v-btn
+                      v-bind="props"
+                      icon="mdi-delete-outline"
+                      variant="text"
+                      size="small"
+                      class="list-action-icon-btn"
+                      :disabled="
+                        itemLoading[skill.name] || isReadOnlySourceSkill(skill)
+                      "
+                      @click.stop="confirmDelete(skill)"
+                    />
+                  </template>
+                </v-tooltip>
+              </template>
 
-              <v-tooltip
-                :text="t('core.common.itemCard.delete')"
-                location="top"
-              >
-                <template #activator="{ props }">
-                  <v-btn
-                    v-bind="props"
-                    icon="mdi-delete-outline"
-                    variant="text"
-                    size="small"
-                    class="list-action-icon-btn"
-                    :disabled="
-                      itemLoading[skill.name] || isReadOnlySourceSkill(skill)
-                    "
-                    @click.stop="confirmDelete(skill)"
-                  />
-                </template>
-              </v-tooltip>
-            </template>
-
-            <template #control>
-              <v-tooltip location="top">
-                <template #activator="{ props }">
-                  <v-switch
-                    v-bind="props"
-                    color="primary"
-                    density="compact"
-                    hide-details
-                    inset
-                    :model-value="skill.active"
-                    :aria-label="
-                      skill.active ? tm('skills.disable') : tm('skills.enable')
-                    "
-                    :loading="itemLoading[skill.name] || false"
-                    :disabled="
-                      itemLoading[skill.name] || isSandboxPresetSkill(skill)
-                    "
-                    @click.stop
-                    @update:model-value="toggleSkill(skill)"
-                  />
-                </template>
-                <span>{{
-                  skill.active ? tm("skills.disable") : tm("skills.enable")
-                }}</span>
-              </v-tooltip>
-            </template>
-          </OutlinedActionListItem>
+              <template #control>
+                <v-tooltip location="top">
+                  <template #activator="{ props }">
+                    <v-switch
+                      v-bind="props"
+                      color="primary"
+                      density="compact"
+                      hide-details
+                      inset
+                      :model-value="skill.active"
+                      :aria-label="
+                        skill.active
+                          ? tm('skills.disable')
+                          : tm('skills.enable')
+                      "
+                      :loading="itemLoading[skill.name] || false"
+                      :disabled="
+                        itemLoading[skill.name] || isSandboxPresetSkill(skill)
+                      "
+                      @click.stop
+                      @update:model-value="toggleSkill(skill)"
+                    />
+                  </template>
+                  <span>{{
+                    skill.active ? tm("skills.disable") : tm("skills.enable")
+                  }}</span>
+                </v-tooltip>
+              </template>
+            </OutlinedActionListItem>
+          </div>
         </div>
       </template>
 
@@ -1873,9 +1875,48 @@ export default {
 
 <style scoped>
 .skills-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.skills-list-title {
+  margin-bottom: 16px;
+}
+
+.skill-list-item :deep(.outlined-action-list-item__main) {
+  gap: 0;
+}
+
+.skill-list-item :deep(.outlined-action-list-item__content) {
+  flex: 1 1 auto;
+}
+
+.skill-list-item :deep(.outlined-action-list-item__actions) {
+  gap: 0;
+  margin-left: 0;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+  visibility: hidden;
+}
+
+.skill-list-item:hover :deep(.outlined-action-list-item__actions),
+.skill-list-item:focus-within :deep(.outlined-action-list-item__actions) {
+  gap: 8px;
+  margin-left: auto;
+  max-width: 180px;
+  opacity: 1;
+  overflow: visible;
+  pointer-events: auto;
+  visibility: visible;
+}
+
+.skill-list-item:hover :deep(.outlined-action-list-item__main),
+.skill-list-item:focus-within :deep(.outlined-action-list-item__main) {
+  gap: 16px;
 }
 
 .list-action-icon-btn {
@@ -2358,8 +2399,47 @@ export default {
 }
 
 @media (max-width: 860px) {
+  .skills-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .skill-list-item :deep(.outlined-action-list-item__actions) {
+    gap: 8px;
+    margin-left: auto;
+    max-width: none;
+    opacity: 1;
+    overflow: visible;
+    pointer-events: auto;
+    visibility: visible;
+  }
+
+  .skill-list-item :deep(.outlined-action-list-item__main) {
+    gap: 16px;
+  }
+
   .skills-upload-capabilities {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (hover: none) {
+  .skill-list-item :deep(.outlined-action-list-item__actions) {
+    gap: 8px;
+    margin-left: auto;
+    max-width: none;
+    opacity: 1;
+    overflow: visible;
+    pointer-events: auto;
+    visibility: visible;
+  }
+
+  .skill-list-item :deep(.outlined-action-list-item__main) {
+    gap: 16px;
+  }
+
+  .skill-list-item :deep(.outlined-action-list-item__hover-actions) {
+    opacity: 1;
+    pointer-events: auto;
   }
 }
 
