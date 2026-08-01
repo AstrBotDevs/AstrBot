@@ -1700,6 +1700,10 @@
         "description": "Model context window size",
         "hint": "Maximum context tokens. If 0, it auto-fills from model metadata (if available); you can also edit manually."
       },
+      "reasoning": {
+        "description": "Reasoning capability",
+        "hint": "Whether this model supports reasoning/thinking capabilities. This is a metadata flag and does not affect actual API calls."
+      },
       "dify_api_key": {
         "description": "API Key",
         "hint": "Dify API Key. This field is required."

@@ -59,6 +59,13 @@ def try_cast(value: Any, type_: str):
             return float(value)
         except (ValueError, TypeError):
             return None
+    elif type_ == "bool" and isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in ("true", "1"):
+            return True
+        if lowered in ("false", "0"):
+            return False
+        return None
 
 
 def _expect_type(value, expected_type, path_key, errors, expected_name=None) -> bool:
@@ -276,9 +283,12 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
                     )
                 data[key] = casted
             elif meta["type"] == "bool" and not isinstance(value, bool):
-                errors.append(
-                    f"错误的类型 {path}{key}: 期望是 bool, 得到了 {type(value).__name__}",
-                )
+                casted = try_cast(value, "bool")
+                if casted is None:
+                    errors.append(
+                        f"错误的类型 {path}{key}: 期望是 bool, 得到了 {type(value).__name__}",
+                    )
+                data[key] = casted
             elif meta["type"] in ["string", "text"] and not isinstance(value, str):
                 errors.append(
                     f"错误的类型 {path}{key}: 期望是 string, 得到了 {type(value).__name__}",
