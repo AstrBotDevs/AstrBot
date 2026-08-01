@@ -56,3 +56,4 @@ qrcode>=8.2
 quart>=0.20.0
 python-ripgrep==0.0.8 ; python_version < '3.14'
 pyotp>=2.9.0
+reportlab>=5.0.0
