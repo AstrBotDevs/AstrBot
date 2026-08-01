@@ -466,17 +466,15 @@ const updateDialogPluginLogo = computed(() => {
           ></v-select>
         </div>
         <v-divider class="my-4"></v-divider>
-        <div>
-          <AstrBotConfig
-            v-if="extension_config.metadata"
-            :metadata="extension_config.metadata"
-            :iterable="extension_config.config"
-            :metadataKey="curr_namespace"
-            :pluginName="curr_namespace"
-            :pluginI18n="extension_config.i18n"
-          />
-          <p v-else>{{ tm("dialogs.config.noConfig") }}</p>
-        </div>
+        <AstrBotConfig
+          v-if="extension_config.metadata"
+          :metadata="extension_config.metadata"
+          :iterable="extension_config.config"
+          :metadataKey="curr_namespace"
+          :pluginName="curr_namespace"
+          :pluginI18n="extension_config.i18n"
+        />
+        <p v-else>{{ tm("dialogs.config.noConfig") }}</p>
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
