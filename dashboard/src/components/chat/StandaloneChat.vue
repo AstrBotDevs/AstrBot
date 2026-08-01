@@ -401,7 +401,7 @@ async function stopCurrentSession() {
   await stopSession(currSessionId.value);
 }
 
-async function handleFilesSelected(files: FileList) {
+async function handleFilesSelected(files: FileList | File[]) {
   const selectedFiles = Array.from(files || []);
   for (const file of selectedFiles) {
     if (file.type.startsWith("image/")) {
