@@ -135,6 +135,7 @@ class InternalAgentSubStage(Stage):
             tool_call_timeout=self.tool_call_timeout,
             streaming_response=self.streaming_response,
             llm_safety_mode=self.llm_safety_mode,
+            add_cron_tools=self.add_cron_tools,
         )
 
     async def _send_llm_error_message(

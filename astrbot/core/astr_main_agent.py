@@ -237,6 +237,7 @@ def build_proactive_agent_config(
     tool_call_timeout: int | None = None,
     streaming_response: bool | None = None,
     llm_safety_mode: bool | None = None,
+    add_cron_tools: bool | None = None,
 ) -> MainAgentBuildConfig:
     """Build a main-agent config for proactive entry points.
 
@@ -251,6 +252,7 @@ def build_proactive_agent_config(
         tool_call_timeout: Optional timeout override for tool calls.
         streaming_response: Optional streaming override for the caller.
         llm_safety_mode: Optional safety-mode override for the caller.
+        add_cron_tools: Optional cron-tool availability override for the caller.
 
     Returns:
         Configuration shared by proactive and normal agent entry points.
@@ -263,6 +265,8 @@ def build_proactive_agent_config(
         streaming_response = settings.get(
             "streaming_response", settings.get("stream", False)
         )
+    if add_cron_tools is None:
+        add_cron_tools = proactive_cfg.get("add_cron_tools", True)
 
     return MainAgentBuildConfig(
         tool_call_timeout=int(
@@ -300,7 +304,7 @@ def build_proactive_agent_config(
         safety_mode_strategy=settings.get("safety_mode_strategy", "system_prompt"),
         computer_use_runtime=settings.get("computer_use_runtime", "none"),
         sandbox_cfg=settings.get("sandbox", {}) or {},
-        add_cron_tools=bool(proactive_cfg.get("add_cron_tools", True)),
+        add_cron_tools=bool(add_cron_tools),
         provider_settings=settings,
         subagent_orchestrator=global_config.get("subagent_orchestrator", {}) or {},
         timezone=global_config.get("timezone")

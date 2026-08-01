@@ -416,7 +416,7 @@ class CronJobManager:
                     extras=extras,
                     delivery_session_str=delivery_session_str,
                 )
-        except TimeoutError as exc:
+        except asyncio.TimeoutError as exc:
             raise RuntimeError(
                 f"Cron job agent exceeded the {job_timeout}s execution timeout"
             ) from exc
