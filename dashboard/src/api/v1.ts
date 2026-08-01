@@ -1363,6 +1363,11 @@ export const pluginApi = {
       openApiV1.installPluginFromGithub({ body: body as any }),
     );
   },
+  installGit(body: OpenConfig) {
+    return typed<OpenConfig>(
+      openApiV1.installPluginFromGit({ body: body as any }),
+    );
+  },
   installUrl(body: OpenConfig) {
     return typed<OpenConfig>(
       openApiV1.installPluginFromUrl({ body: body as any }),

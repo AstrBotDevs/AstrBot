@@ -484,7 +484,7 @@ const togglePinnedExtension = (extension) => {
               sourceBindingDialog.loading ||
               sourceBindingDialog.candidates.length === 0 ||
               !sourceBindingDialog.selectedKey ||
-              (selectedSourceBindingCandidate?.install_method === 'github' &&
+              (selectedSourceBindingCandidate?.install_method === 'repository' &&
                 selectedSourceBindingCandidate?.validation_status !== 'valid')
             "
             @click="confirmPluginSourceBinding"

@@ -496,14 +496,14 @@ export type PluginConfigFileDeleteRequest = {
     path: string;
 };
 
-export type PluginGithubInstallRequest = {
+export type PluginRepositoryInstallRequest = {
     /**
-     * GitHub URL or owner/repository slug.
+     * GitHub shorthand, HTTP(S), SSH, or SCP-style Git repository locator.
      */
     repository: string;
     ref?: string;
     /**
-     * Optional downloadable ZIP URL to use instead of GitHub archive resolution.
+     * Optional downloadable ZIP URL to use instead of repository archive resolution.
      */
     download_url?: string;
     proxy?: string;
@@ -2096,12 +2096,20 @@ export type ReloadFailedPluginResponse = (SuccessEnvelope);
 export type ReloadFailedPluginError = unknown;
 
 export type InstallPluginFromGithubData = {
-    body: PluginGithubInstallRequest;
+    body: PluginRepositoryInstallRequest;
 };
 
 export type InstallPluginFromGithubResponse = (SuccessEnvelope);
 
 export type InstallPluginFromGithubError = unknown;
+
+export type InstallPluginFromGitData = {
+    body: PluginRepositoryInstallRequest;
+};
+
+export type InstallPluginFromGitResponse = (SuccessEnvelope);
+
+export type InstallPluginFromGitError = unknown;
 
 export type InstallPluginFromUrlData = {
     body: PluginUrlInstallRequest;
