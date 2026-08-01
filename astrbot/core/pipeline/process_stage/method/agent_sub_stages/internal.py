@@ -19,6 +19,7 @@ from astrbot.core.astr_main_agent import (
     MainAgentBuildResult,
     build_main_agent,
 )
+from astrbot.core.agent.injection_detector import detect
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -250,7 +251,19 @@ class InternalAgentSubStage(Stage):
                     provider = build_result.provider
                     reset_coro = build_result.reset_coro
 
-                    api_base = provider.provider_config.get("api_base", "")
+                    # Injection detection gate — regex-level hard block
+                    detection = detect(event.message_str or "")
+                    if detection.detected:
+                        if reset_coro:
+                            reset_coro.close()
+                        await event.send(
+                            MessageChain().message(
+                                f"[安全提醒] 检测到可能存在安全风险的输入（{detection.pattern_type}），已暂停处理。是否继续？"
+                            )
+                        )
+                        return
+
+                    api_base
                     for host in decoded_blocked:
                         if host in api_base:
                             error_message = (
