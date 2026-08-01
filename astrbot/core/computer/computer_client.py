@@ -101,9 +101,6 @@ def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
 def _collect_sync_skill_dirs() -> list[tuple[str, Path]]:
     """Collect local and plugin-provided skills that should be synced."""
     skills_root = Path(get_astrbot_skills_path())
-    if not skills_root.is_dir():
-        return []
-
     try:
         skill_manager = SkillManager(skills_root=str(skills_root))
     except OSError as exc:

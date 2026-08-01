@@ -146,10 +146,12 @@ def _setup_local_fs_tools(
     workspaces_root = tmp_path / "workspaces"
     skills_root = tmp_path / "skills"
     plugins_root = tmp_path / "plugins"
+    builtin_plugins_root = tmp_path / "builtin_plugins"
     temp_root = tmp_path / "temp"
     workspaces_root.mkdir()
     skills_root.mkdir()
     plugins_root.mkdir()
+    builtin_plugins_root.mkdir()
     temp_root.mkdir()
 
     monkeypatch.setattr(
@@ -166,6 +168,11 @@ def _setup_local_fs_tools(
         fs_tools,
         "get_astrbot_plugin_path",
         lambda: str(plugins_root),
+    )
+    monkeypatch.setattr(
+        fs_tools,
+        "get_astrbot_builtin_plugin_path",
+        lambda: str(builtin_plugins_root),
     )
     monkeypatch.setattr(
         fs_tools,
@@ -319,6 +326,31 @@ async def test_restricted_local_member_can_read_plugin_provided_skill(
 
 
 @pytest.mark.asyncio
+async def test_restricted_local_member_can_read_builtin_plugin_skill(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    _setup_local_fs_tools(monkeypatch, tmp_path)
+    builtin_skill = (
+        tmp_path
+        / "builtin_plugins"
+        / "astrbot"
+        / "skills"
+        / "skill-creator"
+        / "SKILL.md"
+    )
+    builtin_skill.parent.mkdir(parents=True)
+    builtin_skill.write_text("# Skill Creator\n", encoding="utf-8")
+
+    result = await fs_tools.FileReadTool().call(
+        _make_context(role="member"),
+        path=str(builtin_skill),
+    )
+
+    assert result == "# Skill Creator\n"
+
+
+@pytest.mark.asyncio
 async def test_restricted_local_member_can_read_plugin_skill_inventory_even_if_plugin_inactive(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -369,6 +401,68 @@ async def test_restricted_local_member_cannot_write_plugin_provided_skill(
     assert "Write access is restricted for this user." in result
     assert "data/plugins/*/skills" not in result
     assert plugin_skill.read_text(encoding="utf-8") == "# Demo Skill\n"
+
+
+@pytest.mark.asyncio
+async def test_restricted_local_member_cannot_modify_locally_installed_skill(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    installed_skill = tmp_path / "skills" / "demo-skill" / "SKILL.md"
+    installed_skill.parent.mkdir(parents=True)
+    installed_skill.write_text("# Demo Skill\n", encoding="utf-8")
+    workspace_skill = workspace / "skills" / "demo-skill" / "SKILL.md"
+    workspace_skill.parent.mkdir(parents=True)
+
+    context = _make_context(role="member")
+    read_result = await fs_tools.FileReadTool().call(
+        context,
+        path=str(installed_skill),
+    )
+    write_result = await fs_tools.FileWriteTool().call(
+        context,
+        path=str(installed_skill),
+        content="# Changed\n",
+    )
+    edit_result = await fs_tools.FileEditTool().call(
+        context,
+        path=str(installed_skill),
+        old="Demo",
+        new="Changed",
+    )
+    workspace_result = await fs_tools.FileWriteTool().call(
+        context,
+        path=str(workspace_skill),
+        content="# Workspace Skill\n",
+    )
+
+    assert read_result == "# Demo Skill\n"
+    assert "Write access is restricted for this user." in write_result
+    assert "Write access is restricted for this user." in edit_result
+    assert "data/skills" not in write_result
+    assert installed_skill.read_text(encoding="utf-8") == "# Demo Skill\n"
+    assert workspace_result == f"File written successfully: {workspace_skill}"
+    assert workspace_skill.read_text(encoding="utf-8") == "# Workspace Skill\n"
+
+
+@pytest.mark.asyncio
+async def test_local_admin_can_modify_locally_installed_skill(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    _setup_local_fs_tools(monkeypatch, tmp_path)
+    installed_skill = tmp_path / "skills" / "demo-skill" / "SKILL.md"
+    installed_skill.parent.mkdir(parents=True)
+
+    result = await fs_tools.FileWriteTool().call(
+        _make_context(role="admin"),
+        path=str(installed_skill),
+        content="# Demo Skill\n",
+    )
+
+    assert result == f"File written successfully: {installed_skill}"
+    assert installed_skill.read_text(encoding="utf-8") == "# Demo Skill\n"
 
 
 @pytest.mark.asyncio
