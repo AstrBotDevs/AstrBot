@@ -457,8 +457,10 @@ def _build_local_mode_prompt() -> str:
         f"{shell_hint} "
         "Local shell commands automatically return a managed session when they "
         "outlive the initial wait. Use `astrbot_shell_session` to list, poll, "
-        "write to, interrupt, or terminate those sessions. Do not add `&`, "
-        "`nohup`, or another detachment wrapper for ordinary long-running commands."
+        "write raw text or complete lines to, interrupt, or terminate those sessions. "
+        "Use its `write_line` action for line-oriented programs so the session receives "
+        "a real line feed. Do not add `&`, `nohup`, or another detachment wrapper for "
+        "ordinary long-running commands."
     )
 
 

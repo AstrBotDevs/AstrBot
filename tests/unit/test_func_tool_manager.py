@@ -68,6 +68,16 @@ def test_local_execute_shell_schema_replaces_background_with_yield():
     assert "background" not in inspect.signature(tool.call).parameters
 
 
+def test_shell_session_schema_supports_line_writes():
+    tool = ShellSessionTool()
+
+    assert "write_line" in tool.parameters["properties"]["action"]["enum"]
+    assert (
+        "LF is appended automatically"
+        in tool.parameters["properties"]["chars"]["description"]
+    )
+
+
 @pytest.mark.asyncio
 async def test_local_execute_shell_uses_managed_session(monkeypatch, tmp_path):
     from astrbot.core.tools.computer_tools import shell as shell_tools
@@ -249,16 +259,26 @@ async def test_shell_session_tool_lists_sessions_for_current_owner(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("action", ["poll", "write", "interrupt", "terminate"])
+@pytest.mark.parametrize(
+    ("action", "component_action"),
+    [
+        ("poll", "poll"),
+        ("write", "write"),
+        ("write_line", "write"),
+        ("interrupt", "interrupt"),
+        ("terminate", "terminate"),
+    ],
+)
 async def test_shell_session_tool_passes_member_identity_to_session_actions(
     monkeypatch,
     action,
+    component_action,
 ):
     from astrbot.core.tools.computer_tools import shell as shell_tools
 
     shell = LocalShellComponent()
     operation = AsyncMock(return_value={"session_id": "sh_test", "status": "running"})
-    setattr(shell, f"{action}_session", operation)
+    setattr(shell, f"{component_action}_session", operation)
 
     class FakeBooter:
         pass
@@ -306,6 +326,9 @@ async def test_shell_session_tool_passes_member_identity_to_session_actions(
     assert operation.await_args.kwargs["owner_id"] == "group-umo"
     assert operation.await_args.kwargs["requester_id"] == "member-user"
     assert operation.await_args.kwargs["requester_is_admin"] is False
+    if component_action == "write":
+        expected_chars = "input\n" if action == "write_line" else "input"
+        assert operation.await_args.kwargs["chars"] == expected_chars
 
 
 @pytest.mark.asyncio
