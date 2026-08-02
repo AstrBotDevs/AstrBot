@@ -57,23 +57,23 @@ defineProps({
   color: #00695c !important;
 }
 
-:global(.v-theme--PurpleThemeDark) .capability-source-chip--plugin {
+:global(.v-theme--PurpleThemeDark .capability-source-chip--plugin) {
   color: #64b5f6 !important;
 }
 
-:global(.v-theme--PurpleThemeDark) .capability-source-chip--mcp {
+:global(.v-theme--PurpleThemeDark .capability-source-chip--mcp) {
   color: #ffab91 !important;
 }
 
-:global(.v-theme--PurpleThemeDark) .capability-source-chip--local {
+:global(.v-theme--PurpleThemeDark .capability-source-chip--local) {
   color: #a5d6a7 !important;
 }
 
-:global(.v-theme--PurpleThemeDark) .capability-source-chip--preset {
+:global(.v-theme--PurpleThemeDark .capability-source-chip--preset) {
   color: #ce93d8 !important;
 }
 
-:global(.v-theme--PurpleThemeDark) .capability-source-chip--mixed {
+:global(.v-theme--PurpleThemeDark .capability-source-chip--mixed) {
   color: #80cbc4 !important;
 }
 </style>
