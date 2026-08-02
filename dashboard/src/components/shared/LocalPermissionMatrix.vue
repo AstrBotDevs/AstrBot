@@ -57,6 +57,15 @@
     </div>
 
     <v-alert
+      type="info"
+      variant="tonal"
+      density="compact"
+      class="mt-3"
+    >
+      {{ tm('ai_group.agent_computer_use.local_permissions.windowsHelp') }}
+    </v-alert>
+
+    <v-alert
       v-if="memberHasElevatedAccess"
       type="warning"
       variant="tonal"

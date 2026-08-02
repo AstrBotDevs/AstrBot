@@ -60,9 +60,7 @@ def _make_local_run_context(role: str, policy: dict) -> ContextWrapper:
         role=role,
         unified_msg_origin="qq_official:friend:user-1",
     )
-    return ContextWrapper(
-        context=SimpleNamespace(context=config_holder, event=event)
-    )
+    return ContextWrapper(context=SimpleNamespace(context=config_holder, event=event))
 
 
 def test_local_permission_policy_resolves_each_role_independently():
@@ -128,6 +126,41 @@ def test_local_permission_policy_denies_disabled_execution():
     assert resolved.allow_execution is False
     assert error is not None
     assert "disabled by the Local permission policy" in error
+
+
+def test_windows_local_execution_requires_a_full_trust_policy(monkeypatch):
+    from astrbot.core.tools.computer_tools import util as computer_util
+
+    monkeypatch.setattr(computer_util.sys, "platform", "win32")
+    restricted = {
+        "member": {
+            "allow_execution": True,
+            "allow_network": False,
+            "filesystem_scope": "host",
+        }
+    }
+    full_trust = {
+        "member": {
+            "allow_execution": True,
+            "allow_network": True,
+            "filesystem_scope": "host",
+        }
+    }
+
+    _, restricted_error = check_local_execution_permission(
+        _make_local_run_context("member", restricted),
+        "Shell execution",
+    )
+    full_policy, full_error = check_local_execution_permission(
+        _make_local_run_context("member", full_trust),
+        "Shell execution",
+    )
+
+    assert restricted_error is not None
+    assert "only supported on Linux" in restricted_error
+    assert full_error is None
+    assert full_policy is not None
+    assert full_policy.requires_sandbox is False
 
 
 @pytest.mark.asyncio
