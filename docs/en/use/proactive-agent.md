@@ -33,6 +33,10 @@ You can view and manage all future tasks by clicking **Future Tasks** in the lef
 
 ![](https://files.astrbot.app/docs/source/images/proactive-agent/image-1.png)
 
+### Time zones
+
+Agent-created tasks use the active profile's `timezone` when it is set to an IANA time-zone name such as `Asia/Shanghai`. Recurring schedules and naive one-time timestamps are interpreted in that time zone, and task times shown in Agent responses are converted to it. If the setting is empty or invalid, the system time zone is used; an invalid value is not persisted as the task time zone. You can also provide an explicit offset in a one-time ISO timestamp, for example `2026-02-02T08:00:00+08:00`.
+
 ### Supported Platforms
 
 Tasks can be created from any platform session, but the result can be delivered back only through adapters that implement proactive sending. Current built-in adapters include:

@@ -61,6 +61,8 @@ Provider 来源内的原生 `web_search` 只作用于 OpenAI Responses；配置�
 
 当前 TTS 类型包含 ElevenLabs。配置 `elevenlabs_tts_api` 时需要 API Key、Voice ID 和输出格式；stability、similarity boost、style 与 speaker boost 是可选声音设置。TTS 总开关、默认模型、双输出、文件服务和触发概率位于配置档的 `provider_tts_settings`。
 
+MiMo TTS 当前默认使用 `mimo-v2.5-tts`，因为旧的 `mimo-v2-tts` 模型已经下线。升级时不会自动改写已有 Provider 条目中的模型值；如果 MiMo TTS 条目仍使用旧模型，请手动编辑为新模型。
+
 音频格式能否在最终消息平台播放仍取决于平台适配器，不应只以 Provider 测试成功为准。
 
 ## 安全与排错

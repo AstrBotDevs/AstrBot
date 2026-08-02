@@ -50,9 +50,10 @@ The current runtime supports:
 | `list`          | `[]`    | JSON array; `items` can describe object entries.     |
 | `file`          | `[]`    | A list of relative path strings produced by uploads. |
 | `object`        | `{}`    | Nested object and must provide `items`.              |
+| `dict`          | `{}`    | Open key-value object edited in the WebUI.           |
 | `template_list` | `[]`    | Object list built from predefined templates.         |
 
-`dict` is **not** a current plugin-schema type. Using `type: "dict"` raises `TypeError` while defaults are built. Use `object` with explicit `items` for a key structure. For open-ended JSON, use `text` and parse and validate it inside the plugin.
+`dict` is an open-ended key-value object. The WebUI provides a key-value editor for it; use `items: {}` for arbitrary values, or add `template_schema` when you want to offer predefined fields and types. Use `object` with explicit `items` when the plugin needs a fixed, structured schema. Plugins remain responsible for validating values beyond the editor metadata.
 
 ## Common metadata
 

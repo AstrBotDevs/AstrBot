@@ -61,6 +61,8 @@ Several models on the same unstable endpoint are not true failure isolation. For
 
 ElevenLabs is included in the current TTS types. An `elevenlabs_tts_api` source needs an API key, Voice ID, and output format; stability, similarity boost, style, and speaker boost are optional voice controls. The profile's `provider_tts_settings` controls the global TTS switch, default model, dual output, file service, and trigger probability.
 
+MiMo TTS uses `mimo-v2.5-tts` as the current default because the older `mimo-v2-tts` model is no longer available. Existing Provider entries keep their configured model during upgrade; edit any MiMo TTS entry that still uses the old model.
+
 Whether the final audio format plays correctly still depends on the messaging-platform adapter. A successful Provider test is not the end-to-end test.
 
 ## Security and troubleshooting

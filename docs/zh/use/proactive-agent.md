@@ -33,6 +33,10 @@ AstrBot 引入了主动 Agent（Proactive Agent）系统，使 AstrBot 不仅能
 
 ![](https://files.astrbot.app/docs/source/images/proactive-agent/image-1.png)
 
+### 时区
+
+如果当前配置档的 `timezone` 填写了 IANA 时区名称（例如 `Asia/Shanghai`），Agent 创建的任务会使用该时区。周期任务和不带时区的一次性时间会按该时区解释，Agent 返回的任务时间也会转换为该时区显示。配置为空或无效时使用系统时区；无效值不会作为任务时区保存。一次性任务也可以直接使用带偏移量的 ISO 时间，例如 `2026-02-02T08:00:00+08:00`。
+
 ### 支持的平台
 
 “定时任务”可以在任意平台会话中创建，但只有实现了主动发送的适配器才能在任务执行后把结果推回原会话。当前内置适配器包括：

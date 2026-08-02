@@ -50,9 +50,10 @@ Schema 文件必须是**严格 JSON**，不能包含注释、尾随逗号或 Pyt
 | `list`          | `[]`    | JSON 数组；可用 `items` 描述对象数组元素。 |
 | `file`          | `[]`    | 上传文件后保存相对路径字符串列表。         |
 | `object`        | `{}`    | 嵌套对象，必须提供 `items`。               |
+| `dict`          | `{}`    | 开放式键值对象，可在 WebUI 中编辑。        |
 | `template_list` | `[]`    | 从预定义模板创建的对象列表。               |
 
-`dict` **不是**当前插件 schema 类型。使用 `type: "dict"` 会在加载默认配置时抛出 `TypeError`。需要键值结构时使用 `object` 并明确 `items`；需要开放 JSON 文本时使用 `text`，在插件内自行解析和验证。
+`dict` 是开放式键值对象。WebUI 会提供键值编辑器；使用 `items: {}` 可编辑任意键值，需要预置字段和类型时可以增加 `template_schema`。如果插件需要固定的结构化 schema，应使用明确 `items` 的 `object`。除编辑器元数据外的值校验仍由插件负责。
 
 ## 通用元数据
 
