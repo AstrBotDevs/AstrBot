@@ -4,7 +4,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from astrbot.core.config.default import CONFIG_METADATA_2
 from astrbot.core.provider.sources.mimo_api_common import (
+    DEFAULT_MIMO_TTS_MODEL,
     MiMoAPIError,
     _validate_wav_payload,
     build_headers,
@@ -22,7 +24,7 @@ def _make_tts_provider(overrides: dict | None = None) -> ProviderMiMoTTSAPI:
     provider_config = {
         "id": "test-mimo-tts",
         "type": "mimo_tts_api",
-        "model": "mimo-v2-tts",
+        "model": "mimo-v2.5-tts",
         "api_key": "test-key",
         "mimo-tts-voice": "mimo_default",
         "mimo-tts-format": "wav",
@@ -49,6 +51,27 @@ def test_mimo_tts_user_prompt_returns_seed_text():
     provider = _make_tts_provider()
     try:
         assert provider._build_user_prompt() == "seed text"
+    finally:
+        asyncio.run(provider.terminate())
+
+
+def test_mimo_tts_defaults_use_the_current_model():
+    expected_model = "mimo-v2.5-tts"
+    template = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"][
+        "config_template"
+    ]["MiMo TTS(API)"]
+    provider = ProviderMiMoTTSAPI(
+        provider_config={
+            "id": "test-mimo-tts-default",
+            "type": "mimo_tts_api",
+        },
+        provider_settings={},
+    )
+
+    try:
+        assert DEFAULT_MIMO_TTS_MODEL == expected_model
+        assert template["model"] == expected_model
+        assert provider.model_name == expected_model
     finally:
         asyncio.run(provider.terminate())
 
