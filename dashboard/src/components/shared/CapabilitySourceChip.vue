@@ -57,6 +57,10 @@ defineProps({
   color: #00695c !important;
 }
 
+/* NOTE: The descendant selector MUST stay inside :global(). If split out as
+   `:global(.v-theme--PurpleThemeDark) .capability-source-chip--xxx`, the Vue
+   SFC compiler drops the descendant part and emits a bare `.v-theme--PurpleThemeDark`
+   rule that leaks the color to the entire app root via CSS inheritance. */
 :global(.v-theme--PurpleThemeDark .capability-source-chip--plugin) {
   color: #64b5f6 !important;
 }
