@@ -66,14 +66,20 @@ def build_api_url(api_base: str) -> str:
     return normalized_api_base + "/chat/completions"
 
 
-async def prepare_audio_input(audio_source: str) -> tuple[str, list[Path]]:
+async def prepare_audio_input(
+    audio_source: str,
+    *,
+    target_format: str | None = "wav",
+    preserve_mp3: bool = False,
+) -> tuple[str, list[Path]]:
     audio_data = await MediaResolver(
         audio_source,
         media_type="audio",
         default_suffix=".wav",
     ).to_base64_data(
         strict=True,
-        target_format="wav",
+        target_format=target_format,
+        preserve_mp3=preserve_mp3,
     )
     if audio_data is None:
         raise ValueError(f"Invalid audio data: {describe_media_ref(audio_source)}")

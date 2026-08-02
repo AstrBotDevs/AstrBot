@@ -25,6 +25,7 @@ def _make_tts_provider(overrides: dict | None = None) -> ProviderMiMoTTSAPI:
         "model": "mimo-v2-tts",
         "api_key": "test-key",
         "mimo-tts-voice": "mimo_default",
+        "mimo-tts-voiceclone-audio": "",
         "mimo-tts-format": "wav",
         "mimo-tts-seed-text": "seed text",
     }
@@ -177,6 +178,211 @@ def test_mimo_headers_use_single_authorization_method():
         "Content-Type": "application/json",
         "Authorization": "Bearer test-key",
     }
+
+
+def test_mimo_tts_build_payload_voice_value_override_takes_precedence():
+    """voice_value 显式传入时应覆盖 self.voice (用于 voiceclone data URL)"""
+    provider = _make_tts_provider(
+        {
+            "model": "mimo-v2.5-tts-voiceclone",
+            "mimo-tts-voice": "mimo_default",
+            "mimo-tts-seed-text": "",
+        }
+    )
+    try:
+        payload = provider._build_payload(
+            "hello", voice_value=MIMO_STT_TEST_AUDIO_DATA_URL
+        )
+        assert payload["audio"]["voice"] == MIMO_STT_TEST_AUDIO_DATA_URL
+    finally:
+        asyncio.run(provider.terminate())
+
+
+def test_mimo_tts_is_voiceclone_model_detection():
+    provider = _make_tts_provider({"model": "mimo-v2.5-tts-voiceclone"})
+    try:
+        assert provider._is_voiceclone_model() is True
+    finally:
+        asyncio.run(provider.terminate())
+
+    provider2 = _make_tts_provider({"model": "mimo-v2.5-tts"})
+    try:
+        assert provider2._is_voiceclone_model() is False
+    finally:
+        asyncio.run(provider2.terminate())
+
+
+@pytest.mark.asyncio
+async def test_mimo_tts_voiceclone_without_audio_raises_clear_error():
+    """选用 voiceclone 模型但未配置参考音频时应给出清晰报错，而不是悄悄发出错误请求"""
+    provider = _make_tts_provider(
+        {
+            "model": "mimo-v2.5-tts-voiceclone",
+            "mimo-tts-voiceclone-audio": "",
+        }
+    )
+    try:
+        with pytest.raises(MiMoAPIError, match="mimo-tts-voiceclone-audio"):
+            await provider.get_audio("hello")
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_mimo_tts_voiceclone_sends_audio_data_url_as_voice(monkeypatch):
+    """voiceclone 模型应将参考音频转换的 data URL 填入 audio.voice 字段"""
+    provider = _make_tts_provider(
+        {
+            "model": "mimo-v2.5-tts-voiceclone",
+            "mimo-tts-voiceclone-audio": "/tmp/reference_voice.mp3",
+            "mimo-tts-voice": "mimo_default",  # 应被忽略
+            "mimo-tts-seed-text": "",
+        }
+    )
+
+    call_count = {"n": 0}
+
+    async def fake_prepare_audio_input(audio_source: str, **kwargs):
+        call_count["n"] += 1
+        assert audio_source == "/tmp/reference_voice.mp3"
+        assert kwargs == {"target_format": None, "preserve_mp3": True}
+        return MIMO_STT_TEST_AUDIO_DATA_URL, []
+
+    monkeypatch.setattr(
+        "astrbot.core.provider.sources.mimo_tts_api_source.prepare_audio_input",
+        fake_prepare_audio_input,
+    )
+
+    captured: dict = {}
+
+    class _Response:
+        status_code = 200
+        text = '{"choices":[{"message":{"audio":{"data":"ZmFrZQ=="}}}]}'
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"choices": [{"message": {"audio": {"data": "ZmFrZQ=="}}}]}
+
+    async def fake_post(_url, headers=None, json=None):
+        captured["json"] = json
+        return _Response()
+
+    async def fake_aclose():
+        return None
+
+    provider.client = SimpleNamespace(post=fake_post, aclose=fake_aclose)
+
+    try:
+        output_path = await provider.get_audio("hello")
+        assert captured["json"]["audio"]["voice"] == MIMO_STT_TEST_AUDIO_DATA_URL
+        assert output_path.endswith(".wav")
+        assert call_count["n"] == 1
+
+        # 第二次调用同一来源的音频应使用缓存，不应重复转换
+        await provider.get_audio("hello again")
+        assert call_count["n"] == 1
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_mimo_tts_voiceclone_cache_refreshes_on_source_change(monkeypatch):
+    """更换参考音频来源后应重新转换，而不是继续复用旧的缓存"""
+    provider = _make_tts_provider(
+        {
+            "model": "mimo-v2.5-tts-voiceclone",
+            "mimo-tts-voiceclone-audio": "/tmp/voice_a.mp3",
+            "mimo-tts-seed-text": "",
+        }
+    )
+
+    seen_sources: list[str] = []
+
+    async def fake_prepare_audio_input(audio_source: str, **kwargs):
+        seen_sources.append(audio_source)
+        return f"data:audio/mpeg;base64,{audio_source}", []
+
+    monkeypatch.setattr(
+        "astrbot.core.provider.sources.mimo_tts_api_source.prepare_audio_input",
+        fake_prepare_audio_input,
+    )
+
+    try:
+        first_voice = await provider._resolve_voiceclone_voice()
+        assert first_voice == "data:audio/mpeg;base64,/tmp/voice_a.mp3"
+
+        provider.voiceclone_audio_source = "/tmp/voice_b.mp3"
+        second_voice = await provider._resolve_voiceclone_voice()
+        assert second_voice == "data:audio/mpeg;base64,/tmp/voice_b.mp3"
+        assert seen_sources == ["/tmp/voice_a.mp3", "/tmp/voice_b.mp3"]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_mimo_tts_voiceclone_preserves_mp3_instead_of_forcing_wav(monkeypatch):
+    """voiceclone 应保留原始 mp3 而不强制转 wav,避免体积不必要地膨胀"""
+    provider = _make_tts_provider(
+        {
+            "model": "mimo-v2.5-tts-voiceclone",
+            "mimo-tts-voiceclone-audio": "/tmp/reference_voice.mp3",
+            "mimo-tts-seed-text": "",
+        }
+    )
+
+    captured_kwargs: dict = {}
+
+    async def fake_prepare_audio_input(audio_source: str, **kwargs):
+        captured_kwargs.update(kwargs)
+        return "data:audio/mp3;base64,ZmFrZQ==", []
+
+    monkeypatch.setattr(
+        "astrbot.core.provider.sources.mimo_tts_api_source.prepare_audio_input",
+        fake_prepare_audio_input,
+    )
+
+    try:
+        voice = await provider._resolve_voiceclone_voice()
+        assert voice == "data:audio/mp3;base64,ZmFrZQ=="
+        assert captured_kwargs == {"target_format": None, "preserve_mp3": True}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_mimo_tts_voiceclone_concurrent_calls_convert_audio_once(monkeypatch):
+    """并发调用 get_audio 时，参考音频只应被转换一次，不应出现重复转换或临时文件泄漏"""
+    provider = _make_tts_provider(
+        {
+            "model": "mimo-v2.5-tts-voiceclone",
+            "mimo-tts-voiceclone-audio": "/tmp/reference_voice.mp3",
+            "mimo-tts-seed-text": "",
+        }
+    )
+
+    call_count = {"n": 0}
+
+    async def fake_prepare_audio_input(audio_source: str, **kwargs):
+        call_count["n"] += 1
+        # 模拟较慢的转码过程，放大并发窗口
+        await asyncio.sleep(0.05)
+        return MIMO_STT_TEST_AUDIO_DATA_URL, []
+
+    monkeypatch.setattr(
+        "astrbot.core.provider.sources.mimo_tts_api_source.prepare_audio_input",
+        fake_prepare_audio_input,
+    )
+
+    try:
+        results = await asyncio.gather(
+            *[provider._resolve_voiceclone_voice() for _ in range(5)]
+        )
+        assert results == [MIMO_STT_TEST_AUDIO_DATA_URL] * 5
+        assert call_count["n"] == 1
+    finally:
+        await provider.terminate()
 
 
 @pytest.mark.asyncio
@@ -356,6 +562,7 @@ async def test_mimo_stt_prepare_audio_input_returns_data_url(monkeypatch):
             assert kwargs == {
                 "strict": True,
                 "target_format": "wav",
+                "preserve_mp3": False,
             }
             return _ResolvedAudio()
 
