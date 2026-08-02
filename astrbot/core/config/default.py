@@ -1324,7 +1324,7 @@ CONFIG_METADATA_2 = {
                         "provider_type": "chat_completion",
                         "enable": True,
                         "key": [],
-                        "api_base": "https://api.deepseek.com",
+                        "api_base": "https://api.deepseek.com/v1",
                         "timeout": 120,
                         "proxy": "",
                         "custom_headers": {},

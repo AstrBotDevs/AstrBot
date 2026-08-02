@@ -55,7 +55,7 @@ def test_responses_provider_templates_are_independent_and_stateless():
     assert templates["OpenAI Responses"]["type"] == "openai_responses"
     assert templates["OpenAI Responses"]["api_base"] == "https://api.openai.com/v1"
     assert templates["DeepSeek Responses"]["type"] == "openai_responses"
-    assert templates["DeepSeek Responses"]["api_base"] == "https://api.deepseek.com"
+    assert templates["DeepSeek Responses"]["api_base"] == "https://api.deepseek.com/v1"
     assert templates["xAI"]["type"] == "openai_responses"
     assert templates["xAI"]["api_base"] == "https://api.x.ai/v1"
     assert "xai_native_search" not in templates["xAI"]
