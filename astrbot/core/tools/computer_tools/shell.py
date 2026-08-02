@@ -4,6 +4,7 @@ import shlex
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
+from time import monotonic
 from typing import Any
 
 from astrbot.api import FunctionTool
@@ -122,6 +123,7 @@ class ExecuteShellTool(FunctionTool):
                 creator_id = context.context.event.get_sender_id()
                 if not creator_id:
                     return "Error executing command: sender identity is unavailable."
+                started_at = monotonic()
                 result = await sb.shell.exec_managed(
                     command,
                     owner_id=context.context.event.unified_msg_origin,
@@ -133,11 +135,15 @@ class ExecuteShellTool(FunctionTool):
                     timeout=timeout,
                     yield_time_ms=0 if background else yield_time_ms,
                 )
+                elapsed_seconds = monotonic() - started_at
                 if result.get("session_closed") and result.get("status") in {
                     "completed",
                     "failed",
                 }:
-                    message = f"Command completed with exit code {result['exit_code']}."
+                    message = (
+                        f"Command completed with exit code {result['exit_code']} "
+                        f"(wall time: {elapsed_seconds:.2f}s)."
+                    )
                     output = f"{result['stdout']}{result['stderr']}"
                     return f"{message}\n{output}" if output else message
                 return json.dumps(result, ensure_ascii=False)

@@ -130,6 +130,8 @@ async def test_local_execute_shell_manages_running_and_closed_results(
         "workspace_root_for_context",
         AsyncMock(return_value=tmp_path),
     )
+    monotonic_values = iter((10.0, 10.5, 20.0, 21.234, 30.0, 32.346))
+    monkeypatch.setattr(shell_tools, "monotonic", lambda: next(monotonic_values))
 
     result = await LocalExecuteShellTool().call(
         FakeWrapper(),
@@ -149,7 +151,10 @@ async def test_local_execute_shell_manages_running_and_closed_results(
         timeout=None,
         yield_time_ms=250,
     )
-    for status, exit_code in (("completed", 0), ("failed", 1)):
+    for status, exit_code, wall_time in (
+        ("completed", 0, "1.23"),
+        ("failed", 1, "2.35"),
+    ):
         shell.exec_managed.return_value = {
             "session_id": "sh_test",
             "pid": 12345,
@@ -167,7 +172,10 @@ async def test_local_execute_shell_manages_running_and_closed_results(
             command="echo done",
         )
 
-        assert result == f"Command completed with exit code {exit_code}.\ndone\n"
+        assert result == (
+            f"Command completed with exit code {exit_code} "
+            f"(wall time: {wall_time}s).\ndone\n"
+        )
 
 
 @pytest.mark.asyncio
