@@ -37,8 +37,6 @@ class ToolImageCache:
 
     _instance: ClassVar["ToolImageCache | None"] = None
     CACHE_DIR_NAME: ClassVar[str] = "tool_images"
-    # Cache expiry time in seconds (1 hour)
-    CACHE_EXPIRY: ClassVar[int] = 3600
 
     def __new__(cls) -> "ToolImageCache":
         if cls._instance is None:
@@ -130,31 +128,6 @@ class ToolImageCache:
         except Exception as e:
             logger.error(f"Failed to read cached image {file_path}: {e}")
             return None
-
-    def cleanup_expired(self) -> int:
-        """Clean up expired cached images.
-
-        Returns:
-            Number of images cleaned up.
-        """
-        now = time.time()
-        cleaned = 0
-
-        try:
-            for file_name in os.listdir(self._cache_dir):
-                file_path = os.path.join(self._cache_dir, file_name)
-                if os.path.isfile(file_path):
-                    file_age = now - os.path.getmtime(file_path)
-                    if file_age > self.CACHE_EXPIRY:
-                        os.remove(file_path)
-                        cleaned += 1
-        except Exception as e:
-            logger.warning(f"Error during cache cleanup: {e}")
-
-        if cleaned:
-            logger.info(f"Cleaned up {cleaned} expired cached images")
-
-        return cleaned
 
 
 # Global singleton instance
