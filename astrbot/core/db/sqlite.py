@@ -178,6 +178,17 @@ class SQLiteDatabase(BaseDatabase):
             await conn.execute(
                 text("ALTER TABLE chatui_projects ADD COLUMN workspace_path VARCHAR")
             )
+        await conn.execute(
+            text(
+                "UPDATE chatui_projects SET "
+                "workspace_type = CASE "
+                "WHEN LOWER(workspace_type) = 'custom' THEN 'project' "
+                "ELSE workspace_type END, "
+                "workspace_path = NULL "
+                "WHERE SUBSTR(creator, 1, 8) = 'api_key:' "
+                "AND (LOWER(workspace_type) = 'custom' OR workspace_path IS NOT NULL)"
+            )
+        )
 
     # ====
     # Platform Statistics

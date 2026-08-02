@@ -324,8 +324,6 @@ class ResultDecorateStage(Stage):
                                 new_chain.append(comp)
                                 continue
 
-                            event.track_temporary_local_file(audio_path)
-
                             use_file_service = self.ctx.astrbot_config[
                                 "provider_tts_settings"
                             ]["use_file_service"]

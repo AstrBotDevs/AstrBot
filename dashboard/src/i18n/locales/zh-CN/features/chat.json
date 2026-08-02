@@ -3,6 +3,7 @@
   "subtitle": "与AI助手进行对话",
   "input": {
     "placeholder": "想问什么都可以",
+    "projectPlaceholder": "接下来做点什么？",
     "send": "发送",
     "clear": "清空",
     "upload": "上传文件",

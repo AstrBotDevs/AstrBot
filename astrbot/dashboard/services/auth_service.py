@@ -47,7 +47,10 @@ from astrbot.dashboard.password_state import (
     set_password_storage_upgraded,
 )
 
-ALL_OPEN_API_SCOPES = (
+CHAT_ADMIN_SCOPE = "chat:admin"
+CONFIG_EDIT_ADMIN_SCOPE = "config:edit_admin"
+
+DEFAULT_OPEN_API_SCOPES = (
     "bot",
     "provider",
     "persona",
@@ -59,6 +62,12 @@ ALL_OPEN_API_SCOPES = (
     "plugin",
     "mcp",
     "skill",
+)
+
+ALL_OPEN_API_SCOPES = (
+    *DEFAULT_OPEN_API_SCOPES,
+    CHAT_ADMIN_SCOPE,
+    CONFIG_EDIT_ADMIN_SCOPE,
 )
 
 OPEN_API_SCOPE_INCLUDES = {

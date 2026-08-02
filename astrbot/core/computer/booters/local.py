@@ -464,6 +464,9 @@ class _LocalShellSession:
 
     session_id: str
     owner_id: str
+    creator_id: str
+    creator_is_admin: bool
+    sandboxed: bool
     process: asyncio.subprocess.Process
     output_path: Path
     started_at: float
@@ -579,24 +582,28 @@ class LocalShellComponent(ShellComponent):
         command: str,
         *,
         owner_id: str,
+        creator_id: str,
+        creator_is_admin: bool,
+        sandboxed: bool,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
         timeout: int | None = None,
         yield_time_ms: int = 10_000,
         max_output_chars: int = 10_000,
-        sandboxed: bool = False,
     ) -> dict[str, Any]:
         """Start a locally managed shell process and briefly wait for it.
 
         Args:
             command: Shell command to execute.
-            owner_id: Unified message origin that owns the process.
+            owner_id: Unified message origin containing the process.
+            creator_id: Sender ID that created the session.
+            creator_is_admin: Whether the creator was an administrator.
+            sandboxed: Whether the process is isolated from the host.
             cwd: Working directory for the process.
             env: Additional environment variables.
             timeout: Hard process lifetime in seconds. None disables it.
             yield_time_ms: Maximum time to wait before returning a session ID.
             max_output_chars: Maximum output bytes returned in this call.
-            sandboxed: Whether to isolate the command with the platform sandbox.
 
         Returns:
             Process result with output, status, and session metadata.
@@ -718,6 +725,9 @@ class LocalShellComponent(ShellComponent):
         session = _LocalShellSession(
             session_id=session_id,
             owner_id=owner_id,
+            creator_id=creator_id,
+            creator_is_admin=creator_is_admin,
+            sandboxed=sandboxed,
             process=process,
             output_path=output_path,
             started_at=time.time(),
@@ -762,26 +772,43 @@ class LocalShellComponent(ShellComponent):
 
         return await self.poll_session(
             owner_id=owner_id,
+            requester_id=creator_id,
+            requester_is_admin=creator_is_admin,
             session_id=session_id,
             cursor=0,
             yield_time_ms=0,
             max_output_chars=max_output_chars,
         )
 
-    async def list_sessions(self, owner_id: str) -> dict[str, Any]:
-        """List managed shell sessions owned by one conversation.
+    async def list_sessions(
+        self,
+        *,
+        owner_id: str,
+        requester_id: str,
+        requester_is_admin: bool,
+    ) -> dict[str, Any]:
+        """List managed shell sessions visible to one requester.
 
         Args:
-            owner_id: Unified message origin that owns the sessions.
+            owner_id: Unified message origin containing the sessions.
+            requester_id: Sender ID requesting the session list.
+            requester_is_admin: Whether the requester is an administrator.
 
         Returns:
-            Session summaries scoped to the owner.
+            Session summaries scoped to the conversation and requester.
         """
         async with self._sessions_lock:
             sessions = [
                 session
                 for session in self._sessions.values()
                 if session.owner_id == owner_id
+                and (
+                    requester_is_admin
+                    or (
+                        not session.creator_is_admin
+                        and session.creator_id == requester_id
+                    )
+                )
             ]
 
         items = []
@@ -815,6 +842,7 @@ class LocalShellComponent(ShellComponent):
                     "status": status,
                     "exit_code": exit_code,
                     "started_at": session.started_at,
+                    "sandboxed": session.sandboxed,
                     "unread_output_bytes": max(output_size - session.cursor, 0),
                 }
             )
@@ -824,6 +852,8 @@ class LocalShellComponent(ShellComponent):
         self,
         *,
         owner_id: str,
+        requester_id: str,
+        requester_is_admin: bool,
         session_id: str,
         cursor: int | None = None,
         yield_time_ms: int = 0,
@@ -832,7 +862,9 @@ class LocalShellComponent(ShellComponent):
         """Read new output and status from a managed shell session.
 
         Args:
-            owner_id: Unified message origin that owns the session.
+            owner_id: Unified message origin containing the session.
+            requester_id: Sender ID requesting the output.
+            requester_is_admin: Whether the requester is an administrator.
             session_id: Managed shell session identifier.
             cursor: Byte offset to read from. Defaults to the last returned offset.
             yield_time_ms: Maximum wait for new output or process completion.
@@ -849,7 +881,12 @@ class LocalShellComponent(ShellComponent):
         if max_output_chars < 1:
             raise ValueError("`max_output_chars` must be greater than 0.")
 
-        session = await self._get_owned_session(owner_id, session_id)
+        session = await self._get_owned_session(
+            owner_id,
+            requester_id,
+            requester_is_admin,
+            session_id,
+        )
         read_cursor = session.cursor if cursor is None else cursor
         if read_cursor < 0:
             raise ValueError("`cursor` must be greater than or equal to 0.")
@@ -944,13 +981,17 @@ class LocalShellComponent(ShellComponent):
         self,
         *,
         owner_id: str,
+        requester_id: str,
+        requester_is_admin: bool,
         session_id: str,
         chars: str,
     ) -> dict[str, Any]:
         """Write text to the stdin pipe of a managed shell session.
 
         Args:
-            owner_id: Unified message origin that owns the session.
+            owner_id: Unified message origin containing the session.
+            requester_id: Sender ID writing to the process.
+            requester_is_admin: Whether the requester is an administrator.
             session_id: Managed shell session identifier.
             chars: Text to write verbatim.
 
@@ -960,7 +1001,12 @@ class LocalShellComponent(ShellComponent):
         Raises:
             ValueError: If the session is unavailable or no longer accepts input.
         """
-        session = await self._get_owned_session(owner_id, session_id)
+        session = await self._get_owned_session(
+            owner_id,
+            requester_id,
+            requester_is_admin,
+            session_id,
+        )
         if session.process.returncode is not None or session.process.stdin is None:
             raise ValueError(f"Shell session {session_id} is not accepting input.")
         session.process.stdin.write(chars.encode("utf-8"))
@@ -976,6 +1022,8 @@ class LocalShellComponent(ShellComponent):
         self,
         *,
         owner_id: str,
+        requester_id: str,
+        requester_is_admin: bool,
         session_id: str,
         yield_time_ms: int = 1_000,
         max_output_chars: int = 10_000,
@@ -983,7 +1031,9 @@ class LocalShellComponent(ShellComponent):
         """Send an interrupt signal to a managed shell process group.
 
         Args:
-            owner_id: Unified message origin that owns the session.
+            owner_id: Unified message origin containing the session.
+            requester_id: Sender ID requesting the interrupt.
+            requester_is_admin: Whether the requester is an administrator.
             session_id: Managed shell session identifier.
             yield_time_ms: Maximum wait for output or exit after the signal.
             max_output_chars: Maximum output bytes returned after the signal.
@@ -991,7 +1041,12 @@ class LocalShellComponent(ShellComponent):
         Returns:
             Incremental output and status after sending the interrupt.
         """
-        session = await self._get_owned_session(owner_id, session_id)
+        session = await self._get_owned_session(
+            owner_id,
+            requester_id,
+            requester_is_admin,
+            session_id,
+        )
         if session.process.returncode is None:
             if os.name == "nt":
                 session.process.send_signal(
@@ -1004,6 +1059,8 @@ class LocalShellComponent(ShellComponent):
                     pass
         return await self.poll_session(
             owner_id=owner_id,
+            requester_id=requester_id,
+            requester_is_admin=requester_is_admin,
             session_id=session_id,
             yield_time_ms=yield_time_ms,
             max_output_chars=max_output_chars,
@@ -1013,24 +1070,35 @@ class LocalShellComponent(ShellComponent):
         self,
         *,
         owner_id: str,
+        requester_id: str,
+        requester_is_admin: bool,
         session_id: str,
         max_output_chars: int = 10_000,
     ) -> dict[str, Any]:
         """Terminate a managed shell process group.
 
         Args:
-            owner_id: Unified message origin that owns the session.
+            owner_id: Unified message origin containing the session.
+            requester_id: Sender ID requesting termination.
+            requester_is_admin: Whether the requester is an administrator.
             session_id: Managed shell session identifier.
             max_output_chars: Maximum remaining output bytes to return.
 
         Returns:
             Remaining output and final process status.
         """
-        session = await self._get_owned_session(owner_id, session_id)
+        session = await self._get_owned_session(
+            owner_id,
+            requester_id,
+            requester_is_admin,
+            session_id,
+        )
         session.terminated = True
         await self._terminate_process(session)
         return await self.poll_session(
             owner_id=owner_id,
+            requester_id=requester_id,
+            requester_is_admin=requester_is_admin,
             session_id=session_id,
             yield_time_ms=0,
             max_output_chars=max_output_chars,
@@ -1063,12 +1131,16 @@ class LocalShellComponent(ShellComponent):
     async def _get_owned_session(
         self,
         owner_id: str,
+        requester_id: str,
+        requester_is_admin: bool,
         session_id: str,
     ) -> _LocalShellSession:
-        """Resolve a shell session while enforcing conversation ownership.
+        """Resolve a shell session while enforcing requester ownership.
 
         Args:
-            owner_id: Unified message origin that must own the session.
+            owner_id: Unified message origin that must contain the session.
+            requester_id: Sender ID requesting access.
+            requester_is_admin: Whether the requester is an administrator.
             session_id: Managed shell session identifier.
 
         Returns:
@@ -1079,7 +1151,14 @@ class LocalShellComponent(ShellComponent):
         """
         async with self._sessions_lock:
             session = self._sessions.get(session_id)
-        if session is None or session.owner_id != owner_id:
+        if (
+            session is None
+            or session.owner_id != owner_id
+            or (
+                not requester_is_admin
+                and (session.creator_is_admin or session.creator_id != requester_id)
+            )
+        ):
             raise ValueError(f"Shell session {session_id} was not found.")
         return session
 

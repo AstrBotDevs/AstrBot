@@ -3,6 +3,7 @@
   "subtitle": "Chat with AI Assistant",
   "input": {
     "placeholder": "Ask anything...",
+    "projectPlaceholder": "What should we work on next?",
     "send": "Send",
     "clear": "Clear",
     "upload": "Upload File",

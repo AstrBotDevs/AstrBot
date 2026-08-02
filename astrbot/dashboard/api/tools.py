@@ -15,7 +15,7 @@ from astrbot.dashboard.schemas import (
 )
 from astrbot.dashboard.services.tools_service import ToolsService, ToolsServiceError
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, ScopeDependency, require_dashboard_user, require_scope
 
 router = APIRouter(tags=["Extension Components"])
 legacy_router = APIRouter(
@@ -33,8 +33,7 @@ async def require_tool_scope(request: Request) -> AuthContext:
     return await require_scope(request, "tool")
 
 
-async def require_mcp_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "mcp")
+require_mcp_scope = ScopeDependency("mcp")
 
 
 async def _json_or_empty(request: Request) -> dict[str, Any]:

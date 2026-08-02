@@ -142,6 +142,9 @@ async def test_managed_shell_uses_windows_powershell(monkeypatch, tmp_path):
     result = await LocalShellComponent().exec_managed(
         "Get-ChildItem",
         owner_id="owner-a",
+        creator_id="user-a",
+        creator_is_admin=False,
+        sandboxed=False,
         cwd=str(tmp_path),
         yield_time_ms=5_000,
     )
@@ -747,6 +750,9 @@ async def test_managed_shell_returns_completed_output_without_open_session():
     result = await shell.exec_managed(
         _python_command("print('hello')"),
         owner_id="owner-a",
+        creator_id="user-a",
+        creator_is_admin=False,
+        sandboxed=False,
         yield_time_ms=5_000,
     )
 
@@ -754,15 +760,22 @@ async def test_managed_shell_returns_completed_output_without_open_session():
     assert result["stdout"] == "hello\n"
     assert result["exit_code"] == 0
     assert result["session_closed"] is True
-    assert await shell.list_sessions("owner-a") == {"sessions": []}
+    assert await shell.list_sessions(
+        owner_id="owner-a",
+        requester_id="user-a",
+        requester_is_admin=False,
+    ) == {"sessions": []}
 
 
 @pytest.mark.asyncio
-async def test_managed_shell_lists_and_terminates_running_session():
+async def test_managed_shell_allows_creator_and_conversation_admin():
     shell = LocalShellComponent()
     result = await shell.exec_managed(
         _python_command("import time; print('ready', flush=True); time.sleep(30)"),
         owner_id="owner-a",
+        creator_id="user-a",
+        creator_is_admin=False,
+        sandboxed=True,
         yield_time_ms=200,
     )
 
@@ -770,19 +783,135 @@ async def test_managed_shell_lists_and_terminates_running_session():
         assert result["status"] == "running"
         assert result["stdout"] == "ready\n"
         session_id = result["session_id"]
-        assert (await shell.list_sessions("owner-b"))["sessions"] == []
-        sessions = (await shell.list_sessions("owner-a"))["sessions"]
+        assert (
+            await shell.list_sessions(
+                owner_id="owner-b",
+                requester_id="user-a",
+                requester_is_admin=False,
+            )
+        )["sessions"] == []
+        sessions = (
+            await shell.list_sessions(
+                owner_id="owner-a",
+                requester_id="user-a",
+                requester_is_admin=False,
+            )
+        )["sessions"]
         assert [item["session_id"] for item in sessions] == [session_id]
+        assert sessions[0]["sandboxed"] is True
 
+        admin_sessions = (
+            await shell.list_sessions(
+                owner_id="owner-a",
+                requester_id="admin-user",
+                requester_is_admin=True,
+            )
+        )["sessions"]
+        assert [item["session_id"] for item in admin_sessions] == [session_id]
         stopped = await shell.terminate_session(
             owner_id="owner-a",
+            requester_id="admin-user",
+            requester_is_admin=True,
             session_id=session_id,
         )
 
         assert stopped["status"] == "terminated"
         assert stopped["exit_code"] is not None
         assert stopped["session_closed"] is True
-        assert await shell.list_sessions("owner-a") == {"sessions": []}
+        assert await shell.list_sessions(
+            owner_id="owner-a",
+            requester_id="user-a",
+            requester_is_admin=False,
+        ) == {"sessions": []}
+    finally:
+        await shell.shutdown_sessions()
+
+
+@pytest.mark.asyncio
+async def test_managed_shell_rejects_cross_user_session_access():
+    shell = LocalShellComponent()
+    result = await shell.exec_managed(
+        _python_command("import time; input(); time.sleep(30)"),
+        owner_id="group-umo",
+        creator_id="admin-user",
+        creator_is_admin=True,
+        sandboxed=False,
+        yield_time_ms=100,
+    )
+
+    try:
+        session_id = result["session_id"]
+        member_access = {
+            "owner_id": "group-umo",
+            "requester_id": "member-user",
+            "requester_is_admin": False,
+        }
+        demoted_creator_access = {
+            "owner_id": "group-umo",
+            "requester_id": "admin-user",
+            "requester_is_admin": False,
+        }
+        other_conversation_admin_access = {
+            "owner_id": "other-group-umo",
+            "requester_id": "other-admin",
+            "requester_is_admin": True,
+        }
+
+        assert await shell.list_sessions(**member_access) == {"sessions": []}
+        assert await shell.list_sessions(**demoted_creator_access) == {"sessions": []}
+        assert await shell.list_sessions(**other_conversation_admin_access) == {
+            "sessions": []
+        }
+        with pytest.raises(ValueError, match="was not found"):
+            await shell.poll_session(
+                **member_access,
+                session_id=session_id,
+                cursor=0,
+            )
+        with pytest.raises(ValueError, match="was not found"):
+            await shell.write_session(
+                **member_access,
+                session_id=session_id,
+                chars="attacker-input\n",
+            )
+        with pytest.raises(ValueError, match="was not found"):
+            await shell.interrupt_session(
+                **member_access,
+                session_id=session_id,
+            )
+        with pytest.raises(ValueError, match="was not found"):
+            await shell.poll_session(
+                **demoted_creator_access,
+                session_id=session_id,
+                cursor=0,
+            )
+        with pytest.raises(ValueError, match="was not found"):
+            await shell.terminate_session(
+                **other_conversation_admin_access,
+                session_id=session_id,
+            )
+        with pytest.raises(ValueError, match="was not found"):
+            await shell.terminate_session(
+                **member_access,
+                session_id=session_id,
+            )
+
+        assert shell._sessions[session_id].process.returncode is None
+        admin_sessions = await shell.list_sessions(
+            owner_id="group-umo",
+            requester_id="admin-user",
+            requester_is_admin=True,
+        )
+        assert [item["session_id"] for item in admin_sessions["sessions"]] == [
+            session_id
+        ]
+        stopped = await shell.terminate_session(
+            owner_id="group-umo",
+            requester_id="admin-user",
+            requester_is_admin=True,
+            session_id=session_id,
+        )
+        assert stopped["status"] == "terminated"
     finally:
         await shell.shutdown_sessions()
 
@@ -793,6 +922,9 @@ async def test_managed_shell_accepts_stdin_and_polls_incremental_output():
     result = await shell.exec_managed(
         _python_command("value = input(); print(f'got:{value}', flush=True)"),
         owner_id="owner-a",
+        creator_id="user-a",
+        creator_is_admin=False,
+        sandboxed=True,
         yield_time_ms=100,
     )
 
@@ -800,11 +932,15 @@ async def test_managed_shell_accepts_stdin_and_polls_incremental_output():
         assert result["status"] == "running"
         await shell.write_session(
             owner_id="owner-a",
+            requester_id="user-a",
+            requester_is_admin=False,
             session_id=result["session_id"],
             chars="hello\n",
         )
         completed = await shell.poll_session(
             owner_id="owner-a",
+            requester_id="user-a",
+            requester_is_admin=False,
             session_id=result["session_id"],
             yield_time_ms=5_000,
         )
@@ -812,6 +948,8 @@ async def test_managed_shell_accepts_stdin_and_polls_incremental_output():
         if completed["status"] == "running":
             completed = await shell.poll_session(
                 owner_id="owner-a",
+                requester_id="user-a",
+                requester_is_admin=False,
                 session_id=result["session_id"],
                 yield_time_ms=5_000,
             )
@@ -830,6 +968,9 @@ async def test_managed_shell_hard_timeout_terminates_session():
     result = await shell.exec_managed(
         _python_command("import time; time.sleep(30)"),
         owner_id="owner-a",
+        creator_id="user-a",
+        creator_is_admin=False,
+        sandboxed=False,
         timeout=1,
         yield_time_ms=0,
     )
@@ -837,6 +978,8 @@ async def test_managed_shell_hard_timeout_terminates_session():
     try:
         timed_out = await shell.poll_session(
             owner_id="owner-a",
+            requester_id="user-a",
+            requester_is_admin=False,
             session_id=result["session_id"],
             yield_time_ms=3_000,
         )
@@ -854,6 +997,9 @@ async def test_managed_shell_keeps_completed_session_until_output_is_drained():
     result = await shell.exec_managed(
         _python_command("print('x' * 25000)"),
         owner_id="owner-a",
+        creator_id="user-a",
+        creator_is_admin=False,
+        sandboxed=False,
         yield_time_ms=5_000,
         max_output_chars=10_000,
     )
@@ -865,6 +1011,8 @@ async def test_managed_shell_keeps_completed_session_until_output_is_drained():
         while result["has_more"]:
             result = await shell.poll_session(
                 owner_id="owner-a",
+                requester_id="user-a",
+                requester_is_admin=False,
                 session_id=result["session_id"],
                 max_output_chars=10_000,
             )
@@ -872,6 +1020,10 @@ async def test_managed_shell_keeps_completed_session_until_output_is_drained():
 
         assert output == f"{'x' * 25000}\n"
         assert result["session_closed"] is True
-        assert await shell.list_sessions("owner-a") == {"sessions": []}
+        assert await shell.list_sessions(
+            owner_id="owner-a",
+            requester_id="user-a",
+            requester_is_admin=False,
+        ) == {"sessions": []}
     finally:
         await shell.shutdown_sessions()
