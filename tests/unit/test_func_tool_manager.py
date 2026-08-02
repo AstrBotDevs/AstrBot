@@ -174,7 +174,7 @@ async def test_local_execute_shell_manages_running_and_closed_results(
 
         assert result == (
             f"Command completed with exit code {exit_code} "
-            f"(wall time: {wall_time}s).\ndone\n"
+            f"(wall time: {wall_time}s).\nOutput:\ndone\n"
         )
 
 

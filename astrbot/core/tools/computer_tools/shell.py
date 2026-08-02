@@ -145,7 +145,7 @@ class ExecuteShellTool(FunctionTool):
                         f"(wall time: {elapsed_seconds:.2f}s)."
                     )
                     output = f"{result['stdout']}{result['stderr']}"
-                    return f"{message}\n{output}" if output else message
+                    return f"{message}\nOutput:\n{output}"
                 return json.dumps(result, ensure_ascii=False)
 
             effective_background = background and not _is_self_detached_command(command)
