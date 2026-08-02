@@ -221,6 +221,10 @@ export default defineConfig({
                 link: "/openapi",
               },
               {
+                text: "API Scope 与接口对照",
+                link: "/openapi-scopes",
+              },
+              {
                 text: "AstrBot 配置文件",
                 link: "/astrbot-config",
               },
@@ -231,6 +235,7 @@ export default defineConfig({
             base: "/others",
             collapsed: true,
             items: [
+              { text: "异常诊断", link: "/diagnostics" },
               { text: "自部署文转图", link: "/self-host-t2i" },
               { text: "插件下载不了?试试自建 GitHub 加速服务", link: "/github-proxy" },
             ],
@@ -474,6 +479,10 @@ export default defineConfig({
                 link: "/openapi",
               },
               {
+                text: "API Scope–Endpoint Reference",
+                link: "/openapi-scopes",
+              },
+              {
                 text: "AstrBot Configuration File",
                 link: "/astrbot-config",
               },
@@ -484,6 +493,7 @@ export default defineConfig({
             base: "/en/others",
             collapsed: true,
             items: [
+              { text: "Diagnostics", link: "/diagnostics" },
               { text: "Self-hosted HTML to Image", link: "/self-host-t2i" },
             ],
           },

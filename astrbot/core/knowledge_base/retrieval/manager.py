@@ -171,21 +171,12 @@ class RetrievalManager:
 
         # 5. Rerank
         first_rerank = None
-        for kb_id in kb_ids:
-            vec_db = kb_options[kb_id]["vec_db"]
+        for kb_opt in kb_options.values():
+            vec_db = kb_opt.get("vec_db")
             rerank_provider = (
                 getattr(vec_db, "rerank_provider", None) if vec_db else None
             )
-            if rerank_provider is None:
-                continue
-
-            rerank_pi = kb_options[kb_id]["rerank_provider_id"]
-            if (
-                vec_db
-                and rerank_provider
-                and rerank_pi
-                and rerank_pi == rerank_provider.meta().id
-            ):
+            if rerank_provider is not None:
                 first_rerank = rerank_provider
                 break
         if first_rerank and retrieval_results:
@@ -237,10 +228,11 @@ class RetrievalManager:
 
                 all_results.extend(vec_results)
             except Exception as e:
-                logger.error(f"知识库 {kb_id} 稠密检索失败: {e}", exc_info=True)
-                if len(kb_ids) == 1:
-                    raise RuntimeError(f"知识库 {kb_id} 稠密检索失败: {e}") from e
-                # multi-KB: skip the faulty KB and continue
+                logger.error(
+                    f"知识库 {kb_id} 稠密检索失败: {type(e).__name__}: {e}",
+                    exc_info=True,
+                )
+                # skip the faulty KB and continue
 
         # 按相似度排序并返回 top_k
         all_results.sort(key=lambda x: x.similarity, reverse=True)

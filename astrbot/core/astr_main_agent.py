@@ -21,6 +21,7 @@ from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
 from astrbot.core.astr_agent_run_util import AgentRunner
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.astr_main_agent_resources import (
+    CHATUI_INLINE_GENUI_SYSTEM_PROMPT,
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
     LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
@@ -29,12 +30,14 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
 from astrbot.core.conversation_mgr import Conversation
+from astrbot.core.db import BaseDatabase
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,
     set_persona_custom_error_message_on_event,
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.provider.register import llm_tools
@@ -67,20 +70,24 @@ from astrbot.core.tools.computer_tools import (
     GrepTool,
     ListSkillCandidatesTool,
     ListSkillReleasesTool,
+    LocalExecuteShellTool,
     LocalPythonTool,
     PromoteSkillCandidateTool,
     PythonTool,
     RollbackSkillReleaseTool,
     RunBrowserSkillTool,
+    ShellSessionTool,
     SyncSkillReleaseTool,
-    normalize_umo_for_workspace,
 )
 from astrbot.core.tools.cron_tools import FutureTaskTool
 from astrbot.core.tools.knowledge_base_tools import (
     KnowledgeBaseQueryTool,
     retrieve_knowledge_base,
 )
-from astrbot.core.tools.message_tools import SendMessageToUserTool
+from astrbot.core.tools.message_tools import (
+    GetGroupMessageHistoryTool,
+    SendMessageToUserTool,
+)
 from astrbot.core.tools.web_search_tools import (
     BaiduWebSearchTool,
     BochaWebSearchTool,
@@ -115,6 +122,10 @@ from astrbot.core.utils.quoted_message_parser import (
     extract_quoted_message_text,
 )
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
+from astrbot.core.workspace import (
+    normalize_umo_for_workspace,
+    resolve_workspace_root_for_umo,
+)
 
 LLM_ERROR_MESSAGE_EXTRA_KEY = "_llm_error_message"
 WEEKDAY_NAMES = (
@@ -357,41 +368,63 @@ def _apply_prompt_prefix(req: ProviderRequest, cfg: dict) -> None:
         req.prompt = f"{prefix}{req.prompt}"
 
 
-def _get_workspace_path_for_umo(umo: str) -> Path:
-    normalized_umo = normalize_umo_for_workspace(umo)
-    return Path(get_astrbot_workspaces_path()) / normalized_umo
+async def _get_workspace_path_for_umo(umo: str, plugin_context: Context) -> Path:
+    """Resolve the workspace path for the current request.
+
+    Args:
+        umo: Unified message origin.
+        plugin_context: Star context containing the database instance.
+
+    Returns:
+        Workspace path used as cwd.
+    """
+    fallback_root = (
+        Path(get_astrbot_workspaces_path()) / normalize_umo_for_workspace(umo)
+    ).resolve(strict=False)
+    db = getattr(plugin_context, "_db", None)
+    if not isinstance(db, BaseDatabase):
+        return fallback_root
+    try:
+        return await resolve_workspace_root_for_umo(umo, db)
+    except Exception:
+        return fallback_root
 
 
-def _apply_workspace_extra_prompt(
+async def _apply_workspace_extra_prompt(
     event: AstrMessageEvent,
     req: ProviderRequest,
+    plugin_context: Context,
 ) -> None:
-    extra_prompt_path = _get_workspace_path_for_umo(event.unified_msg_origin) / (
-        "EXTRA_PROMPT.md"
+    workspace_root = await _get_workspace_path_for_umo(
+        event.unified_msg_origin,
+        plugin_context,
     )
-    if not extra_prompt_path.is_file():
+    extra_prompts: list[str] = []
+    extra_prompt_path = workspace_root / "EXTRA_PROMPT.md"
+    if extra_prompt_path.is_file():
+        try:
+            extra_prompt = extra_prompt_path.read_text(encoding="utf-8").strip()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to read workspace extra prompt for umo=%s from %s: %s",
+                event.unified_msg_origin,
+                extra_prompt_path,
+                exc,
+            )
+        else:
+            if extra_prompt:
+                extra_prompts.append(f"From `{extra_prompt_path}`:\n{extra_prompt}")
+
+    if not extra_prompts:
         return
 
-    try:
-        extra_prompt = extra_prompt_path.read_text(encoding="utf-8").strip()
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "Failed to read workspace extra prompt for umo=%s from %s: %s",
-            event.unified_msg_origin,
-            extra_prompt_path,
-            exc,
-        )
-        return
-
-    if not extra_prompt:
-        return
-
+    extra_prompt_text = "\n\n".join(extra_prompts)
     req.system_prompt = (
         f"{req.system_prompt or ''}\n"
         "[Workspace Extra Prompt]\n"
         "The following instructions are loaded from the current workspace "
         "`EXTRA_PROMPT.md` file.\n"
-        f"{extra_prompt}\n"
+        f"{extra_prompt_text}\n"
     )
 
 
@@ -399,7 +432,8 @@ def _apply_local_env_tools(req: ProviderRequest, plugin_context: Context) -> Non
     if req.func_tool is None:
         req.func_tool = ToolSet()
     tool_mgr = plugin_context.get_llm_tool_manager()
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
+    req.func_tool.add_tool(LocalExecuteShellTool())
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ShellSessionTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(LocalPythonTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileReadTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
@@ -411,15 +445,22 @@ def _apply_local_env_tools(req: ProviderRequest, plugin_context: Context) -> Non
 def _build_local_mode_prompt() -> str:
     system_name = platform.system() or "Unknown"
     shell_hint = (
-        "The runtime shell is Windows Command Prompt (cmd.exe). "
-        "Use cmd-compatible commands and do not assume Unix commands like cat/ls/grep are available."
+        "The runtime shell is Windows PowerShell 5.1 (powershell.exe). "
+        "Use Windows PowerShell 5.1-compatible syntax and cmdlets; do not use "
+        "PowerShell 7-only syntax or assume Unix commands like cat/ls/grep are available."
         if system_name.lower() == "windows"
         else "The runtime shell is Unix-like. Use POSIX-compatible shell commands."
     )
     return (
         "You have access to the host local environment and can execute shell commands and Python code. "
         f"Current operating system: {system_name}. "
-        f"{shell_hint}"
+        f"{shell_hint} "
+        "Local shell commands automatically return a managed session when they "
+        "outlive the initial wait. Use `astrbot_shell_session` to list, poll, "
+        "write raw text or complete lines to, interrupt, or terminate those sessions. "
+        "Use its `write_line` action for line-oriented programs so the session receives "
+        "a real line feed. Do not add `&`, `nohup`, or another detachment wrapper for "
+        "ordinary long-running commands."
     )
 
 
@@ -462,6 +503,12 @@ async def _ensure_persona_and_skills(
     event: AstrMessageEvent,
 ) -> None:
     """Ensure persona and skills are applied to the request's system prompt or user prompt."""
+    if req.system_prompt is None:
+        req.system_prompt = ""
+
+    if event.get_extra("enable_inline_genui"):
+        req.system_prompt += CHATUI_INLINE_GENUI_SYSTEM_PROMPT
+
     if not req.conversation:
         return
 
@@ -481,16 +528,16 @@ async def _ensure_persona_and_skills(
         event, extract_persona_custom_error_message_from_persona(persona)
     )
 
-    if req.system_prompt is None:
-        req.system_prompt = ""
-
     if persona:
         # Inject persona system prompt
         if prompt := persona["prompt"]:
             req.system_prompt += f"\n# Persona Instructions\n\n{prompt}\n"
         if begin_dialogs := copy.deepcopy(persona.get("_begin_dialogs_processed")):
             req.contexts[:0] = begin_dialogs
-    elif use_webchat_special_default:
+    elif (
+        use_webchat_special_default
+        and event.get_extra("enable_default_system_prompt") is not False
+    ):
         req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
 
     # Inject skills prompt
@@ -498,13 +545,13 @@ async def _ensure_persona_and_skills(
     skill_manager = SkillManager()
     skills = skill_manager.list_skills(active_only=True, runtime=runtime)
     skills = _filter_skills_for_current_config(skills, cfg)
-    workspace_skills = (
-        skill_manager.list_workspace_skills(
-            _get_workspace_path_for_umo(event.unified_msg_origin)
+    workspace_skills: list[SkillInfo] = []
+    if runtime == "local":
+        workspace_root = await _get_workspace_path_for_umo(
+            event.unified_msg_origin,
+            plugin_context,
         )
-        if runtime == "local"
-        else []
-    )
+        workspace_skills.extend(skill_manager.list_workspace_skills(workspace_root))
 
     if skills or workspace_skills:
         if persona and persona.get("skills") is not None:
@@ -960,9 +1007,9 @@ async def _decorate_llm_request(
     img_cap_prov_id: str = cfg.get("default_image_caption_provider_id") or ""
     quote_images_already_captioned = False
 
-    if req.conversation:
-        await _ensure_persona_and_skills(req, cfg, plugin_context, event)
+    await _ensure_persona_and_skills(req, cfg, plugin_context, event)
 
+    if req.conversation:
         if img_cap_prov_id and req.image_urls and not main_provider_supports_image:
             await _ensure_img_caption(
                 event,
@@ -989,7 +1036,7 @@ async def _decorate_llm_request(
     if tz is None:
         tz = plugin_context.get_config().get("timezone")
     _append_system_reminders(event, req, cfg, tz)
-    _apply_workspace_extra_prompt(event, req)
+    await _apply_workspace_extra_prompt(event, req, plugin_context)
 
 
 def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
@@ -1557,6 +1604,21 @@ async def build_main_agent(
             )
         )
 
+    ltm_settings = plugin_context.get_config(umo=event.unified_msg_origin).get(
+        "provider_ltm_settings",
+        {},
+    )
+    if event.get_message_type() == MessageType.GROUP_MESSAGE and ltm_settings.get(
+        "group_message_history_enable", False
+    ):
+        if req.func_tool is None:
+            req.func_tool = ToolSet()
+        req.func_tool.add_tool(
+            plugin_context.get_llm_tool_manager().get_builtin_tool(
+                GetGroupMessageHistoryTool
+            )
+        )
+
     fallback_providers = _get_fallback_chat_providers(
         provider, plugin_context, config.provider_settings
     )
@@ -1590,11 +1652,18 @@ async def build_main_agent(
         )
 
         if config.computer_use_runtime == "local":
+            workspace_root = await _get_workspace_path_for_umo(
+                event.unified_msg_origin,
+                plugin_context,
+            )
             tool_prompt += (
-                f"\nCurrent workspace you can use: "
-                f"`{_get_workspace_path_for_umo(event.unified_msg_origin)}`\n"
-                "Unless the user explicitly specifies a different directory, "
-                "perform all file-related operations in this workspace.\n"
+                f"\nCurrent workspace: `{workspace_root}`. "
+                "`astrbot_execute_shell` and `astrbot_execute_python` use it as "
+                "their working directory. `astrbot_file_read_tool`, "
+                "`astrbot_file_write_tool`, `astrbot_file_edit_tool`, and "
+                "`astrbot_grep_tool` resolve relative paths from it. Prefer relative "
+                "paths within the workspace; do not assume this behavior for other "
+                "tools.\n"
             )
 
         req.system_prompt += f"\n{tool_prompt}\n"

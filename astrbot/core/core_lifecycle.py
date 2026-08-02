@@ -19,6 +19,7 @@ from asyncio import Queue
 from astrbot.api import logger, sp
 from astrbot.core import LogBroker, LogManager
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.computer.computer_client import shutdown_local_booter
 from astrbot.core.config.default import VERSION
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.cron import CronJobManager
@@ -28,13 +29,17 @@ from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.pipeline.scheduler import PipelineContext, PipelineScheduler
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
+from astrbot.core.process_restart import restart_process
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
 from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.umop_config_router import UmopConfigRouter
-from astrbot.core.updator import AstrBotUpdator
+from astrbot.core.updater import AstrBotUpdater
+from astrbot.core.utils.event_loop_diagnostics import (
+    create_event_loop_diagnostic_tasks,
+)
 from astrbot.core.utils.llm_metadata import update_llm_metadata
 from astrbot.core.utils.migra_helper import migra
 from astrbot.core.utils.temp_dir_cleaner import TempDirCleaner
@@ -71,14 +76,25 @@ class AstrBotCoreLifecycle:
             no_proxy_list = self.astrbot_config.get("no_proxy", [])
             os.environ["no_proxy"] = ",".join(no_proxy_list)
         else:
-            # 清空代理环境变量
+            # Clear system proxy variables to avoid interfering with localhost requests.
+            has_system_proxy = "https_proxy" in os.environ or "http_proxy" in os.environ
+            if has_system_proxy:
+                logger.warning(
+                    "System http_proxy/https_proxy environment variables were detected, "
+                    "but AstrBot has no proxy configured. Clearing the proxy variables "
+                    "and setting no_proxy to localhost,127.0.0.1,::1 so local API "
+                    "requests bypass the proxy. Configure http_proxy in AstrBot if a "
+                    "proxy is required."
+                )
             if "https_proxy" in os.environ:
                 del os.environ["https_proxy"]
             if "http_proxy" in os.environ:
                 del os.environ["http_proxy"]
             if "no_proxy" in os.environ:
                 del os.environ["no_proxy"]
-            logger.debug("HTTP proxy cleared")
+            # Always bypass proxies for loopback addresses used by local APIs.
+            os.environ["no_proxy"] = "localhost,127.0.0.1,::1"
+            logger.debug("HTTP proxy cleared, no_proxy set to localhost")
 
     async def _init_or_reload_subagent_orchestrator(self) -> None:
         """Create (if needed) and reload the subagent orchestrator from config.
@@ -142,7 +158,7 @@ class AstrBotCoreLifecycle:
     async def initialize(self) -> None:
         """初始化 AstrBot 核心生命周期管理类.
 
-        负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus、AstrBotUpdator等。
+        负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus、AstrBotUpdater等。
         """
         # 初始化日志代理
         logger.info("AstrBot v" + VERSION)
@@ -253,7 +269,7 @@ class AstrBotCoreLifecycle:
         self.pipeline_scheduler_mapping = await self.load_pipeline_scheduler()
 
         # 初始化更新器
-        self.astrbot_updator = AstrBotUpdator()
+        self.astrbot_updater = AstrBotUpdater()
 
         # 初始化事件总线
         self.event_bus = EventBus(
@@ -296,13 +312,18 @@ class AstrBotCoreLifecycle:
                 self.temp_dir_cleaner.run(),
                 name="temp_dir_cleaner",
             )
+        diagnostic_tasks = create_event_loop_diagnostic_tasks()
 
         # 把插件中注册的所有协程函数注册到事件总线中并执行
         extra_tasks = []
         for task in self.star_context._register_tasks:
             extra_tasks.append(asyncio.create_task(task, name=task.__name__))  # type: ignore
 
-        tasks_ = [event_bus_task, *(extra_tasks if extra_tasks else [])]
+        tasks_ = [
+            event_bus_task,
+            *diagnostic_tasks,
+            *(extra_tasks if extra_tasks else []),
+        ]
         if cron_task:
             tasks_.append(cron_task)
         if temp_dir_cleaner_task:
@@ -368,6 +389,8 @@ class AstrBotCoreLifecycle:
         if self.cron_manager:
             await self.cron_manager.shutdown()
 
+        await shutdown_local_booter()
+
         for plugin in self.plugin_manager.context.get_all_stars():
             try:
                 await self.plugin_manager._terminate_plugin(plugin)
@@ -399,12 +422,13 @@ class AstrBotCoreLifecycle:
 
     async def restart(self) -> None:
         """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
+        await shutdown_local_booter()
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()
         self.dashboard_shutdown_event.set()
         threading.Thread(
-            target=self.astrbot_updator._reboot,
+            target=restart_process,
             name="restart",
             daemon=True,
         ).start()

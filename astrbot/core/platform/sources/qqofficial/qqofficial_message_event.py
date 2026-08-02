@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import copy
 import logging
 import os
 import random
@@ -30,6 +31,10 @@ from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path, is_file_uri
 
 
+class APIReturnNoneError(Exception):
+    pass
+
+
 def _patch_qq_botpy_formdata() -> None:
     """Patch qq-botpy for aiohttp>=3.12 compatibility.
 
@@ -49,21 +54,25 @@ def _patch_qq_botpy_formdata() -> None:
 
 _patch_qq_botpy_formdata()
 
-# Retry decorator for QQ Official API transient errors (HTTP 500/504)
-_qqofficial_retry = retry(
-    retry=retry_if_exception_type(
-        (
-            botpy.errors.ServerError,
-            botpy.errors.SequenceNumberError,
-            OSError,
-            asyncio.TimeoutError,
-        )
-    ),
-    stop=stop_after_attempt(5),
-    wait=wait_exponential(multiplier=2, min=2, max=30),
-    before_sleep=before_sleep_log(logger, logging.WARNING),
-    reraise=True,
-)
+
+def _qqofficial_retry(max_attempts: int = 5):
+    """Retry decorator for QQ Official API transient errors (HTTP 500/504)"""
+    return retry(
+        retry=retry_if_exception_type(
+            (
+                botpy.errors.ServerError,
+                botpy.errors.SequenceNumberError,
+                OSError,
+                asyncio.TimeoutError,
+                APIReturnNoneError,
+            )
+        ),
+        stop=stop_after_attempt(max_attempts),
+        wait=wait_exponential(multiplier=2, min=2, max=30),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+
 
 _QQOFFICIAL_SEND_API_ERRORS = (
     botpy.errors.ForbiddenError,
@@ -115,11 +124,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 source = self.message_obj.raw_message
 
                 if not isinstance(source, botpy.message.C2CMessage):
-                    # 非 C2C 场景：直接累积，最后统一发
-                    if not self.send_buffer:
-                        self.send_buffer = chain
-                    else:
-                        self.send_buffer.chain.extend(chain.chain)
+                    # 非 C2C 场景：直接累积，最后统一发（拷贝 delta，避免引用丢首字）
+                    self._append_stream_delta(chain)
                     continue
 
                 # ---- C2C 流式场景 ----
@@ -142,11 +148,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     last_edit_time = 0
                     continue
 
-                # 累积内容
-                if not self.send_buffer:
-                    self.send_buffer = chain
-                else:
-                    self.send_buffer.chain.extend(chain.chain)
+                # 累积内容（拷贝，避免上游复用 MessageChain 改写 buffer）
+                self._append_stream_delta(chain)
 
                 # 节流：按时间间隔发送中间分片
                 current_time = asyncio.get_running_loop().time()
@@ -176,6 +179,26 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             self.send_buffer = None
 
         return None
+
+    def _append_stream_delta(self, chain: MessageChain) -> None:
+        """Append stream delta into an owned buffer (copy components).
+
+        Holding the yielded MessageChain by reference drops leading characters
+        when upstream reuses/mutates the same chain between yields. Non-Plain
+        components are deep-copied for the same reason.
+        """
+        if not self.send_buffer:
+            self.send_buffer = MessageChain(
+                use_t2i_=chain.use_t2i_,
+                use_markdown_=chain.use_markdown_,
+                type=chain.type,
+            )
+        for comp in chain.chain:
+            if isinstance(comp, Plain):
+                # Preserve original text value (do not coerce falsy with `or ""`).
+                self.send_buffer.chain.append(Plain(text=comp.text))
+            else:
+                self.send_buffer.chain.append(copy.deepcopy(comp))
 
     @staticmethod
     def _extract_response_message_id(ret) -> str | None:
@@ -265,8 +288,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             file_source,
             file_name,
         ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_to_send)
-        if record_file_path:
-            self.track_temporary_local_file(record_file_path)
 
         # C2C 流式仅用于文本分片，富媒体时降级为普通发送，避免平台侧流式校验报错。
         if stream and (
@@ -494,6 +515,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             logger.info("[QQOfficial] 回复消息失败: %s, 尝试使用主动发送接口。", err)
             if payload.get("msg_id"):
                 fallback_payload = payload.copy()
+                fallback_payload.pop("msg_id", None)
                 try:
                     ret = await send_func(fallback_payload)
                     logger.info("[QQOfficial] 使用主动发送接口发送成功。")
@@ -558,14 +580,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             "srv_send_msg": False,
         }
 
-        @_qqofficial_retry
+        @_qqofficial_retry()
         async def _do_upload():
             if "openid" in kwargs:
                 payload["openid"] = kwargs["openid"]
                 route = Route(
                     "POST", "/v2/users/{openid}/files", openid=kwargs["openid"]
                 )
-                return await self.bot.api._http.request(route, json=payload)
             elif "group_openid" in kwargs:
                 payload["group_openid"] = kwargs["group_openid"]
                 route = Route(
@@ -573,11 +594,20 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     "/v2/groups/{group_openid}/files",
                     group_openid=kwargs["group_openid"],
                 )
-                return await self.bot.api._http.request(route, json=payload)
             else:
                 raise ValueError("Invalid upload parameters")
 
-        result = await _do_upload()
+            result = await self.bot.api._http.request(route, json=payload)
+            if result is None:
+                err_msg = "上传图片API返回None，触发重试"
+                raise APIReturnNoneError(err_msg)
+            return result
+
+        try:
+            result = await _do_upload()
+        except APIReturnNoneError:
+            logger.warning(f"上传图片API返回None，共尝试5次后放弃: {payload}")
+            raise
 
         if not isinstance(result, dict):
             raise RuntimeError(
@@ -629,9 +659,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         else:
             return None
 
-        @_qqofficial_retry
+        @_qqofficial_retry()
         async def _do_upload():
-            return await self.bot.api._http.request(route, json=payload)
+            result = await self.bot.api._http.request(route, json=payload)
+            if result is None:
+                err_msg = "上传文件API返回None，触发重试"
+                raise APIReturnNoneError(err_msg)
+            return result
 
         try:
             result = await _do_upload()
@@ -646,6 +680,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     file_info=result["file_info"],
                     ttl=result.get("ttl", 0),
                 )
+        except APIReturnNoneError:
+            logger.warning(f"上传文件API返回None，共尝试5次后放弃: {file_source}")
         except (botpy.errors.ServerError, botpy.errors.SequenceNumberError):
             logger.error(f"上传媒体文件失败，共尝试5次后放弃: {file_source}")
         except Exception as e:
@@ -680,11 +716,26 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 stream_data.pop("id", None)
             payload["stream"] = stream_data
         route = Route("POST", "/v2/users/{openid}/messages", openid=openid)
-        result = await self.bot.api._http.request(route, json=payload)
 
-        if result is None:
-            logger.warning("[QQOfficial] post_c2c_message: API 返回 None，跳过本次发送")
+        retry_times = 3
+
+        @_qqofficial_retry(retry_times)
+        async def _do_request():
+            result = await self.bot.api._http.request(route, json=payload)
+            if result is None:
+                err_msg = "发送消息API返回None，触发重试"
+                raise APIReturnNoneError(err_msg)
+            return result
+
+        result = None
+        try:
+            result = await _do_request()
+        except APIReturnNoneError:
+            logger.warning(
+                f"[QQOfficial] post_c2c_message: 发送消息失败，API 返回 None，共尝试{retry_times}次后放弃"
+            )
             return None
+
         if not isinstance(result, dict):
             logger.error(f"[QQOfficial] post_c2c_message: 响应不是 dict: {result}")
             return None

@@ -680,3 +680,16 @@ def get_local_booter() -> ComputerBooter:
     if local_booter is None:
         local_booter = LocalBooter()
     return local_booter
+
+
+async def shutdown_local_booter() -> None:
+    """Shut down managed local computer resources without creating a booter."""
+    global local_booter
+    if local_booter is None:
+        return
+    booter = local_booter
+    local_booter = None
+    try:
+        await booter.shutdown()
+    except Exception as exc:
+        logger.warning("[Computer] Failed to shut down local booter: %s", exc)

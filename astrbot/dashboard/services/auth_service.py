@@ -47,7 +47,10 @@ from astrbot.dashboard.password_state import (
     set_password_storage_upgraded,
 )
 
-ALL_OPEN_API_SCOPES = (
+CHAT_ADMIN_SCOPE = "chat:admin"
+CONFIG_EDIT_ADMIN_SCOPE = "config:edit_admin"
+
+DEFAULT_OPEN_API_SCOPES = (
     "bot",
     "provider",
     "persona",
@@ -59,6 +62,12 @@ ALL_OPEN_API_SCOPES = (
     "plugin",
     "mcp",
     "skill",
+)
+
+ALL_OPEN_API_SCOPES = (
+    *DEFAULT_OPEN_API_SCOPES,
+    CHAT_ADMIN_SCOPE,
+    CONFIG_EDIT_ADMIN_SCOPE,
 )
 
 OPEN_API_SCOPE_INCLUDES = {
@@ -369,6 +378,12 @@ class AuthService:
         if not new_pwd and not new_username:
             return self.error("新用户名和新密码不能同时为空")
 
+        username_to_save = None
+        if new_username is not None and new_username != "":
+            if not isinstance(new_username, str) or len(new_username.strip()) < 3:
+                return self.error("用户名长度至少3位")
+            username_to_save = new_username.strip()
+
         if new_pwd:
             if not isinstance(new_pwd, str):
                 return self.error("新密码无效")
@@ -384,8 +399,8 @@ class AuthService:
             await set_password_change_required(self.db, self.config, False)
             if is_totp_enabled(self.config):
                 await revoke_user_trusted_devices(self.db)
-        if new_username:
-            self.config["dashboard"]["username"] = new_username
+        if username_to_save:
+            self.config["dashboard"]["username"] = username_to_save
 
         self.config.save_config()
 

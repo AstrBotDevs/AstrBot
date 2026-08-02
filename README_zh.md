@@ -1,4 +1,4 @@
-![AstrBot-Logo-Simplified](https://github.com/user-attachments/assets/ffd99b6b-3272-4682-beaa-6fe74250f7d9)
+![AstrBot-Logo-Simplified](https://github.com/user-attachments/assets/36fb04e4-cc75-4454-bd8b-049d11aa86f9)
 
 <div align="center">
 
@@ -240,6 +240,8 @@ pre-commit install
 - 12 群：916228568 (人满)
 - 13 群：1092185289
 - 14 群：1103419483
+- 15 群：258637629
+- 16 群：1044542496
 
 
 - 开发者群（偏闲聊吹水）：975206796

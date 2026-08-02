@@ -136,6 +136,7 @@
         "deleteSuccess": "Модель удалена",
         "deleteError": "Ошибка удаления модели",
         "testSuccess": "Тест модели «{id}» пройден успешно",
+        "testSuccessWithLatency": "Тест модели «{id}» пройден успешно, задержка {latency} мс",
         "testError": "Тест модели провален",
         "searchPlaceholder": "Поиск по имени или ID",
         "manualAddButton": "Добавить вручную",
@@ -146,6 +147,17 @@
         "manualModelRequired": "Укажите ID модели",
         "manualModelExists": "Эта модель уже добавлена",
         "configure": "Настроить",
+        "testButton": "Тестировать модель",
+        "metadata": {
+            "image": "Ввод изображений",
+            "audio": "Ввод аудио",
+            "toolUse": "Использование инструментов",
+            "reasoning": "Рассуждение",
+            "context": "Контекстное окно {tokens}",
+            "available": "Metadata модели поддерживает {capability}",
+            "enabled": "{capability} включено",
+            "supportedDisabled": "Metadata модели поддерживает {capability}, но эта возможность не включена в modalities текущего провайдера."
+        },
         "tooltips": {
             "providerId": "ID провайдера",
             "modelId": "ID модели"

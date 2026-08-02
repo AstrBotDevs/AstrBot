@@ -1,5 +1,4 @@
 import os
-import uuid
 import wave
 
 from google import genai
@@ -7,6 +6,7 @@ from google.genai import types
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.datetime_utils import generate_timestamp_id
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -50,7 +50,7 @@ class ProviderGeminiTTSAPI(TTSProvider):
 
     async def get_audio(self, text: str) -> str:
         temp_dir = get_astrbot_temp_path()
-        path = os.path.join(temp_dir, f"gemini_tts_{uuid.uuid4()}.wav")
+        path = os.path.join(temp_dir, f"gemini_tts_{generate_timestamp_id()}.wav")
         prompt = f"{self.prefix}: {text}" if self.prefix else text
         response = await self.client.models.generate_content(
             model=self.model,

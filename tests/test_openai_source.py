@@ -1514,7 +1514,7 @@ async def test_prepare_chat_payload_keeps_original_context_image_when_materializ
 
 
 @pytest.mark.asyncio
-async def test_apply_provider_specific_extra_body_overrides_disables_ollama_thinking():
+async def test_apply_provider_specific_request_overrides_disables_ollama_thinking():
     provider = _make_provider(
         {
             "provider": "ollama",
@@ -1529,12 +1529,75 @@ async def test_apply_provider_specific_extra_body_overrides_disables_ollama_thin
             "temperature": 0.2,
         }
 
-        provider._apply_provider_specific_extra_body_overrides(extra_body)
+        provider._apply_provider_specific_request_overrides({}, extra_body)
 
         assert extra_body["reasoning_effort"] == "none"
         assert "reasoning" not in extra_body
         assert "think" not in extra_body
         assert extra_body["temperature"] == 0.2
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_provider_specific_request_overrides_sets_minimax_m3_max_tokens():
+    provider = _make_provider({"provider": "nvidia"})
+    try:
+        payloads = {"model": "minimaxai/minimax-m3"}
+        extra_body = {"temperature": 0.2}
+
+        provider._apply_provider_specific_request_overrides(payloads, extra_body)
+
+        assert payloads["max_tokens"] == 8192
+        assert extra_body == {"temperature": 0.2}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_minimax_m3_max_tokens_preserves_custom_extra_body_value():
+    provider = _make_provider({"provider": "nvidia"})
+    try:
+        payloads = {"model": "minimaxai/minimax-m3"}
+        extra_body = {"max_tokens": 4096}
+
+        provider._apply_provider_specific_request_overrides(payloads, extra_body)
+
+        assert "max_tokens" not in payloads
+        assert extra_body["max_tokens"] == 4096
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_minimax_m3_max_tokens_preserves_standard_payload_value():
+    provider = _make_provider({"provider": "nvidia"})
+    try:
+        payloads = {
+            "model": "minimaxai/minimax-m3",
+            "max_tokens": 2048,
+        }
+        extra_body = {}
+
+        provider._apply_provider_specific_request_overrides(payloads, extra_body)
+
+        assert payloads["max_tokens"] == 2048
+        assert extra_body == {}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_nvidia_request_does_not_set_max_tokens_for_other_models():
+    provider = _make_provider({"provider": "nvidia"})
+    try:
+        payloads = {"model": "nvidia/usdcode"}
+        extra_body = {}
+
+        provider._apply_provider_specific_request_overrides(payloads, extra_body)
+
+        assert "max_tokens" not in payloads
+        assert "max_tokens" not in extra_body
     finally:
         await provider.terminate()
 
@@ -1630,6 +1693,50 @@ async def test_parse_openai_completion_raises_empty_model_output_error():
 
         with pytest.raises(EmptyModelOutputError):
             await provider._parse_openai_completion(completion, tools=None)
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_parse_openai_completion_reads_nested_data_choices():
+    provider = _make_provider()
+    try:
+        completion = ChatCompletion.model_construct(
+            id=None,
+            object="chat.completion",
+            created=None,
+            model=None,
+            choices=None,
+            data={
+                "id": "gen_test",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "deepseek/deepseek-v4-flash",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": "PONG",
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 12,
+                    "completion_tokens": 38,
+                    "total_tokens": 50,
+                },
+            },
+        )
+
+        response = await provider._parse_openai_completion(completion, tools=None)
+
+        assert response.completion_text == "PONG"
+        assert response.id == "gen_test"
+        assert response.usage is not None
+        assert response.usage.input_other == 12
+        assert response.usage.output == 38
     finally:
         await provider.terminate()
 

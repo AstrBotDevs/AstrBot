@@ -223,9 +223,11 @@ DEFAULT_CONFIG = {
     },
     "provider_ltm_settings": {
         "group_icl_enable": False,
-        "group_message_max_cnt": 300,
+        "group_message_max_cnt": 1000,
         "image_caption": False,
         "image_caption_provider_id": "",
+        "group_message_history_enable": False,
+        "group_message_history_max_cnt": 700,
         "active_reply": {
             "enable": False,
             "method": "possibility_reply",
@@ -1622,7 +1624,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "api_key": "",
                         "api_base": "https://api.xiaomimimo.com/v1",
-                        "model": "mimo-v2-omni",
+                        "model": "mimo-v2.5-asr",
                         "timeout": "20",
                         "proxy": "",
                     },
@@ -1665,7 +1667,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "api_key": "",
                         "api_base": "https://api.xiaomimimo.com/v1",
-                        "model": "mimo-v2-tts",
+                        "model": "mimo-v2.5-tts",
                         "mimo-tts-voice": "mimo_default",
                         "mimo-tts-format": "wav",
                         "mimo-tts-style-prompt": "",
@@ -1754,6 +1756,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "api_key": "",
                         "api_base": "https://api.fish.audio/v1",
+                        "model": "s2-pro",
                         "fishaudio-tts-character": "可莉",
                         "fishaudio-tts-reference-id": "",
                         "timeout": "20",
@@ -1868,6 +1871,7 @@ CONFIG_METADATA_2 = {
                         "embedding_api_base": "",
                         "embedding_model": "",
                         "embedding_dimensions": 1024,
+                        "embedding_dimensions_mode": "auto",
                         "timeout": 20,
                         "proxy": "",
                     },
@@ -1910,6 +1914,20 @@ CONFIG_METADATA_2 = {
                         "embedding_api_base": "http://localhost:11434",
                         "embedding_model": "nomic-embed-text",
                         "embedding_dimensions": 768,
+                        "timeout": 60,
+                        "proxy": "",
+                    },
+                    "DashScope Embedding": {
+                        "id": "dashscope_embedding",
+                        "type": "dashscope_embedding",
+                        "provider": "dashscope",
+                        "provider_type": "embedding",
+                        "hint": "provider_group.provider.dashscope_embedding.hint",
+                        "enable": True,
+                        "embedding_api_key": "",
+                        "embedding_api_base": "https://dashscope.aliyuncs.com/api/v1",
+                        "embedding_model": "text-embedding-v4",
+                        "embedding_dimensions": 1024,
                         "timeout": 60,
                         "proxy": "",
                     },
@@ -1962,6 +1980,20 @@ CONFIG_METADATA_2 = {
                         "nvidia_rerank_model_endpoint": "/reranking",
                         "timeout": 20,
                         "nvidia_rerank_truncate": "",
+                    },
+                    "TEI Rerank": {
+                        "id": "tei_rerank",
+                        "type": "tei_rerank",
+                        "provider": "huggingface",
+                        "provider_type": "rerank",
+                        "enable": True,
+                        "rerank_api_key": "",
+                        "rerank_api_base": "http://127.0.0.1:8080",
+                        "timeout": 20,
+                        "tei_rerank_truncate": False,
+                        "tei_rerank_truncation_direction": "Right",
+                        "tei_rerank_raw_scores": False,
+                        "tei_rerank_return_text": False,
                     },
                     "Xinference STT": {
                         "id": "xinference_stt",
@@ -2058,6 +2090,27 @@ CONFIG_METADATA_2 = {
                             "NONE",
                             "END",
                         ],
+                    },
+                    "tei_rerank_truncate": {
+                        "description": "截断超长文本",
+                        "type": "bool",
+                        "hint": "当输入超过模型最大上下文长度时，是否自动截断。启用后需配合 截断方向 使用。",
+                    },
+                    "tei_rerank_truncation_direction": {
+                        "description": "截断方向",
+                        "type": "string",
+                        "options": ["left", "right"],
+                        "hint": "选择从文本的左侧(left)还是右侧(right)开始截断。仅在 截断超长文本 为 True 时生效。",
+                    },
+                    "tei_rerank_raw_scores": {
+                        "description": "返回原始分数",
+                        "type": "bool",
+                        "hint": "如果为 True，返回模型原始 logit 分数（可能为负值），不经过 sigmoid 归一化。默认 False。",
+                    },
+                    "tei_rerank_return_text": {
+                        "description": "返回排序结果中的文档原文",
+                        "type": "bool",
+                        "hint": "如果为 True，每个排序结果将附带原始文本。默认 False 以减少网络传输。",
                     },
                     "modalities": {
                         "description": "模型能力",
@@ -2244,6 +2297,12 @@ CONFIG_METADATA_2 = {
                         "type": "int",
                         "hint": "嵌入向量的维度。根据模型不同，可能需要调整，请参考具体模型的文档。此配置项请务必填写正确，否则将导致向量数据库无法正常工作。",
                         "_special": "get_embedding_dim",
+                    },
+                    "embedding_dimensions_mode": {
+                        "description": "嵌入维度参数发送模式",
+                        "type": "string",
+                        "options": ["auto", "always", "never"],
+                        "hint": "控制是否在 OpenAI 兼容 Embedding 请求中发送 dimensions 参数。auto 会仅对官方 OpenAI embedding-3 模型自动发送；第三方兼容 API 如需该参数可改为 always，报错时改为 never。",
                     },
                     "embedding_model": {
                         "description": "嵌入模型",
@@ -2981,6 +3040,12 @@ CONFIG_METADATA_2 = {
                     },
                     "image_caption_prompt": {
                         "type": "string",
+                    },
+                    "group_message_history_enable": {
+                        "type": "bool",
+                    },
+                    "group_message_history_max_cnt": {
+                        "type": "int",
                     },
                     "active_reply": {
                         "type": "object",
@@ -4200,29 +4265,48 @@ CONFIG_METADATA_3 = {
                 },
             },
             "ltm": {
-                "description": "群聊上下文感知（原聊天记忆增强）",
+                "description": "群聊上下文感知",
                 "type": "object",
                 "items": {
                     "provider_ltm_settings.group_icl_enable": {
-                        "description": "启用群聊上下文感知",
+                        "description": "群聊消息记录注入上下文",
                         "type": "bool",
                     },
                     "provider_ltm_settings.group_message_max_cnt": {
-                        "description": "最大消息数量",
+                        "description": "注入上下文最大消息数量",
                         "type": "int",
+                        "condition": {
+                            "provider_ltm_settings.group_icl_enable": True,
+                        },
                     },
                     "provider_ltm_settings.image_caption": {
                         "description": "自动理解图片",
                         "type": "bool",
                         "hint": "需要设置群聊图片转述模型。",
+                        "condition": {
+                            "provider_ltm_settings.group_icl_enable": True,
+                        },
                     },
                     "provider_ltm_settings.image_caption_provider_id": {
                         "description": "群聊图片转述模型",
                         "type": "string",
                         "_special": "select_provider",
-                        "hint": "用于群聊上下文感知的图片理解，与默认图片转述模型分开配置。",
+                        "hint": "用于群聊记录注入上下文的图片理解，与默认图片转述模型分开配置。",
                         "condition": {
+                            "provider_ltm_settings.group_icl_enable": True,
                             "provider_ltm_settings.image_caption": True,
+                        },
+                    },
+                    "provider_ltm_settings.group_message_history_enable": {
+                        "description": "持久化群聊消息记录",
+                        "type": "bool",
+                        "hint": "启用后保存群消息，并向模型提供当前群聊历史查询工具。暂时不支持媒体消息记录，媒体消息将保存为 [Image] 等占位文本。",
+                    },
+                    "provider_ltm_settings.group_message_history_max_cnt": {
+                        "description": "持久化最大消息数量",
+                        "type": "int",
+                        "condition": {
+                            "provider_ltm_settings.group_message_history_enable": True,
                         },
                     },
                     "provider_ltm_settings.active_reply.enable": {
@@ -4437,4 +4521,5 @@ DEFAULT_VALUE_MAP = {
     "file": [],
     "object": {},
     "template_list": [],
+    "dict": {},
 }

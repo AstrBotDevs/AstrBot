@@ -179,7 +179,7 @@
     <!-- 查看分块对话框 -->
     <v-dialog v-model="showViewDialog" max-width="800px" scrollable>
       <v-card>
-        <v-card-title class="pa-4">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
           <span>{{ t('view.title') }}</span>
           <v-spacer />
           <v-btn icon="mdi-close" variant="text" @click="showViewDialog = false" />

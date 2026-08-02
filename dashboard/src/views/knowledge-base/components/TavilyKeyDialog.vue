@@ -1,7 +1,7 @@
 <template>
   <v-dialog v-model="dialog" max-width="500px" persistent>
     <v-card>
-      <v-card-title class="text-h5">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         配置 Tavily API Key
       </v-card-title>
       <v-card-text>
@@ -24,7 +24,7 @@
         <v-btn variant="text" @click="closeDialog" :disabled="saving">
           取消
         </v-btn>
-        <v-btn color="primary" variant="elevated" @click="saveKey" :loading="saving">
+        <v-btn color="primary" variant="tonal" @click="saveKey" :loading="saving">
           保存
         </v-btn>
       </v-card-actions>

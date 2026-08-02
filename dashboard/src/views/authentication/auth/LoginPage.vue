@@ -250,7 +250,7 @@ onMounted(async () => {
     </v-card>
     <v-dialog v-model="versionDialogVisible" max-width="460">
       <v-card class="version-dialog-card">
-        <v-card-title class="version-dialog-title">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 version-dialog-title">
           <v-icon size="20" color="warning">mdi-alert-circle-outline</v-icon>
           <span>{{ t('versions.dialogTitle') }}</span>
         </v-card-title>
@@ -338,9 +338,6 @@ onMounted(async () => {
   align-items: center;
   display: flex;
   gap: 8px;
-  font-size: 17px;
-  line-height: 1.35;
-  padding-bottom: 8px;
 }
 
 .version-dialog-content {
