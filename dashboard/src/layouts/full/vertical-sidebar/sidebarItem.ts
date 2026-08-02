@@ -37,14 +37,14 @@ const sidebarItem: menu[] = [
     to: '/providers',
   },
   {
-    title: 'core.navigation.extension',
-    icon: 'mdi-puzzle',
-    to: '/extension',
-  },
-  {
     title: 'core.navigation.config',
     icon: 'mdi-cog',
     to: '/config',
+  },
+  {
+    title: 'core.navigation.extension',
+    icon: 'mdi-puzzle',
+    to: '/extension',
   },
   {
     title: 'core.navigation.knowledgeBase',
