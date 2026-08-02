@@ -9,6 +9,7 @@ import aiohttp
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.datetime_utils import generate_timestamp_id
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -97,7 +98,7 @@ class ProviderVolcengineTTS(TTSProvider):
                         os.makedirs(temp_dir, exist_ok=True)
                         file_path = os.path.join(
                             temp_dir,
-                            f"volcengine_tts_{uuid.uuid4()}.mp3",
+                            f"volcengine_tts_{generate_timestamp_id()}.mp3",
                         )
 
                         loop = asyncio.get_running_loop()

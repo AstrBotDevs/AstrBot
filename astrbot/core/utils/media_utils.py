@@ -12,7 +12,6 @@ import mimetypes
 import os
 import shutil
 import subprocess
-import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -25,6 +24,7 @@ from PIL import Image as PILImage
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.datetime_utils import generate_timestamp_id
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.tencent_record_helper import (
     tencent_silk_to_wav,
@@ -248,7 +248,7 @@ def _temp_media_path(media_type: str, suffix: str) -> Path:
     safe_media_type = "".join(
         char if char.isalnum() or char in {"_", "-"} else "_" for char in media_type
     )
-    return temp_dir / f"media_{safe_media_type}_{uuid.uuid4().hex}{suffix}"
+    return temp_dir / f"media_{safe_media_type}_{generate_timestamp_id()}{suffix}"
 
 
 def _parse_base64_data_uri(data_uri: str) -> tuple[str | None, bytes]:
@@ -1047,7 +1047,7 @@ async def convert_video_format(
         os.makedirs(temp_dir, exist_ok=True)
         output_path = os.path.join(
             temp_dir,
-            f"media_video_{uuid.uuid4().hex}.{output_format}",
+            f"media_video_{generate_timestamp_id()}.{output_format}",
         )
 
     try:
@@ -1133,7 +1133,9 @@ async def convert_audio_format(
     if output_path is None:
         temp_dir = Path(get_astrbot_temp_path())
         temp_dir.mkdir(parents=True, exist_ok=True)
-        output_path = str(temp_dir / f"media_audio_{uuid.uuid4().hex}.{output_format}")
+        output_path = str(
+            temp_dir / f"media_audio_{generate_timestamp_id()}.{output_format}"
+        )
 
     args = ["ffmpeg", "-y", "-i", audio_path]
     if output_format == "amr":
@@ -1262,7 +1264,9 @@ async def ensure_wav(audio_path: str, output_path: str | None = None) -> str:
         if output_path is None:
             temp_dir = get_astrbot_temp_path()
             os.makedirs(temp_dir, exist_ok=True)
-            output_path = os.path.join(temp_dir, f"media_audio_{uuid.uuid4().hex}.wav")
+            output_path = os.path.join(
+                temp_dir, f"media_audio_{generate_timestamp_id()}.wav"
+            )
         return await tencent_silk_to_wav(audio_path, output_path)
 
     return await convert_audio_to_wav(audio_path, output_path)
@@ -1318,7 +1322,7 @@ async def ensure_jpeg(image_path: str, output_path: str | None = None) -> str:
     if output_path is None:
         temp_dir = Path(get_astrbot_temp_path())
         temp_dir.mkdir(parents=True, exist_ok=True)
-        output_path = str(temp_dir / f"media_image_{uuid.uuid4().hex}.jpg")
+        output_path = str(temp_dir / f"media_image_{generate_timestamp_id()}.jpg")
     jpeg_output_path = output_path
 
     try:
@@ -1448,7 +1452,7 @@ async def extract_video_cover(
     if output_path is None:
         temp_dir = Path(get_astrbot_temp_path())
         temp_dir.mkdir(parents=True, exist_ok=True)
-        output_path = str(temp_dir / f"media_cover_{uuid.uuid4().hex}.jpg")
+        output_path = str(temp_dir / f"media_cover_{generate_timestamp_id()}.jpg")
 
     try:
         process = await asyncio.create_subprocess_exec(
@@ -1529,8 +1533,9 @@ def _compress_image_sync(
             if max(working_img.size) > max_size:
                 working_img.thumbnail((max_size, max_size), PILImage.Resampling.LANCZOS)
 
-            new_uuid = uuid.uuid4().hex
-            save_path = temp_dir / f"compressed_{new_uuid}{output_suffix}"
+            save_path = (
+                temp_dir / f"compressed_{generate_timestamp_id()}{output_suffix}"
+            )
             save_kwargs: dict[str, int | bool] = {"optimize": optimize}
             if output_format == "JPEG":
                 save_kwargs["quality"] = quality
