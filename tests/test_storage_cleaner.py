@@ -1,5 +1,7 @@
+import base64
 from pathlib import Path
 
+from astrbot.core.agent.tool_image_cache import tool_image_cache
 from astrbot.core.utils.storage_cleaner import StorageCleaner
 
 
@@ -83,3 +85,29 @@ def test_storage_cleaner_cleanup_truncates_active_log_and_removes_cache(tmp_path
     assert not (temp_dir / "nested").exists()
     assert result["status"]["logs"]["size_bytes"] == 0
     assert result["status"]["cache"]["size_bytes"] == 0
+
+
+def test_tool_image_cache_recovers_after_storage_cleanup(tmp_path, monkeypatch):
+    data_dir = tmp_path / "data"
+    temp_dir = data_dir / "temp"
+    cache_dir = temp_dir / tool_image_cache.CACHE_DIR_NAME
+    image_bytes = b"generated-image"
+
+    _write_bytes(cache_dir / "stale.png", 32)
+    monkeypatch.setattr(tool_image_cache, "_cache_dir", str(cache_dir))
+
+    cleaner = StorageCleaner({}, data_dir=data_dir, temp_dir=temp_dir)
+    cleaner.cleanup("cache")
+
+    assert not cache_dir.exists()
+
+    cached_image = tool_image_cache.save_image(
+        base64_data=base64.b64encode(image_bytes).decode("ascii"),
+        tool_call_id="call-test",
+        tool_name="test-tool",
+        mime_type="image/jpeg",
+    )
+    cached_path = Path(cached_image.file_path)
+
+    assert cached_path == cache_dir / "call-test_0.jpg"
+    assert cached_path.read_bytes() == image_bytes
