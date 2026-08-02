@@ -1,9 +1,30 @@
 import json
 
 import pytest
+from click.testing import CliRunner
 
 from astrbot.cli.commands import cmd_init
 from astrbot.core.utils.auth_password import verify_dashboard_password
+
+
+def test_init_yes_skips_install_confirmation(monkeypatch, tmp_path):
+    async def fake_check_dashboard(_data_path):
+        return None
+
+    def fail_confirm(*_args, **_kwargs):
+        pytest.fail("-y should skip the installation confirmation")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cmd_init, "check_dashboard", fake_check_dashboard)
+    monkeypatch.setattr(cmd_init.click, "confirm", fail_confirm)
+
+    result = CliRunner().invoke(cmd_init.init, ["-y"])
+
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / ".astrbot").exists()
+    assert (tmp_path / "data" / "config").is_dir()
+    assert (tmp_path / "data" / "plugins").is_dir()
+    assert (tmp_path / "data" / "temp").is_dir()
 
 
 @pytest.mark.asyncio
