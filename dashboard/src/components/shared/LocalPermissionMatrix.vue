@@ -164,7 +164,7 @@ const memberHasElevatedAccess = computed(() => {
 }
 
 .permission-table {
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.16);
   border-radius: 8px;
 }
 
