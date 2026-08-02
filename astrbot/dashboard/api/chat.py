@@ -20,7 +20,7 @@ from astrbot.dashboard.services.chat_service import (
     ChatServiceError,
 )
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, ScopeDependency, require_dashboard_user
 from .multipart import single_upload
 
 router = APIRouter(tags=["Chat"])
@@ -35,8 +35,7 @@ def get_service(request: Request) -> ChatService:
     return request.app.state.services.chat
 
 
-async def require_chat_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "chat")
+require_chat_scope = ScopeDependency("chat")
 
 
 async def _json_or_empty(request: Request) -> dict[str, Any]:

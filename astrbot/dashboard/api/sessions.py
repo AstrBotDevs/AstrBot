@@ -17,7 +17,7 @@ from astrbot.dashboard.services.session_management_service import (
     SessionManagementServiceError,
 )
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, ScopeDependency, require_dashboard_user
 
 router = APIRouter(tags=["Sessions"])
 legacy_router = APIRouter(
@@ -31,8 +31,7 @@ def get_service(request: Request) -> SessionManagementService:
     return request.app.state.services.sessions
 
 
-async def require_data_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "data")
+require_data_scope = ScopeDependency("data")
 
 
 async def _json_or_empty(request: Request) -> dict:

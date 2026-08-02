@@ -8,7 +8,7 @@ from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import T2iActiveTemplateRequest, T2iTemplateRequest
 from astrbot.dashboard.services.t2i_service import T2iService, T2iServiceError
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, ScopeDependency, require_dashboard_user
 
 router = APIRouter(tags=["Text To Image"])
 legacy_router = APIRouter(
@@ -22,8 +22,7 @@ def get_service(request: Request) -> T2iService:
     return request.app.state.services.t2i
 
 
-async def require_config_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "config")
+require_config_scope = ScopeDependency("config")
 
 
 async def _json_or_empty(request: Request) -> dict:

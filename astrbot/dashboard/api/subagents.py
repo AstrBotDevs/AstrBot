@@ -9,7 +9,7 @@ from astrbot.dashboard.services.subagent_service import (
     SubAgentServiceError,
 )
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, ScopeDependency, require_dashboard_user
 
 router = APIRouter(tags=["Subagents"])
 legacy_router = APIRouter(
@@ -19,8 +19,7 @@ legacy_router = APIRouter(
 )
 
 
-async def require_config_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "config")
+require_config_scope = ScopeDependency("config")
 
 
 def get_service(request: Request) -> SubAgentService:

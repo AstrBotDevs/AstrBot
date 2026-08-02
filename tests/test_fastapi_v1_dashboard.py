@@ -1,4 +1,5 @@
 import copy
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -1075,6 +1076,42 @@ async def test_v1_openapi_is_served_by_fastapi(asgi_client: httpx.AsyncClient):
     assert "/api/v1/mcp/servers" in spec["paths"]
     assert "/api/v1/skills" in spec["paths"]
     assert "/api/v1/file" in spec["paths"]
+
+    bot_list = spec["paths"]["/api/v1/bots"]["get"]
+    assert bot_list["x-astrbot-scope"] == "bot"
+    assert "**Required scope:** `bot`" in bot_list["description"]
+
+    conversation_list = spec["paths"]["/api/v1/conversations"]["get"]
+    assert conversation_list["x-astrbot-scope"] == "data"
+    assert "**Required scope:** `data`" in conversation_list["description"]
+
+    chat_send = spec["paths"]["/api/v1/chat"]["post"]
+    assert chat_send["x-astrbot-scope"] == "chat"
+    assert chat_send["x-astrbot-sensitive-scopes"] == ["chat:admin"]
+    assert "**Required scope:** `chat`" in chat_send["description"]
+    assert (
+        "**Conditional sensitive scope:** `chat:admin`" in chat_send["description"]
+    )
+
+    public_spec_path = (
+        Path(__file__).resolve().parents[1] / "docs" / "public" / "openapi.json"
+    )
+    public_spec = json.loads(public_spec_path.read_text(encoding="utf-8"))
+    runtime_scope_map = {
+        (method, path): operation["x-astrbot-scope"]
+        for path, methods in spec["paths"].items()
+        for method, operation in methods.items()
+        if isinstance(operation, dict) and "x-astrbot-scope" in operation
+    }
+    public_scope_map = {
+        (method, path): operation["x-astrbot-scope"]
+        for path, methods in public_spec["paths"].items()
+        for method, operation in methods.items()
+        if isinstance(operation, dict)
+        and "x-astrbot-scope" in operation
+        and not operation.get("x-websocket")
+    }
+    assert public_scope_map == runtime_scope_map
 
 
 def test_static_openapi_v1_paths_include_api_version():

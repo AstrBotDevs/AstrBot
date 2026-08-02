@@ -10,7 +10,7 @@ from astrbot.dashboard.schemas import (
 )
 from astrbot.dashboard.services.config_service import ProviderConfigService
 
-from .auth import AuthContext, require_scope
+from .auth import AuthContext, ScopeDependency
 
 router = APIRouter(tags=["Providers"])
 legacy_router = APIRouter(
@@ -20,8 +20,7 @@ legacy_router = APIRouter(
 )
 
 
-async def require_provider_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "provider")
+require_provider_scope = ScopeDependency("provider")
 
 
 def get_service(request: Request) -> ProviderConfigService:

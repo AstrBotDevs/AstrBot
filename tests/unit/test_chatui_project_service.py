@@ -1,8 +1,11 @@
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.workspace import resolve_project_workspace_root
 from astrbot.dashboard.services.chatui_project_service import (
     ChatUIProjectService,
     ChatUIProjectServiceError,
@@ -141,6 +144,228 @@ def test_custom_workspace_accepts_absolute_path_outside_workspaces(
 
     assert workspace_type == "custom"
     assert workspace_path == str(outside_workspace)
+
+
+@pytest.mark.asyncio
+async def test_api_key_project_rejects_custom_workspace(tmp_path):
+    """API key projects must not accept caller-selected workspace roots."""
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    db = SimpleNamespace(create_chatui_project=AsyncMock())
+    service = ChatUIProjectService(db)
+
+    with pytest.raises(
+        ChatUIProjectServiceError,
+        match="API key projects cannot use custom workspaces",
+    ):
+        await service.create_project(
+            "api_key:key-id",
+            {
+                "title": "Unsafe project",
+                "workspace_type": "custom",
+                "workspace_path": str(workspace),
+            },
+        )
+
+    db.create_chatui_project.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_api_key_project_rejects_workspace_path_without_custom_type():
+    """API key projects must reject workspace paths for every workspace type."""
+    db = SimpleNamespace(create_chatui_project=AsyncMock())
+    service = ChatUIProjectService(db)
+
+    with pytest.raises(
+        ChatUIProjectServiceError,
+        match="API key projects cannot use custom workspaces",
+    ):
+        await service.create_project(
+            "api_key:key-id",
+            {
+                "title": "Unsafe project",
+                "workspace_type": "project",
+                "workspace_path": "/etc",
+            },
+        )
+
+    db.create_chatui_project.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_api_key_project_defaults_to_managed_project_workspace():
+    """API key projects should default to a managed per-project workspace."""
+    now = datetime.now(timezone.utc)
+    project = SimpleNamespace(
+        project_id="project-1",
+        title="Managed project",
+        emoji="📁",
+        description=None,
+        creator="api_key:key-id",
+        workspace_type="project",
+        workspace_path=None,
+        created_at=now,
+        updated_at=now,
+    )
+    db = SimpleNamespace(create_chatui_project=AsyncMock(return_value=project))
+    service = ChatUIProjectService(db)
+
+    result = await service.create_project(
+        "api_key:key-id",
+        {"title": "Managed project"},
+    )
+
+    assert result["workspace_type"] == "project"
+    db.create_chatui_project.assert_awaited_once_with(
+        creator="api_key:key-id",
+        title="Managed project",
+        emoji="📁",
+        description=None,
+        workspace_type="project",
+        workspace_path=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_api_key_project_update_rejects_custom_workspace():
+    """API key project updates must not accept a custom workspace path."""
+    project = SimpleNamespace(
+        project_id="project-1",
+        creator="api_key:key-id",
+        workspace_type="project",
+        workspace_path=None,
+    )
+    db = SimpleNamespace(
+        get_chatui_project_by_id=AsyncMock(return_value=project),
+        update_chatui_project=AsyncMock(),
+    )
+    service = ChatUIProjectService(db)
+
+    with pytest.raises(
+        ChatUIProjectServiceError,
+        match="API key projects cannot use custom workspaces",
+    ):
+        await service.update_project(
+            "api_key:key-id",
+            {
+                "project_id": "project-1",
+                "workspace_type": "custom",
+                "workspace_path": "/etc",
+            },
+        )
+
+    db.update_chatui_project.assert_not_awaited()
+
+
+def test_dashboard_project_resolves_absolute_custom_workspace(tmp_path, monkeypatch):
+    """Dashboard projects should preserve administrator-selected workspaces."""
+    workspaces_root = tmp_path / "workspaces"
+    custom_root = tmp_path / "custom"
+    workspaces_root.mkdir()
+    custom_root.mkdir()
+    monkeypatch.setattr(
+        "astrbot.core.workspace.get_astrbot_workspaces_path",
+        lambda: str(workspaces_root),
+    )
+    project = SimpleNamespace(
+        project_id="project-1",
+        creator="alice",
+        workspace_type="custom",
+        workspace_path=str(custom_root),
+    )
+
+    resolved = resolve_project_workspace_root(
+        project,
+        fallback_umo="webchat:FriendMessage:webchat!alice!default",
+    )
+
+    assert resolved == custom_root
+
+
+def test_api_key_project_runtime_rejects_root_outside_workspaces(
+    tmp_path,
+    monkeypatch,
+):
+    """Runtime resolution must keep every API key project under workspaces."""
+    workspaces_root = tmp_path / "workspaces"
+    external_root = tmp_path / "external"
+    workspaces_root.mkdir()
+    external_root.mkdir()
+    monkeypatch.setattr(
+        "astrbot.core.workspace.get_astrbot_workspaces_path",
+        lambda: str(workspaces_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.workspace.project_workspace_root",
+        lambda _project_id: external_root,
+    )
+    project = SimpleNamespace(
+        project_id="project-1",
+        creator="api_key:key-id",
+        workspace_type="project",
+        workspace_path=None,
+    )
+
+    with pytest.raises(ValueError, match="must stay within AstrBot workspaces"):
+        resolve_project_workspace_root(
+            project,
+            fallback_umo="webchat:FriendMessage:webchat!api-key!default",
+        )
+
+
+@pytest.mark.asyncio
+async def test_api_key_custom_workspace_cannot_expose_external_files(
+    tmp_path,
+    monkeypatch,
+):
+    """Legacy API key projects must resolve to managed project workspaces."""
+    workspaces_root = tmp_path / "workspaces"
+    external_root = tmp_path / "external"
+    workspaces_root.mkdir()
+    external_root.mkdir()
+    (external_root / "secret.txt").write_text("secret", encoding="utf-8")
+    monkeypatch.setattr(
+        "astrbot.core.workspace.get_astrbot_workspaces_path",
+        lambda: str(workspaces_root),
+    )
+    project = SimpleNamespace(
+        project_id="project-1",
+        creator="api_key:key-id",
+        workspace_type="custom",
+        workspace_path=str(external_root),
+    )
+    db = SimpleNamespace(get_chatui_project_by_id=AsyncMock(return_value=project))
+    service = ChatUIProjectService(db)
+
+    result = await service.list_workspace_files(
+        "api_key:key-id",
+        "project-1",
+    )
+
+    assert result == {"path": "", "entries": []}
+
+
+@pytest.mark.asyncio
+async def test_database_migrates_api_key_custom_workspaces(tmp_path):
+    """Database startup should downgrade existing API key custom workspaces."""
+    db = SQLiteDatabase(str(tmp_path / "workspace-migration.db"))
+    try:
+        await db.initialize()
+        project = await db.create_chatui_project(
+            creator="api_key:key-id",
+            title="Legacy API project",
+            workspace_type="custom",
+            workspace_path="/external/workspace",
+        )
+
+        await db.initialize()
+        migrated = await db.get_chatui_project_by_id(project.project_id)
+
+        assert migrated is not None
+        assert migrated.workspace_type == "project"
+        assert migrated.workspace_path is None
+    finally:
+        await db.engine.dispose()
 
 
 @pytest.fixture

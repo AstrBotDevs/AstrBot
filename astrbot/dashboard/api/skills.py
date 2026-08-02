@@ -21,7 +21,7 @@ from astrbot.dashboard.services.skills_service import (
     SkillsServiceError,
 )
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, ScopeDependency, require_dashboard_user
 from .multipart import multipart_parts, single_upload
 
 router = APIRouter(tags=["Skills"])
@@ -36,8 +36,7 @@ def get_service(request: Request) -> SkillsService:
     return request.app.state.services.skills
 
 
-async def require_skill_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "skill")
+require_skill_scope = ScopeDependency("skill")
 
 
 async def _json_or_empty(request: Request) -> dict[str, Any]:

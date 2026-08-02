@@ -94,8 +94,12 @@ class WakingCheckStage(Stage):
 
         # 设置 sender 身份
         event.message_str = event.message_str.strip()
+        api_key_allow_admin_role = event.get_extra("_api_key_allow_admin_role")
         for admin_id in self.ctx.astrbot_config["admins_id"]:
-            if str(event.get_sender_id()) == admin_id:
+            if (
+                api_key_allow_admin_role is not False
+                and str(event.get_sender_id()) == admin_id
+            ):
                 event.role = "admin"
                 break
 
