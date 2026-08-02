@@ -20,18 +20,23 @@ OPENCODE_GO_MESSAGES_ONLY_MODELS = {"minimax-m2.5", "minimax-m2.7"}
     "OpenCode Go Subscription Provider Adapter",
 )
 class ProviderOpenCodeGo(Provider):
+    API_BASE = OPENCODE_GO_API_BASE
+    MODEL_PREFIX = OPENCODE_GO_MODEL_PREFIX
+    DEFAULT_MODEL = OPENCODE_GO_DEFAULT_MODEL
+    PROVIDER_NAME = "OpenCode Go"
+    UNSUPPORTED_MODEL_ENDPOINTS = dict.fromkeys(
+        OPENCODE_GO_MESSAGES_ONLY_MODELS, "/v1/messages"
+    )
+    UNSUPPORTED_MODEL_PREFIX_ENDPOINTS: tuple[tuple[str, str], ...] = ()
+
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config, provider_settings)
-        self.api_base = provider_config.get("api_base", OPENCODE_GO_API_BASE).rstrip(
-            "/"
-        )
+        self.api_base = provider_config.get("api_base", self.API_BASE).rstrip("/")
         self.timeout = provider_config.get("timeout", 120)
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
 
-        model = self._to_api_model(
-            provider_config.get("model", OPENCODE_GO_DEFAULT_MODEL)
-        )
+        model = self._to_api_model(provider_config.get("model", self.DEFAULT_MODEL))
         self.set_model(model)
 
         self.openai_provider = ProviderOpenAIOfficial(
@@ -48,23 +53,32 @@ class ProviderOpenCodeGo(Provider):
 
     @classmethod
     def _to_api_model(cls, model: str | None) -> str:
-        resolved_model = (model or OPENCODE_GO_DEFAULT_MODEL).strip()
-        if resolved_model.startswith(OPENCODE_GO_MODEL_PREFIX):
-            return resolved_model.removeprefix(OPENCODE_GO_MODEL_PREFIX)
+        resolved_model = (model or cls.DEFAULT_MODEL).strip()
+        if resolved_model.startswith(cls.MODEL_PREFIX):
+            return resolved_model.removeprefix(cls.MODEL_PREFIX)
         return resolved_model
 
     @classmethod
     def _to_provider_model(cls, model: str) -> str:
         api_model = cls._to_api_model(model)
-        return f"{OPENCODE_GO_MODEL_PREFIX}{api_model}"
+        return f"{cls.MODEL_PREFIX}{api_model}"
+
+    @classmethod
+    def _unsupported_endpoint(cls, api_model: str) -> str | None:
+        if endpoint := cls.UNSUPPORTED_MODEL_ENDPOINTS.get(api_model):
+            return endpoint
+        for prefix, endpoint in cls.UNSUPPORTED_MODEL_PREFIX_ENDPOINTS:
+            if api_model.startswith(prefix):
+                return endpoint
+        return None
 
     @classmethod
     def _ensure_chat_completions_model(cls, model: str | None) -> str:
         api_model = cls._to_api_model(model)
-        if api_model in OPENCODE_GO_MESSAGES_ONLY_MODELS:
+        if endpoint := cls._unsupported_endpoint(api_model):
             raise ValueError(
-                f"OpenCode Go model {OPENCODE_GO_MODEL_PREFIX}{api_model} uses "
-                "/v1/messages. This adapter currently supports "
+                f"{cls.PROVIDER_NAME} model {cls.MODEL_PREFIX}{api_model} uses "
+                f"{endpoint}. This adapter currently supports "
                 "/v1/chat/completions models only."
             )
         return api_model
@@ -86,9 +100,9 @@ class ProviderOpenCodeGo(Provider):
         provider_models: list[str] = []
         for model in models:
             api_model = self._to_api_model(model)
-            if not api_model or api_model in OPENCODE_GO_MESSAGES_ONLY_MODELS:
+            if not api_model or self._unsupported_endpoint(api_model):
                 continue
-            provider_models.append(f"{OPENCODE_GO_MODEL_PREFIX}{api_model}")
+            provider_models.append(f"{self.MODEL_PREFIX}{api_model}")
         return sorted(provider_models)
 
     async def text_chat(

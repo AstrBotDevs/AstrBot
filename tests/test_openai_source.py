@@ -18,6 +18,7 @@ from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
 from astrbot.core.provider.sources.opencode_go_source import ProviderOpenCodeGo
+from astrbot.core.provider.sources.opencode_zen_source import ProviderOpenCodeZen
 from astrbot.core.utils.media_utils import ResolvedMediaData, file_uri_to_path
 
 
@@ -66,6 +67,14 @@ class _OpenCodeGoStreamUnitProvider(ProviderOpenCodeGo):
         self.model_name = "kimi-k2.6"
 
 
+class _OpenCodeZenUnitProvider(ProviderOpenCodeZen):
+    openai_provider: _ModelsProviderStub
+
+    def __init__(self, models: list[str]):
+        self.openai_provider = _ModelsProviderStub(models)
+        self.model_name = "kimi-k2.6"
+
+
 def _make_provider(overrides: dict | None = None) -> ProviderOpenAIOfficial:
     provider_config = {
         "id": "test-openai",
@@ -100,6 +109,12 @@ def _make_opencode_go_provider_for_unit_tests(
     models: list[str] | None = None,
 ) -> ProviderOpenCodeGo:
     return _OpenCodeGoUnitProvider(models or [])
+
+
+def _make_opencode_zen_provider_for_unit_tests(
+    models: list[str] | None = None,
+) -> ProviderOpenCodeZen:
+    return _OpenCodeZenUnitProvider(models or [])
 
 
 def test_create_http_client_uses_openai_httpx_module(monkeypatch):
@@ -573,6 +588,50 @@ async def test_opencode_go_text_chat_stream_forwards_extra_user_content_parts():
     assert responses
     assert delegate.stream_kwargs is not None
     assert delegate.stream_kwargs["extra_user_content_parts"] is extra_parts
+
+
+@pytest.mark.asyncio
+async def test_opencode_zen_get_models_prefixes_and_filters_non_chat_models():
+    provider = _make_opencode_zen_provider_for_unit_tests(
+        [
+            "kimi-k2.6",
+            "opencode/minimax-m2.7",
+            "claude-sonnet-4-6",
+            "gemini-3.1-pro",
+            "gpt-5.4",
+            "grok-4.5",
+            "qwen3.5-plus",
+        ]
+    )
+
+    assert await provider.get_models() == [
+        "opencode/kimi-k2.6",
+        "opencode/minimax-m2.7",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("model", "endpoint"),
+    [
+        ("opencode/claude-sonnet-4-6", "/v1/messages"),
+        ("opencode/gemini-3.1-pro", "/v1/models/{model}"),
+        ("opencode/gpt-5.4", "/v1/responses"),
+    ],
+)
+def test_opencode_zen_resolve_model_rejects_non_chat_models(model: str, endpoint: str):
+    provider = _make_opencode_zen_provider_for_unit_tests()
+
+    with pytest.raises(
+        ValueError, match=endpoint.replace("{", r"\{").replace("}", r"\}")
+    ):
+        provider._resolve_model(model)
+
+
+def test_opencode_zen_resolve_model_strips_prefix():
+    provider = _make_opencode_zen_provider_for_unit_tests()
+
+    assert provider._resolve_model("opencode/kimi-k2.6") == "kimi-k2.6"
+    assert provider._resolve_model(None) == "kimi-k2.6"
 
 
 @pytest.mark.asyncio
