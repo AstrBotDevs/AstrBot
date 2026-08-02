@@ -9,9 +9,11 @@ import { mountWithVuetify } from './utils/mountWithVuetify';
 
 const testState = vi.hoisted(() => ({
   getThreadMock: vi.fn(),
+  fetchWithAuthMock: vi.fn(),
   chatMessageListStub: {
     props: ['messages'],
-    template: '<div class="chat-message-list-stub">{{ messages.length }}</div>',
+    template:
+      '<div class="chat-message-list-stub">{{ messages[1]?.content?.message?.[0]?.text || messages.length }}</div>',
   },
   reasoningTimelineStub: {
     props: ['parts', 'reasoning'],
@@ -23,7 +25,12 @@ const testState = vi.hoisted(() => ({
 vi.mock('@/api/v1', () => ({
   chatApi: {
     getThread: testState.getThreadMock,
+    sendThreadMessageUrl: (threadId: string) => `/threads/${threadId}/messages`,
   },
+}));
+
+vi.mock('@/api/http', () => ({
+  fetchWithAuth: testState.fetchWithAuthMock,
 }));
 
 vi.mock('@/components/chat/ChatMessageList.vue', () => ({
@@ -119,5 +126,62 @@ describe('chat side panels', () => {
     expect(wrapper.text()).toContain('Selected thread excerpt');
     expect(wrapper.find('.chat-message-list-stub').exists()).toBe(true);
     expect(hasNonElementRootWarning(warnSpy.mock.calls)).toBe(false);
+  });
+
+  it('restores a missing final SSE suffix in thread responses', async () => {
+    testState.getThreadMock.mockResolvedValue({
+      data: {
+        data: {
+          history: [],
+        },
+      },
+    });
+    const streamData = [
+      {
+        ct: 'chat',
+        type: 'plain',
+        data: 'partial',
+        streaming: true,
+      },
+      {
+        ct: 'chat',
+        type: 'complete',
+        data: 'partial response',
+      },
+    ]
+      .map((payload) => `data: ${JSON.stringify(payload)}\n\n`)
+      .join('');
+    testState.fetchWithAuthMock.mockResolvedValue({
+      ok: true,
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(streamData));
+          controller.close();
+        },
+      }),
+    });
+
+    const wrapper = mountWithVuetify(ThreadPanel, {
+      props: {
+        modelValue: true,
+        thread: {
+          thread_id: 'thread-1',
+          selected_text: 'Selected thread excerpt',
+        },
+        isDark: false,
+      },
+    });
+    await flushPromises();
+    await wrapper.find('.thread-input').setValue('Question');
+    await wrapper.find('.thread-composer').trigger('submit');
+    await flushPromises();
+
+    expect(testState.fetchWithAuthMock).toHaveBeenCalledWith(
+      '/threads/thread-1/messages',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(wrapper.find('.chat-message-list-stub').text()).toContain(
+      'partial response',
+    );
   });
 });

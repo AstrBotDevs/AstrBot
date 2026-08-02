@@ -122,4 +122,121 @@ describe('useMessages follow-up streams', () => {
     socket.emit({ ct: 'chat', type: 'end', message_id: 'request-1' });
     expect(messages.isSessionRunning(sessionId)).toBe(false);
   });
+
+  it('restores a complete response suffix while preserving break fallbacks', () => {
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    const sessionId = 'session-1';
+    const messages = useMessages({ currentSessionId: ref(sessionId) });
+
+    const complete = messages.createLocalExchange({
+      sessionId,
+      messageId: 'complete-request',
+      parts: [{ type: 'plain', text: 'first' }],
+    });
+    messages.sendMessageStream({
+      sessionId,
+      messageId: 'complete-request',
+      parts: [{ type: 'plain', text: 'first' }],
+      transport: 'websocket',
+      botRecord: complete.botRecord,
+      userRecord: complete.userRecord,
+    });
+    const socket = testState.sockets[testState.sockets.length - 1];
+    socket.emit({
+      ct: 'chat',
+      type: 'plain',
+      message_id: 'complete-request',
+      data: 'partial',
+      streaming: true,
+    });
+    socket.emit({
+      ct: 'chat',
+      type: 'complete',
+      message_id: 'complete-request',
+      data: 'partial response',
+    });
+
+    expect(messages.messageParts(complete.botRecord)).toEqual([
+      { type: 'plain', text: 'partial response' },
+    ]);
+
+    const noPlain = messages.createLocalExchange({
+      sessionId,
+      messageId: 'no-plain-request',
+      parts: [{ type: 'plain', text: 'second' }],
+    });
+    messages.sendMessageStream({
+      sessionId,
+      messageId: 'no-plain-request',
+      parts: [{ type: 'plain', text: 'second' }],
+      transport: 'websocket',
+      botRecord: noPlain.botRecord,
+      userRecord: noPlain.userRecord,
+    });
+    socket.emit({
+      ct: 'chat',
+      type: 'complete',
+      message_id: 'no-plain-request',
+      data: 'complete response',
+    });
+
+    expect(messages.messageParts(noPlain.botRecord)).toEqual([
+      { type: 'plain', text: 'complete response' },
+    ]);
+
+    const interrupted = messages.createLocalExchange({
+      sessionId,
+      messageId: 'break-request',
+      parts: [{ type: 'plain', text: 'third' }],
+    });
+    messages.sendMessageStream({
+      sessionId,
+      messageId: 'break-request',
+      parts: [{ type: 'plain', text: 'third' }],
+      transport: 'websocket',
+      botRecord: interrupted.botRecord,
+      userRecord: interrupted.userRecord,
+    });
+    socket.emit({
+      ct: 'chat',
+      type: 'plain',
+      message_id: 'break-request',
+      data: 'interrupted',
+      streaming: true,
+    });
+    socket.emit({
+      ct: 'chat',
+      type: 'break',
+      message_id: 'break-request',
+      data: 'interrupted response',
+    });
+
+    expect(messages.messageParts(interrupted.botRecord)).toEqual([
+      { type: 'plain', text: 'interrupted' },
+    ]);
+
+    const breakFallback = messages.createLocalExchange({
+      sessionId,
+      messageId: 'break-fallback-request',
+      parts: [{ type: 'plain', text: 'fourth' }],
+    });
+    messages.sendMessageStream({
+      sessionId,
+      messageId: 'break-fallback-request',
+      parts: [{ type: 'plain', text: 'fourth' }],
+      transport: 'websocket',
+      botRecord: breakFallback.botRecord,
+      userRecord: breakFallback.userRecord,
+    });
+    socket.emit({
+      ct: 'chat',
+      type: 'break',
+      message_id: 'break-fallback-request',
+      data: 'tool-call handoff',
+    });
+
+    expect(messages.messageParts(breakFallback.botRecord)).toEqual([
+      { type: 'plain', text: 'tool-call handoff' },
+    ]);
+  });
 });

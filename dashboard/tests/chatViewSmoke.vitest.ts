@@ -31,6 +31,11 @@ const testState = vi.hoisted(() => ({
   getProjectsMock: vi.fn(),
   getProjectSessionsMock: vi.fn(),
   chatApiUpdateSessionMock: vi.fn(),
+  regenerateMessageMock: vi.fn(),
+  inputSelection: {
+    providerId: 'current-provider',
+    modelName: 'current-model',
+  },
 }));
 
 vi.mock('vue-router', async () => {
@@ -131,7 +136,7 @@ vi.mock('@/composables/useMessages', () => ({
     sendMessageStream: vi.fn(),
     editMessage: vi.fn(),
     continueEditedMessage: vi.fn(),
-    regenerateMessage: vi.fn(),
+    regenerateMessage: testState.regenerateMessageMock,
     stopSession: vi.fn(),
   }),
 }));
@@ -204,14 +209,22 @@ vi.mock('@/components/chat/ProjectView.vue', () => ({
 vi.mock('@/components/chat/ChatInput.vue', () => ({
   default: {
     template: '<div class="chat-input-stub"></div>',
+    setup(_props: unknown, { expose }: { expose: (value: unknown) => void }) {
+      expose({
+        getCurrentSelection: () => testState.inputSelection,
+        focus: vi.fn(),
+      });
+      return {};
+    },
   },
 }));
 
 vi.mock('@/components/chat/ChatMessageList.vue', () => ({
   default: {
-    emits: ['open-refs'],
+    props: ['messages'],
+    emits: ['open-refs', 'regenerate'],
     template:
-      '<div class="chat-message-list-stub"><button class="open-refs-trigger" @click="$emit(\'open-refs\', { used: [{ title: \'Doc\', url: \'https://example.com\' }] })">open refs</button></div>',
+      '<div class="chat-message-list-stub"><button class="open-refs-trigger" @click="$emit(\'open-refs\', { used: [{ title: \'Doc\', url: \'https://example.com\' }] })">open refs</button><button class="regenerate-trigger" @click="$emit(\'regenerate\', messages[0])">regenerate</button></div>',
   },
 }));
 
@@ -273,6 +286,11 @@ describe('Chat view smoke', () => {
     testState.getProjectsMock.mockResolvedValue(undefined);
     testState.getProjectSessionsMock.mockResolvedValue([]);
     testState.chatApiUpdateSessionMock.mockResolvedValue(undefined);
+    testState.regenerateMessageMock.mockResolvedValue(undefined);
+    testState.inputSelection = {
+      providerId: 'current-provider',
+      modelName: 'current-model',
+    };
   });
 
   it('renders the welcome chat state without crashing', async () => {
@@ -318,5 +336,38 @@ describe('Chat view smoke', () => {
     await wrapper.find('.open-refs-trigger').trigger('click');
 
     expect(wrapper.find('.refs-sidebar-stub').text()).toBe('1');
+  });
+
+  it('uses the current input model when regenerating without an explicit selection', async () => {
+    testState.currSessionId = 'session-1';
+    testState.sessions = [
+      {
+        session_id: 'session-1',
+        display_name: 'Session 1',
+      },
+    ];
+    testState.activeMessages = [
+      {
+        id: 'msg-1',
+        content: {
+          type: 'bot',
+          message: [{ type: 'plain', text: 'hello' }],
+        },
+      },
+    ];
+    localStorage.setItem('selectedProvider', 'stale-provider');
+    localStorage.setItem('selectedProviderModel', 'stale-model');
+
+    const wrapper = mountChat();
+    await flushPromises();
+    await wrapper.find('.regenerate-trigger').trigger('click');
+    await flushPromises();
+
+    expect(testState.regenerateMessageMock).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({ id: 'msg-1' }),
+      'current-provider',
+      'current-model',
+    );
   });
 });

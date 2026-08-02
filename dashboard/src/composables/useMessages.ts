@@ -1082,10 +1082,11 @@ export function useMessages(options: UseMessagesOptions) {
     }
     if (msgType === 'complete' || msgType === 'break') {
       markMessageStarted(botRecord);
-      const finalText = payloadText(data);
-      if (finalText && !hasPlainText(botRecord)) {
-        appendPlain(botRecord, finalText, false);
-      }
+      appendCompletePlainSuffix(
+        botRecord,
+        payloadText(data),
+        msgType === 'complete',
+      );
       return;
     }
     if (msgType === 'end') {
@@ -1510,6 +1511,32 @@ export function hasPlainText(record: ChatRecord) {
     (part) =>
       part.type === 'plain' && typeof part.text === 'string' && part.text,
   );
+}
+
+/**
+ * Restores a suffix omitted from streamed plain-text chunks when completion
+ * carries the cumulative response text.
+ */
+export function appendCompletePlainSuffix(
+  record: ChatRecord,
+  finalText: string,
+  appendSuffix = true,
+) {
+  if (!finalText) return;
+  if (!hasPlainText(record)) {
+    appendPlain(record, finalText, false);
+    return;
+  }
+  if (!appendSuffix) return;
+
+  const streamedText = record.content.message
+    .filter((part) => part.type === 'plain')
+    .map((part) => (typeof part.text === 'string' ? part.text : ''))
+    .join('');
+  if (!finalText.startsWith(streamedText)) return;
+
+  const suffix = finalText.slice(streamedText.length);
+  if (suffix) appendPlain(record, suffix);
 }
 
 export function payloadText(value: unknown) {

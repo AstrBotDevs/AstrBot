@@ -59,11 +59,11 @@ import { nextTick, ref, watch } from 'vue';
 import { chatApi } from '@/api/v1';
 import { fetchWithAuth } from '@/api/http';
 import {
+  appendCompletePlainSuffix,
   appendPlain,
   appendReasoningPart,
   extractReasoningText,
   finishToolCall,
-  hasPlainText,
   markMessageStarted,
   normalizeMessageParts,
   parseJsonSafe,
@@ -312,10 +312,11 @@ function processPayload(
 
   if (type === 'complete' || type === 'break') {
     markMessageStarted(botRecord);
-    const finalText = payloadText(data);
-    if (finalText && !hasPlainText(botRecord)) {
-      appendPlain(botRecord, finalText, false);
-    }
+    appendCompletePlainSuffix(
+      botRecord,
+      payloadText(data),
+      type === 'complete',
+    );
     return;
   }
 
