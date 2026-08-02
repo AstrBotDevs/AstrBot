@@ -195,6 +195,9 @@ CHECKPOINT_ROLE = "_checkpoint"
 class Message(BaseModel):
     """A message in a conversation."""
 
+    id: str | None = None
+    """The provider-specific message ID."""
+
     role: Literal[
         "system",
         "user",
@@ -239,6 +242,8 @@ class Message(BaseModel):
     @model_serializer(mode="wrap")
     def serialize(self, handler):
         data = handler(self)
+        if self.id is None:
+            data.pop("id", None)
         if self.tool_calls is None:
             data.pop("tool_calls", None)
         if self.tool_call_id is None:
