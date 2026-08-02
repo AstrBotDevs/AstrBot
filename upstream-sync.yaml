@@ -5,21 +5,27 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 9e3497e6b49f39d62e6105a8beb9df6131435b1e
-  synced_at_utc: 2026-07-26T10:45:12Z
+  commit: 0283f923312dd011599e41b0772566589e51ba7a
+  synced_at_utc: 2026-08-02T15:59:31Z
   sync_method: manual-adaptation
-  source_pr: '9389, 9385, 9236, 9394, 9390, 9381, 9339, 9319, 9386, 9382'
+  source_pr: '9406, 9148, 9416, 9414, 9402, 9419, 9413, 9411, 9428, 8897, 9426, 9435, 9439, 9462, 9454, 9444, 9499'
   note: >-
-    Processed nine upstream/master commits through
-    9e3497e6b49f39d62e6105a8beb9df6131435b1e by manual adaptation. Included
-    fresh-index FAISS dimension validation; zero-valued quoted-message limits;
-    message-outline whitespace; FishAudio model headers/default; correct
-    WebChat image MIME types while retaining the fork's BMP/TIFF/AVIF support;
-    nested OpenAI chat-completion choices; and Dashboard scroll fixes adapted
-    to the current FullLayout and script-setup UI. b4459953 was partially
-    absorbed: DingTalk rich-text self-mention handling and explicit plain-text
-    sends were retained, while the fork kept its command-catalog architecture
-    and generic redacted filter errors rather than restoring upstream
-    star_map/legacy inspection. Skipped e732e956 because its Windows Docker
-    guidance relies on upstream prebuilt images, which conflicts with this
-    fork's source-build astrbot:local contract.
+    Reviewed all 34 upstream/master commits through
+    0283f923312dd011599e41b0772566589e51ba7a. The prior marker is not an
+    ancestor of this fork branch, so the included work was semantically
+    transplanted rather than cherry-picked. Included direct/adapted fixes:
+    pinned docker/login-action v4.5.1; mutable configuration defaults; MiMo
+    TTS; chat regeneration and streamed tails; Cron scheduler/database state
+    and localized task times; QQ Official streaming buffers; C-extension-safe
+    dependency preference; Bailian and vLLM rerank protocol/error handling;
+    no-proxy loopback bypass; sparse retrieval/rank-fusion correctness; and
+    the empty persona capability-list semantic. The Discord slash-name regex
+    was already correct in this fork. Deferred for fork-specific design and
+    security review: conversation-list API/DB changes, log-console filtering,
+    DashScope embeddings, workspace browsing, persistent group history,
+    managed shell sessions, enriched embedding context, composer/UI redesign,
+    extension/persona UI unification, and Skills UI. Skipped
+    upstream Cloud/release documentation, version bump,
+    deprecated decorator and misspelling compatibility shims, QQ group notice,
+    and updater/release architecture because they conflict with this fork's
+    no-legacy and source-build/release policy.
