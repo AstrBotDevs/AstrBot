@@ -64,7 +64,7 @@
               <template #title-extra>
                 <div class="d-flex align-center ga-1">
                   <v-chip
-                    v-if="skill.source_type === 'sandbox_only'"
+                    v-if="skill.preset || skill.source_type === 'sandbox_only'"
                     size="x-small"
                     variant="tonal"
                     color="secondary"
