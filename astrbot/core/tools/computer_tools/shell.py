@@ -122,20 +122,25 @@ class ExecuteShellTool(FunctionTool):
                 creator_id = context.context.event.get_sender_id()
                 if not creator_id:
                     return "Error executing command: sender identity is unavailable."
-                return json.dumps(
-                    await sb.shell.exec_managed(
-                        command,
-                        owner_id=context.context.event.unified_msg_origin,
-                        creator_id=creator_id,
-                        creator_is_admin=context.context.event.role == "admin",
-                        sandboxed=False,
-                        cwd=cwd,
-                        env=env,
-                        timeout=timeout,
-                        yield_time_ms=0 if background else yield_time_ms,
-                    ),
-                    ensure_ascii=False,
+                result = await sb.shell.exec_managed(
+                    command,
+                    owner_id=context.context.event.unified_msg_origin,
+                    creator_id=creator_id,
+                    creator_is_admin=context.context.event.role == "admin",
+                    sandboxed=False,
+                    cwd=cwd,
+                    env=env,
+                    timeout=timeout,
+                    yield_time_ms=0 if background else yield_time_ms,
                 )
+                if result.get("session_closed") and result.get("status") in {
+                    "completed",
+                    "failed",
+                }:
+                    result = {
+                        key: result[key] for key in ("stdout", "stderr", "exit_code")
+                    }
+                return json.dumps(result, ensure_ascii=False)
 
             effective_background = background and not _is_self_detached_command(command)
 
