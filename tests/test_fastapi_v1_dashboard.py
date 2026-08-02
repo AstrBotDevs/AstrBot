@@ -3487,6 +3487,28 @@ async def test_v1_safe_persona_routes_accept_slash_ids(
 
 
 @pytest.mark.asyncio
+async def test_v1_persona_create_preserves_explicit_empty_tools_and_skills(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    response = await asgi_client.post(
+        "/api/v1/personas",
+        json={
+            "persona_id": "persona/no-capabilities",
+            "system_prompt": "Do not use capabilities.",
+            "tools": [],
+            "skills": [],
+        },
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    persona = fake_core_lifecycle.persona_mgr.personas["persona/no-capabilities"]
+    assert persona.tools == []
+    assert persona.skills == []
+
+
+@pytest.mark.asyncio
 async def test_v1_persona_by_id_update_preserves_explicit_null_tools_and_skills(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
