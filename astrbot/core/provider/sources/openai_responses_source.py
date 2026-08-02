@@ -73,9 +73,10 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         """
         response_input: list[dict] = []
         host = (self.client.base_url.host or "").rstrip(".").lower()
-        is_deepseek = self.provider_config.get(
-            "provider"
-        ) == "deepseek" or host == "api.deepseek.com"
+        is_deepseek = (
+            self.provider_config.get("provider") == "deepseek"
+            or host == "api.deepseek.com"
+        )
 
         for message in messages:
             if not isinstance(message, dict):
