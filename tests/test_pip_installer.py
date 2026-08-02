@@ -1881,3 +1881,41 @@ async def test_install_adds_aliyun_trusted_host_only_for_aliyun_index(monkeypatc
     assert "https://mirrors.aliyun.com/simple" in recorded_args
     trusted_host_index = recorded_args.index("--trusted-host")
     assert recorded_args[trusted_host_index + 1] == "mirrors.aliyun.com"
+
+
+def test_has_loaded_c_extension_detects_abi_tagged_suffix(monkeypatch):
+    """Native modules with the current interpreter ABI suffix are detected."""
+    extension_suffix = ".cpython-314-x86_64-linux-gnu.so"
+    native_module = type("NativeModule", (), {})()
+    native_module.__file__ = f"/site/pkg/_core{extension_suffix}"
+    package_module = type("PackageModule", (), {})()
+    package_module.__file__ = "/site/pkg/__init__.py"
+    monkeypatch.setattr(
+        pip_installer_module,
+        "sys",
+        type(
+            "FakeSys",
+            (),
+            {"modules": {"pkg": package_module, "pkg._core": native_module}},
+        )(),
+    )
+    monkeypatch.setattr(
+        pip_installer_module.importlib.machinery,
+        "EXTENSION_SUFFIXES",
+        [extension_suffix],
+    )
+
+    assert pip_installer_module._has_loaded_c_extension("pkg") is True
+
+
+def test_has_loaded_c_extension_ignores_unrelated_modules(monkeypatch):
+    """An extension outside the target module subtree does not block reload."""
+    native_module = type("NativeModule", (), {})()
+    native_module.__file__ = "/site/other/_core.so"
+    monkeypatch.setattr(
+        pip_installer_module,
+        "sys",
+        type("FakeSys", (), {"modules": {"other._core": native_module}})(),
+    )
+
+    assert pip_installer_module._has_loaded_c_extension("pkg") is False

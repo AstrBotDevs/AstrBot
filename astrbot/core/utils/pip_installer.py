@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import importlib
+import importlib.machinery
 import importlib.metadata as importlib_metadata
 import importlib.util
 import io
@@ -631,10 +632,40 @@ def _is_module_loaded_from_site_packages(
         return False
 
 
+def _has_loaded_c_extension(module_name: str) -> bool:
+    """Return whether a loaded module subtree contains a native extension.
+
+    Reloading a package after one of its native submodules has been imported
+    can crash the interpreter.  Use Python's platform-specific extension
+    suffixes so ABI-tagged files (for example ``.cpython-314-...so``) are
+    recognized on every supported platform.
+    """
+    extension_suffixes = tuple(
+        suffix.lower() for suffix in importlib.machinery.EXTENSION_SUFFIXES
+    )
+    for key in list(sys.modules):
+        if key != module_name and not key.startswith(f"{module_name}."):
+            continue
+        module = sys.modules.get(key)
+        module_file = getattr(module, "__file__", None)
+        if not module_file:
+            continue
+        module_file_lower = str(module_file).lower()
+        if any(module_file_lower.endswith(suffix) for suffix in extension_suffixes):
+            return True
+    return False
+
+
 def _prefer_module_from_site_packages(
     module_name: str, site_packages_path: str
 ) -> bool:
     with _SITE_PACKAGES_IMPORT_LOCK:
+        if _has_loaded_c_extension(module_name):
+            logger.debug(
+                "Skipping prefer for %s: C extension detected in submodules",
+                module_name,
+            )
+            return False
         base_path = os.path.join(site_packages_path, *module_name.split("."))
         package_init = os.path.join(base_path, "__init__.py")
         module_file = f"{base_path}.py"
