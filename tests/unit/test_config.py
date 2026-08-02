@@ -755,6 +755,23 @@ class TestConfigSchemaToDefault:
         assert config.int_field == DEFAULT_VALUE_MAP["int"]
         assert config.bool_field == DEFAULT_VALUE_MAP["bool"]
 
+    def test_convert_schema_dict_defaults_are_independent(self, temp_config_path):
+        """Schema-generated dict defaults must not share mutable state."""
+        schema = {
+            "first": {"type": "dict"},
+            "second": {"type": "dict"},
+        }
+
+        config = AstrBotConfig(config_path=temp_config_path, schema=schema)
+
+        assert config.first == {}
+        assert config.second == {}
+        assert config.first is not config.second
+
+        config.first["changed"] = True
+
+        assert config.second == {}
+
     def test_unsupported_schema_type_raises_error(self, temp_config_path):
         """Test that unsupported schema types raise error."""
         schema = {

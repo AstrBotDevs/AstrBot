@@ -206,9 +206,9 @@ class AstrBotConfig(dict):
                     conf[k] = {}
                     _parse_schema(v["items"], conf[k])
                 elif v["type"] == "template_list":
-                    conf[k] = default
+                    conf[k] = copy.deepcopy(default)
                 else:
-                    conf[k] = default
+                    conf[k] = copy.deepcopy(default)
 
         _parse_schema(schema, conf)
 

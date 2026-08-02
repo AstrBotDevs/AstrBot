@@ -85,3 +85,22 @@ def test_validate_config_template_list_file_path_uses_template_schema_path():
 
     assert errors == []
     assert validated == data
+
+
+def test_validate_config_dict_defaults_are_independent():
+    schema = {
+        "first": {"type": "dict"},
+        "second": {"type": "dict"},
+    }
+    data = {"first": None, "second": None}
+
+    errors, validated = validate_config(data, schema, is_core=False)
+
+    assert errors == []
+    assert validated["first"] == {}
+    assert validated["second"] == {}
+    assert validated["first"] is not validated["second"]
+
+    validated["first"]["changed"] = True
+
+    assert validated["second"] == {}

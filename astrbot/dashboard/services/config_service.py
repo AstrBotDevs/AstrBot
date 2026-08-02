@@ -347,7 +347,7 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
                 logger.debug(f"配置项 {path}{key} 没有类型定义, 跳过校验")
                 continue
             if value is None:
-                data[key] = DEFAULT_VALUE_MAP[meta["type"]]
+                data[key] = copy.deepcopy(DEFAULT_VALUE_MAP[meta["type"]])
                 continue
 
             if meta["type"] == "template_list":
