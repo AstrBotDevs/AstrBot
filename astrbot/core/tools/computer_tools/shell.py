@@ -178,9 +178,8 @@ class LocalExecuteShellTool(ExecuteShellTool):
     """Local shell tool that automatically yields long-running commands."""
 
     description: str = (
-        "Execute a command in the shell. Commands that finish within yield_time_ms "
-        "return a plain-text completion message and output. Commands still running "
-        "return managed shell session JSON."
+        "Execute a command in the shell. If it is still running after "
+        "yield_time_ms, the tool returns a managed shell session ID."
     )
     parameters: dict = field(
         default_factory=lambda: {
