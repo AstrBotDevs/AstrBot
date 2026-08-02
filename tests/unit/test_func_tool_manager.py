@@ -146,6 +146,8 @@ async def test_local_execute_shell_manages_running_and_closed_results(
         creator_id="admin-user",
         creator_is_admin=True,
         sandboxed=False,
+        allow_network=True,
+        filesystem_scope="host",
         cwd=str(tmp_path),
         env={},
         timeout=None,
@@ -274,6 +276,10 @@ async def test_local_member_shell_uses_platform_sandbox(
         unified_msg_origin = "umo"
         role = "member"
 
+        @staticmethod
+        def get_sender_id():
+            return "member-user"
+
     wrapper = type(
         "FakeWrapper",
         (),
@@ -305,11 +311,15 @@ async def test_local_member_shell_uses_platform_sandbox(
     shell.exec_managed.assert_awaited_once_with(
         "python server.py",
         owner_id="umo",
+        creator_id="member-user",
+        creator_is_admin=False,
         cwd=str(tmp_path),
         env={},
         timeout=300,
         yield_time_ms=250,
         sandboxed=True,
+        allow_network=False,
+        filesystem_scope="workspace",
     )
 
 

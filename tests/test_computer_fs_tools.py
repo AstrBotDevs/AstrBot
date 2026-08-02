@@ -27,13 +27,17 @@ def _make_context(
     role: str = "admin",
     runtime: str = "local",
     umo: str = "qq:friend:user-1",
+    local_permissions: dict[str, Any] | None = None,
 ) -> ContextWrapper:
+    provider_settings = {
+        "computer_use_require_admin": require_admin,
+        "computer_use_runtime": runtime,
+    }
+    if local_permissions is not None:
+        provider_settings["computer_use_local_permissions"] = local_permissions
     config_holder = SimpleNamespace(
         get_config=lambda umo=None: {
-            "provider_settings": {
-                "computer_use_require_admin": require_admin,
-                "computer_use_runtime": runtime,
-            }
+            "provider_settings": provider_settings
         }
     )
     event = SimpleNamespace(
@@ -361,6 +365,30 @@ async def test_local_member_stays_restricted_when_admin_requirement_is_disabled(
 
     assert "Read access is restricted for this user." in result
     assert "host secret" not in result
+
+
+@pytest.mark.asyncio
+async def test_local_filesystem_scope_can_grant_member_host_access(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    _setup_local_fs_tools(monkeypatch, tmp_path)
+    outside_file = tmp_path / "outside.txt"
+    outside_file.write_text("host data\n", encoding="utf-8")
+    permissions = {
+        "member": {
+            "allow_execution": False,
+            "allow_network": False,
+            "filesystem_scope": "host",
+        }
+    }
+
+    result = await fs_tools.FileReadTool().call(
+        _make_context(role="member", local_permissions=permissions),
+        path=str(outside_file),
+    )
+
+    assert result == "host data\n"
 
 
 @pytest.mark.asyncio

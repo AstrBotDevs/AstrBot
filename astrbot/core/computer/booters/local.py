@@ -216,14 +216,18 @@ def _build_local_sandbox_command(
     workspace: Path,
     env: dict[str, str] | None = None,
     workspace_writable: bool = True,
+    allow_network: bool = False,
+    filesystem_scope: str = "workspace",
 ) -> list[str]:
-    """Build a fail-closed OS sandbox command for non-admin Local execution.
+    """Build a fail-closed OS sandbox command for restricted Local execution.
 
     Args:
         argv: Command and arguments to execute inside the sandbox.
-        workspace: Only additional host directory exposed to the process.
+        workspace: Working directory exposed to the process.
         env: Additional environment variables exposed inside the sandbox.
         workspace_writable: Whether the exposed directory may be modified.
+        allow_network: Whether the process may use the host network namespace.
+        filesystem_scope: Either workspace-only access or host filesystem access.
 
     Returns:
         Bubblewrap or Seatbelt arguments with filesystem and resource restrictions.
@@ -234,6 +238,8 @@ def _build_local_sandbox_command(
     """
     if not argv:
         raise ValueError("A sandbox command is required.")
+    if filesystem_scope not in {"workspace", "host"}:
+        raise ValueError(f"Invalid Local filesystem scope: {filesystem_scope}.")
 
     sandbox_argv = list(argv)
     if Path(sandbox_argv[0]) == Path(sys.executable):
@@ -260,7 +266,7 @@ def _build_local_sandbox_command(
         seatbelt_path = shutil.which("sandbox-exec", path="/usr/bin")
         if seatbelt_path != "/usr/bin/sandbox-exec":
             raise RuntimeError(
-                "Seatbelt (`/usr/bin/sandbox-exec`) is required for non-admin "
+                "Seatbelt (`/usr/bin/sandbox-exec`) is required for restricted "
                 "Local execution on macOS."
             )
         python_prefix = str(Path(sys.prefix).resolve())
@@ -271,6 +277,20 @@ def _build_local_sandbox_command(
             if workspace_writable
             else _MACOS_SEATBELT_READ_ONLY_PROFILE
         )
+        if filesystem_scope == "host":
+            profile = profile.replace(
+                '(import "system.sb")',
+                '(import "system.sb")\n\n'
+                "(allow file-read* file-write* file-test-existence "
+                "file-read-metadata file-map-executable)",
+            ).replace(
+                "(deny file-read*\n"
+                '    (literal "/private/etc/master.passwd")\n'
+                '    (literal "/private/etc/passwd"))\n',
+                "",
+            )
+        if allow_network:
+            profile = profile.replace("(deny network*)", "(allow network*)")
         executable_definitions: list[str] = []
         executable_rules: list[str] = []
         for index, read_path in enumerate(
@@ -319,11 +339,47 @@ def _build_local_sandbox_command(
     bwrap_path = shutil.which("bwrap")
     if not bwrap_path:
         raise RuntimeError(
-            "bubblewrap (`bwrap`) is required for non-admin Local execution."
+            "bubblewrap (`bwrap`) is required for restricted Local execution."
         )
 
     if not Path("/bin/sh").exists():
         raise RuntimeError("The Local bubblewrap sandbox requires /bin/sh.")
+
+    command = [
+        bwrap_path,
+        "--unshare-all",
+        "--new-session",
+        "--die-with-parent",
+        "--clearenv",
+    ]
+    if allow_network:
+        command.append("--share-net")
+
+    if filesystem_scope == "host":
+        command.extend(
+            (
+                "--bind",
+                "/",
+                "/",
+                "--proc",
+                "/proc",
+                "--dev",
+                "/dev",
+                "--chdir",
+                str(resolved_workspace),
+            )
+        )
+    else:
+        command.extend(
+            (
+                "--dir",
+                "/tmp",
+                "--size",
+                str(_LINUX_SANDBOX_TMP_BYTES),
+                "--tmpfs",
+                "/tmp",
+            )
+        )
 
     readonly_paths = {
         Path("/usr"),
@@ -342,55 +398,45 @@ def _build_local_sandbox_command(
         Path(sys.prefix).resolve(),
         Path(sys.base_prefix).resolve(),
     }
-    if not any(
-        executable_path == path or executable_path.is_relative_to(path)
-        for path in readonly_paths
-    ):
-        readonly_paths.add(executable_path)
-    readonly_paths = {path for path in readonly_paths if path.exists()}
+    if filesystem_scope == "workspace":
+        if not any(
+            executable_path == path or executable_path.is_relative_to(path)
+            for path in readonly_paths
+        ):
+            readonly_paths.add(executable_path)
+        readonly_paths = {path for path in readonly_paths if path.exists()}
 
-    required_directories = {Path("/tmp"), Path("/tmp/home")}
-    for path in (*readonly_paths, resolved_workspace):
-        required_directories.update(
-            parent
-            for parent in path.parents
-            if parent != Path("/") and parent not in readonly_paths
+        required_directories = {Path("/tmp"), Path("/tmp/home")}
+        for path in (*readonly_paths, resolved_workspace):
+            required_directories.update(
+                parent
+                for parent in path.parents
+                if parent != Path("/") and parent not in readonly_paths
+            )
+        for directory in sorted(
+            required_directories,
+            key=lambda path: len(path.parts),
+        ):
+            if directory == Path("/tmp"):
+                continue
+            command.extend(("--dir", str(directory)))
+        command.extend(("--proc", "/proc", "--dev", "/dev"))
+
+        for path in sorted(readonly_paths, key=lambda item: len(item.parts)):
+            if path.is_symlink():
+                command.extend(("--symlink", os.readlink(path), str(path)))
+            else:
+                command.extend(("--ro-bind", str(path), str(path)))
+
+        command.extend(
+            (
+                "--bind" if workspace_writable else "--ro-bind",
+                str(resolved_workspace),
+                str(resolved_workspace),
+                "--chdir",
+                str(resolved_workspace),
+            )
         )
-
-    command = [
-        bwrap_path,
-        "--unshare-all",
-        "--new-session",
-        "--die-with-parent",
-        "--clearenv",
-        "--dir",
-        "/tmp",
-        "--size",
-        str(_LINUX_SANDBOX_TMP_BYTES),
-        "--tmpfs",
-        "/tmp",
-    ]
-    for directory in sorted(required_directories, key=lambda path: len(path.parts)):
-        if directory == Path("/tmp"):
-            continue
-        command.extend(("--dir", str(directory)))
-    command.extend(("--proc", "/proc", "--dev", "/dev"))
-
-    for path in sorted(readonly_paths, key=lambda item: len(item.parts)):
-        if path.is_symlink():
-            command.extend(("--symlink", os.readlink(path), str(path)))
-        else:
-            command.extend(("--ro-bind", str(path), str(path)))
-
-    command.extend(
-        (
-            "--bind" if workspace_writable else "--ro-bind",
-            str(resolved_workspace),
-            str(resolved_workspace),
-            "--chdir",
-            str(resolved_workspace),
-        )
-    )
     for key, value in sorted(normalized_env.items()):
         command.extend(("--setenv", key, value))
     command.extend(
@@ -400,7 +446,7 @@ def _build_local_sandbox_command(
             "/usr/local/bin:/usr/bin:/bin",
             "--setenv",
             "HOME",
-            "/tmp/home",
+            str(resolved_workspace) if filesystem_scope == "host" else "/tmp/home",
             "--setenv",
             "TMPDIR",
             "/tmp",
@@ -585,6 +631,8 @@ class LocalShellComponent(ShellComponent):
         creator_id: str,
         creator_is_admin: bool,
         sandboxed: bool,
+        allow_network: bool = False,
+        filesystem_scope: str = "workspace",
         cwd: str | None = None,
         env: dict[str, str] | None = None,
         timeout: int | None = None,
@@ -599,6 +647,8 @@ class LocalShellComponent(ShellComponent):
             creator_id: Sender ID that created the session.
             creator_is_admin: Whether the creator was an administrator.
             sandboxed: Whether the process is isolated from the host.
+            allow_network: Whether an isolated process may access the network.
+            filesystem_scope: Filesystem scope applied to an isolated process.
             cwd: Working directory for the process.
             env: Additional environment variables.
             timeout: Hard process lifetime in seconds. None disables it.
@@ -629,6 +679,8 @@ class LocalShellComponent(ShellComponent):
                     ["/bin/sh", "-c", command],
                     workspace=working_dir,
                     env={str(k): str(v) for k, v in (env or {}).items()},
+                    allow_network=allow_network,
+                    filesystem_scope=filesystem_scope,
                 )
             )
             process_factory = asyncio.create_subprocess_exec
@@ -1242,6 +1294,8 @@ class LocalPythonComponent(PythonComponent):
         silent: bool = False,
         cwd: str | None = None,
         sandboxed: bool = False,
+        allow_network: bool = False,
+        filesystem_scope: str = "workspace",
     ) -> dict[str, Any]:
         """Execute Python locally, optionally inside the platform sandbox.
 
@@ -1252,6 +1306,8 @@ class LocalPythonComponent(PythonComponent):
             silent: Whether to suppress standard output.
             cwd: Working directory for the process.
             sandboxed: Whether to isolate execution with the platform sandbox.
+            allow_network: Whether an isolated process may access the network.
+            filesystem_scope: Filesystem scope applied to an isolated process.
 
         Returns:
             Python output and error data in the computer component format.
@@ -1266,6 +1322,8 @@ class LocalPythonComponent(PythonComponent):
                     run_command = _build_local_sandbox_command(
                         [sys.executable, "-c", code],
                         workspace=working_dir,
+                        allow_network=allow_network,
+                        filesystem_scope=filesystem_scope,
                     )
                     run_env = {"PATH": os.defpath}
                     with (

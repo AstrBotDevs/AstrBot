@@ -99,12 +99,13 @@ class ExecuteShellTool(FunctionTool):
         env: dict[str, Any] | None = None,
         yield_time_ms: int = 10_000,
     ) -> ToolExecResult:
-        sandboxed, permission_error = check_local_execution_permission(
+        local_policy, permission_error = check_local_execution_permission(
             context,
             "Shell execution",
         )
         if permission_error:
             return permission_error
+        sandboxed = bool(local_policy and local_policy.requires_sandbox)
 
         sb = await get_booter(
             context.context.context,
@@ -134,6 +135,12 @@ class ExecuteShellTool(FunctionTool):
                     creator_id=creator_id,
                     creator_is_admin=context.context.event.role == "admin",
                     sandboxed=sandboxed,
+                    allow_network=(
+                        local_policy.allow_network if local_policy else True
+                    ),
+                    filesystem_scope=(
+                        local_policy.filesystem_scope if local_policy else "host"
+                    ),
                     cwd=cwd,
                     env=env,
                     timeout=min(timeout or 300, 300) if sandboxed else timeout,
@@ -190,8 +197,7 @@ class LocalExecuteShellTool(ExecuteShellTool):
     description: str = (
         "Execute a command in the shell. If it is still running after "
         "yield_time_ms, the tool returns a managed shell session ID. "
-        "Non-admin Linux and macOS calls run without network access in a "
-        "workspace-restricted sandbox."
+        "Restricted Linux and macOS calls run inside an operating-system sandbox."
     )
     parameters: dict = field(
         default_factory=lambda: {

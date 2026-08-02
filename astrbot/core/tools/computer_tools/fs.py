@@ -7,26 +7,22 @@ Tool exposure from the main agent:
   `astrbot_read_file_tool`, `astrbot_file_write_tool`,
   `astrbot_file_edit_tool`, and `astrbot_grep_tool`.
 
-Behavior when `provider_settings.computer_use_require_admin=True`:
-- Admin + local: read/write/edit/grep are not path-restricted by this module;
-  access depends on the local runtime implementation and host OS permissions.
-  Upload and download tools are defined here, but `LocalBooter` does not
-  implement them and the main agent does not expose them in local mode.
-- Member + local: read/grep are restricted to `data/skills`,
-  plugin-provided `data/plugins/*/skills`,
-  the current session or project workspace, and `/tmp/.astrbot`; write/edit are
-  restricted to the same local roots except plugin-provided Skills, which are
-  read-only. Upload/download are denied by `check_admin_permission` if invoked.
+Local behavior follows each role's `filesystem_scope` permission:
+- `host`: read/write/edit/grep are not path-restricted by this module; access
+  depends on host OS permissions.
+- `workspace`: read/grep are restricted to `data/skills`, plugin-provided
+  `data/plugins/*/skills`, the current session or project workspace, and
+  AstrBot temporary directories. Write/edit use the same roots except
+  plugin-provided Skills, which remain read-only.
+- Upload and download tools are not exposed in Local mode.
+
+Remote Sandbox behavior still follows `computer_use_require_admin`:
 - Admin + sandbox: read/write/edit/grep are not path-restricted by this
   module;
   sandbox filesystem boundaries are enforced by the sandbox runtime. Upload and
   download are allowed.
 - Member + sandbox: read/write/edit/grep are also not path-restricted by this
   module. Upload/download are denied by `check_admin_permission` if invoked.
-
-When `computer_use_require_admin=False`, local members remain path-restricted.
-This is required because their shell and Python tools may be enabled inside a
-workspace-only operating-system sandbox.
 
 Local path resolution rule:
 - In local runtime, relative paths are resolved under the primary workspace.
@@ -61,6 +57,7 @@ from ..registry import builtin_tool
 from . import util as computer_util
 from .util import (
     check_admin_permission,
+    get_local_permission_policy,
     is_local_runtime,
     normalize_umo_for_workspace,
     workspace_root_for_context,
@@ -90,7 +87,7 @@ def _restricted_env_path_labels(
     include_plugin_skills: bool,
     current_workspace_root: Path | None = None,
 ) -> list[str]:
-    """Labels for the allowed directories in a local(not sandbox) and restricted(not admin) environment"""
+    """Return labels for directories allowed by a workspace-scoped Local policy."""
     labels = [
         "data/skills",
     ]
@@ -132,7 +129,7 @@ def _read_allowed_roots(
     umo: str,
     current_workspace_root: Path | None = None,
 ) -> tuple[Path, ...]:
-    """Non-admin users can only read files within these directories (and their subdirectories)"""
+    """Return roots readable by a workspace-scoped Local policy."""
     return (
         Path(get_astrbot_skills_path()).resolve(strict=False),
         *_plugin_skill_roots(),
@@ -146,7 +143,7 @@ def _write_allowed_roots(
     umo: str,
     current_workspace_root: Path | None = None,
 ) -> tuple[Path, ...]:
-    """Non-admin users cannot modify plugin-provided Skills."""
+    """Return writable roots, excluding plugin-provided Skills."""
     return (
         Path(get_astrbot_skills_path()).resolve(strict=False),
         current_workspace_root or _workspace_root(umo),
@@ -162,9 +159,11 @@ def _is_restricted_env(context: ContextWrapper[AstrAgentContext]) -> bool:
         context: Tool call context.
 
     Returns:
-        True for every non-admin Local tool call.
+        True when the caller's Local filesystem scope is workspace-only.
     """
-    return is_local_runtime(context) and context.context.event.role != "admin"
+    return is_local_runtime(context) and (
+        get_local_permission_policy(context).filesystem_scope == "workspace"
+    )
 
 
 def _resolve_tool_path(

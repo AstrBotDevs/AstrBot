@@ -75,6 +75,8 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
         silent=False,
         cwd=str(workspace.resolve(strict=False)),
         sandboxed=False,
+        allow_network=True,
+        filesystem_scope="host",
     )
 
 
@@ -131,6 +133,8 @@ async def test_local_member_python_uses_platform_sandbox(
         silent=False,
         cwd=str(tmp_path.resolve(strict=False)),
         sandboxed=True,
+        allow_network=False,
+        filesystem_scope="workspace",
     )
 
 

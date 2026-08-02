@@ -172,9 +172,13 @@
           "description": "运行环境",
           "hint": "允许 Agent 访问的环境。local 为本机环境，sandbox 为沙箱环境，none 为不允许任何环境。"
         },
+        "computer_use_local_permissions": {
+          "description": "本地权限策略",
+          "hint": "分别设置普通成员和管理员在 Local 环境中的代码执行、执行环境联网和本机文件访问权限。"
+        },
         "computer_use_require_admin": {
-          "description": "需要 AstrBot 管理员权限",
-          "hint": "开启后，需要 AstrBot 管理员权限才能调用使用电脑能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。"
+          "description": "沙箱能力需要 AstrBot 管理员权限",
+          "hint": "开启后，需要 AstrBot 管理员权限才能调用远程沙箱能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。"
         },
         "sandbox": {
           "booter": {
@@ -237,6 +241,24 @@
             "hint": "决定了一个实例承载的最大会话数量。"
           }
         }
+      },
+      "local_permissions": {
+        "role": "权限主体",
+        "execution": "执行代码",
+        "network": "执行环境联网",
+        "hostFilesystem": "访问工作区外文件",
+        "result": "策略结果",
+        "roles": {
+          "member": "普通成员",
+          "admin": "管理员"
+        },
+        "states": {
+          "filesOnly": "仅文件访问",
+          "isolated": "隔离执行",
+          "full": "完整权限"
+        },
+        "help": "未授权工作区外文件时，仅可访问当前工作区及必要的 Skills、临时目录。只要网络或文件系统受到限制，Shell/Python 就会自动进入 OS 沙箱。",
+        "memberWarning": "普通成员已获得联网或工作区外文件权限，请确认这符合你的安全预期。"
       }
     },
     "proactive_capability": {

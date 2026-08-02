@@ -206,6 +206,37 @@ def test_linux_bwrap_command_is_workspace_only_and_clears_environment(
     ]
 
 
+def test_linux_bwrap_command_applies_network_and_filesystem_permissions(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(local_booter.sys, "platform", "linux")
+    monkeypatch.setattr(local_booter.shutil, "which", lambda name: f"/usr/bin/{name}")
+
+    networked_workspace = local_booter._build_local_sandbox_command(
+        ["/bin/sh", "-c", "pwd"],
+        workspace=tmp_path,
+        allow_network=True,
+        filesystem_scope="workspace",
+    )
+    host_without_network = local_booter._build_local_sandbox_command(
+        ["/bin/sh", "-c", "pwd"],
+        workspace=tmp_path,
+        allow_network=False,
+        filesystem_scope="host",
+    )
+
+    assert "--share-net" in networked_workspace
+    assert ["--bind", "/", "/"] not in [
+        networked_workspace[index : index + 3]
+        for index in range(len(networked_workspace) - 2)
+    ]
+    assert "--share-net" not in host_without_network
+    root_bind = host_without_network.index("--bind")
+    assert host_without_network[root_bind : root_bind + 3] == ["--bind", "/", "/"]
+    assert "--tmpfs" not in host_without_network
+
+
 def test_linux_bwrap_command_fails_closed_when_bwrap_is_missing(
     monkeypatch,
     tmp_path,
@@ -276,6 +307,107 @@ def test_macos_seatbelt_command_restricts_profile_and_environment(
     read_only_profile = read_only_command[read_only_command.index("-p") + 1]
     assert "(deny file-write*)" in read_only_profile
     assert "(allow file-write*" not in read_only_profile
+
+
+def test_macos_seatbelt_profile_applies_network_and_filesystem_permissions(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(local_booter.sys, "platform", "darwin")
+    monkeypatch.setattr(
+        local_booter.shutil,
+        "which",
+        lambda name, **_kwargs: f"/usr/bin/{name}",
+    )
+
+    networked_workspace = local_booter._build_local_sandbox_command(
+        ["/bin/sh", "-c", "pwd"],
+        workspace=tmp_path,
+        allow_network=True,
+        filesystem_scope="workspace",
+    )
+    host_without_network = local_booter._build_local_sandbox_command(
+        ["/bin/sh", "-c", "pwd"],
+        workspace=tmp_path,
+        allow_network=False,
+        filesystem_scope="host",
+    )
+
+    network_profile = networked_workspace[networked_workspace.index("-p") + 1]
+    host_profile = host_without_network[host_without_network.index("-p") + 1]
+    assert "(allow network*)" in network_profile
+    assert "(deny network*)" not in network_profile
+    assert "(deny network*)" in host_profile
+    assert "(allow file-read* file-write*" in host_profile
+    assert '(literal "/private/etc/passwd")' not in host_profile
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Seatbelt is macOS-only")
+def test_macos_seatbelt_enforces_independent_network_and_filesystem_permissions(
+    tmp_path,
+):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside_file = tmp_path / "outside.txt"
+    outside_file.write_text("host-visible", encoding="utf-8")
+
+    host_without_network = local_booter._build_local_sandbox_command(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import pathlib, socket; "
+                f"assert pathlib.Path({str(outside_file)!r}).read_text() == "
+                "'host-visible'; "
+                "sock = socket.socket(); "
+                "\ntry: sock.bind(('127.0.0.1', 0))\n"
+                "except OSError: pass\n"
+                "else: raise SystemExit('network unexpectedly available')"
+            ),
+        ],
+        workspace=workspace,
+        allow_network=False,
+        filesystem_scope="host",
+    )
+    host_result = subprocess.run(
+        host_without_network,
+        cwd=workspace,
+        env={"PATH": os.defpath},
+        capture_output=True,
+        timeout=10,
+    )
+
+    workspace_with_network = local_booter._build_local_sandbox_command(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import pathlib, socket; "
+                f"outside = pathlib.Path({str(outside_file)!r}); "
+                "\ntry: outside.read_text()\n"
+                "except OSError: pass\n"
+                "else: raise SystemExit('host file unexpectedly available')\n"
+                "sock = socket.socket(); sock.bind(('127.0.0.1', 0))"
+            ),
+        ],
+        workspace=workspace,
+        allow_network=True,
+        filesystem_scope="workspace",
+    )
+    network_result = subprocess.run(
+        workspace_with_network,
+        cwd=workspace,
+        env={"PATH": os.defpath},
+        capture_output=True,
+        timeout=10,
+    )
+
+    assert host_result.returncode == 0, local_booter._decode_shell_output(
+        host_result.stderr
+    )
+    assert network_result.returncode == 0, local_booter._decode_shell_output(
+        network_result.stderr
+    )
 
 
 def test_macos_seatbelt_command_fails_closed_when_tool_is_missing(
@@ -515,6 +647,8 @@ async def test_managed_shell_uses_platform_sandbox(
     result = await LocalShellComponent().exec_managed(
         "pwd",
         owner_id="owner-a",
+        creator_id="member-a",
+        creator_is_admin=False,
         cwd=str(tmp_path),
         yield_time_ms=5_000,
         sandboxed=True,
@@ -572,6 +706,8 @@ async def test_sandboxed_managed_shell_stops_at_output_limit(monkeypatch, tmp_pa
     result = await LocalShellComponent().exec_managed(
         "yes",
         owner_id="owner-a",
+        creator_id="member-a",
+        creator_is_admin=False,
         cwd=str(tmp_path),
         yield_time_ms=5_000,
         sandboxed=True,
