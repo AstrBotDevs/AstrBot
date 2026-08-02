@@ -3448,7 +3448,11 @@ CONFIG_METADATA_3 = {
                         "description": "Computer Use Runtime",
                         "type": "string",
                         "options": ["none", "local", "sandbox"],
-                        "labels": ["无", "本地", "沙箱"],
+                        "labels": [
+                            "不允许任何环境",
+                            "本机环境",
+                            "第三方沙箱环境",
+                        ],
                         "hint": "选择 Computer Use 运行环境。",
                     },
                     "provider_settings.computer_use_local_permissions": {

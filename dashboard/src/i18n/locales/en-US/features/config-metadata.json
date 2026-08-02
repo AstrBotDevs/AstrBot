@@ -255,8 +255,7 @@
           "isolated": "Isolated execution",
           "full": "Full access"
         },
-        "help": "Without host file access, tools are limited to the current workspace and required Skills and temporary directories. Shell and Python automatically use an OS sandbox whenever network or filesystem access is restricted.",
-        "windowsHelp": "Windows does not currently support restricted code execution. Shell and Python must remain disabled or receive both network and host file access for full-trust Local execution. Use remote Sandbox for granular isolation.",
+        "help": "Without permission to access files outside the workspace, tools are limited to the current workspace and required Skills and temporary data directories. When network or filesystem access is restricted, AstrBot runs Agent tasks in an operating-system sandbox. Windows does not currently support restricted isolation: non-administrators cannot execute code, while administrators may execute arbitrary code.",
         "memberWarning": "Members can access the network or files outside the workspace. Confirm that this matches your security expectations."
       }
     },
