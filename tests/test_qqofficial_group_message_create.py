@@ -884,6 +884,122 @@ async def test_send_streaming_non_c2c_batches_and_posts_once_at_end():
     assert event.send_buffer is None
 
 
+def test_append_stream_delta_owns_reused_plain_components():
+    event = QQOfficialMessageEvent.__new__(QQOfficialMessageEvent)
+    event.send_buffer = None
+    shared = MessageChain([Plain("不")])
+
+    event._append_stream_delta(shared)
+    shared.chain[0].text = "稀"
+    event._append_stream_delta(shared)
+    shared.chain[0].text = "罕"
+    event._append_stream_delta(shared)
+
+    assert (
+        "".join(
+            component.text
+            for component in event.send_buffer.chain
+            if isinstance(component, Plain)
+        )
+        == "不稀罕"
+    )
+
+
+@pytest.mark.asyncio
+async def test_send_streaming_non_c2c_keeps_reused_delta_text():
+    source = botpy.message.GroupMessage(
+        None,
+        "evt-2",
+        {
+            "id": "msg-2",
+            "group_openid": "group-1",
+            "author": {"member_openid": "member-1"},
+            "content": "hello",
+        },
+    )
+    event = QQOfficialMessageEvent.__new__(QQOfficialMessageEvent)
+    event.message_obj = SimpleNamespace(raw_message=source)
+    event.send_buffer = None
+    sent_text: list[str] = []
+
+    async def fake_post_send():
+        sent_text.append(
+            "".join(
+                component.text
+                for component in event.send_buffer.chain
+                if isinstance(component, Plain)
+            )
+        )
+        event.send_buffer = None
+
+    event._post_send = AsyncMock(side_effect=fake_post_send)
+    shared = MessageChain([Plain("不")])
+
+    async def generator():
+        shared.chain[0].text = "不"
+        yield shared
+        shared.chain[0].text = "稀"
+        yield shared
+        shared.chain[0].text = "罕"
+        yield shared
+
+    with patch.object(
+        AstrMessageEvent,
+        "send_streaming",
+        AsyncMock(return_value=None),
+    ):
+        await event.send_streaming(generator())
+
+    assert sent_text == ["不稀罕"]
+
+
+@pytest.mark.asyncio
+async def test_send_streaming_c2c_keeps_reused_delta_before_final_flush(monkeypatch):
+    source = botpy.message.C2CMessage(
+        None,
+        "evt-1",
+        {"id": "msg-1", "author": {"user_openid": "user-1"}, "content": "hello"},
+    )
+    event = QQOfficialMessageEvent.__new__(QQOfficialMessageEvent)
+    event.message_obj = SimpleNamespace(raw_message=source)
+    event.send_buffer = None
+    sent_text: list[str] = []
+
+    async def fake_post_send(stream=None):
+        assert stream == {"state": 10, "id": None, "index": 0, "reset": False}
+        sent_text.append(
+            "".join(
+                component.text
+                for component in event.send_buffer.chain
+                if isinstance(component, Plain)
+            )
+        )
+        event.send_buffer = None
+        return {"id": "out-1"}
+
+    event._post_send = AsyncMock(side_effect=fake_post_send)
+    shared = MessageChain([Plain("不")])
+    loop = asyncio.get_running_loop()
+    monkeypatch.setattr(loop, "time", lambda: 0.5)
+
+    async def generator():
+        shared.chain[0].text = "不"
+        yield shared
+        shared.chain[0].text = "稀"
+        yield shared
+        shared.chain[0].text = "罕"
+        yield shared
+
+    with patch.object(
+        AstrMessageEvent,
+        "send_streaming",
+        AsyncMock(return_value=None),
+    ):
+        await event.send_streaming(generator())
+
+    assert sent_text == ["不稀罕"]
+
+
 @pytest.mark.asyncio
 async def test_send_streaming_clears_buffer_when_post_send_raises():
     source = botpy.message.C2CMessage(
@@ -979,9 +1095,7 @@ async def test_result_decorate_segments_qqofficial_ws_plain_result():
         stage,
         "ctx",
         SimpleNamespace(
-            execution_context=SimpleNamespace(
-                get_using_tts_provider=lambda _umo: None
-            ),
+            execution_context=SimpleNamespace(get_using_tts_provider=lambda _umo: None),
             handlers=SimpleNamespace(
                 get_handlers_by_event_type=lambda *_args, **_kwargs: []
             ),

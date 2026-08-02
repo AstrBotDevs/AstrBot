@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import copy
 import logging
 import os
 import random
@@ -146,11 +147,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 source = self.message_obj.raw_message
 
                 if not isinstance(source, botpy.message.C2CMessage):
-                    # 非 C2C 场景：直接累积，最后统一发
-                    if not self.send_buffer:
-                        self.send_buffer = chain
-                    else:
-                        self.send_buffer.chain.extend(chain.chain)
+                    # Non-C2C output is sent at the end. Keep an owned copy
+                    # because some stream generators reuse their chain object.
+                    self._append_stream_delta(chain)
                     continue
 
                 # ---- C2C 流式场景 ----
@@ -173,11 +172,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     last_edit_time = 0
                     continue
 
-                # 累积内容
-                if not self.send_buffer:
-                    self.send_buffer = chain
-                else:
-                    self.send_buffer.chain.extend(chain.chain)
+                # Keep an owned copy: a reused stream delta must not mutate
+                # previously buffered text.
+                self._append_stream_delta(chain)
 
                 # 节流：按时间间隔发送中间分片
                 current_time = asyncio.get_running_loop().time()
@@ -207,6 +204,25 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             self.send_buffer = None
 
         return None
+
+    def _append_stream_delta(self, chain: MessageChain) -> None:
+        """Append a stream delta without retaining caller-owned components.
+
+        Some stream generators mutate and yield the same ``MessageChain`` more
+        than once. Holding that chain by reference corrupts the accumulated
+        response (most visibly by losing its leading text).
+        """
+        if not self.send_buffer:
+            self.send_buffer = MessageChain(
+                use_t2i_=chain.use_t2i_,
+                use_markdown_=chain.use_markdown_,
+                type=chain.type,
+            )
+        for component in chain.chain:
+            if isinstance(component, Plain):
+                self.send_buffer.chain.append(Plain(text=component.text))
+            else:
+                self.send_buffer.chain.append(copy.deepcopy(component))
 
     @staticmethod
     def _extract_response_message_id(ret) -> str | None:
