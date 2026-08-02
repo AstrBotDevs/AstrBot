@@ -91,6 +91,57 @@ class TestAstrBotConfigLoad:
         assert config.platform_settings["unique_session"] is True
         assert config.provider_settings["enable"] is False
 
+    @pytest.mark.parametrize("require_admin", [True, False])
+    def test_migrates_legacy_local_computer_permissions(
+        self,
+        temp_config_path,
+        require_admin,
+    ):
+        """Legacy admin switches should become explicit Local role policies."""
+        default_config = {
+            "provider_settings": {
+                "computer_use_require_admin": True,
+                "computer_use_local_permissions": {
+                    "member": {
+                        "allow_execution": False,
+                        "allow_network": False,
+                        "filesystem_scope": "workspace",
+                    },
+                    "admin": {
+                        "allow_execution": True,
+                        "allow_network": True,
+                        "filesystem_scope": "workspace",
+                    },
+                },
+            }
+        }
+        with open(temp_config_path, "w", encoding="utf-8-sig") as file:
+            json.dump(
+                {
+                    "provider_settings": {
+                        "computer_use_require_admin": require_admin,
+                    }
+                },
+                file,
+            )
+
+        config = AstrBotConfig(
+            config_path=temp_config_path,
+            default_config=default_config,
+        )
+
+        permissions = config["provider_settings"]["computer_use_local_permissions"]
+        assert permissions["member"] == {
+            "allow_execution": not require_admin,
+            "allow_network": False,
+            "filesystem_scope": "workspace",
+        }
+        assert permissions["admin"] == {
+            "allow_execution": True,
+            "allow_network": True,
+            "filesystem_scope": "host",
+        }
+
     def test_first_deploy_flag(self, temp_config_path, minimal_default_config):
         """Test first_deploy flag is set for new config."""
         config = AstrBotConfig(
