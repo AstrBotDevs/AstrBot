@@ -410,6 +410,38 @@ def test_macos_seatbelt_enforces_independent_network_and_filesystem_permissions(
     )
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="Seatbelt is macOS-only")
+def test_macos_seatbelt_preserves_process_limit_and_allows_shell_fork(tmp_path):
+    import resource
+
+    python_path = str(Path(sys.executable).resolve())
+    print_process_limit = shlex.join(
+        [
+            python_path,
+            "-I",
+            "-S",
+            "-c",
+            "import resource; print(resource.getrlimit(resource.RLIMIT_NPROC)[0])",
+        ]
+    )
+    command = local_booter._build_local_sandbox_command(
+        ["/bin/sh", "-c", f"{print_process_limit}; /bin/date >/dev/null"],
+        workspace=tmp_path,
+    )
+
+    result = subprocess.run(
+        command,
+        cwd=tmp_path,
+        env={"PATH": os.defpath},
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert int(result.stdout.strip()) == resource.getrlimit(resource.RLIMIT_NPROC)[0]
+
+
 def test_macos_seatbelt_command_fails_closed_when_tool_is_missing(
     monkeypatch,
     tmp_path,

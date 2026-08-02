@@ -82,13 +82,17 @@ limits = [
     (resource.RLIMIT_CPU, {_LOCAL_SANDBOX_MAX_CPU_SECONDS}),
     (resource.RLIMIT_FSIZE, {_LOCAL_SANDBOX_MAX_FILE_BYTES}),
     (resource.RLIMIT_NOFILE, {_LOCAL_SANDBOX_MAX_OPEN_FILES}),
-    (resource.RLIMIT_NPROC, {_LOCAL_SANDBOX_MAX_PROCESSES}),
     (resource.RLIMIT_CORE, 0),
 ]
 if sys.platform.startswith("linux"):
-    # macOS Python starts above this virtual-address limit, so lowering RLIMIT_AS
-    # there fails before the sandboxed payload can run.
-    limits.append((resource.RLIMIT_AS, {_LOCAL_SANDBOX_MAX_MEMORY_BYTES}))
+    # macOS RLIMIT_NPROC counts every process owned by the host user, and its
+    # Python process starts above this virtual-address limit.
+    limits.extend(
+        (
+            (resource.RLIMIT_NPROC, {_LOCAL_SANDBOX_MAX_PROCESSES}),
+            (resource.RLIMIT_AS, {_LOCAL_SANDBOX_MAX_MEMORY_BYTES}),
+        )
+    )
 for kind, requested in limits:
     _, hard = resource.getrlimit(kind)
     value = requested if hard == resource.RLIM_INFINITY else min(requested, hard)
