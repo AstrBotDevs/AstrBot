@@ -164,6 +164,11 @@ const memberHasElevatedAccess = computed(() => {
   font-size: 0.8rem;
 }
 
+.permission-table :deep(th),
+.permission-table :deep(td) {
+  border-bottom-color: rgba(var(--v-theme-on-surface), 0.12) !important;
+}
+
 .role-cell {
   min-width: 92px;
   font-weight: 500;

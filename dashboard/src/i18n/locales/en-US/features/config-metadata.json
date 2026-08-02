@@ -168,7 +168,8 @@
       "provider_settings": {
         "computer_use_runtime": {
           "description": "Computer Use Runtime",
-          "hint": "Environment allowed for Agent usage. `local` means the local machine environment, `sandbox` means the sandbox environment, and `none` means no environment is allowed."
+          "hint": "Environment the Agent is allowed to access.",
+          "labels": ["No environment", "Local machine", "Third-party sandbox"]
         },
         "computer_use_local_permissions": {
           "description": "Local Permission Policies",

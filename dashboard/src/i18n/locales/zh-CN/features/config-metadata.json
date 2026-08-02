@@ -170,7 +170,8 @@
       "provider_settings": {
         "computer_use_runtime": {
           "description": "运行环境",
-          "hint": "允许 Agent 访问的环境。local 为本机环境，sandbox 为沙箱环境，none 为不允许任何环境。"
+          "hint": "允许 Agent 访问的环境。",
+          "labels": ["不允许任何环境", "本机环境", "第三方沙箱环境"]
         },
         "computer_use_local_permissions": {
           "description": "本地权限策略",
