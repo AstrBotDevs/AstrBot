@@ -1,10 +1,10 @@
-import uuid
 from pathlib import Path
 
 import httpx
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.datetime_utils import generate_timestamp_id
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -163,7 +163,8 @@ class ProviderElevenLabsTTSAPI(TTSProvider):
         temp_dir = Path(get_astrbot_temp_path())
         temp_dir.mkdir(parents=True, exist_ok=True)
         path = (
-            temp_dir / f"elevenlabs_tts_api_{uuid.uuid4()}.{self._output_extension()}"
+            temp_dir
+            / f"elevenlabs_tts_api_{generate_timestamp_id()}.{self._output_extension()}"
         )
         path.write_bytes(response.content)
         return str(path)
