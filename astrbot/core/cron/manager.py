@@ -103,23 +103,28 @@ class CronJobManager:
         self._background_tasks: set[asyncio.Task] = set()
         self._lock = asyncio.Lock()
         self._started = False
+        self._db_synced = False
 
     async def start(self, ctx: CoreExecutionContext) -> None:
         self.ctx: CoreExecutionContext = ctx
         async with self._lock:
-            if self._started:
+            if self._db_synced:
                 return
-            self.scheduler.start()
-            self._started = True
+            if not self._started:
+                self.scheduler.start()
+                self._started = True
             await self.sync_from_db()
+            self._db_synced = True
 
     async def shutdown(self) -> None:
         async with self._lock:
             if not self._started:
                 return
             self.scheduler.shutdown(wait=False)
+            await asyncio.sleep(0)
             await cancel_tracked_tasks(self._background_tasks)
             self._started = False
+            self._db_synced = False
 
     async def sync_from_db(self) -> None:
         jobs = await self.db.list_cron_jobs()
@@ -282,6 +287,15 @@ class CronJobManager:
         if not aps_job or aps_job.next_run_time is None:
             return None
         return aps_job.next_run_time.astimezone(UTC)
+
+    def get_next_run_time(self, job_id: str) -> datetime | None:
+        """Return the live scheduler next-run time in UTC.
+
+        The database update is intentionally tracked in the background, so a
+        freshly created job may not have its ``next_run_time`` persisted yet.
+        Callers that need an immediate value should read the scheduler.
+        """
+        return self._get_next_run_time(job_id)
 
     async def run_job_now(self, job_id: str) -> None:
         await self._run_job(job_id, ignore_enabled=True, delete_run_once=False)

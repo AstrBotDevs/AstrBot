@@ -1,9 +1,11 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
+from astrbot import logger
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
@@ -44,6 +46,34 @@ def _parse_run_at(run_at: Any) -> datetime | None:
     if run_at in (None, ""):
         return None
     return datetime.fromisoformat(str(run_at))
+
+
+def _get_configured_timezone(context: ContextWrapper[AstrAgentContext]):
+    """Return the configured display timezone, or ``None`` on invalid input."""
+    event = context.context.event
+    get_config = getattr(context.context.context, "get_config", None)
+    if not callable(get_config):
+        return None, None
+    config = get_config(umo=event.unified_msg_origin)
+    if not isinstance(config, dict):
+        return None, None
+    tz_name = str(config.get("timezone") or "").strip()
+    if not tz_name:
+        return None, None
+    try:
+        return tz_name, ZoneInfo(tz_name)
+    except ZoneInfoNotFoundError:
+        logger.warning("Invalid timezone %r in config; using system timezone.", tz_name)
+        return None, None
+
+
+def _display_next_run_time(value: datetime | None, tzinfo) -> datetime | None:
+    """Convert a scheduler/DB UTC value to the configured display timezone."""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(tzinfo) if tzinfo else value.astimezone()
 
 
 @builtin_tool(config=_CRON_TOOL_CONFIG)
@@ -96,7 +126,11 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
     )
 
     async def _create_future_task(
-        self, cron_mgr, event, kwargs: dict[str, Any]
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        cron_mgr,
+        event,
+        kwargs: dict[str, Any],
     ) -> ToolExecResult:
         cron_expression = kwargs.get("cron_expression")
         run_at = kwargs.get("run_at")
@@ -115,6 +149,7 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             run_at_dt = _parse_run_at(run_at)
         except Exception:
             return "error: run_at must be ISO datetime, e.g., 2026-02-02T08:00:00+08:00"
+        timezone_name, timezone_info = _get_configured_timezone(context)
         payload = {
             "session": event.unified_msg_origin,
             "sender_id": event.get_sender_id(),
@@ -127,12 +162,24 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                 cron_expression=str(cron_expression) if cron_expression else None,
                 payload=payload,
                 description=note,
+                timezone=timezone_name,
                 run_once=run_once,
                 run_at=run_at_dt,
             )
         except CronJobSchedulingError:
             return "error: failed to schedule task due to invalid configuration."
-        next_run = job.next_run_time or run_at_dt
+        next_run = (
+            cron_mgr.get_next_run_time(job.job_id)
+            if hasattr(cron_mgr, "get_next_run_time")
+            else None
+        ) or job.next_run_time
+        if next_run is not None:
+            next_run = _display_next_run_time(next_run, timezone_info)
+        elif run_at_dt is not None:
+            if run_at_dt.tzinfo is None and timezone_info:
+                next_run = run_at_dt.replace(tzinfo=timezone_info)
+            elif run_at_dt.tzinfo is not None and timezone_info:
+                next_run = run_at_dt.astimezone(timezone_info)
         suffix = (
             f"one-time at {next_run}"
             if run_once
@@ -154,7 +201,11 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
         return f"Deleted cron job {job_id}."
 
     async def _list_future_tasks(
-        self, cron_mgr, current_umo: str, current_sender_id: str
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        cron_mgr,
+        current_umo: str,
+        current_sender_id: str,
     ) -> ToolExecResult:
         jobs = [
             job
@@ -163,10 +214,11 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
         ]
         if not jobs:
             return "No cron jobs found."
+        _, timezone_info = _get_configured_timezone(context)
         return "\n".join(
             f"{job.job_id} | {job.name} | {job.job_type} | "
             f"run_once={getattr(job, 'run_once', False)} | enabled={job.enabled} | "
-            f"next={job.next_run_time}"
+            f"next={_display_next_run_time(job.next_run_time, timezone_info)}"
             for job in jobs
         )
 
@@ -254,7 +306,7 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
         action = str(kwargs.get("action") or "").strip().lower()
         if action == "create":
             return await self._create_future_task(
-                cron_mgr, context.context.event, kwargs
+                context, cron_mgr, context.context.event, kwargs
             )
 
         current_umo = context.context.event.unified_msg_origin
@@ -274,7 +326,7 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
 
         if action == "list":
             return await self._list_future_tasks(
-                cron_mgr, current_umo, current_sender_id
+                context, cron_mgr, current_umo, current_sender_id
             )
 
         return "error: action must be one of create, edit, delete, or list."
