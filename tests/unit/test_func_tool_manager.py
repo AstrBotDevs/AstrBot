@@ -167,11 +167,7 @@ async def test_local_execute_shell_manages_running_and_closed_results(
             command="echo done",
         )
 
-        assert json.loads(result) == {
-            "stdout": "done\n",
-            "stderr": "",
-            "exit_code": exit_code,
-        }
+        assert result == f"Command completed with exit code {exit_code}.\ndone\n"
 
 
 @pytest.mark.asyncio

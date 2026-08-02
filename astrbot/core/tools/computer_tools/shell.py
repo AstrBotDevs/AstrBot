@@ -137,9 +137,9 @@ class ExecuteShellTool(FunctionTool):
                     "completed",
                     "failed",
                 }:
-                    result = {
-                        key: result[key] for key in ("stdout", "stderr", "exit_code")
-                    }
+                    message = f"Command completed with exit code {result['exit_code']}."
+                    output = f"{result['stdout']}{result['stderr']}"
+                    return f"{message}\n{output}" if output else message
                 return json.dumps(result, ensure_ascii=False)
 
             effective_background = background and not _is_self_detached_command(command)
@@ -178,8 +178,9 @@ class LocalExecuteShellTool(ExecuteShellTool):
     """Local shell tool that automatically yields long-running commands."""
 
     description: str = (
-        "Execute a command in the shell. If it is still running after "
-        "yield_time_ms, the tool returns a managed shell session ID."
+        "Execute a command in the shell. Commands that finish within yield_time_ms "
+        "return a plain-text completion message and output. Commands still running "
+        "return managed shell session JSON."
     )
     parameters: dict = field(
         default_factory=lambda: {
