@@ -252,16 +252,18 @@ class AstrBotCoreLifecycle:
             self.subagent_orchestrator,
         )
 
+        # 根据配置实例化各个 Provider
+        # 必须先于插件初始化：插件可能在 initialize() 中发起 LLM 调用，
+        # 若此时 Provider 尚未装载，会解析到配置数组中的第一个 Provider。
+        self._default_chat_provider_warning_emitted = False
+        await self.provider_manager.initialize()
+        self._warn_about_unset_default_chat_provider()
+
         # 初始化插件管理器
         self.plugin_manager = PluginManager(self.star_context, self.astrbot_config)
 
         # 扫描、注册插件、实例化插件类
         await self.plugin_manager.reload()
-
-        # 根据配置实例化各个 Provider
-        self._default_chat_provider_warning_emitted = False
-        await self.provider_manager.initialize()
-        self._warn_about_unset_default_chat_provider()
 
         await self.kb_manager.initialize()
 
