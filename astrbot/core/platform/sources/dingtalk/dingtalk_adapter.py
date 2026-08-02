@@ -3,6 +3,7 @@ import json
 import threading
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from concurrent.futures import CancelledError as FutureCancelledError
 from pathlib import Path
 from typing import Literal, NoReturn, cast
@@ -221,7 +222,6 @@ class DingtalkPlatformAdapter(Platform):
             return path
 
         async def _download_media_lazily(
-            *,
             download_code: str,
             file_ext: str,
         ) -> str | None:
@@ -234,6 +234,30 @@ class DingtalkPlatformAdapter(Platform):
                 return None
             return _track_temp_path(f_path)
 
+        await self._convert_message_content(
+            message=message,
+            abm=abm,
+            message_type=message_type,
+            robot_code=robot_code,
+            raw_content=raw_content,
+            leading_at_is_self=leading_at_is_self,
+            download_media=_download_media_lazily,
+        )
+
+        await self._remember_sender_binding(message, abm)
+        return abm  # 别忘了返回转换后的消息对象
+
+    async def _convert_message_content(
+        self,
+        *,
+        message: dingtalk_stream.ChatbotMessage,
+        abm: AstrBotMessage,
+        message_type: str,
+        robot_code: str,
+        raw_content: dict,
+        leading_at_is_self: bool,
+        download_media: Callable[[str, str], Awaitable[str | None]],
+    ) -> None:
         match message_type:
             case "text":
                 abm.message_str = message.text.content.strip()
@@ -241,8 +265,7 @@ class DingtalkPlatformAdapter(Platform):
             case "picture":
                 if not robot_code:
                     logger.error("钉钉图片消息解析失败: 回调中缺少 robotCode")
-                    await self._remember_sender_binding(message, abm)
-                    return abm
+                    return
                 image_content = cast(
                     dingtalk_stream.ImageContent | None,
                     message.image_content,
@@ -255,9 +278,8 @@ class DingtalkPlatformAdapter(Platform):
                 else:
                     image = Image(file="")
                     image.set_source_resolver(
-                        lambda download_code=download_code: _download_media_lazily(
-                            download_code=download_code,
-                            file_ext="jpg",
+                        lambda download_code=download_code: download_media(
+                            download_code, "jpg"
                         )
                     )
                     abm.message.append(image)
@@ -301,9 +323,8 @@ class DingtalkPlatformAdapter(Platform):
                             continue
                         image = Image(file="")
                         image.set_source_resolver(
-                            lambda download_code=download_code: _download_media_lazily(
-                                download_code=download_code,
-                                file_ext="jpg",
+                            lambda download_code=download_code: download_media(
+                                download_code, "jpg"
                             )
                         )
                         abm.message.append(image)
@@ -322,10 +343,7 @@ class DingtalkPlatformAdapter(Platform):
                     record = Record(file="")
                     record.set_source_resolver(
                         lambda download_code=download_code, voice_ext=voice_ext: (
-                            _download_media_lazily(
-                                download_code=download_code,
-                                file_ext=voice_ext,
-                            )
+                            download_media(download_code, voice_ext)
                         )
                     )
                     abm.message.append(record)
@@ -353,19 +371,13 @@ class DingtalkPlatformAdapter(Platform):
                         file_ext: str = file_ext,
                         file_name_missing: bool = file_name_missing,
                     ) -> str | None:
-                        resolved_path = await _download_media_lazily(
-                            download_code=download_code,
-                            file_ext=file_ext,
-                        )
+                        resolved_path = await download_media(download_code, file_ext)
                         if resolved_path and file_name_missing:
                             file_component.name = Path(resolved_path).name
                         return resolved_path
 
                     file_component.set_file_resolver(_resolve_file_path)
                     abm.message.append(file_component)
-
-        await self._remember_sender_binding(message, abm)
-        return abm  # 别忘了返回转换后的消息对象
 
     async def _remember_sender_binding(
         self,
