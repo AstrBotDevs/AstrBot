@@ -44,16 +44,11 @@ class VLLMRerankProvider(RerankProvider):
 
     def _parse_results(self, response_data: object) -> list[RerankResult]:
         if not isinstance(response_data, Mapping):
-            logger.warning("VLLM rerank returned an invalid response")
-            return []
+            raise ValueError("VLLM rerank returned an invalid response")
 
-        results = response_data.get("results", [])
-        if not isinstance(results, list):
-            logger.warning("VLLM rerank returned invalid result data")
-            return []
-        if not results:
-            logger.warning("VLLM rerank returned no results")
-            return []
+        results = response_data.get("results")
+        if not isinstance(results, list) or not results:
+            raise ValueError("VLLM rerank returned invalid result data")
 
         rerank_results: list[RerankResult] = []
         for result in results:
@@ -71,6 +66,8 @@ class VLLMRerankProvider(RerankProvider):
                     "VLLM rerank result parsing failed: %s", safe_error("", exc)
                 )
 
+        if not rerank_results:
+            raise ValueError("VLLM rerank returned no valid results")
         return rerank_results
 
     async def rerank(
@@ -79,6 +76,8 @@ class VLLMRerankProvider(RerankProvider):
         documents: list[str],
         top_n: int | None = None,
     ) -> list[RerankResult]:
+        if not documents:
+            return []
         payload = {
             "query": query,
             "documents": documents,

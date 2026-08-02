@@ -1,8 +1,11 @@
+import importlib
 import json
+import sys
 from types import SimpleNamespace
 
 import pytest
 
+from astrbot.core.knowledge_base.retrieval import sparse_retriever
 from astrbot.core.knowledge_base.retrieval.sparse_retriever import SparseRetriever
 
 
@@ -59,11 +62,21 @@ class FallbackStorage:
         ]
 
 
+class StaticFTSStorage:
+    def __init__(self, documents: list[dict]) -> None:
+        self.documents = documents
+
+    async def search_sparse(self, query_tokens: list[str], limit: int):
+        del query_tokens
+        return self.documents[:limit]
+
+
 @pytest.mark.asyncio
-async def test_sparse_retriever_uses_fts5_when_available():
+async def test_sparse_retriever_uses_fts5_without_importing_bm25(monkeypatch):
     storage = FTSStorage()
     vec_db = SimpleNamespace(document_storage=storage)
     retriever = SparseRetriever(kb_db=None)
+    monkeypatch.setitem(sys.modules, "rank_bm25", None)
 
     results = await retriever.retrieve(
         query="apple",
@@ -74,6 +87,13 @@ async def test_sparse_retriever_uses_fts5_when_available():
     assert [result.chunk_id for result in results] == ["chunk-1"]
     assert storage.search_sparse_calls == 1
     assert storage.get_documents_calls == 0
+
+
+def test_sparse_retriever_module_import_does_not_load_bm25(monkeypatch):
+    """FTS-only deployments do not need rank_bm25 during module import."""
+    monkeypatch.setitem(sys.modules, "rank_bm25", None)
+
+    importlib.reload(sparse_retriever)
 
 
 @pytest.mark.asyncio
@@ -91,3 +111,39 @@ async def test_sparse_retriever_falls_back_to_bm25_when_fts5_is_unavailable():
     assert [result.chunk_id for result in results] == ["chunk-1"]
     assert storage.search_sparse_calls == 1
     assert storage.get_documents_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_sparse_retriever_preserves_per_kb_fts_ranks():
+    """Independent FTS scores use per-knowledge-base ranks for later RRF."""
+    large_storage = StaticFTSStorage(
+        [
+            {**make_doc("large-1", "admin account", 0), "score": -12.0},
+            {**make_doc("large-2", "password policy", 1), "score": -10.0},
+        ]
+    )
+    small_storage = StaticFTSStorage(
+        [{**make_doc("small-exact", "reset admin password", 0), "score": -0.01}]
+    )
+    retriever = SparseRetriever(kb_db=None)
+
+    results = await retriever.retrieve(
+        query="reset admin password",
+        kb_ids=["kb-large", "kb-small"],
+        kb_options={
+            "kb-large": {
+                "vec_db": SimpleNamespace(document_storage=large_storage),
+                "top_k_sparse": 2,
+            },
+            "kb-small": {
+                "vec_db": SimpleNamespace(document_storage=small_storage),
+                "top_k_sparse": 1,
+            },
+        },
+    )
+
+    assert {result.chunk_id: result.rank for result in results} == {
+        "large-1": 1,
+        "large-2": 2,
+        "small-exact": 1,
+    }

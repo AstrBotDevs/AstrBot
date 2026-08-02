@@ -196,10 +196,20 @@ async def test_rerank_rejects_non_object_response_without_leaking_contents(
 ) -> None:
     provider = _provider(_Client(_Response(200, [_SENSITIVE_ERROR])))
 
-    with caplog.at_level(logging.WARNING, logger="astrbot"):
-        assert await provider.rerank("query", ["document"]) == []
+    with caplog.at_level(logging.ERROR, logger="astrbot"):
+        with pytest.raises(RuntimeError, match=_REQUEST_ERROR) as caught:
+            await provider.rerank("query", ["document"])
 
-    _assert_no_sensitive_values(caplog.text)
+    _assert_no_sensitive_values(caught.value, caplog.text)
+
+
+@pytest.mark.asyncio
+async def test_rerank_skips_request_for_empty_documents() -> None:
+    client = _Client(_Response(200, {"results": []}))
+    provider = _provider(client)
+
+    assert await provider.rerank("query", []) == []
+    assert client.posts == []
 
 
 @pytest.mark.asyncio

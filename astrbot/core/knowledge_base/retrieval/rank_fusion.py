@@ -124,7 +124,10 @@ class RankFusion:
         dense_lookup = self._build_dense_lookup(dense_results)
         sparse_lookup = self._build_sparse_lookup(sparse_results)
         dense_ranks = self._build_rank_map(list(dense_lookup))
-        sparse_ranks = self._build_rank_map(list(sparse_lookup))
+        sparse_ranks = {
+            result.chunk_id: result.rank if result.rank is not None else index + 1
+            for index, result in enumerate(sparse_results)
+        }
         all_chunk_ids = set(dense_lookup) | set(sparse_lookup)
         rrf_scores = {
             identifier: self._score_identifier(
@@ -136,8 +139,12 @@ class RankFusion:
         }
         sorted_ids = sorted(
             rrf_scores,
-            key=rrf_scores.__getitem__,
-            reverse=True,
+            key=lambda identifier: (
+                -rrf_scores[identifier],
+                dense_ranks.get(identifier, float("inf")),
+                sparse_ranks.get(identifier, float("inf")),
+                identifier,
+            ),
         )[:top_k]
 
         fused_results: list[FusedResult] = []
