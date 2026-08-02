@@ -137,6 +137,7 @@ class TestAstrBotCoreLifecycleInit:
         assert lifecycle.log_broker == mock_log_broker
         assert "http_proxy" not in os.environ
         assert "https_proxy" not in os.environ
+        assert os.environ["no_proxy"] == "localhost,127.0.0.1,::1"
 
     @pytest.mark.asyncio
     async def test_stop_restores_proxy_environment(

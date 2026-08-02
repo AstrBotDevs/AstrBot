@@ -144,7 +144,11 @@ class AstrBotCoreLifecycle:
 
         for name in _PROXY_ENVIRONMENT_KEYS:
             self._set_proxy_environment_value(name, None)
-        logger.debug("HTTP proxy cleared")
+        # Several local service clients intentionally use ``trust_env=True``.
+        # Preserve a loopback bypass even if the embedding host also exposes
+        # uppercase proxy variables that this lifecycle does not own.
+        self._set_proxy_environment_value("no_proxy", "localhost,127.0.0.1,::1")
+        logger.debug("HTTP proxy cleared; loopback hosts bypass environment proxies")
 
     async def _restore_proxy_environment(self) -> None:
         """Restore proxy variables only when they still hold our values."""
