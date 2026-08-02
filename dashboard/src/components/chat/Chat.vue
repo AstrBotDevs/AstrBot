@@ -1289,12 +1289,13 @@ async function handleRegenerateMessage(
   selection?: RegenerateModelSelection,
 ) {
   if (!currSessionId.value || isUserMessage(message)) return;
+  const resolvedSelection = selection ?? getSelectedProviderSelection();
   message.threads = [];
   await regenerateMessage(
     currSessionId.value,
     message,
-    selection?.providerId || '',
-    selection?.modelName || '',
+    resolvedSelection?.providerId || '',
+    resolvedSelection?.modelName || '',
   );
 }
 
