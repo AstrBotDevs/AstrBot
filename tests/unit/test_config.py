@@ -110,7 +110,7 @@ class TestAstrBotConfigLoad:
                     "admin": {
                         "allow_execution": True,
                         "allow_network": True,
-                        "filesystem_scope": "host",
+                        "filesystem_scope": "workspace",
                     },
                 },
             }
@@ -130,9 +130,7 @@ class TestAstrBotConfigLoad:
             default_config=default_config,
         )
 
-        permissions = config["provider_settings"][
-            "computer_use_local_permissions"
-        ]
+        permissions = config["provider_settings"]["computer_use_local_permissions"]
         assert permissions["member"] == {
             "allow_execution": not require_admin,
             "allow_network": False,

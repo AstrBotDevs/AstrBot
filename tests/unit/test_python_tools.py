@@ -74,9 +74,9 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
         timeout=30,
         silent=False,
         cwd=str(workspace.resolve(strict=False)),
-        sandboxed=False,
+        sandboxed=True,
         allow_network=True,
-        filesystem_scope="host",
+        filesystem_scope="workspace",
     )
 
 

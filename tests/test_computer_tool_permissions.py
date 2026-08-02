@@ -108,6 +108,15 @@ def test_local_permission_policy_treats_unknown_roles_as_members():
     assert resolved.filesystem_scope == "workspace"
 
 
+def test_local_permission_policy_defaults_admin_to_workspace_access():
+    resolved = get_local_permission_policy(_make_local_run_context("admin", {}))
+
+    assert resolved.allow_execution is True
+    assert resolved.allow_network is True
+    assert resolved.filesystem_scope == "workspace"
+    assert resolved.requires_sandbox is True
+
+
 def test_local_permission_policy_denies_disabled_execution():
     policy = {
         "member": {
@@ -126,6 +135,8 @@ def test_local_permission_policy_denies_disabled_execution():
     assert resolved.allow_execution is False
     assert error is not None
     assert "disabled by the Local permission policy" in error
+    assert "WebUI -> Config -> Normal Config" in error
+    assert "Local Permission Policies" in error
 
 
 def test_windows_local_execution_requires_a_full_trust_policy(monkeypatch):
@@ -158,6 +169,8 @@ def test_windows_local_execution_requires_a_full_trust_policy(monkeypatch):
 
     assert restricted_error is not None
     assert "only supported on Linux" in restricted_error
+    assert "Third-party sandbox" in restricted_error
+    assert "Computer Use Runtime" in restricted_error
     assert full_error is None
     assert full_policy is not None
     assert full_policy.requires_sandbox is False

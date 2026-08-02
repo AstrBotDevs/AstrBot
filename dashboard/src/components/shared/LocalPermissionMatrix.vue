@@ -91,7 +91,7 @@ const defaults = {
   admin: {
     allow_execution: true,
     allow_network: true,
-    filesystem_scope: 'host'
+    filesystem_scope: 'workspace'
   }
 }
 

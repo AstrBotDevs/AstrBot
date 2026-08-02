@@ -180,7 +180,7 @@ DEFAULT_CONFIG = {
             "admin": {
                 "allow_execution": True,
                 "allow_network": True,
-                "filesystem_scope": "host",
+                "filesystem_scope": "workspace",
             },
         },
         "computer_use_require_admin": True,

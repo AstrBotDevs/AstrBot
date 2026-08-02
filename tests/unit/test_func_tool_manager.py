@@ -145,12 +145,12 @@ async def test_local_execute_shell_manages_running_and_closed_results(
         owner_id="umo",
         creator_id="admin-user",
         creator_is_admin=True,
-        sandboxed=False,
+        sandboxed=True,
         allow_network=True,
-        filesystem_scope="host",
+        filesystem_scope="workspace",
         cwd=str(tmp_path),
         env={},
-        timeout=None,
+        timeout=300,
         yield_time_ms=250,
     )
     for status, exit_code, wall_time in (

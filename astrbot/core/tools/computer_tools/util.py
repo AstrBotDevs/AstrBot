@@ -95,7 +95,7 @@ def get_local_permission_policy(
     role = "admin" if context.context.event.role == "admin" else "member"
     default_execution = role == "admin"
     default_network = role == "admin"
-    default_filesystem = "host" if role == "admin" else "workspace"
+    default_filesystem = "workspace"
 
     permissions = provider_settings.get("computer_use_local_permissions")
     role_policy = permissions.get(role) if isinstance(permissions, dict) else None
@@ -158,13 +158,18 @@ def check_local_execution_permission(
     if not policy.allow_execution:
         return policy, (
             f"error: Permission denied. {operation_name} is disabled by the "
-            "Local permission policy for this user role."
+            "Local permission policy for this user role. Enable `Execute code` "
+            "for this role in AstrBot WebUI -> Config -> Normal Config -> AI -> "
+            "Agent Computer Use -> Local Permission Policies."
         )
     if policy.requires_sandbox and not (
         sys.platform.startswith("linux") or sys.platform == "darwin"
     ):
         return policy, (
             "error: Permission denied. Restricted Local execution is only supported "
-            "on Linux with bubblewrap or macOS with Seatbelt."
+            "on Linux with bubblewrap or macOS with Seatbelt. To use restricted "
+            "execution on this platform, select `Third-party sandbox` under AstrBot "
+            "WebUI -> Config -> Normal Config -> AI -> Agent Computer Use -> "
+            "Computer Use Runtime."
         )
     return policy, None
