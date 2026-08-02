@@ -5,8 +5,11 @@ import {
   openApiV1,
   typed,
 } from './shared';
+import { fetchWithAuth } from '../http';
 import type {
+  ApiEnvelope,
   AxiosRequestConfig,
+  AxiosResponse,
   PluginBatchUpdateRequest,
   PluginConfigFileDeleteRequest,
   PluginDashboardAction,
@@ -18,7 +21,6 @@ import type {
   PluginSourceBindRequest,
   PluginSourceRequest,
   PluginUpdateRequest,
-  PluginUploadInstallRequest,
   PluginUrlInstallRequest,
 } from './shared';
 import { notifyPluginDashboardLifecycle } from './lifecycle';
@@ -200,14 +202,18 @@ export const pluginApi = {
       openApiV1.replacePluginSources({ body: { sources } }),
     );
   },
-  installUpload(formData: FormData) {
-    return typed<OpenConfig>(
-      openApiV1.installPluginFromUpload({
-        body: generatedFormData(
-          formData,
-        ) as unknown as PluginUploadInstallRequest,
-      }),
-    );
+  async installUpload(formData: FormData) {
+    const response = await fetchWithAuth('/api/v1/plugins/install/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(
+        data?.message || `Plugin upload failed (${response.status})`,
+      );
+    }
+    return { data } as AxiosResponse<ApiEnvelope<OpenConfig>>;
   },
   installGithub(body: PluginGithubInstallRequest) {
     return typed<OpenConfig>(openApiV1.installPluginFromGithub({ body }));
