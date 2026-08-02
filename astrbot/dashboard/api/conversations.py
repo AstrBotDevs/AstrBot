@@ -19,7 +19,7 @@ from astrbot.dashboard.services.conversation_service import (
     ConversationServiceError,
 )
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, ScopeDependency, require_dashboard_user
 
 router = APIRouter(tags=["Conversations"])
 legacy_router = APIRouter(
@@ -33,8 +33,7 @@ def get_service(request: Request) -> ConversationService:
     return request.app.state.services.conversations
 
 
-async def require_data_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "data")
+require_data_scope = ScopeDependency("data")
 
 
 async def _json_or_empty(request: Request) -> dict[str, Any]:

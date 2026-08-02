@@ -13,7 +13,7 @@ from astrbot.dashboard.services.chatui_project_service import (
     ChatUIProjectServiceError,
 )
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, ScopeDependency, require_dashboard_user
 
 router = APIRouter(tags=["Chat Projects"])
 legacy_router = APIRouter(
@@ -27,8 +27,7 @@ def get_service(request: Request) -> ChatUIProjectService:
     return request.app.state.services.chat_projects
 
 
-async def require_chat_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "chat")
+require_chat_scope = ScopeDependency("chat")
 
 
 async def _json_or_empty(request: Request) -> dict:

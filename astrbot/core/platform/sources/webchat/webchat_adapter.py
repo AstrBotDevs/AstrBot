@@ -271,6 +271,12 @@ class WebChatAdapter(Platform):
                 message_event.set_extra(
                     "thread_selected_text", payload.get("thread_selected_text")
                 )
+                api_key_allow_admin_role = payload.get("_api_key_allow_admin_role")
+                if isinstance(api_key_allow_admin_role, bool):
+                    message_event.set_extra(
+                        "_api_key_allow_admin_role",
+                        api_key_allow_admin_role,
+                    )
 
         return message_event
 

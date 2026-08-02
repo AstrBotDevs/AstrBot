@@ -49,15 +49,14 @@ from astrbot.dashboard.services.plugin_service import (
     PluginServiceWarning,
 )
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, ScopeDependency, require_dashboard_user
 from .multipart import multipart_parts
 
 router = APIRouter(tags=["Plugins"])
 legacy_router = APIRouter(tags=["Dashboard Plugins"], include_in_schema=False)
 
 
-async def require_plugin_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "plugin")
+require_plugin_scope = ScopeDependency("plugin")
 
 
 def get_service(request: Request) -> PluginService:
