@@ -154,9 +154,6 @@ class KnowledgeBaseManager:
         Returns:
             The matched knowledge base instance, or None when not found.
         """
-        for kb_helper in self.kb_insts.values():
-            if kb_helper.kb.kb_name == kb_name:
-                return kb_helper
         if kb_name in self.kb_insts:
             logger.warning(
                 "[Knowledge Base] Detected legacy kb_id %s in config and "
@@ -164,6 +161,9 @@ class KnowledgeBaseManager:
                 kb_name,
             )
             return self.kb_insts[kb_name]
+        for kb_helper in self.kb_insts.values():
+            if kb_helper.kb.kb_name == kb_name:
+                return kb_helper
         return None
 
     async def delete_kb(self, kb_id: str) -> bool:

@@ -20,7 +20,11 @@ async def test_get_kb_by_name_falls_back_to_kb_id():
         result = await kb_manager.get_kb_by_name("kb-uuid-1")
 
     assert result is kb_helper
-    warning.assert_called_once()
+    warning.assert_called_once_with(
+        "[Knowledge Base] Detected legacy kb_id %s in config and "
+        "resolved it as a fallback.",
+        "kb-uuid-1",
+    )
 
 
 @pytest.mark.asyncio
