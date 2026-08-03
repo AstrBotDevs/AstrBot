@@ -16,9 +16,9 @@ body:
       label: 如何复现？
       description: 复现该问题的步骤。
       placeholder: |
-        例如：<br>
-        1. 打开 ...<br>
-        2. 点击 ...<br>
+        例如:
+        1. 打开 ...
+        2. 点击 ...
         3. 问题复现
     validations:
       required: true

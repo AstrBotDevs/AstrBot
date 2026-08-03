@@ -16,9 +16,9 @@ body:
       label: Reproduction Steps
       description: Steps to reproduce the issue.
       placeholder: |
-        For example:<br>
-        1. Open ...<br>
-        2. Click ...<br>
+        For example:
+        1. Open ...
+        2. Click ...
         3. Issue reproduced
     validations:
       required: true
