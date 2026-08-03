@@ -1,0 +1,98 @@
+name: "🐛 Bug Report"
+title: "[Bug] "
+description: Submit a bug report to help us improve.
+labels: ["bug"]
+body:
+  - type: textarea
+    attributes:
+      label: Description
+      description: What happened?
+      placeholder: A clear and specific description of what happened or what problem you encountered.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Reproduction Steps
+      description: Steps to reproduce the issue.
+      placeholder: |
+        For example:<br>
+        1. Open ...<br>
+        2. Click ...<br>
+        3. Issue reproduced
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: AstrBot Version
+      description: The AstrBot version where the issue occurred. Please do not use meaningless values like `latest`.
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: Operating System
+      description: The operating system where AstrBot is running.
+      options:
+        - "Windows"
+        - "MacOS"
+        - "Linux"
+        - "Other"
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      # Deployment methods may expand in the future. To avoid frequent form modifications,
+      # we use an input field here so users can fill it in themselves.
+      label: Deployment Method
+      description: How AstrBot is deployed.
+      placeholder: For example, Docker, Windows Desktop.
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      # Same as above
+      label: Message Platform Adapter
+      description: The message platform adapter being used when the issue occurred.
+      placeholder: For example, QQ Official Bot (WebSocket), Onebot v11.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Error Log
+      description: Debug-level logs related to the issue. Issues without valid logs will be closed, thank you for your understanding.
+      render: text
+    validations:
+      required: true
+
+  - type: upload
+    attributes:
+      label: Supplementary Information
+      description: |
+        Other supplementary information related to the issue, such as reproduction videos or complete log files. Please upload images in the description.<br>
+        If the logs you want to provide are too long to fit in the previous field, you can paste only the key logs there and upload the complete log file here.
+    validations:
+      accept: ".txt,.log,.mp4,.mov,.webm"
+
+  - type: checkboxes
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched the [Issue list](https://github.com/AstrBotDevs/AstrBot/issues) for related issues and could not resolve the problem, or this issue has never been reported before.
+          required: true
+        - label: I have tried disabling all plugins to rule out issues caused by plugins.
+          required: true
+        - label: The issue I am reporting is related to AstrBot itself, not to a specific plugin.
+          required: true
+        - label: I have read and agree to the project's [Code of Conduct](https://github.com/AstrBotDevs/AstrBot/blob/master/CODE_OF_CONDUCT.md).
+          required: true
+        - label: (Optional) I am willing to submit a PR to help fix this issue.
+          required: false
+
+  - type: markdown
+    attributes:
+      value: "Finally, thank you for taking the time to report this issue!"
