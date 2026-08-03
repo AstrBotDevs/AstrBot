@@ -3,17 +3,19 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import httpx
 import jwt
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 
 import astrbot.dashboard.services.config_service as config_service
 from astrbot.core import file_token_service
 from astrbot.dashboard.api.app import create_dashboard_asgi_app
+from astrbot.dashboard.api.backups import download_backup as download_backup_route
 from astrbot.dashboard.asgi_runtime import (
     FastAPIAppAdapter,
     g,
@@ -24,6 +26,7 @@ from astrbot.dashboard.asgi_runtime import (
 from astrbot.dashboard.responses import ok
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
+from astrbot.dashboard.services.backup_service import BackupDownload
 from astrbot.dashboard.services.plugin_service import (
     PLUGIN_UPDATE_SOURCE_REQUIRED_MESSAGE,
     PluginServiceError,
@@ -1178,6 +1181,43 @@ async def test_dashboard_static_dist_files_are_served(
     assert missing_response.status_code == 404
     assert traversal_response.status_code == 404
     assert api_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_v1_backup_download_accepts_bearer_token(
+    tmp_path: Path,
+):
+    filename = "desktop-backup.zip"
+    backup_path = tmp_path / filename
+    backup_path.write_bytes(b"PK\x03\x04desktop-backup-content")
+    prepare_download = Mock(
+        return_value=BackupDownload(path=str(backup_path), filename=filename)
+    )
+    service = SimpleNamespace(
+        config={"dashboard": {"jwt_secret": JWT_SECRET}},
+        prepare_download=prepare_download,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "headers": [(b"authorization", b"Bearer desktop-session-token")],
+        }
+    )
+
+    response = await download_backup_route(
+        filename=filename,
+        request=request,
+        token=None,
+        service=service,
+    )
+
+    assert isinstance(response, FileResponse)
+    assert response.path == str(backup_path)
+    prepare_download.assert_called_once_with(
+        filename=filename,
+        token="desktop-session-token",
+        jwt_secret=JWT_SECRET,
+    )
 
 
 @pytest.mark.asyncio
