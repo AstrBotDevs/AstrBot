@@ -1200,7 +1200,7 @@ async def test_v1_backup_download_accepts_bearer_token(
     request = Request(
         {
             "type": "http",
-            "headers": [(b"authorization", b"Bearer desktop-session-token")],
+            "headers": [(b"authorization", b"bEaReR   desktop-session-token")],
         }
     )
 

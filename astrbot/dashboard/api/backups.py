@@ -301,8 +301,9 @@ async def download_backup(
 ):
     if not token:
         auth_header = request.headers.get("Authorization", "").strip()
-        if auth_header.startswith("Bearer "):
-            token = auth_header.removeprefix("Bearer ").strip() or None
+        scheme, separator, credentials = auth_header.partition(" ")
+        if separator and scheme.lower() == "bearer":
+            token = credentials.strip() or None
     return _download_backup(filename=filename, token=token, service=service)
 
 
