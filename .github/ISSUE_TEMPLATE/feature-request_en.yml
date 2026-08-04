@@ -1,0 +1,31 @@
+name: "🎉 Feature Request"
+title: "[Feature] "
+description: Submit a new feature idea or suggestion.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    attributes:
+      label: Feature Description
+      placeholder: Describe in detail the feature you would like to add.
+
+  - type: textarea
+    attributes:
+      label: Use Case
+      placeholder: Describe the use case for your suggested feature.
+
+  - type: checkboxes
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched the [Issue list](https://github.com/AstrBotDevs/AstrBot/issues) for related features and confirmed this feature idea has never been proposed.
+          required: true
+        - label: The feature I am suggesting is related to AstrBot itself, not to a specific plugin.
+          required: true
+        - label: I have read and agree to the project's [Code of Conduct](https://github.com/AstrBotDevs/AstrBot/blob/master/CODE_OF_CONDUCT.md).
+          required: true
+        - label: (Optional) I am willing to submit a PR to help implement this feature.
+          required: false
+
+  - type: markdown
+    attributes:
+      value: "Thank you for sharing your valuable ideas with us!"
