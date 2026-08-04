@@ -5,7 +5,6 @@ import jwt
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from astrbot.core.star.dashboard_extension import ALL_OPEN_API_SCOPES
 from astrbot.dashboard.responses import ApiError
 from astrbot.dashboard.schemas import (
     AccountUpdateRequest,
@@ -13,11 +12,15 @@ from astrbot.dashboard.schemas import (
     LoginRequest,
     TotpSetupRequest,
 )
+from astrbot.dashboard.services.api_key_scopes import (
+    DASHBOARD_API_KEY_SCOPES,
+    api_key_has_scope,
+    effective_api_key_scopes,
+)
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.auth_service import (
     DASHBOARD_JWT_COOKIE_MAX_AGE,
     DASHBOARD_JWT_COOKIE_NAME,
-    OPEN_API_SCOPE_INCLUDES,
     TOTP_TRUSTED_DEVICE_COOKIE_NAME,
     TOTP_TRUSTED_DEVICE_MAX_AGE,
     AuthService,
@@ -242,26 +245,15 @@ async def _require_api_key_scope(
     raw_key: str,
     scope: str,
 ) -> AuthContext:
-    if scope not in ALL_OPEN_API_SCOPES:
+    if scope not in DASHBOARD_API_KEY_SCOPES:
         raise ApiError("Insufficient API key scope", status_code=403)
 
     key_hash = ApiKeyService.hash_key(raw_key)
     api_key = await request.app.state.db.get_active_api_key_by_hash(key_hash)
     if not api_key:
         raise ApiError("Invalid API key", status_code=401)
-    scopes = (
-        [str(scope) for scope in api_key.scopes]
-        if isinstance(api_key.scopes, list)
-        else [str(scope) for scope in ALL_OPEN_API_SCOPES]
-    )
-    if (
-        "*" not in scopes
-        and scope not in scopes
-        and not any(
-            scope in OPEN_API_SCOPE_INCLUDES.get(api_key_scope, ())
-            for api_key_scope in scopes
-        )
-    ):
+    scopes = effective_api_key_scopes(api_key.scopes)
+    if not api_key_has_scope(scopes, scope):
         raise ApiError("Insufficient API key scope", status_code=403)
     await request.app.state.db.touch_api_key(api_key.key_id)
     return AuthContext(

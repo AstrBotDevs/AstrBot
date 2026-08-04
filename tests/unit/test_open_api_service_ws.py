@@ -11,6 +11,7 @@ from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.webchat.queue_manager import WebChatQueueManager
 from astrbot.core.webchat.run_coordinator import WebChatRunCoordinator
 from astrbot.dashboard.services.open_api_service import (
+    OpenApiKeyAuthContext,
     OpenApiService,
     OpenApiServiceError,
     OpenApiWebSocketChatBridge,
@@ -78,7 +79,7 @@ async def test_run_chat_websocket_closes_when_api_key_is_invalid(monkeypatch):
     closed: list[tuple[int, str]] = []
 
     async def authenticate_api_key(_raw_key):
-        return False, "Invalid API key"
+        return None, "Invalid API key"
 
     monkeypatch.setattr(service, "authenticate_api_key", authenticate_api_key)
 
@@ -162,7 +163,7 @@ async def test_run_chat_websocket_handles_control_messages(monkeypatch):
     handled: list[dict] = []
 
     async def authenticate_api_key(_raw_key):
-        return True, None
+        return OpenApiKeyAuthContext("test-key", ("chat",)), None
 
     async def handle_chat_ws_send(**kwargs):
         handled.append(kwargs["post_data"])
@@ -314,7 +315,11 @@ async def test_handle_chat_ws_send_reduces_queue_results_and_persists_native_ref
         raise AssertionError("send_error should not be called")
 
     await service.handle_chat_ws_send(
-        post_data={"message": "question", "message_id": "message-1"},
+        post_data={
+            "message": "question",
+            "message_id": "message-1",
+            "_api_key_allow_admin_role": True,
+        },
         conf_list=[],
         chat_bridge=bridge,
         send_json=send_json,
@@ -330,8 +335,40 @@ async def test_handle_chat_ws_send_reduces_queue_results_and_persists_native_ref
     ]
     assert agent_stats == {"latency": 3}
     assert refs == {"used": [{"url": "https://example.com", "title": "Tool source"}]}
+    assert (
+        chat_queue.put.await_args.args[0][2]["_api_key_allow_admin_role"] is False
+    )
     assert not any(item.get("data") == "ignored" for item in sent)
     assert any(item.get("type") == "refs" for item in sent)
+
+
+@pytest.mark.asyncio
+async def test_prepare_chat_send_checks_every_loaded_profile_admin_id():
+    service = _service()
+    service.astrbot_config_mgr = SimpleNamespace(
+        get_conf_list=lambda: [],
+        confs={
+            "default": {"admins_id": ["primary-admin"]},
+            "active-profile": {"admins_id": [42]},
+        },
+    )
+    service.ensure_chat_session = AsyncMock(return_value=None)
+
+    with pytest.raises(
+        OpenApiServiceError,
+        match="username is reserved for an AstrBot administrator",
+    ):
+        await service.prepare_chat_send(
+            {"username": "42", "session_id": "profile-admin-session"},
+            [],
+        )
+
+    username, session_id, config_id = await service.prepare_chat_send(
+        {"username": "42", "session_id": "profile-admin-session"},
+        [],
+        allow_admin_username=True,
+    )
+    assert (username, session_id, config_id) == ("42", "profile-admin-session", None)
 
 
 @pytest.mark.asyncio

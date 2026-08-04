@@ -165,6 +165,8 @@ export type CreateApiKeyRequest = {
     | 'plugin'
     | 'mcp'
     | 'skill'
+    | 'chat:admin'
+    | 'config:edit_admin'
   >;
   expires_at?: string;
   expires_in_days?: number;
@@ -236,7 +238,7 @@ export type ProviderEmbeddingDimensionRequest = {
 
 export type ChatRequest = {
   /**
-   * Caller-declared WebChat sender/session owner. This value is used as the message sender identity and may participate in sender-ID-based command permission checks. Treat chat-scoped API keys as trusted backend credentials and map or validate usernames before accepting end-user input.
+   * Caller-declared WebChat sender/session owner. A configured AstrBot administrator ID requires the explicitly granted chat:admin API-key scope.
    */
   username?: string;
   session_id?: string;

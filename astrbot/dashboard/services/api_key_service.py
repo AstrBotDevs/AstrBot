@@ -4,10 +4,13 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from astrbot.core.db.protocols import ApiKeyStore
-from astrbot.core.star.dashboard_extension import ALL_OPEN_API_SCOPES
 from astrbot.core.utils.datetime_utils import normalize_datetime_utc
 
-from .auth_service import OPEN_API_SCOPE_INCLUDES
+from .api_key_scopes import (
+    ApiKeyScopeError,
+    effective_api_key_scopes,
+    normalize_api_key_scopes,
+)
 
 
 class ApiKeyServiceError(Exception):
@@ -45,7 +48,7 @@ class ApiKeyService:
             "key_id": key.key_id,
             "name": key.name,
             "key_prefix": key.key_prefix,
-            "scopes": key.scopes or [],
+            "scopes": effective_api_key_scopes(key.scopes),
             "created_by": key.created_by,
             "created_at": cls._serialize_datetime(key.created_at),
             "updated_at": cls._serialize_datetime(key.updated_at),
@@ -58,26 +61,10 @@ class ApiKeyService:
 
     @staticmethod
     def _normalize_scopes(raw_scopes: Any) -> list[str]:
-        if raw_scopes is None:
-            return list(ALL_OPEN_API_SCOPES)
-        if not isinstance(raw_scopes, list):
-            raise ApiKeyServiceError("Invalid scopes")
-
-        scopes = []
-        invalid_scopes = []
-        for scope in raw_scopes:
-            if isinstance(scope, str) and scope in ALL_OPEN_API_SCOPES:
-                scopes.append(scope)
-            else:
-                invalid_scopes.append(str(scope))
-        if invalid_scopes:
-            raise ApiKeyServiceError(f"Invalid scopes: {', '.join(invalid_scopes)}")
-        for scope in tuple(scopes):
-            scopes.extend(OPEN_API_SCOPE_INCLUDES.get(scope, ()))
-        normalized_scopes = list(dict.fromkeys(scopes))
-        if not normalized_scopes:
-            raise ApiKeyServiceError("At least one valid scope is required")
-        return normalized_scopes
+        try:
+            return normalize_api_key_scopes(raw_scopes)
+        except ApiKeyScopeError as exc:
+            raise ApiKeyServiceError(str(exc)) from exc
 
     @staticmethod
     def _resolve_expires_at(expires_in_days: Any) -> datetime | None:

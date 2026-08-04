@@ -40,8 +40,10 @@ When creating an API Key, you can configure `scopes`. Each scope controls the ra
 | `provider` | Manage models and Provider sources                                                           | `GET/POST /api/v1/providers`, `GET/PUT/DELETE /api/v1/provider-sources/{source_id}`                                             |
 | `persona`  | Manage Personas and Persona folders                                                          | `GET/POST /api/v1/personas`, `GET/POST /api/v1/persona-folders`                                                                 |
 | `im`       | Send proactive IM messages and query the bot/platform list                                   | `POST /api/v1/im/messages`, `GET /api/v1/im/bots`                                                                               |
-| `config`   | Manage profiles, system config, and shared configuration; also includes `bot` and `provider` | `GET/PUT /api/v1/system-config`, `GET/POST /api/v1/config-profiles`, `GET /api/v1/subagents/config`                             |
+| `config`   | Manage profiles and system config except `admins_id`; also includes `bot` and `provider` | `GET/PUT /api/v1/system-config`, `GET/POST /api/v1/config-profiles`, `GET /api/v1/subagents/config`                             |
+| `config:edit_admin` | High-risk explicit permission to set or change `admins_id`; requires `config` | `POST /api/v1/config-profiles`, `PUT /api/v1/config-profiles/{config_id}`, `PUT /api/v1/system-config` |
 | `chat`     | Use chat and inspect or maintain WebChat sessions                                            | `POST /api/v1/chat`, `GET /api/v1/chat/sessions`, `GET /api/v1/chat/configs`                                                    |
+| `chat:admin` | High-risk explicit permission to use a configured administrator ID as a chat sender; requires `chat` | `POST /api/v1/chat`, `GET /api/v1/chat/ws` |
 | `kb`       | Manage knowledge bases, documents, chunks, and retrieval                                     | `GET/POST /api/v1/knowledge-bases`, `POST /api/v1/knowledge-bases/{kb_id}/retrieve`                                             |
 | `memory`   | Audit and maintain long-term-memory facts, profiles, and operations                          | `GET/POST /api/v1/memory/facts`, `POST /api/v1/memory/facts/{fact_id}/delete`, `GET /api/v1/memory/operations`                  |
 | `data`     | Manage session state, session groups, rules, and stored conversations                        | `GET/POST /api/v1/sessions`, `GET/POST /api/v1/session-groups`, `GET/POST /api/v1/conversations`                                |
@@ -54,9 +56,9 @@ If the API Key does not include the required scope for the target endpoint, the 
 
 `config` is a broad management scope. When an API key is created with `config`, AstrBot grants the key `config`, `bot`, and `provider` access together. The WebUI mirrors this dependency: selecting `config` selects `bot` and `provider`; deselecting `bot` or `provider` removes `config`.
 
-Developer API keys currently support the 13 scopes listed above. Use the singular `skill` scope for `/api/v1/skills/*` endpoints.
+Developer API keys support the 13 baseline scopes and the two sensitive scopes listed above. Use the singular `skill` scope for `/api/v1/skills/*` endpoints. The sensitive scopes are never selected by default in Settings. Selecting one selects its required parent; removing that parent removes the sensitive child.
 
-The backend accepts `data`, `kb`, and `memory`, but the current scope picker in Settings does not list those three entries. Do not interpret “not selectable in the UI” as “not enforced by the backend”; an automated client still needs a key carrying the exact scope.
+Keys stored before explicit scopes used `NULL` to mean the fixed baseline scope set. It is not a wildcard and does not gain sensitive scopes. An explicitly stored `*` retains its legacy wildcard meaning.
 
 `tool` and `system` routes still exist in the full local `/api/v1/openapi.json` schema, but they are dashboard-session routes today rather than developer API key scopes.
 
@@ -143,7 +145,7 @@ Notes:
 
 `POST /api/v1/chat` additionally requires `username`, with optional `session_id` (a UUID is auto-generated if omitted).
 
-`username` is a caller-declared WebChat identity. It is used as the message sender and session owner in the message pipeline, including sender-ID-based command permission checks. Treat API keys with the `chat` scope as trusted backend credentials. If you expose chat access to end users, proxy requests through your own service and map each external user to an allowed `username`; do not let clients submit administrator IDs or other reserved sender IDs directly.
+`username` is a caller-declared WebChat identity. It is used as the message sender and session owner in the message pipeline, including sender-ID-based command permission checks. A `chat` key cannot use any configured profile administrator ID. Only a key explicitly granted both `chat` and `chat:admin` may do so. If you expose chat access to end users, proxy requests through your own service and map each external user to an allowed `username`.
 
 ```json
 {

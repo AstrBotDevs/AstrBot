@@ -10,6 +10,7 @@ from astrbot.dashboard.schemas import (
     ConfigRouteUpsertRequest,
     RenameRequest,
 )
+from astrbot.dashboard.services.api_key_scopes import api_key_has_scope
 from astrbot.dashboard.services.config_service import (
     ConfigDisplayService,
     ConfigFileService,
@@ -58,6 +59,10 @@ def _model_dict(payload) -> dict[str, Any]:
     return payload.model_dump(exclude_none=True)
 
 
+def _can_edit_admin_ids(auth: AuthContext) -> bool:
+    return auth.via != "api_key" or api_key_has_scope(auth.scopes, "config:edit_admin")
+
+
 @router.get("/config-profiles/schema")
 async def get_config_profile_schema(
     auth: AuthContext = Depends(require_config_scope),
@@ -74,13 +79,23 @@ async def list_config_profiles(
     return ok(service.list_profiles())
 
 
-@router.post("/config-profiles")
+@router.post(
+    "/config-profiles",
+    openapi_extra={"x-astrbot-sensitive-scopes": ["config:edit_admin"]},
+)
 async def create_config_profile(
     payload: ConfigProfileCreateRequest,
-    _auth: AuthContext = Depends(require_config_scope),
+    auth: AuthContext = Depends(require_config_scope),
     service: ConfigProfileService = Depends(get_service),
 ):
-    return ok(await service.create_profile(payload.name, payload.config), "创建成功")
+    return ok(
+        await service.create_profile(
+            payload.name,
+            payload.config,
+            allow_admin_id_change=_can_edit_admin_ids(auth),
+        ),
+        "创建成功",
+    )
 
 
 @router.get("/config-profiles/{config_id}")
@@ -92,7 +107,10 @@ async def get_config_profile(
     return ok(service.get_profile(config_id))
 
 
-@router.put("/config-profiles/{config_id}")
+@router.put(
+    "/config-profiles/{config_id}",
+    openapi_extra={"x-astrbot-sensitive-scopes": ["config:edit_admin"]},
+)
 async def update_config_profile(
     config_id: str,
     payload: ConfigContentRequest,
@@ -105,6 +123,7 @@ async def update_config_profile(
         _model_dict(payload),
         subject=auth.subject,
         two_factor_code=request.headers.get("X-2FA-Code"),
+        allow_admin_id_change=_can_edit_admin_ids(auth),
     )
     return ok(message=message or "保存成功")
 
@@ -154,7 +173,10 @@ async def get_system_config_runtime(
     return ok(await service.get_configs())
 
 
-@router.put("/system-config")
+@router.put(
+    "/system-config",
+    openapi_extra={"x-astrbot-sensitive-scopes": ["config:edit_admin"]},
+)
 async def update_system_config(
     payload: ConfigContentRequest,
     request: Request,
@@ -166,6 +188,7 @@ async def update_system_config(
         _model_dict(payload),
         subject=auth.subject,
         two_factor_code=request.headers.get("X-2FA-Code"),
+        allow_admin_id_change=_can_edit_admin_ids(auth),
     )
     return ok(message=message or "保存成功")
 

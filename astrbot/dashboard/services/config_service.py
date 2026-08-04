@@ -641,7 +641,22 @@ class ConfigProfileService:
     def list_profiles(self) -> dict:
         return {"info_list": self.acm.get_conf_list()}
 
-    async def create_profile(self, name: str | None, config: dict | None) -> dict:
+    async def create_profile(
+        self,
+        name: str | None,
+        config: dict | None,
+        *,
+        allow_admin_id_change: bool = True,
+    ) -> dict:
+        if (
+            not allow_admin_id_change
+            and isinstance(config, dict)
+            and "admins_id" in config
+        ):
+            raise ApiError(
+                "config:edit_admin scope is required to set admins_id",
+                status_code=403,
+            )
         conf_id = await self.acm.create_conf(name=name, config=config or DEFAULT_CONFIG)
         await self.core_control.reload_pipeline_scheduler(conf_id)
         return {"conf_id": conf_id}
@@ -661,6 +676,7 @@ class ConfigProfileService:
         *,
         subject: str,
         two_factor_code: str | None = None,
+        allow_admin_id_change: bool = True,
     ) -> str | None:
         if config_id not in self.acm.confs:
             raise DashboardValidationError(f"Config file {config_id} does not exist")
@@ -671,6 +687,15 @@ class ConfigProfileService:
                 config[key] = default_conf.get(key, [])
 
         current_config = self.acm.confs[config_id]
+        if (
+            not allow_admin_id_change
+            and "admins_id" in config
+            and config.get("admins_id") != current_config.get("admins_id")
+        ):
+            raise ApiError(
+                "config:edit_admin scope is required to change admins_id",
+                status_code=403,
+            )
         protected_2fa_changed = _protected_2fa_config_changed(current_config, config)
         if (
             is_totp_enabled(current_config)

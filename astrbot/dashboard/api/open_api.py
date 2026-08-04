@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from astrbot.dashboard.responses import ApiError, error, ok
 from astrbot.dashboard.schemas import ImMessageRequest, OpenApiChatRequest
+from astrbot.dashboard.services.api_key_scopes import api_key_has_scope
 from astrbot.dashboard.services.chat_service import (
     ChatService,
     ChatServiceError,
@@ -71,9 +72,15 @@ async def _build_streaming_chat_response(
     chat_service: ChatService,
     username: str,
     post_data: dict[str, Any],
+    *,
+    api_key_allow_admin_role: bool | None = None,
 ) -> StreamingResponse | JSONResponse:
     try:
-        stream = await chat_service.build_chat_stream(username, post_data)
+        stream = await chat_service.build_chat_stream(
+            username,
+            post_data,
+            api_key_allow_admin_role=api_key_allow_admin_role,
+        )
     except ChatServiceError as exc:
         return _open_api_error(str(exc))
 
@@ -101,6 +108,7 @@ async def _open_api_chat_response(
             post_data,
         )
 
+    allow_admin_username = api_key_has_scope(auth.scopes, "chat:admin")
     try:
         (
             effective_username,
@@ -109,6 +117,7 @@ async def _open_api_chat_response(
         ) = await open_api_service.prepare_chat_send(
             post_data,
             _get_chat_config_list(open_api_service),
+            allow_admin_username=allow_admin_username,
         )
     except OpenApiServiceError as exc:
         return _open_api_error(str(exc))
@@ -125,6 +134,7 @@ async def _open_api_chat_response(
         chat_service,
         effective_username,
         post_data,
+        api_key_allow_admin_role=allow_admin_username,
     )
 
 
@@ -185,7 +195,11 @@ def _extract_ws_api_key(websocket: WebSocket) -> str | None:
     return None
 
 
-@router.post("/chat", responses=_SSE_RESPONSE)
+@router.post(
+    "/chat",
+    responses=_SSE_RESPONSE,
+    openapi_extra={"x-astrbot-sensitive-scopes": ["chat:admin"]},
+)
 async def chat(
     payload: OpenApiChatRequest,
     auth: AuthContext = Depends(require_chat_scope),

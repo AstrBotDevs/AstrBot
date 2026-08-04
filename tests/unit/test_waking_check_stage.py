@@ -256,6 +256,26 @@ async def test_process_applies_admin_self_message_and_unique_session_rules(monke
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("api_key_allow_admin_role", "expected_role"),
+    [(False, "member"), (True, "admin"), (None, "admin")],
+)
+async def test_api_key_admin_capability_is_only_denied_by_explicit_false(
+    api_key_allow_admin_role,
+    expected_role,
+):
+    stage = await make_stage()
+    extras = {}
+    if api_key_allow_admin_role is not None:
+        extras["_api_key_allow_admin_role"] = api_key_allow_admin_role
+    event = FakeEvent([Plain("hello")], sender_id="admin", extras=extras)
+
+    stage._assign_admin_role(event)
+
+    assert event.role == expected_role
+
+
+@pytest.mark.asyncio
 async def test_process_filters_handlers_by_session(monkeypatch):
     stage = await make_stage()
     handler = SimpleNamespace(

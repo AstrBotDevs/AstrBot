@@ -43,10 +43,6 @@ from astrbot.dashboard.password_state import (
     set_dashboard_password_security_state,
 )
 
-OPEN_API_SCOPE_INCLUDES = {
-    "config": ("bot", "provider"),
-}
-
 DASHBOARD_JWT_COOKIE_NAME = "astrbot_dashboard_jwt"
 DASHBOARD_JWT_COOKIE_MAX_AGE = 7 * 24 * 60 * 60
 DASHBOARD_SESSION_TOKEN_TYPE = "dashboard_session"

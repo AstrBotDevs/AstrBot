@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import io
 import uuid
 from unittest.mock import AsyncMock
@@ -17,6 +18,7 @@ from astrbot.core.utils.auth_password import (
 from astrbot.dashboard.api import open_api as open_api_routes
 from astrbot.dashboard.responses import ok
 from astrbot.dashboard.server import AstrBotDashboard
+from astrbot.dashboard.services.api_key_service import ApiKeyService
 from tests.fixtures.helpers import create_isolated_runtime_services
 from tests.helpers.dashboard_test_adapter import DashboardTestClient
 
@@ -62,6 +64,9 @@ async def core_lifecycle_td(tmp_path_factory):
         core_lifecycle.astrbot_config["dashboard"]["password"] = (
             hash_md5_dashboard_password(dashboard_password)
         )
+    # Keep authorization tests independent of the product's default sample
+    # administrator ID.  The lifecycle is already initialized at this point.
+    core_lifecycle.astrbot_config["admins_id"] = ["fixture-api-admin"]
     object.__setattr__(
         core_lifecycle,
         "_dashboard_plain_password",
@@ -234,7 +239,12 @@ async def test_open_chat_send_auto_session_id_and_username(
         name_prefix="chat-send-key",
     )
 
-    async def fake_chat_response(_chat_service, username: str, post_data: dict):
+    async def fake_chat_response(
+        _chat_service,
+        username: str,
+        post_data: dict,
+        **_kwargs,
+    ):
         return ok(
             {
                 "session_id": post_data.get("session_id"),
@@ -305,6 +315,204 @@ async def test_open_chat_send_auto_session_id_and_username(
     missing_username_data = await missing_username_res.get_json()
     assert missing_username_data["status"] == "error"
     assert missing_username_data["message"] == "Missing key: username"
+
+
+@pytest.mark.asyncio
+async def test_open_chat_admin_identity_requires_explicit_sensitive_scope(
+    app: FastAPI,
+    test_client: DashboardTestClient,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    basic_key, _ = await _create_api_key(
+        test_client,
+        authenticated_header,
+        scopes=["chat"],
+        name_prefix="chat-basic-admin-boundary",
+    )
+    admin_key, _ = await _create_api_key(
+        test_client,
+        authenticated_header,
+        scopes=["chat", "chat:admin"],
+        name_prefix="chat-admin-boundary",
+    )
+    calls: list[tuple[str, bool | None]] = []
+
+    async def fake_chat_response(
+        _chat_service,
+        username: str,
+        post_data: dict,
+        *,
+        api_key_allow_admin_role: bool | None = None,
+    ):
+        calls.append((username, api_key_allow_admin_role))
+        return ok({"session_id": post_data["session_id"], "creator": username})
+
+    monkeypatch.setattr(
+        open_api_routes,
+        "_build_streaming_chat_response",
+        fake_chat_response,
+    )
+
+    denied = await test_client.post(
+        "/api/v1/chat",
+        json={
+            "message": "hello",
+            "username": "fixture-api-admin",
+            "session_id": f"openapi_admin_denied_{uuid.uuid4().hex[:8]}",
+            "_api_key_allow_admin_role": True,
+        },
+        headers={"X-API-Key": basic_key},
+    )
+    denied_data = await denied.get_json()
+    assert denied_data["status"] == "error"
+    assert denied_data["message"] == "username is reserved for an AstrBot administrator"
+
+    ordinary = await test_client.post(
+        "/api/v1/chat",
+        json={
+            "message": "hello",
+            "username": "ordinary-api-user",
+            "session_id": f"openapi_internal_flag_{uuid.uuid4().hex[:8]}",
+            "_api_key_allow_admin_role": True,
+        },
+        headers={"X-API-Key": basic_key},
+    )
+    assert ordinary.status_code == 200
+    assert calls[-1] == ("ordinary-api-user", False)
+
+    allowed = await test_client.post(
+        "/api/v1/chat",
+        json={
+            "message": "hello",
+            "username": "fixture-api-admin",
+            "session_id": f"openapi_admin_allowed_{uuid.uuid4().hex[:8]}",
+            "_api_key_allow_admin_role": False,
+        },
+        headers={"X-API-Key": admin_key},
+    )
+    assert allowed.status_code == 200
+    assert calls[-1] == ("fixture-api-admin", True)
+
+    dashboard = await test_client.post(
+        "/api/v1/chat",
+        json={"message": "hello", "session_id": f"dashboard_{uuid.uuid4().hex[:8]}"},
+        headers=authenticated_header,
+    )
+    assert dashboard.status_code == 200
+    assert calls[-1][1] is None
+
+
+@pytest.mark.asyncio
+async def test_api_key_admin_configuration_requires_explicit_scope(
+    test_client: DashboardTestClient,
+    authenticated_header: dict,
+):
+    config_key, _ = await _create_api_key(
+        test_client,
+        authenticated_header,
+        scopes=["config"],
+        name_prefix="config-admin-boundary",
+    )
+    denied_create = await test_client.post(
+        "/api/v1/config-profiles",
+        json={"name": "denied-admin-create", "config": {"admins_id": ["new"]}},
+        headers={"X-API-Key": config_key},
+    )
+    assert denied_create.status_code == 403
+
+    created = await test_client.post(
+        "/api/v1/config-profiles",
+        json={"name": "ordinary-config-profile"},
+        headers={"X-API-Key": config_key},
+    )
+    assert created.status_code == 200
+    profile_id = (await created.get_json())["data"]["conf_id"]
+    profile = await test_client.get(
+        f"/api/v1/config-profiles/{profile_id}",
+        headers={"X-API-Key": config_key},
+    )
+    profile_config = copy.deepcopy((await profile.get_json())["data"]["config"])
+    profile_config["admins_id"] = ["changed-profile-admin"]
+    denied_update = await test_client.put(
+        f"/api/v1/config-profiles/{profile_id}",
+        json=profile_config,
+        headers={"X-API-Key": config_key},
+    )
+    assert denied_update.status_code == 403
+
+    system = await test_client.get(
+        "/api/v1/system-config",
+        headers={"X-API-Key": config_key},
+    )
+    system_config = copy.deepcopy((await system.get_json())["data"]["config"])
+    system_config["admins_id"] = ["changed-system-admin"]
+    denied_system = await test_client.put(
+        "/api/v1/system-config",
+        json=system_config,
+        headers={"X-API-Key": config_key},
+    )
+    assert denied_system.status_code == 403
+
+    sensitive_key, _ = await _create_api_key(
+        test_client,
+        authenticated_header,
+        scopes=["config", "config:edit_admin"],
+        name_prefix="config-sensitive-admin-boundary",
+    )
+    allowed = await test_client.post(
+        "/api/v1/config-profiles",
+        json={
+            "name": "allowed-admin-create",
+            "config": {**system_config, "admins_id": ["allowed"]},
+        },
+        headers={"X-API-Key": sensitive_key},
+    )
+    assert allowed.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_sensitive_scopes_require_parents_and_null_is_not_a_wildcard(
+    app: FastAPI,
+    test_client: DashboardTestClient,
+    authenticated_header: dict,
+):
+    child_only = await test_client.post(
+        "/api/v1/api-keys",
+        json={"name": "invalid-child", "scopes": ["chat:admin"]},
+        headers=authenticated_header,
+    )
+    assert child_only.status_code == 400
+
+    raw_key = f"abk_null_scope_{uuid.uuid4().hex}"
+    await app.state.db.create_api_key(
+        name="legacy-null-scope",
+        key_hash=ApiKeyService.hash_key(raw_key),
+        key_prefix=raw_key[:12],
+        scopes=None,
+        created_by="test",
+    )
+    denied = await test_client.post(
+        "/api/v1/chat",
+        json={
+            "message": "hello",
+            "username": "fixture-api-admin",
+            "session_id": f"null_scope_{uuid.uuid4().hex[:8]}",
+        },
+        headers={"X-API-Key": raw_key},
+    )
+    data = await denied.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == "username is reserved for an AstrBot administrator"
+
+    listed = await test_client.get("/api/v1/api-keys", headers=authenticated_header)
+    null_scope_key = next(
+        item
+        for item in (await listed.get_json())["data"]
+        if item["name"] == "legacy-null-scope"
+    )
+    assert "chat" in null_scope_key["scopes"]
+    assert "chat:admin" not in null_scope_key["scopes"]
 
 
 @pytest.mark.asyncio
@@ -461,7 +669,12 @@ async def test_open_chat_rejects_blank_username_and_uses_session_id(
         name_prefix="chat-conversation-key",
     )
 
-    async def fake_chat_response(_chat_service, _username: str, post_data: dict):
+    async def fake_chat_response(
+        _chat_service,
+        _username: str,
+        post_data: dict,
+        **_kwargs,
+    ):
         return ok({"session_id": post_data.get("session_id")})
 
     monkeypatch.setattr(
@@ -548,7 +761,12 @@ async def test_open_chat_send_config_resolution(
         delete_route,
     )
 
-    async def fake_chat_response(_chat_service, username: str, post_data: dict):
+    async def fake_chat_response(
+        _chat_service,
+        username: str,
+        post_data: dict,
+        **_kwargs,
+    ):
         return ok(
             {
                 "session_id": post_data.get("session_id"),
