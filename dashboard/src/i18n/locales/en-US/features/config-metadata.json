@@ -600,9 +600,13 @@
         "description": "Telegram Polling Restart Delay",
         "hint": "Waiting time in seconds when the polling loop needs to restart after unexpected exits. Defaults to 5s."
       },
+      "telegram_proxy": {
+        "description": "Telegram Proxy URL",
+        "hint": "Optional proxy URL, e.g. http://ip:port or socks5://ip:port. Used only by the Telegram adapter; falls back to the global proxy settings when empty."
+      },
       "telegram_token": {
         "description": "Bot Token",
-        "hint": "If you are in mainland China, set a proxy or change api_base in Other Settings."
+        "hint": "Enter your Telegram Bot Token here."
       },
       "mattermost_url": {
         "description": "Mattermost URL",
