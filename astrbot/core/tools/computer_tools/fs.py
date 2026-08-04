@@ -13,10 +13,11 @@ Behavior when `provider_settings.computer_use_require_admin=True`:
   Upload and download tools are defined here, but `LocalBooter` does not
   implement them and the main agent does not expose them in local mode.
 - Member + local: read/grep are restricted to `data/skills`,
-  plugin-provided `data/plugins/*/skills`,
-  `data/workspaces/{normalized_umo}`, and `/tmp/.astrbot`; write/edit are
-  restricted to the same local roots except plugin-provided Skills, which are
-  read-only. Upload/download are denied by `check_admin_permission` if invoked.
+  plugin-provided `data/plugins/*/skills`, builtin Star Skills,
+  `data/workspaces/{normalized_umo}`, and temporary directories; write/edit are
+  restricted to the workspace and temporary directories.  All Skill catalogs
+  are read-only. Upload/download are denied by `check_admin_permission` if
+  invoked.
 - Admin + sandbox: read/write/edit/grep are not path-restricted by this
   module;
   sandbox filesystem boundaries are enforced by the sandbox runtime. Upload and
@@ -83,7 +84,7 @@ def _restricted_env_path_labels(umo: str, *, include_plugin_skills: bool) -> lis
         "data/skills",
     ]
     if include_plugin_skills:
-        labels.append("data/plugins/*/skills")
+        labels.extend(("data/plugins/*/skills", "builtin_stars/*/skills"))
     labels.extend(
         [
             f"data/workspaces/{normalized_umo}",
@@ -116,11 +117,24 @@ def _plugin_skill_roots() -> tuple[Path, ...]:
     )
 
 
+def _builtin_skill_roots() -> tuple[Path, ...]:
+    """Return source-owned builtin Star Skill directories without runtime I/O."""
+    builtin_root = Path(__file__).resolve().parents[3] / "builtin_stars"
+    if not builtin_root.is_dir():
+        return ()
+    return tuple(
+        (star_dir / "skills").resolve(strict=False)
+        for star_dir in builtin_root.iterdir()
+        if star_dir.is_dir() and (star_dir / "skills").is_dir()
+    )
+
+
 def _read_allowed_roots(umo: str) -> tuple[Path, ...]:
     """Non-admin users can only read files within these directories (and their subdirectories)"""
     return (
         Path(get_astrbot_skills_path()).resolve(strict=False),
         *_plugin_skill_roots(),
+        *_builtin_skill_roots(),
         _workspace_root(umo),
         Path(get_astrbot_system_tmp_path()).resolve(strict=False),
         Path(get_astrbot_temp_path()).resolve(strict=False),
@@ -128,9 +142,8 @@ def _read_allowed_roots(umo: str) -> tuple[Path, ...]:
 
 
 def _write_allowed_roots(umo: str) -> tuple[Path, ...]:
-    """Non-admin users cannot modify plugin-provided Skills."""
+    """Member writes never target global, plugin, or builtin Skill catalogs."""
     return (
-        Path(get_astrbot_skills_path()).resolve(strict=False),
         _workspace_root(umo),
         Path(get_astrbot_system_tmp_path()).resolve(strict=False),
         Path(get_astrbot_temp_path()).resolve(strict=False),

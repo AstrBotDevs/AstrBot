@@ -344,6 +344,108 @@ async def test_restricted_local_member_can_read_plugin_skill_inventory_even_if_p
 
 
 @pytest.mark.asyncio
+async def test_restricted_member_can_read_global_and_builtin_skills_but_not_write(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    global_skill = tmp_path / "skills" / "global-skill" / "SKILL.md"
+    global_skill.parent.mkdir(parents=True)
+    global_skill.write_text("# Global\n", encoding="utf-8")
+    builtin_skill = tmp_path / "builtin" / "preset" / "skills" / "SKILL.md"
+    builtin_skill.parent.mkdir(parents=True)
+    builtin_skill.write_text("# Builtin\n", encoding="utf-8")
+    monkeypatch.setattr(
+        fs_tools,
+        "_builtin_skill_roots",
+        lambda: (builtin_skill.parent.resolve(),),
+    )
+
+    assert await fs_tools.FileReadTool().call(
+        _make_context(role="member"), path=str(global_skill)
+    ) == "# Global\n"
+    assert await fs_tools.FileReadTool().call(
+        _make_context(role="member"), path=str(builtin_skill)
+    ) == "# Builtin\n"
+
+    global_write = await fs_tools.FileWriteTool().call(
+        _make_context(role="member"),
+        path=str(global_skill),
+        content="# Changed\n",
+    )
+    builtin_write = await fs_tools.FileWriteTool().call(
+        _make_context(role="member"),
+        path=str(builtin_skill),
+        content="# Changed\n",
+    )
+    assert "Write access is restricted" in global_write
+    assert "Write access is restricted" in builtin_write
+    assert global_skill.read_text(encoding="utf-8") == "# Global\n"
+    assert builtin_skill.read_text(encoding="utf-8") == "# Builtin\n"
+
+    workspace_file = workspace / "member.txt"
+    writes = []
+
+    async def write_file(**kwargs):
+        writes.append(kwargs)
+        workspace_file.write_text(kwargs["content"], encoding="utf-8")
+        return {"success": True}
+
+    context = _make_context(
+        role="member",
+        computer_runtime=SimpleNamespace(
+            get_booter=AsyncMock(
+                return_value=SimpleNamespace(
+                    fs=SimpleNamespace(write_file=write_file),
+                )
+            )
+        ),
+    )
+    result = await fs_tools.FileWriteTool().call(
+        context,
+        path="member.txt",
+        content="# Workspace\n",
+    )
+    assert "File written successfully" in result
+    assert writes[0]["path"] == str(workspace_file)
+    assert workspace_file.read_text(encoding="utf-8") == "# Workspace\n"
+
+
+@pytest.mark.asyncio
+async def test_admin_can_write_global_skill_catalog(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    _setup_local_fs_tools(monkeypatch, tmp_path)
+    global_skill = tmp_path / "skills" / "global-skill" / "SKILL.md"
+    global_skill.parent.mkdir(parents=True)
+    global_skill.write_text("# Global\n", encoding="utf-8")
+    writes = []
+
+    async def write_file(**kwargs):
+        writes.append(kwargs)
+        return {"success": True}
+
+    context = _make_context(
+        role="admin",
+        computer_runtime=SimpleNamespace(
+            get_booter=AsyncMock(
+                return_value=SimpleNamespace(
+                    fs=SimpleNamespace(write_file=write_file),
+                )
+            )
+        ),
+    )
+    result = await fs_tools.FileWriteTool().call(
+        context,
+        path=str(global_skill),
+        content="# Updated\n",
+    )
+    assert "File written successfully" in result
+    assert writes
+
+
+@pytest.mark.asyncio
 async def test_restricted_local_member_cannot_write_plugin_provided_skill(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
