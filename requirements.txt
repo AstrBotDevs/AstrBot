@@ -1,7 +1,7 @@
 aiocqhttp>=1.4.4
 aiodocker>=0.27.0
 aiofiles>=25.1.0
-aiohttp>=3.14.2
+aiohttp>=3.14.3
 aiosqlite>=0.22.1
 anthropic>=0.117.0
 apscheduler>=3.11.3
@@ -10,7 +10,7 @@ audioop-lts>=0.2.2
 certifi>=2026.6.17
 chardet>=7.4.3
 click>=8.4.2
-cryptography>=49.0.0
+cryptography>=50.0.0
 dashscope>=1.26.4
 dingtalk-stream>=0.24.3
 docstring-parser>=0.18.0
