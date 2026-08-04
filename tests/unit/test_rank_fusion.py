@@ -137,3 +137,21 @@ async def test_rank_fusion_uses_stable_tiebreakers():
 
     assert [result.chunk_id for result in forward] == ["chunk-a", "chunk-b"]
     assert [result.chunk_id for result in reverse] == ["chunk-a", "chunk-b"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("top_k", [0, -1])
+async def test_rank_fusion_returns_no_results_for_non_positive_top_k(top_k: int):
+    """An empty request must not parse malformed retrieval payloads."""
+    malformed_dense_result = Result(
+        similarity=0.9,
+        data={"doc_id": "chunk-1"},
+    )
+
+    results = await RankFusion(kb_db=None).fuse(
+        [malformed_dense_result],
+        [],
+        top_k=top_k,
+    )
+
+    assert results == []

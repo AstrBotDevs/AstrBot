@@ -121,6 +121,9 @@ class RankFusion:
             List[FusedResult]: 融合后的结果列表
 
         """
+        if top_k <= 0:
+            return []
+
         dense_lookup = self._build_dense_lookup(dense_results)
         sparse_lookup = self._build_sparse_lookup(sparse_results)
         dense_ranks = self._build_rank_map(list(dense_lookup))
