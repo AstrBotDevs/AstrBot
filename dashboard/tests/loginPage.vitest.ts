@@ -74,6 +74,16 @@ describe('LoginPage', () => {
     expect(clearTimeoutSpy).toHaveBeenCalledWith(revealTimer);
   });
 
+  it('uses the current favicon on the login page', async () => {
+    const wrapper = mountWithVuetify(LoginPage);
+    await flushPromises();
+
+    const logo = wrapper.get('[data-testid="login-logo"]');
+    expect(logo.attributes('src')).toBe('/favicon.svg');
+
+    wrapper.unmount();
+  });
+
   it('does not log sensitive public-version transport failures during initialization', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     state.versions.mockRejectedValue(
