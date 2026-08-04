@@ -5101,7 +5101,18 @@ export const downloadBackup = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     responseType: 'blob',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    security: [
+      {
+        key: 'DashboardBearerAuth',
+        scheme: 'bearer',
+        type: 'http',
+      },
+      {
+        in: 'query',
+        name: 'token',
+        type: 'apiKey',
+      },
+    ],
     url: '/api/v1/backups/{filename}',
     ...options,
   });

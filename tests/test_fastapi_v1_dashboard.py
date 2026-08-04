@@ -1315,6 +1315,77 @@ async def test_v1_backup_path_rejects_traversal(asgi_client: httpx.AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_v1_backup_download_accepts_dashboard_bearer_or_query_token(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    tmp_path: Path,
+):
+    service = asgi_app.state.services.backups
+    service.backup_dir = str(tmp_path)
+    (tmp_path / "backup.zip").write_bytes(b"backup")
+    valid_token = DashboardTokenValidator(JWT_SECRET).issue("backup-user")
+
+    bearer = await asgi_client.get(
+        "/api/v1/backups/backup.zip",
+        headers={"Authorization": f"bEaReR    {valid_token}"},
+    )
+    empty_query_uses_bearer = await asgi_client.get(
+        "/api/v1/backups/backup.zip",
+        params={"token": ""},
+        headers={"Authorization": f"Bearer {valid_token}"},
+    )
+    query = await asgi_client.get(
+        "/api/v1/backups/backup.zip",
+        params={"token": valid_token},
+    )
+
+    assert bearer.status_code == 200
+    assert bearer.content == b"backup"
+    assert empty_query_uses_bearer.status_code == 200
+    assert query.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_v1_backup_download_rejects_non_dashboard_credentials(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    tmp_path: Path,
+):
+    service = asgi_app.state.services.backups
+    service.backup_dir = str(tmp_path)
+    (tmp_path / "backup.zip").write_bytes(b"backup")
+    valid_token = DashboardTokenValidator(JWT_SECRET).issue("backup-user")
+    expired_payload = jwt.decode(valid_token, options={"verify_signature": False})
+    expired_payload["exp"] = 0
+    expired_token = jwt.encode(expired_payload, JWT_SECRET, algorithm="HS256")
+
+    wrong_query = await asgi_client.get(
+        "/api/v1/backups/backup.zip",
+        params={"token": "not-a-dashboard-token"},
+        headers={"Authorization": f"Bearer {valid_token}"},
+    )
+    empty_credentials = await asgi_client.get(
+        "/api/v1/backups/backup.zip",
+        headers={"Authorization": "Bearer    "},
+    )
+    wrong_scheme = await asgi_client.get(
+        "/api/v1/backups/backup.zip",
+        headers={"Authorization": f"ApiKey {valid_token}"},
+    )
+    expired = await asgi_client.get(
+        "/api/v1/backups/backup.zip",
+        headers={"Authorization": f"Bearer {expired_token}"},
+    )
+    forged = await asgi_client.get(
+        "/api/v1/backups/backup.zip",
+        headers={"Authorization": f"Bearer {valid_token}forged"},
+    )
+
+    for response in (wrong_query, empty_credentials, wrong_scheme, expired, forged):
+        assert response.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_v1_openapi_uses_pydantic_request_bodies(
     asgi_client: httpx.AsyncClient,
 ):

@@ -4908,6 +4908,11 @@
         "type": "apiKey",
         "in": "cookie",
         "name": "astrbot_dashboard_jwt"
+      },
+      "BackupDownloadToken": {
+        "type": "apiKey",
+        "in": "query",
+        "name": "token"
       }
     },
     "responses": {

@@ -3985,7 +3985,9 @@ paths:
       tags: [Backups]
       summary: Download a backup
       operationId: downloadBackup
-      x-astrbot-scope: system
+      security:
+        - DashboardBearerAuth: []
+        - BackupDownloadToken: []
       parameters:
         - $ref: '#/components/parameters/Filename'
       responses:
@@ -4426,6 +4428,10 @@ components:
       type: apiKey
       in: cookie
       name: astrbot_dashboard_jwt
+    BackupDownloadToken:
+      type: apiKey
+      in: query
+      name: token
 
   responses:
     Ok:
