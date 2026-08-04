@@ -4,9 +4,10 @@ This module allows LLM to review images before deciding whether to send them to 
 """
 
 import base64
+import os
 import re
-import time
-from dataclasses import dataclass, field
+import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
@@ -25,10 +26,6 @@ class CachedImage:
     """The file path where the image is stored."""
     mime_type: str
     """The MIME type of the image."""
-    created_at: float = field(default_factory=time.time)
-    """Timestamp when the image was cached."""
-
-
 class ToolImageCache:
     """Manages cached images from tool calls.
 
@@ -37,8 +34,6 @@ class ToolImageCache:
     """
 
     CACHE_DIR_NAME: ClassVar[str] = "tool_images"
-    # Cache expiry time in seconds (1 hour)
-    CACHE_EXPIRY: ClassVar[int] = 3600
     _SAFE_ID_RE: ClassVar[re.Pattern[str]] = re.compile(r"[^A-Za-z0-9._-]+")
 
     def __init__(self, cache_dir: Path) -> None:
@@ -98,11 +93,30 @@ class ToolImageCache:
         file_name = f"{safe_tool_call_id}_{index}{ext}"
         file_path = self._resolve_cache_path(file_name)
 
-        # Decode and save the image
+        # Decode before creating a target file. StorageCleaner can remove an
+        # empty cache directory at any point, so the write retries directory
+        # creation once and publishes only an atomically replaced final file.
         try:
             image_bytes = base64.b64decode(base64_data)
-            with file_path.open("wb") as f:
-                f.write(image_bytes)
+            for attempt in range(2):
+                self._cache_dir.mkdir(parents=True, exist_ok=True)
+                temp_path = self._resolve_cache_path(
+                    f".{file_name}.{uuid.uuid4().hex}.tmp"
+                )
+                try:
+                    with temp_path.open("xb") as file:
+                        file.write(image_bytes)
+                        file.flush()
+                        os.fsync(file.fileno())
+                    os.replace(temp_path, file_path)
+                    break
+                except FileNotFoundError:
+                    temp_path.unlink(missing_ok=True)
+                    if attempt:
+                        raise
+                except BaseException:
+                    temp_path.unlink(missing_ok=True)
+                    raise
             logger.debug(f"Saved tool image to: {file_path}")
         except Exception as e:
             logger.error(f"Failed to save tool image: {e}")
@@ -146,27 +160,3 @@ class ToolImageCache:
         except Exception as e:
             logger.error(f"Failed to read cached image {file_path}: {e}")
             return None
-
-    def cleanup_expired(self) -> int:
-        """Clean up expired cached images.
-
-        Returns:
-            Number of images cleaned up.
-        """
-        now = time.time()
-        cleaned = 0
-
-        try:
-            for file_path in self._cache_dir.iterdir():
-                if file_path.is_file():
-                    file_age = now - file_path.stat().st_mtime
-                    if file_age > self.CACHE_EXPIRY:
-                        file_path.unlink()
-                        cleaned += 1
-        except Exception as e:
-            logger.warning(f"Error during cache cleanup: {e}")
-
-        if cleaned:
-            logger.info(f"Cleaned up {cleaned} expired cached images")
-
-        return cleaned
