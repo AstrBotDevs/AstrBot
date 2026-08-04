@@ -10,10 +10,6 @@
       </p>
     </div>
 
-    <div class="project-input-slot">
-      <slot></slot>
-    </div>
-
     <v-card flat class="project-sessions-list">
       <v-list v-if="sessions.length > 0">
         <v-list-item
@@ -65,6 +61,10 @@
         <p>{{ tm('project.noSessions') }}</p>
       </div>
     </v-card>
+
+    <div class="project-input-slot">
+      <slot></slot>
+    </div>
   </div>
 </template>
 
@@ -113,14 +113,16 @@ async function handleDeleteSession(session: Session) {
 <style scoped>
 .project-sessions-container {
   height: 100%;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 32px;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .project-header {
+  flex: 0 0 auto;
   text-align: center;
   margin-bottom: 32px;
   max-width: 600px;
@@ -150,14 +152,17 @@ async function handleDeleteSession(session: Session) {
 }
 
 .project-input-slot {
+  flex: 0 0 auto;
   width: 100%;
-  max-width: 800px;
-  margin-bottom: 24px;
+  padding-top: 18px;
 }
 
 .project-sessions-list {
+  flex: 1;
+  min-height: 0;
   width: 100%;
   max-width: 680px;
+  overflow-y: auto;
   background-color: transparent !important;
 }
 
@@ -209,6 +214,12 @@ async function handleDeleteSession(session: Session) {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@media (max-width: 760px) {
+  .project-sessions-container {
+    padding: 24px 14px 12px;
   }
 }
 </style>
