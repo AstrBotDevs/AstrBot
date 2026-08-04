@@ -20,6 +20,7 @@ from astrbot.application import resolve_dashboard_assets
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.desktop_runtime import DESKTOP_MANAGED_RESTART_MESSAGE
 from astrbot.core.log import LogBroker
+from astrbot.core.skills.skill_manager import SkillManager
 from astrbot.core.utils.auth_password import (
     hash_dashboard_password,
     hash_md5_dashboard_password,
@@ -3190,6 +3191,15 @@ async def test_batch_upload_skills_accepts_valid_skill_archive(
         "astrbot.dashboard.services.skills_service.get_astrbot_temp_path",
         lambda: str(temp_dir),
     )
+    test_skill_manager = SkillManager(
+        skills_root=str(skills_dir),
+        plugins_root=str(tmp_path / "plugins"),
+    )
+    monkeypatch.setattr(
+        app.state.services.skills,
+        "skill_manager",
+        test_skill_manager,
+    )
 
     archive = io.BytesIO()
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -3375,6 +3385,15 @@ async def test_skill_file_browser_and_editor_security(
     monkeypatch.setattr(
         "astrbot.core.skills.skill_manager.get_astrbot_skills_path",
         lambda: str(skills_root),
+    )
+    test_skill_manager = SkillManager(
+        skills_root=str(skills_root),
+        plugins_root=str(tmp_path / "plugins"),
+    )
+    monkeypatch.setattr(
+        app.state.services.skills,
+        "skill_manager",
+        test_skill_manager,
     )
     monkeypatch.setattr(
         core_lifecycle_td.services.computer_runtime,

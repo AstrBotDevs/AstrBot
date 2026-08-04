@@ -1022,19 +1022,19 @@ class ChatService:
         )
 
         try:
+            queue_payload = {
+                "message": message_parts,
+                "selected_provider": selected_provider,
+                "selected_model": selected_model,
+                "enable_streaming": enable_streaming,
+                "llm_checkpoint_id": llm_checkpoint_id,
+                "thread_selected_text": thread_selected_text,
+            }
+            if isinstance(api_key_allow_admin_role, bool):
+                queue_payload["_api_key_allow_admin_role"] = api_key_allow_admin_role
             await self.webchat_run_coordinator.dispatch(
                 webchat_run,
-                {
-                    "message": message_parts,
-                    "selected_provider": selected_provider,
-                    "selected_model": selected_model,
-                    "enable_streaming": enable_streaming,
-                    "llm_checkpoint_id": llm_checkpoint_id,
-                    "thread_selected_text": thread_selected_text,
-                    # Only the authenticated route supplies this capability.
-                    # Do not propagate a same-named client JSON field.
-                    "_api_key_allow_admin_role": api_key_allow_admin_role,
-                },
+                queue_payload,
             )
         except BaseException:
             if webchat_run.task is not None:

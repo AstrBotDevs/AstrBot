@@ -547,6 +547,7 @@ async def test_batch_skill_upload_failure_is_generic_and_logs_are_redacted(
 ) -> None:
     service = SkillsService.__new__(SkillsService)
     service.demo_mode = False
+    service.skill_manager = MagicMock()
 
     async def fail_upload(*_args, **_kwargs) -> None:
         raise RuntimeError(_SENSITIVE_ERROR)

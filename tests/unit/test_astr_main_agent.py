@@ -50,6 +50,7 @@ def mock_context():
     ctx.get_llm_tool_manager.return_value = tool_mgr
     ctx.subagent_orchestrator = None
     ctx.catalogs = RuntimeCatalogs()
+    ctx.skill_manager = None
     return ctx
 
 
@@ -157,7 +158,9 @@ async def test_image_caption_prompt_sanitizes_untrusted_event_context(
 
 
 @pytest.mark.asyncio
-async def test_image_caption_normalizes_missing_completion_text(mock_event, mock_context):
+async def test_image_caption_normalizes_missing_completion_text(
+    mock_event, mock_context
+):
     """Image-caption callers always receive text even for an empty response."""
     provider = MagicMock(spec=Provider)
     provider.text_chat = AsyncMock(return_value=MagicMock(completion_text=None))
