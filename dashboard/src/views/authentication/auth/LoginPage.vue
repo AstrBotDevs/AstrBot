@@ -165,7 +165,7 @@ onMounted(async () => {
     <v-card class="login-card" elevation="1">
       <v-card-title>
         <div class="d-flex justify-space-between align-center w-100">
-          <img width="80" src="@/assets/images/icon-no-shadow.svg" alt="AstrBot Logo">
+          <img width="80" src="/favicon.svg" alt="AstrBot Logo">
           <div class="d-flex align-center gap-1">
             <LanguageSwitcher />
             <v-divider vertical class="mx-1"
