@@ -26,6 +26,8 @@ class CachedImage:
     """The file path where the image is stored."""
     mime_type: str
     """The MIME type of the image."""
+
+
 class ToolImageCache:
     """Manages cached images from tool calls.
 

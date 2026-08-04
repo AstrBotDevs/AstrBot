@@ -413,12 +413,18 @@
                       "
                     >
                       {{ scope.label
-                      }}<span v-if="scope.sensitive" class="ml-1">· {{ tm('apiKey.sensitiveScope') }}</span>
+                      }}<span v-if="scope.sensitive" class="ml-1"
+                        >· {{ tm('apiKey.sensitiveScope') }}</span
+                      >
                     </v-chip>
                   </v-chip-group>
 
                   <v-alert
-                    v-if="newApiKeyScopes.some((scope) => sensitiveScopes.has(scope))"
+                    v-if="
+                      newApiKeyScopes.some((scope) =>
+                        sensitiveScopes.has(scope),
+                      )
+                    "
                     type="warning"
                     variant="tonal"
                     density="comfortable"

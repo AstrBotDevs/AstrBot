@@ -37,9 +37,7 @@ class FileTokenService:
     async def _cleanup_expired_tokens(self) -> None:
         now = time.time()
         expired = [
-            token
-            for token, (_, expire) in self.staged_files.items()
-            if expire < now
+            token for token, (_, expire) in self.staged_files.items() if expire < now
         ]
         for token in expired:
             self.staged_files.pop(token, None)

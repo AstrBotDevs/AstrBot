@@ -33,13 +33,10 @@ def sanitize_history_for_storage(messages: list[dict]) -> list[dict]:
             if not isinstance(image_url, dict):
                 continue
             url = image_url.get("url")
-            if (
-                isinstance(url, str)
-                and (
-                    (url.startswith("data:image/") and ";base64," in url)
-                    or url.startswith(("file://", "/"))
-                    or bool(_WINDOWS_ABSOLUTE_PATH_RE.match(url))
-                )
+            if isinstance(url, str) and (
+                (url.startswith("data:image/") and ";base64," in url)
+                or url.startswith(("file://", "/"))
+                or bool(_WINDOWS_ABSOLUTE_PATH_RE.match(url))
             ):
                 image_url["url"] = IMAGE_HISTORY_PLACEHOLDER
     return sanitized
