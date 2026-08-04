@@ -5,27 +5,31 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 0283f923312dd011599e41b0772566589e51ba7a
-  synced_at_utc: 2026-08-02T15:59:31Z
+  commit: bb9b1878474e5ed65667d5c2c6b7fd6efbc51db4
+  synced_at_utc: 2026-08-04T17:19:05Z
   sync_method: manual-adaptation
-  source_pr: '9406, 9148, 9416, 9414, 9402, 9419, 9413, 9411, 9428, 8897, 9426, 9435, 9439, 9462, 9454, 9444, 9499'
+  source_pr: '9501, 9503, 9500, 9491, 9504, 17333, 9490, 9505, 07baa, 9507, 9506, 9455, 9509, 9514, e4cf9b16, 9515, 9517, 9520, 9525, 9539, 9541, 9537, 9532, 9536, 9544'
   note: >-
-    Reviewed all 34 upstream/master commits through
-    0283f923312dd011599e41b0772566589e51ba7a. The prior marker is not an
-    ancestor of this fork branch, so the included work was semantically
-    transplanted rather than cherry-picked. Included direct/adapted fixes:
-    pinned docker/login-action v4.5.1; mutable configuration defaults; MiMo
-    TTS; chat regeneration and streamed tails; Cron scheduler/database state
-    and localized task times; QQ Official streaming buffers; C-extension-safe
-    dependency preference; Bailian and vLLM rerank protocol/error handling;
-    no-proxy loopback bypass; sparse retrieval/rank-fusion correctness; and
-    the empty persona capability-list semantic. The Discord slash-name regex
-    was already correct in this fork. Deferred for fork-specific design and
-    security review: conversation-list API/DB changes, log-console filtering,
-    DashScope embeddings, workspace browsing, persistent group history,
-    managed shell sessions, enriched embedding context, composer/UI redesign,
-    extension/persona UI unification, and Skills UI. Skipped
-    upstream Cloud/release documentation, version bump,
-    deprecated decorator and misspelling compatibility shims, QQ group notice,
-    and updater/release architecture because they conflict with this fork's
-    no-legacy and source-build/release policy.
+    Reviewed all 25 upstream/master commits from
+    0283f923312dd011599e41b0772566589e51ba7a through
+    bb9b1878474e5ed65667d5c2c6b7fd6efbc51db4. The marker is not an ancestor
+    of this fork branch, so no upstream commit was merged or mechanically
+    cherry-picked. Fork-native semantic ports: API-key capability boundaries
+    and isolated profile-admin fixture (#9503, #9539); terminal tool-only
+    history persistence (#9500); atomic ToolImageCache recreation and dead
+    expiry removal (#9490, #9504); owned temporary artifact token leases
+    (#9506); Dashboard Bearer backup download (#9525); init --yes (#9514);
+    nonpositive rank-fusion limit (#9455); favicon (#9537); project-chat
+    placeholder and bottom composer (#17333, #07baa); local member Skill
+    write hardening plus lifecycle-owned readonly builtin Skill catalog from
+    loaded Stars (#9517); and the requested SHA-only action pin updates
+    (#9532). The OpenAPI contract, generated client/public JSON, bilingual
+    docs, and focused tests were updated where API behavior changed. Skipped
+    or deferred: managed shell sessions/write_line (#9501, #9507), UUID
+    replacement (#9505), the relative-score fusion/rerank rewrite (#9455),
+    Responses provider (#9515), Office/PDF/spreadsheet/skill-creator payloads
+    and host conversion plus global star registry discovery (#9517), upstream
+    styling/component removals (#9491, #e4cf9b16, #9541), upstream version and
+    release text (#9509, #9520), and Issue Forms (#9536, #9544). These are
+    excluded by the fork's security, no-legacy, runtime-ownership, source-build,
+    or release-policy constraints.
