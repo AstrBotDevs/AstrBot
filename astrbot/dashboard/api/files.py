@@ -2,6 +2,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import error, ok
@@ -37,7 +38,13 @@ async def require_file_scope(request: Request) -> AuthContext:
 
 async def _serve_token_file(file_token: str, service: FileService):
     try:
-        return FileResponse(await service.resolve_token_file(file_token))
+        file_path, owned = await service.claim_token_file(file_token)
+        background = (
+            BackgroundTask(service.file_token_service.release_token, file_token)
+            if owned
+            else None
+        )
+        return FileResponse(file_path, background=background)
     except FileServiceError as exc:
         raise HTTPException(status_code=404) from exc
 

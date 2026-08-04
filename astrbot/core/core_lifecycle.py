@@ -347,6 +347,10 @@ class AstrBotCoreLifecycle:
             LogManager.configure_trace_logger(self.astrbot_config)
 
         self._register_cleanup("database", self.db.close)
+        self._register_cleanup(
+            "file token artifacts",
+            self.services.file_token_service.shutdown,
+        )
         self._register_cleanup("metrics", self.services.metrics.shutdown)
         self._register_cleanup(
             "shared preferences",

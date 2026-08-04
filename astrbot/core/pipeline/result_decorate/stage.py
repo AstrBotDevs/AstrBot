@@ -263,6 +263,16 @@ class ResultDecorateStage(Stage):
                     chain.append(Plain(part))
         result.chain = chain
 
+    async def _register_generated_file(self, event, file_path: str) -> str:
+        register_owned = getattr(
+            self.ctx.file_token_service,
+            "register_owned_file",
+            None,
+        )
+        if callable(register_owned):
+            return await register_owned(file_path, event)
+        return await self.ctx.file_token_service.register_file(file_path)
+
     async def _apply_tts(self, event, result) -> bool:
         should_tts = (
             bool(self.ctx.astrbot_config["provider_tts_settings"]["enable"])
@@ -294,7 +304,7 @@ class ResultDecorateStage(Stage):
                 event.track_temporary_local_file(audio_path)
                 url = audio_path
                 if settings["use_file_service"] and callback_base:
-                    token = await self.ctx.file_token_service.register_file(audio_path)
+                    token = await self._register_generated_file(event, audio_path)
                     url = f"{callback_base}/api/v1/files/tokens/{token}"
                 chain.append(Record(file=url, url=url, text=component.text))
                 if settings["dual_output"]:
@@ -360,7 +370,7 @@ class ResultDecorateStage(Stage):
             or event.get_platform_name() in {"aiocqhttp", "napcat"}
         ):
             try:
-                token = await self.ctx.file_token_service.register_file(image_path)
+                token = await self._register_generated_file(event, image_path)
                 result.chain = [
                     Image.fromURL(f"{callback_base}/api/v1/files/tokens/{token}")
                 ]

@@ -396,6 +396,16 @@ class AstrMessageEvent(abc.ABC):
         if path and path not in self._temporary_local_files:
             self._temporary_local_files.append(path)
 
+    def has_temporary_local_file(self, path: str) -> bool:
+        return bool(path) and path in self._temporary_local_files
+
+    def transfer_temporary_local_file(self, path: str) -> bool:
+        """Transfer one temporary artifact to another runtime-owned lease."""
+        if path not in self._temporary_local_files:
+            return False
+        self._temporary_local_files.remove(path)
+        return True
+
     def cleanup_temporary_local_files(self) -> None:
         for path in getattr(self.message_obj, "temporary_file_paths", []):
             self.track_temporary_local_file(path)
