@@ -330,6 +330,7 @@
             :current-session="currentSession"
             :reply-to="chatInputReplyTarget"
             :send-shortcut="sendShortcut"
+            :placeholder="tm('input.projectPlaceholder')"
             @send="sendCurrentMessage"
             @stop="stopCurrentSession"
             @toggle-streaming="toggleStreaming"

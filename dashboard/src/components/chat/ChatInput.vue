@@ -192,7 +192,7 @@
             @blur="handleBlur"
             @paste="handlePaste"
             :disabled="disabled"
-            :placeholder="tm('input.placeholder')"
+            :placeholder="props.placeholder ?? tm('input.placeholder')"
             class="chat-text-input"
             autocomplete="off"
             autocorrect="off"
@@ -212,7 +212,7 @@
             @blur="handleBlur"
             @paste="handlePaste"
             :disabled="disabled"
-            :placeholder="tm('input.placeholder')"
+            :placeholder="props.placeholder ?? tm('input.placeholder')"
             class="chat-textarea"
             autocomplete="off"
             autocorrect="off"
@@ -374,6 +374,7 @@ interface Props {
   sendShortcut?: 'enter' | 'shift_enter';
   showProviderSelector?: boolean;
   tokenUsage?: TokenUsageInfo | null;
+  placeholder?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {

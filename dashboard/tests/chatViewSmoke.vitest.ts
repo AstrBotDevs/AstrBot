@@ -208,7 +208,9 @@ vi.mock('@/components/chat/ProjectView.vue', () => ({
 
 vi.mock('@/components/chat/ChatInput.vue', () => ({
   default: {
-    template: '<div class="chat-input-stub"></div>',
+    props: ['placeholder'],
+    template:
+      '<div class="chat-input-stub" :data-placeholder="placeholder"></div>',
     setup(_props: unknown, { expose }: { expose: (value: unknown) => void }) {
       expose({
         getCurrentSelection: () => testState.inputSelection,
@@ -310,6 +312,29 @@ describe('Chat view smoke', () => {
 
     expect(wrapper.find('.provider-workspace-stub').exists()).toBe(true);
     expect(wrapper.find('.welcome-title').exists()).toBe(false);
+  });
+
+  it('passes the project placeholder only to the project composer', async () => {
+    testState.projects = [
+      {
+        project_id: 'project-1',
+        title: 'Planning',
+        emoji: 'P',
+      },
+    ];
+    testState.selectedProjectId = 'project-1';
+
+    const wrapper = mountChat();
+    await flushPromises();
+
+    expect(
+      wrapper
+        .get('.project-view-stub .chat-input-stub')
+        .attributes('data-placeholder'),
+    ).toBe('input.projectPlaceholder');
+    expect(wrapper.find('.composer-shell .chat-input-stub').exists()).toBe(
+      false,
+    );
   });
 
   it('opens the refs sidebar from the message list interaction path', async () => {
