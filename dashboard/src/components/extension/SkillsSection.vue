@@ -71,10 +71,6 @@
                   >
                     {{ tm("status.preset") }}
                   </v-chip>
-                  <CapabilitySourceChip
-                    :label="sourceTypeLabel(skill.source_type, skill)"
-                    :tone="sourceTypeTone(skill.source_type)"
-                  />
                 </div>
               </template>
 
@@ -794,7 +790,6 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import { skillApi, systemConfigApi } from "@/api/v1";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
-import CapabilitySourceChip from "@/components/shared/CapabilitySourceChip.vue";
 import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
 import { useCustomizerStore } from "@/stores/customizer";
 
@@ -807,7 +802,6 @@ const STATUS_SKIPPED = "skipped";
 export default {
   name: "SkillsSection",
   components: {
-    CapabilitySourceChip,
     OutlinedActionListItem,
     VueMonacoEditor,
   },
@@ -983,28 +977,6 @@ export default {
       sandboxCache.count = Number(cache.count || 0);
       sandboxCache.updated_at = cache.updated_at || null;
       return payload.skills || [];
-    };
-
-    const sourceTypeLabel = (sourceType, skill = null) => {
-      if (sourceType === "plugin") {
-        return tm("skills.sourcePlugin", {
-          plugin:
-            skill?.plugin_display_name ||
-            skill?.source_label ||
-            skill?.plugin_name ||
-            "",
-        });
-      }
-      if (sourceType === "sandbox_only") return tm("skills.sourceSandboxOnly");
-      if (sourceType === "both") return tm("skills.sourceBoth");
-      return tm("skills.sourceLocalOnly");
-    };
-
-    const sourceTypeTone = (sourceType) => {
-      if (sourceType === "sandbox_only") return "preset";
-      if (sourceType === "plugin") return "plugin";
-      if (sourceType === "both") return "mixed";
-      return "local";
     };
 
     const isSandboxPresetSkill = (skill) =>
@@ -1863,8 +1835,6 @@ export default {
       viewPayload,
       deleteCandidate,
       deleteRelease,
-      sourceTypeLabel,
-      sourceTypeTone,
       isSandboxPresetSkill,
       isPluginProvidedSkill,
       isReadOnlySourceSkill,
