@@ -75,7 +75,7 @@ body:
         与问题相关的其他辅助信息，例如复现视频、完整日志文件。图片请在问题描述中上传。<br>
         如果您要提供的日志过长以至不适合直接填写到上一栏，您可以选择只在上一栏贴关键日志，将完整的日志文件上传到这里。
     validations:
-      accept: ".txt,.log,.mp4,.mov,.webm,.zip,.gz,.tar.gz"
+      accept: ".txt,.log,.mp4,.mov,.webm,.zip,.gz"
 
   - type: checkboxes
     attributes:
