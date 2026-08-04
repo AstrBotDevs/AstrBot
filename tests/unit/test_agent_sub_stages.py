@@ -198,7 +198,7 @@ async def test_internal_save_to_history_filters_messages_and_appends_checkpoints
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.ctx = _pipeline_context(SimpleNamespace())
     event = FakeEvent(extras={"llm_checkpoint_id": "ck-latest"})
-    req = ProviderRequest(conversation=SimpleNamespace(cid="conv-1"))
+    req = ProviderRequest(conversation=SimpleNamespace(cid="conv-1", token_usage=5))
 
     user_message = Message(role="user", content="hello")
     assistant_message = Message(role="assistant", content="answer")
@@ -235,7 +235,7 @@ async def test_internal_save_to_history_filters_messages_and_appends_checkpoints
         {"role": "_checkpoint", "content": {"id": "ck-prev"}},
         {"role": "_checkpoint", "content": {"id": "ck-latest"}},
     ]
-    assert stage.conv_manager.update_conversation.await_args.kwargs["token_usage"] == 5
+    assert stage.conv_manager.update_conversation.await_args.kwargs["token_usage"] is None
 
 
 @pytest.mark.asyncio
@@ -246,6 +246,7 @@ async def test_internal_save_to_history_sanitizes_images_without_mutating_agent_
     event = FakeEvent()
     req = ProviderRequest(conversation=SimpleNamespace(cid="conv-1"))
     image_data = "data:image/png;base64,aGVsbG8="
+    temporary_image_path = "/tmp/astrbot/tool-image.png"
     message = Message.model_validate(
         {
             "role": "user",
@@ -253,7 +254,11 @@ async def test_internal_save_to_history_sanitizes_images_without_mutating_agent_
                 {
                     "type": "image_url",
                     "image_url": {"url": image_data},
-                }
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": temporary_image_path},
+                },
             ],
         }
     )
@@ -268,7 +273,9 @@ async def test_internal_save_to_history_sanitizes_images_without_mutating_agent_
 
     saved_history = stage.conv_manager.update_conversation.await_args.kwargs["history"]
     assert "data:image" not in str(saved_history)
+    assert temporary_image_path not in str(saved_history)
     assert message.content[0].image_url.url == image_data
+    assert message.content[1].image_url.url == temporary_image_path
 
 
 @pytest.mark.asyncio
@@ -321,14 +328,14 @@ async def test_internal_save_to_history_keeps_tool_only_turn_without_text():
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.ctx = _pipeline_context(SimpleNamespace())
     req = ProviderRequest(
-        conversation=SimpleNamespace(cid="conv-tools"),
+        conversation=SimpleNamespace(cid="conv-tools", token_usage=17),
         tool_calls_result=[{"name": "kb_search", "result": "ok"}],
     )
 
     await stage._save_to_history(
         FakeEvent(),
         req,
-        LLMResponse(role="assistant", completion_text=""),
+        None,
         [Message(role="assistant", content="tool output saved")],
         runner_stats=None,
     )
@@ -338,7 +345,7 @@ async def test_internal_save_to_history_keeps_tool_only_turn_without_text():
         {"role": "assistant", "content": "tool output saved"}
     ]
     assert (
-        stage.conv_manager.update_conversation.await_args.kwargs["token_usage"] is None
+        stage.conv_manager.update_conversation.await_args.kwargs["token_usage"] == 17
     )
 
 
@@ -385,6 +392,32 @@ async def test_internal_save_to_history_keeps_checkpoint_after_failed_response()
         ],
         token_usage=None,
     )
+
+
+@pytest.mark.asyncio
+async def test_internal_save_to_history_keeps_checkpoint_for_terminal_tool_turn():
+    stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
+    stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
+    stage.ctx = _pipeline_context(SimpleNamespace())
+    event = FakeEvent(extras={"llm_checkpoint_id": "ck-terminal-tool"})
+    req = ProviderRequest(
+        conversation=SimpleNamespace(cid="conv-terminal-tool", token_usage=19),
+        tool_calls_result=[{"name": "terminal_tool", "result": "done"}],
+    )
+
+    await stage._save_to_history(
+        event,
+        req,
+        None,
+        [Message(role="user", content="hello"), Message(role="assistant", content="tool")],
+        runner_stats=None,
+    )
+
+    assert stage.conv_manager.update_conversation.await_args.kwargs["token_usage"] is None
+    assert stage.conv_manager.update_conversation.await_args.kwargs["history"][-1] == {
+        "role": "_checkpoint",
+        "content": {"id": "ck-terminal-tool"},
+    }
 
 
 @pytest.mark.asyncio
@@ -503,7 +536,7 @@ async def test_internal_save_to_history_schedules_runtime_memory_postprocess(
 
 
 @pytest.mark.asyncio
-async def test_internal_save_to_history_normalizes_missing_completion_for_postprocess(
+async def test_internal_save_to_history_does_not_postprocess_empty_terminal_tool_turn(
     monkeypatch,
 ):
     stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
@@ -526,19 +559,21 @@ async def test_internal_save_to_history_normalizes_missing_completion_for_postpr
 
     await stage._save_to_history(
         FakeEvent(),
-        ProviderRequest(conversation=SimpleNamespace(cid="conv-post-empty")),
-        LLMResponse(role="assistant", completion_text=None),
-        [Message(role="user", content="I like tea.")],
+        ProviderRequest(
+            conversation=SimpleNamespace(cid="conv-post-empty", token_usage=3),
+            tool_calls_result=[{"name": "terminal_tool", "result": "done"}],
+        ),
+        None,
+        [Message(role="assistant", content="tool output")],
         runner_stats=None,
-        user_aborted=True,
     )
 
-    assert scheduled[0][2] == "runtime_memory_postprocess"
-    assert postprocess.call_args.kwargs["assistant_text"] == ""
+    assert scheduled == []
+    postprocess.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_internal_save_to_history_skips_no_save_assistant_and_ignores_runner_stats_usage():
+async def test_internal_save_to_history_uses_conversation_token_usage():
     stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.ctx = _pipeline_context(SimpleNamespace())
@@ -548,7 +583,7 @@ async def test_internal_save_to_history_skips_no_save_assistant_and_ignores_runn
 
     await stage._save_to_history(
         FakeEvent(),
-        ProviderRequest(conversation=SimpleNamespace(cid="conv-no-save")),
+        ProviderRequest(conversation=SimpleNamespace(cid="conv-no-save", token_usage=64)),
         LLMResponse(role="assistant", completion_text="final answer"),
         [
             Message(role="system", content="drop me"),
@@ -564,7 +599,7 @@ async def test_internal_save_to_history_skips_no_save_assistant_and_ignores_runn
         {"role": "assistant", "content": "final answer"},
     ]
     assert (
-        stage.conv_manager.update_conversation.await_args.kwargs["token_usage"] is None
+        stage.conv_manager.update_conversation.await_args.kwargs["token_usage"] == 64
     )
 
 

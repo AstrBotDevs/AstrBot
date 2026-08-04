@@ -1,12 +1,14 @@
 """Provider-facing sanitization for persisted agent history."""
 
+import re
 from copy import deepcopy
 
 IMAGE_HISTORY_PLACEHOLDER = "[image omitted]"
+_WINDOWS_ABSOLUTE_PATH_RE = re.compile(r"^[A-Za-z]:[\\/]")
 
 
 def sanitize_history_for_storage(messages: list[dict]) -> list[dict]:
-    """Replace base64 image data URLs in persisted history with a placeholder.
+    """Replace transient image data and local paths in persisted history.
 
     The input is copied before it is changed so the current agent loop keeps its
     complete, in-memory image data for the rest of the request.
@@ -33,8 +35,11 @@ def sanitize_history_for_storage(messages: list[dict]) -> list[dict]:
             url = image_url.get("url")
             if (
                 isinstance(url, str)
-                and url.startswith("data:image/")
-                and ";base64," in url
+                and (
+                    (url.startswith("data:image/") and ";base64," in url)
+                    or url.startswith(("file://", "/"))
+                    or bool(_WINDOWS_ABSOLUTE_PATH_RE.match(url))
+                )
             ):
                 image_url["url"] = IMAGE_HISTORY_PLACEHOLDER
     return sanitized

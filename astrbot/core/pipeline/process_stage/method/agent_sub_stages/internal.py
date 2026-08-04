@@ -546,7 +546,9 @@ class InternalAgentSubStage:
                     history=sanitize_history_for_storage(message_to_save),
                     token_usage=None,
                 )
-            return
+                return
+            if not req.tool_calls_result:
+                return
 
         if llm_response and llm_response.role != "assistant":
             if not user_aborted:
@@ -594,10 +596,13 @@ class InternalAgentSubStage:
         #         ).model_dump()
         #     )
 
-        token_usage = None
-        if runner_stats:
-            # token_usage = runner_stats.token_usage.total
-            token_usage = llm_response.usage.total if llm_response.usage else None
+        # ConversationManager aggregates usage while requests run.  A checkpoint
+        # is a partial snapshot and must not overwrite the persisted aggregate.
+        token_usage = (
+            None
+            if isinstance(checkpoint_id, str) and checkpoint_id
+            else getattr(req.conversation, "token_usage", None)
+        )
 
         await self.conv_manager.update_conversation(
             event.unified_msg_origin,
@@ -605,11 +610,12 @@ class InternalAgentSubStage:
             history=message_to_save,
             token_usage=token_usage,
         )
-        self._schedule_runtime_memory_postprocess(
-            event,
-            req,
-            llm_response.completion_text or "",
-        )
+        if llm_response.completion_text:
+            self._schedule_runtime_memory_postprocess(
+                event,
+                req,
+                llm_response.completion_text,
+            )
 
     def _schedule_runtime_memory_postprocess(
         self,
