@@ -16,19 +16,9 @@
 
 AstrBot 提供了开箱即用的会话控制功能：
 
-导入：
-
 ```py
 import astrbot.api.message_components as Comp
-from astrbot.core.utils.session_waiter import (
-    session_waiter,
-    SessionController,
-)
-```
-
-handler 内的代码可以如下：
-
-```python
+from astrbot.api.utils import SessionController, session_waiter
 from astrbot.api.event import filter, AstrMessageEvent
 
 @filter.command("成语接龙")
@@ -43,24 +33,18 @@ async def handle_empty_mention(self, event: AstrMessageEvent):
             idiom = event.message_str # 用户发来的成语，假设是 "一马当先"
 
             if idiom == "退出":   # 假设用户想主动退出成语接龙，输入了 "退出"
-                await event.send(event.plain_result("已退出成语接龙~"))
                 controller.stop()    # 停止会话控制器，会立即结束。
-                return
+                return event.plain_result("已退出成语接龙~")
 
             if len(idiom) != 4:   # 假设用户输入的不是4字成语
-                await event.send(event.plain_result("成语必须是四个字的呢~"))  # 发送回复，不能使用 yield
-                return
-                # 退出当前方法，不执行后续逻辑，但此会话并未中断，后续的用户输入仍然会进入当前会话
+                return event.plain_result("成语必须是四个字的呢~")  # 返回后不执行后续逻辑，但此会话并未中断，后续的用户输入仍然会进入当前会话
 
             # ...
-            message_result = event.make_result()
-            message_result.chain = [Comp.Plain("先见之明")] # import astrbot.api.message_components as Comp
-            await event.send(message_result) # 发送回复，不能使用 yield
-
             controller.keep(timeout=60, reset_timeout=True) # 重置超时时间为 60s，如果不重置，则会继续之前的超时时间计时。
 
             # controller.stop() # 停止会话控制器，会立即结束。
             # 如果记录了历史消息链，可以通过 controller.get_history_chains() 获取历史消息链
+            return event.plain_result("先见之明")  # 发送回复
 
         try:
             await empty_mention_waiter(event)
@@ -73,6 +57,10 @@ async def handle_empty_mention(self, event: AstrMessageEvent):
     except Exception as e:
         logger.error("handle_empty_mention error: " + str(e))
 ```
+
+> [!TIP]
+> 会话控制器处理函数内**不能使用 `yield`**，但可以 `return` 一个 `MessageEventResult`。返回的结果会被框架自动送入消息装饰流程后再发送，与普通指令回复的行为一致。\
+> 如果直接调用 `event.send()`，消息会绕过装饰流程直接发送。
 
 当激活会话控制器后，该发送人之后发送的消息会首先经过上面你定义的 `empty_mention_waiter` 函数处理，直到会话控制器被停止或者超时。
 
@@ -92,7 +80,7 @@ async def handle_empty_mention(self, event: AstrMessageEvent):
 
 ```py
 import astrbot.api.message_components as Comp
-from astrbot.core.utils.session_waiter import (
+from astrbot.api.utils import (
     session_waiter,
     SessionFilter,
     SessionController,

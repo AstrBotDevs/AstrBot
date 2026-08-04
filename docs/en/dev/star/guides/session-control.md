@@ -20,15 +20,7 @@ Import:
 
 ```py
 import astrbot.api.message_components as Comp
-from astrbot.core.utils.session_waiter import (
-    session_waiter,
-    SessionController,
-)
-```
-
-Code within the handler can be written as follows:
-
-```python
+from astrbot.api.utils import SessionController, session_waiter
 from astrbot.api.event import filter, AstrMessageEvent
 
 @filter.command("idiom-chain")
@@ -40,27 +32,22 @@ async def handle_empty_mention(self, event: AstrMessageEvent):
         # How to use the session controller
         @session_waiter(timeout=60, record_history_chains=False) # Register a session controller with a 60-second timeout, without recording message history
         async def empty_mention_waiter(controller: SessionController, event: AstrMessageEvent):
-            idiom = event.message_str # The idiom sent by the user, e.g., "one horse takes the lead"
+            idiom = event.message_str # The idiom sent by the user, e.g., "一马当先"
 
             if idiom == "exit":   # If the user wants to exit the idiom chain game by typing "exit"
-                await event.send(event.plain_result("Exited the idiom chain game~"))
                 controller.stop()    # Stop the session controller, which will end immediately.
-                return
+                return event.plain_result("Exited the idiom chain game~")
 
             if len(idiom) != 4:   # If the user's input is not a 4-character idiom
-                await event.send(event.plain_result("The idiom must be four characters~"))  # Send a reply, cannot use yield
-                return
                 # Exit the current method without executing subsequent logic, but the session is not interrupted; subsequent user input will still enter the current session
+                return event.plain_result("The idiom must be four characters~")
 
             # ...
-            message_result = event.make_result()
-            message_result.chain = [Comp.Plain("Foresight")] # import astrbot.api.message_components as Comp
-            await event.send(message_result) # Send a reply, cannot use yield
-
             controller.keep(timeout=60, reset_timeout=True) # Reset timeout to 60s. If not reset, it will continue the previous timeout countdown.
 
             # controller.stop() # Stop the session controller, which will end immediately.
             # If history chains are recorded, you can retrieve them via controller.get_history_chains()
+            return event.plain_result("先见之明")  # Send a reply
 
         try:
             await empty_mention_waiter(event)
@@ -73,6 +60,10 @@ async def handle_empty_mention(self, event: AstrMessageEvent):
     except Exception as e:
         logger.error("handle_empty_mention error: " + str(e))
 ```
+
+> [!TIP]
+> Inside the session controller handler, you **cannot use `yield`**, but you can `return` a `MessageEventResult`. The returned result is automatically sent through the framework's message decoration pipeline, behaving the same as a regular command reply.\
+> If you call `event.send()` directly, the message bypasses the decoration pipeline and is sent directly.
 
 Once the session controller is activated, messages subsequently sent by that sender will first be processed by the `empty_mention_waiter` function you defined above, until the session controller is stopped or times out.
 
@@ -92,7 +83,7 @@ By default, the AstrBot session controller uses `sender_id` (the sender's ID) as
 
 ```py
 import astrbot.api.message_components as Comp
-from astrbot.core.utils.session_waiter import (
+from astrbot.api.utils import (
     session_waiter,
     SessionFilter,
     SessionController,
