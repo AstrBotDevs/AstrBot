@@ -49,6 +49,7 @@ async def core_lifecycle_td(tmp_path_factory):
     log_broker = LogBroker()
     core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
     await core_lifecycle.initialize()
+    core_lifecycle.astrbot_config["admins_id"] = ["api-key-test-admin"]
     generated_password = getattr(
         core_lifecycle.astrbot_config,
         "_generated_dashboard_password",
