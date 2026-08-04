@@ -1561,6 +1561,26 @@
                 "description": "Одиночный голос",
                 "hint": "ID одиночного голоса; см. официальную документацию."
             },
+            "minimax-voice-design-prompt": {
+                "description": "Описание голоса для дизайна",
+                "hint": "Текстовое описание желаемого голоса. При задании перед синтезом будет создан кастомный голос через API Voice Design."
+            },
+            "minimax-voice-design-preview-text": {
+                "description": "Текст предпросмотра голоса",
+                "hint": "Текст для генерации предпросмотра аудио при дизайне голоса. Обязателен для API Voice Design."
+            },
+            "minimax-voice-design-voice-id": {
+                "description": "ID голоса для дизайна",
+                "hint": "Пользовательский ID для создаваемого голоса. Оставьте пустым, чтобы API сгенерировал его автоматически."
+            },
+            "minimax-voice-design-prompt-audio": {
+                "description": "Путь к аудио подсказки",
+                "hint": "Локальный файл .mp3, .m4a или .wav, загружаемый с целью prompt_audio для повышения схожести и стабильности голоса."
+            },
+            "minimax-voice-design-api-base": {
+                "description": "API base для дизайна голоса",
+                "hint": "Региональный базовый URL MiniMax для загрузки аудио и дизайна голоса."
+            },
             "minimax-voice-emotion": {
                 "description": "Эмоция",
                 "hint": "Эмоция речи. 'auto' выбирает эмоцию на основе текста."
