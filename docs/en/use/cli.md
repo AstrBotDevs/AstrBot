@@ -30,7 +30,7 @@ uv run astrbot init
 uv run astrbot run
 ```
 
-`init` creates the `.astrbot` marker and `data/` subdirectories, then checks Dashboard assets. The direct source entry point, `uv run main.py`, does not require this marker.
+`init` creates the `.astrbot` marker and `data/` subdirectories, then checks Dashboard assets. Use `astrbot init --yes` (or `-y`) only to skip its first-install directory confirmation; it does not bypass the lock, initial-password setup, or any other confirmation. The direct source entry point, `uv run main.py`, does not require this marker.
 
 Common `run` options:
 

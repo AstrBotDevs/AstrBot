@@ -30,7 +30,7 @@ uv run astrbot init
 uv run astrbot run
 ```
 
-`init` 会创建 `.astrbot` 标记、`data/` 子目录并检查 Dashboard。直接使用 `uv run main.py` 的源码启动流程不要求这个标记。
+`init` 会创建 `.astrbot` 标记、`data/` 子目录并检查 Dashboard。`astrbot init --yes`（或 `-y`）仅跳过首次安装目录确认，不会跳过文件锁、初始密码设置或其他后续确认。直接使用 `uv run main.py` 的源码启动流程不要求这个标记。
 
 `run` 常用选项：
 

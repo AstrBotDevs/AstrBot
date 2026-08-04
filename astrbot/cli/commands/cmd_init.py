@@ -18,18 +18,24 @@ def _initialize_config_from_env(astrbot_root: Path) -> None:
     click.echo("Initialized data/cmd_config.json with dashboard initial password.")
 
 
-async def initialize_astrbot(astrbot_root: Path) -> None:
+async def initialize_astrbot(
+    astrbot_root: Path,
+    *,
+    confirm_install_directory: bool = True,
+) -> None:
     """Execute AstrBot initialization logic"""
     dot_astrbot = astrbot_root / ".astrbot"
 
-    if not dot_astrbot.exists():
-        if click.confirm(
+    if not dot_astrbot.exists() and (
+        not confirm_install_directory
+        or click.confirm(
             f"Install AstrBot to this directory? {astrbot_root}",
             default=True,
             abort=True,
-        ):
-            dot_astrbot.touch()
-            click.echo(f"Created {dot_astrbot}")
+        )
+    ):
+        dot_astrbot.touch()
+        click.echo(f"Created {dot_astrbot}")
 
     paths = {
         "data": astrbot_root / "data",
@@ -46,7 +52,14 @@ async def initialize_astrbot(astrbot_root: Path) -> None:
 
 
 @click.command()
-def init() -> None:
+@click.option(
+    "--yes",
+    "yes",
+    "-y",
+    is_flag=True,
+    help="Skip the first-install directory confirmation.",
+)
+def init(yes: bool) -> None:
     """Initialize AstrBot"""
     from ..utils.basic import get_astrbot_root
 
@@ -58,7 +71,12 @@ def init() -> None:
 
     try:
         with lock.acquire():
-            asyncio.run(initialize_astrbot(astrbot_root))
+            asyncio.run(
+                initialize_astrbot(
+                    astrbot_root,
+                    confirm_install_directory=not yes,
+                )
+            )
             click.echo("Done! You can now run 'astrbot run' to start AstrBot")
     except Timeout:
         raise click.ClickException(
