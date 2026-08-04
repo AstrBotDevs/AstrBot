@@ -17,6 +17,7 @@ import traceback
 from asyncio import Queue
 from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
+from pathlib import Path
 
 from astrbot import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
@@ -36,12 +37,14 @@ from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.runtime_services import RuntimeServices
+from astrbot.core.skills.skill_manager import SkillManager
 from astrbot.core.star.command_management import list_commands, toggle_command
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.updator import AstrBotUpdator
+from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.utils.error_redaction import redact_sensitive_text, safe_error
 from astrbot.core.utils.event_loop_diagnostics import (
     create_event_loop_diagnostic_tasks,
@@ -495,6 +498,15 @@ class AstrBotCoreLifecycle:
         # 扫描、注册插件、实例化插件类
         self._register_cleanup("plugin manager", self._terminate_plugins)
         await self.plugin_manager.lifecycle.reload()
+        self.services.catalogs.builtin_skills.bind(
+            self.services.catalogs.plugins,
+            Path(get_astrbot_path()) / "astrbot" / "builtin_stars",
+        )
+        skill_manager = SkillManager(
+            builtin_skill_catalog=self.services.catalogs.builtin_skills,
+        )
+        execution_context.skill_manager = skill_manager
+        self.services.computer_runtime.bind_skill_manager(skill_manager)
         await self._migrate_legacy_builtin_command_switch()
 
         # 根据配置实例化各个 Provider

@@ -99,11 +99,13 @@ class SkillsService:
         self,
         config: AstrBotConfig,
         computer_runtime: ComputerRuntime,
+        skill_manager: SkillManager,
         *,
         demo_mode: bool,
     ) -> None:
         self.config = config
         self.computer_runtime = computer_runtime
+        self.skill_manager = skill_manager
         self.demo_mode = demo_mode
 
     @staticmethod
@@ -116,6 +118,18 @@ class SkillsService:
                 "You are not permitted to do this operation in demo mode"
             )
 
+    def _is_readonly_skill(self, name: str) -> bool:
+        return self.skill_manager.is_plugin_skill(
+            name
+        ) or self.skill_manager.is_builtin_skill(name)
+
+    def _ensure_skill_mutable(self, name: str) -> None:
+        if self._is_readonly_skill(name):
+            raise SkillsServiceError(
+                "Preset and plugin-provided skills are read-only.",
+                status_code=403,
+            )
+
     def resolve_local_skill_dir(self, name: str) -> Path:
         skill_name = str(name or "").strip()
         if not skill_name:
@@ -123,7 +137,7 @@ class SkillsService:
         if not _SKILL_NAME_RE.match(skill_name):
             raise SkillsServiceError("Invalid skill name")
 
-        skill_mgr = SkillManager()
+        skill_mgr = self.skill_manager
         if skill_mgr.is_sandbox_only_skill(skill_name):
             raise SkillsServiceError(
                 "Sandbox preset skill cannot be opened from local skill files.",
@@ -131,9 +145,19 @@ class SkillsService:
             )
 
         plugin_skill_dir = skill_mgr._get_plugin_skill_dir(skill_name)
-        if plugin_skill_dir is not None:
+        if skill_mgr.is_plugin_skill(skill_name) and plugin_skill_dir is not None:
             try:
                 return plugin_skill_dir.resolve(strict=True)
+            except FileNotFoundError as exc:
+                raise SkillsServiceError(
+                    "Local skill not found",
+                    status_code=404,
+                ) from exc
+
+        builtin_skill_dir = skill_mgr._get_builtin_skill_dir(skill_name)
+        if skill_mgr.is_builtin_skill(skill_name) and builtin_skill_dir is not None:
+            try:
+                return builtin_skill_dir.resolve(strict=True)
             except FileNotFoundError as exc:
                 raise SkillsServiceError(
                     "Local skill not found",
@@ -258,7 +282,7 @@ class SkillsService:
     def get_skills(self) -> dict:
         provider_settings = self.config.get("provider_settings", {})
         runtime = provider_settings.get("computer_use_runtime", "local")
-        skill_mgr = SkillManager()
+        skill_mgr = self.skill_manager
         skills = skill_mgr.list_skills(
             active_only=False,
             runtime=runtime,
@@ -282,7 +306,7 @@ class SkillsService:
 
         temp_dir = get_astrbot_temp_path()
         os.makedirs(temp_dir, exist_ok=True)
-        skill_mgr = SkillManager()
+        skill_mgr = self.skill_manager
         temp_path = _next_available_temp_path(temp_dir, filename)
 
         try:
@@ -320,7 +344,7 @@ class SkillsService:
         succeeded = []
         failed = []
         skipped = []
-        skill_mgr = SkillManager()
+        skill_mgr = self.skill_manager
         temp_dir = get_astrbot_temp_path()
         os.makedirs(temp_dir, exist_ok=True)
 
@@ -417,7 +441,7 @@ class SkillsService:
         if not _SKILL_NAME_RE.match(skill_name):
             raise SkillsServiceError("Invalid skill name")
 
-        skill_mgr = SkillManager()
+        skill_mgr = self.skill_manager
         if skill_mgr.is_sandbox_only_skill(skill_name):
             raise SkillsServiceError(
                 "Sandbox preset skill cannot be downloaded from local skill files."
@@ -425,6 +449,11 @@ class SkillsService:
         if skill_mgr.is_plugin_skill(skill_name):
             raise SkillsServiceError(
                 "Plugin-provided skill cannot be downloaded from local skill files."
+            )
+        if skill_mgr.is_builtin_skill(skill_name):
+            raise SkillsServiceError(
+                "Builtin preset skill cannot be downloaded from local skill files.",
+                status_code=403,
             )
 
         skill_dir = Path(skill_mgr.skills_root) / skill_name
@@ -449,7 +478,7 @@ class SkillsService:
 
     def list_skill_files(self, name: str, relative_path: str | None = "") -> dict:
         skill_name = str(name or "").strip()
-        readonly = SkillManager().is_plugin_skill(skill_name)
+        readonly = self._is_readonly_skill(skill_name)
         skill_dir = self.resolve_local_skill_dir(skill_name)
         target_dir = self.resolve_skill_relative_path(
             skill_dir,
@@ -509,7 +538,7 @@ class SkillsService:
             "path": self.skill_relative_path(skill_dir, target_file),
             "content": content,
             "size": size,
-            "editable": not SkillManager().is_plugin_skill(skill_name),
+            "editable": not self._is_readonly_skill(skill_name),
         }
 
     async def update_skill_file(self, data: object) -> dict:
@@ -526,8 +555,7 @@ class SkillsService:
             raise SkillsServiceError("File content is too large")
 
         skill_dir = self.resolve_local_skill_dir(skill_name)
-        if SkillManager().is_plugin_skill(skill_name):
-            raise SkillsServiceError("Plugin-provided skill is read-only.")
+        self._ensure_skill_mutable(skill_name)
         target_file = self.resolve_skill_relative_path(
             skill_dir,
             relative_path,
@@ -558,7 +586,8 @@ class SkillsService:
             raise SkillsServiceError("Missing skill name")
         if not isinstance(active, bool):
             raise SkillsServiceError("Missing skill active state")
-        SkillManager().set_skill_active(name, active)
+        self._ensure_skill_mutable(str(name))
+        self.skill_manager.set_skill_active(name, active)
         return {"name": name, "active": active}
 
     async def delete_skill(self, data: object) -> dict:
@@ -567,7 +596,8 @@ class SkillsService:
         name = payload.get("name")
         if not name:
             raise SkillsServiceError("Missing skill name")
-        SkillManager().delete_skill(name)
+        self._ensure_skill_mutable(str(name))
+        self.skill_manager.delete_skill(name)
         try:
             await self.computer_runtime.sync_skills_to_active_sandboxes()
         except Exception:

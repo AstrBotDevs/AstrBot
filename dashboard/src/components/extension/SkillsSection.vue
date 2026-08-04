@@ -123,7 +123,7 @@
                     :model-value="skill.active"
                     :loading="itemLoading[skill.name] || false"
                     :disabled="
-                      itemLoading[skill.name] || isSandboxPresetSkill(skill)
+                      itemLoading[skill.name] || isReadOnlySourceSkill(skill)
                     "
                     @click.stop
                     @update:model-value="toggleSkill(skill)"
@@ -799,6 +799,7 @@ interface SkillItem extends SkillItemData {
   source_type?: string;
   source_label?: string;
   plugin_name?: string;
+  readonly?: boolean;
 }
 
 interface SandboxCacheState {
@@ -978,6 +979,7 @@ function normalizeSkillItem(value: unknown): SkillItem | null {
     source_type: getString(record.source_type) || undefined,
     source_label: getString(record.source_label) || undefined,
     plugin_name: getString(record.plugin_name) || undefined,
+    readonly: getBoolean(record.readonly),
   };
 }
 
@@ -1201,6 +1203,11 @@ function sourceTypeLabel(sourceType?: string, skill: SkillItem | null = null) {
       plugin: skill?.source_label || skill?.plugin_name || '',
     });
   }
+  if (sourceType === 'builtin_preset') {
+    return tm('skills.sourceBuiltin', {
+      source: skill?.source_label || '',
+    });
+  }
   if (sourceType === 'sandbox_only') return tm('skills.sourceSandboxOnly');
   if (sourceType === 'both') return tm('skills.sourceBoth');
   return tm('skills.sourceLocalOnly');
@@ -1209,6 +1216,7 @@ function sourceTypeLabel(sourceType?: string, skill: SkillItem | null = null) {
 function sourceTypeColor(sourceType?: string) {
   if (sourceType === 'sandbox_only') return 'indigo';
   if (sourceType === 'plugin') return 'secondary';
+  if (sourceType === 'builtin_preset') return 'teal';
   if (sourceType === 'both') return 'success';
   return 'primary';
 }
@@ -1221,8 +1229,31 @@ function isPluginProvidedSkill(skill: SkillItem) {
   return skill.source_type === 'plugin';
 }
 
+function isBuiltinPresetSkill(skill: SkillItem) {
+  return skill.source_type === 'builtin_preset';
+}
+
 function isReadOnlySourceSkill(skill: SkillItem) {
-  return isSandboxPresetSkill(skill) || isPluginProvidedSkill(skill);
+  return (
+    skill.readonly === true ||
+    isSandboxPresetSkill(skill) ||
+    isPluginProvidedSkill(skill) ||
+    isBuiltinPresetSkill(skill)
+  );
+}
+
+function showReadOnlySkillMessage(skill: SkillItem) {
+  if (isSandboxPresetSkill(skill)) {
+    showMessage(tm('skills.sandboxPresetReadonly'), 'warning');
+    return;
+  }
+  if (isPluginProvidedSkill(skill)) {
+    showMessage(tm('skills.pluginReadonly'), 'warning');
+    return;
+  }
+  if (isBuiltinPresetSkill(skill)) {
+    showMessage(tm('skills.builtinReadonly'), 'warning');
+  }
 }
 
 function normalizeNeoItemsPayload(payload: unknown) {
@@ -1508,8 +1539,8 @@ async function uploadSkillBatch() {
 }
 
 async function toggleSkill(skill: SkillItem) {
-  if (isSandboxPresetSkill(skill)) {
-    showMessage(tm('skills.sandboxPresetReadonly'), 'warning');
+  if (isReadOnlySourceSkill(skill)) {
+    showReadOnlySkillMessage(skill);
     return;
   }
   const nextActive = !skill.active;
@@ -1532,12 +1563,8 @@ async function toggleSkill(skill: SkillItem) {
 }
 
 function confirmDelete(skill: SkillItem) {
-  if (isSandboxPresetSkill(skill)) {
-    showMessage(tm('skills.sandboxPresetReadonly'), 'warning');
-    return;
-  }
-  if (isPluginProvidedSkill(skill)) {
-    showMessage(tm('skills.pluginReadonly'), 'warning');
+  if (isReadOnlySourceSkill(skill)) {
+    showReadOnlySkillMessage(skill);
     return;
   }
   skillToDelete.value = skill;
@@ -1566,12 +1593,8 @@ async function deleteSkill() {
 }
 
 async function downloadSkill(skill: SkillItem) {
-  if (isSandboxPresetSkill(skill)) {
-    showMessage(tm('skills.sandboxPresetReadonly'), 'warning');
-    return;
-  }
-  if (isPluginProvidedSkill(skill)) {
-    showMessage(tm('skills.pluginReadonly'), 'warning');
+  if (isReadOnlySourceSkill(skill)) {
+    showReadOnlySkillMessage(skill);
     return;
   }
   itemLoading[skill.name] = true;

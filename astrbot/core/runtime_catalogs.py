@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from astrbot.core.platform.catalog import PlatformCatalog
 from astrbot.core.provider.catalog import ProviderCatalog
+from astrbot.core.skills.builtin_skill_catalog import BuiltinSkillCatalog
 from astrbot.core.star.star import PluginRegistry
 from astrbot.core.star.star_handler import HandlerRegistry
 from astrbot.core.tools.function_tool_manager import FunctionToolManager
@@ -24,6 +25,7 @@ class RuntimeCatalogs:
     platforms: PlatformCatalog = field(default_factory=PlatformCatalog)
     plugins: PluginRegistry = field(default_factory=PluginRegistry)
     tools: FunctionToolManager = field(default_factory=FunctionToolManager)
+    builtin_skills: BuiltinSkillCatalog = field(default_factory=BuiltinSkillCatalog)
     handlers: HandlerRegistry = field(init=False)
 
     def __post_init__(self) -> None:

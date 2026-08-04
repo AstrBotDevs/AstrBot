@@ -1,16 +1,20 @@
 """Tests for skill metadata: frontmatter parsing, prompt generation, absolute paths."""
 
-
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from astrbot.core.runtime_catalogs import RuntimeCatalogs
+from astrbot.core.skills.builtin_skill_catalog import BuiltinSkillCatalog
 from astrbot.core.skills.skill_manager import (
     SkillInfo,
     SkillManager,
     _parse_frontmatter_description,
     build_skills_prompt,
 )
+from astrbot.core.star.star import StarMetadata
+from astrbot.dashboard.services.skills_service import SkillsService, SkillsServiceError
 
 # ---------- _parse_frontmatter_description tests ----------
 
@@ -629,6 +633,122 @@ def test_list_skills_includes_inactive_plugin_provided_skills_for_inventory(
     skills = mgr.list_skills()
     assert len(skills) == 1
     assert skills[0].name == "demo-skill"
+
+
+def test_builtin_skill_catalog_is_runtime_owned_and_readonly(
+    monkeypatch,
+    tmp_path: Path,
+):
+    data_dir = tmp_path / "data"
+    skills_root = tmp_path / "skills"
+    plugins_root = tmp_path / "plugins"
+    builtin_root = tmp_path / "builtin_stars"
+    data_dir.mkdir(parents=True)
+    skills_root.mkdir(parents=True)
+    plugins_root.mkdir(parents=True)
+    builtin_skill = builtin_root / "builtin_demo" / "skills" / "demo-skill"
+    builtin_skill.mkdir(parents=True)
+    builtin_skill.joinpath("SKILL.md").write_text(
+        "---\ndescription: Built-in preset.\n---\n# Demo\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+
+    catalogs = RuntimeCatalogs()
+    assert isinstance(catalogs.builtin_skills, BuiltinSkillCatalog)
+    catalogs.plugins.publish(
+        StarMetadata(
+            name="Builtin Demo",
+            module_path="astrbot.builtin_stars.builtin_demo.main",
+            root_dir_name="builtin_demo",
+            reserved=True,
+        )
+    )
+    catalogs.builtin_skills.bind(catalogs.plugins, builtin_root)
+    manager = SkillManager(
+        skills_root=str(skills_root),
+        plugins_root=str(plugins_root),
+        builtin_skill_catalog=catalogs.builtin_skills,
+    )
+
+    listed = manager.list_skills()
+    assert len(listed) == 1
+    assert listed[0].source_type == "builtin_preset"
+    assert listed[0].source_label == "Builtin Demo"
+    assert listed[0].readonly is True
+    assert manager.is_builtin_skill("demo-skill") is True
+    with pytest.raises(PermissionError):
+        manager.set_skill_active("demo-skill", False)
+    with pytest.raises(PermissionError):
+        manager.delete_skill("demo-skill")
+
+    service = SkillsService(
+        {"provider_settings": {"computer_use_runtime": "local"}},
+        SimpleNamespace(sync_skills_to_active_sandboxes=lambda: None),
+        manager,
+        demo_mode=False,
+    )
+    assert service.get_skill_file("demo-skill")["editable"] is False
+    with pytest.raises(SkillsServiceError) as exc_info:
+        service.prepare_skill_archive("demo-skill")
+    assert exc_info.value.status_code == 403
+
+
+def test_skill_listing_priority_is_local_plugin_builtin_then_sandbox(
+    monkeypatch,
+    tmp_path: Path,
+):
+    data_dir = tmp_path / "data"
+    skills_root = tmp_path / "skills"
+    plugins_root = tmp_path / "plugins"
+    builtin_root = tmp_path / "builtin_stars"
+    for root in (data_dir, skills_root, plugins_root):
+        root.mkdir(parents=True)
+    builtin_skill = builtin_root / "builtin_demo" / "skills" / "shared"
+    builtin_skill.mkdir(parents=True)
+    builtin_skill.joinpath("SKILL.md").write_text("# builtin", encoding="utf-8")
+    plugin_skill = plugins_root / "plugin_demo" / "skills" / "shared"
+    plugin_skill.mkdir(parents=True)
+    plugin_skill.joinpath("SKILL.md").write_text("# plugin", encoding="utf-8")
+    local_skill = skills_root / "shared"
+    local_skill.mkdir(parents=True)
+    local_skill.joinpath("SKILL.md").write_text("# local", encoding="utf-8")
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+
+    catalogs = RuntimeCatalogs()
+    catalogs.plugins.publish(
+        StarMetadata(
+            name="Builtin Demo",
+            module_path="astrbot.builtin_stars.builtin_demo.main",
+            root_dir_name="builtin_demo",
+            reserved=True,
+        )
+    )
+    catalogs.builtin_skills.bind(catalogs.plugins, builtin_root)
+    manager = SkillManager(
+        skills_root=str(skills_root),
+        plugins_root=str(plugins_root),
+        builtin_skill_catalog=catalogs.builtin_skills,
+    )
+    manager.set_sandbox_skills_cache(
+        [
+            {
+                "name": "shared",
+                "description": "sandbox",
+                "path": "skills/shared/SKILL.md",
+            }
+        ]
+    )
+
+    listed = manager.list_skills(runtime="sandbox")
+    assert len(listed) == 1
+    assert listed[0].source_type == "both"
 
 
 def test_list_skills_description_from_sandbox_cache(monkeypatch, tmp_path: Path):

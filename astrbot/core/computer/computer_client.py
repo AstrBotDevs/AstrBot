@@ -134,14 +134,14 @@ def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
     return skills
 
 
-def _collect_sync_skill_dirs() -> list[tuple[str, Path]]:
-    """Collect local and plugin-provided skills that should be synced."""
+def _collect_sync_skill_dirs(
+    skill_manager: SkillManager | None = None,
+) -> list[tuple[str, Path]]:
+    """Collect local, plugin, and builtin Skills that should be synced."""
     skills_root = Path(get_astrbot_skills_path())
-    if not skills_root.is_dir():
-        return []
 
     try:
-        skill_manager = SkillManager(skills_root=str(skills_root))
+        skill_manager = skill_manager or SkillManager(skills_root=str(skills_root))
     except OSError as exc:
         logger.warning("[Computer] Failed to initialize skill manager: %s", exc)
         return []
@@ -468,13 +468,16 @@ def _decode_sync_payload(stdout: str) -> dict | None:
     return None
 
 
-def _update_sandbox_skills_cache(payload: dict | None) -> None:
+def _update_sandbox_skills_cache(
+    payload: dict | None,
+    skill_manager: SkillManager | None = None,
+) -> None:
     if not isinstance(payload, dict):
         return
     skills = payload.get("skills", [])
     if not isinstance(skills, list):
         return
-    SkillManager().set_sandbox_skills_cache(skills)
+    (skill_manager or SkillManager()).set_sandbox_skills_cache(skills)
 
 
 async def _apply_skills_to_sandbox(booter: ComputerBooter) -> None:
@@ -513,13 +516,16 @@ async def _scan_sandbox_skills(booter: ComputerBooter) -> dict | None:
     return payload
 
 
-async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
+async def _sync_skills_to_sandbox(
+    booter: ComputerBooter,
+    skill_manager: SkillManager | None = None,
+) -> None:
     """Sync local skills to sandbox and refresh cache.
 
     The flow keeps two explicit phases: apply filesystem changes, then scan
     metadata for cache refresh.
     """
-    sync_skill_dirs = _collect_sync_skill_dirs()
+    sync_skill_dirs = _collect_sync_skill_dirs(skill_manager)
 
     temp_dir = Path(get_astrbot_temp_path())
     temp_dir.mkdir(parents=True, exist_ok=True)
@@ -553,7 +559,7 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
         # then scan metadata for cache refresh.
         await _apply_skills_to_sandbox(booter)
         payload = await _scan_sandbox_skills(booter)
-        _update_sandbox_skills_cache(payload)
+        _update_sandbox_skills_cache(payload, skill_manager)
         managed = payload.get("managed_skills", []) if isinstance(payload, dict) else []
         logger.info(
             "[Computer] Sandbox skill sync complete: managed=%d",
@@ -574,6 +580,14 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
 
 class ComputerRuntime(_ComputerRuntimeState):
     """Runtime-owned computer sandbox capability."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._skill_manager: SkillManager | None = None
+
+    def bind_skill_manager(self, skill_manager: SkillManager) -> None:
+        """Bind the lifecycle-owned Skill inventory after plugin loading."""
+        self._skill_manager = skill_manager
 
     async def get_booter(
         self,
@@ -681,7 +695,7 @@ class ComputerRuntime(_ComputerRuntimeState):
                         booter_type,
                         session_id,
                     )
-                    await _sync_skills_to_sandbox(client)
+                    await _sync_skills_to_sandbox(client, self._skill_manager)
                 except asyncio.CancelledError:
                     try:
                         await self._shutdown_booter(client, booter_type)
@@ -738,7 +752,7 @@ class ComputerRuntime(_ComputerRuntimeState):
             try:
                 if not await booter.available():
                     continue
-                await _sync_skills_to_sandbox(booter)
+                await _sync_skills_to_sandbox(booter, self._skill_manager)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001

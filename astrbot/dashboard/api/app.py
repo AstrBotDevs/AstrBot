@@ -9,6 +9,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from astrbot import logger
 from astrbot.core.core_runtime import CoreControl, CoreRuntime
 from astrbot.core.db.protocols import DashboardStore
+from astrbot.core.skills.skill_manager import SkillManager
 from astrbot.dashboard.responses import ApiError, DashboardValidationError, error
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.appearance_service import AppearanceService
@@ -219,6 +220,7 @@ def create_dashboard_asgi_app(
         skills=SkillsService(
             runtime.astrbot_config,
             runtime.services.computer_runtime,
+            SkillManager(builtin_skill_catalog=runtime.catalogs.builtin_skills),
             demo_mode=runtime.services.demo_mode,
         ),
         stats=StatService(

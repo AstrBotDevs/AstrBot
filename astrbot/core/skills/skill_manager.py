@@ -2,6 +2,7 @@ import json
 import os
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from astrbot.core.skills._skill_inventory import (
     SANDBOX_SKILLS_ROOT,
@@ -28,6 +29,9 @@ DEFAULT_SKILLS_CONFIG: dict[str, dict] = {"skills": {}}
 _SANDBOX_SKILLS_CACHE_VERSION = 1
 get_astrbot_temp_path = _get_astrbot_temp_path
 
+if TYPE_CHECKING:
+    from astrbot.core.skills.builtin_skill_catalog import BuiltinSkillCatalog
+
 __all__ = [
     "SANDBOX_SKILLS_ROOT",
     "SANDBOX_WORKSPACE_ROOT",
@@ -47,9 +51,11 @@ class SkillManager(SkillManagerInventoryMixin, SkillManagerArchiveMixin):
         self,
         skills_root: str | None = None,
         plugins_root: str | None = None,
+        builtin_skill_catalog: BuiltinSkillCatalog | None = None,
     ) -> None:
         self.skills_root = skills_root or get_astrbot_skills_path()
         self.plugins_root = plugins_root or get_astrbot_plugin_path()
+        self.builtin_skill_catalog = builtin_skill_catalog
         data_path = Path(get_astrbot_data_path())
         self.config_path = str(data_path / SKILLS_CONFIG_FILENAME)
         self.sandbox_skills_cache_path = str(data_path / SANDBOX_SKILLS_CACHE_FILENAME)

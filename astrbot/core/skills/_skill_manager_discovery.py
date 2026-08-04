@@ -8,10 +8,38 @@ from astrbot.core.skills._skill_inventory import (
     _normalize_skill_markdown_path,
     _parse_frontmatter_description,
 )
+from astrbot.core.skills.builtin_skill_catalog import BuiltinSkillCatalog
 
 
 class SkillManagerDiscoveryMixin:
     plugins_root: str
+    builtin_skill_catalog: BuiltinSkillCatalog | None
+
+    def _iter_builtin_skill_dirs(self) -> list[tuple[str, str, Path]]:
+        """Return loaded builtin Skill directories as (skill, source, dir)."""
+        catalog = self.builtin_skill_catalog
+        if catalog is None:
+            return []
+
+        result: list[tuple[str, str, Path]] = []
+        for source in catalog.sources():
+            skills_dir = source.root_path / "skills"
+            if not skills_dir.is_dir():
+                continue
+            root_entry = self._build_root_plugin_skill_entry(
+                skills_dir,
+                source.root_dir_name,
+            )
+            if root_entry is not None:
+                skill_name, _unused, skill_dir = root_entry
+                result.append((skill_name, source.source_label, skill_dir))
+            for nested in self._iter_nested_plugin_skill_entries(
+                skills_dir,
+                source.root_dir_name,
+            ):
+                skill_name, _unused, skill_dir = nested
+                result.append((skill_name, source.source_label, skill_dir))
+        return result
 
     def _iter_plugin_skill_dirs(self) -> list[tuple[str, str, Path]]:
         """Return plugin-provided skill directories as (skill, plugin, dir)."""
@@ -83,6 +111,12 @@ class SkillManagerDiscoveryMixin:
 
     def _get_plugin_skill_dir(self, name: str) -> Path | None:
         for skill_name, _plugin_name, skill_dir in self._iter_plugin_skill_dirs():
+            if skill_name == name:
+                return skill_dir
+        return None
+
+    def _get_builtin_skill_dir(self, name: str) -> Path | None:
+        for skill_name, _source_label, skill_dir in self._iter_builtin_skill_dirs():
             if skill_name == name:
                 return skill_dir
         return None

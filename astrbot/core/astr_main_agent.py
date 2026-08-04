@@ -526,7 +526,9 @@ def _append_skills_prompt(
     plugin_context: CoreExecutionContext,
 ) -> None:
     runtime = cfg.get("computer_use_runtime", "local")
-    skill_manager = SkillManager()
+    skill_manager = plugin_context.skill_manager or SkillManager(
+        builtin_skill_catalog=plugin_context.catalogs.builtin_skills,
+    )
     skills = _filter_skills_for_current_config(
         skill_manager.list_skills(active_only=True, runtime=runtime),
         cfg,

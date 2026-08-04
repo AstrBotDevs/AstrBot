@@ -57,6 +57,7 @@ if TYPE_CHECKING:
     from astrbot.core.file_token_service import FileTokenService
     from astrbot.core.memory import MemoryManager
     from astrbot.core.persona_runtime import PersonaRuntimeManager
+    from astrbot.core.skills.skill_manager import SkillManager
     from astrbot.core.utils.shared_preferences import SharedPreferences
     from astrbot.core.utils.t2i.renderer import HtmlRenderer
 
@@ -224,6 +225,8 @@ class CoreExecutionContext:
         """Auxiliary Agent tasks cancelled with this runtime."""
         self.computer_runtime = computer_runtime
         """Runtime-owned local and sandbox computer capability."""
+        self.skill_manager: SkillManager | None = None
+        """Runtime-owned Skill inventory, bound after plugin initialization."""
         self.tool_image_cache = tool_image_cache
         """Runtime-owned cache for tool-returned images."""
         self.active_event_registry = active_event_registry or ActiveEventRegistry()

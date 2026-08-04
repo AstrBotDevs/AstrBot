@@ -4,6 +4,9 @@ from typing import cast
 
 from astrbot.core.computer import computer_client
 from astrbot.core.computer.booters.base import ComputerBooter
+from astrbot.core.runtime_catalogs import RuntimeCatalogs
+from astrbot.core.skills.skill_manager import SkillManager
+from astrbot.core.star.star import StarMetadata
 
 
 def _extract_embedded_python(command: str) -> str:
@@ -203,6 +206,63 @@ def test_sync_skills_includes_plugin_provided_skills(
             "path": "skills/demo-skill/SKILL.md",
         }
     ]
+
+
+def test_sync_skills_includes_builtin_only_skills_without_local_root(
+    monkeypatch,
+    tmp_path: Path,
+):
+    skills_root = tmp_path / "skills"
+    plugins_root = tmp_path / "plugins"
+    temp_root = tmp_path / "temp"
+    builtin_root = tmp_path / "builtin_stars"
+    plugins_root.mkdir(parents=True)
+    temp_root.mkdir(parents=True)
+    builtin_skill = builtin_root / "builtin_demo" / "skills" / "builtin-skill"
+    builtin_skill.mkdir(parents=True)
+    builtin_skill.joinpath("SKILL.md").write_text("# builtin", encoding="utf-8")
+    _isolate_skill_manager_data(monkeypatch, tmp_path)
+
+    catalogs = RuntimeCatalogs()
+    catalogs.plugins.publish(
+        StarMetadata(
+            name="Builtin Demo",
+            module_path="astrbot.builtin_stars.builtin_demo.main",
+            root_dir_name="builtin_demo",
+            reserved=True,
+        )
+    )
+    catalogs.builtin_skills.bind(catalogs.plugins, builtin_root)
+    manager = SkillManager(
+        skills_root=str(skills_root),
+        plugins_root=str(plugins_root),
+        builtin_skill_catalog=catalogs.builtin_skills,
+    )
+    captured = {"skills": None}
+
+    def _fake_set_cache(self, skills):
+        captured["skills"] = skills
+
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.get_astrbot_skills_path",
+        lambda: str(skills_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.get_astrbot_temp_path",
+        lambda: str(temp_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.SkillManager.set_sandbox_skills_cache",
+        _fake_set_cache,
+    )
+
+    booter = _FakeBooter(
+        '{"skills":[{"name":"builtin-skill","description":"","path":"skills/builtin-skill/SKILL.md"}]}'
+    )
+    asyncio.run(computer_client._sync_skills_to_sandbox(booter, skill_manager=manager))
+
+    assert len(booter.uploads) == 1
+    assert booter.uploads[0][1] == "skills/skills.zip"
 
 
 def test_build_scan_command_frontmatter_newline_is_escaped_literal():

@@ -22,6 +22,8 @@ class SkillManagerListingMixin:
     def _save_sandbox_skills_cache(self, cache: dict) -> None: ...
     def _get_plugin_skill_dir(self, name: str) -> Path | None: ...
     def _iter_plugin_skill_dirs(self) -> list[tuple[str, str, Path]]: ...
+    def _get_builtin_skill_dir(self, name: str) -> Path | None: ...
+    def _iter_builtin_skill_dirs(self) -> list[tuple[str, str, Path]]: ...
 
     def set_sandbox_skills_cache(self, skills: list[dict]) -> None:
         """Persist sandbox skill metadata discovered from runtime side."""
@@ -305,6 +307,41 @@ class SkillManagerListingMixin:
             )
         return modified
 
+    def _add_builtin_listed_skills(
+        self,
+        *,
+        skills_by_name: dict[str, SkillInfo],
+        cached_sandbox_skills: dict[str, dict[str, str]],
+        skill_configs: dict[str, dict],
+        active_only: bool,
+        runtime: str,
+        show_sandbox_path: bool,
+    ) -> bool:
+        modified = False
+        for skill_name, source_label, skill_dir in self._iter_builtin_skill_dirs():
+            if skill_name in skills_by_name:
+                continue
+            skill_md = _normalize_skill_markdown_path(skill_dir)
+            if skill_md is None:
+                continue
+            modified = (
+                self._add_markdown_backed_skill(
+                    skills_by_name=skills_by_name,
+                    cached_sandbox_skills=cached_sandbox_skills,
+                    skill_configs=skill_configs,
+                    skill_name=skill_name,
+                    skill_md=skill_md,
+                    active_only=active_only,
+                    runtime=runtime,
+                    show_sandbox_path=show_sandbox_path,
+                    source_type="builtin_preset",
+                    source_label=source_label,
+                    readonly=True,
+                )
+                or modified
+            )
+        return modified
+
     def _add_sandbox_cached_listed_skills(
         self,
         *,
@@ -377,6 +414,7 @@ class SkillManagerListingMixin:
         for adder in (
             self._add_local_listed_skills,
             self._add_plugin_listed_skills,
+            self._add_builtin_listed_skills,
             self._add_sandbox_cached_listed_skills,
         ):
             modified = (
@@ -407,17 +445,38 @@ class SkillManagerListingMixin:
     def is_sandbox_only_skill(self, name: str) -> bool:
         skill_dir = Path(self.skills_root) / name
         skill_md_exists = _normalize_skill_markdown_path(skill_dir) is not None
-        if skill_md_exists:
+        if skill_md_exists or self._get_plugin_skill_dir(name) is not None:
+            return False
+        if self._get_builtin_skill_dir(name) is not None:
             return False
         return name in self._get_cached_sandbox_skills()
 
     def is_plugin_skill(self, name: str) -> bool:
+        skill_dir = Path(self.skills_root) / name
+        if _normalize_skill_markdown_path(skill_dir) is not None:
+            return False
         return self._get_plugin_skill_dir(name) is not None
+
+    def is_builtin_skill(self, name: str) -> bool:
+        skill_dir = Path(self.skills_root) / name
+        if _normalize_skill_markdown_path(skill_dir) is not None:
+            return False
+        if self._get_plugin_skill_dir(name) is not None:
+            return False
+        return self._get_builtin_skill_dir(name) is not None
 
     def set_skill_active(self, name: str, active: bool) -> None:
         if self.is_sandbox_only_skill(name):
             raise PermissionError(
                 "Sandbox preset skill cannot be enabled/disabled from local skill management."
+            )
+        if self.is_plugin_skill(name):
+            raise PermissionError(
+                "Plugin-provided skill cannot be enabled/disabled from local skill management."
+            )
+        if self.is_builtin_skill(name):
+            raise PermissionError(
+                "Builtin preset skill cannot be enabled/disabled from local skill management."
             )
         config = self._load_config()
         config.setdefault("skills", {})
