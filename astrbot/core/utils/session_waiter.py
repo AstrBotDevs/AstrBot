@@ -151,11 +151,11 @@ class SessionWaiter:
         self.session_controller.stop(error)
 
     @classmethod
-    async def trigger(cls, session_id: str, event: AstrMessageEvent) -> None:
+    async def trigger(cls, session_id: str, event: AstrMessageEvent) -> Any:
         """外部输入触发会话处理"""
         session = USER_SESSIONS.get(session_id)
         if not session or session.session_controller.future.done():
-            return
+            return None
 
         async with session._lock:
             if not session.session_controller.future.done():
@@ -166,9 +166,10 @@ class SessionWaiter:
                 try:
                     # TODO: 这里使用 create_task，跟踪 task，防止超时后这里 handler 仍然在执行
                     assert session.handler is not None
-                    await session.handler(session.session_controller, event)
+                    return await session.handler(session.session_controller, event)
                 except Exception as e:
                     session.session_controller.stop(e)
+        return None
 
 
 def session_waiter(timeout: int = 30, record_history_chains: bool = False):
