@@ -555,7 +555,7 @@ class LarkMessageEvent(AstrMessageEvent):
             self._bot,
             reply_message_id=self.message_obj.message_id,
         )
-        await super().send(message)
+        return await super().send(message)
 
     @staticmethod
     async def _send_file_message(

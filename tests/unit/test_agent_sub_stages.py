@@ -6,6 +6,7 @@ import pytest
 
 from astrbot.core.agent.llm_types import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.agent.message import CheckpointData, Message
+from astrbot.core.assistant_history import build_pending_assistant_history
 from astrbot.core.message.components import Image, Record, Reply
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -16,6 +17,7 @@ from astrbot.core.pipeline.process_stage.method.agent_sub_stages import (
     internal,
     third_party,
 )
+from astrbot.core.platform.send_result import DeliveryAttempt, DeliveryReceipt
 from astrbot.core.utils import task_utils
 
 
@@ -212,7 +214,7 @@ async def test_internal_save_to_history_filters_messages_and_appends_checkpoints
         usage=TokenUsage(input_other=2, output=3),
     )
 
-    await stage._save_to_history(
+    pending = await stage._save_to_history(
         event,
         req,
         llm_response,
@@ -225,17 +227,17 @@ async def test_internal_save_to_history_filters_messages_and_appends_checkpoints
         runner_stats=SimpleNamespace(token_usage=TokenUsage(output=99)),
     )
 
-    stage.conv_manager.update_conversation.assert_awaited_once()
-    args = stage.conv_manager.update_conversation.await_args.args
-    assert args[:2] == (event.unified_msg_origin, "conv-1")
-    saved_history = stage.conv_manager.update_conversation.await_args.kwargs["history"]
-    assert saved_history == [
+    stage.conv_manager.update_conversation.assert_not_awaited()
+    assert pending is not None
+    assert pending.unified_msg_origin == event.unified_msg_origin
+    assert pending.conversation_id == "conv-1"
+    assert list(pending.history_snapshot) == [
         {"role": "user", "content": "hello"},
-        {"role": "assistant", "content": "answer"},
         {"role": "_checkpoint", "content": {"id": "ck-prev"}},
-        {"role": "_checkpoint", "content": {"id": "ck-latest"}},
     ]
-    assert stage.conv_manager.update_conversation.await_args.kwargs["token_usage"] is None
+    assert pending.assistant_semantic_output == "answer"
+    assert pending.checkpoint_id == "ck-latest"
+    assert pending.token_usage is None
 
 
 @pytest.mark.asyncio
@@ -263,7 +265,7 @@ async def test_internal_save_to_history_sanitizes_images_without_mutating_agent_
         }
     )
 
-    await stage._save_to_history(
+    pending = await stage._save_to_history(
         event,
         req,
         LLMResponse(role="assistant", completion_text="answer"),
@@ -271,9 +273,10 @@ async def test_internal_save_to_history_sanitizes_images_without_mutating_agent_
         runner_stats=None,
     )
 
-    saved_history = stage.conv_manager.update_conversation.await_args.kwargs["history"]
-    assert "data:image" not in str(saved_history)
-    assert temporary_image_path not in str(saved_history)
+    stage.conv_manager.update_conversation.assert_not_awaited()
+    assert pending is not None
+    assert image_data in str(pending.history_snapshot)
+    assert temporary_image_path in str(pending.history_snapshot)
     assert message.content[0].image_url.url == image_data
     assert message.content[1].image_url.url == temporary_image_path
 
@@ -286,7 +289,7 @@ async def test_internal_save_to_history_keeps_aborted_error_response():
     event = FakeEvent()
     req = ProviderRequest(conversation=SimpleNamespace(cid="conv-2"))
 
-    await stage._save_to_history(
+    pending = await stage._save_to_history(
         event,
         req,
         LLMResponse(role="err", completion_text="partial output"),
@@ -295,13 +298,9 @@ async def test_internal_save_to_history_keeps_aborted_error_response():
         user_aborted=True,
     )
 
-    stage.conv_manager.update_conversation.assert_awaited_once()
-    assert (
-        stage.conv_manager.update_conversation.await_args.kwargs["history"][0][
-            "content"
-        ]
-        == "partial output"
-    )
+    stage.conv_manager.update_conversation.assert_not_awaited()
+    assert pending is not None
+    assert pending.assistant_semantic_output == "partial output"
 
 
 @pytest.mark.asyncio
@@ -310,7 +309,7 @@ async def test_internal_save_to_history_skips_empty_non_aborted_response():
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.ctx = _pipeline_context(SimpleNamespace())
 
-    await stage._save_to_history(
+    pending = await stage._save_to_history(
         FakeEvent(),
         ProviderRequest(conversation=SimpleNamespace(cid="conv-3")),
         LLMResponse(role="assistant", completion_text=""),
@@ -320,6 +319,7 @@ async def test_internal_save_to_history_skips_empty_non_aborted_response():
     )
 
     stage.conv_manager.update_conversation.assert_not_called()
+    assert pending is None
 
 
 @pytest.mark.asyncio
@@ -332,7 +332,7 @@ async def test_internal_save_to_history_keeps_tool_only_turn_without_text():
         tool_calls_result=[{"name": "kb_search", "result": "ok"}],
     )
 
-    await stage._save_to_history(
+    pending = await stage._save_to_history(
         FakeEvent(),
         req,
         None,
@@ -340,13 +340,8 @@ async def test_internal_save_to_history_keeps_tool_only_turn_without_text():
         runner_stats=None,
     )
 
-    stage.conv_manager.update_conversation.assert_awaited_once()
-    assert stage.conv_manager.update_conversation.await_args.kwargs["history"] == [
-        {"role": "assistant", "content": "tool output saved"}
-    ]
-    assert (
-        stage.conv_manager.update_conversation.await_args.kwargs["token_usage"] == 17
-    )
+    stage.conv_manager.update_conversation.assert_not_awaited()
+    assert pending is None
 
 
 @pytest.mark.asyncio
@@ -355,7 +350,7 @@ async def test_internal_save_to_history_skips_non_aborted_non_assistant_response
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.ctx = _pipeline_context(SimpleNamespace())
 
-    await stage._save_to_history(
+    pending = await stage._save_to_history(
         FakeEvent(),
         ProviderRequest(conversation=SimpleNamespace(cid="conv-err")),
         LLMResponse(role="tool", completion_text="tool-only"),
@@ -365,6 +360,7 @@ async def test_internal_save_to_history_skips_non_aborted_non_assistant_response
     )
 
     stage.conv_manager.update_conversation.assert_not_called()
+    assert pending is None
 
 
 @pytest.mark.asyncio
@@ -375,23 +371,19 @@ async def test_internal_save_to_history_keeps_checkpoint_after_failed_response()
     event = FakeEvent(extras={"llm_checkpoint_id": "ck-failed"})
     req = ProviderRequest(conversation=SimpleNamespace(cid="conv-failed"))
 
-    await stage._save_to_history(
+    pending = await stage._save_to_history(
         event,
         req,
         LLMResponse(role="err", completion_text="upstream failed"),
-        [Message(role="system", content="system"), Message(role="user", content="hello")],
+        [
+            Message(role="system", content="system"),
+            Message(role="user", content="hello"),
+        ],
         runner_stats=None,
     )
 
-    stage.conv_manager.update_conversation.assert_awaited_once_with(
-        event.unified_msg_origin,
-        "conv-failed",
-        history=[
-            {"role": "user", "content": "hello"},
-            {"role": "_checkpoint", "content": {"id": "ck-failed"}},
-        ],
-        token_usage=None,
-    )
+    stage.conv_manager.update_conversation.assert_not_awaited()
+    assert pending is None
 
 
 @pytest.mark.asyncio
@@ -405,19 +397,19 @@ async def test_internal_save_to_history_keeps_checkpoint_for_terminal_tool_turn(
         tool_calls_result=[{"name": "terminal_tool", "result": "done"}],
     )
 
-    await stage._save_to_history(
+    pending = await stage._save_to_history(
         event,
         req,
         None,
-        [Message(role="user", content="hello"), Message(role="assistant", content="tool")],
+        [
+            Message(role="user", content="hello"),
+            Message(role="assistant", content="tool"),
+        ],
         runner_stats=None,
     )
 
-    assert stage.conv_manager.update_conversation.await_args.kwargs["token_usage"] is None
-    assert stage.conv_manager.update_conversation.await_args.kwargs["history"][-1] == {
-        "role": "_checkpoint",
-        "content": {"id": "ck-terminal-tool"},
-    }
+    stage.conv_manager.update_conversation.assert_not_awaited()
+    assert pending is None
 
 
 @pytest.mark.asyncio
@@ -426,7 +418,7 @@ async def test_internal_save_to_history_saves_empty_placeholder_for_aborted_empt
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.ctx = _pipeline_context(SimpleNamespace())
 
-    await stage._save_to_history(
+    pending = await stage._save_to_history(
         FakeEvent(),
         ProviderRequest(conversation=SimpleNamespace(cid="conv-abort")),
         None,
@@ -435,10 +427,8 @@ async def test_internal_save_to_history_saves_empty_placeholder_for_aborted_empt
         user_aborted=True,
     )
 
-    stage.conv_manager.update_conversation.assert_awaited_once()
-    assert stage.conv_manager.update_conversation.await_args.kwargs["history"] == [
-        {"role": "assistant", "content": "partial"}
-    ]
+    stage.conv_manager.update_conversation.assert_not_awaited()
+    assert pending is None
 
 
 @pytest.mark.asyncio
@@ -450,14 +440,14 @@ async def test_internal_save_to_history_skips_when_request_or_conversation_missi
     response = LLMResponse(role="assistant", completion_text="answer")
     messages = [Message(role="assistant", content="answer")]
 
-    await stage._save_to_history(
+    missing_request_pending = await stage._save_to_history(
         event,
         None,
         response,
         messages,
         runner_stats=None,
     )
-    await stage._save_to_history(
+    missing_conversation_pending = await stage._save_to_history(
         event,
         ProviderRequest(conversation=None),
         response,
@@ -466,6 +456,8 @@ async def test_internal_save_to_history_skips_when_request_or_conversation_missi
     )
 
     stage.conv_manager.update_conversation.assert_not_called()
+    assert missing_request_pending is None
+    assert missing_conversation_pending is None
 
 
 @pytest.mark.asyncio
@@ -474,7 +466,7 @@ async def test_internal_save_to_history_preserves_non_initial_system_messages():
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.ctx = _pipeline_context(SimpleNamespace())
 
-    await stage._save_to_history(
+    pending = await stage._save_to_history(
         FakeEvent(),
         ProviderRequest(conversation=SimpleNamespace(cid="conv-system")),
         LLMResponse(role="assistant", completion_text="answer"),
@@ -487,10 +479,11 @@ async def test_internal_save_to_history_preserves_non_initial_system_messages():
         runner_stats=None,
     )
 
-    assert stage.conv_manager.update_conversation.await_args.kwargs["history"] == [
+    stage.conv_manager.update_conversation.assert_not_awaited()
+    assert pending is not None
+    assert list(pending.history_snapshot) == [
         {"role": "user", "content": "hello"},
         {"role": "system", "content": "keep me"},
-        {"role": "assistant", "content": "answer"},
     ]
 
 
@@ -518,7 +511,7 @@ async def test_internal_save_to_history_schedules_runtime_memory_postprocess(
 
     monkeypatch.setattr(internal, "create_tracked_task", fake_create_tracked_task)
 
-    await stage._save_to_history(
+    pending = await stage._save_to_history(
         event,
         req,
         LLMResponse(role="assistant", completion_text="answer"),
@@ -530,6 +523,15 @@ async def test_internal_save_to_history_schedules_runtime_memory_postprocess(
         runner_stats=None,
     )
 
+    assert pending is not None
+    event.set_extra(
+        "delivery_receipt",
+        DeliveryReceipt.aggregate(
+            [DeliveryAttempt(status="accepted", semantic_text="answer")],
+        ),
+    )
+    monkeypatch.setattr(internal, "call_event_hook", AsyncMock())
+    await stage._finalize_pending_history(event, req, pending)
     stage.conv_manager.update_conversation.assert_awaited_once()
     assert len(scheduled) == 1
     assert scheduled[0][2] == "runtime_memory_postprocess"
@@ -557,7 +559,7 @@ async def test_internal_save_to_history_does_not_postprocess_empty_terminal_tool
     monkeypatch.setattr(internal, "create_tracked_task", fake_create_tracked_task)
     monkeypatch.setattr(internal, "_run_runtime_memory_postprocess", postprocess)
 
-    await stage._save_to_history(
+    pending = await stage._save_to_history(
         FakeEvent(),
         ProviderRequest(
             conversation=SimpleNamespace(cid="conv-post-empty", token_usage=3),
@@ -570,6 +572,7 @@ async def test_internal_save_to_history_does_not_postprocess_empty_terminal_tool
 
     assert scheduled == []
     postprocess.assert_not_called()
+    assert pending is None
 
 
 @pytest.mark.asyncio
@@ -581,9 +584,11 @@ async def test_internal_save_to_history_uses_conversation_token_usage():
     skipped_assistant = Message(role="assistant", content="draft")
     skipped_assistant._no_save = True
 
-    await stage._save_to_history(
+    pending = await stage._save_to_history(
         FakeEvent(),
-        ProviderRequest(conversation=SimpleNamespace(cid="conv-no-save", token_usage=64)),
+        ProviderRequest(
+            conversation=SimpleNamespace(cid="conv-no-save", token_usage=64)
+        ),
         LLMResponse(role="assistant", completion_text="final answer"),
         [
             Message(role="system", content="drop me"),
@@ -594,13 +599,47 @@ async def test_internal_save_to_history_uses_conversation_token_usage():
         runner_stats=SimpleNamespace(token_usage=TokenUsage(output=42)),
     )
 
-    assert stage.conv_manager.update_conversation.await_args.kwargs["history"] == [
+    stage.conv_manager.update_conversation.assert_not_awaited()
+    assert pending is not None
+    assert list(pending.history_snapshot) == [
         {"role": "user", "content": "hello"},
-        {"role": "assistant", "content": "final answer"},
     ]
-    assert (
-        stage.conv_manager.update_conversation.await_args.kwargs["token_usage"] == 64
+    assert pending.token_usage == 64
+
+
+@pytest.mark.asyncio
+async def test_streaming_pending_history_is_frozen_before_delivery_receipt():
+    stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
+    event = FakeEvent()
+    runner = FakeInternalRunner()
+    pending = build_pending_assistant_history(
+        unified_msg_origin=event.unified_msg_origin,
+        conversation_id="conv-stream-pending",
+        history_snapshot=[{"role": "user", "content": "question"}],
+        token_usage=1,
+        assistant_semantic_output="answer",
+        checkpoint_id=None,
+        run_id="run-stream",
     )
+    stage._save_to_history = AsyncMock(return_value=pending)
+
+    async def stream():
+        yield MessageChain().message("answer")
+
+    yielded = [
+        item
+        async for item in stage._stream_with_pending_history(
+            event,
+            ProviderRequest(conversation=SimpleNamespace(cid="conv-stream-pending")),
+            runner,
+            stream(),
+        )
+    ]
+
+    assert len(yielded) == 1
+    stage._save_to_history.assert_awaited_once()
+    assert event.get_extra("_pending_assistant_history") is pending
+    assert event.get_extra("delivery_receipt") is None
 
 
 @pytest.mark.asyncio

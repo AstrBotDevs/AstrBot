@@ -44,7 +44,7 @@ class WebChatMessageEvent(AstrMessageEvent):
             message,
             attachments_dir=self._attachments_dir,
         )
-        await super().send(MessageChain([]))
+        return await super().send(message or MessageChain([]))
 
     async def send_typing(self) -> None:
         """Emit a run-start signal before an independent LLM request."""
@@ -116,4 +116,4 @@ class WebChatMessageEvent(AstrMessageEvent):
                 "message_id": message_id,
             },
         )
-        await super().send_streaming(generator, use_fallback)
+        return await super().send_streaming(generator, use_fallback)

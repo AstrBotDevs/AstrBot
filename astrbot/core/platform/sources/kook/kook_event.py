@@ -207,4 +207,4 @@ class KookEvent(AstrMessageEvent):
             err_msg = "\n".join([str(err) for err in errors])
             logger.error(f"[kook] {err_msg}")
 
-        await super().send(message)
+        return await super().send(message)

@@ -120,7 +120,7 @@ class MisskeyPlatformEvent(AstrMessageEvent):
                     logger.debug("[MisskeyEvent] 创建新帖子")
                     await self._client.create_note(content)
 
-            await super().send(message)
+            return await super().send(message)
 
         except Exception as e:
             logger.error(f"[MisskeyEvent] 发送失败: {e}")

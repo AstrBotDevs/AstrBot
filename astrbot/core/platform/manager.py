@@ -500,14 +500,17 @@ class PlatformManager:
                 target=session.session_id,
                 message_count=len(message_chain.chain),
                 error_message="message delivery failed",
+                status="unknown",
             )
         if isinstance(result, PlatformSendResult):
             return result
         return PlatformSendResult(
             platform_id=session.platform_id,
-            success=True,
+            success=False,
             target=session.session_id,
             message_count=len(message_chain.chain),
+            error_message="platform did not return an acceptance receipt",
+            status="unknown",
         )
 
     async def invoke_action(

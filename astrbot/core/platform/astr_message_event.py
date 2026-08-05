@@ -51,7 +51,7 @@ from .astrbot_message import AstrBotMessage, Group
 from .message_session import MessageSession
 from .platform_metadata import PlatformMetadata
 from .route_identity import PlatformRouteIdentity
-from .send_result import PlatformSendResult
+from .send_result import DeliveryAttempt, PlatformSendResult
 
 
 class _LazyExtraValue:
@@ -475,6 +475,64 @@ class AstrMessageEvent(abc.ABC):
             buffer = buffer[match.end() :]
         return buffer
 
+    @staticmethod
+    def _history_semantic_text(chain: MessageChain) -> str:
+        """Return local semantic text for a submitted streaming fragment."""
+        text_parts: list[str] = []
+        for component in chain.chain:
+            if isinstance(component, (At, AtAll, Reply)):
+                continue
+            if isinstance(component, Plain) and component.text:
+                text_parts.append(component.text)
+            elif isinstance(component, Markdown) and component.content:
+                text_parts.append(component.content)
+        return "".join(text_parts)
+
+    async def _send_streaming_fragment(
+        self,
+        chain: MessageChain,
+    ) -> DeliveryAttempt:
+        """Submit one fallback fragment and retain its explicit transport outcome."""
+        semantic_text = self._history_semantic_text(chain)
+        try:
+            result = await self.send(chain)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            return DeliveryAttempt(
+                status="unknown",
+                semantic_text=semantic_text,
+                error_summary="platform streaming submission outcome unknown",
+            )
+        if not isinstance(result, PlatformSendResult):
+            return DeliveryAttempt(
+                status="unknown",
+                semantic_text=semantic_text,
+                error_summary="platform did not return an acceptance receipt",
+            )
+        return result.to_delivery_attempt(semantic_text=semantic_text)
+
+    async def _streaming_result_from_attempts(
+        self,
+        attempts: list[DeliveryAttempt],
+        generator: AsyncGenerator[MessageChain],
+        use_fallback: bool,
+    ) -> PlatformSendResult | None:
+        """Record stream metrics and return a receipt-backed compatibility result."""
+        recorded = await AstrMessageEvent.send_streaming(
+            self,
+            generator,
+            use_fallback,
+        )
+        if not isinstance(recorded, PlatformSendResult):
+            # Preserve adapter/test overrides of the old metrics-only helper.
+            return recorded
+        return PlatformSendResult.from_delivery_attempts(
+            attempts,
+            platform_id=self.get_platform_id(),
+            target=self.route_identity.target_id,
+        )
+
     async def _send_buffered_streaming_response(
         self,
         generator: AsyncGenerator[MessageChain],
@@ -504,8 +562,12 @@ class AstrMessageEvent(abc.ABC):
             return None
 
         message_buffer.squash_plain()
-        await self.send(message_buffer)
-        return await AstrMessageEvent.send_streaming(self, generator, use_fallback)
+        attempt = await self._send_streaming_fragment(message_buffer)
+        return await self._streaming_result_from_attempts(
+            [attempt],
+            generator,
+            use_fallback,
+        )
 
     async def send_non_streaming_response(
         self,
@@ -531,29 +593,40 @@ class AstrMessageEvent(abc.ABC):
             )
 
         text_buffer = ""
-        sent_any = False
+        attempts: list[DeliveryAttempt] = []
         for_sentence_flush = sentence_pattern is not None
+
+        async def send_text(text: str) -> None:
+            if not text:
+                return
+            attempts.append(
+                await self._send_streaming_fragment(MessageChain([Plain(text)])),
+            )
+
         async for chain in generator:
             if not isinstance(chain, MessageChain):
                 continue
             for component in chain.chain:
                 if isinstance(component, Plain):
                     text_buffer += component.text
-                    if for_sentence_flush and any(p in text_buffer for p in "。？！~…"):
-                        text_buffer = await self.process_buffer(
-                            text_buffer,
-                            sentence_pattern,
-                        )
-                        sent_any = True
+                    if for_sentence_flush and sentence_pattern is not None:
+                        while match := sentence_pattern.search(text_buffer):
+                            matched_text = match.group().strip()
+                            if matched_text:
+                                await send_text(matched_text)
+                                await sleep(component_delay)
+                            text_buffer = text_buffer[match.end() :]
                 else:
-                    await self.send(MessageChain(chain=[component]))
-                    sent_any = True
+                    attempts.append(
+                        await self._send_streaming_fragment(
+                            MessageChain(chain=[component]),
+                        ),
+                    )
                     await sleep(component_delay)
 
         if text_buffer.strip():
-            await self.send(MessageChain([Plain(text_buffer.strip())]))
-            sent_any = True
-        if not sent_any:
+            await send_text(text_buffer.strip())
+        if not attempts:
             if record_empty:
                 return await AstrMessageEvent.send_streaming(
                     self,
@@ -561,7 +634,11 @@ class AstrMessageEvent(abc.ABC):
                     use_fallback,
                 )
             return None
-        return await AstrMessageEvent.send_streaming(self, generator, use_fallback)
+        return await self._streaming_result_from_attempts(
+            attempts,
+            generator,
+            use_fallback,
+        )
 
     async def _record_streaming_send(self) -> PlatformSendResult:
         """Record exactly one successful logical streaming response."""

@@ -62,7 +62,7 @@ class WeixinOCMessageEvent(AstrMessageEvent):
         if not message.chain:
             return
         await self.platform.send_by_session(self.session, message)
-        await super().send(message)
+        return await super().send(message)
 
     async def send_typing(self) -> None:
         await self.platform.start_typing(

@@ -173,8 +173,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         ):
             if self.only_use_webhook_url_to_send and self.webhook_client and message:
                 await self.webhook_client.send_message_chain(message)
-                await super().send(MessageChain([]))
-                return
+                return await super().send(message)
 
             if self.webhook_client and message:
                 await self.webhook_client.send_message_chain(
@@ -194,14 +193,12 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                     },
                 },
             )
-            await super().send(MessageChain([]))
-            return
+            return await super().send(message)
 
         if self.only_use_webhook_url_to_send and self.webhook_client and message:
             await self.webhook_client.send_message_chain(message)
             await self._mark_stream_complete(stream_id)
-            await super().send(MessageChain([]))
-            return
+            return await super().send(message)
 
         if self.webhook_client and message:
             await self.webhook_client.send_message_chain(
@@ -215,7 +212,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             self.queue_mgr,
             suppress_unsupported_log=self.webhook_client is not None,
         )
-        await super().send(MessageChain([]))
+        return await super().send(message)
 
     async def send_streaming(self, generator, use_fallback=False) -> None:
         """流式发送消息，参考webchat的send_streaming设计"""
@@ -255,8 +252,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                         },
                     },
                 )
-                await super().send_streaming(generator, use_fallback)
-                return
+                return await super().send_streaming(generator, use_fallback)
 
             increment_plain = ""
             last_stream_update_time = 0.0
@@ -300,8 +296,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                     },
                 },
             )
-            await super().send_streaming(generator, use_fallback)
-            return
+            return await super().send_streaming(generator, use_fallback)
 
         if self.only_use_webhook_url_to_send and self.webhook_client:
             merged_chain = MessageChain([])
@@ -310,8 +305,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             merged_chain.squash_plain()
             await self.webhook_client.send_message_chain(merged_chain)
             await self._mark_stream_complete(stream_id)
-            await super().send_streaming(generator, use_fallback)
-            return
+            return await super().send_streaming(generator, use_fallback)
 
         # 企业微信智能机器人不支持增量发送，因此我们需要在这里将增量内容累积起来，按间隔推送
         increment_plain = ""
@@ -382,4 +376,4 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                 "session_id": stream_id,
             },
         )
-        await super().send_streaming(generator, use_fallback)
+        return await super().send_streaming(generator, use_fallback)

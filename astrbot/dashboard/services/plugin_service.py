@@ -118,6 +118,7 @@ class PluginService:
             EventType.OnDecoratingResultEvent: "回复消息前",
             EventType.OnCallingFuncToolEvent: "函数工具",
             EventType.OnAfterMessageSentEvent: "发送消息后",
+            EventType.OnAssistantHistoryFinalized: "assistant 历史完成后",
             EventType.OnPluginErrorEvent: "插件报错时",
         }
         self._logo_cache: dict[str, str] = {}

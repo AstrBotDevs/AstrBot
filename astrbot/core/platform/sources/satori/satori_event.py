@@ -16,6 +16,7 @@ from astrbot.core.message.components import (
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.utils.media_utils import resolve_media_ref_to_base64_data
 
 if TYPE_CHECKING:
@@ -133,7 +134,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
             logger.error(f"Satori 消息发送异常: {e}")
             return None
 
-    async def send(self, message: MessageChain) -> None:
+    async def send(self, message: MessageChain) -> PlatformSendResult:
         platform = getattr(self, "platform", None)
         user_id = getattr(self, "user_id", None)
 
@@ -178,10 +179,20 @@ class SatoriPlatformEvent(AstrMessageEvent):
             )
             if not result:
                 logger.error("Satori 消息发送失败")
+                return self._failure_send_result(
+                    "Satori rejected the message submission",
+                    message_count=len(message.chain),
+                )
         except Exception as e:
             logger.error(f"Satori 消息发送异常: {e}")
+            result = self._failure_send_result(
+                "Satori submission outcome unknown",
+                message_count=len(message.chain),
+            )
+            result.status = "unknown"
+            return result
 
-        await super().send(message)
+        return await super().send(message)
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         try:
@@ -231,8 +242,11 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
         except Exception as e:
             logger.error(f"Satori 流式消息发送异常: {e}")
+            result = self._failure_send_result("Satori streaming outcome unknown")
+            result.status = "unknown"
+            return result
 
-        return await super().send_streaming(generator, use_fallback)
+        return await self._record_streaming_send()
 
     async def _convert_component_to_satori(self, component) -> str:
         """将单个消息组件转换为 Satori 格式"""

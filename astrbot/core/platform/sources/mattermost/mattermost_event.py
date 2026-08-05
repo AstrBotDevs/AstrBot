@@ -27,14 +27,14 @@ class MattermostMessageEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain) -> None:
         await self._client.send_message_chain(self.get_session_id(), message)
-        await super().send(message)
+        return await super().send(message)
 
     async def send_streaming(
         self,
         generator: AsyncGenerator,
         use_fallback: bool = False,
-    ) -> None:
-        await self.send_non_streaming_response(
+    ):
+        return await self.send_non_streaming_response(
             generator,
             use_fallback=use_fallback,
             sentence_pattern=self._FALLBACK_SENTENCE_PATTERN,

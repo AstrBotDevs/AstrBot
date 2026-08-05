@@ -5,10 +5,17 @@ from collections.abc import AsyncGenerator
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
+from astrbot.core.assistant_history import make_projection
 from astrbot.core.message.components import BaseMessageComponent, ComponentType
 from astrbot.core.message.message_event_result import MessageChain, ResultContentType
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.send_result import (
+    DeliveryAttempt,
+    DeliveryReceipt,
+    PlatformSendResult,
+)
 from astrbot.core.star.star_handler import EventType
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.path_util import path_Mapping
 
 from ..context import PipelineContext, call_event_hook
@@ -196,11 +203,75 @@ class RespondStage(Stage):
 
         return extracted
 
-    async def _send_streaming_result(self, event: AstrMessageEvent, result) -> None:
+    def _chain_semantic_text(self, chain: MessageChain) -> str:
+        """Return submitted user-visible text without transport wrappers."""
+        text_parts: list[str] = []
+        for component in chain.chain:
+            if isinstance(component, (Comp.At, Comp.AtAll, Comp.Reply)):
+                continue
+            if isinstance(component, (Comp.Plain, Comp.Unknown)) and component.text:
+                text_parts.append(component.text)
+            elif isinstance(component, Comp.Markdown) and component.content:
+                text_parts.append(component.content)
+        return "".join(text_parts)
+
+    def _receipt_for_attempts(
+        self,
+        event: AstrMessageEvent,
+        attempts: list[DeliveryAttempt],
+    ) -> DeliveryReceipt:
+        return DeliveryReceipt.aggregate(
+            attempts,
+            platform_id=event.get_platform_id(),
+            target=getattr(getattr(event, "route_identity", None), "target_id", ""),
+        )
+
+    async def _send_attempt(
+        self,
+        event: AstrMessageEvent,
+        chain: MessageChain,
+    ) -> DeliveryAttempt:
+        """Submit one chain without conflating exceptions with acceptance."""
+        try:
+            await self._stop_typing_before_send(event)
+            result = await event.send(chain)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.error("发送消息链异常: %s", safe_error("", exc))
+            return DeliveryAttempt(
+                status="unknown",
+                semantic_text=self._chain_semantic_text(chain),
+                error_summary="platform submission outcome unknown",
+            )
+
+        if not isinstance(result, PlatformSendResult):
+            logger.warning("平台未返回发送回执，发送结果未知。")
+            return DeliveryAttempt(
+                status="unknown",
+                semantic_text=self._chain_semantic_text(chain),
+                error_summary="platform did not return an acceptance receipt",
+            )
+        self._log_send_result(result, chain=chain)
+        attempts = result.to_delivery_attempts(
+            semantic_text=self._chain_semantic_text(chain),
+        )
+        if len(attempts) != 1:
+            logger.warning("普通发送返回了多个投递回执，按不确定结果处理。")
+            return DeliveryAttempt(
+                status="unknown",
+                semantic_text=self._chain_semantic_text(chain),
+                error_summary="platform returned an unexpected multi-part receipt",
+            )
+        return attempts[0]
+
+    async def _send_streaming_result(
+        self, event: AstrMessageEvent, result
+    ) -> DeliveryReceipt:
         """Deliver a streaming result using the platform's configured strategy."""
         if result.async_stream is None:
             logger.warning("async_stream 为空，跳过发送。")
-            return
+            return DeliveryReceipt.skipped(platform_id=event.get_platform_id())
         realtime_segmenting = (
             self.config.get("provider_settings", {}).get(
                 "unsupported_streaming_strategy",
@@ -209,12 +280,57 @@ class RespondStage(Stage):
             == "realtime_segmenting"
         )
         logger.info("应用流式输出(%s)", event.get_platform_id())
-        await self._stop_typing_before_send(event)
-        send_result = await event.send_streaming(
-            result.async_stream,
-            realtime_segmenting,
-        )
+        streamed_text: list[str] = []
+
+        async def tracked_stream():
+            async for chain in result.async_stream:
+                if isinstance(chain, MessageChain) and chain.type not in {
+                    "reasoning",
+                    "break",
+                    "tool_call",
+                }:
+                    streamed_text.append(self._chain_semantic_text(chain))
+                yield chain
+
+        try:
+            await self._stop_typing_before_send(event)
+            send_result = await event.send_streaming(
+                tracked_stream(), realtime_segmenting
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.error("流式消息发送异常: %s", safe_error("", exc))
+            return self._receipt_for_attempts(
+                event,
+                [
+                    DeliveryAttempt(
+                        status="unknown",
+                        semantic_text="".join(streamed_text),
+                        error_summary="platform streaming outcome unknown",
+                    )
+                ],
+            )
+        if not isinstance(send_result, PlatformSendResult):
+            return self._receipt_for_attempts(
+                event,
+                [
+                    DeliveryAttempt(
+                        status="unknown",
+                        semantic_text="".join(streamed_text),
+                        error_summary="platform did not return an acceptance receipt",
+                    )
+                ],
+            )
         self._log_send_result(send_result)
+        return self._receipt_for_attempts(
+            event,
+            list(
+                send_result.to_delivery_attempts(
+                    semantic_text="".join(streamed_text),
+                ),
+            ),
+        )
 
     async def _prepare_result_chain(self, result) -> bool:
         """Map files and remove empty content before ordinary delivery."""
@@ -239,7 +355,9 @@ class RespondStage(Stage):
         ]
         return True
 
-    async def _send_segmented_result(self, event: AstrMessageEvent, result) -> bool:
+    async def _send_segmented_result(
+        self, event: AstrMessageEvent, result
+    ) -> DeliveryReceipt:
         """Deliver a result component by component, retaining reply headers once."""
         header_comps = self._extract_comp(
             result.chain,
@@ -252,27 +370,21 @@ class RespondStage(Stage):
                 header_comps,
                 result.chain,
             )
-            return False
+            return DeliveryReceipt.skipped(platform_id=event.get_platform_id())
+        attempts: list[DeliveryAttempt] = []
         for comp in result.chain:
             await asyncio.sleep(await self._calc_comp_interval(comp))
-            try:
-                await self._stop_typing_before_send(event)
-                if comp.type == ComponentType.Record:
-                    send_result = await event.send(result.derive([comp]))
-                else:
-                    send_result = await event.send(result.derive([*header_comps, comp]))
-                    header_comps.clear()
-                self._log_send_result(send_result, chain=MessageChain([comp]))
-            except Exception as exc:
-                logger.error(
-                    "发送消息链失败: chain = %s, error = %s",
-                    MessageChain([comp]),
-                    exc,
-                    exc_info=True,
-                )
-        return True
+            if comp.type == ComponentType.Record:
+                chain = result.derive([comp])
+            else:
+                chain = result.derive([*header_comps, comp])
+                header_comps.clear()
+            attempts.append(await self._send_attempt(event, chain))
+        return self._receipt_for_attempts(event, attempts)
 
-    async def _send_standard_result(self, event: AstrMessageEvent, result) -> bool:
+    async def _send_standard_result(
+        self, event: AstrMessageEvent, result
+    ) -> DeliveryReceipt:
         """Deliver records separately, then the remaining ordinary message chain."""
         if all(
             comp.type in {ComponentType.Reply, ComponentType.At}
@@ -282,7 +394,8 @@ class RespondStage(Stage):
                 "消息链全为 Reply 和 At 消息段, 跳过发送阶段。chain: %s",
                 result.chain,
             )
-            return False
+            return DeliveryReceipt.skipped(platform_id=event.get_platform_id())
+        attempts: list[DeliveryAttempt] = []
         separate_components = self._extract_comp(
             result.chain,
             {ComponentType.Record},
@@ -290,30 +403,21 @@ class RespondStage(Stage):
         )
         for comp in separate_components:
             chain = result.derive([comp])
-            try:
-                await self._stop_typing_before_send(event)
-                self._log_send_result(await event.send(chain), chain=chain)
-            except Exception as exc:
-                logger.error(
-                    "发送消息链失败: chain = %s, error = %s",
-                    chain,
-                    exc,
-                    exc_info=True,
-                )
+            attempts.append(await self._send_attempt(event, chain))
         if not result.chain:
-            return True
+            return self._receipt_for_attempts(event, attempts)
         chain = result.derive(result.chain)
-        try:
-            await self._stop_typing_before_send(event)
-            self._log_send_result(await event.send(chain), chain=chain)
-        except Exception as exc:
-            logger.error(
-                "发送消息链失败: chain = %s, error = %s",
-                chain,
-                exc,
-                exc_info=True,
-            )
-        return True
+        attempts.append(await self._send_attempt(event, chain))
+        return self._receipt_for_attempts(event, attempts)
+
+    def _store_delivery_receipt(
+        self,
+        event: AstrMessageEvent,
+        receipt: DeliveryReceipt,
+    ) -> None:
+        """Expose immutable receipt/projection data to Agent finalization only."""
+        event.set_extra("delivery_receipt", receipt)
+        event.set_extra("history_projection", make_projection(receipt))
 
     async def process(
         self,
@@ -355,6 +459,10 @@ class RespondStage(Stage):
             logger.info(
                 "send_message_to_user already delivered the same text in this session, skip respond stage to avoid duplicate reply.",
             )
+            self._store_delivery_receipt(
+                event,
+                DeliveryReceipt.skipped(platform_id=event.get_platform_id()),
+            )
             return
 
         logger.info(
@@ -362,17 +470,22 @@ class RespondStage(Stage):
         )
 
         if result.result_content_type == ResultContentType.STREAMING_RESULT:
-            await self._send_streaming_result(event, result)
+            self._store_delivery_receipt(
+                event,
+                await self._send_streaming_result(event, result),
+            )
             return
+        receipt = DeliveryReceipt.skipped(platform_id=event.get_platform_id())
         if len(result.chain) > 0:
             if not await self._prepare_result_chain(result):
+                self._store_delivery_receipt(event, receipt)
                 return
 
             if self.is_seg_reply_required(event):
-                if not await self._send_segmented_result(event, result):
-                    return
-            elif not await self._send_standard_result(event, result):
-                return
+                receipt = await self._send_segmented_result(event, result)
+            else:
+                receipt = await self._send_standard_result(event, result)
+        self._store_delivery_receipt(event, receipt)
 
         if await call_event_hook(
             event,

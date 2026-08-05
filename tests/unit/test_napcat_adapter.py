@@ -4279,11 +4279,9 @@ async def test_napcat_event_send_streaming_batches_without_fallback():
 
     result = await event.send_streaming(_generator())
 
-    assert result == PlatformSendResult(
-        platform_id="napcat-test",
-        success=True,
-        target="445566",
-    )
+    assert isinstance(result, PlatformSendResult)
+    assert result.status == "unknown"
+    assert result.success is False
     event.send.assert_awaited_once()
     sent_chain = event.send.await_args.args[0]
     assert isinstance(sent_chain, MessageChain)
@@ -4316,11 +4314,9 @@ async def test_napcat_event_send_streaming_fallback_sends_components_incremental
 
     result = await event.send_streaming(_generator(), use_fallback=True)
 
-    assert result == PlatformSendResult(
-        platform_id="napcat-test",
-        success=True,
-        target="445566",
-    )
+    assert isinstance(result, PlatformSendResult)
+    assert result.status == "unknown"
+    assert result.success is False
     assert event.send.await_count == 3
     first_chain = event.send.await_args_list[0].args[0]
     second_chain = event.send.await_args_list[1].args[0]

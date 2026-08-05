@@ -300,7 +300,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             forward_message_max_retries=self.forward_message_max_retries,
             forward_message_fallback_enabled=self.forward_message_fallback_enabled,
         )
-        await super().send(message)
+        return await super().send(message)
 
     async def send_streaming(
         self,

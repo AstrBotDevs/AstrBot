@@ -20,6 +20,7 @@ from astrbot.core.pipeline.result_decorate.stage import ResultDecorateStage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.platform.sources.qqofficial import qqofficial_message_event
 from astrbot.core.platform.sources.qqofficial.qqofficial_message_event import (
     QQOfficialMessageEvent,
@@ -1022,7 +1023,8 @@ async def test_send_streaming_clears_buffer_when_post_send_raises():
     ):
         result = await event.send_streaming(generator())
 
-    assert result is None
+    assert isinstance(result, PlatformSendResult)
+    assert result.status == "unknown"
     assert event.send_buffer is None
 
 

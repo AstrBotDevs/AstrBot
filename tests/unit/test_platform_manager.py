@@ -662,9 +662,11 @@ async def test_platform_manager_send_to_session_normalizes_legacy_none_result():
 
     assert result == PlatformSendResult(
         platform_id="telegram",
-        success=True,
+        success=False,
         target="chat-1",
         message_count=1,
+        error_message="platform did not return an acceptance receipt",
+        status="unknown",
     )
 
 
@@ -690,6 +692,7 @@ async def test_platform_manager_send_to_session_hides_adapter_failure_details(ca
         target="chat-1",
         message_count=1,
         error_message="message delivery failed",
+        status="unknown",
     )
     assert "top-secret" not in caplog.text
     assert "token-123" not in caplog.text

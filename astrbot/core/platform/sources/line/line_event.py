@@ -245,7 +245,7 @@ class LineMessageEvent(AstrMessageEvent):
             if target_id:
                 await self.line_api.push_message(target_id, messages)
 
-        await super().send(message)
+        return await super().send(message)
 
     async def send_streaming(
         self,

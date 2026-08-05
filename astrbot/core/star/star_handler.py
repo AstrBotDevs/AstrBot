@@ -118,6 +118,14 @@ class HandlerRegistry[T: "StarHandlerMetadata"]:
     @overload
     def get_handlers_by_event_type(
         self,
+        event_type: Literal[EventType.OnAssistantHistoryFinalized],
+        only_activated=True,
+        plugins_name: list[str] | None = None,
+    ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
+
+    @overload
+    def get_handlers_by_event_type(
+        self,
         event_type: Literal[EventType.OnPluginErrorEvent],
         only_activated=True,
         plugins_name: list[str] | None = None,
@@ -235,6 +243,7 @@ class EventType(enum.Enum):
     OnUsingLLMToolEvent = enum.auto()  # 使用 LLM 工具
     OnLLMToolRespondEvent = enum.auto()  # 调用函数工具后
     OnAfterMessageSentEvent = enum.auto()  # 发送消息后
+    OnAssistantHistoryFinalized = enum.auto()  # assistant 历史投影完成
     OnPluginErrorEvent = enum.auto()  # 插件处理消息异常时
     OnPluginLoadedEvent = enum.auto()  # 插件加载完成
     OnPluginUnloadedEvent = enum.auto()  # 插件卸载完成

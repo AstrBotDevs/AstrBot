@@ -22,12 +22,15 @@ class DingtalkMessageEvent(AstrMessageEvent):
     async def send(self, message: MessageChain) -> None:
         if not self._adapter:
             logger.error("钉钉消息发送失败: 缺少 adapter")
-            return
+            return self._failure_send_result(
+                "DingTalk adapter unavailable",
+                message_count=len(message.chain),
+            )
         await self._adapter.send_message_chain_with_incoming(
             incoming_message=self.message_obj.raw_message,
             message_chain=message,
         )
-        await super().send(message)
+        return await super().send(message)
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         # 钉钉统一回退为缓冲发送：最终发送仍使用新的 HTTP 消息接口。

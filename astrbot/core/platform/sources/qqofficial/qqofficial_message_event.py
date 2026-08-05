@@ -5,7 +5,7 @@ import logging
 import os
 import random
 from dataclasses import dataclass
-from typing import cast
+from typing import Literal, cast
 
 import aiofiles
 import botpy
@@ -30,6 +30,7 @@ from astrbot.core.message.components import At, File, Image, Plain, Record, Vide
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path, is_file_uri
 
 
@@ -126,9 +127,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         self._bot = bot
         self.send_buffer = None
 
-    async def send(self, message: MessageChain) -> None:
+    async def send(self, message: MessageChain) -> PlatformSendResult | None:
         self.send_buffer = message
-        await self._post_send()
+        return await self._post_send()
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         """流式输出仅支持消息列表私聊（C2C），其他消息源退化为普通发送"""
@@ -197,13 +198,36 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             else:
                 ret = await self._post_send()
 
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logger.error(f"发送流式消息时出错: {e}", exc_info=True)
             # 避免累计内容在异常后被整包重复发送：仅清理缓存，不做非流式整包兜底
             # 如需兜底，应该只发送未发送 delta（后续可继续优化）
             self.send_buffer = None
+            return self._streaming_send_result(status="unknown")
 
-        return None
+        if isinstance(ret, PlatformSendResult):
+            return ret
+        return self._streaming_send_result(status="skipped")
+
+    def _streaming_send_result(
+        self,
+        *,
+        status: Literal["unknown", "skipped"],
+    ) -> PlatformSendResult:
+        """Build a receipt when no final QQ response object is available."""
+        platform_meta = getattr(self, "platform_meta", None)
+        route_identity = getattr(self, "route_identity", None)
+        return PlatformSendResult(
+            platform_id=getattr(platform_meta, "id", ""),
+            success=False,
+            target=getattr(route_identity, "target_id", ""),
+            status=status,
+            error_message=(
+                "QQ streaming outcome unknown" if status == "unknown" else None
+            ),
+        )
 
     def _append_stream_delta(self, chain: MessageChain) -> None:
         """Append a stream delta without retaining caller-owned components.
@@ -499,8 +523,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 stream=stream,
             )
 
-        await super().send(message_to_send)
-        return ret
+        send_result = await super().send(message_to_send)
+        if not isinstance(send_result, PlatformSendResult):
+            return send_result
+        message_id = self._extract_response_message_id(ret)
+        if message_id is not None:
+            send_result.message_id = str(message_id)
+        return send_result
 
     async def _send_with_markdown_fallback(
         self,

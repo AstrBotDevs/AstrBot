@@ -887,3 +887,17 @@ def register_after_message_sent(**kwargs):
         return awaitable
 
     return decorator
+
+
+def register_on_assistant_history_finalized(**kwargs):
+    """Register a read-only notification after assistant history finalization."""
+
+    def decorator(awaitable):
+        _ = get_handler_declaration(
+            awaitable,
+            EventType.OnAssistantHistoryFinalized,
+            **kwargs,
+        )
+        return awaitable
+
+    return decorator

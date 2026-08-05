@@ -176,7 +176,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
             else:
                 logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}。")
 
-        await super().send(message)
+        return await super().send(message)
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         return await self._send_buffered_streaming_response(generator, use_fallback)

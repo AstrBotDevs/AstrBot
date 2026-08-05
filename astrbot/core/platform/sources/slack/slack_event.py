@@ -172,7 +172,7 @@ class SlackMessageEvent(AstrMessageEvent):
                     text=fallback_text,
                 )
 
-        await super().send(message)
+        return await super().send(message)
 
     async def send_streaming(
         self,

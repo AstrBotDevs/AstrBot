@@ -5,18 +5,22 @@ from dataclasses import replace
 
 from astrbot import logger
 from astrbot.core.agent.follow_up import FollowUpCapture
-from astrbot.core.agent.history_sanitizer import sanitize_history_for_storage
 from astrbot.core.agent.llm_types import (
     LLMResponse,
     ProviderRequest,
 )
 from astrbot.core.agent.message import (
-    CheckpointData,
-    CheckpointMessageSegment,
     Message,
     dump_messages_with_checkpoints,
 )
 from astrbot.core.agent.response import AgentStats
+from astrbot.core.assistant_history import (
+    AssistantHistoryCommitter,
+    AssistantHistoryFinalized,
+    PendingAssistantHistory,
+    build_pending_assistant_history,
+    make_projection,
+)
 from astrbot.core.astr_main_agent import (
     LLM_ERROR_MESSAGE_EXTRA_KEY,
     MainAgentBuildConfig,
@@ -40,12 +44,15 @@ from astrbot.core.persona_error_reply import (
     get_agent_error_message,
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.send_result import DeliveryReceipt
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.task_utils import create_tracked_task
 
 from .....astr_agent_run_util import AgentRunner, run_agent, run_live_agent
 from ....context import PipelineContext, call_event_hook
+
+_FALLBACK_HISTORY_COMMITTER = AssistantHistoryCommitter()
 
 
 class InternalAgentSubStage:
@@ -168,7 +175,7 @@ class InternalAgentSubStage:
         action_type: str | None,
         history_saved: bool,
     ) -> None:
-        """Record completion state and persist a completed ordinary response."""
+        """Record Agent facts, then finalize accepted assistant history separately."""
         final_resp = agent_runner.get_final_llm_resp()
         event.trace.record(
             "astr_agent_complete",
@@ -187,18 +194,12 @@ class InternalAgentSubStage:
             name="record_internal_agent_stats",
         )
         if (
-            action_type != "live"
+            agent_runner.done()
             and not history_saved
             and (not event.is_stopped() or agent_runner.was_aborted())
         ):
-            await self._save_to_history(
-                event,
-                req,
-                final_resp,
-                agent_runner.run_context.messages,
-                agent_runner.stats,
-                user_aborted=agent_runner.was_aborted(),
-            )
+            pending = await self._capture_pending_history(event, req, agent_runner)
+            await self._finalize_pending_history(event, req, pending)
         create_tracked_task(
             self.ctx.execution_context.background_tasks,
             self.ctx.execution_context.metrics.upload(
@@ -338,6 +339,15 @@ class InternalAgentSubStage:
 
                     agent_runner = build_result.agent_runner
                     req = build_result.provider_request
+                    history_committer = getattr(
+                        self.ctx.execution_context,
+                        "assistant_history_committer",
+                        _FALLBACK_HISTORY_COMMITTER,
+                    )
+                    event.set_extra(
+                        "_assistant_history_sequence",
+                        history_committer.next_sequence(),
+                    )
                     provider = build_result.provider
                     reset_coro = build_result.reset_coro
 
@@ -401,32 +411,23 @@ class InternalAgentSubStage:
                             MessageEventResult()
                             .set_result_content_type(ResultContentType.STREAMING_RESULT)
                             .set_async_stream(
-                                run_live_agent(
+                                self._stream_with_pending_history(
+                                    event,
+                                    req,
                                     agent_runner,
-                                    tts_provider,
-                                    self.max_step,
-                                    self.show_tool_use,
-                                    self.show_tool_call_result,
-                                    show_reasoning=self.show_reasoning,
-                                    buffer_intermediate_messages=self.buffer_intermediate_messages,
+                                    run_live_agent(
+                                        agent_runner,
+                                        tts_provider,
+                                        self.max_step,
+                                        self.show_tool_use,
+                                        self.show_tool_call_result,
+                                        show_reasoning=self.show_reasoning,
+                                        buffer_intermediate_messages=self.buffer_intermediate_messages,
+                                    ),
                                 ),
                             ),
                         )
                         yield
-
-                        # 保存历史记录
-                        if agent_runner.done() and (
-                            not event.is_stopped() or agent_runner.was_aborted()
-                        ):
-                            await self._save_to_history(
-                                event,
-                                req,
-                                agent_runner.get_final_llm_resp(),
-                                agent_runner.run_context.messages,
-                                agent_runner.stats,
-                                user_aborted=agent_runner.was_aborted(),
-                            )
-                            history_saved = True
 
                     elif streaming_response and not stream_to_general:
                         # 流式响应
@@ -434,13 +435,18 @@ class InternalAgentSubStage:
                             MessageEventResult()
                             .set_result_content_type(ResultContentType.STREAMING_RESULT)
                             .set_async_stream(
-                                run_agent(
+                                self._stream_with_pending_history(
+                                    event,
+                                    req,
                                     agent_runner,
-                                    self.max_step,
-                                    self.show_tool_use,
-                                    self.show_tool_call_result,
-                                    show_reasoning=self.show_reasoning,
-                                    buffer_intermediate_messages=self.buffer_intermediate_messages,
+                                    run_agent(
+                                        agent_runner,
+                                        self.max_step,
+                                        self.show_tool_use,
+                                        self.show_tool_call_result,
+                                        show_reasoning=self.show_reasoning,
+                                        buffer_intermediate_messages=self.buffer_intermediate_messages,
+                                    ),
                                 ),
                             ),
                         )
@@ -516,39 +522,22 @@ class InternalAgentSubStage:
         all_messages: list[Message],
         runner_stats: AgentStats | None,
         user_aborted: bool = False,
-    ) -> None:
+    ) -> PendingAssistantHistory | None:
+        """Freeze an Agent result for later history projection.
+
+        This compatibility-named private method intentionally no longer writes
+        conversation storage. It only freezes the completed Agent state; a
+        later platform receipt authorizes a user-visible assistant projection.
+        """
         if not req or not req.conversation:
-            return
+            return None
 
         checkpoint_id = event.get_extra("llm_checkpoint_id")
+        checkpoint_id = checkpoint_id if isinstance(checkpoint_id, str) else None
         if not user_aborted and (
             llm_response is None or llm_response.role != "assistant"
         ):
-            if isinstance(checkpoint_id, str) and checkpoint_id:
-                messages_to_save: list[Message] = []
-                skipped_initial_system = False
-                for message in all_messages:
-                    if message.role == "system" and not skipped_initial_system:
-                        skipped_initial_system = True
-                        continue
-                    if message.role in ["assistant", "user"] and message._no_save:
-                        continue
-                    messages_to_save.append(message)
-                message_to_save = dump_messages_with_checkpoints(messages_to_save)
-                message_to_save.append(
-                    CheckpointMessageSegment(
-                        content=CheckpointData(id=checkpoint_id),
-                    ).model_dump()
-                )
-                await self.conv_manager.update_conversation(
-                    event.unified_msg_origin,
-                    req.conversation.cid,
-                    history=sanitize_history_for_storage(message_to_save),
-                    token_usage=None,
-                )
-                return
-            if not req.tool_calls_result:
-                return
+            return None
 
         if llm_response and llm_response.role != "assistant":
             if not user_aborted:
@@ -560,13 +549,9 @@ class InternalAgentSubStage:
         elif llm_response is None:
             llm_response = LLMResponse(role="assistant", completion_text="")
 
-        if (
-            not llm_response.completion_text
-            and not req.tool_calls_result
-            and not user_aborted
-        ):
+        if not llm_response.completion_text:
             logger.debug("LLM 响应为空，不保存记录。")
-            return
+            return None
 
         messages_to_save: list[Message] = []
         skipped_initial_system = False
@@ -579,43 +564,122 @@ class InternalAgentSubStage:
             messages_to_save.append(message)
 
         message_to_save = dump_messages_with_checkpoints(messages_to_save)
-        if isinstance(checkpoint_id, str) and checkpoint_id:
-            message_to_save.append(
-                CheckpointMessageSegment(
-                    content=CheckpointData(id=checkpoint_id),
-                ).model_dump()
-            )
-
-        message_to_save = sanitize_history_for_storage(message_to_save)
-
-        # if user_aborted:
-        #     message_to_save.append(
-        #         Message(
-        #             role="assistant",
-        #             content="[User aborted this request. Partial output before abort was preserved.]",
-        #         ).model_dump()
-        #     )
+        # Replace only the terminal semantic assistant response later, after
+        # the platform accepts the locally submitted normalized message chain.
+        for index in range(len(message_to_save) - 1, -1, -1):
+            message = message_to_save[index]
+            if message.get("role") != "assistant":
+                continue
+            if "tool_calls" not in message:
+                message_to_save.pop(index)
+                break
 
         # ConversationManager aggregates usage while requests run.  A checkpoint
         # is a partial snapshot and must not overwrite the persisted aggregate.
         token_usage = (
-            None
-            if isinstance(checkpoint_id, str) and checkpoint_id
-            else getattr(req.conversation, "token_usage", None)
+            None if checkpoint_id else getattr(req.conversation, "token_usage", None)
+        )
+        run_id = event.get_extra("run_id")
+        if run_id is None:
+            run_id = getattr(getattr(event, "message_obj", None), "message_id", None)
+        return build_pending_assistant_history(
+            unified_msg_origin=event.unified_msg_origin,
+            conversation_id=req.conversation.cid,
+            history_snapshot=message_to_save,
+            token_usage=token_usage,
+            assistant_semantic_output=llm_response.completion_text,
+            checkpoint_id=checkpoint_id,
+            run_id=str(run_id) if run_id is not None else None,
+            sequence=event.get_extra("_assistant_history_sequence") or 0,
+            runtime_metadata={
+                "user_aborted": user_aborted,
+                "token_usage": getattr(runner_stats, "token_usage", None),
+            },
         )
 
-        await self.conv_manager.update_conversation(
-            event.unified_msg_origin,
-            req.conversation.cid,
-            history=message_to_save,
-            token_usage=token_usage,
+    async def _capture_pending_history(
+        self,
+        event: AstrMessageEvent,
+        req: ProviderRequest,
+        agent_runner: AgentRunner,
+    ) -> PendingAssistantHistory | None:
+        """Freeze one terminal Agent snapshot before receipt finalization."""
+        captured = event.get_extra("_pending_assistant_history")
+        if isinstance(captured, PendingAssistantHistory):
+            return captured
+        if event.get_extra("_pending_assistant_history_captured"):
+            return None
+
+        event.set_extra("_pending_assistant_history_captured", True)
+        pending = await self._save_to_history(
+            event,
+            req,
+            agent_runner.get_final_llm_resp(),
+            agent_runner.run_context.messages,
+            agent_runner.stats,
+            user_aborted=agent_runner.was_aborted(),
         )
-        if llm_response.completion_text:
-            self._schedule_runtime_memory_postprocess(
-                event,
-                req,
-                llm_response.completion_text,
+        event.set_extra("_pending_assistant_history", pending)
+        return pending
+
+    async def _stream_with_pending_history(
+        self,
+        event: AstrMessageEvent,
+        req: ProviderRequest,
+        agent_runner: AgentRunner,
+        stream: AsyncGenerator[MessageChain | None],
+    ) -> AsyncGenerator[MessageChain | None]:
+        """Freeze streaming history after Agent completion, before send returns."""
+        async for chain in stream:
+            yield chain
+        if agent_runner.done():
+            await self._capture_pending_history(event, req, agent_runner)
+
+    async def _finalize_pending_history(
+        self,
+        event: AstrMessageEvent,
+        req: ProviderRequest,
+        pending: PendingAssistantHistory | None,
+    ) -> None:
+        """Commit a pending assistant turn only after a platform acceptance receipt."""
+        if not isinstance(pending, PendingAssistantHistory):
+            pending = None
+        receipt = event.get_extra("delivery_receipt")
+        if not isinstance(receipt, DeliveryReceipt):
+            get_platform_id = getattr(event, "get_platform_id", None)
+            platform_id = get_platform_id() if callable(get_platform_id) else ""
+            receipt = DeliveryReceipt.skipped(platform_id=platform_id)
+        projection = make_projection(receipt)
+        committer = getattr(
+            self.ctx.execution_context,
+            "assistant_history_committer",
+            _FALLBACK_HISTORY_COMMITTER,
+        )
+        history_committed = False
+        if pending is not None:
+            history_committed = await committer.commit(
+                self.conv_manager,
+                pending,
+                projection,
             )
+            if history_committed and projection is not None:
+                self._schedule_runtime_memory_postprocess(event, req, projection.text)
+
+        finalized = AssistantHistoryFinalized(
+            projection=projection,
+            receipt=receipt,
+            conversation_id=pending.conversation_id if pending else None,
+            run_id=pending.run_id if pending else None,
+            history_committed=history_committed,
+        )
+        event.set_extra("assistant_history_finalized", finalized)
+        await call_event_hook(
+            event,
+            EventType.OnAssistantHistoryFinalized,
+            finalized,
+            handler_registry=self.ctx.handlers,
+            plugin_registry=self.ctx.plugins,
+        )
 
     def _schedule_runtime_memory_postprocess(
         self,
