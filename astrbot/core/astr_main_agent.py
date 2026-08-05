@@ -16,6 +16,10 @@ from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
+from astrbot.core.agent.request_preparation import (
+    clone_provider_request,
+    prepare_provider_request,
+)
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
 from astrbot.core.astr_agent_hooks import MainAgentHooks
@@ -1851,14 +1855,14 @@ async def build_main_agent(
             )
         return None
 
+    provider_request_from_event = False
     if req is None:
         if event.get_extra("provider_request"):
             req = event.get_extra("provider_request")
             assert isinstance(req, ProviderRequest), (
                 "provider_request 必须是 ProviderRequest 类型。"
             )
-            if req.conversation:
-                req.contexts = load_sanitized_history(req.conversation.history)
+            provider_request_from_event = True
         else:
             req = ProviderRequest()
             req.prompt = ""
@@ -1877,6 +1881,10 @@ async def build_main_agent(
             req.conversation = conversation
             req.contexts = load_sanitized_history(conversation.history)
             event.set_extra("provider_request", req)
+
+    req = clone_provider_request(req)
+    if provider_request_from_event and req.conversation:
+        req.contexts = load_sanitized_history(req.conversation.history)
 
     await prepare_event_attachments(event, req, config, plugin_context)
 
@@ -1900,6 +1908,11 @@ async def build_main_agent(
     provider, fallback_providers = _select_request_provider(
         provider, req, plugin_context, config
     )
+
+    # Main-Agent assembly may add request-scoped text. Prepare the selected
+    # provider request immediately before runner reset.
+    req = await prepare_provider_request(req, provider=provider)
+    event.set_extra("provider_request", req)
 
     if provider.provider_config.get("max_context_tokens", 0) <= 0:
         model = provider.get_model()

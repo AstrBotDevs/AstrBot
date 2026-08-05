@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
@@ -20,6 +20,20 @@ from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.media_utils import MediaResolver
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderContentBlock:
+    """Provider-neutral, prepared user-media content.
+
+    The transport-facing provider adapters remain responsible for mapping these
+    blocks to their own payloads.  A block never contains an unvalidated remote
+    URL: media preparation materializes accepted local/data references first.
+    """
+
+    type: Literal["text", "image", "audio", "video", "file"]
+    value: str
+    mime_type: str | None = None
 
 
 @dataclass
@@ -75,6 +89,8 @@ class ProviderRequest:
     """Runtime-only marker for idempotent event attachment preparation."""
     tool_history_mode: str = "full"
     tool_history_placeholder: str = ""
+    prepared_content: tuple[ProviderContentBlock, ...] = field(default_factory=tuple)
+    """Prepared provider-neutral content retained for inspection and adapters."""
 
     def __repr__(self) -> str:
         return (

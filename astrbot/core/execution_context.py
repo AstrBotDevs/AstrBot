@@ -11,6 +11,7 @@ from astrbot.core.agent.message import Message
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import ToolImageCache
+from astrbot.core.assistant_history import AssistantHistoryCommitter
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.computer.computer_client import ComputerRuntime
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -223,6 +224,8 @@ class CoreExecutionContext:
         """Runtime-owned active Agent follow-up coordination state."""
         self.background_tasks: set[asyncio.Task] = set()
         """Auxiliary Agent tasks cancelled with this runtime."""
+        self.assistant_history_committer = AssistantHistoryCommitter()
+        """Serializes accepted assistant-history projections per conversation."""
         self.computer_runtime = computer_runtime
         """Runtime-owned local and sandbox computer capability."""
         self.skill_manager: SkillManager | None = None
@@ -281,13 +284,30 @@ class CoreExecutionContext:
         prov = await self.provider_manager.get_provider_by_id(chat_provider_id)
         if not prov or not isinstance(prov, Provider):
             raise ProviderNotFoundError(f"Provider {chat_provider_id} not found")
+        from astrbot.core.agent.request_preparation import prepare_provider_request
+
+        request = await prepare_provider_request(
+            ProviderRequest(
+                prompt=prompt,
+                image_urls=list(image_urls or []),
+                audio_urls=list(audio_urls or []),
+                func_tool=tools,
+                contexts=[
+                    message.model_dump() if isinstance(message, Message) else message
+                    for message in contexts or []
+                ],
+                system_prompt=system_prompt or "",
+            ),
+            provider=prov,
+        )
         llm_resp = await prov.text_chat(
-            prompt=prompt,
-            image_urls=image_urls,
-            audio_urls=audio_urls,
-            func_tool=tools,
-            contexts=contexts,
-            system_prompt=system_prompt,
+            prompt=request.prompt,
+            image_urls=request.image_urls,
+            audio_urls=request.audio_urls,
+            func_tool=request.func_tool,
+            contexts=request.contexts,
+            system_prompt=request.system_prompt,
+            extra_user_content_parts=request.extra_user_content_parts,
             **kwargs,
         )
         return llm_resp
@@ -336,6 +356,7 @@ class CoreExecutionContext:
             Exception: For other errors during LLM generation
         """
         # Import here to avoid circular imports
+        from astrbot.core.agent.request_preparation import prepare_provider_request
         from astrbot.core.astr_agent_context import (
             AgentContextWrapper,
             AstrAgentContext,
@@ -379,6 +400,7 @@ class CoreExecutionContext:
             ),
             self,
         )
+        request = await prepare_provider_request(request, provider=prov)
         if agent_context is None:
             agent_context = AstrAgentContext(
                 context=self,

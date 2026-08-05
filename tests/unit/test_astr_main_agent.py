@@ -1833,7 +1833,11 @@ class TestBuildMainAgent:
             )
 
         assert result is not None
-        assert result.provider_request.image_urls == ["/tmp/quoted.jpg"]
+        assert result.provider_request.image_urls == []
+        assert any(
+            "image omitted" in part.text
+            for part in result.provider_request.extra_user_content_parts
+        )
         assert not any(
             "Image Caption" in part.text or "<image_caption>" in part.text
             for part in result.provider_request.extra_user_content_parts
@@ -2040,7 +2044,12 @@ class TestBuildMainAgent:
 
         assert result is not None
         assert result.provider is image_provider
-        assert result.provider_request.image_urls == ["/tmp/image.jpg"]
+        assert req.image_urls == ["/tmp/image.jpg"]
+        assert result.provider_request.image_urls == []
+        assert any(
+            "image omitted" in part.text
+            for part in result.provider_request.extra_user_content_parts
+        )
         assert result.provider_request.model is None
         assert mock_runner.reset.call_args.kwargs["provider"] is image_provider
         assert mock_runner.reset.call_args.kwargs["fallback_providers"] == []
@@ -2092,7 +2101,12 @@ class TestBuildMainAgent:
 
         assert result is not None
         assert result.provider is text_provider
-        assert result.provider_request.image_urls == ["/tmp/image.jpg"]
+        assert req.image_urls == ["/tmp/image.jpg"]
+        assert result.provider_request.image_urls == []
+        assert any(
+            "image omitted" in part.text
+            for part in result.provider_request.extra_user_content_parts
+        )
         assert mock_runner.reset.call_args.kwargs["provider"] is text_provider
 
     @pytest.mark.asyncio
@@ -2328,7 +2342,9 @@ class TestBuildMainAgent:
             )
 
         assert result is not None
-        assert result.provider_request == existing_req
+        assert existing_req == ProviderRequest(prompt="Existing prompt")
+        assert result.provider_request is not existing_req
+        assert result.provider_request.prompt == "Existing prompt"
 
 
 class TestHandleWebchat:
