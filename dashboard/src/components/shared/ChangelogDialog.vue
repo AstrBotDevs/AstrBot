@@ -192,17 +192,20 @@ void getCurrentVersion();
             density="compact"
             @update:model-value="onVersionChange"
           >
-            <template #item="{ item, props: itemProps }">
-              <v-list-item v-bind="itemProps" :title="`v${item.value}`">
-                <template v-if="item.value === changelogVersion" #append>
+            <template #item="{ internalItem, props: itemProps }">
+              <v-list-item v-bind="itemProps" :title="`v${internalItem.value}`">
+                <template
+                  v-if="internalItem.value === changelogVersion"
+                  #append
+                >
                   <v-chip size="x-small" color="primary" variant="tonal">
                     {{ t('core.navigation.changelogDialog.current') }}
                   </v-chip>
                 </template>
               </v-list-item>
             </template>
-            <template #selection="{ item }">
-              <span>v{{ item.value }}</span>
+            <template #selection="{ internalItem }">
+              <span>v{{ internalItem.value }}</span>
             </template>
           </v-select>
         </div>

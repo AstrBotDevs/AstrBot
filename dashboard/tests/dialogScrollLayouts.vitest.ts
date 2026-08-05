@@ -260,7 +260,7 @@ describe('shared dialog scroll layouts', () => {
   });
 
   it('renders the changelog dialog inside a bounded scroll container', async () => {
-    mountWithVuetify(ChangelogDialog, {
+    const wrapper = mountWithVuetify(ChangelogDialog, {
       props: {
         modelValue: true,
       },
@@ -276,6 +276,10 @@ describe('shared dialog scroll layouts', () => {
     expect(
       document.body.querySelector('.changelog-dialog__scroll'),
     ).not.toBeNull();
+    expect(document.body.textContent).toContain('v4.26.2');
+    expect(document.body.textContent).not.toContain('vundefined');
+
+    wrapper.unmount();
   });
 
   it('renders the provider config dialog inside a constrained scrollable container', async () => {
