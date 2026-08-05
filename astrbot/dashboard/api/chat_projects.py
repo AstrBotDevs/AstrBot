@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, Request
+import os
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import FileResponse
 
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import error, ok
@@ -10,7 +13,7 @@ from astrbot.dashboard.services.chatui_project_service import (
     ChatUIProjectServiceError,
 )
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, ScopeDependency, require_dashboard_user
 
 router = APIRouter(tags=["Chat Projects"])
 legacy_router = APIRouter(
@@ -24,8 +27,7 @@ def get_service(request: Request) -> ChatUIProjectService:
     return request.app.state.services.chat_projects
 
 
-async def require_chat_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "chat")
+require_chat_scope = ScopeDependency("chat")
 
 
 async def _json_or_empty(request: Request) -> dict:
@@ -153,6 +155,55 @@ async def list_chat_project_sessions(
     service: ChatUIProjectService = Depends(get_service),
 ):
     return await _run(lambda: service.get_project_sessions(auth.username, project_id))
+
+
+@router.get("/chat/projects/{project_id}/workspace/files")
+async def list_chat_project_workspace_files(
+    project_id: str,
+    path: str = Query(default=""),
+    auth: AuthContext = Depends(require_chat_scope),
+    service: ChatUIProjectService = Depends(get_service),
+):
+    return await _run(
+        lambda: service.list_workspace_files(auth.username, project_id, path)
+    )
+
+
+@router.get("/chat/projects/{project_id}/workspace/file")
+async def get_chat_project_workspace_file(
+    project_id: str,
+    path: str,
+    auth: AuthContext = Depends(require_chat_scope),
+    service: ChatUIProjectService = Depends(get_service),
+):
+    return await _run(
+        lambda: service.get_workspace_file(auth.username, project_id, path)
+    )
+
+
+@router.get("/chat/projects/{project_id}/workspace/file/download")
+async def download_chat_project_workspace_file(
+    project_id: str,
+    path: str,
+    auth: AuthContext = Depends(require_chat_scope),
+    service: ChatUIProjectService = Depends(get_service),
+):
+    try:
+        workspace_root, file_path = await service.get_workspace_file_location(
+            auth.username,
+            project_id,
+            path,
+        )
+    except ChatUIProjectServiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    workspace_root_path = os.path.normcase(os.path.realpath(workspace_root))
+    download_path = os.path.normcase(os.path.realpath(file_path))
+    workspace_root_prefix = os.path.join(workspace_root_path, "")
+    if download_path != workspace_root_path and not download_path.startswith(
+        workspace_root_prefix
+    ):
+        raise HTTPException(status_code=400, detail="Invalid workspace path")
+    return FileResponse(download_path, filename=os.path.basename(download_path))
 
 
 @legacy_router.get("/get_sessions")

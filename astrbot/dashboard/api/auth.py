@@ -6,6 +6,7 @@ import jwt
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
+from astrbot.core.workspace import API_KEY_USERNAME_PREFIX
 from astrbot.dashboard.responses import ApiError
 from astrbot.dashboard.schemas import (
     AccountUpdateRequest,
@@ -18,6 +19,7 @@ from astrbot.dashboard.services.auth_service import (
     ALL_OPEN_API_SCOPES,
     DASHBOARD_JWT_COOKIE_MAX_AGE,
     DASHBOARD_JWT_COOKIE_NAME,
+    DEFAULT_OPEN_API_SCOPES,
     OPEN_API_SCOPE_INCLUDES,
     TOTP_TRUSTED_DEVICE_COOKIE_NAME,
     TOTP_TRUSTED_DEVICE_MAX_AGE,
@@ -39,6 +41,24 @@ class AuthContext:
     scopes: list[str]
     api_key_id: str | None = None
     via: str = "jwt"
+
+
+@dataclass(frozen=True)
+class ScopeDependency:
+    """Authenticate a request and expose its API key scope to OpenAPI."""
+
+    scope: str
+
+    async def __call__(self, request: Request) -> AuthContext:
+        """Require the configured scope for a request.
+
+        Args:
+            request: Current FastAPI request.
+
+        Returns:
+            Authentication context for the authorized caller.
+        """
+        return await require_scope(request, self.scope)
 
 
 def _extract_raw_api_key(request: Request) -> str | None:
@@ -122,7 +142,7 @@ async def _require_api_key_scope(
     scopes = (
         [str(scope) for scope in api_key.scopes]
         if isinstance(api_key.scopes, list)
-        else [str(scope) for scope in ALL_OPEN_API_SCOPES]
+        else [str(scope) for scope in DEFAULT_OPEN_API_SCOPES]
     )
     if (
         "*" not in scopes
@@ -135,7 +155,7 @@ async def _require_api_key_scope(
         raise ApiError("Insufficient API key scope", status_code=403)
     await request.app.state.db.touch_api_key(api_key.key_id)
     return AuthContext(
-        username=f"api_key:{api_key.key_id}",
+        username=f"{API_KEY_USERNAME_PREFIX}{api_key.key_id}",
         scopes=scopes,
         api_key_id=api_key.key_id,
         via="api_key",

@@ -7,6 +7,8 @@
 import json
 from collections.abc import Awaitable, Callable
 
+from deprecated import deprecated
+
 from astrbot.core import sp
 from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment
 from astrbot.core.db import BaseDatabase
@@ -57,8 +59,20 @@ class ConversationManager:
                     f"会话删除回调执行失败 (session: {unified_msg_origin}): {e}",
                 )
 
-    def _convert_conv_from_v2_to_v1(self, conv_v2: ConversationV2) -> Conversation:
-        """将 ConversationV2 对象转换为 Conversation 对象"""
+    def _convert_conv_from_v2_to_v1(
+        self,
+        conv_v2: ConversationV2,
+        include_history: bool = True,
+    ) -> Conversation:
+        """Convert a ConversationV2 object into the legacy Conversation object.
+
+        Args:
+            conv_v2: Database conversation object.
+            include_history: Whether to access and serialize the full history.
+
+        Returns:
+            Legacy-compatible conversation object.
+        """
         created_ts = to_utc_timestamp(conv_v2.created_at)
         updated_ts = to_utc_timestamp(conv_v2.updated_at)
         created_at = int(created_ts) if created_ts is not None else 0
@@ -67,7 +81,7 @@ class ConversationManager:
             platform_id=conv_v2.platform_id,
             user_id=conv_v2.user_id,
             cid=conv_v2.conversation_id,
-            history=json.dumps(conv_v2.content or []),
+            history=json.dumps(conv_v2.content or []) if include_history else "[]",
             title=conv_v2.title,
             persona_id=conv_v2.persona_id,
             created_at=created_at,
@@ -229,6 +243,7 @@ class ConversationManager:
         page_size: int = 20,
         platform_ids: list[str] | None = None,
         search_query: str = "",
+        include_history: bool = True,
         **kwargs,
     ) -> tuple[list[Conversation], int]:
         """获取过滤后的对话列表.
@@ -238,20 +253,26 @@ class ConversationManager:
             page_size (int): 每页大小, 默认为 20
             platform_ids (list[str]): 平台 ID 列表, 可选
             search_query (str): 搜索查询字符串, 可选
+            include_history (bool): Whether to load the full conversation history.
         Returns:
             conversations (list[Conversation]): 对话对象列表
 
         """
-        convs, cnt = await self.db.get_filtered_conversations(
-            page=page,
-            page_size=page_size,
-            platform_ids=platform_ids,
-            search_query=search_query,
+        query_kwargs = {
+            "page": page,
+            "page_size": page_size,
+            "platform_ids": platform_ids,
+            "search_query": search_query,
+            "include_history": include_history,
             **kwargs,
-        )
+        }
+        convs, cnt = await self.db.get_filtered_conversations(**query_kwargs)
         convs_res = []
         for conv in convs:
-            conv_res = self._convert_conv_from_v2_to_v1(conv)
+            conv_res = self._convert_conv_from_v2_to_v1(
+                conv,
+                include_history=include_history,
+            )
             convs_res.append(conv_res)
         return convs_res, cnt
 
@@ -285,6 +306,7 @@ class ConversationManager:
                 token_usage=token_usage,
             )
 
+    @deprecated(reason="Use update_conversation() with the title parameter instead.")
     async def update_conversation_title(
         self,
         unified_msg_origin: str,
@@ -307,6 +329,9 @@ class ConversationManager:
             title=title,
         )
 
+    @deprecated(
+        reason="Use update_conversation() with the persona_id parameter instead."
+    )
     async def update_conversation_persona_id(
         self,
         unified_msg_origin: str,

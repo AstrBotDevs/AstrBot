@@ -56,7 +56,7 @@ import {
   type UpdateAccountRequest,
   type UpdateRequest,
 } from './generated/openapi-v1';
-import { apiV1Client, httpClient } from './http';
+import { apiV1Client, fetchWithAuth, httpClient } from './http';
 
 openApiV1Client.setConfig({
   axios: httpClient,
@@ -924,6 +924,29 @@ export const chatApi = {
       openApiV1.listChatProjectSessions({ path: { project_id: projectId } }),
     );
   },
+  listProjectWorkspaceFiles(projectId: string, path = '') {
+    return typed<any>(
+      openApiV1.listChatProjectWorkspaceFiles({
+        path: { project_id: projectId },
+        query: path ? { path } : undefined,
+      }),
+    );
+  },
+  getProjectWorkspaceFile(projectId: string, path: string) {
+    return typed<any>(
+      openApiV1.getChatProjectWorkspaceFile({
+        path: { project_id: projectId },
+        query: { path },
+      }),
+    );
+  },
+  downloadProjectWorkspaceFile(projectId: string, path: string) {
+    return openApiV1.downloadChatProjectWorkspaceFile({
+      path: { project_id: projectId },
+      query: { path },
+      responseType: 'blob',
+    }) as Promise<AxiosResponse<Blob>>;
+  },
   addProjectSession(projectId: string, sessionId: string) {
     return typed<any>(
       openApiV1.addChatProjectSession({
@@ -1259,6 +1282,17 @@ export const pluginApi = {
       }),
     );
   },
+  updateLogLevel(
+    pluginId: string,
+    level: "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL" | null,
+  ) {
+    return typed<OpenConfig>(
+      openApiV1.updatePluginLogLevel({
+        path: { plugin_id: pluginId },
+        body: { level },
+      }),
+    );
+  },
   listConfigFiles(pluginId: string, configKey: string) {
     return typed<any>(
       openApiV1.listPluginConfigFilesById({
@@ -1311,16 +1345,27 @@ export const pluginApi = {
       openApiV1.replacePluginSources({ body: { sources: sources as any } }),
     );
   },
-  installUpload(formData: FormData) {
-    return typed<OpenConfig>(
-      openApiV1.installPluginFromUpload({
-        body: generatedFormData(formData),
-      }),
-    );
+  async installUpload(formData: FormData) {
+    const response = await fetchWithAuth('/api/v1/plugins/install/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(
+        data?.message || `Plugin upload failed (${response.status})`,
+      );
+    }
+    return { data } as AxiosResponse<ApiEnvelope<OpenConfig>>;
   },
   installGithub(body: OpenConfig) {
     return typed<OpenConfig>(
       openApiV1.installPluginFromGithub({ body: body as any }),
+    );
+  },
+  installGit(body: OpenConfig) {
+    return typed<OpenConfig>(
+      openApiV1.installPluginFromGit({ body: body as any }),
     );
   },
   installUrl(body: OpenConfig) {

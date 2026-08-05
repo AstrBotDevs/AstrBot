@@ -1,6 +1,7 @@
 """Tests for AstrBotCoreLifecycle."""
 
 import asyncio
+import logging
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -97,6 +98,8 @@ class TestAstrBotCoreLifecycleInit:
             # Verify proxy environment variables are cleared
             assert "http_proxy" not in os.environ
             assert "https_proxy" not in os.environ
+            # Verify local APIs always bypass proxies after clearing the environment.
+            assert os.environ.get("no_proxy") == "localhost,127.0.0.1,::1"
 
 
 class TestAstrBotCoreLifecycleStop:
@@ -426,7 +429,7 @@ class TestAstrBotCoreLifecycleInitialize:
         mock_pipeline_scheduler = MagicMock()
         mock_pipeline_scheduler.initialize = AsyncMock()
 
-        mock_astrbot_updator = MagicMock()
+        mock_astrbot_updater = MagicMock()
 
         mock_event_bus = MagicMock()
 
@@ -481,8 +484,8 @@ class TestAstrBotCoreLifecycleInitialize:
                 return_value=mock_pipeline_scheduler,
             ),
             patch(
-                "astrbot.core.core_lifecycle.AstrBotUpdator",
-                return_value=mock_astrbot_updator,
+                "astrbot.core.core_lifecycle.AstrBotUpdater",
+                return_value=mock_astrbot_updater,
             ),
             patch("astrbot.core.core_lifecycle.EventBus", return_value=mock_event_bus),
             patch("astrbot.core.core_lifecycle.migra", new_callable=AsyncMock),
@@ -592,7 +595,7 @@ class TestAstrBotCoreLifecycleInitialize:
                 return_value=MagicMock(initialize=AsyncMock()),
             ),
             patch(
-                "astrbot.core.core_lifecycle.AstrBotUpdator",
+                "astrbot.core.core_lifecycle.AstrBotUpdater",
                 return_value=MagicMock(),
             ),
             patch(
@@ -609,6 +612,7 @@ class TestAstrBotCoreLifecycleInitialize:
                 new_callable=AsyncMock,
             ),
         ):
+            mock_logger.level = logging.INFO
             # Should not raise, just log the error
             await lifecycle.initialize()
 
@@ -884,7 +888,7 @@ class TestAstrBotCoreLifecycleRestart:
 
         lifecycle.dashboard_shutdown_event = asyncio.Event()
 
-        lifecycle.astrbot_updator = MagicMock()
+        lifecycle.astrbot_updater = MagicMock()
 
         with patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread:
             await lifecycle.restart()

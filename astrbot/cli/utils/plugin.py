@@ -49,58 +49,59 @@ def _validate_plugin_dir_name(plugin_name: str, source_path: Path) -> str:
     return plugin_name
 
 
-def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
-    """Download code from a Git repository and extract to the specified path"""
+def download_repository(
+    url: str,
+    target_path: Path,
+    proxy: str | None = None,
+) -> None:
+    """Download repository source without requiring a local Git executable.
+
+    Args:
+        url: Supported repository URL.
+        target_path: Directory that will receive the repository source.
+        proxy: Optional URL-prefix mirror for the archive request.
+
+    Raises:
+        ValueError: If the repository URL is unsupported or invalid.
+        httpx.HTTPError: If repository metadata or the archive cannot be downloaded.
+    """
+    from astrbot.core.repository import GitHubRepository
+
     temp_dir = Path(tempfile.mkdtemp())
     try:
-        # Parse repository info
-        repo_namespace = url.split("/")[-2:]
-        author = repo_namespace[0]
-        repo = repo_namespace[1]
+        repository = GitHubRepository.parse(url)
+        if not repository.branch:
+            try:
+                with httpx.Client(follow_redirects=True, trust_env=True) as client:
+                    response = client.get(repository.default_branch_api_url)
+                    response.raise_for_status()
+                    default_branch = str(
+                        response.json().get("default_branch") or ""
+                    ).strip()
+            except httpx.HTTPError as exc:
+                default_branch = ""
+                click.echo(
+                    f"Failed to resolve the default GitHub branch: {exc}. Trying main."
+                )
+            branch = default_branch or "main"
+            repository = GitHubRepository(
+                repository.owner,
+                repository.name,
+                branch,
+            )
 
-        # Try to get the latest release
-        release_url = f"https://api.github.com/repos/{author}/{repo}/releases"
-        try:
-            with httpx.Client(
-                proxy=proxy if proxy else None,
-                follow_redirects=True,
-            ) as client:
-                resp = client.get(release_url)
-                resp.raise_for_status()
-                releases = resp.json()
-
-                if releases:
-                    # Use the latest release
-                    download_url = releases[0]["zipball_url"]
-                else:
-                    # No release found, use default branch
-                    click.echo(f"Downloading {author}/{repo} from default branch")
-                    download_url = f"https://github.com/{author}/{repo}/archive/refs/heads/master.zip"
-        except Exception as e:
-            click.echo(f"Failed to get release info: {e}. Using provided URL directly")
-            download_url = url
-
-        # Apply proxy
+        click.echo(
+            f"Downloading {repository.owner}/{repository.name} "
+            f"from GitHub branch {repository.branch}"
+        )
+        download_url = repository.archive_url
         if proxy:
-            download_url = f"{proxy}/{download_url}"
+            download_url = f"{proxy.rstrip('/')}/{download_url}"
 
-        # Download and extract
-        with httpx.Client(
-            proxy=proxy if proxy else None,
-            follow_redirects=True,
-        ) as client:
-            resp = client.get(download_url)
-            if (
-                resp.status_code == 404
-                and "archive/refs/heads/master.zip" in download_url
-            ):
-                alt_url = download_url.replace("master.zip", "main.zip")
-                click.echo("Branch 'master' not found, trying 'main' branch")
-                resp = client.get(alt_url)
-                resp.raise_for_status()
-            else:
-                resp.raise_for_status()
-            zip_content = BytesIO(resp.content)
+        with httpx.Client(follow_redirects=True, trust_env=True) as client:
+            response = client.get(download_url)
+            response.raise_for_status()
+            zip_content = BytesIO(response.content)
         with ZipFile(zip_content) as z:
             z.extractall(temp_dir)
             namelist = z.namelist()
@@ -328,7 +329,7 @@ def manage_plugin(
         click.echo(
             f"{'Updating' if is_update else 'Downloading'} plugin {plugin_name} from {repo_url}...",
         )
-        get_git_repo(repo_url, target_path, proxy)
+        download_repository(repo_url, target_path, proxy)
 
         # Update succeeded, delete backup
         if is_update and backup_path is not None and backup_path.exists():

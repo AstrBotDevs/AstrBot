@@ -94,8 +94,12 @@ class WakingCheckStage(Stage):
 
         # 设置 sender 身份
         event.message_str = event.message_str.strip()
+        api_key_allow_admin_role = event.get_extra("_api_key_allow_admin_role")
         for admin_id in self.ctx.astrbot_config["admins_id"]:
-            if str(event.get_sender_id()) == admin_id:
+            if (
+                api_key_allow_admin_role is not False
+                and str(event.get_sender_id()) == admin_id
+            ):
                 event.role = "admin"
                 break
 
@@ -189,9 +193,11 @@ class WakingCheckStage(Stage):
                         break
                 except Exception as e:
                     await event.send(
-                        MessageEventResult().message(
+                        MessageEventResult()
+                        .message(
                             f"插件 {star_map[handler.handler_module_path].name}: {e}",
-                        ),
+                        )
+                        .use_markdown(False),
                     )
                     event.stop_event()
                     passed = False
@@ -208,7 +214,8 @@ class WakingCheckStage(Stage):
                             ),
                         )
                     logger.info(
-                        f"触发 {star_map[handler.handler_module_path].name} 时, 用户(ID={event.get_sender_id()}) 权限不足。",
+                        f"User ID {event.get_sender_id()} lacks permission to trigger "
+                        f"{star_map[handler.handler_module_path].name}.",
                     )
                     event.stop_event()
                     return

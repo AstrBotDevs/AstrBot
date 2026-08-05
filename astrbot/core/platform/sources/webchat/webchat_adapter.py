@@ -24,6 +24,7 @@ from .message_parts_helper import (
     message_chain_to_storage_message_parts,
     parse_webchat_message_parts,
 )
+from .request_flags import resolve_webchat_request_flags
 from .webchat_event import WebChatMessageEvent
 from .webchat_queue_mgr import WebChatQueueMgr, webchat_queue_mgr
 
@@ -255,13 +256,14 @@ class WebChatAdapter(Platform):
         if isinstance(raw_message, tuple) and len(raw_message) >= 3:
             payload = raw_message[2]
             if isinstance(payload, dict):
+                flags = resolve_webchat_request_flags(payload)
+                message_event.set_extra("flags", flags)
+                for key, value in flags.items():
+                    message_event.set_extra(key, value)
                 message_event.set_extra(
                     "selected_provider", payload.get("selected_provider")
                 )
                 message_event.set_extra("selected_model", payload.get("selected_model"))
-                message_event.set_extra(
-                    "enable_streaming", payload.get("enable_streaming", True)
-                )
                 message_event.set_extra("action_type", payload.get("action_type"))
                 message_event.set_extra(
                     "llm_checkpoint_id", payload.get("llm_checkpoint_id")
@@ -269,6 +271,12 @@ class WebChatAdapter(Platform):
                 message_event.set_extra(
                     "thread_selected_text", payload.get("thread_selected_text")
                 )
+                api_key_allow_admin_role = payload.get("_api_key_allow_admin_role")
+                if isinstance(api_key_allow_admin_role, bool):
+                    message_event.set_extra(
+                        "_api_key_allow_admin_role",
+                        api_key_allow_admin_role,
+                    )
 
         return message_event
 

@@ -9,11 +9,11 @@
     "market": "AstrBot Plugin Market"
   },
   "titles": {
-    "installedAstrBotPlugins": "Installed AstrBot Plugins"
+    "installedAstrBotPlugins": "Installed"
   },
   "failedPlugins": {
     "title": "Failed to Load Plugins ({count})",
-    "hint": "These plugins failed to load. You can try reload or uninstall them directly.",
+    "hint": "These plugins failed to load. You can try reloading or deleting them directly.",
     "columns": {
       "plugin": "Plugin",
       "error": "Error"
@@ -34,11 +34,13 @@
     "showSystemPlugins": "Show System Extensions",
     "hideSystemPlugins": "Hide System Extensions",
     "install": "Install",
-    "uninstall": "Uninstall",
+    "uninstall": "Delete",
     "update": "Update",
     "reload": "Reload",
     "enable": "Enable",
     "disable": "Disable",
+    "load": "Open plugin",
+    "stop": "Close plugin",
     "configure": "Configure",
     "viewInfo": "Handlers",
     "viewDocs": "Documentation",
@@ -64,9 +66,12 @@
   "status": {
     "enabled": "Enabled",
     "disabled": "Disabled",
+    "loaded": "Open",
+    "stopped": "Closed",
     "system": "System",
     "loading": "Loading...",
     "installed": "Installed",
+    "preset": "Preset",
     "unknown": "Unknown",
     "unsupported": "Unsupported"
   },
@@ -78,7 +83,7 @@
     "viewInfo": "Handlers",
     "viewDocs": "Documentation",
     "update": "Update",
-    "uninstall": "Uninstall"
+    "uninstall": "Delete plugin"
   },
   "table": {
     "headers": {
@@ -197,15 +202,20 @@
     },
     "config": {
       "title": "Extension Configuration",
-      "noConfig": "This extension has no configuration"
+      "noConfig": "This extension has no additional configuration",
+      "coreSettings": {
+        "logLevel": "Log Level",
+        "logLevelHint": "Only affects this plugin's log output. Takes effect immediately, no restart required.",
+        "followGlobal": "Follow Global"
+      }
     },
     "loading": {
       "title": "Loading...",
       "logs": "Logs"
     },
     "uninstall": {
-      "title": "Confirm Deletion",
-      "message": "Are you sure you want to delete this extension?",
+      "title": "Delete Plugin",
+      "message": "Are you sure you want to delete this plugin?",
       "deleteConfig": "Also delete plugin configuration file",
       "deleteData": "Also delete plugin persistent data",
       "configHint": "Configuration file located in data/config directory",
@@ -218,7 +228,7 @@
       "supportPlatformsCount": "Supports {count} Platforms",
       "sectionTitle": "Install",
       "downloadSource": "The plugin package will be installed from:",
-      "githubSecurityWarning": "AstrBot cannot guarantee the safety of plugins downloaded from GitHub. Install only if you trust the plugin source."
+      "repositorySecurityWarning": "AstrBot cannot guarantee the safety of plugins downloaded from a code repository. Install only if you trust the plugin source."
     },
     "update": {
       "title": "Update Extension",
@@ -260,11 +270,12 @@
     }
   },
   "messages": {
-    "uninstalling": "Uninstalling",
+    "uninstalling": "Deleting",
     "refreshing": "Refreshing extension list...",
     "refreshSuccess": "Extension list refreshed!",
     "refreshFailed": "Error occurred while refreshing extension list",
     "operationFailed": "Operation failed",
+    "logLevelUpdated": "Log level updated and applied immediately",
     "reloadSuccess": "Reload successful",
     "reloadFailed": "Reload failed",
     "updateSuccess": "Update successful!",
@@ -290,10 +301,10 @@
     "resolveSourceFirst": "Resolve and validate the source URL first",
     "sourceResolveFailed": "Failed to resolve source",
     "invalidUrl": "Please enter a valid URL",
-    "invalidGithubRepo": "Please enter a valid GitHub repository URL",
+    "invalidRepositoryUrl": "Please enter a valid Git repository URL",
     "enterJsonUrl": "Please enter a URL that returns plugin list JSON data",
     "pluginNotFound": "Plugin not found",
-    "pluginDisabled": "This plugin is disabled. Enable it before opening its page.",
+    "pluginDisabled": "This plugin is closed. Open it before accessing its page.",
     "pluginPageNotFound": "Plugin page not found",
     "pluginPageLoadFailed": "Failed to load the plugin page",
     "missingMarketPluginId": "This source record is missing legal plugin identifiers, so it cannot be installed from the market",
@@ -312,6 +323,8 @@
     "modeLocal": "Local Skills",
     "modeNeo": "Neo Skills",
     "actions": "Actions",
+    "enable": "Enable Skill",
+    "disable": "Disable Skill",
     "upload": "Upload Skills",
     "refresh": "Refresh",
     "empty": "No Skills found",
@@ -420,7 +433,7 @@
   "card": {
     "actions": {
       "pluginConfig": "Extension Config",
-      "uninstallPlugin": "Uninstall Extension",
+      "uninstallPlugin": "Delete Plugin",
       "reloadPlugin": "Reload Extension",
       "togglePlugin": "Extension",
       "viewHandlers": "View Handlers",
@@ -430,7 +443,7 @@
     },
     "status": {
       "hasUpdate": "New version available",
-      "disabled": "This extension is disabled",
+      "disabled": "This plugin is closed",
       "handlersCount": " handlers",
       "supportPlatform": "Supported Platform",
       "supportPlatformsCount": "Supports {count} Platforms",

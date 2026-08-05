@@ -653,13 +653,17 @@ class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
         if topic == "news":
             payload["days"] = kwargs.get("days", 3)
 
-        time_range = kwargs.get("time_range", "")
-        if time_range in ["day", "week", "month", "year"]:
-            payload["time_range"] = time_range
-        if kwargs.get("start_date"):
-            payload["start_date"] = kwargs["start_date"]
-        if kwargs.get("end_date"):
-            payload["end_date"] = kwargs["end_date"]
+        start_date = str(kwargs.get("start_date") or "").strip()
+        end_date = str(kwargs.get("end_date") or "").strip()
+        if start_date or end_date:
+            if start_date:
+                payload["start_date"] = start_date
+            if end_date:
+                payload["end_date"] = end_date
+        else:
+            time_range = kwargs.get("time_range", "")
+            if time_range in ["day", "week", "month", "year"]:
+                payload["time_range"] = time_range
 
         results = await _tavily_search(provider_settings, payload)
         if not results:

@@ -4,6 +4,8 @@ import asyncio
 from pathlib import Path
 from typing import cast
 
+import pytest
+
 from astrbot.core.computer import computer_client
 from astrbot.core.computer.booters.base import ComputerBooter
 
@@ -45,6 +47,16 @@ class _FakeBooter:
     async def upload_file(self, path: str, file_name: str) -> dict:
         self.uploads.append((path, file_name))
         return {"success": True}
+
+
+@pytest.fixture(autouse=True)
+def _isolate_builtin_plugin_skills(monkeypatch, tmp_path: Path) -> None:
+    builtin_plugins_root = tmp_path / "builtin_plugins"
+    builtin_plugins_root.mkdir()
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_builtin_plugin_path",
+        lambda: str(builtin_plugins_root),
+    )
 
 
 def test_sync_skills_keeps_builtin_skills_when_local_is_empty(
