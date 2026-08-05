@@ -56,6 +56,56 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             return value.get(name, default)
         return getattr(value, name, default)
 
+    @staticmethod
+    def _response_tool_key(tool: dict[str, Any]) -> tuple[str, str] | None:
+        """Return a stable key for tools that can safely be deduplicated.
+
+        Args:
+            tool: A Responses API tool definition.
+
+        Returns:
+            A key for native tools and named function tools, or ``None`` when
+            the tool must be preserved as-is.
+        """
+        tool_type = tool.get("type")
+        if tool_type == "function":
+            name = tool.get("name")
+            if isinstance(name, str) and name:
+                return tool_type, name
+            return None
+        if tool_type in {
+            "web_search",
+            "file_search",
+            "code_interpreter",
+            "image_generation",
+        }:
+            return tool_type, ""
+        return None
+
+    @classmethod
+    def _deduplicate_response_tools(
+        cls,
+        response_tools: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Keep the first configured definition of each native tool.
+
+        Args:
+            response_tools: Responses API tools in precedence order.
+
+        Returns:
+            Tools without duplicate native entries or function names.
+        """
+        unique_tools: list[dict[str, Any]] = []
+        seen_keys: set[tuple[str, str]] = set()
+        for tool in response_tools:
+            tool_key = cls._response_tool_key(tool)
+            if tool_key is not None:
+                if tool_key in seen_keys:
+                    continue
+                seen_keys.add(tool_key)
+            unique_tools.append(tool)
+        return unique_tools
+
     def _build_response_tools(
         self,
         tools: ToolSet | None,
@@ -130,7 +180,56 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 tool for tool in custom_tools if isinstance(tool, dict)
             )
 
-        return response_tools
+        return self._deduplicate_response_tools(response_tools)
+
+    def _prepare_response_request(
+        self,
+        payloads: dict[str, Any],
+        tools: ToolSet | None,
+    ) -> dict[str, Any]:
+        """Normalize a Responses API request before streaming or completion.
+
+        Args:
+            payloads: Request payload that is updated in place.
+            tools: AstrBot function tools available for the request.
+
+        Returns:
+            Extra request fields that are not SDK method parameters.
+        """
+        extra_body: dict[str, Any] = {}
+        custom_extra_body = self.provider_config.get("custom_extra_body", {})
+        if isinstance(custom_extra_body, dict):
+            extra_body.update(custom_extra_body)
+
+        custom_tools = extra_body.pop("tools", None)
+        custom_tool_choice = extra_body.pop("tool_choice", None)
+        response_tools = self._build_response_tools(tools, custom_tools)
+        if response_tools:
+            payloads["tools"] = response_tools
+            tool_choice = self.provider_config.get("responses_tool_choice")
+            if tool_choice not in {"auto", "required", "none"}:
+                tool_choice = payloads.get("tool_choice", custom_tool_choice)
+            if tool_choice not in {"auto", "required", "none"}:
+                tool_choice = "auto"
+            payloads["tool_choice"] = tool_choice
+
+        for key in list(payloads):
+            if key not in self.default_params:
+                extra_body[key] = payloads.pop(key)
+
+        max_tokens = extra_body.pop("max_tokens", None)
+        if max_tokens is not None and "max_output_tokens" not in extra_body:
+            extra_body["max_output_tokens"] = max_tokens
+        reasoning_effort = extra_body.pop("reasoning_effort", None)
+        if reasoning_effort is not None and "reasoning" not in extra_body:
+            extra_body["reasoning"] = {"effort": reasoning_effort}
+        extra_body.pop("previous_response_id", None)
+        extra_body.pop("conversation", None)
+        extra_body.pop("store", None)
+        payloads.pop("previous_response_id", None)
+        payloads.pop("conversation", None)
+        payloads["store"] = False
+        return extra_body
 
     def _convert_chat_messages_to_response_input(
         self,
@@ -390,39 +489,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         Raises:
             TypeError: If the SDK returns an unexpected response type.
         """
-        extra_body: dict[str, Any] = {}
-        custom_extra_body = self.provider_config.get("custom_extra_body", {})
-        if isinstance(custom_extra_body, dict):
-            extra_body.update(custom_extra_body)
-
-        custom_tools = extra_body.pop("tools", None)
-        custom_tool_choice = extra_body.pop("tool_choice", None)
-        response_tools = self._build_response_tools(tools, custom_tools)
-        if response_tools:
-            payloads["tools"] = response_tools
-            tool_choice = self.provider_config.get("responses_tool_choice")
-            if tool_choice not in {"auto", "required", "none"}:
-                tool_choice = payloads.get("tool_choice", custom_tool_choice)
-            if tool_choice not in {"auto", "required", "none"}:
-                tool_choice = "auto"
-            payloads["tool_choice"] = tool_choice
-
-        for key in list(payloads):
-            if key not in self.default_params:
-                extra_body[key] = payloads.pop(key)
-
-        max_tokens = extra_body.pop("max_tokens", None)
-        if max_tokens is not None and "max_output_tokens" not in extra_body:
-            extra_body["max_output_tokens"] = max_tokens
-        reasoning_effort = extra_body.pop("reasoning_effort", None)
-        if reasoning_effort is not None and "reasoning" not in extra_body:
-            extra_body["reasoning"] = {"effort": reasoning_effort}
-        extra_body.pop("previous_response_id", None)
-        extra_body.pop("conversation", None)
-        extra_body.pop("store", None)
-        payloads.pop("previous_response_id", None)
-        payloads.pop("conversation", None)
-        payloads["store"] = False
+        extra_body = self._prepare_response_request(payloads, tools)
 
         response = await retry_provider_request(
             "OpenAI Responses",
@@ -462,39 +529,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         Raises:
             EmptyModelOutputError: If the stream ends without a terminal event.
         """
-        extra_body: dict[str, Any] = {}
-        custom_extra_body = self.provider_config.get("custom_extra_body", {})
-        if isinstance(custom_extra_body, dict):
-            extra_body.update(custom_extra_body)
-
-        custom_tools = extra_body.pop("tools", None)
-        custom_tool_choice = extra_body.pop("tool_choice", None)
-        response_tools = self._build_response_tools(tools, custom_tools)
-        if response_tools:
-            payloads["tools"] = response_tools
-            tool_choice = self.provider_config.get("responses_tool_choice")
-            if tool_choice not in {"auto", "required", "none"}:
-                tool_choice = payloads.get("tool_choice", custom_tool_choice)
-            if tool_choice not in {"auto", "required", "none"}:
-                tool_choice = "auto"
-            payloads["tool_choice"] = tool_choice
-
-        for key in list(payloads):
-            if key not in self.default_params:
-                extra_body[key] = payloads.pop(key)
-
-        max_tokens = extra_body.pop("max_tokens", None)
-        if max_tokens is not None and "max_output_tokens" not in extra_body:
-            extra_body["max_output_tokens"] = max_tokens
-        reasoning_effort = extra_body.pop("reasoning_effort", None)
-        if reasoning_effort is not None and "reasoning" not in extra_body:
-            extra_body["reasoning"] = {"effort": reasoning_effort}
-        extra_body.pop("previous_response_id", None)
-        extra_body.pop("conversation", None)
-        extra_body.pop("store", None)
-        payloads.pop("previous_response_id", None)
-        payloads.pop("conversation", None)
-        payloads["store"] = False
+        extra_body = self._prepare_response_request(payloads, tools)
 
         stream = await retry_provider_request(
             "OpenAI Responses",
@@ -690,6 +725,8 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             result_chain = MessageChain()
             if completion_text:
                 result_chain.message(completion_text)
+            elif generated_images:
+                result_chain.message("[Image]")
             for image_base64 in generated_images:
                 result_chain.base64_image(image_base64)
             if citation_sources or file_citation_sources:
