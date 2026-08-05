@@ -1,6 +1,6 @@
 [project]
 name = "AstrBot"
-version = "4.26.6"
+version = "4.27.2"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
 license = { text = "AGPL-3.0-or-later" }
@@ -32,6 +32,8 @@ dependencies = [
   "mcp>=1.8.0,<2",
   "openai>=1.78.0",
   "ormsgpack>=1.9.1",
+  "openpyxl>=3.1.5",
+  "pandas>=2.2.0",
   "pillow>=11.2.1",
   "pip>=25.1.1",
   "psutil>=5.8.0,<7.2.0",
@@ -65,8 +67,11 @@ dependencies = [
   "python-socks>=2.8.0",
   "pysocks>=1.7.1",
   "packaging>=24.2",
-  "python-ripgrep==0.0.8",
+  "python-ripgrep==0.0.8 ; python_version < '3.14'",
+  "python-docx>=1.2.0",
   "pyotp>=2.9.0",
+  "reportlab>=5.0.0",
+  "xlrd>=2.0.2",
 ]
 
 [dependency-groups]
@@ -75,7 +80,7 @@ dev = [
   "pytest>=8.4.1",
   "pytest-asyncio>=1.1.0",
   "pytest-cov>=6.2.1",
-  "ruff>=0.15.0",
+  "ruff==0.15.22",
 ]
 
 [project.scripts]

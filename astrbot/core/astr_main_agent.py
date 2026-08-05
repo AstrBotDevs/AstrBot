@@ -21,6 +21,7 @@ from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
 from astrbot.core.astr_agent_run_util import AgentRunner
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.astr_main_agent_resources import (
+    CHATUI_INLINE_GENUI_SYSTEM_PROMPT,
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
     LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
@@ -36,6 +37,7 @@ from astrbot.core.persona_error_reply import (
     set_persona_custom_error_message_on_event,
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.provider.register import llm_tools
@@ -68,11 +70,13 @@ from astrbot.core.tools.computer_tools import (
     GrepTool,
     ListSkillCandidatesTool,
     ListSkillReleasesTool,
+    LocalExecuteShellTool,
     LocalPythonTool,
     PromoteSkillCandidateTool,
     PythonTool,
     RollbackSkillReleaseTool,
     RunBrowserSkillTool,
+    ShellSessionTool,
     SyncSkillReleaseTool,
 )
 from astrbot.core.tools.cron_tools import FutureTaskTool
@@ -80,7 +84,10 @@ from astrbot.core.tools.knowledge_base_tools import (
     KnowledgeBaseQueryTool,
     retrieve_knowledge_base,
 )
-from astrbot.core.tools.message_tools import SendMessageToUserTool
+from astrbot.core.tools.message_tools import (
+    GetGroupMessageHistoryTool,
+    SendMessageToUserTool,
+)
 from astrbot.core.tools.web_search_tools import (
     BaiduWebSearchTool,
     BochaWebSearchTool,
@@ -425,7 +432,8 @@ def _apply_local_env_tools(req: ProviderRequest, plugin_context: Context) -> Non
     if req.func_tool is None:
         req.func_tool = ToolSet()
     tool_mgr = plugin_context.get_llm_tool_manager()
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
+    req.func_tool.add_tool(LocalExecuteShellTool())
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ShellSessionTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(LocalPythonTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileReadTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
@@ -437,15 +445,22 @@ def _apply_local_env_tools(req: ProviderRequest, plugin_context: Context) -> Non
 def _build_local_mode_prompt() -> str:
     system_name = platform.system() or "Unknown"
     shell_hint = (
-        "The runtime shell is Windows Command Prompt (cmd.exe). "
-        "Use cmd-compatible commands and do not assume Unix commands like cat/ls/grep are available."
+        "The runtime shell is Windows PowerShell 5.1 (powershell.exe). "
+        "Use Windows PowerShell 5.1-compatible syntax and cmdlets; do not use "
+        "PowerShell 7-only syntax or assume Unix commands like cat/ls/grep are available."
         if system_name.lower() == "windows"
         else "The runtime shell is Unix-like. Use POSIX-compatible shell commands."
     )
     return (
         "You have access to the host local environment and can execute shell commands and Python code. "
         f"Current operating system: {system_name}. "
-        f"{shell_hint}"
+        f"{shell_hint} "
+        "Local shell commands automatically return a managed session when they "
+        "outlive the initial wait. Use `astrbot_shell_session` to list, poll, "
+        "write raw text or complete lines to, interrupt, or terminate those sessions. "
+        "Use its `write_line` action for line-oriented programs so the session receives "
+        "a real line feed. Do not add `&`, `nohup`, or another detachment wrapper for "
+        "ordinary long-running commands."
     )
 
 
@@ -488,6 +503,12 @@ async def _ensure_persona_and_skills(
     event: AstrMessageEvent,
 ) -> None:
     """Ensure persona and skills are applied to the request's system prompt or user prompt."""
+    if req.system_prompt is None:
+        req.system_prompt = ""
+
+    if event.get_extra("enable_inline_genui"):
+        req.system_prompt += CHATUI_INLINE_GENUI_SYSTEM_PROMPT
+
     if not req.conversation:
         return
 
@@ -507,16 +528,16 @@ async def _ensure_persona_and_skills(
         event, extract_persona_custom_error_message_from_persona(persona)
     )
 
-    if req.system_prompt is None:
-        req.system_prompt = ""
-
     if persona:
         # Inject persona system prompt
         if prompt := persona["prompt"]:
             req.system_prompt += f"\n# Persona Instructions\n\n{prompt}\n"
         if begin_dialogs := copy.deepcopy(persona.get("_begin_dialogs_processed")):
             req.contexts[:0] = begin_dialogs
-    elif use_webchat_special_default:
+    elif (
+        use_webchat_special_default
+        and event.get_extra("enable_default_system_prompt") is not False
+    ):
         req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
 
     # Inject skills prompt
@@ -986,9 +1007,9 @@ async def _decorate_llm_request(
     img_cap_prov_id: str = cfg.get("default_image_caption_provider_id") or ""
     quote_images_already_captioned = False
 
-    if req.conversation:
-        await _ensure_persona_and_skills(req, cfg, plugin_context, event)
+    await _ensure_persona_and_skills(req, cfg, plugin_context, event)
 
+    if req.conversation:
         if img_cap_prov_id and req.image_urls and not main_provider_supports_image:
             await _ensure_img_caption(
                 event,
@@ -1583,6 +1604,21 @@ async def build_main_agent(
             )
         )
 
+    ltm_settings = plugin_context.get_config(umo=event.unified_msg_origin).get(
+        "provider_ltm_settings",
+        {},
+    )
+    if event.get_message_type() == MessageType.GROUP_MESSAGE and ltm_settings.get(
+        "group_message_history_enable", False
+    ):
+        if req.func_tool is None:
+            req.func_tool = ToolSet()
+        req.func_tool.add_tool(
+            plugin_context.get_llm_tool_manager().get_builtin_tool(
+                GetGroupMessageHistoryTool
+            )
+        )
+
     fallback_providers = _get_fallback_chat_providers(
         provider, plugin_context, config.provider_settings
     )
@@ -1620,11 +1656,14 @@ async def build_main_agent(
                 event.unified_msg_origin,
                 plugin_context,
             )
-            workspace_prompt = f"\nCurrent workspace you can use: `{workspace_root}`\n"
             tool_prompt += (
-                workspace_prompt
-                + "Unless the user explicitly specifies a different directory, "
-                "perform all file-related operations in this workspace.\n"
+                f"\nCurrent workspace: `{workspace_root}`. "
+                "`astrbot_execute_shell` and `astrbot_execute_python` use it as "
+                "their working directory. `astrbot_file_read_tool`, "
+                "`astrbot_file_write_tool`, `astrbot_file_edit_tool`, and "
+                "`astrbot_grep_tool` resolve relative paths from it. Prefer relative "
+                "paths within the workspace; do not assume this behavior for other "
+                "tools.\n"
             )
 
         req.system_prompt += f"\n{tool_prompt}\n"

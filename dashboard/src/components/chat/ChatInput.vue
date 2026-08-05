@@ -194,7 +194,7 @@
             @blur="handleBlur"
             @paste="handlePaste"
             :disabled="disabled"
-            :placeholder="tm('input.placeholder')"
+            :placeholder="props.placeholder || tm('input.placeholder')"
             class="chat-text-input"
             autocomplete="off"
             autocorrect="off"
@@ -214,7 +214,7 @@
             @blur="handleBlur"
             @paste="handlePaste"
             :disabled="disabled"
-            :placeholder="tm('input.placeholder')"
+            :placeholder="props.placeholder || tm('input.placeholder')"
             class="chat-textarea"
             autocomplete="off"
             autocorrect="off"
@@ -376,6 +376,7 @@ interface Props {
   sendShortcut?: "enter" | "shift_enter";
   showProviderSelector?: boolean;
   tokenUsage?: TokenUsageInfo | null;
+  placeholder?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -400,7 +401,7 @@ const emit = defineEmits<{
   startRecording: [];
   stopRecording: [];
   pasteImage: [event: ClipboardEvent];
-  fileSelect: [files: FileList];
+  fileSelect: [files: FileList | File[]];
   clearReply: [];
   openLiveMode: [];
 }>();
@@ -421,6 +422,7 @@ const isDragging = ref(false);
 const isComposing = ref(false);
 const inputIsMultiline = ref(false);
 const lastCompositionEndAt = ref<number | null>(null);
+const longPasteThreshold = 10_000;
 let dragLeaveTimeout: number | null = null;
 
 // 命令提示相关状态
@@ -895,6 +897,16 @@ function handleKeyUp(e: KeyboardEvent) {
 
 function handlePaste(e: ClipboardEvent) {
   const pastedText = e.clipboardData?.getData("text/plain") || "";
+  if (pastedText.length > longPasteThreshold) {
+    e.preventDefault();
+    emit("fileSelect", [
+      new File([pastedText], `pasted-text-${Date.now()}.txt`, {
+        type: "text/plain;charset=utf-8",
+      }),
+    ]);
+    return;
+  }
+
   if (!inputIsMultiline.value && pastedText.includes("\n")) {
     e.preventDefault();
     const target = e.target as HTMLInputElement;
@@ -1011,7 +1023,7 @@ defineExpose({
 
 <style scoped>
 .input-area {
-  padding: 12px 16px 0;
+  padding: 0 16px;
   background-color: transparent;
   position: relative;
   border-top: 1px solid var(--v-theme-border);
@@ -1143,7 +1155,7 @@ defineExpose({
   border-color: #f0f0f0 !important;
   border-radius: 999px !important;
   background: #fff !important;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06) !important;
 }
 
 .input-container.is-multiline {

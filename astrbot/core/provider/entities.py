@@ -6,8 +6,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from anthropic.types import Message as AnthropicMessage
+from deprecated import deprecated
 from google.genai.types import GenerateContentResponse
 from openai.types.chat.chat_completion import ChatCompletion
+from openai.types.responses import Response
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
@@ -311,7 +313,7 @@ class LLMResponse:
     """The signature of the reasoning content, if any."""
 
     raw_completion: (
-        ChatCompletion | GenerateContentResponse | AnthropicMessage | None
+        ChatCompletion | Response | GenerateContentResponse | AnthropicMessage | None
     ) = None
     """The raw completion response from the LLM provider."""
 
@@ -338,6 +340,7 @@ class LLMResponse:
         reasoning_content: str | None = None,
         reasoning_signature: str | None = None,
         raw_completion: ChatCompletion
+        | Response
         | GenerateContentResponse
         | AnthropicMessage
         | None = None,
@@ -400,8 +403,9 @@ class LLMResponse:
         else:
             self._completion_text = value
 
+    @deprecated(reason="Use to_openai_tool_calls_model instead.")
     def to_openai_tool_calls(self) -> list[dict]:
-        """Convert to OpenAI tool calls format. Deprecated, use to_openai_to_calls_model instead."""
+        """Convert to OpenAI tool calls format. Deprecated, use to_openai_tool_calls_model instead."""
         ret = []
         for idx, tool_call_arg in enumerate(self.tools_call_args):
             payload = {
@@ -419,7 +423,7 @@ class LLMResponse:
             ret.append(payload)
         return ret
 
-    def to_openai_to_calls_model(self) -> list[ToolCall]:
+    def to_openai_tool_calls_model(self) -> list[ToolCall]:
         """The same as to_openai_tool_calls but return pydantic model."""
         ret = []
         for idx, tool_call_arg in enumerate(self.tools_call_args):
@@ -437,6 +441,11 @@ class LLMResponse:
                 ),
             )
         return ret
+
+    @deprecated(reason="Use to_openai_tool_calls_model instead.")
+    def to_openai_to_calls_model(self) -> list[ToolCall]:
+        """Deprecated alias of to_openai_tool_calls_model (legacy misspelled name)."""
+        return self.to_openai_tool_calls_model()
 
 
 @dataclass

@@ -101,9 +101,6 @@ def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
 def _collect_sync_skill_dirs() -> list[tuple[str, Path]]:
     """Collect local and plugin-provided skills that should be synced."""
     skills_root = Path(get_astrbot_skills_path())
-    if not skills_root.is_dir():
-        return []
-
     try:
         skill_manager = SkillManager(skills_root=str(skills_root))
     except OSError as exc:
@@ -680,3 +677,16 @@ def get_local_booter() -> ComputerBooter:
     if local_booter is None:
         local_booter = LocalBooter()
     return local_booter
+
+
+async def shutdown_local_booter() -> None:
+    """Shut down managed local computer resources without creating a booter."""
+    global local_booter
+    if local_booter is None:
+        return
+    booter = local_booter
+    local_booter = None
+    try:
+        await booter.shutdown()
+    except Exception as exc:
+        logger.warning("[Computer] Failed to shut down local booter: %s", exc)

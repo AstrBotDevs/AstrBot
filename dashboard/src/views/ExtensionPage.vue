@@ -4,18 +4,29 @@ import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
 import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
 import ProxySelector from "@/components/shared/ProxySelector.vue";
 import UninstallConfirmDialog from "@/components/shared/UninstallConfirmDialog.vue";
-import McpServersSection from "@/components/extension/McpServersSection.vue";
-import SkillsSection from "@/components/extension/SkillsSection.vue";
-import ComponentPanel from "@/components/extension/componentPanel/index.vue";
-import InstalledPluginsTab from "./extension/InstalledPluginsTab.vue";
-import MarketPluginsTab from "./extension/MarketPluginsTab.vue";
-import PluginDetailPage from "./extension/PluginDetailPage.vue";
 import { useExtensionPage } from "./extension/useExtensionPage";
-import { computed } from "vue";
+import { computed, defineAsyncComponent } from "vue";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 import { usePluginI18n } from "@/utils/pluginI18n";
 
-const pageState = useExtensionPage();
+const props = defineProps({
+  initialTab: {
+    type: String,
+    default: "installed",
+  },
+});
+
+const InstalledPluginsTab = defineAsyncComponent(
+  () => import("./extension/InstalledPluginsTab.vue"),
+);
+const MarketPluginsTab = defineAsyncComponent(
+  () => import("./extension/MarketPluginsTab.vue"),
+);
+const PluginDetailPage = defineAsyncComponent(
+  () => import("./extension/PluginDetailPage.vue"),
+);
+
+const pageState = useExtensionPage(props.initialTab);
 const { pluginName, pluginDesc } = usePluginI18n();
 
 const {
@@ -30,11 +41,6 @@ const {
   handleConflictConfirm,
   fileInput,
   activeTab,
-  validTabs,
-  isValidTab,
-  getLocationHash,
-  extractTabFromHash,
-  syncTabFromHash,
   extension_data,
   getInitialShowReserved,
   showReserved,
@@ -128,6 +134,8 @@ const {
   pluginOff,
   openExtensionConfig,
   updateConfig,
+  updatePluginLogLevel,
+  pluginLogLevelSaving,
   showPluginInfo,
   reloadPlugin,
   viewReadme,
@@ -159,25 +167,36 @@ const {
   selectedInstallPlugin,
   selectedInstallDownloadUrl,
   selectedInstallSourceUrl,
-  installUsesGithubSource,
+  installUsesRepositorySource,
+  installUsesGithubArchiveSource,
   selectedUpdateExtension,
   selectedUpdateMarketPlugin,
   selectedUpdateDownloadUrl,
   selectedUpdateSourceUrl,
-  updateUsesGithubSource,
+  updateUsesRepositorySource,
+  updateUsesGithubArchiveSource,
   checkInstallVersionSupport,
   refreshPluginMarket,
   handleLocaleChange,
   searchDebounceTimer,
 } = pageState;
 
+const logLevelItems = computed(() => [
+  { title: tm("dialogs.config.coreSettings.followGlobal"), value: null },
+  { title: "DEBUG", value: "DEBUG" },
+  { title: "INFO", value: "INFO" },
+  { title: "WARNING", value: "WARNING" },
+  { title: "ERROR", value: "ERROR" },
+  { title: "CRITICAL", value: "CRITICAL" },
+]);
+
 const selectedPluginId = computed(() => {
   const pluginId = route.params.pluginId;
   return Array.isArray(pluginId) ? pluginId[0] : pluginId || "";
 });
 
-const selectedDetailTab = computed(
-  () => extractTabFromHash(route.hash) || "installed",
+const selectedDetailTab = computed(() =>
+  props.initialTab === "market" ? "market" : "installed",
 );
 
 const selectedInstalledPlugin = computed(() => {
@@ -292,7 +311,12 @@ const updateDialogPluginLogo = computed(() => {
         variant="text"
         density="comfortable"
         @click="
-          router.push({ name: 'Extensions', hash: `#${selectedDetailTab}` })
+          router.push({
+            name:
+              selectedDetailTab === 'market'
+                ? 'ExtensionMarketplace'
+                : 'Extensions',
+          })
         "
       />
       <h2 class="text-h3 mb-0 ml-2">
@@ -315,77 +339,11 @@ const updateDialogPluginLogo = computed(() => {
       <v-card variant="flat" style="background-color: transparent">
         <!-- 标签页 -->
         <v-card-text style="padding: 0px 12px">
-          <!-- 已安装插件标签页内容 -->
-          <InstalledPluginsTab :state="pageState" />
-
-          <!-- 指令面板标签页内容 -->
-          <v-tab-item v-if="activeTab === 'components'">
-            <div class="mb-4 pt-4 pb-4">
-              <div class="d-flex align-center flex-wrap" style="gap: 12px">
-                <h2 class="text-h2 mb-0">{{ tm("tabs.handlersOperation") }}</h2>
-              </div>
-            </div>
-            <v-card
-              class="rounded-lg"
-              variant="flat"
-              style="background-color: transparent"
-            >
-              <v-card-text class="pa-0">
-                <ComponentPanel :active="activeTab === 'components'" />
-              </v-card-text>
-            </v-card>
-          </v-tab-item>
-
-          <!-- 已安装的 MCP 服务器标签页内容 -->
-          <v-tab-item v-if="activeTab === 'mcp'">
-            <div class="extension-detail-width">
-              <div class="mb-4 pt-4 pb-4">
-                <div class="d-flex flex-column" style="gap: 6px">
-                  <h2 class="text-h2 mb-0">
-                    {{ tm("tabs.installedMcpServers") }}
-                  </h2>
-                  <div class="text-body-2 text-medium-emphasis">
-                    {{ t("features.tooluse.mcpServers.description") }}
-                  </div>
-                </div>
-              </div>
-              <v-card
-                class="rounded-lg"
-                variant="flat"
-                style="background-color: transparent"
-              >
-                <v-card-text class="pa-0">
-                  <McpServersSection />
-                </v-card-text>
-              </v-card>
-            </div>
-          </v-tab-item>
-
-          <!-- Skills 标签页内容 -->
-          <v-tab-item v-if="activeTab === 'skills'">
-            <div class="extension-detail-width">
-              <div class="mb-4 pt-4 pb-4">
-                <div class="d-flex flex-column" style="gap: 6px">
-                  <h2 class="text-h2 mb-0">{{ tm("tabs.skills") }}</h2>
-                  <div class="text-body-2 text-medium-emphasis">
-                    {{ tm("skills.runtimeHint") }}
-                  </div>
-                </div>
-              </div>
-              <v-card
-                class="rounded-lg"
-                variant="flat"
-                style="background-color: transparent"
-              >
-                <v-card-text class="pa-0">
-                  <SkillsSection />
-                </v-card-text>
-              </v-card>
-            </div>
-          </v-tab-item>
-
-          <!-- 插件市场标签页内容 -->
-          <MarketPluginsTab :state="pageState" />
+          <InstalledPluginsTab
+            v-if="activeTab === 'installed'"
+            :state="pageState"
+          />
+          <MarketPluginsTab v-else :state="pageState" />
         </v-card-text>
       </v-card>
     </v-col>
@@ -425,29 +383,55 @@ const updateDialogPluginLogo = computed(() => {
   </v-row>
 
   <!-- 配置对话框 -->
-  <v-dialog v-model="configDialog" max-width="900">
+  <v-dialog v-model="configDialog" max-width="900" scrollable>
     <v-card>
       <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{
         tm("dialogs.config.title")
       }}</v-card-title>
       <v-card-text>
-        <div style="max-height: 60vh; overflow-y: auto; padding-right: 8px">
-          <AstrBotConfig
-            v-if="extension_config.metadata"
-            :metadata="extension_config.metadata"
-            :iterable="extension_config.config"
-            :metadataKey="curr_namespace"
-            :pluginName="curr_namespace"
-            :pluginI18n="extension_config.i18n"
-          />
-          <p v-else>{{ tm("dialogs.config.noConfig") }}</p>
+        <div
+          class="d-flex align-center justify-space-between flex-wrap"
+          style="gap: 12px"
+        >
+          <div>
+            <div class="text-subtitle-1 font-weight-medium">
+              {{ tm("dialogs.config.coreSettings.logLevel") }}
+            </div>
+            <div class="text-caption text-medium-emphasis">
+              {{ tm("dialogs.config.coreSettings.logLevelHint") }}
+            </div>
+          </div>
+          <v-select
+            :model-value="extension_config.log_level"
+            :items="logLevelItems"
+            :loading="pluginLogLevelSaving"
+            density="compact"
+            variant="outlined"
+            hide-details
+            style="max-width: 220px; min-width: 180px"
+            @update:model-value="updatePluginLogLevel"
+          ></v-select>
         </div>
+        <v-divider class="my-4"></v-divider>
+        <AstrBotConfig
+          v-if="extension_config.metadata"
+          :metadata="extension_config.metadata"
+          :iterable="extension_config.config"
+          :metadataKey="curr_namespace"
+          :pluginName="curr_namespace"
+          :pluginI18n="extension_config.i18n"
+        />
+        <p v-else>{{ tm("dialogs.config.noConfig") }}</p>
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn color="blue-darken-1" variant="text" @click="updateConfig">{{
-          tm("buttons.saveAndClose")
-        }}</v-btn>
+        <v-btn
+          v-if="extension_config.metadata"
+          color="blue-darken-1"
+          variant="text"
+          @click="updateConfig"
+          >{{ tm("buttons.saveAndClose") }}</v-btn
+        >
         <v-btn
           color="blue-darken-1"
           variant="text"
@@ -459,7 +443,12 @@ const updateDialogPluginLogo = computed(() => {
   </v-dialog>
 
   <!-- 加载对话框 -->
-  <v-dialog v-model="loadingDialog.show" width="700" persistent>
+  <v-dialog
+    v-model="loadingDialog.show"
+    width="700"
+    persistent
+    transition="dialog-transition"
+  >
     <v-card>
       <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ loadingDialog.title }}</v-card-title>
       <v-card-text style="max-height: calc(100vh - 200px); overflow-y: auto">
@@ -470,19 +459,24 @@ const updateDialogPluginLogo = computed(() => {
           class="mb-4"
         ></v-progress-linear>
 
-        <div v-if="loadingDialog.statusCode !== 0" class="py-8 text-center">
-          <v-icon
-            class="mb-6"
-            :color="loadingDialog.statusCode === 1 ? 'success' : 'error'"
-            :icon="
-              loadingDialog.statusCode === 1
-                ? 'mdi-check-circle-outline'
-                : 'mdi-alert-circle-outline'
-            "
-            size="128"
-          ></v-icon>
-          <div class="text-h4 font-weight-bold">{{ loadingDialog.result }}</div>
-        </div>
+        <v-fade-transition>
+          <div
+            v-if="loadingDialog.statusCode !== 0"
+            class="py-8 text-center"
+          >
+            <v-icon
+              class="mb-6"
+              :color="loadingDialog.statusCode === 1 ? 'success' : 'error'"
+              :icon="
+                loadingDialog.statusCode === 1
+                  ? 'mdi-check-circle-outline'
+                  : 'mdi-alert-circle-outline'
+              "
+              size="128"
+            ></v-icon>
+            <div class="text-h4 font-weight-bold">{{ loadingDialog.result }}</div>
+          </div>
+        </v-fade-transition>
 
         <div style="margin-top: 32px">
           <h3>{{ tm("dialogs.loading.logs") }}</h3>
@@ -755,16 +749,19 @@ const updateDialogPluginLogo = computed(() => {
           </div>
 
           <v-alert
-            v-if="installUsesGithubSource"
+            v-if="installUsesRepositorySource"
             type="warning"
             variant="tonal"
             density="comfortable"
             class="market-install-alert mt-4 mb-4"
           >
-            {{ tm("dialogs.install.githubSecurityWarning") }}
+            {{ tm("dialogs.install.repositorySecurityWarning") }}
           </v-alert>
 
-          <ProxySelector v-if="!selectedInstallDownloadUrl" class="mt-4" />
+          <ProxySelector
+            v-if="installUsesGithubArchiveSource"
+            class="mt-4"
+          />
         </div>
 
         <template v-else>
@@ -827,7 +824,7 @@ const updateDialogPluginLogo = computed(() => {
                   prepend-inner-icon="mdi-link"
                   hide-details
                   class="rounded-lg mb-4"
-                  placeholder="https://github.com/username/repo"
+                  placeholder="https://github.com/owner/repo or git@host:owner/repo.git"
                 ></v-text-field>
 
                 <div v-if="selectedInstallPlugin" class="mb-3">
@@ -930,17 +927,17 @@ const updateDialogPluginLogo = computed(() => {
                 </div>
 
                 <v-alert
-                  v-if="installUsesGithubSource"
+                  v-if="installUsesRepositorySource"
                   type="warning"
                   variant="tonal"
                   density="comfortable"
                   class="market-install-alert mb-4"
                 >
-                  {{ tm("dialogs.install.githubSecurityWarning") }}
+                  {{ tm("dialogs.install.repositorySecurityWarning") }}
                 </v-alert>
 
                 <ProxySelector
-                  v-if="!selectedInstallDownloadUrl"
+                  v-if="installUsesGithubArchiveSource"
                 ></ProxySelector>
               </div>
             </v-window-item>
@@ -1214,16 +1211,19 @@ const updateDialogPluginLogo = computed(() => {
           </div>
 
           <v-alert
-            v-if="updateUsesGithubSource"
+            v-if="updateUsesRepositorySource"
             type="warning"
             variant="tonal"
             density="comfortable"
             class="market-install-alert mt-4 mb-4"
           >
-            {{ tm("dialogs.install.githubSecurityWarning") }}
+            {{ tm("dialogs.install.repositorySecurityWarning") }}
           </v-alert>
 
-          <ProxySelector v-if="!selectedUpdateDownloadUrl" class="mt-4" />
+          <ProxySelector
+            v-if="updateUsesGithubArchiveSource"
+            class="mt-4"
+          />
         </div>
       </v-card-text>
       <v-card-actions>
@@ -1266,6 +1266,12 @@ const updateDialogPluginLogo = computed(() => {
 </template>
 
 <style scoped>
+.extension-page {
+  margin: 0 auto;
+  max-width: 1200px;
+  width: 100%;
+}
+
 .plugin-handler-item {
   margin-bottom: 10px;
   padding: 5px;
@@ -1281,12 +1287,6 @@ const updateDialogPluginLogo = computed(() => {
 .fab-button:hover {
   transform: translateY(-4px) scale(1.05);
   box-shadow: 0 12px 20px rgba(var(--v-theme-primary), 0.4);
-}
-
-.extension-detail-width {
-  margin: 0 auto;
-  max-width: 1040px;
-  width: 100%;
 }
 
 .market-install-confirm {

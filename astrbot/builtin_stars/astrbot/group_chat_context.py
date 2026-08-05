@@ -35,7 +35,7 @@ GROUP_HISTORY_HEADER = (
     "--- BEGIN CONTEXT---\n"
 )
 GROUP_HISTORY_FOOTER = "\n--- END CONTEXT ---\n</system_reminder>"
-DEFAULT_GROUP_MESSAGE_MAX_CNT = 300
+DEFAULT_GROUP_MESSAGE_MAX_CNT = 1000
 
 
 class GroupChatContext:

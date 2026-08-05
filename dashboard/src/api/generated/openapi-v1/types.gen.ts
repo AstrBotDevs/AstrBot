@@ -67,6 +67,24 @@ export type BotRegistrationRequest = {
 
 export type action = 'start' | 'poll';
 
+/**
+ * Per-request ChatUI feature flags. A value here takes priority over its legacy top-level field, followed by the documented default.
+ */
+export type ChatFlags = {
+    /**
+     * Inject the inline HTML GenUI system prompt for this request.
+     */
+    enable_inline_genui?: boolean;
+    /**
+     * Allow the ChatUI default system prompt when no persona overrides it.
+     */
+    enable_default_system_prompt?: boolean;
+    /**
+     * Enable streaming model output for this request. This value takes priority over the legacy top-level enable_streaming field.
+     */
+    enable_streaming?: boolean;
+};
+
 export type ChatMessagePatchRequest = {
     content: {
         [key: string]: unknown;
@@ -76,22 +94,36 @@ export type ChatMessagePatchRequest = {
 export type ChatMessageRegenerateRequest = {
     selected_provider?: string;
     selected_model?: string;
+    /**
+     * Deprecated compatibility field. It is used only when flags.enable_streaming is absent; otherwise flags.enable_streaming takes priority.
+     * @deprecated
+     */
     enable_streaming?: boolean;
+    flags?: ChatFlags;
 };
 
 export type ChatProjectRequest = {
     title?: string;
     emoji?: string;
     description?: string;
+    /**
+     * Workspace mode. API key callers may use only session or project; project is the default.
+     */
     workspace_type?: 'session' | 'project' | 'custom';
+    /**
+     * Dashboard-only custom workspace path. API key callers cannot set this field.
+     */
     workspace_path?: string;
 };
 
+/**
+ * Workspace mode. API key callers may use only session or project; project is the default.
+ */
 export type workspace_type = 'session' | 'project' | 'custom';
 
 export type ChatRequest = {
     /**
-     * Caller-declared WebChat sender/session owner. This value is used as the message sender identity and may participate in sender-ID-based command permission checks. Treat chat-scoped API keys as trusted backend credentials and map or validate usernames before accepting end-user input.
+     * Caller-declared WebChat sender/session owner. Configured AstrBot administrator IDs require the chat:admin API key sub-scope.
      */
     username?: string;
     session_id?: string;
@@ -104,7 +136,12 @@ export type ChatRequest = {
     config_name?: string;
     selected_provider?: string;
     selected_model?: string;
+    /**
+     * Deprecated compatibility field. It is used only when flags.enable_streaming is absent; otherwise flags.enable_streaming takes priority.
+     * @deprecated
+     */
     enable_streaming?: boolean;
+    flags?: ChatFlags;
     /**
      * Internal WebUI flag for edit/regenerate flows.
      */
@@ -141,7 +178,12 @@ export type ChatThreadMessageRequest = {
     message: (string | Array<MessagePart>);
     selected_provider?: string;
     selected_model?: string;
+    /**
+     * Deprecated compatibility field. It is used only when flags.enable_streaming is absent; otherwise flags.enable_streaming takes priority.
+     * @deprecated
+     */
     enable_streaming?: boolean;
+    flags?: ChatFlags;
 };
 
 export type CommandPatchRequest = {
@@ -198,7 +240,7 @@ export type ConversationRef = {
 
 export type CreateApiKeyRequest = {
     name: string;
-    scopes?: Array<('bot' | 'provider' | 'persona' | 'im' | 'config' | 'chat' | 'data' | 'file' | 'plugin' | 'mcp' | 'skill')>;
+    scopes?: Array<('bot' | 'provider' | 'persona' | 'im' | 'config' | 'config:edit_admin' | 'chat' | 'chat:admin' | 'data' | 'file' | 'plugin' | 'mcp' | 'skill')>;
     expires_at?: string;
     expires_in_days?: number;
 };
@@ -463,14 +505,14 @@ export type PluginConfigFileDeleteRequest = {
     path: string;
 };
 
-export type PluginGithubInstallRequest = {
+export type PluginRepositoryInstallRequest = {
     /**
-     * GitHub URL or owner/repository slug.
+     * GitHub shorthand, HTTP(S), SSH, or SCP-style Git repository locator.
      */
     repository: string;
     ref?: string;
     /**
-     * Optional downloadable ZIP URL to use instead of GitHub archive resolution.
+     * Optional downloadable ZIP URL to use instead of repository archive resolution.
      */
     download_url?: string;
     proxy?: string;
@@ -1501,6 +1543,45 @@ export type ListChatProjectSessionsResponse = (SuccessEnvelope);
 
 export type ListChatProjectSessionsError = unknown;
 
+export type ListChatProjectWorkspaceFilesData = {
+    path: {
+        project_id: string;
+    };
+    query?: {
+        path?: string;
+    };
+};
+
+export type ListChatProjectWorkspaceFilesResponse = (SuccessEnvelope);
+
+export type ListChatProjectWorkspaceFilesError = unknown;
+
+export type GetChatProjectWorkspaceFileData = {
+    path: {
+        project_id: string;
+    };
+    query: {
+        path: string;
+    };
+};
+
+export type GetChatProjectWorkspaceFileResponse = (SuccessEnvelope);
+
+export type GetChatProjectWorkspaceFileError = unknown;
+
+export type DownloadChatProjectWorkspaceFileData = {
+    path: {
+        project_id: string;
+    };
+    query: {
+        path: string;
+    };
+};
+
+export type DownloadChatProjectWorkspaceFileResponse = ((Blob | File));
+
+export type DownloadChatProjectWorkspaceFileError = unknown;
+
 export type AddChatProjectSessionData = {
     path: {
         project_id: string;
@@ -1838,6 +1919,23 @@ export type UpdatePluginConfigResponse = (SuccessEnvelope);
 
 export type UpdatePluginConfigError = unknown;
 
+export type UpdatePluginLogLevelData = {
+    body: {
+        /**
+         * Log level name, or null to follow the global level.
+         */
+        level?: ('DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL') | null;
+        [key: string]: unknown | string;
+    };
+    path: {
+        plugin_id: string;
+    };
+};
+
+export type UpdatePluginLogLevelResponse = (SuccessEnvelope);
+
+export type UpdatePluginLogLevelError = unknown;
+
 export type GetPluginConfigSchemaData = {
     path: {
         plugin_id: string;
@@ -2007,12 +2105,20 @@ export type ReloadFailedPluginResponse = (SuccessEnvelope);
 export type ReloadFailedPluginError = unknown;
 
 export type InstallPluginFromGithubData = {
-    body: PluginGithubInstallRequest;
+    body: PluginRepositoryInstallRequest;
 };
 
 export type InstallPluginFromGithubResponse = (SuccessEnvelope);
 
 export type InstallPluginFromGithubError = unknown;
+
+export type InstallPluginFromGitData = {
+    body: PluginRepositoryInstallRequest;
+};
+
+export type InstallPluginFromGitResponse = (SuccessEnvelope);
+
+export type InstallPluginFromGitError = unknown;
 
 export type InstallPluginFromUrlData = {
     body: PluginUrlInstallRequest;
@@ -3044,6 +3150,10 @@ export type ListConversationsData = {
          * Comma-separated platforms to exclude.
          */
         exclude_platforms?: string;
+        /**
+         * Include full message history in each conversation.
+         */
+        include_history?: boolean;
         /**
          * Comma-separated message types.
          */

@@ -10,11 +10,11 @@ import certifi
 import httpx
 import pytest
 
-from astrbot.core import updator as core_updator
-from astrbot.core.star.updator import PluginUpdator
-from astrbot.core.updator import AstrBotUpdator
-from astrbot.core.utils import io as io_utils
-from astrbot.core.zip_updator import RepoZipUpdator
+from astrbot.core import dashboard_assets, process_restart
+from astrbot.core import updater as core_updater
+from astrbot.core.star.updater import _PluginUpdater
+from astrbot.core.updater import AstrBotUpdater, UpdateProgress
+from astrbot.core.zip_updater import ReleaseInfo, _RepoZipUpdater
 
 
 class _FakeJSONResponse:
@@ -81,7 +81,7 @@ class _FakeStatusErrorResponse:
         )
 
 
-def test_astrbot_updator_exec_reboot_spawns_new_console_on_windows(
+def test_process_restart_spawns_new_console_on_windows(
     monkeypatch: pytest.MonkeyPatch,
 ):
     popen_calls = []
@@ -99,17 +99,20 @@ def test_astrbot_updator_exec_reboot_spawns_new_console_on_windows(
     def fake_execv(*args):
         execv_calls.append(args)
 
-    monkeypatch.setattr(core_updator.os, "name", "nt")
-    monkeypatch.setattr(core_updator.sys, "frozen", False, raising=False)
+    monkeypatch.setattr(process_restart.os, "name", "nt")
+    monkeypatch.setattr(process_restart.sys, "frozen", False, raising=False)
     monkeypatch.setattr(
-        core_updator.subprocess, "CREATE_NEW_CONSOLE", 0x00000010, raising=False
+        process_restart.subprocess,
+        "CREATE_NEW_CONSOLE",
+        0x00000010,
+        raising=False,
     )
-    monkeypatch.setattr(core_updator.subprocess, "Popen", fake_popen)
-    monkeypatch.setattr(core_updator.os, "_exit", fake_exit)
-    monkeypatch.setattr(core_updator.os, "execv", fake_execv)
+    monkeypatch.setattr(process_restart.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(process_restart.os, "_exit", fake_exit)
+    monkeypatch.setattr(process_restart.os, "execv", fake_execv)
 
     with pytest.raises(SystemExit) as exc_info:
-        AstrBotUpdator._exec_reboot(
+        process_restart._exec_restart(
             r"C:\Python312\python.exe",
             [
                 r"C:\Python312\python.exe",
@@ -128,7 +131,7 @@ def test_astrbot_updator_exec_reboot_spawns_new_console_on_windows(
                 "--webui-dir",
                 r"C:\AstrBot WebUI\dist",
             ],
-            core_updator.subprocess.CREATE_NEW_CONSOLE,
+            process_restart.subprocess.CREATE_NEW_CONSOLE,
         )
     ]
     assert exit_codes == [0]
@@ -209,7 +212,7 @@ def _exercise_unzip_file_windows_path_normalization(
     monkeypatch: pytest.MonkeyPatch,
     *,
     updater_module,
-    zip_updator_module,
+    zip_updater_module,
     updater,
     target_dir: str,
     archive_root: str,
@@ -227,6 +230,7 @@ def _exercise_unzip_file_windows_path_normalization(
         return [".dockerignore"]
 
     monkeypatch.setattr(updater_module.os, "makedirs", lambda path, exist_ok=True: None)
+    monkeypatch.setattr(updater_module, "ensure_dir", lambda path: None)
     monkeypatch.setattr(updater_module.os.path, "join", ntpath.join)
     monkeypatch.setattr(updater_module.os.path, "normpath", ntpath.normpath)
     monkeypatch.setattr(updater_module.os.path, "commonpath", ntpath.commonpath)
@@ -241,12 +245,12 @@ def _exercise_unzip_file_windows_path_normalization(
     monkeypatch.setattr(updater_module.logger, "warning", lambda message: None)
     monkeypatch.setattr(updater_module.os, "listdir", fake_listdir)
     monkeypatch.setattr(
-        zip_updator_module.shutil,
+        zip_updater_module.shutil,
         "move",
         lambda src, dst: captured.__setitem__("move", (src, dst)),
     )
     monkeypatch.setattr(
-        zip_updator_module.shutil,
+        zip_updater_module.shutil,
         "rmtree",
         lambda path, onerror=None: captured.__setitem__("cleanup", path),
     )
@@ -256,7 +260,12 @@ def _exercise_unzip_file_windows_path_normalization(
         lambda path: captured.__setitem__("removed", path),
     )
 
-    updater.unzip_file("temp.zip", target_dir)
+    extract_archive = getattr(
+        updater,
+        "_extract_plugin_archive",
+        updater._extract_archive,
+    )
+    extract_archive("temp.zip", target_dir)
 
     return captured
 
@@ -319,13 +328,13 @@ def fake_async_client_state() -> _FakeAsyncClientState:
 
 
 @pytest.mark.asyncio
-async def test_plugin_updator_install_prefers_download_url(
+async def test_plugin_updater_install_prefers_download_url(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     calls = {}
-    updator = PluginUpdator()
-    updator.plugin_store_path = str(tmp_path)
+    updater = _PluginUpdater()
+    updater.plugin_store_path = str(tmp_path)
 
     async def fake_download_file(url: str, path: str, timeout: float = 1800.0):  # noqa: ARG001
         calls["download"] = (url, path)
@@ -337,11 +346,11 @@ async def test_plugin_updator_install_prefers_download_url(
     def fake_unzip_file(zip_path: str, target_dir: str):
         calls["unzip"] = (zip_path, target_dir)
 
-    monkeypatch.setattr(updator, "_download_file", fake_download_file)
-    monkeypatch.setattr(updator, "download_from_repo_url", fail_download_from_repo_url)
-    monkeypatch.setattr(updator, "unzip_file", fake_unzip_file)
+    monkeypatch.setattr(updater, "_download_file", fake_download_file)
+    monkeypatch.setattr(updater, "_download_repository", fail_download_from_repo_url)
+    monkeypatch.setattr(updater, "_extract_plugin_archive", fake_unzip_file)
 
-    plugin_path = await updator.install(
+    plugin_path = await updater.install(
         "https://github.com/Owner/plugin-name",
         proxy="https://gh-proxy.example",
         download_url="https://cdn.example/plugin.zip",
@@ -373,8 +382,8 @@ def test_plugin_unzip_file_accepts_metadata_yml(tmp_path: Path) -> None:
         )
         archive.writestr("demo-plugin/main.py", "VALUE = 1\n")
 
-    updater = PluginUpdator.__new__(PluginUpdator)
-    updater.unzip_file(str(zip_path), str(target_dir))
+    updater = _PluginUpdater.__new__(_PluginUpdater)
+    updater._extract_plugin_archive(str(zip_path), str(target_dir))
 
     assert (target_dir / "metadata.yml").is_file()
     assert (target_dir / "main.py").is_file()
@@ -387,9 +396,9 @@ def test_plugin_unzip_file_rejects_archive_without_metadata(tmp_path: Path) -> N
     with zipfile.ZipFile(zip_path, "w") as archive:
         archive.writestr("demo-plugin/main.py", "VALUE = 1\n")
 
-    updater = PluginUpdator.__new__(PluginUpdator)
+    updater = _PluginUpdater.__new__(_PluginUpdater)
     with pytest.raises(ValueError, match="未找到 metadata.yaml 或 metadata.yml"):
-        updater.unzip_file(str(zip_path), str(target_dir))
+        updater._extract_plugin_archive(str(zip_path), str(target_dir))
 
     assert not target_dir.exists()
 
@@ -410,7 +419,7 @@ def test_plugin_validate_archive_rejects_incomplete_metadata(tmp_path: Path) -> 
         archive.writestr("demo-plugin/main.py", "VALUE = 1\n")
 
     with pytest.raises(ValueError, match="version"):
-        PluginUpdator.validate_plugin_archive(str(zip_path))
+        _PluginUpdater.validate_plugin_archive(str(zip_path))
 
 
 def test_plugin_validate_archive_rejects_empty_metadata_fields(
@@ -432,7 +441,7 @@ def test_plugin_validate_archive_rejects_empty_metadata_fields(
         archive.writestr("demo-plugin/main.py", "VALUE = 1\n")
 
     with pytest.raises(ValueError, match="version.*非空字符串"):
-        PluginUpdator.validate_plugin_archive(str(zip_path))
+        _PluginUpdater.validate_plugin_archive(str(zip_path))
 
 
 @pytest.mark.asyncio
@@ -440,7 +449,7 @@ async def test_plugin_update_validates_archive_before_removing_existing_plugin(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    updater = PluginUpdator.__new__(PluginUpdator)
+    updater = _PluginUpdater.__new__(_PluginUpdater)
     updater.plugin_store_path = str(tmp_path)
     plugin_dir = tmp_path / "demo_plugin"
     plugin_dir.mkdir()
@@ -463,7 +472,7 @@ async def test_plugin_update_validates_archive_before_removing_existing_plugin(
 
     monkeypatch.setattr(
         updater,
-        "download_from_repo_url",
+        "_download_repository",
         fake_download_from_repo_url,
     )
 
@@ -474,7 +483,338 @@ async def test_plugin_update_validates_archive_before_removing_existing_plugin(
 
 
 @pytest.mark.asyncio
-async def test_astrbot_updator_prefers_hosted_core_package(
+async def test_plugin_update_validates_git_checkout_before_replacing_plugin(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    updater = _PluginUpdater.__new__(_PluginUpdater)
+    updater.plugin_store_path = str(tmp_path)
+    plugin_dir = tmp_path / "demo_plugin"
+    plugin_dir.mkdir()
+    marker_path = plugin_dir / "main.py"
+    marker_path.write_text("VALUE = 'old'\n", encoding="utf-8")
+    plugin = SimpleNamespace(
+        name="demo_plugin",
+        repo="https://github.com/AstrBotDevs/demo-plugin",
+        root_dir_name="demo_plugin",
+    )
+
+    async def fake_clone_repository(repo_url: str, target_path: Path) -> None:
+        assert repo_url == "git@gitlab.com:AstrBotDevs/demo-plugin.git"
+        target_path.mkdir(parents=True)
+        (target_path / "main.py").write_text("VALUE = 'new'\n", encoding="utf-8")
+
+    monkeypatch.setattr(updater, "_clone_repository", fake_clone_repository)
+
+    with pytest.raises(ValueError, match="metadata.yaml 或 metadata.yml"):
+        await updater.update(
+            plugin,
+            repo_url="git@gitlab.com:AstrBotDevs/demo-plugin.git",
+        )
+
+    assert marker_path.read_text(encoding="utf-8") == "VALUE = 'old'\n"
+
+
+@pytest.mark.asyncio
+async def test_astrbot_updater_prepares_both_packages_before_applying(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    updater = AstrBotUpdater()
+    calls: list[str] = []
+    progress_events: list[UpdateProgress] = []
+    fetch_count = 0
+    observer_failed = False
+    release_data = {
+        "tag_name": "v99.0.0",
+        "zipball_url": "https://example.com/core.zip",
+    }
+
+    async def fake_fetch_release_info(_url: str):
+        nonlocal fetch_count
+        fetch_count += 1
+        return [release_data]
+
+    async def fake_download_dashboard(*, path: str, **kwargs) -> None:
+        calls.append("download-dashboard")
+        assert kwargs["version"] == "v99.0.0"
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("dist/index.html", "dashboard")
+        await kwargs["progress_callback"](
+            {"downloaded": 10, "total": 10, "percent": 1, "speed": 1}
+        )
+
+    async def fake_download_core(*, path: Path, **kwargs) -> Path:
+        calls.append("download-core")
+        assert kwargs["latest"] is False
+        assert kwargs["version"] == "v99.0.0"
+        assert kwargs["release_data"] is release_data
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("AstrBot-main/README.md", "core")
+        await kwargs["progress_callback"](
+            {"downloaded": 10, "total": 10, "percent": 1, "speed": 1}
+        )
+        return path
+
+    def fake_apply_core(_path: Path) -> None:
+        calls.append("apply-core")
+
+    def fake_extract_dashboard(_path: Path, _data_path: Path) -> None:
+        calls.append("apply-dashboard")
+
+    async def record_progress(event: UpdateProgress) -> None:
+        nonlocal observer_failed
+        progress_events.append(event)
+        if not observer_failed:
+            observer_failed = True
+            raise RuntimeError("observer failed")
+
+    monkeypatch.setattr(
+        core_updater,
+        "get_astrbot_temp_path",
+        lambda: str(tmp_path / "temp"),
+    )
+    monkeypatch.setattr(updater, "_fetch_release_info", fake_fetch_release_info)
+    monkeypatch.setattr(
+        core_updater,
+        "get_astrbot_data_path",
+        lambda: str(tmp_path / "data"),
+    )
+    monkeypatch.setattr(
+        core_updater,
+        "_download_package",
+        fake_download_dashboard,
+    )
+    monkeypatch.setattr(updater, "_download_core_package", fake_download_core)
+    monkeypatch.setattr(updater, "_apply_core_package", fake_apply_core)
+    monkeypatch.setattr(
+        core_updater,
+        "_extract_package",
+        fake_extract_dashboard,
+    )
+
+    await updater.update(progress_callback=record_progress)
+
+    assert calls == [
+        "download-dashboard",
+        "download-core",
+        "apply-core",
+        "apply-dashboard",
+    ]
+    assert fetch_count == 1
+    assert observer_failed is True
+    assert any(event.stage == "verify" for event in progress_events)
+    assert progress_events[-1].stage == "apply"
+    assert progress_events[-1].status == "done"
+
+
+@pytest.mark.asyncio
+async def test_astrbot_updater_exposes_release_info_without_download_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    updater = AstrBotUpdater()
+
+    async def fake_fetch_release_info(_url: str):
+        return [
+            {
+                "version": "AstrBot v99.0.0",
+                "tag_name": "v99.0.0",
+                "published_at": "2026-08-01T00:00:00Z",
+                "body": "release notes",
+                "zipball_url": "https://example.com/internal.zip",
+            }
+        ]
+
+    monkeypatch.setattr(updater, "_fetch_release_info", fake_fetch_release_info)
+
+    releases = await updater.get_releases()
+    update = await updater.check_update()
+
+    assert len(releases) == 1
+    assert isinstance(releases[0], ReleaseInfo)
+    assert releases[0].version == "v99.0.0"
+    assert releases[0].published_at == "2026-08-01T00:00:00Z"
+    assert releases[0].body == "release notes"
+    assert update is not None
+    assert update.body == "release notes"
+
+
+@pytest.mark.asyncio
+async def test_astrbot_updater_does_not_apply_unverified_packages(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    updater = AstrBotUpdater()
+    calls: list[str] = []
+
+    async def fake_fetch_release_info(_url: str):
+        return [
+            {
+                "tag_name": "v99.0.0",
+                "zipball_url": "https://example.com/core.zip",
+            }
+        ]
+
+    async def fake_download_dashboard(*, path: str, **_kwargs) -> None:
+        calls.append("download-dashboard")
+        Path(path).write_bytes(b"not a zip")
+
+    async def fake_download_core(*, path: Path, **_kwargs) -> Path:
+        calls.append("download-core")
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("AstrBot-main/README.md", "core")
+        return path
+
+    monkeypatch.setattr(
+        core_updater,
+        "get_astrbot_temp_path",
+        lambda: str(tmp_path / "temp"),
+    )
+    monkeypatch.setattr(updater, "_fetch_release_info", fake_fetch_release_info)
+    monkeypatch.setattr(
+        core_updater,
+        "_download_package",
+        fake_download_dashboard,
+    )
+    monkeypatch.setattr(updater, "_download_core_package", fake_download_core)
+    monkeypatch.setattr(
+        updater,
+        "_apply_core_package",
+        lambda _path: calls.append("apply-core"),
+    )
+    monkeypatch.setattr(
+        core_updater,
+        "_extract_package",
+        lambda *_args: calls.append("apply-dashboard"),
+    )
+
+    with pytest.raises(zipfile.BadZipFile):
+        await updater.update(version="v99.0.0")
+
+    assert calls == ["download-dashboard", "download-core"]
+
+
+@pytest.mark.asyncio
+async def test_astrbot_updater_ensure_dashboard_uses_compatible_managed_assets(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    updater = AstrBotUpdater()
+    data_dist = tmp_path / "data" / "dist"
+    data_dist.mkdir(parents=True)
+    bundled_dist = tmp_path / "bundled-dist"
+
+    monkeypatch.setattr(
+        core_updater,
+        "get_astrbot_data_path",
+        lambda: str(tmp_path / "data"),
+    )
+    monkeypatch.setattr(
+        core_updater,
+        "_get_bundled_dist_path",
+        lambda: bundled_dist,
+    )
+    monkeypatch.setattr(
+        core_updater,
+        "_is_dist_compatible",
+        lambda path, _version: path == data_dist,
+    )
+
+    assert await updater.ensure_dashboard() == data_dist
+
+
+@pytest.mark.asyncio
+async def test_astrbot_updater_ensure_dashboard_downloads_matching_assets(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    updater = AstrBotUpdater()
+    data_path = tmp_path / "data"
+    data_dist = data_path / "dist"
+    calls: list[dict] = []
+
+    async def fake_download_dashboard(**kwargs) -> None:
+        calls.append(kwargs)
+        data_dist.mkdir(parents=True)
+        (data_dist / "index.html").write_text("dashboard", encoding="utf-8")
+
+    monkeypatch.setattr(core_updater, "get_astrbot_data_path", lambda: str(data_path))
+    monkeypatch.setattr(
+        core_updater,
+        "_get_bundled_dist_path",
+        lambda: tmp_path / "missing-bundled-dist",
+    )
+    monkeypatch.setattr(
+        core_updater,
+        "_is_dist_compatible",
+        lambda path, _version: path == data_dist and (path / "index.html").is_file(),
+    )
+    monkeypatch.setattr(
+        core_updater,
+        "_should_use_bundled_dist",
+        lambda *_args: False,
+    )
+    monkeypatch.setattr(
+        core_updater,
+        "_download_package",
+        fake_download_dashboard,
+    )
+
+    assert await updater.ensure_dashboard() == data_dist
+    assert calls == [
+        {
+            "version": f"v{core_updater.VERSION}",
+            "allow_insecure_ssl_fallback": False,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_astrbot_updater_ensure_dashboard_keeps_usable_stale_assets_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    updater = AstrBotUpdater()
+    data_path = tmp_path / "data"
+    data_dist = data_path / "dist"
+    data_dist.mkdir(parents=True)
+    (data_dist / "index.html").write_text("stale", encoding="utf-8")
+
+    async def fail_download(**_kwargs) -> None:
+        raise RuntimeError("unavailable")
+
+    monkeypatch.setattr(core_updater, "get_astrbot_data_path", lambda: str(data_path))
+    monkeypatch.setattr(
+        core_updater,
+        "_get_bundled_dist_path",
+        lambda: tmp_path / "missing-bundled-dist",
+    )
+    monkeypatch.setattr(
+        core_updater,
+        "_is_dist_compatible",
+        lambda *_args: False,
+    )
+    monkeypatch.setattr(
+        core_updater,
+        "_should_use_bundled_dist",
+        lambda *_args: False,
+    )
+    monkeypatch.setattr(
+        core_updater,
+        "_read_dashboard_version",
+        lambda _path: "v0.0.1",
+    )
+    monkeypatch.setattr(
+        core_updater,
+        "_download_package",
+        fail_download,
+    )
+
+    assert await updater.ensure_dashboard() == data_dist
+
+
+@pytest.mark.asyncio
+async def test_astrbot_updater_prefers_hosted_core_package(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -482,7 +822,7 @@ async def test_astrbot_updator_prefers_hosted_core_package(
     monkeypatch.delenv("ASTRBOT_LAUNCHER", raising=False)
     monkeypatch.setenv("ASTRBOT_CORE_PACKAGE_BASE_URL", "https://cdn.example/core")
 
-    updator = AstrBotUpdator()
+    updater = AstrBotUpdater()
     calls: list[str] = []
 
     async def fake_fetch_release_info(url: str, latest: bool = True):  # noqa: ARG001
@@ -501,10 +841,10 @@ async def test_astrbot_updator_prefers_hosted_core_package(
         with zipfile.ZipFile(path, "w") as archive:
             archive.writestr("AstrBot-v99.0.0/README.md", "hosted-core")
 
-    monkeypatch.setattr(updator, "fetch_release_info", fake_fetch_release_info)
-    monkeypatch.setattr(updator, "_download_file", fake_download_file)
+    monkeypatch.setattr(updater, "_fetch_release_info", fake_fetch_release_info)
+    monkeypatch.setattr(updater, "_download_file", fake_download_file)
 
-    zip_path = await updator.download_update_package(
+    zip_path = await updater._download_core_package(
         latest=False,
         version="v99.0.0",
         path=tmp_path / "core.zip",
@@ -516,7 +856,7 @@ async def test_astrbot_updator_prefers_hosted_core_package(
 
 
 @pytest.mark.asyncio
-async def test_astrbot_updator_falls_back_when_hosted_core_package_fails(
+async def test_astrbot_updater_falls_back_when_hosted_core_package_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -524,7 +864,7 @@ async def test_astrbot_updator_falls_back_when_hosted_core_package_fails(
     monkeypatch.delenv("ASTRBOT_LAUNCHER", raising=False)
     monkeypatch.setenv("ASTRBOT_CORE_PACKAGE_BASE_URL", "https://cdn.example/core")
 
-    updator = AstrBotUpdator()
+    updater = AstrBotUpdater()
     calls: list[str] = []
 
     async def fake_fetch_release_info(url: str, latest: bool = True):  # noqa: ARG001
@@ -545,10 +885,10 @@ async def test_astrbot_updator_falls_back_when_hosted_core_package_fails(
             raise RuntimeError("404")
         Path(path).write_bytes(b"github-core")
 
-    monkeypatch.setattr(updator, "fetch_release_info", fake_fetch_release_info)
-    monkeypatch.setattr(updator, "_download_file", fake_download_file)
+    monkeypatch.setattr(updater, "_fetch_release_info", fake_fetch_release_info)
+    monkeypatch.setattr(updater, "_download_file", fake_download_file)
 
-    zip_path = await updator.download_update_package(
+    zip_path = await updater._download_core_package(
         latest=False,
         version="v99.0.0",
         path=tmp_path / "core.zip",
@@ -563,7 +903,7 @@ async def test_astrbot_updator_falls_back_when_hosted_core_package_fails(
 
 
 @pytest.mark.asyncio
-async def test_astrbot_updator_falls_back_when_hosted_core_package_is_not_zip(
+async def test_astrbot_updater_falls_back_when_hosted_core_package_is_not_zip(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -571,7 +911,7 @@ async def test_astrbot_updator_falls_back_when_hosted_core_package_is_not_zip(
     monkeypatch.delenv("ASTRBOT_LAUNCHER", raising=False)
     monkeypatch.setenv("ASTRBOT_CORE_PACKAGE_BASE_URL", "https://cdn.example/core")
 
-    updator = AstrBotUpdator()
+    updater = AstrBotUpdater()
     calls: list[str] = []
 
     async def fake_fetch_release_info(url: str, latest: bool = True):  # noqa: ARG001
@@ -594,10 +934,10 @@ async def test_astrbot_updator_falls_back_when_hosted_core_package_is_not_zip(
         with zipfile.ZipFile(path, "w") as archive:
             archive.writestr("AstrBot-v99.0.0/README.md", "github-core")
 
-    monkeypatch.setattr(updator, "fetch_release_info", fake_fetch_release_info)
-    monkeypatch.setattr(updator, "_download_file", fake_download_file)
+    monkeypatch.setattr(updater, "_fetch_release_info", fake_fetch_release_info)
+    monkeypatch.setattr(updater, "_download_file", fake_download_file)
 
-    zip_path = await updator.download_update_package(
+    zip_path = await updater._download_core_package(
         latest=False,
         version="v99.0.0",
         path=tmp_path / "core.zip",
@@ -636,12 +976,11 @@ async def test_download_dashboard_falls_back_when_hosted_package_is_not_zip(
         with zipfile.ZipFile(path, "w") as archive:
             archive.writestr("dist/index.html", "dashboard")
 
-    monkeypatch.setattr(io_utils, "download_file", fake_download_file)
+    monkeypatch.setattr(dashboard_assets, "download_file", fake_download_file)
 
     zip_path = tmp_path / "dashboard.zip"
-    await io_utils.download_dashboard(
+    await dashboard_assets._download_package(
         path=str(zip_path),
-        latest=False,
         version="v99.0.0",
         extract=False,
     )
@@ -658,7 +997,7 @@ async def test_fetch_release_info_uses_httpx_client_with_env_proxy_support(
     monkeypatch: pytest.MonkeyPatch,
     fake_async_client_state: _FakeAsyncClientState,
 ) -> None:
-    import astrbot.core.zip_updator as zip_updator_module
+    import astrbot.core.zip_updater as zip_updater_module
 
     fake_async_client_state.json_payload = [
         {
@@ -671,7 +1010,7 @@ async def test_fetch_release_info_uses_httpx_client_with_env_proxy_support(
     ]
 
     monkeypatch.setattr(
-        zip_updator_module,
+        zip_updater_module,
         "aiohttp",
         SimpleNamespace(
             ClientSession=lambda *args, **kwargs: (_ for _ in ()).throw(
@@ -683,13 +1022,13 @@ async def test_fetch_release_info_uses_httpx_client_with_env_proxy_support(
         raising=False,
     )
     monkeypatch.setattr(
-        zip_updator_module,
+        zip_updater_module,
         "httpx",
         _build_fake_httpx_module(fake_async_client_state),
         raising=False,
     )
 
-    release_info = await RepoZipUpdator().fetch_release_info(
+    release_info = await _RepoZipUpdater()._fetch_release_info(
         "https://api.soulter.top/releases"
     )
 
@@ -718,12 +1057,12 @@ async def test_download_from_repo_url_uses_httpx_stream_for_zip_download(
     tmp_path: Path,
     fake_async_client_state: _FakeAsyncClientState,
 ) -> None:
-    import astrbot.core.zip_updator as zip_updator_module
+    import astrbot.core.zip_updater as zip_updater_module
 
     fake_async_client_state.json_payload = {"default_branch": "trunk"}
     fake_async_client_state.stream_payload = b"zip-data"
     monkeypatch.setattr(
-        zip_updator_module,
+        zip_updater_module,
         "download_file",
         lambda *args, **kwargs: (_ for _ in ()).throw(
             AssertionError(
@@ -733,14 +1072,14 @@ async def test_download_from_repo_url_uses_httpx_stream_for_zip_download(
         raising=False,
     )
     monkeypatch.setattr(
-        zip_updator_module,
+        zip_updater_module,
         "httpx",
         _build_fake_httpx_module(fake_async_client_state),
         raising=False,
     )
 
     target_path = tmp_path / "AstrBot"
-    await RepoZipUpdator().download_from_repo_url(
+    await _RepoZipUpdater()._download_repository(
         str(target_path),
         "https://github.com/AstrBotDevs/AstrBot",
     )
@@ -764,24 +1103,26 @@ async def test_download_from_repo_url_uses_explicit_branch_without_default_branc
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    updator = RepoZipUpdator()
+    updater = _RepoZipUpdater()
     calls: list[str] = []
 
-    async def fail_fetch_github_default_branch(author: str, repo: str):  # noqa: ARG001
-        raise AssertionError("explicit branch should not fetch GitHub default branch")
+    async def fail_fetch_repository_default_branch(
+        repository,
+    ):  # noqa: ARG001
+        raise AssertionError("explicit branch should not fetch the default branch")
 
     async def fake_download_file(url: str, path: str):
         calls.append(url)
         Path(path).write_bytes(b"zip-data")
 
     monkeypatch.setattr(
-        updator,
-        "fetch_github_default_branch",
-        fail_fetch_github_default_branch,
+        updater,
+        "_fetch_repository_default_branch",
+        fail_fetch_repository_default_branch,
     )
-    monkeypatch.setattr(updator, "_download_file", fake_download_file)
+    monkeypatch.setattr(updater, "_download_file", fake_download_file)
 
-    await updator.download_from_repo_url(
+    await updater._download_repository(
         str(tmp_path / "AstrBot"),
         "https://github.com/AstrBotDevs/AstrBot/tree/dev",
         proxy="https://proxy.example/",
@@ -792,22 +1133,198 @@ async def test_download_from_repo_url_uses_explicit_branch_without_default_branc
     ]
 
 
+@pytest.mark.asyncio
+async def test_plugin_updater_shallow_clones_non_github_repository(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import astrbot.core.star.updater as plugin_updater_module
+
+    updater = _PluginUpdater()
+    updater.plugin_store_path = str(tmp_path)
+    clone_args: tuple[str, ...] = ()
+
+    class FakeGitProcess:
+        returncode = 0
+
+        async def communicate(self):
+            target = Path(clone_args[-1])
+            target.mkdir(parents=True)
+            (target / ".git").mkdir()
+            (target / "metadata.yaml").write_text(
+                "\n".join(
+                    [
+                        "name: demo_plugin",
+                        "desc: Demo plugin",
+                        "version: 1.0.0",
+                        "author: AstrBot Team",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            return b"", b""
+
+        def kill(self) -> None:
+            raise AssertionError("successful clone must not be killed")
+
+    async def fake_create_subprocess_exec(*args, **_kwargs):
+        nonlocal clone_args
+        clone_args = args
+        return FakeGitProcess()
+
+    monkeypatch.setattr(plugin_updater_module.shutil, "which", lambda _name: "/git")
+    monkeypatch.setattr(
+        plugin_updater_module.asyncio,
+        "create_subprocess_exec",
+        fake_create_subprocess_exec,
+    )
+
+    plugin_path = await updater.install("https://gitee.com/astrbot/demo-plugin.git")
+
+    assert plugin_path == str(tmp_path / "demo_plugin")
+    assert clone_args == (
+        "/git",
+        "clone",
+        "--depth",
+        "1",
+        "--single-branch",
+        "--no-tags",
+        "--",
+        "https://gitee.com/astrbot/demo-plugin.git",
+        str(tmp_path / "demo_plugin"),
+    )
+    assert not (tmp_path / "demo_plugin" / ".git").exists()
+
+
+@pytest.mark.asyncio
+async def test_plugin_updater_git_clone_requires_git(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import astrbot.core.star.updater as plugin_updater_module
+
+    updater = _PluginUpdater()
+    monkeypatch.setattr(plugin_updater_module.shutil, "which", lambda _name: None)
+
+    with pytest.raises(RuntimeError, match="未找到 git 命令"):
+        await updater._clone_repository(
+            "git@github.com:AstrBotDevs/demo.git",
+            tmp_path / "demo",
+        )
+
+
+@pytest.mark.asyncio
+async def test_plugin_updater_inspects_github_repository_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    updater = _PluginUpdater()
+    requested_urls: list[str] = []
+    source = SimpleNamespace(
+        raw_file_url=lambda filename: (
+            "https://raw.githubusercontent.com/AstrBotDevs/"
+            f"astrbot-plugin-demo/trunk/{filename}"
+        ),
+    )
+
+    async def fake_resolve_repository_source(repo_url: str):
+        assert repo_url == "https://github.com/AstrBotDevs/astrbot-plugin-demo"
+        return source
+
+    def handle_request(request: httpx.Request) -> httpx.Response:
+        requested_urls.append(str(request.url))
+        if request.url.path.endswith("metadata.yaml"):
+            return httpx.Response(404)
+        return httpx.Response(
+            200,
+            text="\n".join(
+                [
+                    "name: astrbot_plugin_demo",
+                    "description: Demo plugin",
+                    "version: 2.0.0",
+                    "author: AstrBotDevs",
+                ]
+            ),
+        )
+
+    monkeypatch.setattr(
+        updater,
+        "_resolve_repository_source",
+        fake_resolve_repository_source,
+    )
+    monkeypatch.setattr(
+        updater,
+        "_create_httpx_client",
+        lambda timeout=30.0: httpx.AsyncClient(
+            transport=httpx.MockTransport(handle_request),
+            timeout=timeout,
+        ),
+    )
+
+    result = await updater.inspect_repository(
+        "https://github.com/AstrBotDevs/astrbot-plugin-demo",
+        "https://proxy.example/",
+    )
+
+    assert result["name"] == "astrbot_plugin_demo"
+    assert result["desc"] == "Demo plugin"
+    assert requested_urls[-1] == (
+        "https://proxy.example/https://raw.githubusercontent.com/AstrBotDevs/"
+        "astrbot-plugin-demo/trunk/metadata.yml"
+    )
+
+
+@pytest.mark.asyncio
+async def test_plugin_updater_rejects_large_repository_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    updater = _PluginUpdater()
+    source = SimpleNamespace(
+        raw_file_url=lambda filename: f"https://example.com/{filename}",
+    )
+
+    async def fake_resolve_repository_source(repo_url: str):  # noqa: ARG001
+        return source
+
+    def handle_request(request: httpx.Request) -> httpx.Response:  # noqa: ARG001
+        return httpx.Response(
+            200,
+            headers={"Content-Length": str(1024 * 1024 + 1)},
+        )
+
+    monkeypatch.setattr(
+        updater,
+        "_resolve_repository_source",
+        fake_resolve_repository_source,
+    )
+    monkeypatch.setattr(
+        updater,
+        "_create_httpx_client",
+        lambda timeout=30.0: httpx.AsyncClient(
+            transport=httpx.MockTransport(handle_request),
+            timeout=timeout,
+        ),
+    )
+
+    with pytest.raises(ValueError, match="metadata.yaml 超过 1MB"):
+        await updater.inspect_repository("https://github.com/example/plugin")
+
+
 def test_create_httpx_client_uses_custom_verify_setting(
     monkeypatch: pytest.MonkeyPatch,
     fake_async_client_state: _FakeAsyncClientState,
 ) -> None:
-    import astrbot.core.zip_updator as zip_updator_module
+    import astrbot.core.zip_updater as zip_updater_module
 
     custom_verify = "/tmp/custom-ca.pem"
 
     monkeypatch.setattr(
-        zip_updator_module,
+        zip_updater_module,
         "httpx",
         _build_fake_httpx_module(fake_async_client_state),
         raising=False,
     )
 
-    RepoZipUpdator(verify=custom_verify)._create_httpx_client(timeout=45.0)
+    _RepoZipUpdater(verify=custom_verify)._create_httpx_client(timeout=45.0)
 
     assert fake_async_client_state.init_kwargs is not None
     assert fake_async_client_state.init_kwargs["follow_redirects"] is True
@@ -820,14 +1337,14 @@ def test_create_httpx_client_uses_custom_verify_setting(
 async def test_fetch_release_info_logs_status_code_and_truncated_body_on_http_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import astrbot.core.zip_updator as zip_updator_module
+    import astrbot.core.zip_updater as zip_updater_module
 
     url = "https://api.soulter.top/releases"
     body = "x" * 1005
     log_messages: list[str] = []
 
     monkeypatch.setattr(
-        RepoZipUpdator,
+        _RepoZipUpdater,
         "_create_httpx_client",
         staticmethod(
             lambda timeout=30.0: _FakeStatusErrorAsyncClient(  # noqa: ARG005
@@ -836,16 +1353,16 @@ async def test_fetch_release_info_logs_status_code_and_truncated_body_on_http_er
         ),
     )
     monkeypatch.setattr(
-        zip_updator_module.logger,
+        zip_updater_module.logger,
         "error",
         lambda message: log_messages.append(message),
     )
 
-    with pytest.raises(Exception, match="解析版本信息失败"):
-        await RepoZipUpdator().fetch_release_info(url)
+    with pytest.raises(Exception, match="Failed to parse release information"):
+        await _RepoZipUpdater()._fetch_release_info(url)
 
-    assert any("状态码: 502" in message for message in log_messages)
-    assert any("内容: " in message for message in log_messages)
+    assert any("status 502" in message for message in log_messages)
+    assert any("response: " in message for message in log_messages)
     assert any("...[truncated]" in message for message in log_messages)
 
 
@@ -855,7 +1372,7 @@ async def test_download_file_removes_partial_file_when_stream_fails(
     tmp_path: Path,
 ) -> None:
     monkeypatch.setattr(
-        RepoZipUpdator,
+        _RepoZipUpdater,
         "_create_httpx_client",
         staticmethod(
             lambda timeout=30.0: _FakeFailingStreamAsyncClient()  # noqa: ARG005
@@ -865,7 +1382,7 @@ async def test_download_file_removes_partial_file_when_stream_fails(
     target_path = tmp_path / "partial.zip"
 
     with pytest.raises(RuntimeError, match="stream interrupted"):
-        await RepoZipUpdator()._download_file(
+        await _RepoZipUpdater()._download_file(
             "https://example.com/archive.zip",
             str(target_path),
         )
@@ -878,27 +1395,27 @@ async def test_download_file_logs_url_and_target_path_on_failure(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    import astrbot.core.zip_updator as zip_updator_module
+    import astrbot.core.zip_updater as zip_updater_module
 
     url = "https://example.com/archive.zip"
     target_path = tmp_path / "logged-partial.zip"
     log_messages: list[str] = []
 
     monkeypatch.setattr(
-        RepoZipUpdator,
+        _RepoZipUpdater,
         "_create_httpx_client",
         staticmethod(
             lambda timeout=30.0: _FakeFailingStreamAsyncClient()  # noqa: ARG005
         ),
     )
     monkeypatch.setattr(
-        zip_updator_module.logger,
+        zip_updater_module.logger,
         "error",
         lambda message: log_messages.append(message),
     )
 
     with pytest.raises(RuntimeError, match="stream interrupted"):
-        await RepoZipUpdator()._download_file(url, str(target_path))
+        await _RepoZipUpdater()._download_file(url, str(target_path))
 
     assert any(url in message for message in log_messages)
     assert any(str(target_path) in message for message in log_messages)
@@ -917,14 +1434,14 @@ def test_repo_unzip_file_normalizes_windows_extended_length_paths(
     monkeypatch: pytest.MonkeyPatch,
     archive_root: str,
 ) -> None:
-    import astrbot.core.zip_updator as zip_updator_module
+    import astrbot.core.zip_updater as zip_updater_module
 
     target_dir = r"\\?\C:\Users\admin\AppData\Local\AstrBot\backend\app"
     captured = _exercise_unzip_file_windows_path_normalization(
         monkeypatch,
-        updater_module=zip_updator_module,
-        zip_updator_module=zip_updator_module,
-        updater=RepoZipUpdator(),
+        updater_module=zip_updater_module,
+        zip_updater_module=zip_updater_module,
+        updater=_RepoZipUpdater(),
         target_dir=target_dir,
         archive_root=archive_root,
         logger_method="debug",
@@ -948,15 +1465,15 @@ def test_plugin_unzip_file_normalizes_windows_extended_length_paths(
     monkeypatch: pytest.MonkeyPatch,
     archive_root: str,
 ) -> None:
-    import astrbot.core.star.updator as plugin_updator_module
-    import astrbot.core.zip_updator as zip_updator_module
+    import astrbot.core.star.updater as plugin_updater_module
+    import astrbot.core.zip_updater as zip_updater_module
 
     target_dir = r"\\?\C:\Users\admin\AppData\Local\AstrBot\data\plugins\demo"
     captured = _exercise_unzip_file_windows_path_normalization(
         monkeypatch,
-        updater_module=plugin_updator_module,
-        zip_updator_module=zip_updator_module,
-        updater=PluginUpdator.__new__(PluginUpdator),
+        updater_module=plugin_updater_module,
+        zip_updater_module=zip_updater_module,
+        updater=_PluginUpdater.__new__(_PluginUpdater),
         target_dir=target_dir,
         archive_root=archive_root,
         logger_method="info",
@@ -979,28 +1496,32 @@ def test_repo_unzip_file_rejects_archive_roots_outside_target_dir(
     archive_root: str,
     expected_error: str,
 ) -> None:
-    import astrbot.core.zip_updator as zip_updator_module
+    import astrbot.core.zip_updater as zip_updater_module
 
     monkeypatch.setattr(
-        zip_updator_module.os, "makedirs", lambda path, exist_ok=True: None
+        zip_updater_module.os, "makedirs", lambda path, exist_ok=True: None
     )
-    monkeypatch.setattr(zip_updator_module.os.path, "join", ntpath.join)
-    monkeypatch.setattr(zip_updator_module.os.path, "normpath", ntpath.normpath)
-    monkeypatch.setattr(zip_updator_module.os.path, "commonpath", ntpath.commonpath)
+    monkeypatch.setattr(zip_updater_module, "ensure_dir", lambda path: None)
+    monkeypatch.setattr(zip_updater_module.os.path, "join", ntpath.join)
+    monkeypatch.setattr(zip_updater_module.os.path, "normpath", ntpath.normpath)
+    monkeypatch.setattr(zip_updater_module.os.path, "commonpath", ntpath.commonpath)
     monkeypatch.setattr(
-        zip_updator_module.zipfile,
+        zip_updater_module.zipfile,
         "ZipFile",
         lambda path, mode: _FakeZipArchive(_build_fake_archive_entries(archive_root)),
     )
 
     with pytest.raises(ValueError, match=expected_error):
-        RepoZipUpdator().unzip_file("temp.zip", r"\\?\C:\Users\admin\target")
+        _RepoZipUpdater()._extract_archive(
+            "temp.zip",
+            r"\\?\C:\Users\admin\target",
+        )
 
 
 def test_repo_unzip_file_handles_archives_without_explicit_root_dir_entry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import astrbot.core.zip_updator as zip_updator_module
+    import astrbot.core.zip_updater as zip_updater_module
 
     target_dir = r"\\?\C:\Users\admin\AppData\Local\AstrBot\backend\app"
     archive_root = "repo-root"
@@ -1018,40 +1539,41 @@ def test_repo_unzip_file_handles_archives_without_explicit_root_dir_entry(
         return ["README.md"]
 
     monkeypatch.setattr(
-        zip_updator_module.os, "makedirs", lambda path, exist_ok=True: None
+        zip_updater_module.os, "makedirs", lambda path, exist_ok=True: None
     )
-    monkeypatch.setattr(zip_updator_module.os.path, "join", ntpath.join)
-    monkeypatch.setattr(zip_updator_module.os.path, "normpath", ntpath.normpath)
-    monkeypatch.setattr(zip_updator_module.os.path, "commonpath", ntpath.commonpath)
-    monkeypatch.setattr(zip_updator_module.os.path, "isdir", lambda path: False)
-    monkeypatch.setattr(zip_updator_module.os.path, "exists", lambda path: False)
+    monkeypatch.setattr(zip_updater_module, "ensure_dir", lambda path: None)
+    monkeypatch.setattr(zip_updater_module.os.path, "join", ntpath.join)
+    monkeypatch.setattr(zip_updater_module.os.path, "normpath", ntpath.normpath)
+    monkeypatch.setattr(zip_updater_module.os.path, "commonpath", ntpath.commonpath)
+    monkeypatch.setattr(zip_updater_module.os.path, "isdir", lambda path: False)
+    monkeypatch.setattr(zip_updater_module.os.path, "exists", lambda path: False)
     monkeypatch.setattr(
-        zip_updator_module.zipfile,
+        zip_updater_module.zipfile,
         "ZipFile",
         lambda path, mode: _FakeZipArchive(
             _build_fake_archive_entries_with_first_file(archive_root)
         ),
     )
-    monkeypatch.setattr(zip_updator_module.logger, "debug", lambda message: None)
-    monkeypatch.setattr(zip_updator_module.logger, "warning", lambda message: None)
-    monkeypatch.setattr(zip_updator_module.os, "listdir", fake_listdir)
+    monkeypatch.setattr(zip_updater_module.logger, "debug", lambda message: None)
+    monkeypatch.setattr(zip_updater_module.logger, "warning", lambda message: None)
+    monkeypatch.setattr(zip_updater_module.os, "listdir", fake_listdir)
     monkeypatch.setattr(
-        zip_updator_module.shutil,
+        zip_updater_module.shutil,
         "move",
         lambda src, dst: captured.__setitem__("move", (src, dst)),
     )
     monkeypatch.setattr(
-        zip_updator_module.shutil,
+        zip_updater_module.shutil,
         "rmtree",
         lambda path, onerror=None: captured.__setitem__("cleanup", path),
     )
     monkeypatch.setattr(
-        zip_updator_module.os,
+        zip_updater_module.os,
         "remove",
         lambda path: captured.__setitem__("removed", path),
     )
 
-    RepoZipUpdator().unzip_file("temp.zip", target_dir)
+    _RepoZipUpdater()._extract_archive("temp.zip", target_dir)
 
     assert captured["listdir"] == expected_root
     assert captured["move"] == (expected_file, target_dir)

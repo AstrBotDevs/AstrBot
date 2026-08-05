@@ -1,5 +1,6 @@
 import os
 from typing import Any
+from urllib.parse import urlsplit
 
 import aiohttp
 
@@ -35,6 +36,10 @@ class BailianRerankProvider(RerankProvider):
     """阿里云百炼文本重排序适配器."""
 
     QWEN3_RERANK_MODEL = "qwen3-rerank"
+    COMPATIBLE_API_PATH_SUFFIXES = (
+        "/compatible-api/v1/reranks",
+        "/compatible-mode/v1/reranks",
+    )
 
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config, provider_settings)
@@ -73,6 +78,10 @@ class BailianRerankProvider(RerankProvider):
 
         logger.info(f"AstrBot 百炼 Rerank 初始化完成。模型: {self.model}")
 
+    def _uses_compatible_api(self) -> bool:
+        base_url_path = urlsplit(self.base_url).path.rstrip("/")
+        return base_url_path.endswith(self.COMPATIBLE_API_PATH_SUFFIXES)
+
     def _build_payload(
         self, query: str, documents: list[str], top_n: int | None
     ) -> dict:
@@ -88,8 +97,9 @@ class BailianRerankProvider(RerankProvider):
         """
         normalized_model = self.model.strip().lower()
         normalized_top_n = top_n if top_n is not None and top_n > 0 else None
+        is_compatible_api = self._uses_compatible_api()
 
-        if normalized_model == self.QWEN3_RERANK_MODEL:
+        if normalized_model == self.QWEN3_RERANK_MODEL and is_compatible_api:
             payload = {
                 "model": self.model,
                 "query": query,
@@ -112,6 +122,12 @@ class BailianRerankProvider(RerankProvider):
             for k, v in [
                 ("top_n", normalized_top_n),
                 ("return_documents", True if self.return_documents else None),
+                (
+                    "instruct",
+                    self.instruct
+                    if self.instruct and normalized_model == self.QWEN3_RERANK_MODEL
+                    else None,
+                ),
             ]
             if v is not None
         }
@@ -135,7 +151,7 @@ class BailianRerankProvider(RerankProvider):
             BailianAPIError: API返回错误
             KeyError: 结果缺少必要字段
         """
-        is_compatible_api = "compatible-api" in self.base_url
+        is_compatible_api = self._uses_compatible_api()
 
         if is_compatible_api:
             code = data.get("code")

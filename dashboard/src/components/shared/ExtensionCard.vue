@@ -68,7 +68,7 @@ const hasKnownInstallSource = computed(() => {
   return Boolean(
     source &&
       source.implicit !== true &&
-      ["market", "github"].includes(installMethod),
+      ["market", "repository"].includes(installMethod),
   );
 });
 
@@ -252,6 +252,24 @@ const openWebui = () => {
               >
                 {{ tm("status.system") }}
               </v-chip>
+              <v-chip
+                v-if="!marketMode"
+                :color="extension.activated ? 'success' : 'default'"
+                :prepend-icon="
+                  extension.activated
+                    ? 'mdi-check-circle'
+                    : 'mdi-close-circle-outline'
+                "
+                size="x-small"
+                variant="tonal"
+                class="ml-1"
+              >
+                {{
+                  extension.activated
+                    ? tm("status.loaded")
+                    : tm("status.stopped")
+                }}
+              </v-chip>
               <v-tooltip
                 location="top"
                 v-if="extension?.has_update && !marketMode"
@@ -284,6 +302,11 @@ const openWebui = () => {
                     >
                       <v-switch
                         :model-value="extension.activated"
+                        :aria-label="
+                          extension.activated
+                            ? tm('buttons.stop')
+                            : tm('buttons.load')
+                        "
                         color="success"
                         density="compact"
                         hide-details
@@ -295,8 +318,8 @@ const openWebui = () => {
                 </template>
                 <span>{{
                   extension.activated
-                    ? tm("buttons.disable")
-                    : tm("buttons.enable")
+                    ? tm("buttons.stop")
+                    : tm("buttons.load")
                 }}</span>
               </v-tooltip>
             </template>

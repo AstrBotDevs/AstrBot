@@ -530,7 +530,12 @@ const openExternal = (url) => {
 };
 
 const goBack = () => {
-  router.push({ name: "Extensions", hash: `#${detailSourceTab.value}` });
+  router.push({
+    name:
+      detailSourceTab.value === "market"
+        ? "ExtensionMarketplace"
+        : "Extensions",
+  });
 };
 
 const renderMarkdown = (source) => {
@@ -1035,7 +1040,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .plugin-detail-page {
   margin: 0 auto;
-  max-width: 1040px;
+  max-width: 1200px;
   padding: 16px 24px 32px;
   width: 100%;
 }

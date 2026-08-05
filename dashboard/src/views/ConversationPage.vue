@@ -37,7 +37,7 @@
                         </v-col>
                     </v-row>
                     <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="fetchConversations"
-                        :loading="loading" size="small" class="mr-2">
+                        :loading="listLoading" size="small" class="mr-2">
                         {{ tm('history.refresh') }}
                     </v-btn>
                     <v-btn 
@@ -46,7 +46,7 @@
                         prepend-icon="mdi-download"
                         variant="tonal" 
                         @click="exportConversations" 
-                        :disabled="loading"
+                        :disabled="actionLoading"
                         size="small"
                         class="mr-2">
                         {{ tm('batch.exportSelected', { count: selectedItems.length }) }}
@@ -57,7 +57,7 @@
                         prepend-icon="mdi-delete"
                         variant="tonal" 
                         @click="confirmBatchDelete" 
-                        :disabled="loading"
+                        :disabled="actionLoading"
                         size="small">
                         {{ tm('batch.deleteSelected', { count: selectedItems.length }) }}
                     </v-btn>
@@ -67,10 +67,20 @@
 
                 <v-card-text class="pa-0">
                     <v-data-table v-model="selectedItems" :headers="tableHeaders" :items="conversations"
-                        :loading="loading" style="font-size: 12px;" density="comfortable" hide-default-footer
+                        :loading="listLoading" style="font-size: 12px;" density="comfortable" hide-default-footer
                         class="elevation-0" :items-per-page="pagination.page_size"
                         :items-per-page-options="pageSizeOptions" show-select return-object
-                        :disabled="loading" @update:options="handleTableOptions">
+                        @update:options="handleTableOptions">
+                        <template v-slot:top v-if="listLoadState === 'error' && conversations.length">
+                            <v-alert type="error" variant="tonal" density="compact" class="ma-3" closable>
+                                {{ tm('messages.fetchError') }}
+                                <template v-slot:append>
+                                    <v-btn size="small" variant="text" @click="fetchConversations">
+                                        {{ tm('history.refresh') }}
+                                    </v-btn>
+                                </template>
+                            </v-alert>
+                        </template>
                         <template v-slot:header.umo_source>
                             <div class="umo-header-cell">
                                 <span>{{ tm('table.headers.umo') }}</span>
@@ -104,7 +114,7 @@
                                         :ripple="false"
                                         class="conversation-inline-edit"
                                         @click.stop="editConversation(item)"
-                                        :disabled="loading"
+                                        :disabled="actionLoading"
                                     >
                                         <v-icon size="14">mdi-pencil</v-icon>
                                     </v-btn>
@@ -160,11 +170,11 @@
                         <template v-slot:item.actions="{ item }">
                             <div class="actions-wrapper">
                                 <v-btn icon variant="plain" size="x-small" class="action-button"
-                                    @click="viewConversation(item)" :disabled="loading">
+                                    @click="viewConversation(item)" :disabled="actionLoading">
                                     <v-icon>mdi-eye</v-icon>
                                 </v-btn>
                                 <v-btn icon color="error" variant="plain" size="x-small" class="action-button"
-                                    @click="confirmDeleteConversation(item)" :disabled="loading">
+                                    @click="confirmDeleteConversation(item)" :disabled="actionLoading">
                                     <v-icon>mdi-delete</v-icon>
                                 </v-btn>
                             </div>
@@ -172,8 +182,20 @@
 
                         <template v-slot:no-data>
                             <div class="d-flex flex-column align-center py-6">
-                                <v-icon size="64" color="grey lighten-1">mdi-chat-remove</v-icon>
-                                <span class="text-subtitle-1 text-disabled mt-3">{{ tm('status.noData') }}</span>
+                                <template v-if="listLoadState === 'loading'">
+                                    <v-progress-circular indeterminate color="primary" />
+                                </template>
+                                <template v-else-if="listLoadState === 'empty'">
+                                    <v-icon size="64" color="grey lighten-1">mdi-chat-remove</v-icon>
+                                    <span class="text-subtitle-1 text-disabled mt-3">{{ tm('status.noData') }}</span>
+                                </template>
+                                <template v-else-if="listLoadState === 'error'">
+                                    <v-icon size="64" color="error">mdi-alert-circle-outline</v-icon>
+                                    <span class="text-subtitle-1 text-disabled mt-3">{{ tm('messages.fetchError') }}</span>
+                                    <v-btn class="mt-3" size="small" variant="tonal" @click="fetchConversations">
+                                        {{ tm('history.refresh') }}
+                                    </v-btn>
+                                </template>
                             </div>
                         </template>
                     </v-data-table>
@@ -186,7 +208,7 @@
                                 <span class="text-caption mr-2">{{ tm('pagination.itemsPerPage') }}:</span>
                                 <v-select v-model="pagination.page_size" :items="pageSizeOptions" variant="outlined"
                                     density="compact" hide-details style="max-width: 100px;"
-                                    :disabled="loading" @update:model-value="onPageSizeChange"></v-select>
+                                    @update:model-value="onPageSizeChange"></v-select>
                             </div>
                             <div class="text-caption ml-4">
                                 {{ tm('pagination.showingItems', {
@@ -196,7 +218,7 @@
                                 }) }}
                             </div>
                         </div>
-                        <v-pagination v-model="pagination.page" :length="pagination.total_pages" :disabled="loading"
+                        <v-pagination v-model="pagination.page" :length="pagination.total_pages"
                             @update:model-value="fetchConversations" rounded="circle" :total-visible="7"></v-pagination>
                     </div>
                 </v-card-text>
@@ -227,20 +249,20 @@
                     </div>
                 </v-card-title>
 
-                <v-card-text>
-                    <div class="mb-4 d-flex align-center">
-                        <v-btn color="secondary" variant="tonal" size="small" class="mr-2"
-                            @click="isEditingHistory = !isEditingHistory">
-                            <v-icon class="mr-1">{{ isEditingHistory ? 'mdi-eye' : 'mdi-pencil' }}</v-icon>
-                            {{ isEditingHistory ? tm('dialogs.view.previewMode') : tm('dialogs.view.editMode') }}
-                        </v-btn>
-                        <v-btn v-if="isEditingHistory" color="success" variant="tonal" size="small"
-                            :loading="savingHistory" @click="saveHistoryChanges">
-                            <v-icon class="mr-1">mdi-content-save</v-icon>
-                            {{ tm('dialogs.view.saveChanges') }}
-                        </v-btn>
-                    </div>
+                <div class="pl-6 pr-4 pt-4 pb-2 d-flex align-center">
+                    <v-btn color="secondary" variant="tonal" size="small" class="mr-2"
+                        @click="isEditingHistory = !isEditingHistory">
+                        <v-icon class="mr-1">{{ isEditingHistory ? 'mdi-eye' : 'mdi-pencil' }}</v-icon>
+                        {{ isEditingHistory ? tm('dialogs.view.previewMode') : tm('dialogs.view.editMode') }}
+                    </v-btn>
+                    <v-btn v-if="isEditingHistory" color="success" variant="tonal" size="small"
+                        :loading="savingHistory" @click="saveHistoryChanges">
+                        <v-icon class="mr-1">mdi-content-save</v-icon>
+                        {{ tm('dialogs.view.saveChanges') }}
+                    </v-btn>
+                </div>
 
+                <v-card-text>
                     <!-- 编辑模式 - Monaco编辑器 -->
                     <div v-if="isEditingHistory" class="monaco-editor-container">
                         <VueMonacoEditor v-model:value="editedHistory" theme="vs-dark" language="json" :options="{
@@ -254,9 +276,7 @@
                     </div>
 
                     <!-- 预览模式 - 聊天界面 -->
-                    <div v-else class="conversation-messages-container" style="background-color: var(--v-theme-surface);"
-                        ref="messagesContainer"
-                        @wheel.prevent="onContainerWheel">
+                    <div v-else class="conversation-messages-container" style="background-color: var(--v-theme-surface);">
                         <!-- 空对话提示 -->
                         <div v-if="conversationHistory.length === 0" class="text-center py-5">
                             <v-icon size="48" color="grey">mdi-chat-remove</v-icon>
@@ -270,7 +290,7 @@
 
                 <v-card-actions class="pa-4">
                     <v-spacer></v-spacer>
-                    <v-btn variant="text" @click="closeHistoryDialog">
+                    <v-btn variant="text" @click="closeHistoryDialog" :disabled="actionLoading">
                         {{ tm('dialogs.view.close') }}
                     </v-btn>
                 </v-card-actions>
@@ -297,10 +317,10 @@
 
                 <v-card-actions class="pa-4">
                     <v-spacer></v-spacer>
-                    <v-btn variant="text" @click="dialogEdit = false" :disabled="loading">
+                    <v-btn variant="text" @click="dialogEdit = false" :disabled="actionLoading">
                         {{ tm('dialogs.edit.cancel') }}
                     </v-btn>
-                    <v-btn color="primary" variant="tonal" @click="saveConversation" :loading="loading">
+                    <v-btn color="primary" variant="tonal" @click="saveConversation" :loading="actionLoading">
                         {{ tm('dialogs.edit.save') }}
                     </v-btn>
                 </v-card-actions>
@@ -324,10 +344,10 @@
 
                 <v-card-actions class="pa-4">
                     <v-spacer></v-spacer>
-                    <v-btn variant="text" @click="dialogDelete = false" :disabled="loading">
+                    <v-btn variant="text" @click="dialogDelete = false" :disabled="actionLoading">
                         {{ tm('dialogs.delete.cancel') }}
                     </v-btn>
-                    <v-btn color="error" variant="tonal" @click="deleteConversation" :loading="loading">
+                    <v-btn color="error" variant="tonal" @click="deleteConversation" :loading="actionLoading">
                         {{ tm('dialogs.delete.confirm') }}
                     </v-btn>
                 </v-card-actions>
@@ -349,7 +369,7 @@
                     <div v-if="selectedItems.length > 0" class="mb-3">
                         <v-chip v-for="(item, index) in selectedItems.slice(0, 5)" :key="`${item.user_id}-${item.cid}`"
                             size="small" class="mr-1 mb-1" closable @click:close="removeFromSelection(item)"
-                            :disabled="loading">
+                            :disabled="actionLoading">
                             {{ item.title || tm('status.noTitle') }}
                         </v-chip>
                         <v-chip v-if="selectedItems.length > 5" size="small" class="mr-1 mb-1">
@@ -366,10 +386,10 @@
 
                 <v-card-actions class="pa-4">
                     <v-spacer></v-spacer>
-                    <v-btn variant="text" @click="dialogBatchDelete = false" :disabled="loading">
+                    <v-btn variant="text" @click="dialogBatchDelete = false" :disabled="actionLoading">
                         {{ tm('dialogs.batchDelete.cancel') }}
                     </v-btn>
-                    <v-btn color="error" variant="tonal" @click="batchDeleteConversations" :loading="loading">
+                    <v-btn color="error" variant="tonal" @click="batchDeleteConversations" :loading="actionLoading">
                         {{ tm('dialogs.batchDelete.confirm') }}
                     </v-btn>
                 </v-card-actions>
@@ -386,6 +406,7 @@
 <script>
 import { isCancel } from 'axios';
 import { debounce } from 'lodash';
+import { markRaw } from 'vue';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import { conversationApi } from '@/api/v1';
 import { useCommonStore } from '@/stores/common';
@@ -465,7 +486,11 @@ export default {
             valid: true,
 
             // 状态控制
-            loading: false,
+            listLoading: false,
+            listLoadState: 'idle',
+            listAbortController: null,
+            listRequestId: 0,
+            actionLoading: false,
             showMessage: false,
             message: '',
             messageType: 'success',
@@ -484,12 +509,15 @@ export default {
     watch: {
         // 监听筛选条件变化，使用防抖处理
         platformFilter() {
+            this.invalidateConversationListRequest();
             this.debouncedApplyFilters();
         },
         messageTypeFilter() {
+            this.invalidateConversationListRequest();
             this.debouncedApplyFilters();
         },
         search() {
+            this.invalidateConversationListRequest();
             this.debouncedApplyFilters();
         }
     },
@@ -500,6 +528,12 @@ export default {
             this.pagination.page = 1;
             this.fetchConversations();
         }, 300);
+    },
+
+    beforeUnmount() {
+        this.debouncedApplyFilters?.cancel();
+        this.listRequestId += 1;
+        this.listAbortController?.abort();
     },
 
     computed: {
@@ -639,6 +673,14 @@ export default {
             }
         },
 
+        invalidateConversationListRequest() {
+            this.listRequestId += 1;
+            this.listAbortController?.abort();
+            this.listAbortController = null;
+            this.listLoading = true;
+            this.listLoadState = 'loading';
+        },
+
         // 从会话ID解析平台和消息类型信息
         parseSessionId(userId) {
             if (!userId) return { platform: 'default', messageType: 'default', sessionId: '' };
@@ -725,102 +767,103 @@ export default {
         },
 
         // 获取对话列表
-        fetchConversations: (() => {
-            let controller = new AbortController();
+        async fetchConversations() {
+            this.debouncedApplyFilters?.cancel();
+            this.listAbortController?.abort();
+            const controller = new AbortController();
+            const requestId = ++this.listRequestId;
+            const filtersSnapshot = {
+                platforms: this.platformFilter.map(item =>
+                    typeof item === 'object' ? item.value : item
+                ),
+                messageTypes: [...this.messageTypeFilter],
+                search: this.search
+            };
+            this.listAbortController = markRaw(controller);
+            this.listLoading = true;
+            this.listLoadState = 'loading';
 
-            return async function () {
-                // 新请求前停止之前的请求
-                controller?.abort()
-                controller = new AbortController();
+            try {
+                const params = {
+                    page: this.pagination.page,
+                    page_size: this.pagination.page_size
+                };
 
-                this.loading = true;
-                try {
-                    // 准备请求参数，包含分页和筛选条件
-                    const params = {
-                        page: this.pagination.page,
-                        page_size: this.pagination.page_size
+                if (filtersSnapshot.platforms.length > 0) {
+                    params.platforms = filtersSnapshot.platforms.join(',');
+                }
+
+                if (filtersSnapshot.messageTypes.length > 0) {
+                    params.message_types = filtersSnapshot.messageTypes.join(',');
+                }
+
+                const search = filtersSnapshot.search.trim();
+                if (search) {
+                    params.search = search;
+                }
+
+                params.exclude_ids = 'astrbot';
+                params.exclude_platforms = 'webchat';
+                params.include_history = false;
+
+                const response = await conversationApi.list(params, {
+                    signal: controller.signal,
+                });
+
+                if (requestId !== this.listRequestId) return;
+                if (response.data.status !== "ok") {
+                    throw new Error(response.data.message || this.tm('messages.fetchError'));
+                }
+
+                const data = response.data.data;
+                if (!data || !Array.isArray(data.conversations)) {
+                    throw new Error(this.tm('messages.fetchError'));
+                }
+
+                this.conversations = data.conversations.map(conv => {
+                    const umoInfo = this.getConversationUmoInfo(conv);
+                    conv.sessionInfo = {
+                        platform: umoInfo.platform,
+                        messageType: umoInfo.message_type,
+                        sessionId: umoInfo.session_id
                     };
+                    return conv;
+                });
 
-                    // 添加筛选条件 - 处理combobox的混合数据格式
-                    if (this.platformFilter.length > 0) {
-                        const platforms = this.platformFilter.map(item =>
-                            typeof item === 'object' ? item.value : item
-                        );
-                        params.platforms = platforms.join(',');
+                if (data.pagination) {
+                    this.pagination = {
+                        page: data.pagination.page || 1,
+                        page_size: data.pagination.page_size || 20,
+                        total: data.pagination.total || 0,
+                        total_pages: data.pagination.total_pages || 1
+                    };
+                }
+                this.lastAppliedFilters = filtersSnapshot;
+                this.listLoadState = this.conversations.length ? 'success' : 'empty';
+            } catch (error) {
+                if (
+                    requestId !== this.listRequestId ||
+                    isCancel(error) ||
+                    controller.signal.aborted
+                ) return;
+
+                console.error('获取对话列表出错:', error);
+                this.listLoadState = 'error';
+                this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.fetchError'));
+            } finally {
+                if (requestId === this.listRequestId) {
+                    this.listLoading = false;
+                    if (this.listAbortController === controller) {
+                        this.listAbortController = null;
                     }
-
-                    if (this.messageTypeFilter.length > 0) {
-                        params.message_types = this.messageTypeFilter.join(',');
-                    }
-
-                    if (this.search) {
-                        params.search = this.search.trim();
-                    }
-
-                    // 添加排除条件
-                    params.exclude_ids = 'astrbot';
-                    params.exclude_platforms = 'webchat';
-
-                    const response = await conversationApi.list(params, {
-                        signal: controller.signal,
-                    });
-
-                    this.lastAppliedFilters = { ...this.currentFilters }; // 记录已应用的筛选条件
-
-                    if (response.data.status === "ok") {
-                        const data = response.data.data;
-
-                        if (!data || !data.conversations) {
-                            console.error('API 返回数据格式不符合预期:', data);
-                            this.showErrorMessage(this.tm('messages.fetchError'));
-                            return;
-                        }
-
-                        // 处理会话数据，解析sessionId
-                        this.conversations = (data.conversations || []).map(conv => {
-                            // 为每个会话添加会话信息
-                            const umoInfo = this.getConversationUmoInfo(conv);
-                            conv.sessionInfo = {
-                                platform: umoInfo.platform,
-                                messageType: umoInfo.message_type,
-                                sessionId: umoInfo.session_id
-                            };
-                            return conv;
-                        });
-
-                        // 更新分页信息
-                        if (data.pagination) {
-                            this.pagination = {
-                                page: data.pagination.page || 1,
-                                page_size: data.pagination.page_size || 20,
-                                total: data.pagination.total || 0,
-                                total_pages: data.pagination.total_pages || 1
-                            };
-                        } else {
-                            console.warn('API 响应中没有分页信息');
-                        }
-                    } else {
-                        this.showErrorMessage(response.data.message || this.tm('messages.fetchError'));
-                    }
-                } catch (error) {
-                    if (isCancel(error)) return;
-                    
-                    console.error('获取对话列表出错:', error);
-                    if (error.response) {
-                        console.error('错误响应数据:', error.response.data);
-                        console.error('错误状态码:', error.response.status);
-                    }
-                    this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.fetchError'));
-                } finally {
-                    this.loading = false;
                 }
             }
-        })(),
+        },
 
         // 查看对话详情
         async viewConversation(item) {
             this.selectedConversation = item;
-            this.loading = true;
+            this.actionLoading = true;
             this.isEditingHistory = false;
 
             try {
@@ -855,7 +898,7 @@ export default {
                 console.error('获取对话详情出错:', error);
                 this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.historyError'));
             } finally {
-                this.loading = false;
+                this.actionLoading = false;
             }
         },
 
@@ -920,7 +963,7 @@ export default {
         async saveConversation() {
             if (!this.$refs.form.validate()) return;
 
-            this.loading = true;
+            this.actionLoading = true;
             try {
                 const response = await conversationApi.update(
                     this.editedItem.user_id,
@@ -950,7 +993,7 @@ export default {
             } catch (error) {
                 this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.saveError'));
             } finally {
-                this.loading = false;
+                this.actionLoading = false;
             }
         },
 
@@ -962,7 +1005,7 @@ export default {
 
         // 删除对话
         async deleteConversation() {
-            this.loading = true;
+            this.actionLoading = true;
             try {
                 const response = await conversationApi.delete(
                     this.selectedConversation.user_id,
@@ -979,13 +1022,14 @@ export default {
 
                     this.dialogDelete = false;
                     this.showSuccessMessage(this.tm('messages.deleteSuccess'));
+                    this.fetchConversations();
                 } else {
                     this.showErrorMessage(response.data.message || this.tm('messages.deleteError'));
                 }
             } catch (error) {
                 this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.deleteError'));
             } finally {
-                this.loading = false;
+                this.actionLoading = false;
                 this.selectedItems = this.selectedItems.filter(item =>
                     !(item.user_id === this.selectedConversation.user_id && item.cid === this.selectedConversation.cid)
                 );
@@ -1025,7 +1069,7 @@ export default {
                 return;
             }
 
-            this.loading = true;
+            this.actionLoading = true;
             try {
                 // 准备批量删除的数据
                 const conversations = this.selectedItems.map(item => ({
@@ -1067,7 +1111,7 @@ export default {
                 console.error('批量删除对话出错:', error);
                 this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.batchDeleteError'));
             } finally {
-                this.loading = false;
+                this.actionLoading = false;
             }
         },
 
@@ -1078,7 +1122,7 @@ export default {
                 return;
             }
 
-            this.loading = true;
+            this.actionLoading = true;
             try {
                 // 准备导出的数据
                 const conversations = this.selectedItems.map(item => ({
@@ -1112,7 +1156,7 @@ export default {
                 console.error(this.tm('messages.exportError'), error);
                 this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.exportError'));
             } finally {
-                this.loading = false;
+                this.actionLoading = false;
             }
         },
 
@@ -1201,13 +1245,6 @@ export default {
             return parts;
         },
 
-        // Manually handle wheel scrolling inside the dialog preview container.
-        onContainerWheel(event) {
-            const el = this.$refs.messagesContainer;
-            if (!el) return;
-            el.scrollTop += event.deltaY;
-        },
-
         // 从内容中提取文本（保留用于其他用途）
         extractTextFromContent(content) {
             if (typeof content === 'string') {
@@ -1256,8 +1293,6 @@ export default {
 
 /* 聊天消息容器样式 */
 .conversation-messages-container {
-    max-height: 500px;
-    overflow-y: auto;
     padding: 8px;
     border-radius: 8px;
     background-color: #f9f9f9;

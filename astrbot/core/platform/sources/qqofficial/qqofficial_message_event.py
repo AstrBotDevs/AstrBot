@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import copy
 import logging
 import os
 import random
@@ -123,11 +124,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 source = self.message_obj.raw_message
 
                 if not isinstance(source, botpy.message.C2CMessage):
-                    # 非 C2C 场景：直接累积，最后统一发
-                    if not self.send_buffer:
-                        self.send_buffer = chain
-                    else:
-                        self.send_buffer.chain.extend(chain.chain)
+                    # 非 C2C 场景：直接累积，最后统一发（拷贝 delta，避免引用丢首字）
+                    self._append_stream_delta(chain)
                     continue
 
                 # ---- C2C 流式场景 ----
@@ -150,11 +148,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     last_edit_time = 0
                     continue
 
-                # 累积内容
-                if not self.send_buffer:
-                    self.send_buffer = chain
-                else:
-                    self.send_buffer.chain.extend(chain.chain)
+                # 累积内容（拷贝，避免上游复用 MessageChain 改写 buffer）
+                self._append_stream_delta(chain)
 
                 # 节流：按时间间隔发送中间分片
                 current_time = asyncio.get_running_loop().time()
@@ -184,6 +179,26 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             self.send_buffer = None
 
         return None
+
+    def _append_stream_delta(self, chain: MessageChain) -> None:
+        """Append stream delta into an owned buffer (copy components).
+
+        Holding the yielded MessageChain by reference drops leading characters
+        when upstream reuses/mutates the same chain between yields. Non-Plain
+        components are deep-copied for the same reason.
+        """
+        if not self.send_buffer:
+            self.send_buffer = MessageChain(
+                use_t2i_=chain.use_t2i_,
+                use_markdown_=chain.use_markdown_,
+                type=chain.type,
+            )
+        for comp in chain.chain:
+            if isinstance(comp, Plain):
+                # Preserve original text value (do not coerce falsy with `or ""`).
+                self.send_buffer.chain.append(Plain(text=comp.text))
+            else:
+                self.send_buffer.chain.append(copy.deepcopy(comp))
 
     @staticmethod
     def _extract_response_message_id(ret) -> str | None:
@@ -273,8 +288,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             file_source,
             file_name,
         ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_to_send)
-        if record_file_path:
-            self.track_temporary_local_file(record_file_path)
 
         # C2C 流式仅用于文本分片，富媒体时降级为普通发送，避免平台侧流式校验报错。
         if stream and (
