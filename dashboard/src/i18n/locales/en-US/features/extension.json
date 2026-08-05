@@ -154,7 +154,8 @@
       "productivity": "Productivity",
       "integrations": "Integrations",
       "utilities": "Utilities",
-      "other": "Other"
+      "other": "Other",
+      "其他": "Other"
     },
     "showFullName": "Full Name",
     "devDocs": "Extension Development Docs",
