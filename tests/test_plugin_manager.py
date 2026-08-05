@@ -626,6 +626,90 @@ async def test_reload_all_unbinds_every_registered_plugin(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("unknown_name", ["non_existent_plugin", ""])
+async def test_reload_unknown_plugin_has_no_lifecycle_side_effects(
+    plugin_manager_pm: PluginManager, monkeypatch, unknown_name
+):
+    _clear_star_runtime_state()
+    plugin_names = ["plugin_one", "plugin_two"]
+    for pname in plugin_names:
+        module_path = f"data.plugins.{pname}.main"
+        metadata = star_manager_module.StarMetadata(
+            name=pname,
+            root_dir_name=pname,
+            module_path=module_path,
+        )
+        star_manager_module.star_map[module_path] = metadata
+        star_manager_module.star_registry.append(metadata)
+
+    # Seed a sentinel handler so that clearing the handler registry would
+    # be detected by the snapshot comparison.
+    async def _noop_handler():
+        pass
+
+    sentinel_handler = StarHandlerMetadata(
+        event_type=EventType.AdapterMessageEvent,
+        handler_full_name="sentinel_module.sentinel_handler",
+        handler_name="sentinel_handler",
+        handler_module_path="data.plugins.sentinel.main",
+        handler=_noop_handler,
+        event_filters=[],
+    )
+    star_manager_module.star_handlers_registry.append(sentinel_handler)
+
+    # Snapshot registries before the call.
+    registry_before = list(star_manager_module.star_registry)
+    map_before = dict(star_manager_module.star_map)
+    handlers_before = list(star_manager_module.star_handlers_registry)
+    handlers_map_before = dict(
+        star_manager_module.star_handlers_registry.star_handlers_map
+    )
+
+    terminated = []
+    unbound = []
+    loaded = []
+
+    async def mock_terminate(plugin):
+        terminated.append(plugin.name)
+
+    async def mock_unbind(plugin_name, plugin_module_path):
+        unbound.append(plugin_name)
+
+    async def mock_load(
+        specified_module_path=None,
+        specified_dir_name=None,
+        ignore_version_check=False,
+    ):
+        del specified_module_path, specified_dir_name, ignore_version_check
+        loaded.append(True)
+        return True, None
+
+    monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", mock_terminate)
+    monkeypatch.setattr(plugin_manager_pm, "_unbind_plugin", mock_unbind)
+    monkeypatch.setattr(plugin_manager_pm, "load", mock_load)
+
+    try:
+        success, message = await plugin_manager_pm.reload(unknown_name)
+    finally:
+        registries_unchanged = (
+            list(star_manager_module.star_registry) == registry_before
+            and dict(star_manager_module.star_map) == map_before
+            and list(star_manager_module.star_handlers_registry) == handlers_before
+            and dict(star_manager_module.star_handlers_registry.star_handlers_map)
+            == handlers_map_before
+        )
+        _clear_star_runtime_state()
+
+    assert success is False
+    assert message is not None
+    assert "not found" in message.lower() or "不存在" in message
+    assert terminated == []
+    assert unbound == []
+    assert loaded == []
+    assert registries_unchanged
+
+
+@pytest.mark.asyncio
 async def test_turn_plugin_toggles_llm_tools_from_plugin_child_module(
     plugin_manager_pm: PluginManager,
     monkeypatch,
