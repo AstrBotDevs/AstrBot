@@ -359,6 +359,49 @@ async def test_query_combines_astrbot_and_responses_native_tools(monkeypatch):
     ]
 
 
+def test_build_response_tools_deduplicates_configured_and_custom_tools():
+    provider = _make_provider(
+        {
+            "responses_web_search": True,
+            "responses_file_search_vector_store_ids": ["vs_1"],
+            "responses_code_interpreter": True,
+            "responses_image_generation": True,
+        }
+    )
+    tools = SimpleNamespace(
+        openai_schema=lambda: [
+            {
+                "type": "function",
+                "function": {
+                    "name": "weather",
+                    "parameters": {"type": "object"},
+                },
+            }
+        ]
+    )
+
+    response_tools = provider._build_response_tools(
+        tools,
+        [
+            {"type": "function", "name": "weather", "parameters": {}},
+            {"type": "web_search", "search_context_size": "high"},
+            {"type": "file_search", "vector_store_ids": ["vs_custom"]},
+            {"type": "code_interpreter", "container": {"type": "auto"}},
+            {"type": "image_generation"},
+            {"type": "computer_use", "display_width": 1024},
+        ],
+    )
+
+    assert response_tools == [
+        {"type": "function", "name": "weather", "parameters": {"type": "object"}},
+        {"type": "web_search", "search_context_size": "medium"},
+        {"type": "file_search", "vector_store_ids": ["vs_1"]},
+        {"type": "code_interpreter", "container": {"type": "auto"}},
+        {"type": "image_generation"},
+        {"type": "computer_use", "display_width": 1024},
+    ]
+
+
 @pytest.mark.asyncio
 async def test_parse_response_extracts_text_reasoning_usage_and_replay_state():
     provider = _make_provider()
@@ -448,6 +491,28 @@ async def test_parse_response_keeps_web_citations_and_generated_images():
     assert "Example source: https://example.com/source" in result.completion_text
     assert "notes.pdf (file_1)" in result.completion_text
     assert len(result.result_chain.chain) == 3
+    assert result.result_chain.chain[1].type == "Image"
+
+
+@pytest.mark.asyncio
+async def test_parse_response_keeps_generated_images_as_non_empty_output():
+    provider = _make_provider()
+    response = _make_response(
+        [
+            {
+                "type": "image_generation_call",
+                "id": "img_1",
+                "status": "completed",
+                "result": "aGVsbG8=",
+            }
+        ]
+    )
+
+    result = await provider._parse_response(response, tools=None)
+
+    assert result.completion_text == "[Image]"
+    assert len(result.result_chain.chain) == 2
+    assert result.result_chain.chain[0].type == "Plain"
     assert result.result_chain.chain[1].type == "Image"
 
 
