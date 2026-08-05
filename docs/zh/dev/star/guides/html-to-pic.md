@@ -8,11 +8,12 @@
 AstrBot 支持将文字渲染成图片。
 
 ```python
-@filter.command("image") # 注册一个 /image 指令，接收 text 参数。
+@filter.command("image")  # 注册一个 /image 指令，接收 text 参数。
 async def on_aiocqhttp(self, event: AstrMessageEvent, text: str):
-    image_path = await self.text_to_image(text) # text_to_image() 是 Star 类的一个方法。
+    image_path = await self.text_to_image(
+        text
+    )  # text_to_image() 是 Star 类的一个方法。
     yield event.image_result(image_path)
-
 ```
 
 ![image](https://files.astrbot.app/docs/source/images/plugin/image-3.png)
@@ -25,7 +26,7 @@ AstrBot 支持使用 `HTML + Jinja2` 的方式来渲染文转图模板。
 
 ```py{7}
 # 自定义的 Jinja2 模板，支持 CSS
-TMPL = '''
+TMPL = """
 <div style="font-size: 32px;">
 <h1 style="color: black">Todo List</h1>
 
@@ -34,12 +35,15 @@ TMPL = '''
     <li>{{ item }}</li>
 {% endfor %}
 </div>
-'''
+"""
+
 
 @filter.command("todo")
 async def custom_t2i_tmpl(self, event: AstrMessageEvent):
-    options = {} # 可选择传入渲染选项。
-    image_path = await self.html_render(TMPL, {"items": ["吃饭", "睡觉", "玩原神"]}, options=options) # 第二个参数是 Jinja2 的渲染数据
+    options = {}  # 可选择传入渲染选项。
+    image_path = await self.html_render(
+        TMPL, {"items": ["吃饭", "睡觉", "玩原神"]}, options=options
+    )  # 第二个参数是 Jinja2 的渲染数据
     yield event.image_result(image_path)
 ```
 

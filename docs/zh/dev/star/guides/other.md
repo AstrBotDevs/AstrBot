@@ -5,6 +5,7 @@
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
 
+
 @filter.command("test")
 async def test_(self, event: AstrMessageEvent):
     if event.get_platform_name() != "napcat":

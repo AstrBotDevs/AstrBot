@@ -24,14 +24,17 @@ AstrBot receives messages delivered by messaging platforms and encapsulates them
 
 ```py{11}
 class AstrBotMessage:
-    '''AstrBot's message object'''
+    """AstrBot's message object"""
+
     type: MessageType  # Message type
     self_id: str  # Bot's identification ID
     session_id: str  # Session ID. Depends on the unique_session setting.
     message_id: str  # Message ID
-    group_id: str = "" # Group ID, empty if it's a private chat
+    group_id: str = ""  # Group ID, empty if it's a private chat
     sender: MessageMember  # Sender
-    message: List[BaseMessageComponent]  # Message chain. For example: [Plain("Hello"), At(qq=123456)]
+    message: List[
+        BaseMessageComponent
+    ]  # Message chain. For example: [Plain("Hello"), At(qq=123456)]
     message_str: str  # The most straightforward plain text message string, concatenating Plain messages (text messages) from the message chain
     raw_message: object
     timestamp: int  # Message timestamp
@@ -73,15 +76,16 @@ In AstrBot, message chains are represented as lists of type `List[BaseMessageCom
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import PluginContext, Star
 
+
 class MyPlugin(Star):
     def __init__(self, context: PluginContext):
         super().__init__(context)
 
-    @filter.command("helloworld") # from astrbot.api.event.filter import command
+    @filter.command("helloworld")  # from astrbot.api.event.filter import command
     async def helloworld(self, event: AstrMessageEvent):
-        '''This is a hello world command'''
+        """This is a hello world command"""
         user_name = event.get_sender_name()
-        message_str = event.message_str # Get the plain text content of the message
+        message_str = event.message_str  # Get the plain text content of the message
         yield event.plain_result(f"Hello, {user_name}!")
 ```
 
@@ -154,9 +158,11 @@ from typing import Literal
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.event.filter import GreedyStr
 
+
 class Mode(Enum):
     FAST = "fast"
     SAFE = "safe"
+
 
 @filter.command("search")
 async def search(
@@ -177,6 +183,7 @@ Use `typing.Annotated` with `filter.option(...)` to declare named options. An op
 from typing import Annotated
 
 from astrbot.api.event import AstrMessageEvent, filter
+
 
 @filter.command("deploy")
 async def deploy(
@@ -209,10 +216,12 @@ Command groups help you organize commands.
 def math():
     pass
 
+
 @math.command("add")
 async def add(self, event: AstrMessageEvent, a: int, b: int):
     # /math add 1 2 -> Result is: 3
     yield event.plain_result(f"Result is: {a + b}")
+
 
 @math.command("sub")
 async def sub(self, event: AstrMessageEvent, a: int, b: int):
@@ -233,29 +242,34 @@ When a user omits the subcommand, AstrBot reports an incomplete command and list
 Theoretically, command groups can be nested infinitely!
 
 ```py
-'''
+"""
 math
 ├── calc
 │   ├── add (a(int),b(int),)
 │   ├── sub (a(int),b(int),)
 │   ├── help (command with no parameters)
-'''
+"""
+
 
 @filter.command_group("math")
 def math():
     pass
 
-@math.group("calc") # Note: this is group, not command_group
+
+@math.group("calc")  # Note: this is group, not command_group
 def calc():
     pass
+
 
 @calc.command("add")
 async def add(self, event: AstrMessageEvent, a: int, b: int):
     yield event.plain_result(f"Result is: {a + b}")
 
+
 @calc.command("sub")
 async def sub(self, event: AstrMessageEvent, a: int, b: int):
     yield event.plain_result(f"Result is: {a - b}")
+
 
 @calc.command("help")
 async def calc_help(self, event: AstrMessageEvent):
@@ -268,7 +282,7 @@ async def calc_help(self, event: AstrMessageEvent):
 You can add different aliases for commands or command groups:
 
 ```python
-@filter.command("help", alias={'帮助', 'helpme'})
+@filter.command("help", alias={"帮助", "helpme"})
 async def help(self, event: AstrMessageEvent):
     yield event.plain_result("This is a calculator plugin with add and sub commands.")
 ```
@@ -281,7 +295,7 @@ Plugins can reuse the same argument syntax outside a command handler through the
 from astrbot.api.command import CommandSyntaxError, parse_arguments
 
 try:
-    invocation = parse_arguments(r'''one "two three" C:\Users\bot''')
+    invocation = parse_arguments(r"""one "two three" C:\Users\bot""")
     argv = invocation.argv
 except CommandSyntaxError as exc:
     diagnostic = exc.diagnostic
@@ -306,7 +320,7 @@ async def on_all_message(self, event: AstrMessageEvent):
 ```python
 @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
 async def on_private_message(self, event: AstrMessageEvent):
-    message_str = event.message_str # Get the plain text content of the message
+    message_str = event.message_str  # Get the plain text content of the message
     yield event.plain_result("Received a private message.")
 ```
 
@@ -320,9 +334,11 @@ async def on_private_message(self, event: AstrMessageEvent):
 #### Messaging Platform
 
 ```python
-@filter.platform_adapter_type(filter.PlatformAdapterType.AIOCQHTTP | filter.PlatformAdapterType.QQOFFICIAL)
+@filter.platform_adapter_type(
+    filter.PlatformAdapterType.AIOCQHTTP | filter.PlatformAdapterType.QQOFFICIAL
+)
 async def on_aiocqhttp(self, event: AstrMessageEvent):
-    '''Only receive messages from AIOCQHTTP and QQOFFICIAL'''
+    """Only receive messages from AIOCQHTTP and QQOFFICIAL"""
     yield event.plain_result("Received a message")
 ```
 
@@ -360,10 +376,10 @@ async def helloworld(self, event: AstrMessageEvent):
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
 
+
 @filter.on_astrbot_loaded()
 async def on_astrbot_loaded(self):
     print("AstrBot initialization complete")
-
 ```
 
 #### On Platform Loaded
@@ -372,6 +388,7 @@ The `on_platform_loaded` hook runs after each messaging-platform instance finish
 
 ```python
 from astrbot.api.event import filter
+
 
 @filter.on_platform_loaded()
 async def on_platform_loaded(self):
@@ -385,6 +402,7 @@ The `on_plugin_loaded` hook runs after each plugin finishes loading and receives
 ```python
 from astrbot.api.event import filter
 
+
 @filter.on_plugin_loaded()
 async def on_plugin_loaded(self, metadata):
     print(f"Plugin {metadata.name} has loaded")
@@ -397,6 +415,7 @@ The `on_plugin_unloaded` hook runs after each plugin finishes unloading and rece
 ```python
 from astrbot.api.event import filter
 
+
 @filter.on_plugin_unloaded()
 async def on_plugin_unloaded(self, metadata):
     print(f"Plugin {metadata.name} has unloaded")
@@ -408,6 +427,7 @@ The `on_plugin_error` hook runs when a plugin message handler raises an exceptio
 
 ```python
 from astrbot.api.event import AstrMessageEvent, filter
+
 
 @filter.on_plugin_error()
 async def on_plugin_error(
@@ -433,6 +453,7 @@ It is suitable for sending feedback such as "Waiting for request..." to the user
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
 
+
 @filter.on_waiting_llm_request()
 async def on_waiting_llm(self, event: AstrMessageEvent):
     await event.send(event.plain_result("🤔 Waiting for request...").chain)
@@ -452,11 +473,13 @@ The ProviderRequest object contains all information about the LLM request, inclu
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.provider import ProviderRequest
 
-@filter.on_llm_request()
-async def my_custom_hook_1(self, event: AstrMessageEvent, req: ProviderRequest): # Note there are three parameters
-    print(req) # Print the request text
-    req.system_prompt += "Custom system_prompt" # If there is another suitable approach, avoid using this to append prompts that change every round. It can break prompt caching and greatly increase cost (7 - 20x).
 
+@filter.on_llm_request()
+async def my_custom_hook_1(
+    self, event: AstrMessageEvent, req: ProviderRequest
+):  # Note there are three parameters
+    print(req)  # Print the request text
+    req.system_prompt += "Custom system_prompt"  # If there is another suitable approach, avoid using this to append prompts that change every round. It can break prompt caching and greatly increase cost (7 - 20x).
 ```
 
 > [!WARNING]
@@ -494,8 +517,11 @@ You can obtain the `ProviderResponse` object and modify it.
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.provider import LLMResponse
 
+
 @filter.on_llm_response()
-async def on_llm_resp(self, event: AstrMessageEvent, resp: LLMResponse): # Note there are three parameters
+async def on_llm_resp(
+    self, event: AstrMessageEvent, resp: LLMResponse
+):  # Note there are three parameters
     print(resp)
 ```
 
@@ -508,8 +534,11 @@ When the Agent starts running, the `on_agent_begin` hook is triggered.
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
 
+
 @filter.on_agent_begin()
-async def on_agent_begin(self, event: AstrMessageEvent, run_context): # Note there are three parameters
+async def on_agent_begin(
+    self, event: AstrMessageEvent, run_context
+):  # Note there are three parameters
     print("Agent started")
 ```
 
@@ -524,6 +553,7 @@ You can obtain the `FunctionTool` object and tool call arguments.
 ```python
 from astrbot.api import FunctionTool
 from astrbot.api.event import filter, AstrMessageEvent
+
 
 @filter.on_using_llm_tool()
 async def on_using_llm_tool(
@@ -549,6 +579,7 @@ from mcp.types import CallToolResult
 from astrbot.api import FunctionTool
 from astrbot.api.event import filter, AstrMessageEvent
 
+
 @filter.on_llm_tool_respond()
 async def on_llm_tool_respond(
     self,
@@ -570,8 +601,11 @@ After the Agent finishes running, the `on_agent_done` hook is triggered. This ho
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.provider import LLMResponse
 
+
 @filter.on_agent_done()
-async def on_agent_done(self, event: AstrMessageEvent, run_context, resp: LLMResponse): # Note there are four parameters
+async def on_agent_done(
+    self, event: AstrMessageEvent, run_context, resp: LLMResponse
+):  # Note there are four parameters
     print(resp)
 ```
 
@@ -587,12 +621,15 @@ You can implement some message decoration here, such as converting to voice, con
 from astrbot.api.event import filter, AstrMessageEvent
 import astrbot.api.message_components as Comp
 
+
 @filter.on_decorating_result()
 async def on_decorating_result(self, event: AstrMessageEvent):
     result = event.get_result()
     chain = result.chain
-    print(chain) # Print the message chain
-    chain.append(Comp.Plain("!")) # Add an exclamation mark at the end of the message chain
+    print(chain)  # Print the message chain
+    chain.append(
+        Comp.Plain("!")
+    )  # Add an exclamation mark at the end of the message chain
 ```
 
 > You cannot use yield to send messages here. This hook is only for decorating event.get_result().chain. If you need to send, please use the `event.send()` method directly.
@@ -603,6 +640,7 @@ After a message is sent to the messaging platform, the `after_message_sent` hook
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
+
 
 @filter.after_message_sent()
 async def after_message_sent(self, event: AstrMessageEvent):
@@ -626,10 +664,10 @@ async def helloworld(self, event: AstrMessageEvent):
 ```python{6}
 @filter.command("check_ok")
 async def check_ok(self, event: AstrMessageEvent):
-    ok = self.check() # Your own logic
+    ok = self.check()  # Your own logic
     if not ok:
         yield event.plain_result("Check failed")
-        event.stop_event() # Stop event propagation
+        event.stop_event()  # Stop event propagation
 ```
 
 When event propagation is stopped, all subsequent steps will not be executed.

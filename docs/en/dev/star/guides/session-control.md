@@ -26,9 +26,7 @@ async def idiom_chain(self, event: AstrMessageEvent):
         idiom = next_event.message_str.strip()
 
         if idiom == "exit":
-            await next_event.send(
-                next_event.plain_result("Idiom chain ended.").chain
-            )
+            await next_event.send(next_event.plain_result("Idiom chain ended.").chain)
             controller.stop()
             return
 

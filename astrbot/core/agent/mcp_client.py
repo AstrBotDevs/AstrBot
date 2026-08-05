@@ -7,12 +7,11 @@ import re
 import socket
 import sys
 from contextlib import AsyncExitStack
-from datetime import timedelta
 from pathlib import Path, PureWindowsPath
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlparse
 
-import httpx
+import httpx2
 from tenacity import (
     before_sleep_log,
     retry,
@@ -204,9 +203,9 @@ def _validate_remote_url(url: str, *, allow_private_network: bool = False) -> No
 
 def _create_mcp_http_client_without_redirects(
     headers: dict[str, str] | None = None,
-    timeout: httpx.Timeout | None = None,
-    auth: httpx.Auth | None = None,
-) -> httpx.AsyncClient:
+    timeout: httpx2.Timeout | None = None,
+    auth: httpx2.Auth | None = None,
+) -> httpx2.AsyncClient:
     kwargs: dict[str, Any] = {"follow_redirects": False}
     if timeout is not None:
         kwargs["timeout"] = timeout
@@ -214,7 +213,7 @@ def _create_mcp_http_client_without_redirects(
         kwargs["headers"] = headers
     if auth is not None:
         kwargs["auth"] = auth
-    return httpx.AsyncClient(**kwargs)
+    return httpx2.AsyncClient(**kwargs)
 
 
 def _normalize_stdio_command_name(command: str) -> str:
@@ -666,7 +665,7 @@ class MCPClient:
                 )
 
                 # Create a new client session
-                read_timeout = timedelta(seconds=cfg.get("session_read_timeout", 60))
+                read_timeout = float(cfg.get("session_read_timeout", 60))
                 self.session = await self.exit_stack.enter_async_context(
                     mcp.ClientSession(
                         *streams,
@@ -679,9 +678,9 @@ class MCPClient:
                 sse_read_timeout_seconds = cfg.get("sse_read_timeout", 60 * 5)
                 if streamable_http_client:
                     http_client = await self.exit_stack.enter_async_context(
-                        httpx.AsyncClient(
+                        httpx2.AsyncClient(
                             headers=cfg.get("headers", {}),
-                            timeout=httpx.Timeout(
+                            timeout=httpx2.Timeout(
                                 timeout_seconds,
                                 read=sse_read_timeout_seconds,
                             ),
@@ -697,12 +696,12 @@ class MCPClient:
                     raise RuntimeError(
                         "Streamable HTTP transport is not available in the installed MCP library version."
                     )
-                read_s, write_s, _ = await self.exit_stack.enter_async_context(
+                read_s, write_s = await self.exit_stack.enter_async_context(
                     self._streams_context,
                 )
 
                 # Create a new client session
-                read_timeout = timedelta(seconds=cfg.get("session_read_timeout", 60))
+                read_timeout = float(cfg.get("session_read_timeout", 60))
                 self.session = await self.exit_stack.enter_async_context(
                     mcp.ClientSession(
                         read_stream=read_s,
@@ -830,7 +829,7 @@ class MCPClient:
         self,
         tool_name: str,
         arguments: dict,
-        read_timeout_seconds: timedelta,
+        read_timeout_seconds: float,
     ) -> Any:
         """Call MCP tool with automatic reconnection on failure, max 2 retries.
 
@@ -914,5 +913,5 @@ class MCPTool[TContext](FunctionTool):
         return await self.mcp_client.call_tool_with_reconnect(
             tool_name=self.mcp_tool.name,
             arguments=kwargs,
-            read_timeout_seconds=timedelta(seconds=context.tool_call_timeout),
+            read_timeout_seconds=context.tool_call_timeout,
         )

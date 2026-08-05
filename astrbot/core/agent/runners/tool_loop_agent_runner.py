@@ -1165,17 +1165,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 continue
             if isinstance(content_item, ImageContent):
                 image_data = content_item.data
-                mime_type = content_item.mimeType or mime_type
+                mime_type = content_item.mime_type or mime_type
             elif isinstance(content_item, EmbeddedResource):
                 resource = content_item.resource
                 if isinstance(resource, TextResourceContents):
                     result_parts.append(resource.text)
                     continue
                 if isinstance(resource, BlobResourceContents) and (
-                    resource.mimeType or ""
+                    resource.mime_type or ""
                 ).startswith("image/"):
                     image_data = resource.blob
-                    mime_type = resource.mimeType or mime_type
+                    mime_type = resource.mime_type or mime_type
                 else:
                     result_parts.append(
                         "The tool has returned a data type that is not supported."

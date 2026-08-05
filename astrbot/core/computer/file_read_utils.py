@@ -710,7 +710,7 @@ async def read_file_tool_result(
                 mcp.types.ImageContent(
                     type="image",
                     data=compressed_base64_data,
-                    mimeType=str(
+                    mime_type=str(
                         compressed_payload.get("mime_type", "") or "image/jpeg"
                     ),
                 )

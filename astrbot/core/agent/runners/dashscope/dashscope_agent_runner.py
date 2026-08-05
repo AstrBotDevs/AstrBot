@@ -2,7 +2,7 @@ import asyncio
 import re
 import typing as T
 from collections.abc import AsyncGenerator, AsyncIterator
-from typing import override
+from typing import Any, cast, override
 
 from dashscope import Application
 from dashscope.api_entities.api_request_factory import _build_api_request
@@ -289,14 +289,15 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
         api_key = request_kwargs.pop("api_key")
         prompt = request_kwargs.pop("prompt")
         workspace = request_kwargs.pop("workspace", None)
-        api_key, app_id = Application._validate_params(api_key, app_id)
+        application_api = cast(Any, Application)
+        api_key, app_id = application_api._validate_params(api_key, app_id)
 
         if workspace:
             headers = request_kwargs.pop("headers", {})
             headers["X-DashScope-WorkSpace"] = workspace
             request_kwargs["headers"] = headers
 
-        request_input, parameters = Application._build_input_parameters(
+        request_input, parameters = application_api._build_input_parameters(
             prompt,
             None,
             None,
@@ -305,9 +306,9 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
         request = _build_api_request(
             model="",
             input=request_input,
-            task_group=Application.task_group,
+            task_group=application_api.task_group,
             task=app_id,
-            function=Application.function,
+            function=application_api.function,
             workspace=workspace,
             api_key=api_key,
             is_service=False,

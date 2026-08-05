@@ -147,7 +147,7 @@ async def test_streamable_http_connection_uses_native_http_client_path(monkeypat
                 "terminate_on_close": terminate_on_close,
             }
         )
-        yield ("read-stream", "write-stream", lambda: "session-id")
+        yield ("read-stream", "write-stream")
 
     @asynccontextmanager
     async def fake_client_session(*args, **kwargs):

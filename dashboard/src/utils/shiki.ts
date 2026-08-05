@@ -12,6 +12,7 @@ export const SHIKI_THEMES = {
 
 type ShikiHighlighter = Awaited<ReturnType<typeof createHighlighter>>;
 type ColorMode = 'auto' | 'dark' | 'light';
+type MarkdownItInstance = ReturnType<typeof MarkdownIt>;
 
 let highlighterPromise: Promise<ShikiHighlighter> | undefined;
 
@@ -86,7 +87,7 @@ export function renderShikiCode(
 }
 
 export function collectMarkdownFenceLanguages(
-  markdownIt: MarkdownIt,
+  markdownIt: MarkdownItInstance,
   markdown: string,
 ): string[] {
   if (!markdown) return [];

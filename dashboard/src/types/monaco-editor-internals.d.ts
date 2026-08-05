@@ -1,1 +1,0 @@
-declare module 'monaco-editor/esm/vs/*';

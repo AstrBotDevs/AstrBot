@@ -13,7 +13,7 @@
   },
   "devDependencies": {
     "@taplo/cli": "0.7.0",
-    "markdownlint-cli2": "0.23.1",
+    "markdownlint-cli2": "0.23.2",
     "prettier": "3.9.6"
   },
   "packageManager": "npm@12.0.1+sha512.2f94fd8bf600416416a934bfc59c4991e8bff7372ef7d842784e2a8b8d48c81555ee645069ddea73625fb8e92dc261feab0188fd5dab6c22fefd46316f5f9140"

@@ -1,23 +1,23 @@
 import { loader } from '@guolao/vue-monaco-editor';
-import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
-import 'monaco-editor/esm/vs/basic-languages/dockerfile/dockerfile.contribution';
-import 'monaco-editor/esm/vs/basic-languages/ini/ini.contribution';
-import 'monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution';
-import 'monaco-editor/esm/vs/basic-languages/markdown/markdown.contribution';
-import 'monaco-editor/esm/vs/basic-languages/powershell/powershell.contribution';
-import 'monaco-editor/esm/vs/basic-languages/python/python.contribution';
-import 'monaco-editor/esm/vs/basic-languages/shell/shell.contribution';
-import 'monaco-editor/esm/vs/basic-languages/sql/sql.contribution';
-import 'monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution';
-import 'monaco-editor/esm/vs/basic-languages/xml/xml.contribution';
-import 'monaco-editor/esm/vs/basic-languages/yaml/yaml.contribution';
-import 'monaco-editor/esm/vs/language/css/monaco.contribution';
-import 'monaco-editor/esm/vs/language/html/monaco.contribution';
-import 'monaco-editor/esm/vs/language/json/monaco.contribution';
-import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
-import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
-import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker';
-import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
+import * as monaco from 'monaco-editor/editor/editor.api';
+import 'monaco-editor/languages/definitions/dockerfile/register';
+import 'monaco-editor/languages/definitions/ini/register';
+import 'monaco-editor/languages/definitions/javascript/register';
+import 'monaco-editor/languages/definitions/markdown/register';
+import 'monaco-editor/languages/definitions/powershell/register';
+import 'monaco-editor/languages/definitions/python/register';
+import 'monaco-editor/languages/definitions/shell/register';
+import 'monaco-editor/languages/definitions/sql/register';
+import 'monaco-editor/languages/definitions/typescript/register';
+import 'monaco-editor/languages/definitions/xml/register';
+import 'monaco-editor/languages/definitions/yaml/register';
+import 'monaco-editor/language/css/monaco.contribution';
+import 'monaco-editor/language/html/monaco.contribution';
+import 'monaco-editor/language/json/monaco.contribution';
+import editorWorker from 'monaco-editor/editor/editor.worker?worker';
+import jsonWorker from 'monaco-editor/language/json/json.worker?worker';
+import cssWorker from 'monaco-editor/language/css/css.worker?worker';
+import htmlWorker from 'monaco-editor/language/html/html.worker?worker';
 
 (
   self as typeof self & {
