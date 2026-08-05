@@ -2695,25 +2695,15 @@ CONFIG_METADATA_2 = {
                         "type": "int",
                         "hint": "超时时间，单位为秒。",
                     },
-                    "mimo-stt-system-prompt": {
-                        "description": "系统提示词",
-                        "type": "string",
-                        "hint": "用于指导 MiMo STT 转录行为的 system prompt。",
-                    },
-                    "mimo-stt-user-prompt": {
-                        "description": "用户提示词",
-                        "type": "string",
-                        "hint": "附加给 MiMo STT 的用户提示词，用于约束返回结果格式。",
-                    },
                     "stepfun-asr-language": {
-                        "description": "语言",
+                        "description": "\u8bed\u8a00",
                         "type": "string",
-                        "hint": "StepFun ASR 的识别语言。默认 zh。",
+                        "hint": "StepFun ASR \u7684\u8bc6\u522b\u8bed\u8a00\u3002\u9ed8\u8ba4 zh\u3002",
                     },
                     "stepfun-asr-enable-itn": {
-                        "description": "数字规整",
+                        "description": "\u6570\u5b57\u89c4\u6574",
                         "type": "bool",
-                        "hint": "是否启用 StepFun ASR 的 ITN 数字规整。",
+                        "hint": "\u662f\u5426\u542f\u7528 StepFun ASR \u7684 ITN \u6570\u5b57\u89c4\u6574\u3002",
                     },
                     "openai-tts-voice": {
                         "description": "voice",

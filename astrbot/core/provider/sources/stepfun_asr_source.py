@@ -133,6 +133,17 @@ async def prepare_audio_input(
     audio_source: str,
 ) -> tuple[str, dict[str, object], list[Path]]:
     cleanup_paths: list[Path] = []
+    try:
+        return await _prepare_audio_input(audio_source, cleanup_paths)
+    except Exception:
+        cleanup_files(cleanup_paths)
+        raise
+
+
+async def _prepare_audio_input(
+    audio_source: str,
+    cleanup_paths: list[Path],
+) -> tuple[str, dict[str, object], list[Path]]:
     source_path = Path(audio_source)
     is_remote = audio_source.startswith(("http://", "https://"))
     is_tencent = "multimedia.nt.qq.com.cn" in audio_source if is_remote else False
