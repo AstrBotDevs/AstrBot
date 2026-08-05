@@ -32,11 +32,13 @@ class BaseVecDB:
         tasks_limit: int = 3,
         max_retries: int = 3,
         progress_callback=None,
+        embedding_contents: list[str] | None = None,
     ) -> int:
         """批量插入文本和其对应向量，自动生成 ID 并保持一致性。
 
         Args:
             progress_callback: 进度回调函数，接收参数 (current, total)
+            embedding_contents: Optional enriched texts used only for embeddings.
 
         """
         ...

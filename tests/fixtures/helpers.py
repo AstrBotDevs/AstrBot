@@ -100,6 +100,7 @@ def create_mock_update(
     voice: MagicMock | None = None,
     sticker: MagicMock | None = None,
     reply_to_message: MagicMock | None = None,
+    quote: MagicMock | None = None,
     caption: str | None = None,
     entities: list | None = None,
     caption_entities: list | None = None,
@@ -122,6 +123,7 @@ def create_mock_update(
         voice: 语音对象
         sticker: 贴纸对象
         reply_to_message: 回复的消息
+        quote: 回复消息中的部分引用
         caption: 说明文字
         entities: 实体列表
         caption_entities: 说明实体列表
@@ -158,6 +160,7 @@ def create_mock_update(
     message.voice = voice
     message.sticker = sticker
     message.reply_to_message = reply_to_message
+    message.quote = quote
     message.caption = caption
     message.entities = entities
     message.caption_entities = caption_entities
@@ -574,9 +577,14 @@ def create_mock_updater_update(
         Callable: 异步函数，可用于 monkeypatch.setattr
     """
 
-    async def mock_update(plugin, proxy: str = "", download_url: str = "") -> None:
+    async def mock_update(
+        plugin,
+        proxy: str = "",
+        download_url: str = "",
+        repo_url: str = "",
+    ) -> None:
         """Mock updater.update 方法。"""
-        del proxy, download_url
+        del proxy, download_url, repo_url
         plugin_dir = plugin_builder.get_plugin_path(plugin.name)
 
         # 创建更新标记文件

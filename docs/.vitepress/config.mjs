@@ -221,6 +221,10 @@ export default defineConfig({
                 link: "/openapi",
               },
               {
+                text: "API Scope 与接口对照",
+                link: "/openapi-scopes",
+              },
+              {
                 text: "AstrBot 配置文件",
                 link: "/astrbot-config",
               },
@@ -473,6 +477,10 @@ export default defineConfig({
               {
                 text: "AstrBot HTTP API",
                 link: "/openapi",
+              },
+              {
+                text: "API Scope–Endpoint Reference",
+                link: "/openapi-scopes",
               },
               {
                 text: "AstrBot Configuration File",

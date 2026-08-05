@@ -23,7 +23,7 @@ export function contextLimit(
   provider: ProviderMetadataSource | null | undefined,
   metadata?: ProviderModelMetadata | null
 ): number {
-  const context = Number(metadata?.limit?.context || provider?.max_context_tokens || 0)
+  const context = Number(provider?.max_context_tokens) || Number(metadata?.limit?.context) || 0
   return Number.isFinite(context) && context > 0 ? context : 0
 }
 

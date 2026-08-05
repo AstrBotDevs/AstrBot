@@ -2,18 +2,18 @@
   "title": "插件管理",
   "subtitle": "管理和配置系统插件",
   "tabs": {
-    "installedPlugins": "AstrBot 插件",
-    "market": "AstrBot 插件市场",
+    "installedPlugins": "插件",
+    "market": "插件市场",
     "installedMcpServers": "MCP",
-    "skills": "Skills",
+    "skills": "技能",
     "handlersOperation": "管理行为"
   },
   "titles": {
-    "installedAstrBotPlugins": "已安装的 AstrBot 插件"
+    "installedAstrBotPlugins": "已安装"
   },
   "failedPlugins": {
     "title": "加载失败插件（{count}）",
-    "hint": "这些插件加载失败，仍可尝试重载或直接卸载。",
+    "hint": "这些插件加载失败，仍可尝试重载或直接删除。",
     "columns": {
       "plugin": "插件",
       "error": "错误"
@@ -34,11 +34,13 @@
     "showSystemPlugins": "显示系统插件",
     "hideSystemPlugins": "隐藏系统插件",
     "install": "安装",
-    "uninstall": "卸载",
+    "uninstall": "删除",
     "update": "更新",
     "reload": "重载",
     "enable": "启用",
     "disable": "禁用",
+    "load": "打开插件",
+    "stop": "关闭插件",
     "configure": "配置",
     "viewInfo": "行为",
     "viewDocs": "文档",
@@ -64,9 +66,12 @@
   "status": {
     "enabled": "启用",
     "disabled": "禁用",
+    "loaded": "已打开",
+    "stopped": "已关闭",
     "system": "系统",
     "loading": "加载中...",
     "installed": "已安装",
+    "preset": "预置",
     "unknown": "未知",
     "unsupported": "不支持"
   },
@@ -78,7 +83,7 @@
     "viewInfo": "行为",
     "viewDocs": "文档",
     "update": "更新",
-    "uninstall": "卸载"
+    "uninstall": "删除插件"
   },
   "table": {
     "headers": {
@@ -196,14 +201,19 @@
     },
     "config": {
       "title": "插件配置",
-      "noConfig": "这个插件没有配置"
+      "noConfig": "这个插件没有其他配置项",
+      "coreSettings": {
+        "logLevel": "日志级别",
+        "logLevelHint": "仅影响该插件的日志输出，立即生效，无需重启",
+        "followGlobal": "跟随全局"
+      }
     },
     "loading": {
       "title": "加载中...",
       "logs": "日志"
     },
     "uninstall": {
-      "title": "删除确认",
+      "title": "删除插件",
       "message": "你确定要删除当前插件吗？",
       "deleteConfig": "同时删除插件配置文件",
       "deleteData": "同时删除插件持久化数据",
@@ -217,7 +227,7 @@
       "supportPlatformsCount": "支持 {count} 个平台",
       "sectionTitle": "安装",
       "downloadSource": "将从以下位置安装插件包体：",
-      "githubSecurityWarning": "AstrBot 不能保证从 GitHub 上下载的插件的安全性。请确认你信任该插件来源后再安装。"
+      "repositorySecurityWarning": "AstrBot 不能保证从代码仓库下载的插件的安全性。请确认你信任该插件来源后再安装。"
     },
     "update": {
       "title": "更新插件",
@@ -259,11 +269,12 @@
     }
   },
   "messages": {
-    "uninstalling": "正在卸载",
+    "uninstalling": "正在删除",
     "refreshing": "正在刷新插件列表...",
     "refreshSuccess": "插件列表已刷新！",
     "refreshFailed": "刷新插件列表时发生错误",
     "operationFailed": "操作失败",
+    "logLevelUpdated": "日志级别已更新并实时生效",
     "reloadSuccess": "重载成功",
     "reloadFailed": "重载失败",
     "updateSuccess": "更新成功!",
@@ -289,10 +300,10 @@
     "resolveSourceFirst": "请先解析并校验插件源地址",
     "sourceResolveFailed": "插件源解析失败",
     "invalidUrl": "请输入有效的URL地址",
-    "invalidGithubRepo": "请输入有效的 GitHub 仓库链接",
+    "invalidRepositoryUrl": "请输入有效的 Git 仓库链接",
     "enterJsonUrl": "请输入返回插件列表JSON数据的URL地址",
     "pluginNotFound": "未找到该插件",
-    "pluginDisabled": "该插件当前已禁用，请先启用后再访问页面",
+    "pluginDisabled": "该插件当前已关闭，请先打开后再访问页面",
     "pluginPageNotFound": "未找到该插件页面",
     "pluginPageLoadFailed": "加载插件页面失败",
     "missingMarketPluginId": "缺少合法的插件标识，无法从该插件市场源安装",
@@ -308,14 +319,16 @@
     "enterUrl": "输入插件仓库链接"
   },
   "skills": {
-    "modeLocal": "本地 Skills",
-    "modeNeo": "Neo Skills",
+    "modeLocal": "本地技能",
+    "modeNeo": "Neo 技能",
     "actions": "操作",
-    "upload": "上传 Skills",
+    "enable": "启用技能",
+    "disable": "停用技能",
+    "upload": "上传技能",
     "refresh": "刷新",
-    "empty": "暂无 Skills",
-    "emptyHint": "请上传 Skills 压缩包",
-    "uploadDialogTitle": "上传 Skills",
+    "empty": "暂无技能",
+    "emptyHint": "请上传技能压缩包",
+    "uploadDialogTitle": "上传技能",
     "uploadHint": "支持批量上传 zip 技能包，也支持拖拽批量上传 zip 技能包。系统会自动校验目录结构，并给出逐个文件的结果。",
     "structureRequirement": "支持压缩包内含多个 skills 文件夹。",
     "abilityMultiple": "支持一次上传多个zip文件",
@@ -360,11 +373,11 @@
     "download": "下载",
     "downloadSuccess": "下载成功",
     "downloadFailed": "下载失败",
-    "loadFailed": "加载 Skills 失败",
+    "loadFailed": "加载技能失败",
     "updateSuccess": "更新成功",
     "updateFailed": "更新失败",
     "deleteTitle": "删除确认",
-    "deleteMessage": "确定要删除该 Skill 吗？",
+    "deleteMessage": "确定要删除该技能吗？",
     "deleteSuccess": "删除成功",
     "deleteFailed": "删除失败",
     "neoSkillKey": "skill_key 过滤",
@@ -374,7 +387,7 @@
     "neoAll": "全部",
     "neoCandidates": "Neo Candidates",
     "neoReleases": "Neo Releases",
-    "neoLoadFailed": "加载 Neo Skills 数据失败",
+    "neoLoadFailed": "加载 Neo 技能数据失败",
     "neoPass": "通过",
     "neoReject": "拒绝",
     "neoEvaluateSuccess": "评测更新成功",
@@ -395,20 +408,20 @@
     "neoDeleteFailed": "删除失败",
     "neoPayloadTitle": "Neo Payload 详情",
     "neoPayloadFailed": "读取 Payload 失败",
-    "runtimeNoneWarning": "Computer Use 运行环境为无，Skills 可能无法正确被 Agent 运行，因为没有启用运行环境。",
-    "runtimeHint": "需要在配置的 “使用电脑能力” 中将运行环境设置为 “local” 或 “sandbox” 才能让 AstrBot 正常使用你提供的 Skills。工作区的 Skills 暂不在此页面显示。",
-    "neoRuntimeRequired": "Neo Skills 仅在运行环境为 sandbox 且沙箱驱动为 shipyard_neo 时可用。",
-    "sourceLocalOnly": "本地 Skill",
-    "sourceSandboxOnly": "Sandbox 预置 Skill",
+    "runtimeNoneWarning": "Computer Use 运行环境为无，技能可能无法正确被 Agent 运行，因为没有启用运行环境。",
+    "runtimeHint": "需要在配置的“使用电脑能力”中将运行环境设置为“local”或“sandbox”，才能让 AstrBot 正常使用你提供的技能。工作区技能暂不在此页面显示。",
+    "neoRuntimeRequired": "Neo 技能仅在运行环境为 sandbox 且沙箱驱动为 shipyard_neo 时可用。",
+    "sourceLocalOnly": "本地技能",
+    "sourceSandboxOnly": "Sandbox 预置技能",
     "sourceBoth": "本地 + Sandbox",
     "sourcePlugin": "插件：{plugin}",
-    "sandboxDiscoveryPending": "尚未发现 Sandbox 预置 Skill。请至少启动一次 Sandbox 会话后再查看。",
-    "sandboxPresetReadonly": "Sandbox 预置 Skill 在此处为只读，无法在本地 Skills 页面删除或启用/禁用。",
-    "pluginReadonly": "插件提供的 Skill 由插件管理，无法在本地 Skills 页面删除或下载。",
+    "sandboxDiscoveryPending": "尚未发现 Sandbox 预置技能。请至少启动一次 Sandbox 会话后再查看。",
+    "sandboxPresetReadonly": "Sandbox 预置技能在此处为只读，无法在本地技能页面删除或启用/停用。",
+    "pluginReadonly": "插件提供的技能由插件管理，无法在本地技能页面删除或下载。",
     "openEditor": "查看/编辑",
-    "editorTitle": "编辑 Skill",
-    "editorLoadFailed": "读取 Skill 文件失败",
-    "editorSaveFailed": "保存 Skill 文件失败",
+    "editorTitle": "编辑技能",
+    "editorLoadFailed": "读取技能文件失败",
+    "editorSaveFailed": "保存技能文件失败",
     "editorSaveSuccess": "保存成功",
     "saveFile": "保存文件",
     "readonly": "只读",
@@ -419,7 +432,7 @@
   "card": {
     "actions": {
       "pluginConfig": "插件配置",
-      "uninstallPlugin": "卸载插件",
+      "uninstallPlugin": "删除插件",
       "reloadPlugin": "重载插件",
       "togglePlugin": "插件",
       "viewHandlers": "查看行为",
@@ -429,7 +442,7 @@
     },
     "status": {
       "hasUpdate": "有新版本可用",
-      "disabled": "该插件已经被禁用",
+      "disabled": "该插件已关闭",
       "handlersCount": "个行为",
       "supportPlatform": "支持平台",
       "supportPlatformsCount": "支持 {count} 个平台",

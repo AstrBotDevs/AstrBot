@@ -1,11 +1,15 @@
 import asyncio
+import json
 import threading
 import typing as T
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import CursorResult, Row
+from deprecated import deprecated
+from sqlalchemy import CursorResult, Row, not_
+from sqlalchemy.dialects.sqlite import dialect as sqlite_dialect
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer
 from sqlmodel import col, delete, desc, func, or_, select, text, update
 
 from astrbot.core.db import BaseDatabase
@@ -65,7 +69,29 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_persona_custom_error_message_column(conn)
             await self._ensure_platform_message_history_checkpoint_column(conn)
             await self._ensure_chatui_project_workspace_columns(conn)
+            await self._ensure_conversation_indexes(conn)
             await conn.commit()
+
+    async def _ensure_conversation_indexes(self, conn) -> None:
+        """Create indexes used by the dashboard conversation list.
+
+        Args:
+            conn: Active SQLAlchemy connection used during SQLite initialization.
+        """
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS "
+                "ix_conversations_created_at_inner_id "
+                "ON conversations (created_at DESC, inner_conversation_id DESC)"
+            )
+        )
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS "
+                "ix_conversations_platform_created_at_inner_id "
+                "ON conversations (platform_id, created_at DESC, inner_conversation_id DESC)"
+            )
+        )
 
     async def _ensure_persona_folder_columns(self, conn) -> None:
         """确保 personas 表有 folder_id 和 sort_order 列。
@@ -121,13 +147,20 @@ class SQLiteDatabase(BaseDatabase):
                     "ADD COLUMN llm_checkpoint_id VARCHAR DEFAULT NULL"
                 )
             )
-            await conn.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS "
-                    "ix_platform_message_history_llm_checkpoint_id "
-                    "ON platform_message_history (llm_checkpoint_id)"
-                )
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS "
+                "ix_platform_message_history_llm_checkpoint_id "
+                "ON platform_message_history (llm_checkpoint_id)"
             )
+        )
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS "
+                "ix_platform_message_history_platform_user_id "
+                "ON platform_message_history (platform_id, user_id, id)"
+            )
+        )
 
     async def _ensure_chatui_project_workspace_columns(self, conn) -> None:
         """Ensure chatui_projects has workspace configuration columns."""
@@ -145,6 +178,17 @@ class SQLiteDatabase(BaseDatabase):
             await conn.execute(
                 text("ALTER TABLE chatui_projects ADD COLUMN workspace_path VARCHAR")
             )
+        await conn.execute(
+            text(
+                "UPDATE chatui_projects SET "
+                "workspace_type = CASE "
+                "WHEN LOWER(workspace_type) = 'custom' THEN 'project' "
+                "ELSE workspace_type END, "
+                "workspace_path = NULL "
+                "WHERE SUBSTR(creator, 1, 8) = 'api_key:' "
+                "AND (LOWER(workspace_type) = 'custom' OR workspace_path IS NOT NULL)"
+            )
+        )
 
     # ====
     # Platform Statistics
@@ -301,39 +345,62 @@ class SQLiteDatabase(BaseDatabase):
         page_size=20,
         platform_ids=None,
         search_query="",
+        include_history=True,
         **kwargs,
     ):
         async with self.get_db() as session:
             session: AsyncSession
             # Build the base query with filters
             base_query = select(ConversationV2)
+            conditions = []
 
             if platform_ids:
-                base_query = base_query.where(
-                    col(ConversationV2.platform_id).in_(platform_ids),
-                )
+                conditions.append(col(ConversationV2.platform_id).in_(platform_ids))
             if search_query:
-                search_query = search_query.encode("unicode_escape").decode("utf-8")
-                base_query = base_query.where(
+                escaped_search_query = json.dumps(
+                    search_query,
+                    ensure_ascii=True,
+                )[1:-1]
+                conditions.append(
                     or_(
                         col(ConversationV2.title).ilike(f"%{search_query}%"),
-                        col(ConversationV2.content).ilike(f"%{search_query}%"),
                         col(ConversationV2.user_id).ilike(f"%{search_query}%"),
                         col(ConversationV2.conversation_id).ilike(f"%{search_query}%"),
-                    ),
-                )
-            if "message_types" in kwargs and len(kwargs["message_types"]) > 0:
-                for msg_type in kwargs["message_types"]:
-                    base_query = base_query.where(
-                        col(ConversationV2.user_id).ilike(f"%:{msg_type}:%"),
+                        col(ConversationV2.content).ilike(f"%{search_query}%"),
+                        col(ConversationV2.content).ilike(f"%{escaped_search_query}%"),
                     )
-            if "platforms" in kwargs and len(kwargs["platforms"]) > 0:
-                base_query = base_query.where(
-                    col(ConversationV2.platform_id).in_(kwargs["platforms"]),
+                )
+            message_types = kwargs.get("message_types") or []
+            if message_types:
+                conditions.append(
+                    or_(
+                        *(
+                            col(ConversationV2.user_id).like(f"%:{msg_type}:%")
+                            for msg_type in message_types
+                        )
+                    )
+                )
+            platforms = kwargs.get("platforms") or []
+            if platforms:
+                conditions.append(col(ConversationV2.platform_id).in_(platforms))
+            exclude_ids = kwargs.get("exclude_ids") or []
+            for exclude_id in exclude_ids:
+                conditions.append(
+                    not_(col(ConversationV2.user_id).like(f"{exclude_id}%"))
+                )
+            exclude_platforms = kwargs.get("exclude_platforms") or []
+            if exclude_platforms:
+                conditions.append(
+                    not_(col(ConversationV2.platform_id).in_(exclude_platforms))
                 )
 
+            if conditions:
+                base_query = base_query.where(*conditions)
+
             # Get total count matching the filters
-            count_query = select(func.count()).select_from(base_query.subquery())
+            count_query = select(func.count(ConversationV2.inner_conversation_id))
+            if conditions:
+                count_query = count_query.where(*conditions)
             total_count = await session.execute(count_query)
             total = total_count.scalar_one()
 
@@ -341,10 +408,41 @@ class SQLiteDatabase(BaseDatabase):
             offset = (page - 1) * page_size
             result_query = (
                 base_query.order_by(desc(ConversationV2.created_at))
+                .order_by(desc(ConversationV2.inner_conversation_id))
                 .offset(offset)
                 .limit(page_size)
             )
-            result = await session.execute(result_query)
+            if not include_history:
+                result_query = result_query.options(defer(ConversationV2.content))
+            if len(platforms) > 1 or len(platform_ids or []) > 1:
+                # SQLite may choose the narrow platform index for IN queries and
+                # then materialize a temporary sort. Force the global ordering
+                # index for multi-platform pages while keeping ORM row mapping.
+                compiled = result_query.compile(
+                    dialect=sqlite_dialect(paramstyle="named"),
+                    compile_kwargs={"render_postcompile": True},
+                )
+                indexed_sql = compiled.string.replace(
+                    "FROM conversations",
+                    "FROM conversations INDEXED BY "
+                    "ix_conversations_created_at_inner_id",
+                    1,
+                )
+                conversation_columns = [
+                    column
+                    for column in ConversationV2.__table__.columns
+                    if include_history or column.name != "content"
+                ]
+                result_query = select(ConversationV2).from_statement(
+                    text(indexed_sql).columns(*conversation_columns),
+                )
+                if not include_history:
+                    result_query = result_query.options(
+                        defer(ConversationV2.content),
+                    )
+                result = await session.execute(result_query, compiled.params)
+            else:
+                result = await session.execute(result_query)
             conversations = result.scalars().all()
 
             return conversations, total
@@ -542,6 +640,7 @@ class SQLiteDatabase(BaseDatabase):
         sender_id=None,
         sender_name=None,
         llm_checkpoint_id=None,
+        max_messages=None,
     ):
         """Insert a new platform message history record."""
         async with self.get_db() as session:
@@ -556,6 +655,24 @@ class SQLiteDatabase(BaseDatabase):
                     llm_checkpoint_id=llm_checkpoint_id,
                 )
                 session.add(new_history)
+                await session.flush()
+                if max_messages is not None:
+                    keep_ids = (
+                        select(PlatformMessageHistory.id)
+                        .where(
+                            col(PlatformMessageHistory.platform_id) == platform_id,
+                            col(PlatformMessageHistory.user_id) == user_id,
+                        )
+                        .order_by(desc(PlatformMessageHistory.id))
+                        .limit(max(1, int(max_messages)))
+                    )
+                    await session.execute(
+                        delete(PlatformMessageHistory).where(
+                            col(PlatformMessageHistory.platform_id) == platform_id,
+                            col(PlatformMessageHistory.user_id) == user_id,
+                            col(PlatformMessageHistory.id).not_in(keep_ids),
+                        )
+                    )
                 return new_history
 
     async def update_platform_message_history(
@@ -630,7 +747,10 @@ class SQLiteDatabase(BaseDatabase):
                     PlatformMessageHistory.platform_id == platform_id,
                     PlatformMessageHistory.user_id == user_id,
                 )
-                .order_by(desc(PlatformMessageHistory.created_at))
+                .order_by(
+                    desc(PlatformMessageHistory.created_at),
+                    desc(PlatformMessageHistory.id),
+                )
             )
             result = await session.execute(query.offset(offset).limit(page_size))
             return result.scalars().all()
@@ -1538,6 +1658,7 @@ class SQLiteDatabase(BaseDatabase):
     # Deprecated Methods
     # ====
 
+    @deprecated(version="4.0.0", reason="Use get_platform_stats instead")
     def get_base_stats(self, offset_sec=86400):
         """Get base statistics within the specified offset in seconds."""
 
@@ -1572,6 +1693,7 @@ class SQLiteDatabase(BaseDatabase):
         t.join()
         return result
 
+    @deprecated(version="4.0.0", reason="Use get_platform_stats instead")
     def get_total_message_count(self):
         """Get the total message count from platform statistics."""
 
@@ -1595,6 +1717,7 @@ class SQLiteDatabase(BaseDatabase):
         t.join()
         return result
 
+    @deprecated(version="4.0.0", reason="Use get_platform_stats instead")
     def get_grouped_base_stats(self, offset_sec=86400):
         # group by platform_id
         async def _inner():

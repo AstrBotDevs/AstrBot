@@ -988,13 +988,13 @@
       }
     },
     "ltm": {
-      "description": "Group Chat Context Awareness (formerly Chat Memory Enhancement)",
+      "description": "Group Chat Context Awareness",
       "provider_ltm_settings": {
         "group_icl_enable": {
-          "description": "Enable Group Chat Context Awareness"
+          "description": "Inject Group Chat Records into Context"
         },
         "group_message_max_cnt": {
-          "description": "Maximum Message Count"
+          "description": "Maximum Messages Injected into Context"
         },
         "image_caption": {
           "description": "Auto-understand Images",
@@ -1002,7 +1002,14 @@
         },
         "image_caption_provider_id": {
           "description": "Group Chat Image Caption Model",
-          "hint": "Used for image understanding in group chat context awareness, configured separately from the default image caption model."
+          "hint": "Used to understand images injected from group chat records, configured separately from the default image caption model."
+        },
+        "group_message_history_enable": {
+          "description": "Persist Group Chat Messages",
+          "hint": "Saves group messages and provides the model with a tool for querying the current group's history. Media content is not currently persisted; media messages are stored as placeholders such as [Image]."
+        },
+        "group_message_history_max_cnt": {
+          "description": "Maximum Persisted Messages"
         },
         "active_reply": {
           "enable": {
@@ -1242,6 +1249,22 @@
         "description": "Text Truncation Strategy",
         "hint": "Whether to truncate the input to fit the model's maximum context length when the input text is too long."
       },
+      "tei_rerank_truncate": {
+        "description": "Truncate Long Text",
+        "hint": "Whether to automatically truncate input when it exceeds the model's maximum context length. Requires Truncation Direction when enabled."
+      },
+      "tei_rerank_truncation_direction": {
+        "description": "Truncation Direction",
+        "hint": "Choose to truncate from the left or right side of the text. Only takes effect when Truncate Long Text is True."
+      },
+      "tei_rerank_raw_scores": {
+        "description": "Return Raw Scores",
+        "hint": "If True, returns raw model logit scores (which may be negative) without sigmoid normalization. Default is False."
+      },
+      "tei_rerank_return_text": {
+        "description": "Return Document Text in Results",
+        "hint": "If True, each result will include the original document text. Default is False to reduce network overhead."
+      },
       "launch_model_if_not_running": {
         "description": "Auto-start model if not running",
         "hint": "If the model is not running in Xinference, attempt to start it automatically. Recommended to disable in production."
@@ -1377,6 +1400,10 @@
         "description": "Embedding dimensions",
         "hint": "Embedding vector dimensions. May need adjustment per model; see model documentation. This must be correct or the vector database will not work."
       },
+      "embedding_dimensions_mode": {
+        "description": "Embedding dimensions mode",
+        "hint": "Controls whether to send the dimensions parameter in OpenAI-compatible embedding requests. auto sends it only for official OpenAI embedding-3 models; use always when a compatible API supports it, or never when it rejects the parameter."
+      },
       "embedding_model": {
         "description": "Embedding model",
         "hint": "Embedding model name."
@@ -1392,6 +1419,9 @@
       },
       "gemini_embedding": {
         "hint": "Gemini Embedding does not require manually adding /v1beta."
+      },
+      "dashscope_embedding": {
+        "hint": "Aliyun DashScope Embedding. Default base URL: https://dashscope.aliyuncs.com/api/v1."
       },
       "volcengine_cluster": {
         "description": "Volcengine cluster",

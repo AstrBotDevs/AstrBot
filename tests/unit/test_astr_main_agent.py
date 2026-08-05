@@ -169,6 +169,24 @@ def test_append_system_reminders_includes_weekday(mock_event):
     ]
 
 
+def test_local_mode_prompt_uses_windows_powershell_51():
+    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"):
+        prompt = ama._build_local_mode_prompt()
+
+    assert "Windows PowerShell 5.1 (powershell.exe)" in prompt
+    assert "PowerShell 7-only syntax" in prompt
+    assert "cmd.exe" not in prompt
+
+
+def test_local_mode_prompt_keeps_posix_shell_guidance():
+    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Linux"):
+        prompt = ama._build_local_mode_prompt()
+
+    assert "Unix-like" in prompt
+    assert "POSIX-compatible" in prompt
+    assert "PowerShell" not in prompt
+
+
 class TestMainAgentBuildConfig:
     """Tests for MainAgentBuildConfig dataclass."""
 
@@ -792,6 +810,59 @@ class TestEnsurePersonaAndSkills:
         assert "Custom persona." in req.system_prompt
 
     @pytest.mark.asyncio
+    async def test_inline_genui_prompt_is_added_with_custom_persona(
+        self, mock_event, mock_context
+    ):
+        """Test inline GenUI instructions are independent of persona selection."""
+        module = ama
+        persona = {"name": "conv-persona", "prompt": "Custom persona."}
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=("conv-persona", persona, None, False)
+        )
+        mock_event.get_extra.side_effect = lambda key: key == "enable_inline_genui"
+        req = ProviderRequest()
+        req.conversation = MagicMock(persona_id="conv-persona")
+
+        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+
+        assert "Custom persona." in req.system_prompt
+        assert module.CHATUI_INLINE_GENUI_SYSTEM_PROMPT in req.system_prompt
+
+    @pytest.mark.asyncio
+    async def test_inline_genui_prompt_does_not_require_conversation(
+        self, mock_event, mock_context
+    ):
+        """Test inline GenUI instructions are added before conversation setup."""
+        module = ama
+        mock_event.get_extra.side_effect = lambda key: key == "enable_inline_genui"
+        req = ProviderRequest()
+
+        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+
+        assert module.CHATUI_INLINE_GENUI_SYSTEM_PROMPT in req.system_prompt
+        mock_context.persona_manager.resolve_selected_persona.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_default_system_prompt_can_be_disabled(
+        self, mock_event, mock_context
+    ):
+        """Test the default ChatUI persona prompt honors its request flag."""
+        module = ama
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=("_chatui_default_", None, None, True)
+        )
+        mock_event.get_extra.side_effect = lambda key: {
+            "enable_inline_genui": False,
+            "enable_default_system_prompt": False,
+        }.get(key)
+        req = ProviderRequest()
+        req.conversation = MagicMock(persona_id=None)
+
+        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+
+        assert module.CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT not in req.system_prompt
+
+    @pytest.mark.asyncio
     async def test_ensure_persona_none_explicit(self, mock_event, mock_context):
         """Test that [%None] persona is explicitly set to no persona."""
         module = ama
@@ -1099,7 +1170,14 @@ class TestEnsurePersonaAndSkills:
             assert result.provider_request.func_tool is not None
             tool_names = result.provider_request.func_tool.names()
             assert "astrbot_execute_shell" in tool_names
+            assert "astrbot_shell_session" in tool_names
             assert "astrbot_execute_python" in tool_names
+            shell_tool = result.provider_request.func_tool.get_tool(
+                "astrbot_execute_shell"
+            )
+            assert shell_tool is not None
+            assert "background" not in shell_tool.parameters["properties"]
+            assert "yield_time_ms" in shell_tool.parameters["properties"]
         finally:
             if result.reset_coro:
                 result.reset_coro.close()

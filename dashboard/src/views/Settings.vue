@@ -11,7 +11,10 @@
                     :key="item.id"
                     type="button"
                     class="settings-nav__item"
-                    :class="{ 'settings-nav__item--active': activeSettingsSection === item.id }"
+                    :class="{
+                        'settings-nav__item--active': activeSettingsSection === item.id,
+                        'settings-nav__item--divider': item.dividerBefore
+                    }"
                     :aria-pressed="activeSettingsSection === item.id"
                     @click="activeSettingsSection = item.id"
                 >
@@ -306,17 +309,62 @@
                                     </v-alert>
 
                                     <div class="text-caption text-medium-emphasis mb-1">{{ tm('apiKey.scopes') }}</div>
-                                    <v-chip-group v-model="newApiKeyScopes" multiple class="mb-3">
-                                        <v-chip
+                                    <div class="api-key-scope-list mb-3">
+                                        <div
                                             v-for="scope in availableScopes"
                                             :key="scope.value"
-                                            :value="scope.value"
-                                            :color="newApiKeyScopes.includes(scope.value) ? 'primary' : undefined"
-                                            :variant="newApiKeyScopes.includes(scope.value) ? 'flat' : 'tonal'"
+                                            class="api-key-scope-item"
                                         >
-                                            {{ scope.label }}
-                                        </v-chip>
-                                    </v-chip-group>
+                                            <v-checkbox
+                                                v-model="newApiKeyScopes"
+                                                :value="scope.value"
+                                                density="compact"
+                                                hide-details
+                                                color="primary"
+                                            >
+                                                <template #label>
+                                                    <div class="api-key-scope-label">
+                                                        <code>{{ scope.label }}</code>
+                                                        <span>{{ tm(scope.descriptionKey) }}</span>
+                                                    </div>
+                                                </template>
+                                            </v-checkbox>
+                                            <div
+                                                v-if="scope.children?.length && newApiKeyScopes.includes(scope.value)"
+                                                class="api-key-subscope-list"
+                                            >
+                                                <div class="api-key-subscope-heading">
+                                                    {{ tm('apiKey.sensitiveSubscope') }}
+                                                </div>
+                                                <v-checkbox
+                                                    v-for="child in scope.children"
+                                                    :key="child.value"
+                                                    v-model="newApiKeyScopes"
+                                                    :value="child.value"
+                                                    density="compact"
+                                                    hide-details
+                                                    color="warning"
+                                                >
+                                                    <template #label>
+                                                        <div class="api-key-scope-label">
+                                                            <code>{{ child.label }}</code>
+                                                            <span>{{ tm(child.descriptionKey) }}</span>
+                                                        </div>
+                                                    </template>
+                                                </v-checkbox>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <v-alert
+                                        v-if="newApiKeyScopes.includes('chat:admin')"
+                                        type="warning"
+                                        variant="tonal"
+                                        density="compact"
+                                        class="mb-3"
+                                    >
+                                        {{ tm('apiKey.chatAdminWarning') }}
+                                    </v-alert>
 
                                     <v-alert v-if="createdApiKeyPlaintext" type="warning" variant="tonal" class="mb-4">
                                         <div class="d-flex align-center justify-space-between flex-wrap">
@@ -395,12 +443,39 @@
                         </div>
                     </div>
                 </section>
+
+                <section id="settings-resources" class="settings-section" v-show="activeSettingsSection === 'resources'">
+                    <div class="settings-section__heading">
+                        <div class="settings-section__title">{{ tm('sections.resources.title') }}</div>
+                    </div>
+                    <div class="settings-section__content">
+                        <div class="settings-list-card">
+                            <div
+                                v-for="item in resourceItems"
+                                :key="item.key"
+                                class="settings-item"
+                            >
+                                <div class="settings-item__label">
+                                    <div class="settings-item__title">{{ item.title }}</div>
+                                    <div class="settings-item__subtitle">{{ item.subtitle }}</div>
+                                </div>
+                                <div class="settings-item__control">
+                                    <v-btn variant="tonal" @click="item.action()">
+                                        <v-icon class="mr-2">{{ item.icon }}</v-icon>
+                                        {{ item.title }}
+                                    </v-btn>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </main>
         </div>
     </div>
 
     <WaitingForRestart ref="wfr" />
     <BackupDialog ref="backupDialog" />
+    <ChangelogDialog v-model="changelogDialog" />
     <DashboardTwoFactorDialog
         v-model="configSave2faDialogVisible"
         :error-message="configSave2faError"
@@ -421,9 +496,10 @@ import SidebarCustomizer from '@/components/shared/SidebarCustomizer.vue';
 import BackupDialog from '@/components/shared/BackupDialog.vue';
 import StorageCleanupPanel from '@/components/shared/StorageCleanupPanel.vue';
 import DashboardTwoFactorDialog from '@/components/shared/DashboardTwoFactorDialog.vue';
+import ChangelogDialog from '@/components/shared/ChangelogDialog.vue';
 import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot';
 import { copyToClipboard } from '@/utils/clipboard';
-import { useModuleI18n } from '@/i18n/composables';
+import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { useTheme } from 'vuetify';
 import { PurpleTheme } from '@/theme/LightTheme';
 import { useToastStore } from '@/stores/toast';
@@ -431,6 +507,7 @@ import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
 
 const { tm } = useModuleI18n('features/settings');
 const { tm: tmMeta } = useModuleI18n('features/config-metadata');
+const { t, locale } = useI18n();
 const toastStore = useToastStore();
 const confirmDialog = useConfirmDialog();
 const theme = useTheme();
@@ -482,7 +559,7 @@ const apiKeys = ref([]);
 const apiKeyCreating = ref(false);
 const newApiKeyName = ref('');
 const newApiKeyExpiresInDays = ref(30);
-const newApiKeyScopes = ref(['bot', 'provider', 'im', 'config', 'chat', 'file']);
+const newApiKeyScopes = ref(['bot', 'provider', 'im', 'chat', 'file']);
 const createdApiKeyPlaintext = ref('');
 const systemConfigData = ref({});
 const systemConfigMetadata = ref({});
@@ -497,6 +574,7 @@ const configSave2faRotationHint = ref('');
 const configSavePendingData = ref(null);
 const systemConfigAutoSaveTimer = ref(null);
 const activeSettingsSection = ref('general');
+const changelogDialog = ref(false);
 
 const apiKeyExpiryOptions = computed(() => [
     { title: tm('apiKey.expiryOptions.day1'), value: 1 },
@@ -507,18 +585,44 @@ const apiKeyExpiryOptions = computed(() => [
 ]);
 
 const availableScopes = [
-    { value: 'bot', label: 'bot' },
-    { value: 'provider', label: 'provider' },
-    { value: 'persona', label: 'persona' },
-    { value: 'im', label: 'im' },
-    { value: 'config', label: 'config' },
-    { value: 'chat', label: 'chat' },
-    { value: 'data', label: 'data' },
-    { value: 'file', label: 'file' },
-    { value: 'plugin', label: 'plugin' },
-    { value: 'mcp', label: 'mcp' },
-    { value: 'skill', label: 'skill' }
+    { value: 'bot', label: 'bot', descriptionKey: 'apiKey.scopeDescriptions.bot' },
+    { value: 'provider', label: 'provider', descriptionKey: 'apiKey.scopeDescriptions.provider' },
+    { value: 'persona', label: 'persona', descriptionKey: 'apiKey.scopeDescriptions.persona' },
+    { value: 'im', label: 'im', descriptionKey: 'apiKey.scopeDescriptions.im' },
+    {
+        value: 'config',
+        label: 'config',
+        descriptionKey: 'apiKey.scopeDescriptions.config',
+        children: [
+            {
+                value: 'config:edit_admin',
+                label: 'edit_admin',
+                descriptionKey: 'apiKey.scopeDescriptions.editAdmin'
+            }
+        ]
+    },
+    {
+        value: 'chat',
+        label: 'chat',
+        descriptionKey: 'apiKey.scopeDescriptions.chat',
+        children: [
+            {
+                value: 'chat:admin',
+                label: 'admin',
+                descriptionKey: 'apiKey.scopeDescriptions.chatAdmin'
+            }
+        ]
+    },
+    { value: 'data', label: 'data', descriptionKey: 'apiKey.scopeDescriptions.data' },
+    { value: 'file', label: 'file', descriptionKey: 'apiKey.scopeDescriptions.file' },
+    { value: 'plugin', label: 'plugin', descriptionKey: 'apiKey.scopeDescriptions.plugin' },
+    { value: 'mcp', label: 'mcp', descriptionKey: 'apiKey.scopeDescriptions.mcp' },
+    { value: 'skill', label: 'skill', descriptionKey: 'apiKey.scopeDescriptions.skill' }
 ];
+const apiKeyScopeOrder = availableScopes.flatMap((scope) => [
+    scope.value,
+    ...(scope.children || []).map((child) => child.value)
+]);
 
 const settingsNavItems = computed(() => [
     { id: 'general', label: tm('sections.general.title'), icon: 'mdi mdi-tune-variant' },
@@ -526,10 +630,54 @@ const settingsNavItems = computed(() => [
     { id: 'network', label: tm('sections.network.title'), icon: 'mdi mdi-lan-connect' },
     { id: 'security', label: tm('sections.security.title'), icon: 'mdi mdi-shield-lock-outline' },
     { id: 'maintenance', label: tm('sections.maintenance.title'), icon: 'mdi mdi-tools' },
-    { id: 'openapi', label: tm('sections.openapi.title'), icon: 'mdi mdi-api' }
+    { id: 'openapi', label: tm('sections.openapi.title'), icon: 'mdi mdi-api' },
+    { id: 'resources', label: tm('sections.resources.title'), icon: 'mdi mdi-information-outline', dividerBefore: true }
+]);
+
+const openExternalLink = (url) => {
+    if (typeof window === 'undefined') return;
+    window.open(url, '_blank', 'noopener,noreferrer');
+};
+
+const openFaqLink = () => {
+    openExternalLink(locale.value === 'en-US'
+        ? 'https://docs.astrbot.app/en/faq.html'
+        : 'https://docs.astrbot.app/faq.html');
+};
+
+const resourceItems = computed(() => [
+    {
+        key: 'changelog',
+        title: t('core.navigation.changelog'),
+        subtitle: tm('resources.changelog.subtitle'),
+        icon: 'mdi-note-text-outline',
+        action: () => { changelogDialog.value = true; }
+    },
+    {
+        key: 'documentation',
+        title: t('core.navigation.documentation'),
+        subtitle: tm('resources.documentation.subtitle'),
+        icon: 'mdi-book-open-variant',
+        action: () => openExternalLink('https://docs.astrbot.app')
+    },
+    {
+        key: 'faq',
+        title: t('core.navigation.faq'),
+        subtitle: tm('resources.faq.subtitle'),
+        icon: 'mdi-frequently-asked-questions',
+        action: openFaqLink
+    },
+    {
+        key: 'github',
+        title: t('core.navigation.github'),
+        subtitle: tm('resources.github.subtitle'),
+        icon: 'mdi-github',
+        action: () => openExternalLink('https://github.com/AstrBotDevs/AstrBot')
+    }
 ]);
 
 const configIncludedScopes = ['bot', 'provider'];
+const sensitiveApiKeyScopes = ['config:edit_admin', 'chat:admin'];
 const previousApiKeyScopes = ref([...newApiKeyScopes.value]);
 
 const systemConfigHasChanges = computed(() => (
@@ -626,16 +774,21 @@ watch(
                     selectedScopes.add(scope);
                 }
             }
-
-            nextScopes = availableScopes
-                .map((scopeOption) => scopeOption.value)
-                .filter((scope) => selectedScopes.has(scope));
-            if (
-                nextScopes.length !== scopes.length
-                || nextScopes.some((scope, index) => scope !== scopes[index])
-            ) {
-                newApiKeyScopes.value = nextScopes;
+        }
+        for (const scopeOption of availableScopes) {
+            if (!selectedScopes.has(scopeOption.value)) {
+                for (const child of scopeOption.children || []) {
+                    selectedScopes.delete(child.value);
+                }
             }
+        }
+
+        nextScopes = apiKeyScopeOrder.filter((scope) => selectedScopes.has(scope));
+        if (
+            nextScopes.length !== scopes.length
+            || nextScopes.some((scope, index) => scope !== scopes[index])
+        ) {
+            newApiKeyScopes.value = nextScopes;
         }
         previousApiKeyScopes.value = [...nextScopes];
     },
@@ -816,12 +969,23 @@ const createApiKey = async () => {
             selectedScopeSet.add(scope);
         }
     }
-    const selectedScopes = availableScopes
-        .map((scope) => scope.value)
-        .filter((scope) => selectedScopeSet.has(scope));
+    const selectedScopes = apiKeyScopeOrder.filter((scope) => selectedScopeSet.has(scope));
 
     if (selectedScopes.length === 0) {
         showToast(tm('apiKey.messages.scopeRequired'), 'warning');
+        return;
+    }
+    const selectedSensitiveScopes = selectedScopes.filter((scope) => (
+        sensitiveApiKeyScopes.includes(scope)
+    ));
+    const confirmationMessage = selectedSensitiveScopes.length > 0
+        ? tm('apiKey.sensitiveCreateConfirm', {
+            scopes: selectedSensitiveScopes.join(', ')
+        })
+        : tm('apiKey.createConfirm', {
+            scopes: selectedScopes.join(', ')
+        });
+    if (!(await askForConfirmation(confirmationMessage, confirmDialog))) {
         return;
     }
     apiKeyCreating.value = true;
@@ -916,6 +1080,8 @@ onMounted(async () => {
         activeSettingsSection.value = 'maintenance';
     } else if (hash.includes('settings-openapi')) {
         activeSettingsSection.value = 'openapi';
+    } else if (hash.includes('settings-resources')) {
+        activeSettingsSection.value = 'resources';
     }
 });
 
@@ -993,6 +1159,20 @@ onUnmounted(() => {
 .settings-nav__item:hover {
     background: rgba(var(--v-theme-on-surface), 0.045);
     color: rgb(var(--v-theme-on-surface));
+}
+
+.settings-nav__item--divider {
+    margin-top: 13px;
+}
+
+.settings-nav__item--divider::after {
+    position: absolute;
+    top: -9px;
+    right: 0;
+    left: 0;
+    height: 1px;
+    background: var(--settings-divider);
+    content: "";
 }
 
 .settings-nav__item--active {
@@ -1316,9 +1496,58 @@ onUnmounted(() => {
     font-size: 0.84rem;
 }
 
-.api-key-panel :deep(.v-chip) {
-    height: 30px;
-    font-size: 0.8rem;
+.api-key-scope-list {
+    overflow: hidden;
+    border: 1px solid var(--settings-border);
+    border-radius: 10px;
+}
+
+.api-key-scope-item {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--settings-divider);
+}
+
+.api-key-scope-item:last-child {
+    border-bottom: 0;
+}
+
+.api-key-scope-item :deep(.v-selection-control) {
+    align-items: flex-start;
+}
+
+.api-key-scope-label {
+    display: grid;
+    gap: 2px;
+    padding: 3px 0;
+}
+
+.api-key-scope-label code {
+    width: fit-content;
+    color: rgb(var(--v-theme-on-surface));
+    font-weight: 650;
+}
+
+.api-key-scope-label span {
+    color: rgba(var(--v-theme-on-surface), 0.64);
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
+.api-key-subscope-list {
+    margin: 4px 0 4px 34px;
+    padding: 10px 12px;
+    border-left: 3px solid rgb(var(--v-theme-warning));
+    border-radius: 0 8px 8px 0;
+    background: rgba(var(--v-theme-warning), 0.07);
+}
+
+.api-key-subscope-heading {
+    margin-bottom: 2px;
+    color: rgb(var(--v-theme-warning));
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
 }
 
 .api-key-plain {
