@@ -56,6 +56,82 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             return value.get(name, default)
         return getattr(value, name, default)
 
+    def _build_response_tools(
+        self,
+        tools: ToolSet | None,
+        custom_tools: Any,
+    ) -> list[dict[str, Any]]:
+        """Build the Responses API tool list from AstrBot and native tools.
+
+        Args:
+            tools: AstrBot function tools available for the request.
+            custom_tools: Backward-compatible raw Responses API tools from config.
+
+        Returns:
+            The normalized tool entries to send to the Responses API.
+        """
+        response_tools: list[dict[str, Any]] = []
+        if tools:
+            for tool in tools.openai_schema():
+                function = tool.get("function", {})
+                response_tools.append({"type": "function", **function})
+
+        if self.provider_config.get("responses_web_search"):
+            web_search: dict[str, Any] = {"type": "web_search"}
+            context_size = self.provider_config.get(
+                "responses_web_search_context_size",
+                "medium",
+            )
+            if context_size in {"low", "medium", "high"}:
+                web_search["search_context_size"] = context_size
+            allowed_domains = self.provider_config.get(
+                "responses_web_search_allowed_domains",
+            )
+            if isinstance(allowed_domains, list):
+                domains = [
+                    domain
+                    for domain in allowed_domains
+                    if isinstance(domain, str) and domain
+                ]
+                if domains:
+                    web_search["filters"] = {"allowed_domains": domains}
+            response_tools.append(web_search)
+
+        vector_store_ids = self.provider_config.get(
+            "responses_file_search_vector_store_ids",
+        )
+        if isinstance(vector_store_ids, list):
+            vector_store_ids = [
+                vector_store_id
+                for vector_store_id in vector_store_ids
+                if isinstance(vector_store_id, str) and vector_store_id
+            ]
+            if vector_store_ids:
+                response_tools.append(
+                    {
+                        "type": "file_search",
+                        "vector_store_ids": vector_store_ids,
+                    }
+                )
+
+        if self.provider_config.get("responses_code_interpreter"):
+            response_tools.append(
+                {
+                    "type": "code_interpreter",
+                    "container": {"type": "auto"},
+                }
+            )
+
+        if self.provider_config.get("responses_image_generation"):
+            response_tools.append({"type": "image_generation"})
+
+        if isinstance(custom_tools, list):
+            response_tools.extend(
+                tool for tool in custom_tools if isinstance(tool, dict)
+            )
+
+        return response_tools
+
     def _convert_chat_messages_to_response_input(
         self,
         messages: list[dict],
@@ -314,19 +390,22 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         Raises:
             TypeError: If the SDK returns an unexpected response type.
         """
-        if tools:
-            response_tools = []
-            for tool in tools.openai_schema():
-                function = tool.get("function", {})
-                response_tools.append({"type": "function", **function})
-            if response_tools:
-                payloads["tools"] = response_tools
-                payloads["tool_choice"] = payloads.get("tool_choice", "auto")
-
         extra_body: dict[str, Any] = {}
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
         if isinstance(custom_extra_body, dict):
             extra_body.update(custom_extra_body)
+
+        custom_tools = extra_body.pop("tools", None)
+        custom_tool_choice = extra_body.pop("tool_choice", None)
+        response_tools = self._build_response_tools(tools, custom_tools)
+        if response_tools:
+            payloads["tools"] = response_tools
+            tool_choice = self.provider_config.get("responses_tool_choice")
+            if tool_choice not in {"auto", "required", "none"}:
+                tool_choice = payloads.get("tool_choice", custom_tool_choice)
+            if tool_choice not in {"auto", "required", "none"}:
+                tool_choice = "auto"
+            payloads["tool_choice"] = tool_choice
 
         for key in list(payloads):
             if key not in self.default_params:
@@ -383,19 +462,22 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         Raises:
             EmptyModelOutputError: If the stream ends without a terminal event.
         """
-        if tools:
-            response_tools = []
-            for tool in tools.openai_schema():
-                function = tool.get("function", {})
-                response_tools.append({"type": "function", **function})
-            if response_tools:
-                payloads["tools"] = response_tools
-                payloads["tool_choice"] = payloads.get("tool_choice", "auto")
-
         extra_body: dict[str, Any] = {}
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
         if isinstance(custom_extra_body, dict):
             extra_body.update(custom_extra_body)
+
+        custom_tools = extra_body.pop("tools", None)
+        custom_tool_choice = extra_body.pop("tool_choice", None)
+        response_tools = self._build_response_tools(tools, custom_tools)
+        if response_tools:
+            payloads["tools"] = response_tools
+            tool_choice = self.provider_config.get("responses_tool_choice")
+            if tool_choice not in {"auto", "required", "none"}:
+                tool_choice = payloads.get("tool_choice", custom_tool_choice)
+            if tool_choice not in {"auto", "required", "none"}:
+                tool_choice = "auto"
+            payloads["tool_choice"] = tool_choice
 
         for key in list(payloads):
             if key not in self.default_params:
@@ -523,6 +605,9 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         text_parts: list[str] = []
         reasoning_parts: list[str] = []
         serialized_reasoning_items: list[dict] = []
+        citation_sources: dict[str, str] = {}
+        file_citation_sources: dict[str, str] = {}
+        generated_images: list[str] = []
 
         for item in self._field(response, "output", []) or []:
             item_type = self._field(item, "type")
@@ -531,6 +616,25 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                     content_type = self._field(content, "type")
                     if content_type == "output_text":
                         text_parts.append(str(self._field(content, "text", "")))
+                        for annotation in self._field(content, "annotations", []) or []:
+                            annotation_type = self._field(annotation, "type")
+                            if annotation_type == "url_citation":
+                                url = self._field(annotation, "url")
+                                if not isinstance(url, str) or not url:
+                                    continue
+                                title = self._field(annotation, "title", "")
+                                citation_sources.setdefault(url, str(title or url))
+                            elif annotation_type in {
+                                "file_citation",
+                                "container_file_citation",
+                            }:
+                                file_id = self._field(annotation, "file_id", "")
+                                filename = self._field(annotation, "filename", "")
+                                if isinstance(file_id, str) and file_id:
+                                    file_citation_sources.setdefault(
+                                        file_id,
+                                        str(filename or file_id),
+                                    )
                     elif content_type == "refusal":
                         text_parts.append(str(self._field(content, "refusal", "")))
                 continue
@@ -574,10 +678,31 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 llm_response.tools_call_ids.append(
                     str(self._field(item, "call_id", ""))
                 )
+                continue
+
+            if item_type == "image_generation_call":
+                image_base64 = self._field(item, "result")
+                if isinstance(image_base64, str) and image_base64:
+                    generated_images.append(image_base64)
 
         completion_text = "".join(text_parts)
-        if completion_text:
-            llm_response.result_chain = MessageChain().message(completion_text)
+        if completion_text or generated_images:
+            result_chain = MessageChain()
+            if completion_text:
+                result_chain.message(completion_text)
+            for image_base64 in generated_images:
+                result_chain.base64_image(image_base64)
+            if citation_sources or file_citation_sources:
+                source_lines = ["Sources:"]
+                source_lines.extend(
+                    f"- {title}: {url}" for url, title in citation_sources.items()
+                )
+                source_lines.extend(
+                    f"- {filename} ({file_id})"
+                    for file_id, filename in file_citation_sources.items()
+                )
+                result_chain.message("\n\n" + "\n".join(source_lines))
+            llm_response.result_chain = result_chain
         if reasoning_parts:
             llm_response.reasoning_content = "\n".join(reasoning_parts)
         if serialized_reasoning_items:
@@ -607,7 +732,12 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
 
         has_text = bool((llm_response.completion_text or "").strip())
         has_reasoning = bool((llm_response.reasoning_content or "").strip())
-        if not has_text and not has_reasoning and not llm_response.tools_call_args:
+        if (
+            not has_text
+            and not generated_images
+            and not has_reasoning
+            and not llm_response.tools_call_args
+        ):
             raise EmptyModelOutputError(
                 "Responses API returned no usable output. "
                 f"response_id={response_id}, status={status}"

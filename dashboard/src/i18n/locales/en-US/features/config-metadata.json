@@ -1333,6 +1333,34 @@
         "description": "Enable native search",
         "hint": "When enabled, uses xAI Chat Completions native Live Search for web queries (billed on demand). Only applies to xAI providers."
       },
+      "responses_web_search": {
+        "description": "Enable Responses web search",
+        "hint": "Use the OpenAI Responses API web_search tool for online retrieval. Only applies to openai_responses providers."
+      },
+      "responses_web_search_context_size": {
+        "description": "Web search context size",
+        "hint": "Controls how much context the web search tool allocates to its results."
+      },
+      "responses_web_search_allowed_domains": {
+        "description": "Allowed web search domains",
+        "hint": "Leave empty for no restriction. When set, web search uses only these domains and their subdomains."
+      },
+      "responses_file_search_vector_store_ids": {
+        "description": "File search Vector Store IDs",
+        "hint": "Set OpenAI Vector Store IDs to enable file_search; leave empty to disable it."
+      },
+      "responses_code_interpreter": {
+        "description": "Enable Responses code interpreter",
+        "hint": "Run Python code in an OpenAI-hosted container."
+      },
+      "responses_image_generation": {
+        "description": "Enable Responses image generation",
+        "hint": "Allow supported models to generate images with the image_generation tool."
+      },
+      "responses_tool_choice": {
+        "description": "Responses tool choice",
+        "hint": "Choose whether the model may select tools automatically, must call a tool, or cannot call tools."
+      },
       "rerank_api_base": {
         "description": "Rerank Model API Base URL",
         "hint": "The full request URL is formed by combining the Base URL and a path suffix (defaults to /v1/rerank)."
