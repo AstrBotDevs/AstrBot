@@ -198,7 +198,7 @@ wheels = [
 
 [[package]]
 name = "astrbot"
-version = "4.26.7"
+version = "4.27.1"
 source = { editable = "." }
 dependencies = [
     { name = "aiocqhttp" },
