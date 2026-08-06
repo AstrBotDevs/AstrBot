@@ -139,9 +139,9 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             )
             if isinstance(allowed_domains, list):
                 domains = [
-                    domain
+                    domain.strip()
                     for domain in allowed_domains
-                    if isinstance(domain, str) and domain
+                    if isinstance(domain, str) and domain.strip()
                 ]
                 if domains:
                     web_search["filters"] = {"allowed_domains": domains}
@@ -152,9 +152,9 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         )
         if isinstance(vector_store_ids, list):
             vector_store_ids = [
-                vector_store_id
+                vector_store_id.strip()
                 for vector_store_id in vector_store_ids
-                if isinstance(vector_store_id, str) and vector_store_id
+                if isinstance(vector_store_id, str) and vector_store_id.strip()
             ]
             if vector_store_ids:
                 response_tools.append(
