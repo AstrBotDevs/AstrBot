@@ -7,6 +7,8 @@ Then click **Create Bot** in the top-right corner, choose the platform you want 
 
 If you are connecting NapCat QQ, choose the standalone `napcat` platform directly and follow the [NapCat](/en/platform/napcat) guide instead of the generic `OneBot v11` template.
 
+When creating a bot, the built-in templates prioritize common integrations such as QQ Official Bot, OneBot v11, Personal WeChat, Lark, and WeCom. Hover over QQ Official Bot, OneBot v11, or Personal WeChat to see connection, capability, and QR-setup guidance. Plugins may add more templates, so the running WebUI remains the source of truth for the available list and its order.
+
 ## Current Built-in Adapters
 
 The current code registers these built-in adapter types lazily. Plugins may register additional types, so the **Bots → Create Bot** list in your running WebUI remains authoritative.

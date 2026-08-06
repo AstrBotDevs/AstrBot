@@ -50,6 +50,12 @@
     "step1Title": "选择消息平台类别",
     "step1Hint": "想把机器人接入到哪里？如 QQ、企业微信、飞书、Discord、Telegram 等。",
     "platformTypeLabel": "消息平台类别",
+    "platformTooltips": {
+      "qq_official": "QQ 官方机器人平台，支持私聊、拉入 QQ 群聊（只需要群主身份），支持 QQ 内 Markdown 渲染。一键扫码创建。",
+      "qq_official_webhook": "QQ 官方机器人平台，支持私聊、拉入 QQ 群聊（只需要群主身份），支持 QQ 内 Markdown 渲染。一键扫码创建。该 Webhook 方法需要您的环境拥有公网 IP 地址，因此推荐使用上面的 WebSocket 方法。",
+      "aiocqhttp": "知名的即时聊天软件协议。可接入 NapCat 等第三方服务来对接即时聊天软件。",
+      "weixin_oc": "微信官方提供的微信机器人接入方式，仅支持私聊。一键扫码创建。"
+    },
     "configFileTitle": "配置文件",
     "optional": "可选",
     "configHint": "想如何配置机器人？配置文件包含了聊天模型、人格、知识库、插件范围等丰富的机器人配置项。",

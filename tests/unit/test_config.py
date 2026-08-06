@@ -8,7 +8,11 @@ import threading
 import pytest
 
 from astrbot.core.config.astrbot_config import AstrBotConfig, RateLimitStrategy
-from astrbot.core.config.default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
+from astrbot.core.config.default import (
+    CONFIG_METADATA_2,
+    DEFAULT_CONFIG,
+    DEFAULT_VALUE_MAP,
+)
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.utils.auth_password import (
     DEFAULT_DASHBOARD_PASSWORD,
@@ -71,6 +75,29 @@ def test_default_config_avoids_public_listener_addresses():
             values.append(current)
 
     assert "0.0.0.0" not in values
+
+
+def test_platform_templates_prioritize_current_adapters_without_public_defaults():
+    """Platform templates keep their intended order and loopback listeners."""
+    templates = CONFIG_METADATA_2["platform_group"]["metadata"]["platform"][
+        "config_template"
+    ]
+
+    assert list(templates)[:9] == [
+        "QQ 官方机器人(Websocket, 推荐)",
+        "QQ 官方机器人(Webhook)",
+        "OneBot v11",
+        "个人微信",
+        "飞书(Lark)",
+        "企业微信智能机器人",
+        "企业微信(含微信客服)",
+        "钉钉(DingTalk)",
+        "微信公众平台",
+    ]
+    assert templates["OneBot v11"]["ws_reverse_host"] == "127.0.0.1"
+    assert templates["企业微信智能机器人"]["callback_server_host"] == "127.0.0.1"
+    assert templates["企业微信(含微信客服)"]["callback_server_host"] == "127.0.0.1"
+    assert templates["微信公众平台"]["callback_server_host"] == "127.0.0.1"
 
 
 class TestAstrBotConfigLoad:

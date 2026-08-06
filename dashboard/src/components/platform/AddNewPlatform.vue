@@ -59,6 +59,25 @@
                           "
                         />
                       </template>
+                      <v-tooltip
+                        v-if="
+                          [
+                            'qq_official',
+                            'qq_official_webhook',
+                            'aiocqhttp',
+                            'weixin_oc',
+                          ].includes(platformTemplates[item]?.type ?? '')
+                        "
+                        activator="parent"
+                        :text="
+                          tm(
+                            `createDialog.platformTooltips.${platformTemplates[item]?.type ?? ''}`,
+                          )
+                        "
+                        location="end"
+                        max-width="360"
+                        open-delay="50"
+                      />
                     </v-list-item>
                   </template>
                 </v-select>

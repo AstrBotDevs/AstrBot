@@ -5,31 +5,23 @@ upstream:
   branch: master
 
 last_synced:
-  commit: bb9b1878474e5ed65667d5c2c6b7fd6efbc51db4
-  synced_at_utc: 2026-08-04T17:19:05Z
+  commit: 346b85db9d79207ea7b51694cce5276203612af4
+  synced_at_utc: 2026-08-06T11:26:19Z
   sync_method: manual-adaptation
-  source_pr: '9501, 9503, 9500, 9491, 9504, 17333, 9490, 9505, 07baa, 9507, 9506, 9455, 9509, 9514, e4cf9b16, 9515, 9517, 9520, 9525, 9539, 9541, 9537, 9532, 9536, 9544'
+  source_pr: '9553, 346b85db9d79207ea7b51694cce5276203612af4'
   note: >-
-    Reviewed all 25 upstream/master commits from
-    0283f923312dd011599e41b0772566589e51ba7a through
-    bb9b1878474e5ed65667d5c2c6b7fd6efbc51db4. The marker is not an ancestor
+    Reviewed the two upstream/master commits after
+    bb9b1878474e5ed65667d5c2c6b7fd6efbc51db4 through
+    346b85db9d79207ea7b51694cce5276203612af4. The marker is not an ancestor
     of this fork branch, so no upstream commit was merged or mechanically
-    cherry-picked. Fork-native semantic ports: API-key capability boundaries
-    and isolated profile-admin fixture (#9503, #9539); terminal tool-only
-    history persistence (#9500); atomic ToolImageCache recreation and dead
-    expiry removal (#9490, #9504); owned temporary artifact token leases
-    (#9506); Dashboard Bearer backup download (#9525); init --yes (#9514);
-    nonpositive rank-fusion limit (#9455); favicon (#9537); project-chat
-    placeholder and bottom composer (#17333, #07baa); local member Skill
-    write hardening plus lifecycle-owned readonly builtin Skill catalog from
-    loaded Stars (#9517); and the requested SHA-only action pin updates
-    (#9532). The OpenAPI contract, generated client/public JSON, bilingual
-    docs, and focused tests were updated where API behavior changed. Skipped
-    or deferred: managed shell sessions/write_line (#9501, #9507), UUID
-    replacement (#9505), the relative-score fusion/rerank rewrite (#9455),
-    Responses provider (#9515), Office/PDF/spreadsheet/skill-creator payloads
-    and host conversion plus global star registry discovery (#9517), upstream
-    styling/component removals (#9491, #e4cf9b16, #9541), upstream version and
-    release text (#9509, #9520), and Issue Forms (#9536, #9544). These are
-    excluded by the fork's security, no-legacy, runtime-ownership, source-build,
-    or release-policy constraints.
+    cherry-picked. Fork-native port: adapted the platform-selection tooltips
+    from #9553 to the current Vue item type and shipped zh-CN/en-US strings.
+    The upstream ru-RU resource is excluded because this fork supports only
+    zh-CN and en-US. Ported the platform-template ordering while retaining the
+    fork's existing labels, loopback callback defaults, and OneBot fields,
+    with a regression test for that invariant. Followed the absorbed feature
+    set as fork-owned 4.27.2 metadata, uv.lock revision, bilingual changelog,
+    and platform-start documentation; the upstream release text was not
+    copied. Skipped the RainYun guide because the fork deliberately removed
+    vendor promotion, does not publish that prebuilt application, and requires
+    source-build and explicit secure remote-access guidance.
