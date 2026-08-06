@@ -299,8 +299,8 @@ async def test_query_combines_astrbot_and_responses_native_tools(monkeypatch):
         {
             "responses_web_search": True,
             "responses_web_search_context_size": "high",
-            "responses_web_search_allowed_domains": ["example.com"],
-            "responses_file_search_vector_store_ids": ["vs_1"],
+            "responses_web_search_allowed_domains": [" example.com ", "   "],
+            "responses_file_search_vector_store_ids": [" vs_1 "],
             "responses_code_interpreter": True,
             "responses_image_generation": True,
             "responses_tool_choice": "required",
