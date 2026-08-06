@@ -383,7 +383,16 @@
         v-else
         class="conversation-stack"
         :class="{ 'is-empty': isEmptyChat }"
+        v-on="dragEvents"
       >
+        <transition name="drop-fade">
+          <div v-if="isDragging" class="chat-drop-overlay">
+            <div class="chat-drop-overlay-content">
+              <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
+              <span class="chat-drop-text">{{ tm("input.dropToUpload") }}</span>
+            </div>
+          </div>
+        </transition>
         <section
           ref="messagesContainer"
           class="messages-panel"
@@ -600,6 +609,7 @@ import {
 import { useMediaHandling } from "@/composables/useMediaHandling";
 import { useRecording } from "@/composables/useRecording";
 import { useProjects } from "@/composables/useProjects";
+import { useDragUpload } from "@/composables/useDragUpload";
 import { useChatHeaderStore } from "@/stores/chatHeader";
 import { useCustomizerStore } from "@/stores/customizer";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
@@ -668,6 +678,8 @@ const {
   clearStaged,
   cleanupMediaCache,
 } = useMediaHandling();
+
+const { isDragging, dragEvents } = useDragUpload(handleFilesSelected);
 
 type WorkspaceView = "chat" | "providers";
 
@@ -2202,6 +2214,46 @@ function toggleTheme() {
   display: flex;
   flex-direction: column;
   position: relative;
+}
+
+/* 全区域拖拽上传遮罩 */
+.chat-drop-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(var(--v-theme-primary), 0.12);
+  border: 2px dashed rgba(var(--v-theme-primary), 0.45);
+  border-radius: 16px;
+}
+
+.chat-drop-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-drop-text {
+  font-size: 16px;
+  font-weight: 500;
+  color: rgb(var(--v-theme-primary));
+}
+
+.drop-fade-enter-active,
+.drop-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.drop-fade-enter-from,
+.drop-fade-leave-to {
+  opacity: 0;
 }
 
 .conversation-stack.is-empty {
