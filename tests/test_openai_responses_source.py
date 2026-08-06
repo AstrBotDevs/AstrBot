@@ -298,6 +298,9 @@ async def test_query_combines_astrbot_and_responses_native_tools(monkeypatch):
     provider = _make_provider(
         {
             "responses_web_search": True,
+            "custom_extra_body": {
+                "tool_choice": {"type": "function", "name": "weather"},
+            },
             "responses_web_search_context_size": "high",
             "responses_web_search_allowed_domains": [" example.com ", "   "],
             "responses_file_search_vector_store_ids": [" vs_1 "],
@@ -357,6 +360,41 @@ async def test_query_combines_astrbot_and_responses_native_tools(monkeypatch):
         {"type": "code_interpreter", "container": {"type": "auto"}},
         {"type": "image_generation"},
     ]
+
+
+@pytest.mark.parametrize(
+    ("request_tool_choice", "custom_tool_choice", "expected_tool_choice"),
+    [
+        (
+            None,
+            {"type": "function", "name": "custom_weather"},
+            {"type": "function", "name": "custom_weather"},
+        ),
+        (
+            {"type": "function", "name": "request_weather"},
+            {"type": "function", "name": "custom_weather"},
+            {"type": "function", "name": "request_weather"},
+        ),
+    ],
+)
+def test_prepare_response_request_preserves_custom_tool_choice(
+    request_tool_choice,
+    custom_tool_choice,
+    expected_tool_choice,
+):
+    provider = _make_provider(
+        {
+            "responses_web_search": True,
+            "custom_extra_body": {"tool_choice": custom_tool_choice},
+        }
+    )
+    payloads = {"model": "gpt-test", "input": "hi"}
+    if request_tool_choice is not None:
+        payloads["tool_choice"] = request_tool_choice
+
+    provider._prepare_response_request(payloads, None)
+
+    assert payloads["tool_choice"] == expected_tool_choice
 
 
 def test_build_response_tools_deduplicates_configured_and_custom_tools():

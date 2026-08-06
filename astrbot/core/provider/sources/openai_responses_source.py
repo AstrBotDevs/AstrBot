@@ -182,6 +182,39 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
 
         return self._deduplicate_response_tools(response_tools)
 
+    def _resolve_tool_choice(
+        self,
+        request_tool_choice: Any,
+        custom_tool_choice: Any,
+    ) -> str | dict[str, Any]:
+        """Resolve the Responses API tool choice without overriding custom values.
+
+        Args:
+            request_tool_choice: Tool choice set for the current request.
+            custom_tool_choice: Backward-compatible tool choice from configuration.
+
+        Returns:
+            A valid Responses API tool choice.
+        """
+        configured_tool_choice = self.provider_config.get("responses_tool_choice")
+        if isinstance(configured_tool_choice, str) and configured_tool_choice in {
+            "required",
+            "none",
+        }:
+            return configured_tool_choice
+
+        for tool_choice in (request_tool_choice, custom_tool_choice):
+            if isinstance(tool_choice, dict):
+                return tool_choice
+            if isinstance(tool_choice, str) and tool_choice in {
+                "auto",
+                "required",
+                "none",
+            }:
+                return tool_choice
+
+        return "auto"
+
     def _prepare_response_request(
         self,
         payloads: dict[str, Any],
@@ -206,12 +239,10 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         response_tools = self._build_response_tools(tools, custom_tools)
         if response_tools:
             payloads["tools"] = response_tools
-            tool_choice = self.provider_config.get("responses_tool_choice")
-            if tool_choice not in {"auto", "required", "none"}:
-                tool_choice = payloads.get("tool_choice", custom_tool_choice)
-            if tool_choice not in {"auto", "required", "none"}:
-                tool_choice = "auto"
-            payloads["tool_choice"] = tool_choice
+            payloads["tool_choice"] = self._resolve_tool_choice(
+                payloads.get("tool_choice"),
+                custom_tool_choice,
+            )
 
         for key in list(payloads):
             if key not in self.default_params:
