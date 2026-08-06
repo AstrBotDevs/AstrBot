@@ -1,4 +1,4 @@
-import { ref } from 'vue';
+import { onScopeDispose, ref } from 'vue';
 
 /**
  * 拖拽上传热区:管理拖拽遮罩显隐与 drop 事件。
@@ -7,6 +7,13 @@ import { ref } from 'vue';
 export function useDragUpload(onDrop: (files: FileList) => void) {
     const isDragging = ref(false);
     let dragLeaveTimeout: number | null = null;
+
+    onScopeDispose(() => {
+        if (dragLeaveTimeout !== null) {
+            clearTimeout(dragLeaveTimeout);
+            dragLeaveTimeout = null;
+        }
+    });
 
     const dragEvents = {
         dragover(e: DragEvent) {
