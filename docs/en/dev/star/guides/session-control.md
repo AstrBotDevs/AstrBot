@@ -20,7 +20,7 @@ Import:
 
 ```py
 import astrbot.api.message_components as Comp
-from astrbot.api.utils import SessionController, session_waiter
+from astrbot.api.util import SessionController, session_waiter
 from astrbot.api.event import filter, AstrMessageEvent
 
 @filter.command("idiom-chain")

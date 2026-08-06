@@ -18,7 +18,7 @@ AstrBot 提供了开箱即用的会话控制功能：
 
 ```py
 import astrbot.api.message_components as Comp
-from astrbot.api.utils import SessionController, session_waiter
+from astrbot.api.util import SessionController, session_waiter
 from astrbot.api.event import filter, AstrMessageEvent
 
 @filter.command("成语接龙")
