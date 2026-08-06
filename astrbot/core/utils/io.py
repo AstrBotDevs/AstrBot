@@ -117,57 +117,28 @@ async def download_image_by_url(
     path: str | None = None,
 ) -> str:
     """下载图片, 返回 path"""
-    try:
-        ssl_context = ssl.create_default_context(
-            cafile=certifi.where(),
-        )  # 使用 certifi 提供的 CA 证书
-        connector = aiohttp.TCPConnector(ssl=ssl_context)  # 使用 certifi 的根证书
-        async with aiohttp.ClientSession(
-            trust_env=True,
-            connector=connector,
-        ) as session:
-            if post:
-                async with session.post(url, json=post_data) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    with open(path, "wb") as f:
-                        f.write(await resp.read())
-                    return path
-            else:
-                async with session.get(url) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    with open(path, "wb") as f:
-                        f.write(await resp.read())
-                    return path
-    except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
-        # 关闭SSL验证（仅在证书验证失败时作为fallback）
-        logger.warning(
-            f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
-            "Disabling SSL verification (CERT_NONE) as a fallback. "
-            "This is insecure and exposes the application to man-in-the-middle attacks. "
-            "Please investigate and resolve certificate issues."
-        )
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-        async with aiohttp.ClientSession() as session:
-            if post:
-                async with session.post(url, json=post_data, ssl=ssl_context) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    with open(path, "wb") as f:
-                        f.write(await resp.read())
-                    return path
-            else:
-                async with session.get(url, ssl=ssl_context) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    with open(path, "wb") as f:
-                        f.write(await resp.read())
-                    return path
-    except Exception as e:
-        raise e
+    ssl_context = ssl.create_default_context(
+        cafile=certifi.where(),
+    )  # 使用 certifi 提供的 CA 证书
+    connector = aiohttp.TCPConnector(ssl=ssl_context)  # 使用 certifi 的根证书
+    async with aiohttp.ClientSession(
+        trust_env=True,
+        connector=connector,
+    ) as session:
+        if post:
+            async with session.post(url, json=post_data) as resp:
+                if not path:
+                    return save_temp_img(await resp.read())
+                with open(path, "wb") as f:
+                    f.write(await resp.read())
+                return path
+        else:
+            async with session.get(url) as resp:
+                if not path:
+                    return save_temp_img(await resp.read())
+                with open(path, "wb") as f:
+                    f.write(await resp.read())
+                return path
 
 
 async def _emit_download_progress(progress_callback, payload: dict) -> None:
@@ -278,7 +249,7 @@ async def download_file(
     path: str,
     show_progress: bool = False,
     progress_callback=None,
-    allow_insecure_ssl_fallback: bool = True,
+    allow_insecure_ssl_fallback: bool = False,
 ) -> None:
     """Download a remote file to a local path.
 
@@ -288,7 +259,9 @@ async def download_file(
         show_progress: Whether to print progress to stdout.
         progress_callback: Optional callback for progress payloads.
         allow_insecure_ssl_fallback: Whether certificate failures may retry with
-            TLS certificate verification disabled.
+            TLS certificate verification disabled. Defaults to ``False`` because
+            silently disabling certificate verification enables man-in-the-middle
+            attacks against users and remote plugin/dashboard downloads.
 
     Returns:
         None.

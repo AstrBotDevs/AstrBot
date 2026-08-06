@@ -211,7 +211,7 @@ async def _download_package(
     proxy: str | None = None,
     progress_callback=None,
     extract: bool = True,
-    allow_insecure_ssl_fallback: bool = True,
+    allow_insecure_ssl_fallback: bool = False,
 ) -> None:
     """Download a Dashboard package pinned to one Core version.
 
@@ -223,7 +223,8 @@ async def _download_package(
         progress_callback: Internal download progress callback.
         extract: Whether to extract the downloaded package.
         allow_insecure_ssl_fallback: Whether certificate failures may retry with
-            TLS verification disabled.
+            TLS verification disabled. Defaults to ``False`` to avoid silent
+            man-in-the-middle attacks against the dashboard asset download.
 
     Raises:
         RuntimeError: If neither source provides a valid ZIP package.
