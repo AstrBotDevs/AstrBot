@@ -328,7 +328,16 @@
     <main
       class="chat-main"
       :class="{ 'empty-chat': isEmptyChat }"
+      v-on="dragEvents"
     >
+      <transition name="drop-fade">
+        <div v-if="isDragging && !isProviderWorkspace" class="chat-drop-overlay">
+          <div class="chat-drop-overlay-content">
+            <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
+            <span class="chat-drop-text">{{ tm("input.dropToUpload") }}</span>
+          </div>
+        </div>
+      </transition>
       <section v-if="isProviderWorkspace" class="provider-workspace-shell">
         <ProviderChatCompletionPanel
           class="provider-workspace-page"
@@ -383,16 +392,7 @@
         v-else
         class="conversation-stack"
         :class="{ 'is-empty': isEmptyChat }"
-        v-on="dragEvents"
       >
-        <transition name="drop-fade">
-          <div v-if="isDragging" class="chat-drop-overlay">
-            <div class="chat-drop-overlay-content">
-              <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
-              <span class="chat-drop-text">{{ tm("input.dropToUpload") }}</span>
-            </div>
-          </div>
-        </transition>
         <section
           ref="messagesContainer"
           class="messages-panel"
@@ -679,7 +679,10 @@ const {
   cleanupMediaCache,
 } = useMediaHandling();
 
-const { isDragging, dragEvents } = useDragUpload(handleFilesSelected);
+const { isDragging, dragEvents } = useDragUpload((files) => {
+  if (isProviderWorkspace.value) return;
+  handleFilesSelected(files);
+});
 
 type WorkspaceView = "chat" | "providers";
 
