@@ -19,6 +19,7 @@ from astrbot.core.message.components import (
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import Group, MessageMember
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.send_result import PlatformSendResult
 
 from .forward_node_splitter import split_long_text_node
 
@@ -284,7 +285,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 await cls._dispatch_send(bot, event, is_group, session_id, messages)
                 await asyncio.sleep(0.5)
 
-    async def send(self, message: MessageChain) -> None:
+    async def send(self, message: MessageChain) -> PlatformSendResult | None:
         """发送消息"""
         event = getattr(self.message_obj, "raw_message", None)
 

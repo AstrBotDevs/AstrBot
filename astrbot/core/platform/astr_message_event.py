@@ -676,7 +676,7 @@ class AstrMessageEvent(abc.ABC):
     async def _pre_send(self) -> None:
         """Reserved send hook for platform overrides."""
 
-    async def _post_send(self) -> None:
+    async def _post_send(self) -> PlatformSendResult | None:
         """Reserved post-send hook for platform overrides."""
 
     def set_result(self, result: MessageEventResult | str) -> None:

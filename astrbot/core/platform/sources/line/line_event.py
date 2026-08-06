@@ -17,6 +17,7 @@ from astrbot.core.message.components import (
 )
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import get_media_duration
 
@@ -226,7 +227,7 @@ class LineMessageEvent(AstrMessageEvent):
             messages = messages[:5]
         return messages
 
-    async def send(self, message: MessageChain) -> None:
+    async def send(self, message: MessageChain) -> PlatformSendResult | None:
         messages = await self.build_line_messages(message)
         if not messages:
             return

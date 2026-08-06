@@ -13,6 +13,7 @@ from astrbot.core.message.components import (
 )
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.send_result import PlatformSendResult
 
 if TYPE_CHECKING:  # pragma: no cover - typing helper
     from .weixin_oc_adapter import WeixinOCAdapter
@@ -58,7 +59,7 @@ class WeixinOCMessageEvent(AstrMessageEvent):
             WeixinOCMessageEvent._segment_to_text(seg) for seg in message.chain
         )
 
-    async def send(self, message: MessageChain) -> None:
+    async def send(self, message: MessageChain) -> PlatformSendResult | None:
         if not message.chain:
             return
         await self.platform.send_by_session(self.session, message)

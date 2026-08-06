@@ -134,7 +134,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
             logger.error(f"Satori 消息发送异常: {e}")
             return None
 
-    async def send(self, message: MessageChain) -> PlatformSendResult:
+    async def send(self, message: MessageChain) -> PlatformSendResult | None:
         platform = getattr(self, "platform", None)
         user_id = getattr(self, "user_id", None)
 

@@ -3,6 +3,7 @@ from typing import Any
 from astrbot import logger
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.send_result import PlatformSendResult
 
 
 class DingtalkMessageEvent(AstrMessageEvent):
@@ -19,7 +20,7 @@ class DingtalkMessageEvent(AstrMessageEvent):
         self._client = client
         self._adapter = adapter
 
-    async def send(self, message: MessageChain) -> None:
+    async def send(self, message: MessageChain) -> PlatformSendResult | None:
         if not self._adapter:
             logger.error("钉钉消息发送失败: 缺少 adapter")
             return self._failure_send_result(

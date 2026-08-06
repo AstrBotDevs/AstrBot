@@ -29,6 +29,7 @@ from astrbot.core.message.components import At, File, Json, Plain, Record, Video
 from astrbot.core.message.components import Image as AstrBotImage
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.utils.media_utils import (
     MediaResolver,
     convert_audio_to_opus,
@@ -548,7 +549,7 @@ class LarkMessageEvent(AstrMessageEvent):
                 media_comp, lark_client, reply_message_id, receive_id, receive_id_type
             )
 
-    async def send(self, message: MessageChain) -> None:
+    async def send(self, message: MessageChain) -> PlatformSendResult | None:
         """发送消息链到飞书，然后交给父类做框架级发送/记录"""
         await LarkMessageEvent.send_message_chain(
             message,

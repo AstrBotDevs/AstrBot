@@ -5,6 +5,7 @@ from astrbot import logger
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.send_result import PlatformSendResult
 
 from .misskey_utils import (
     add_at_mention_if_needed,
@@ -39,7 +40,7 @@ class MisskeyPlatformEvent(AstrMessageEvent):
 
         return any(message_trimmed.startswith(prefix) for prefix in system_prefixes)
 
-    async def send(self, message: MessageChain) -> None:
+    async def send(self, message: MessageChain) -> PlatformSendResult | None:
         """发送消息，使用适配器的完整上传和发送逻辑"""
         try:
             logger.debug(

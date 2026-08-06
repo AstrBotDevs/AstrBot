@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from urllib.parse import urlsplit
 
 from astrbot import logger
@@ -71,7 +71,7 @@ def _provider_supports(provider: ChatModel | None, modality: str) -> bool:
 async def _prepare_media(
     refs: list[str],
     *,
-    media_type: str,
+    media_type: Literal["image", "audio", "video", "file"],
     provider: ChatModel | None,
     max_bytes: int,
 ) -> tuple[list[str], list[ProviderContentBlock], bool]:

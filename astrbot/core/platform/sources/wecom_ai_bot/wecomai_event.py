@@ -7,6 +7,7 @@ from astrbot import logger
 from astrbot.core.message.components import At, Image, Plain
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.send_result import PlatformSendResult
 
 from .wecomai_api import WecomAIBotAPIClient
 from .wecomai_queue_mgr import WecomAIQueueMgr
@@ -150,7 +151,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         result = "".join(plain_parts)
         return result.strip() if strip_result else result
 
-    async def send(self, message: MessageChain | None) -> None:
+    async def send(self, message: MessageChain | None) -> PlatformSendResult | None:
         """发送消息"""
         if message is None:
             return
@@ -214,7 +215,11 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         )
         return await super().send(message)
 
-    async def send_streaming(self, generator, use_fallback=False) -> None:
+    async def send_streaming(
+        self,
+        generator,
+        use_fallback: bool = False,
+    ) -> PlatformSendResult | None:
         """流式发送消息，参考webchat的send_streaming设计"""
         final_data = ""
         raw = self.message_obj.raw_message

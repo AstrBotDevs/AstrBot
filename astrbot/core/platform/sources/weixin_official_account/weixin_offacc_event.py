@@ -10,6 +10,7 @@ from astrbot.core.message.components import Image, Plain, Record
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.utils.media_utils import convert_audio_to_amr
 
 
@@ -81,7 +82,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
 
         return result
 
-    async def send(self, message: MessageChain) -> None:
+    async def send(self, message: MessageChain) -> PlatformSendResult | None:
         message_obj = self.message_obj
         active_send_mode = cast(dict, message_obj.raw_message).get(
             "active_send_mode", False

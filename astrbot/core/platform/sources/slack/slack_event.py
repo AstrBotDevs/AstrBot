@@ -16,6 +16,7 @@ from astrbot.core.message.components import (
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import Group, MessageMember
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.send_result import PlatformSendResult
 
 
 class SlackMessageEvent(AstrMessageEvent):
@@ -128,7 +129,7 @@ class SlackMessageEvent(AstrMessageEvent):
 
         return blocks, "" if blocks else text_content
 
-    async def send(self, message: MessageChain) -> None:
+    async def send(self, message: MessageChain) -> PlatformSendResult | None:
         blocks, text = await SlackMessageEvent._parse_slack_blocks(
             message,
             self.web_client,

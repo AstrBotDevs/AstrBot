@@ -5,6 +5,7 @@ from collections.abc import AsyncGenerator
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import Group, MessageMember
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.send_result import PlatformSendResult
 
 from .client import MattermostClient
 
@@ -25,7 +26,7 @@ class MattermostMessageEvent(AstrMessageEvent):
         for path in getattr(message_obj, "temporary_file_paths", []):
             self.track_temporary_local_file(path)
 
-    async def send(self, message: MessageChain) -> None:
+    async def send(self, message: MessageChain) -> PlatformSendResult | None:
         await self._client.send_message_chain(self.get_session_id(), message)
         return await super().send(message)
 

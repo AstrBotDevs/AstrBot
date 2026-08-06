@@ -3,6 +3,7 @@ from pathlib import Path
 from astrbot.core.message.components import Json, Plain
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.webchat.emitter import emit_webchat_response
 from astrbot.core.webchat.queue_manager import WebChatQueueManager
 
@@ -25,7 +26,7 @@ class WebChatMessageEvent(AstrMessageEvent):
         self._webchat_queue_manager = webchat_queue_manager
         self._attachments_dir = Path(attachments_dir)
 
-    async def send(self, message: MessageChain | None) -> None:
+    async def send(self, message: MessageChain | None) -> PlatformSendResult | None:
         message_id = self.message_obj.message_id
         follow_up_capture = self.get_extra("_follow_up_captured")
         if message is None and isinstance(follow_up_capture, dict):
@@ -59,7 +60,11 @@ class WebChatMessageEvent(AstrMessageEvent):
             },
         )
 
-    async def send_streaming(self, generator, use_fallback: bool = False) -> None:
+    async def send_streaming(
+        self,
+        generator,
+        use_fallback: bool = False,
+    ) -> PlatformSendResult | None:
         final_data = ""
         reasoning_content = ""
         message_id = self.message_obj.message_id

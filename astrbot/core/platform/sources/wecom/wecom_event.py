@@ -9,6 +9,7 @@ from astrbot.core.message.components import File, Image, Plain, Record, Video
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.utils.media_utils import convert_audio_to_amr
 
 from .wecom_kf_message import WeChatKFMessage
@@ -228,7 +229,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                 except OSError as exc:
                     logger.warning(f"删除临时音频文件失败: {exc}")
 
-    async def send(self, message: MessageChain) -> None:
+    async def send(self, message: MessageChain) -> PlatformSendResult | None:
         """Send a message through customer-service or application mode."""
         kf_message_api = getattr(self._client, "kf_message", None)
         if hasattr(self._client, "kf_message") and not isinstance(
