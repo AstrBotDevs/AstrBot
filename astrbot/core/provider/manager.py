@@ -864,6 +864,8 @@ class ProviderManager:
                     prov for prov in config["provider"] if prov.get("id") != tpid
                 ]
             config.save_config()
+            # sync in-memory config for API queries (e.g., provider list)
+            self.providers_config = config["provider"]
             logger.info(f"Providers {target_prov_ids} were removed from configuration.")
 
     async def update_provider(self, origin_provider_id: str, new_config: dict) -> None:
