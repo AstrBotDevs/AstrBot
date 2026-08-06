@@ -319,21 +319,22 @@ class ProviderOpenAIResponses(Provider):
         return item
 
     async def _content(self, content: Any, role: str) -> list[dict]:
+        text_type = "output_text" if role == "assistant" else "input_text"
         if isinstance(content, str):
-            return [{"type": "input_text", "text": content}]
+            return [{"type": text_type, "text": content}]
         parts: list[dict] = []
         for part in content or []:
             if not isinstance(part, dict):
                 part = part.model_dump_for_context()
             kind = part.get("type")
             if kind == "text":
-                parts.append({"type": "input_text", "text": part.get("text", "")})
+                parts.append({"type": text_type, "text": part.get("text", "")})
             elif kind == "image_url":
                 url = _value(part.get("image_url"), "url")
                 if not isinstance(url, str):
                     raise ProviderResponseError("Responses image part is missing a URL")
                 if url == IMAGE_HISTORY_PLACEHOLDER:
-                    parts.append({"type": "input_text", "text": url})
+                    parts.append({"type": text_type, "text": url})
                     continue
                 if not url.startswith(("http://", "https://", "data:")):
                     data = await resolve_media_ref_to_base64_data(

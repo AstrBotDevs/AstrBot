@@ -58,6 +58,34 @@ async def test_responses_history_keeps_omitted_images_as_text() -> None:
     ]
 
 
+@pytest.mark.asyncio
+async def test_responses_history_uses_output_text_for_assistant_messages() -> None:
+    provider = _provider()
+
+    items, instructions = await provider._input_items_from_history(
+        [
+            {"role": "assistant", "content": "previous answer"},
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "another answer"}],
+            },
+        ],
+        "gpt-test",
+    )
+
+    assert instructions == ""
+    assert items == [
+        {
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "previous answer"}],
+        },
+        {
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "another answer"}],
+        },
+    ]
+
+
 def test_null_api_version_uses_regular_openai_client(monkeypatch):
     created = []
 
