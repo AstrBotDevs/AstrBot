@@ -296,7 +296,19 @@
           !loadingMessages &&
           !activeMessages.length,
       }"
+      v-on="dragEvents"
     >
+      <transition name="drop-fade">
+        <div
+          v-if="isDragging && !isProviderWorkspace"
+          class="chat-drop-overlay"
+        >
+          <div class="chat-drop-overlay-content">
+            <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
+            <span class="chat-drop-text">{{ tm('input.dropToUpload') }}</span>
+          </div>
+        </div>
+      </transition>
       <section v-if="isProviderWorkspace" class="provider-workspace-shell">
         <ProviderChatCompletionPanel
           class="provider-workspace-page"
@@ -538,6 +550,7 @@ import type { ChatRecord, ChatThread, MessagePart } from '@/domain/chat';
 import { useMediaHandling } from '@/composables/useMediaHandling';
 import { useRecording } from '@/composables/useRecording';
 import { useProjects } from '@/composables/useProjects';
+import { useDragUpload } from '@/composables/useDragUpload';
 import { useCustomizerStore } from '@/stores/customizer';
 import ProviderChatCompletionPanel from '@/components/provider/ProviderChatCompletionPanel.vue';
 import {
@@ -681,6 +694,10 @@ const isSidebarCollapsed = computed(() =>
 const isProviderWorkspace = computed(
   () => activeWorkspace.value === 'providers',
 );
+const { isDragging, dragEvents } = useDragUpload((files) => {
+  if (isProviderWorkspace.value) return;
+  void handleFilesSelected(files);
+});
 const activeReasoningParts = computed<MessagePart[]>(() => {
   if (!activeReasoningTarget.value) return [];
   const blocks = buildMessageBlocks(
@@ -1754,6 +1771,42 @@ function toggleTheme() {
   display: flex;
   flex-direction: column;
   position: relative;
+}
+
+.chat-drop-overlay {
+  position: absolute;
+  z-index: 100;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  border: 2px dashed rgba(var(--v-theme-primary), 0.45);
+  border-radius: 16px;
+  background-color: rgba(var(--v-theme-primary), 0.12);
+}
+
+.chat-drop-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-drop-text {
+  color: rgb(var(--v-theme-primary));
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.drop-fade-enter-active,
+.drop-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.drop-fade-enter-from,
+.drop-fade-leave-to {
+  opacity: 0;
 }
 
 .chat-main.empty-chat {

@@ -1,5 +1,13 @@
 <template>
-  <div class="standalone-chat">
+  <div class="standalone-chat" v-on="dragEvents">
+    <transition name="drop-fade">
+      <div v-if="isDragging" class="chat-drop-overlay">
+        <div class="chat-drop-overlay-content">
+          <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
+          <span class="chat-drop-text">{{ tm('input.dropToUpload') }}</span>
+        </div>
+      </div>
+    </transition>
     <section ref="messagesContainer" class="standalone-messages">
       <div v-if="initializing" class="standalone-state">
         <v-progress-circular indeterminate size="28" width="3" />
@@ -210,6 +218,7 @@ import { chatApi, configRouteApi, fileApi } from '@/api/v1';
 import { setCustomComponents } from 'markstream-vue';
 import 'markstream-vue/index.css';
 import ChatInput from '@/components/chat/ChatInput.vue';
+import { useDragUpload } from '@/composables/useDragUpload';
 import IPythonToolBlock from '@/components/chat/message_list_comps/IPythonToolBlock.vue';
 import MarkdownMessagePart from '@/components/chat/message_list_comps/MarkdownMessagePart.vue';
 import ReasoningBlock from '@/components/chat/message_list_comps/ReasoningBlock.vue';
@@ -276,6 +285,10 @@ const {
   clearStaged,
   cleanupMediaCache,
 } = useMediaHandling();
+
+const { isDragging, dragEvents } = useDragUpload((files) => {
+  void handleFilesSelected(files);
+});
 
 const {
   sending,
@@ -503,7 +516,44 @@ function closeImage() {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
   background: rgb(var(--v-theme-background));
+}
+
+.chat-drop-overlay {
+  position: absolute;
+  z-index: 100;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  border: 2px dashed rgba(var(--v-theme-primary), 0.45);
+  border-radius: 16px;
+  background-color: rgba(var(--v-theme-primary), 0.12);
+}
+
+.chat-drop-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-drop-text {
+  color: rgb(var(--v-theme-primary));
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.drop-fade-enter-active,
+.drop-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.drop-fade-enter-from,
+.drop-fade-leave-to {
+  opacity: 0;
 }
 
 .standalone-messages {
