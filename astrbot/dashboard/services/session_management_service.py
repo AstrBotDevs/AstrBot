@@ -459,8 +459,7 @@ class SessionManagementService:
         for umo in umos:
             try:
                 session_config = (
-                    sp.get("session_service_config", {}, scope="umo", scope_id=umo)
-                    or {}
+                    await sp.session_get(umo, "session_service_config", {}) or {}
                 )
 
                 if llm_enabled is not None:
@@ -470,11 +469,10 @@ class SessionManagementService:
                 if session_enabled is not None:
                     session_config["session_enabled"] = session_enabled
 
-                sp.put(
+                await sp.session_put(
+                    umo,
                     "session_service_config",
                     session_config,
-                    scope="umo",
-                    scope_id=umo,
                 )
                 success_count += 1
             except Exception as exc:
