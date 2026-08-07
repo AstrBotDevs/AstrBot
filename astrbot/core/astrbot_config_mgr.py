@@ -1,3 +1,5 @@
+import asyncio
+import copy
 import os
 import uuid
 from typing import TypedDict, TypeVar
@@ -44,6 +46,7 @@ class AstrBotConfigManager:
         """uuid / "default" -> AstrBotConfig"""
         self.confs["default"] = default_config
         self.abconf_data: dict[str, dict[str, str]] = {}
+        self._abconf_lock = asyncio.Lock()
 
     async def initialize(self) -> None:
         await self._load_all_configs()
@@ -94,8 +97,9 @@ class AstrBotConfigManager:
             meta = abconf_data.get(conf_id)
             if meta and isinstance(meta, dict):
                 # the bind relation between umo and conf is defined in ucr now, so we remove "umop" here
-                meta.pop("umop", None)
-                return ConfInfo(**meta, id=conf_id)
+                normalized_meta = dict(meta)
+                normalized_meta.pop("umop", None)
+                return ConfInfo(**normalized_meta, id=conf_id)
 
         return DEFAULT_CONFIG_CONF_INFO
 
@@ -106,7 +110,7 @@ class AstrBotConfigManager:
         abconf_name: str | None = None,
     ) -> None:
         """保存配置文件的映射关系"""
-        abconf_data = dict(self._get_abconf_data())
+        abconf_data = copy.deepcopy(self._get_abconf_data())
         random_word = abconf_name or uuid.uuid4().hex[:8]
         abconf_data[abconf_id] = {
             "path": abconf_path,
@@ -149,8 +153,9 @@ class AstrBotConfigManager:
         for uuid_, meta in abconf_mapping.items():
             if not isinstance(meta, dict):
                 continue
-            meta.pop("umop", None)
-            conf_list.append(ConfInfo(**meta, id=uuid_))
+            normalized_meta = dict(meta)
+            normalized_meta.pop("umop", None)
+            conf_list.append(ConfInfo(**normalized_meta, id=uuid_))
         conf_list.append(DEFAULT_CONFIG_CONF_INFO)
         return conf_list
 
@@ -159,18 +164,35 @@ class AstrBotConfigManager:
         config: dict = DEFAULT_CONFIG,
         name: str | None = None,
     ) -> str:
-        conf_uuid = str(uuid.uuid4())
-        conf_file_name = f"abconf_{conf_uuid}.json"
-        conf_path = os.path.join(get_astrbot_config_path(), conf_file_name)
-        conf = AstrBotConfig(config_path=conf_path, default_config=config)
-        committed = await conf.save_config_async()
-        if not committed:
-            raise RuntimeError(
-                "Configuration profile save was superseded by a newer revision."
-            )
-        await self._save_conf_mapping(conf_file_name, conf_uuid, abconf_name=name)
-        self.confs[conf_uuid] = conf
-        return conf_uuid
+        async with self._abconf_lock:
+            conf_uuid = str(uuid.uuid4())
+            conf_file_name = f"abconf_{conf_uuid}.json"
+            conf_path = os.path.join(get_astrbot_config_path(), conf_file_name)
+            conf = AstrBotConfig(config_path=conf_path, default_config=config)
+            committed = await conf.save_config_async()
+            if not committed:
+                raise RuntimeError(
+                    "Configuration profile save was superseded by a newer revision."
+                )
+            try:
+                await self._save_conf_mapping(
+                    conf_file_name,
+                    conf_uuid,
+                    abconf_name=name,
+                )
+            except BaseException:
+                try:
+                    if os.path.exists(conf_path):
+                        os.remove(conf_path)
+                except OSError as cleanup_exc:
+                    logger.warning(
+                        "Failed to remove uncommitted profile file %s: %s",
+                        conf_path,
+                        cleanup_exc,
+                    )
+                raise
+            self.confs[conf_uuid] = conf
+            return conf_uuid
 
     async def delete_conf(self, conf_id: str) -> bool:
         """删除指定配置文件
@@ -188,38 +210,44 @@ class AstrBotConfigManager:
         if conf_id == "default":
             raise ValueError("不能删除默认配置文件")
 
-        # 从映射中移除
-        abconf_data = dict(self._get_abconf_data())
-        if conf_id not in abconf_data:
-            logger.warning(f"配置文件 {conf_id} 不存在于映射中")
-            return False
+        async with self._abconf_lock:
+            previous_mapping = copy.deepcopy(self._get_abconf_data())
+            if conf_id not in previous_mapping:
+                logger.warning(f"配置文件 {conf_id} 不存在于映射中")
+                return False
 
-        # 获取配置文件路径
-        conf_path = os.path.join(
-            get_astrbot_config_path(),
-            abconf_data[conf_id]["path"],
-        )
+            metadata = previous_mapping[conf_id]
+            conf_path = os.path.join(
+                get_astrbot_config_path(),
+                metadata["path"],
+            )
+            next_mapping = copy.deepcopy(previous_mapping)
+            del next_mapping[conf_id]
 
-        # 删除配置文件
-        try:
-            if os.path.exists(conf_path):
-                os.remove(conf_path)
-                logger.info(f"已删除配置文件: {conf_path}")
-        except Exception as e:
-            logger.error(f"删除配置文件 {conf_path} 失败: {e}")
-            return False
+            # Commit the mapping first. If file removal fails, restore it so a
+            # failed request never leaves a profile that is still queryable.
+            await self.sp.global_put("abconf_mapping", next_mapping)
+            try:
+                if os.path.exists(conf_path):
+                    os.remove(conf_path)
+                    logger.info(f"已删除配置文件: {conf_path}")
+            except OSError as exc:
+                logger.error(f"删除配置文件 {conf_path} 失败: {exc}")
+                try:
+                    await self.sp.global_put("abconf_mapping", previous_mapping)
+                except Exception as rollback_exc:
+                    logger.error(
+                        "Failed to restore config profile mapping after delete "
+                        "failure: %s",
+                        rollback_exc,
+                    )
+                return False
 
-        # 从内存中移除
-        if conf_id in self.confs:
-            del self.confs[conf_id]
-
-        # 从映射中移除
-        del abconf_data[conf_id]
-        await self.sp.global_put("abconf_mapping", abconf_data)
-        self.abconf_data = abconf_data
-
-        logger.info(f"成功删除配置文件 {conf_id}")
-        return True
+            if conf_id in self.confs:
+                del self.confs[conf_id]
+            self.abconf_data = next_mapping
+            logger.info(f"成功删除配置文件 {conf_id}")
+            return True
 
     async def update_conf_info(self, conf_id: str, name: str | None = None) -> bool:
         """更新配置文件信息
@@ -235,20 +263,19 @@ class AstrBotConfigManager:
         if conf_id == "default":
             raise ValueError("不能更新默认配置文件的信息")
 
-        abconf_data = dict(self._get_abconf_data())
-        if conf_id not in abconf_data:
-            logger.warning(f"配置文件 {conf_id} 不存在于映射中")
-            return False
+        async with self._abconf_lock:
+            abconf_data = copy.deepcopy(self._get_abconf_data())
+            if conf_id not in abconf_data:
+                logger.warning(f"配置文件 {conf_id} 不存在于映射中")
+                return False
 
-        # 更新名称
-        if name is not None:
-            abconf_data[conf_id]["name"] = name
+            if name is not None:
+                abconf_data[conf_id]["name"] = name
 
-        # 保存更新
-        await self.sp.global_put("abconf_mapping", abconf_data)
-        self.abconf_data = abconf_data
-        logger.info(f"成功更新配置文件 {conf_id} 的信息")
-        return True
+            await self.sp.global_put("abconf_mapping", abconf_data)
+            self.abconf_data = abconf_data
+            logger.info(f"成功更新配置文件 {conf_id} 的信息")
+            return True
 
     def g(
         self,
