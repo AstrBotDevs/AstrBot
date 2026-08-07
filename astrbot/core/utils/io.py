@@ -20,6 +20,14 @@ from .astrbot_path import get_astrbot_temp_path
 
 logger = logging.getLogger("astrbot")
 
+# 2 GiB safety cap for streamed HTTP downloads. Content-Length headers above this
+# threshold cause the download to abort before any bytes are written to disk.
+_DOWNLOAD_MAX_BYTES = 2 * 1024 * 1024 * 1024
+
+
+class DownloadTooLargeError(RuntimeError):
+    """Raised when an HTTP download exceeds the configured size cap."""
+
 
 def _safe_url_for_log(url: str) -> str:
     """Return a URL summary that omits query strings and fragments.
@@ -188,6 +196,11 @@ async def _download_response_to_file(
     """
 
     total_size = int(resp.headers.get("content-length", 0))
+    if total_size and total_size > _DOWNLOAD_MAX_BYTES:
+        raise DownloadTooLargeError(
+            f"Refusing download from {_safe_url_for_log(url)}: advertised size "
+            f"{total_size} bytes exceeds {_DOWNLOAD_MAX_BYTES} byte cap.",
+        )
     downloaded_size = 0
     start_time = time.time()
     if show_progress:
@@ -212,8 +225,13 @@ async def _download_response_to_file(
         chunk = await resp.content.read(8192)
         if not chunk:
             break
-        file_obj.write(chunk)
         downloaded_size += len(chunk)
+        if downloaded_size > _DOWNLOAD_MAX_BYTES:
+            raise DownloadTooLargeError(
+                f"Aborting download from {_safe_url_for_log(url)}: response "
+                f"exceeded {_DOWNLOAD_MAX_BYTES} byte cap.",
+            )
+        file_obj.write(chunk)
         elapsed_time = time.time() - start_time if time.time() - start_time > 0 else 1
         speed = downloaded_size / 1024 / elapsed_time  # KB/s
         percent = downloaded_size / total_size if total_size > 0 else 0
@@ -315,6 +333,14 @@ async def download_file(
                         progress_callback,
                         show_downloading_label=False,
                     )
+    except DownloadTooLargeError:
+        # Remove the partial file written before the size cap tripped so a
+        # truncated/empty artifact is not left on disk.
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+        raise
     if show_progress:
         print()
 
