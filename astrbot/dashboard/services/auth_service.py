@@ -12,6 +12,11 @@ from astrbot import logger
 from astrbot.core import DEMO_MODE
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.db import BaseDatabase
+from astrbot.core.desktop_runtime import (
+    is_desktop_session_auth_enabled,
+    is_loopback_client_host,
+    verify_desktop_session_secret,
+)
 from astrbot.core.utils.auth_password import (
     is_default_dashboard_password,
     is_md5_dashboard_password,
@@ -122,6 +127,14 @@ class AuthService:
         self.demo_mode = demo_mode
 
     async def setup_status(self) -> AuthServiceResult:
+        if is_desktop_session_auth_enabled():
+            return AuthServiceResult(
+                data={
+                    "setup_required": False,
+                    "skip_default_password_auth": False,
+                    "password_upgrade_required": False,
+                }
+            )
         return AuthServiceResult(
             data={
                 "setup_required": await self.is_setup_required(),
@@ -131,6 +144,31 @@ class AuthService:
                     self.config,
                 ),
             }
+        )
+
+    async def desktop_session(
+        self,
+        provided_secret: str | None,
+        client_host: str | None,
+    ) -> AuthServiceResult:
+        if not is_desktop_session_auth_enabled() or not is_loopback_client_host(
+            client_host
+        ):
+            return self.error("Not found", status_code=404)
+        if not verify_desktop_session_secret(provided_secret, client_host):
+            return self.error("Invalid desktop session", status_code=401)
+
+        username = self.config["dashboard"]["username"]
+        token = self.generate_jwt(username, auth_source="desktop")
+        return AuthServiceResult(
+            data={
+                "token": token,
+                "username": username,
+                "change_pwd_hint": False,
+                "md5_pwd_hint": False,
+                "password_upgrade_required": False,
+            },
+            jwt_token=token,
         )
 
     async def totp_setup(self, post_data: object) -> AuthServiceResult:
@@ -406,12 +444,14 @@ class AuthService:
 
         return AuthServiceResult(message="Updated account successfully")
 
-    def generate_jwt(self, username: str):
+    def generate_jwt(self, username: str, *, auth_source: str = "password"):
         payload = {
             "username": username,
             "exp": datetime.datetime.now(datetime.timezone.utc)
             + datetime.timedelta(days=7),
         }
+        if auth_source != "password":
+            payload["auth_source"] = auth_source
         jwt_token = self.config["dashboard"].get("jwt_secret", None)
         if not jwt_token:
             raise ValueError("JWT secret is not set in the cmd_config.")

@@ -38,6 +38,7 @@ _RATE_LIMITED_ENDPOINTS: frozenset = frozenset(
         "/api/v1/auth/totp/setup",
         "/api/auth/login",
         "/api/v1/auth/login",
+        "/api/v1/auth/desktop-session",
     }
 )
 

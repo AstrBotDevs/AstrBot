@@ -27,6 +27,7 @@ from astrbot.core.db.po import ProviderStat
 from astrbot.core.desktop_runtime import (
     DESKTOP_MANAGED_RESTART_MESSAGE,
     is_desktop_managed_backend,
+    is_desktop_session_auth_enabled,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.utils.auth_password import (
@@ -75,6 +76,8 @@ class StatService:
         return {"hours": hours, "minutes": minutes, "seconds": seconds}
 
     async def is_default_cred(self):
+        if is_desktop_session_auth_enabled():
+            return False
         password_change_required = await is_password_change_required(
             self.db_helper,
             self.config,
@@ -96,6 +99,14 @@ class StatService:
         ) and not DEMO_MODE
 
     async def get_version(self) -> dict:
+        if is_desktop_session_auth_enabled():
+            return {
+                "version": VERSION,
+                "dashboard_version": await get_dashboard_version(),
+                "change_pwd_hint": False,
+                "md5_pwd_hint": False,
+                "password_upgrade_required": False,
+            }
         storage_upgraded = await is_password_storage_upgraded(
             self.db_helper,
             self.config,
