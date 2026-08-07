@@ -91,7 +91,7 @@ class SessionManagementService:
         if scope == "custom_group":
             if not group_id:
                 raise SessionManagementServiceError("请指定分组 ID")
-            groups = self.get_groups()
+            groups = await self.get_groups()
             if group_id not in groups:
                 raise SessionManagementServiceError(f"分组 '{group_id}' 不存在")
             return groups[group_id].get("umos", [])
@@ -546,14 +546,20 @@ class SessionManagementService:
             "failed_umos": failed_umos,
         }
 
-    def get_groups(self) -> dict:
-        return sp.get("session_groups", {})
+    async def get_groups(self) -> dict:
+        groups = await sp.get_async(
+            "unknown",
+            "unknown",
+            "session_groups",
+            {},
+        )
+        return groups if groups is not None else {}
 
-    def save_groups(self, groups: dict) -> None:
-        sp.put("session_groups", groups)
+    async def save_groups(self, groups: dict) -> None:
+        await sp.put_async("unknown", "unknown", "session_groups", groups)
 
-    def list_groups(self) -> dict:
-        groups = self.get_groups()
+    async def list_groups(self) -> dict:
+        groups = await self.get_groups()
         return {
             "groups": [
                 {
@@ -566,7 +572,7 @@ class SessionManagementService:
             ]
         }
 
-    def create_group(self, data: object) -> dict:
+    async def create_group(self, data: object) -> dict:
         payload = self._payload(data)
         name = str(payload.get("name", "")).strip()
         umos = payload.get("umos", [])
@@ -574,13 +580,13 @@ class SessionManagementService:
         if not name:
             raise SessionManagementServiceError("分组名称不能为空")
 
-        groups = self.get_groups()
+        groups = await self.get_groups()
         group_id = str(uuid.uuid4())[:8]
         groups[group_id] = {
             "name": name,
             "umos": umos,
         }
-        self.save_groups(groups)
+        await self.save_groups(groups)
 
         return {
             "message": f"分组 '{name}' 创建成功",
@@ -592,7 +598,7 @@ class SessionManagementService:
             },
         }
 
-    def update_group(self, data: object) -> dict:
+    async def update_group(self, data: object) -> dict:
         payload = self._payload(data)
         group_id = payload.get("id") or payload.get("group_id")
         name = payload.get("name")
@@ -603,7 +609,7 @@ class SessionManagementService:
         if not group_id:
             raise SessionManagementServiceError("分组 ID 不能为空")
 
-        groups = self.get_groups()
+        groups = await self.get_groups()
         if group_id not in groups:
             raise SessionManagementServiceError(f"分组 '{group_id}' 不存在")
 
@@ -621,7 +627,7 @@ class SessionManagementService:
                 current_umos.difference_update(remove_umos)
             group["umos"] = list(current_umos)
 
-        self.save_groups(groups)
+        await self.save_groups(groups)
 
         return {
             "message": f"分组 '{group['name']}' 更新成功",
@@ -633,20 +639,20 @@ class SessionManagementService:
             },
         }
 
-    def delete_group(self, data: object) -> dict:
+    async def delete_group(self, data: object) -> dict:
         payload = self._payload(data)
         group_id = payload.get("id") or payload.get("group_id")
 
         if not group_id:
             raise SessionManagementServiceError("分组 ID 不能为空")
 
-        groups = self.get_groups()
+        groups = await self.get_groups()
         if group_id not in groups:
             raise SessionManagementServiceError(f"分组 '{group_id}' 不存在")
 
         group_name = groups[group_id].get("name", group_id)
         del groups[group_id]
-        self.save_groups(groups)
+        await self.save_groups(groups)
         return {"message": f"分组 '{group_name}' 已删除"}
 
     @staticmethod
