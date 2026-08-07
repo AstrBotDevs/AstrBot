@@ -64,7 +64,20 @@
                                 :class="{ 'system-config-group--with-cleanup': group.key === 'tempStorage' }"
                                 @focusout.capture="scheduleSystemConfigAutoSave"
                             >
-                                <div class="system-config-group__title">{{ group.title }}</div>
+                                <div class="system-config-group__heading">
+                                    <div class="system-config-group__title">{{ group.title }}</div>
+                                    <div
+                                        v-if="group.key === 'runtime' && timezoneTimePreview"
+                                        class="timezone-time-preview"
+                                    >
+                                        <span
+                                            class="timezone-time-preview__item"
+                                        >
+                                            {{ tm('systemConfig.timePreview.label') }} ·
+                                            {{ timezoneTimePreview.offsetLabel }} {{ timezoneTimePreview.localTime }}
+                                        </span>
+                                    </div>
+                                </div>
                                 <AstrBotConfigV4
                                     :metadata="group.metadata"
                                     :iterable="systemConfigData"
@@ -573,6 +586,11 @@ const configSave2faSaving = ref(false);
 const configSave2faRotationHint = ref('');
 const configSavePendingData = ref(null);
 const systemConfigAutoSaveTimer = ref(null);
+const serverUtcEpochMs = ref(null);
+const serverUtcOffsetMinutes = ref(null);
+const serverClockAnchorMs = ref(null);
+const serverClockTickMs = ref(null);
+const serverClockTimer = ref(null);
 const activeSettingsSection = ref('general');
 const changelogDialog = ref(false);
 
@@ -683,6 +701,34 @@ const previousApiKeyScopes = ref([...newApiKeyScopes.value]);
 const systemConfigHasChanges = computed(() => (
     JSON.stringify(systemConfigData.value || {}) !== systemConfigLastSavedSnapshot.value
 ));
+
+const timezoneTimePreview = computed(() => {
+    if (
+        serverUtcEpochMs.value === null ||
+        serverUtcOffsetMinutes.value === null ||
+        serverClockAnchorMs.value === null ||
+        serverClockTickMs.value === null
+    ) {
+        return null;
+    }
+
+    const localDate = new Date(
+        serverUtcEpochMs.value +
+            Math.max(0, serverClockTickMs.value - serverClockAnchorMs.value) +
+            serverUtcOffsetMinutes.value * 60_000
+    );
+    const localIsoTime = localDate.toISOString();
+    const absoluteOffset = Math.abs(serverUtcOffsetMinutes.value);
+    const offsetHours = Math.floor(absoluteOffset / 60);
+    const offsetMinutes = absoluteOffset % 60;
+    const offsetLabel = serverUtcOffsetMinutes.value === 0
+        ? 'UTC'
+        : `UTC${serverUtcOffsetMinutes.value > 0 ? '+' : '-'}${offsetHours}${offsetMinutes ? `:${String(offsetMinutes).padStart(2, '0')}` : ''}`;
+    return {
+        localTime: `${localIsoTime.slice(0, 4)}/${localIsoTime.slice(5, 7)}/${localIsoTime.slice(8, 10)} ${localIsoTime.slice(11, 16)}`,
+        offsetLabel
+    };
+});
 
 const systemConfigGroups = computed(() => {
     const systemSection = systemConfigMetadata.value?.system_group?.metadata?.system || {};
@@ -820,6 +866,12 @@ const loadSystemConfig = async () => {
         }
         systemConfigData.value = res.data.data?.config || {};
         systemConfigMetadata.value = res.data.data?.metadata || {};
+        const parsedServerTime = Date.parse(res.data.data?.server_utc_time || '');
+        const parsedUtcOffset = Number(res.data.data?.server_utc_offset_minutes);
+        serverUtcEpochMs.value = Number.isNaN(parsedServerTime) ? null : parsedServerTime;
+        serverUtcOffsetMinutes.value = Number.isFinite(parsedUtcOffset) ? parsedUtcOffset : null;
+        serverClockAnchorMs.value = serverUtcEpochMs.value === null ? null : performance.now();
+        serverClockTickMs.value = serverClockAnchorMs.value;
         systemConfigLastSavedSnapshot.value = JSON.stringify(systemConfigData.value || {});
         systemConfigRestartRequired.value = false;
     } catch (error) {
@@ -864,6 +916,23 @@ const saveSystemConfig = async (configOverride = null, headers = {}, allow2faPro
         configSave2faError.value = '';
         systemConfigData.value = configPayload;
         systemConfigLastSavedSnapshot.value = JSON.stringify(configPayload);
+        serverUtcEpochMs.value = null;
+        serverUtcOffsetMinutes.value = null;
+        serverClockAnchorMs.value = null;
+        serverClockTickMs.value = null;
+        try {
+            const timeRes = await systemConfigApi.get();
+            if (timeRes.data.status === 'ok') {
+                const parsedServerTime = Date.parse(timeRes.data.data?.server_utc_time || '');
+                const parsedUtcOffset = Number(timeRes.data.data?.server_utc_offset_minutes);
+                serverUtcEpochMs.value = Number.isNaN(parsedServerTime) ? null : parsedServerTime;
+                serverUtcOffsetMinutes.value = Number.isFinite(parsedUtcOffset) ? parsedUtcOffset : null;
+                serverClockAnchorMs.value = serverUtcEpochMs.value === null ? null : performance.now();
+                serverClockTickMs.value = serverClockAnchorMs.value;
+            }
+        } catch {
+            // Keep the preview hidden until the backend time can be confirmed.
+        }
         systemConfigRestartRequired.value = true;
         showToast(res.data.message || tm('systemConfig.messages.saveSuccess'), 'success');
         return { success: true };
@@ -1069,6 +1138,9 @@ const resetThemeColors = () => {
 
 onMounted(async () => {
     await Promise.all([loadApiKeys(), loadSystemConfig()]);
+    serverClockTimer.value = window.setInterval(() => {
+        serverClockTickMs.value = performance.now();
+    }, 1000);
     const hash = window.location.hash;
     if (hash.includes('settings-appearance')) {
         activeSettingsSection.value = 'appearance';
@@ -1086,6 +1158,10 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+    if (serverClockTimer.value) {
+        clearInterval(serverClockTimer.value);
+        serverClockTimer.value = null;
+    }
     if (systemConfigAutoSaveTimer.value) {
         clearTimeout(systemConfigAutoSaveTimer.value);
         systemConfigAutoSaveTimer.value = null;
@@ -1331,13 +1407,40 @@ onUnmounted(() => {
     margin-bottom: 0;
 }
 
-.system-config-group__title {
+.system-config-group__heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
     margin-bottom: 12px;
+}
+
+.system-config-group__title {
     color: rgb(var(--v-theme-on-surface));
     font-size: 1.04rem;
     font-weight: 760;
     letter-spacing: 0;
     line-height: 1.32;
+}
+
+.timezone-time-preview {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 5px;
+    font-variant-numeric: tabular-nums;
+}
+
+.timezone-time-preview__item {
+    padding: 3px 7px;
+    border: 1px solid rgba(var(--v-theme-primary), 0.16);
+    border-radius: 6px;
+    color: rgb(var(--v-theme-primary));
+    background: rgba(var(--v-theme-primary), 0.055);
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.3;
+    white-space: nowrap;
 }
 
 .system-config-group :deep(.v-card) {
@@ -1734,6 +1837,15 @@ onUnmounted(() => {
     .color-controls :deep(.v-input) {
         flex: 1 1 120px;
         max-width: none;
+    }
+
+    .system-config-group__heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .timezone-time-preview {
+        justify-content: flex-start;
     }
 
     .system-config-group :deep(.config-row) {
