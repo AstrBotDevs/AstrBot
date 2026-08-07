@@ -347,6 +347,7 @@ const emojiCategories = [
 // 加载知识库列表
 const loadKnowledgeBases = async (refreshStats = false) => {
   loading.value = true
+  loadError.value = false
   try {
     if (refreshStats) {
       page.value = 1

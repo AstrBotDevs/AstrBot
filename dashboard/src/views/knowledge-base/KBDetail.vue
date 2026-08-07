@@ -200,6 +200,7 @@ const showSnackbar = (text: string, color: string = 'success') => {
 // 加载知识库详情
 const loadKB = async () => {
   loading.value = true
+  loadError.value = false
   try {
     const response = await knowledgeApi.get(kbId.value)
     if (response.data.status === 'ok') {

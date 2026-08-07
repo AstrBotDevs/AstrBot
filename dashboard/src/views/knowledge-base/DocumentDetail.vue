@@ -312,6 +312,7 @@ const filteredChunks = computed(() => {
 // 加载文档详情
 const loadDocument = async () => {
   loading.value = true
+  loadError.value = false
   try {
     const response = await knowledgeApi.document(kbId.value, docId.value)
     if (response.data.status === 'ok') {
