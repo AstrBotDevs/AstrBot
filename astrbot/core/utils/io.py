@@ -135,18 +135,37 @@ async def download_image_by_url(
     ) as session:
         if post:
             async with session.post(url, json=post_data) as resp:
-                if not path:
-                    return save_temp_img(await resp.read())
-                with open(path, "wb") as f:
-                    f.write(await resp.read())
-                return path
+                resp.raise_for_status()
+                return await _download_image_to_dest(resp, path)
         else:
             async with session.get(url) as resp:
-                if not path:
-                    return save_temp_img(await resp.read())
-                with open(path, "wb") as f:
-                    f.write(await resp.read())
-                return path
+                resp.raise_for_status()
+                return await _download_image_to_dest(resp, path)
+
+
+async def _download_image_to_dest(
+    resp: aiohttp.ClientResponse, path: str | None
+) -> str:
+    """Stream download an image with size cap, saving to path or temp file."""
+    total_read = 0
+    chunks: list[bytes] = []
+
+    async for chunk in resp.content.iter_chunked(64 * 1024):
+        if not chunk:
+            break
+        total_read += len(chunk)
+        if total_read > _DOWNLOAD_MAX_BYTES:
+            raise DownloadTooLargeError(
+                f"Image download exceeded size cap of {_DOWNLOAD_MAX_BYTES} bytes"
+            )
+        chunks.append(chunk)
+
+    data = b"".join(chunks)
+    if path:
+        with open(path, "wb") as f:
+            f.write(data)
+        return path
+    return save_temp_img(data)
 
 
 async def _emit_download_progress(progress_callback, payload: dict) -> None:
