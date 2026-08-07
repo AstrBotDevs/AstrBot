@@ -11,7 +11,8 @@
     "documents": "Documents",
     "chunks": "Chunks",
     "sessionConfig": "Session Config",
-    "initError": "Initialization Failed"
+    "initError": "Initialization Failed",
+    "retry": "Retry"
   },
   "card": {
     "edit": "Edit",
