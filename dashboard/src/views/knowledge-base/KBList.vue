@@ -5,6 +5,20 @@
       <p class="mt-4 text-medium-emphasis">{{ t('list.loading') }}</p>
     </div>
 
+    <div v-else-if="loadError && kbList.length === 0" class="empty-state">
+      <v-icon size="72" color="error">mdi-alert-circle-outline</v-icon>
+      <h2 class="mt-4">{{ t('messages.loadError') }}</h2>
+      <v-btn
+        class="mt-6"
+        prepend-icon="mdi-refresh"
+        color="primary"
+        variant="tonal"
+        @click="loadKnowledgeBases()"
+      >
+        {{ t('list.retry') }}
+      </v-btn>
+    </div>
+
     <div v-else-if="kbList.length > 0" class="kb-list">
       <OutlinedActionListItem
         v-for="kb in kbList"
@@ -400,6 +414,7 @@ const router = useRouter();
 
 // 状态
 const loading = ref(false);
+const loadError = ref(false);
 const saving = ref(false);
 const deleting = ref(false);
 const kbList = ref<KnowledgeBaseListItem[]>([]);
@@ -520,6 +535,7 @@ const emojiCategories = [
 // 加载知识库列表
 const loadKnowledgeBases = async (refreshStats = false) => {
   loading.value = true;
+  loadError.value = false;
   try {
     const response = await knowledgeApi.list({
       refresh_stats: refreshStats,
@@ -527,10 +543,12 @@ const loadKnowledgeBases = async (refreshStats = false) => {
     if (response.data.status === 'ok') {
       kbList.value = response.data.data.items || [];
     } else {
+      loadError.value = true;
       showSnackbar(response.data.message || t('messages.loadError'), 'error');
     }
   } catch {
     console.error('Failed to load knowledge bases');
+    loadError.value = true;
     showSnackbar(t('messages.loadError'), 'error');
   } finally {
     loading.value = false;

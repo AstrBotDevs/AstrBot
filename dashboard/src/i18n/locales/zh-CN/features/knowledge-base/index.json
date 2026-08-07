@@ -11,7 +11,8 @@
     "documents": "文档",
     "chunks": "分块",
     "sessionConfig": "会话配置",
-    "initError": "初始化失败"
+    "initError": "初始化失败",
+    "retry": "重试"
   },
   "card": {
     "edit": "编辑",
