@@ -50,6 +50,9 @@
         "subtitle": "文本转图像渲染策略、端点和自定义模板。"
       }
     },
+    "timePreview": {
+      "label": "AstrBot 当前时间"
+    },
     "messages": {
       "loadFailed": "加载系统配置失败",
       "saveSuccess": "系统配置已保存",

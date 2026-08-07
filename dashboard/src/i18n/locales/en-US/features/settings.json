@@ -50,6 +50,9 @@
         "subtitle": "Rendering strategy, endpoint, and custom templates for text-to-image."
       }
     },
+    "timePreview": {
+      "label": "AstrBot current time"
+    },
     "messages": {
       "loadFailed": "Failed to load system config",
       "saveSuccess": "System config saved",

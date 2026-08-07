@@ -3,8 +3,10 @@ import copy
 import inspect
 import os
 import traceback
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from astrbot import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
@@ -636,7 +638,26 @@ class ConfigProfileService:
         }
 
     def get_system_config(self) -> dict:
-        return self.get_system_schema()
+        data = self.get_system_schema()
+        server_utc_time = datetime.now(UTC)
+        timezone_name = str(data["config"].get("timezone") or "").strip()
+        effective_timezone_name: str | None = None
+        if timezone_name:
+            try:
+                configured_time = server_utc_time.astimezone(ZoneInfo(timezone_name))
+                effective_timezone_name = timezone_name
+            except ValueError, ZoneInfoNotFoundError:
+                configured_time = server_utc_time.astimezone()
+        else:
+            configured_time = server_utc_time.astimezone()
+
+        utc_offset = configured_time.utcoffset()
+        data["server_utc_time"] = server_utc_time.isoformat()
+        data["server_utc_offset_minutes"] = (
+            int(utc_offset.total_seconds() / 60) if utc_offset else 0
+        )
+        data["server_timezone"] = effective_timezone_name
+        return data
 
     def list_profiles(self) -> dict:
         return {"info_list": self.acm.get_conf_list()}
