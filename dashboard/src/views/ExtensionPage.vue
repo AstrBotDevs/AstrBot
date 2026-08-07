@@ -12,7 +12,7 @@ import MarketPluginsTab from './extension/MarketPluginsTab.vue';
 import PluginDetailPage from './extension/PluginDetailPage.vue';
 import { useExtensionPage } from './extension/useExtensionPage';
 import { computed } from 'vue';
-import defaultPluginIcon from '@/assets/images/plugin_icon.png';
+import defaultPluginIcon from '/favicon.svg';
 import { usePluginI18n } from '@/utils/pluginI18n';
 
 const pageState = useExtensionPage();

@@ -1,7 +1,7 @@
 <script setup>
 import MarketPluginCard from '@/components/extension/MarketPluginCard.vue';
 import PluginSortControl from '@/components/extension/PluginSortControl.vue';
-import defaultPluginIcon from '@/assets/images/plugin_icon.png';
+import defaultPluginIcon from '/favicon.svg';
 import { computed } from 'vue';
 import { normalizeTextInput } from '@/utils/inputValue';
 

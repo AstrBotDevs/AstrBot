@@ -5,7 +5,7 @@ import { useModuleI18n } from '@/i18n/composables';
 import UninstallConfirmDialog from './UninstallConfirmDialog.vue';
 import PluginPlatformChip from './PluginPlatformChip.vue';
 import StyledMenu from './StyledMenu.vue';
-import defaultPluginIcon from '@/assets/images/plugin_icon.png';
+import defaultPluginIcon from '/favicon.svg';
 import { usePluginI18n } from '@/utils/pluginI18n';
 
 const props = defineProps({

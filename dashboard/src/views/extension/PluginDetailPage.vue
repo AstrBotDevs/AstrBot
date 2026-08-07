@@ -10,7 +10,7 @@ import {
 import axios from 'axios';
 import DOMPurify from 'dompurify';
 import MarkdownIt from 'markdown-it';
-import defaultPluginIcon from '@/assets/images/plugin_icon.png';
+import defaultPluginIcon from '/favicon.svg';
 import { pluginApi } from '@/api/v1';
 import { usePluginI18n } from '@/utils/pluginI18n';
 import PluginPlatformChip from '@/components/shared/PluginPlatformChip.vue';
