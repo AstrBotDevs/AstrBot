@@ -16,7 +16,7 @@
     <!-- 主内容 -->
     <div v-else class="kb-content">
       <!-- 标签页 -->
-      <v-tabs v-model="activeTab" class="mb-6" color="primary">
+      <v-tabs v-model="activeTab" class="kb-tabs mb-6" color="primary" show-arrows>
         <v-tab value="overview">
           <v-icon start>mdi-information-outline</v-icon>
           {{ t('tabs.overview') }}
@@ -247,7 +247,12 @@ watch(
 
 <style scoped>
 .kb-detail-page {
+  min-width: 0;
   width: 100%;
+}
+
+.kb-tabs {
+  max-width: 100%;
 }
 
 .kb-detail-page :deep(.v-card--variant-outlined) {
@@ -290,6 +295,11 @@ watch(
 
 /* 响应式设计 */
 @media (max-width: 768px) {
+  .kb-tabs :deep(.v-tab) {
+    min-width: max-content;
+    padding-inline: 12px;
+  }
+
   .kb-title {
     font-size: 1.25rem;
   }

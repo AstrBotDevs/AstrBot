@@ -57,9 +57,9 @@
 
         <!-- 检索结果 -->
         <div v-if="hasSearched" class="results-section">
-          <div class="d-flex align-center mb-4">
+          <div class="results-heading d-flex align-center mb-4">
             <h3 class="text-h6">{{ t('retrieval.results') }}</h3>
-            <v-chip class="ml-3" color="primary" variant="tonal" size="small">
+            <v-chip color="primary" variant="tonal" size="small">
               {{ results.length }} {{ t('retrieval.results') }}
             </v-chip>
           </div>
@@ -67,15 +67,15 @@
           <!-- 结果列表 -->
           <div v-if="results.length > 0" class="results-list">
             <v-card v-for="(result, index) in results" :key="result.chunk_id" variant="outlined" class="mb-4">
-              <v-card-title class="d-flex align-center pa-2">
-                <v-chip size="x-small" color="primary" class="mr-2">
+              <v-card-title class="result-card-header d-flex align-center pa-2">
+                <v-chip size="x-small" color="primary">
                   #{{ index + 1 }}
                 </v-chip>
-                <span class="text-subtitle-1">
+                <span class="result-title text-subtitle-1">
                   {{ t('retrieval.chunk', { index: result.chunk_index }) }}
                 </span>
-                <div class="ml-4">
-                  <v-chip size="x-small" variant="tonal" class="mr-2">
+                <div class="result-meta ml-2">
+                  <v-chip size="x-small" variant="tonal" class="result-document-chip">
                     <v-icon start size="small">mdi-file-document</v-icon>
                     {{ result.doc_name }}
                   </v-chip>
@@ -85,7 +85,7 @@
                   </v-chip>
                 </div>
                 <v-spacer />
-                <v-chip size="x-small" :color="getScoreColor(result.score)">
+                <v-chip class="result-score" size="x-small" :color="getScoreColor(result.score)">
                   {{ t('retrieval.score') }}: {{ result.score.toFixed(4) }}
                 </v-chip>
               </v-card-title>
@@ -239,5 +239,65 @@ const getScoreColor = (score: number) => {
   height: 120px;
   overflow-y: auto;
   font-size: 13px;
+}
+
+.result-card-header,
+.result-meta {
+  gap: 8px;
+}
+
+.results-heading {
+  gap: 12px;
+}
+
+.result-meta {
+  align-items: center;
+  display: flex;
+  min-width: 0;
+}
+
+.result-document-chip {
+  max-width: min(280px, 40vw);
+}
+
+.result-document-chip :deep(.v-chip__content) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .result-card-header {
+    align-items: flex-start !important;
+    flex-wrap: wrap;
+  }
+
+  .result-title {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .result-meta {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    margin-left: 0 !important;
+    order: 2;
+  }
+
+  .result-document-chip {
+    max-width: 100%;
+  }
+
+  .result-score {
+    margin-left: auto;
+  }
+
+  .results-heading {
+    flex-wrap: wrap;
+  }
+
+  .results-heading .v-chip {
+    margin-left: 0 !important;
+  }
 }
 </style>
