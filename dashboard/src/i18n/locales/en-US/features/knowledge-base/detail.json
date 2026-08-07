@@ -4,6 +4,10 @@
   "breadcrumb": {
     "list": "Knowledge Bases"
   },
+  "states": {
+    "loadError": "Failed to load knowledge base details",
+    "retry": "Retry"
+  },
   "tabs": {
     "overview": "Overview",
     "documents": "Documents",
@@ -43,7 +47,8 @@
     "uploadSuccess": "Document uploaded successfully",
     "uploadFailed": "Failed to upload document",
     "deleteSuccess": "Document deleted successfully",
-    "deleteFailed": "Failed to delete document"
+    "deleteFailed": "Failed to delete document",
+    "loadFailed": "Failed to load document list"
   },
   "upload": {
     "title": "Upload Document",

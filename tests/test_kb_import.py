@@ -307,6 +307,28 @@ async def test_list_documents_total_comes_from_count_documents():
     kb_helper.count_documents.assert_awaited_once_with(search="foo")
 
 
+@pytest.mark.asyncio
+async def test_list_documents_route_forwards_search_query(
+    asgi_client: httpx.AsyncClient,
+    knowledge_base_route_service: KnowledgeBaseService,
+):
+    knowledge_base_route_service.list_documents = AsyncMock(
+        return_value={"items": [], "page": 2, "page_size": 5, "total": 0}
+    )
+
+    response = await asgi_client.get(
+        "/api/v1/knowledge-bases/test_kb_id/documents?page=2&page_size=5&search=guide"
+    )
+
+    assert response.status_code == 200
+    knowledge_base_route_service.list_documents.assert_awaited_once_with(
+        kb_id="test_kb_id",
+        page=2,
+        page_size=5,
+        search="guide",
+    )
+
+
 def test_get_upload_progress_reports_processing_completed_and_failed_states():
     service = KnowledgeBaseService.__new__(KnowledgeBaseService)
     service.upload_progress = {

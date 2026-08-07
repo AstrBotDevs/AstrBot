@@ -4,6 +4,10 @@
   "breadcrumb": {
     "list": "知识库"
   },
+  "states": {
+    "loadError": "知识库详情加载失败",
+    "retry": "重试"
+  },
   "tabs": {
     "overview": "概览",
     "documents": "文档管理",
@@ -43,7 +47,8 @@
     "uploadSuccess": "文档上传成功",
     "uploadFailed": "文档上传失败",
     "deleteSuccess": "文档删除成功",
-    "deleteFailed": "文档删除失败"
+    "deleteFailed": "文档删除失败",
+    "loadFailed": "文档列表加载失败"
   },
   "upload": {
     "title": "上传文档",

@@ -24,12 +24,15 @@
 
     <!-- 文档列表 -->
     <v-card variant="outlined">
-      <v-data-table
+      <v-data-table-server
         :headers="headers"
         :items="documents"
         :loading="loading"
-        :search="searchQuery"
-        :items-per-page="10"
+        :items-per-page="pageSize"
+        :page="page"
+        :items-length="total"
+        @update:page="handlePageChange"
+        @update:items-per-page="handlePageSizeChange"
       >
         <template #item.doc_name="{ item }">
           <div class="d-flex align-center gap-2">
@@ -92,7 +95,7 @@
             <p class="mt-4 text-medium-emphasis">{{ t('documents.empty') }}</p>
           </div>
         </template>
-      </v-data-table>
+      </v-data-table-server>
     </v-card>
 
     <!-- 上传对话框 -->
@@ -410,7 +413,7 @@
 
 <script setup lang="ts">
 import TavilyKeyDialog from './TavilyKeyDialog.vue';
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { configProfileApi, knowledgeApi, providerApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
@@ -473,6 +476,7 @@ interface UrlUploadPayload {
 
 interface DocumentsPayload {
   items?: DocumentItem[];
+  total?: number;
 }
 
 interface UploadTaskPayload {
@@ -522,6 +526,9 @@ const loading = ref(false);
 const uploading = ref(false);
 const deleting = ref(false);
 const documents = ref<DocumentItem[]>([]);
+const page = ref(1);
+const pageSize = ref(10);
+const total = ref(0);
 const searchQuery = ref('');
 const showUploadDialog = ref(false);
 const showDeleteDialog = ref(false);
@@ -535,6 +542,7 @@ const llmProviders = ref<LlmProviderItem[]>([]);
 const progressPollingInterval = ref<number | null>(null);
 const tavilyConfigStatus = ref('loading'); // 'loading', 'configured', 'not_configured', 'error'
 const showTavilyDialog = ref(false);
+let documentsRequestId = 0;
 
 const snackbar = ref({
   show: false,
@@ -596,11 +604,11 @@ const isUploadDisabled = computed(() => {
 
 // 表格列
 const headers = [
-  { title: t('documents.name'), key: 'doc_name', sortable: true },
-  { title: t('documents.type'), key: 'file_type', sortable: true },
-  { title: t('documents.size'), key: 'file_size', sortable: true },
-  { title: t('documents.chunks'), key: 'chunk_count', sortable: true },
-  { title: t('documents.createdAt'), key: 'created_at', sortable: true },
+  { title: t('documents.name'), key: 'doc_name', sortable: false },
+  { title: t('documents.type'), key: 'file_type', sortable: false },
+  { title: t('documents.size'), key: 'file_size', sortable: false },
+  { title: t('documents.chunks'), key: 'chunk_count', sortable: false },
+  { title: t('documents.createdAt'), key: 'created_at', sortable: false },
   {
     title: t('documents.actions'),
     key: 'actions',
@@ -611,19 +619,38 @@ const headers = [
 
 // 加载文档列表
 const loadDocuments = async () => {
+  const requestId = ++documentsRequestId;
   loading.value = true;
   try {
-    const response = await knowledgeApi.documents(props.kbId);
+    const response = await knowledgeApi.documents(props.kbId, {
+      page: page.value,
+      page_size: pageSize.value,
+      search: searchQuery.value.trim() || undefined,
+    });
+    if (requestId !== documentsRequestId) return;
     if (response.data.status === 'ok') {
       const payload = response.data.data as DocumentsPayload | undefined;
       documents.value = payload?.items || [];
+      total.value = payload?.total || 0;
     }
   } catch (error) {
+    if (requestId !== documentsRequestId) return;
     console.error('Failed to load documents:', error);
-    showSnackbar('加载文档列表失败', 'error');
+    showSnackbar(t('documents.loadFailed'), 'error');
   } finally {
-    loading.value = false;
+    if (requestId === documentsRequestId) loading.value = false;
   }
+};
+
+const handlePageChange = (newPage: number) => {
+  page.value = newPage;
+  void loadDocuments();
+};
+
+const handlePageSizeChange = (newPageSize: number) => {
+  pageSize.value = newPageSize;
+  page.value = 1;
+  void loadDocuments();
 };
 
 // 文件选择
@@ -1095,6 +1122,13 @@ const onTavilyKeySet = () => {
   void checkTavilyConfig();
 };
 
+watch(searchQuery, (_value, _oldValue, onCleanup) => {
+  page.value = 1;
+  documentsRequestId += 1;
+  const timeoutId = window.setTimeout(() => void loadDocuments(), 300);
+  onCleanup(() => void window.clearTimeout(timeoutId));
+});
+
 onMounted(() => {
   void loadDocuments();
   void loadLlmProviders();
@@ -1102,6 +1136,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  documentsRequestId += 1;
   stopProgressPolling();
 });
 </script>
