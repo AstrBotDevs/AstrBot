@@ -34,6 +34,8 @@ import {
   type GhproxyTestRequest,
   type KnowledgeBaseCreateRequest,
   type KnowledgeBaseRequest,
+  type KnowledgeUploadTask,
+  type KnowledgeUploadTaskList,
   type LoginRequest,
   type ListConversationsData,
   type McpServerConfig,
@@ -1492,8 +1494,13 @@ export const knowledgeApi = {
     );
   },
   task(taskId: string) {
-    return typed<any>(
+    return typed<KnowledgeUploadTask>(
       openApiV1.getKnowledgeTask({ path: { task_id: taskId } }),
+    );
+  },
+  tasks(kbId: string) {
+    return typed<KnowledgeUploadTaskList>(
+      openApiV1.listKnowledgeTasks({ path: { kb_id: kbId } }),
     );
   },
   document(kbId: string, documentId: string) {
