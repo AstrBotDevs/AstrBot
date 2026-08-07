@@ -5,23 +5,23 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 346b85db9d79207ea7b51694cce5276203612af4
-  synced_at_utc: 2026-08-06T11:26:19Z
+  commit: 609e576b31eb5d7f4598eeeb4d23b67e34d0f1bf
+  synced_at_utc: 2026-08-07T17:09:46Z
   sync_method: manual-adaptation
-  source_pr: '9553, 346b85db9d79207ea7b51694cce5276203612af4'
+  source_pr: '9579, 9581, 9582, 9584, 9585, 9577, 9547, 9564, 9578, 9568'
   note: >-
-    Reviewed the two upstream/master commits after
-    bb9b1878474e5ed65667d5c2c6b7fd6efbc51db4 through
-    346b85db9d79207ea7b51694cce5276203612af4. The marker is not an ancestor
+    Reviewed all upstream/master commits after the previous marker through
+    609e576b31eb5d7f4598eeeb4d23b67e34d0f1bf. The marker is not an ancestor
     of this fork branch, so no upstream commit was merged or mechanically
-    cherry-picked. Fork-native port: adapted the platform-selection tooltips
-    from #9553 to the current Vue item type and shipped zh-CN/en-US strings.
-    The upstream ru-RU resource is excluded because this fork supports only
-    zh-CN and en-US. Ported the platform-template ordering while retaining the
-    fork's existing labels, loopback callback defaults, and OneBot fields,
-    with a regression test for that invariant. Followed the absorbed feature
-    set as fork-owned 4.27.2 metadata, uv.lock revision, bilingual changelog,
-    and platform-start documentation; the upstream release text was not
-    copied. Skipped the RainYun guide because the fork deliberately removed
-    vendor promotion, does not publish that prebuilt application, and requires
-    source-build and explicit secure remote-access guidance.
+    cherry-picked. Ported the cron timezone inheritance, effective server time
+    preview, profile mapping async serialization and rollback behavior, server
+    side knowledge-base document search/pagination, full-area chat drag upload,
+    favicon plugin defaults, knowledge-base loading error states, and provider
+    API search forwarding. The async shared-preferences migration and
+    in-memory provider refresh were already present in the fork and were
+    verified without duplicate changes. Skipped passwordless desktop sessions:
+    this fork does not publish the desktop runtime and the feature would bypass
+    its password/TOTP authentication boundary. Kept only zh-CN and en-US
+    resources; upstream ru-RU resources were not synchronized. Existing fork
+    policies for Python 3.14+, source-built deployment, protocol contracts, and
+    secure authentication were preserved.
