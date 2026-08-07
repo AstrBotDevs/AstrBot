@@ -35,4 +35,12 @@ export interface ToolItem {
   builtin_config_tags?: BuiltinToolConfigTag[];
   permission?: 'admin' | 'member';
   permission_configured?: boolean;
+  tool_id?: string;
+  parallel_policy?: 'unknown' | 'safe' | 'serial' | 'blocked';
+  parallel_eligible?: boolean;
+  parallel_blocked_reason?: string | null;
+  parallel_enabled?: boolean;
+  parallel_execution_enabled?: boolean;
+  parallel_max_calls?: number;
+  parallel_mcp_max_concurrency?: number;
 }

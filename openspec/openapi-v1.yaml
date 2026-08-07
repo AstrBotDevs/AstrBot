@@ -2344,6 +2344,40 @@ paths:
         '200':
           $ref: '#/components/responses/Ok'
 
+  /api/v1/tools/parallel/enabled:
+    patch:
+      tags: [Tools]
+      summary: Enable or disable native parallel tool execution
+      operationId: setParallelEnabled
+      x-astrbot-scope: tool
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnabledPatch'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/tools/{tool_id}/parallel:
+    patch:
+      tags: [Tools]
+      summary: Enable or disable parallel execution for one tool
+      operationId: setToolParallel
+      x-astrbot-scope: tool
+      parameters:
+        - $ref: '#/components/parameters/ToolId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnabledPatch'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
   /api/v1/tools/{tool_id}/permission:
     patch:
       tags: [Tools]

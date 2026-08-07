@@ -87,6 +87,19 @@ export const toolApi = {
       }),
     );
   },
+  setParallelEnabled(enabled: boolean) {
+    return typed<OpenConfig>(
+      openApiV1.setParallelEnabled({ body: { enabled } }),
+    );
+  },
+  setParallel(toolId: string, enabled: boolean) {
+    return typed<OpenConfig>(
+      openApiV1.setToolParallel({
+        path: { tool_id: toolId },
+        body: { enabled },
+      }),
+    );
+  },
   setPermission(toolId: string, permission: 'admin' | 'member') {
     return typed<OpenConfig>(
       openApiV1.setToolPermission({

@@ -45,6 +45,10 @@ export function useToolActions(
     };
   });
 
+  const parallelExecutionEnabled = computed(() =>
+    tools.value.some((tool) => tool.parallel_execution_enabled),
+  );
+
   /**
    * Toggle a tool's active state (optimistic update).
    */
@@ -102,12 +106,59 @@ export function useToolActions(
     }
   };
 
+  const toggleToolParallel = async (
+    tool: ToolItem,
+    enabled: boolean,
+    errorMessage: string,
+  ) => {
+    if (!tool.parallel_eligible || !tool.tool_id) {
+      toast(tool.parallel_blocked_reason || errorMessage, 'info');
+      return;
+    }
+    const previous = tool.parallel_enabled;
+    tool.parallel_enabled = enabled;
+    try {
+      const res = await toolApi.setParallel(tool.tool_id, enabled);
+      if (res.data.status === 'ok') {
+        toast(res.data.message || errorMessage);
+      } else {
+        tool.parallel_enabled = previous;
+        toast(res.data.message || errorMessage, 'error');
+      }
+    } catch (error) {
+      tool.parallel_enabled = previous;
+      toast(resolveErrorMessage(error, errorMessage), 'error');
+    }
+  };
+
+  const toggleParallelExecution = async (
+    enabled: boolean,
+    errorMessage: string,
+  ) => {
+    try {
+      const res = await toolApi.setParallelEnabled(enabled);
+      if (res.data.status === 'ok') {
+        tools.value.forEach((tool) => {
+          tool.parallel_execution_enabled = enabled;
+        });
+        toast(res.data.message || errorMessage);
+      } else {
+        toast(res.data.message || errorMessage, 'error');
+      }
+    } catch (error) {
+      toast(resolveErrorMessage(error, errorMessage), 'error');
+    }
+  };
+
   return {
     toolSearch,
     showBuiltinTools,
     filteredTools,
     toolSummary,
+    parallelExecutionEnabled,
     toggleTool,
     updateToolPermission,
+    toggleToolParallel,
+    toggleParallelExecution,
   };
 }

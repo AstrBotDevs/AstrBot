@@ -3,7 +3,9 @@ from typing import Any
 
 from astrbot import logger
 from astrbot.core.agent.mcp_client import MCPTool, validate_mcp_stdio_config
+from astrbot.core.agent.tool import get_parallel_blocked_reason, get_tool_id
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.star.plugin_catalog import PluginCatalog
 from astrbot.core.star.star import PluginRegistry
 from astrbot.core.tools.function_tool_manager import FunctionToolManager
 from astrbot.core.utils.shared_preferences import SharedPreferences
@@ -14,6 +16,9 @@ class ToolsServiceError(Exception):
 
 
 class ToolsService:
+    PARALLEL_PREFERENCE_KEY = "tool_parallel_execution"
+    DEFAULT_PARALLEL_MAX_CALLS = 8
+
     def __init__(
         self,
         tool_manager: FunctionToolManager,
@@ -230,15 +235,102 @@ class ToolsService:
             defaults = (
                 perms_store.get("_default", {}) if isinstance(perms_store, dict) else {}
             )
+            parallel_settings = await self.get_parallel_settings()
             tools_dict = []
             for tool in tools:
                 tools_dict.append(
-                    self._serialize_tool(tool, config_entries, defaults=defaults)
+                    self._serialize_tool(
+                        tool,
+                        config_entries,
+                        defaults=defaults,
+                        parallel_settings=parallel_settings,
+                    )
                 )
             return tools_dict
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise ToolsServiceError(f"Failed to get tool list: {exc!s}") from exc
+
+    async def get_parallel_settings(self) -> dict[str, Any]:
+        """Return the persisted global parallel-tool policy."""
+        raw = await self.preferences.global_get(self.PARALLEL_PREFERENCE_KEY, {})
+        if not isinstance(raw, dict):
+            raw = {}
+        allowed_raw = raw.get("allowed_tool_ids", [])
+        allowed = sorted(
+            {
+                value.strip()
+                for value in allowed_raw
+                if isinstance(value, str) and value.strip()
+            }
+            if isinstance(allowed_raw, list)
+            else set()
+        )
+        try:
+            max_calls = max(
+                1,
+                min(
+                    self.DEFAULT_PARALLEL_MAX_CALLS,
+                    int(raw.get("max_calls", self.DEFAULT_PARALLEL_MAX_CALLS)),
+                ),
+            )
+        except TypeError, ValueError:
+            max_calls = self.DEFAULT_PARALLEL_MAX_CALLS
+        try:
+            mcp_max_concurrency = max(
+                1,
+                min(
+                    self.DEFAULT_PARALLEL_MAX_CALLS,
+                    int(raw.get("mcp_max_concurrency", 1)),
+                ),
+            )
+        except TypeError, ValueError:
+            mcp_max_concurrency = 1
+        return {
+            "enabled": bool(raw.get("enabled", False)),
+            "allowed_tool_ids": allowed,
+            "max_calls": max_calls,
+            "mcp_max_concurrency": mcp_max_concurrency,
+        }
+
+    async def set_parallel_enabled(self, enabled: bool) -> str:
+        """Enable or disable native parallel tool execution globally."""
+        settings = await self.get_parallel_settings()
+        settings["enabled"] = bool(enabled)
+        await self.preferences.global_put(self.PARALLEL_PREFERENCE_KEY, settings)
+        return (
+            "Parallel tool execution enabled."
+            if enabled
+            else "Parallel tool execution disabled."
+        )
+
+    async def toggle_tool_parallel(self, data: Any) -> str:
+        """Persist administrator opt-in for one current tool identity."""
+        tool_id = data.get("tool_id") if isinstance(data, dict) else None
+        enabled = data.get("enabled") if isinstance(data, dict) else None
+        if not isinstance(tool_id, str) or not tool_id or not isinstance(enabled, bool):
+            raise ToolsServiceError("tool_id and enabled are required")
+
+        tools = list(self.tool_mgr.func_list) + list(self.tool_mgr.iter_builtin_tools())
+        tool = next(
+            (candidate for candidate in tools if get_tool_id(candidate) == tool_id),
+            None,
+        )
+        if tool is None:
+            raise ToolsServiceError(f"Tool '{tool_id}' not found")
+        blocked_reason = get_parallel_blocked_reason(tool)
+        if enabled and blocked_reason is not None:
+            raise ToolsServiceError(blocked_reason)
+
+        settings = await self.get_parallel_settings()
+        allowed = set(settings["allowed_tool_ids"])
+        if enabled:
+            allowed.add(tool_id)
+        else:
+            allowed.discard(tool_id)
+        settings["allowed_tool_ids"] = sorted(allowed)
+        await self.preferences.global_put(self.PARALLEL_PREFERENCE_KEY, settings)
+        return f"Tool '{tool.name}' parallel execution {'enabled' if enabled else 'disabled'}."
 
     async def update_tool_permission(self, data: Any) -> str:
         """Set a tool permission level.
@@ -487,6 +579,7 @@ class ToolsService:
         config_entries: list[dict],
         *,
         defaults: dict[str, str],
+        parallel_settings: dict[str, Any] | None = None,
     ) -> dict:
         readonly = False
         builtin_config_statuses = []
@@ -505,9 +598,7 @@ class ToolsService:
         elif isinstance(tool, MCPTool):
             origin = "mcp"
             origin_name = tool.mcp_server_name
-        elif tool.handler_module_path and (
-            star := self.plugin_catalog.get_by_module(tool.handler_module_path)
-        ):
+        elif star := self._resolve_plugin_owner(tool):
             origin = "plugin"
             origin_name = star.name
         else:
@@ -516,6 +607,7 @@ class ToolsService:
 
         tool_info = {
             "name": tool.name,
+            "tool_id": get_tool_id(tool),
             "description": tool.description,
             "parameters": tool.parameters,
             "active": tool.active,
@@ -525,6 +617,25 @@ class ToolsService:
             "builtin_config_statuses": builtin_config_statuses,
             "builtin_config_tags": builtin_config_tags,
         }
+        settings = parallel_settings or {
+            "enabled": False,
+            "allowed_tool_ids": [],
+            "max_calls": self.DEFAULT_PARALLEL_MAX_CALLS,
+            "mcp_max_concurrency": 1,
+        }
+        tool_id = tool_info["tool_id"]
+        blocked_reason = get_parallel_blocked_reason(tool)
+        tool_info.update(
+            {
+                "parallel_policy": getattr(tool, "parallel_policy", "unknown"),
+                "parallel_eligible": blocked_reason is None,
+                "parallel_blocked_reason": blocked_reason,
+                "parallel_enabled": tool_id in settings["allowed_tool_ids"],
+                "parallel_execution_enabled": settings["enabled"],
+                "parallel_max_calls": settings["max_calls"],
+                "parallel_mcp_max_concurrency": settings["mcp_max_concurrency"],
+            }
+        )
         if not readonly:
             configured = tool.name in defaults
             permission = (
@@ -535,3 +646,22 @@ class ToolsService:
             tool_info["permission"] = permission
             tool_info["permission_configured"] = configured
         return tool_info
+
+    def _resolve_plugin_owner(self, tool: Any) -> Any | None:
+        """Resolve a plugin by exact path or strict package-prefix ownership."""
+        module_path = getattr(tool, "handler_module_path", None)
+        if not isinstance(module_path, str) or not module_path:
+            return None
+        exact = self.plugin_catalog.get_by_module(module_path)
+        if exact is not None:
+            return exact
+
+        matches = []
+        for metadata in self.plugin_catalog.all():
+            try:
+                prefix = PluginCatalog.module_prefix(metadata)
+            except TypeError, ValueError:
+                continue
+            if PluginCatalog.is_plugin_module_path(module_path, prefix):
+                matches.append(metadata)
+        return matches[0] if len(matches) == 1 else None

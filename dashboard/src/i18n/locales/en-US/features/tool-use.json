@@ -55,7 +55,12 @@
       "permissionMember": "All Users",
       "permissionEveryone": "All Users",
       "permissionBuiltin": "System Builtin",
+      "parallel": "Parallel",
       "actions": "Actions"
+    },
+    "parallel": {
+      "enabled": "Enable native parallel tool execution",
+      "blocked": "This tool cannot be enabled for parallel execution."
     },
     "configTags": {
       "tooltipTitle": "This tool is enabled in config file {config} because:",
@@ -183,6 +188,7 @@
     "updateToolPermissionSuccess": "Permission for {name} updated",
     "updateToolPermissionFailed": "Failed to update tool permission",
     "updateToolPermissionBuiltin": "Builtin tools do not support per-tool permission configuration.",
+    "updateParallelExecutionFailed": "Failed to update parallel tool execution",
     "testError": "Test connection failed: {error}"
   }
 }

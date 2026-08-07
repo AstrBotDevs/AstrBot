@@ -88,8 +88,11 @@ const {
   showBuiltinTools,
   filteredTools,
   toolSummary,
+  parallelExecutionEnabled,
   toggleTool,
   updateToolPermission,
+  toggleToolParallel,
+  toggleParallelExecution,
 } = useToolActions(tools, toast);
 
 // 处理切换指令状态
@@ -132,6 +135,21 @@ const handleUpdateToolPermission = async (
     tmTool('messages.updateToolPermissionSuccess', { name: tool.name }),
     tmTool('messages.updateToolPermissionBuiltin'),
     tmTool('messages.updateToolPermissionFailed'),
+  );
+};
+
+const handleToggleToolParallel = async (tool: ToolItem, enabled: boolean) => {
+  await toggleToolParallel(
+    tool,
+    enabled,
+    tmTool('functionTools.parallel.blocked'),
+  );
+};
+
+const handleToggleParallelExecution = async (enabled: boolean) => {
+  await toggleParallelExecution(
+    enabled,
+    tmTool('messages.updateParallelExecutionFailed'),
   );
 };
 
@@ -351,6 +369,17 @@ watch(viewMode, async (mode) => {
                   hide-details
                   class="builtin-tools-checkbox"
                 />
+                <v-switch
+                  :model-value="parallelExecutionEnabled"
+                  :label="tmTool('functionTools.parallel.enabled')"
+                  color="primary"
+                  density="compact"
+                  hide-details
+                  inset
+                  @update:model-value="
+                    handleToggleParallelExecution($event === true)
+                  "
+                />
               </div>
             </div>
 
@@ -358,6 +387,7 @@ watch(viewMode, async (mode) => {
               :items="filteredTools"
               :loading="toolsLoading"
               @toggle-tool="handleToggleTool"
+              @toggle-parallel="handleToggleToolParallel"
               @update-permission="handleUpdateToolPermission"
             />
           </div>

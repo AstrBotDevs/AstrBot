@@ -21,6 +21,7 @@ const emit = defineEmits<{
     tool: ToolItem,
     permission: 'admin' | 'member',
   ): void;
+  (e: 'toggle-parallel', tool: ToolItem, enabled: boolean): void;
 }>();
 
 const toolHeaders = computed(() => [
@@ -43,6 +44,12 @@ const toolHeaders = computed(() => [
     key: 'permission',
     sortable: false,
     width: '110px',
+  },
+  {
+    title: tmTool('functionTools.table.parallel'),
+    key: 'parallel',
+    sortable: false,
+    width: '120px',
   },
   {
     title: tmTool('functionTools.table.actions'),
@@ -263,6 +270,33 @@ const getPermissionLabel = (permission?: string): string => {
             </v-list-item>
           </v-list>
         </v-menu>
+      </template>
+
+      <template #item.parallel="{ item }">
+        <v-tooltip v-if="item.parallel_blocked_reason" location="top">
+          <template #activator="{ props: tooltipProps }">
+            <span v-bind="tooltipProps">
+              <v-switch
+                :model-value="item.parallel_enabled"
+                disabled
+                color="primary"
+                density="compact"
+                hide-details
+                inset
+              />
+            </span>
+          </template>
+          {{ item.parallel_blocked_reason }}
+        </v-tooltip>
+        <v-switch
+          v-else
+          :model-value="item.parallel_enabled"
+          color="primary"
+          density="compact"
+          hide-details
+          inset
+          @update:model-value="emit('toggle-parallel', item, $event === true)"
+        />
       </template>
 
       <template #item.actions="{ item }">

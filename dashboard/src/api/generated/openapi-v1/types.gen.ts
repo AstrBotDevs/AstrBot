@@ -3614,6 +3614,42 @@ export type SetToolEnabledResponses = {
 export type SetToolEnabledResponse =
   SetToolEnabledResponses[keyof SetToolEnabledResponses];
 
+export type SetParallelEnabledData = {
+  body: EnabledPatch;
+  path?: never;
+  query?: never;
+  url: '/api/v1/tools/parallel/enabled';
+};
+
+export type SetParallelEnabledResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type SetParallelEnabledResponse =
+  SetParallelEnabledResponses[keyof SetParallelEnabledResponses];
+
+export type SetToolParallelData = {
+  body: EnabledPatch;
+  path: {
+    tool_id: string;
+  };
+  query?: never;
+  url: '/api/v1/tools/{tool_id}/parallel';
+};
+
+export type SetToolParallelResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type SetToolParallelResponse =
+  SetToolParallelResponses[keyof SetToolParallelResponses];
+
 export type SetToolPermissionData = {
   body: ToolPermissionPatch;
   path: {

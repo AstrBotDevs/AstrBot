@@ -165,6 +165,18 @@ async def list_tools(
     return await _run(service.get_tool_list)
 
 
+@router.patch("/tools/parallel/enabled")
+async def set_parallel_enabled(
+    payload: ToolEnabledRequest,
+    _auth: AuthContext = Depends(require_tool_scope),
+    service: ToolsService = Depends(get_service),
+):
+    return await _run(
+        lambda: service.set_parallel_enabled(payload.enabled),
+        result_as_message=True,
+    )
+
+
 @router.patch("/tools/{tool_id:path}/enabled")
 async def set_tool_enabled(
     tool_id: str,
@@ -173,6 +185,21 @@ async def set_tool_enabled(
     service: ToolsService = Depends(get_service),
 ):
     return await _toggle_tool(tool_id, payload.enabled, service)
+
+
+@router.patch("/tools/{tool_id:path}/parallel")
+async def set_tool_parallel(
+    tool_id: str,
+    payload: ToolEnabledRequest,
+    _auth: AuthContext = Depends(require_tool_scope),
+    service: ToolsService = Depends(get_service),
+):
+    return await _run(
+        lambda: service.toggle_tool_parallel(
+            {"tool_id": tool_id, "enabled": payload.enabled}
+        ),
+        result_as_message=True,
+    )
 
 
 @router.patch("/tools/{tool_id:path}/permission")

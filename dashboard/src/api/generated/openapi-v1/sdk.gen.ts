@@ -452,12 +452,16 @@ import type {
   SetBotEnabledResponses,
   SetMcpServerEnabledData,
   SetMcpServerEnabledResponses,
+  SetParallelEnabledData,
+  SetParallelEnabledResponses,
   SetPluginEnabledData,
   SetPluginEnabledResponses,
   SetProviderEnabledData,
   SetProviderEnabledResponses,
   SetToolEnabledData,
   SetToolEnabledResponses,
+  SetToolParallelData,
+  SetToolParallelResponses,
   SetToolPermissionData,
   SetToolPermissionResponses,
   SetupAuthData,
@@ -3142,6 +3146,48 @@ export const setToolEnabled = <ThrowOnError extends boolean = false>(
     responseType: 'json',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/tools/{tool_id}/enabled',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Enable or disable native parallel tool execution
+ */
+export const setParallelEnabled = <ThrowOnError extends boolean = false>(
+  options: Options<SetParallelEnabledData, ThrowOnError>,
+): RequestResult<SetParallelEnabledResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).patch<
+    SetParallelEnabledResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/tools/parallel/enabled',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Enable or disable parallel execution for one tool
+ */
+export const setToolParallel = <ThrowOnError extends boolean = false>(
+  options: Options<SetToolParallelData, ThrowOnError>,
+): RequestResult<SetToolParallelResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).patch<
+    SetToolParallelResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/tools/{tool_id}/parallel',
     ...options,
     headers: {
       'Content-Type': 'application/json',
