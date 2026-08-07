@@ -1361,8 +1361,7 @@ async function sendCurrentMessage() {
         await loadProjectSessions(targetProjectId);
         selectedProjectId.value = null;
       }
-      // 会话创建（及可选的项目关联）完成后再刷新一次列表：
-      // 项目会话直接进项目、普通会话进"对话"区，避免中途状态被渲染
+      // 关联项目后再刷新，否则新会话会短暂出现在"对话"列表
       await getSessions();
     }
 
