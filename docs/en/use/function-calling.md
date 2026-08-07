@@ -34,6 +34,19 @@ In addition to providing traditional command invocation, also offer function cal
 
 Tool management (enable/disable) can be done in the WebUI.
 
+## Native parallel tool execution
+
+AstrBot can execute independent function calls from the same model turn in
+parallel. This feature is disabled by default. Enable the global switch in the
+WebUI tool panel, then explicitly allow individual tools. Tools with side
+effects, direct user delivery, handoffs, background tasks, or serial-only
+policies cannot be enabled.
+
+Results are written back to the model in call order even when execution
+finishes out of order. MCP tools use a per-server concurrency limit (default
+one), so enabling a tool does not automatically make a stateful MCP server
+concurrent.
+
 Some models may not support function calling and will return errors such as `tool call is not supported`, `function calling is not supported`, `tool use is not supported`, etc. In most cases, AstrBot can detect these errors and automatically remove function calling tools for you. If you find that a model doesn't support function calling, you can also disable all calling tools in the WebUI and try again, or switch to a model that supports function calling.
 
 Below are some common tool calling demos:
