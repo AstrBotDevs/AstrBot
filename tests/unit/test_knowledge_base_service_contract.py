@@ -6,6 +6,7 @@ from fastapi import Request
 
 from astrbot.core.provider.provider import EmbeddingProvider
 from astrbot.dashboard.api.knowledge_bases import (
+    list_knowledge_base_tasks,
     list_knowledge_bases,
 )
 from astrbot.dashboard.schemas import (
@@ -121,6 +122,124 @@ async def test_list_route_uses_default_page_size_when_page_is_explicit():
 
     assert response["status"] == "ok"
     service.list_kbs.assert_awaited_once_with(page=2, page_size=20)
+
+
+def test_upload_task_metadata_survives_processing_transition():
+    service = make_service(MagicMock())
+    service.init_task(
+        "task-1",
+        kb_id="kb-1",
+        task_type="file_upload",
+        file_names=["one.txt", "two.txt"],
+    )
+    created_at = service.upload_tasks["task-1"]["created_at"]
+
+    service.init_task("task-1", status="processing")
+
+    task = service.upload_tasks["task-1"]
+    assert task["status"] == "processing"
+    assert task["kb_id"] == "kb-1"
+    assert task["task_type"] == "file_upload"
+    assert task["created_at"] == created_at
+    assert [file_info["file_name"] for file_info in task["files"]] == [
+        "one.txt",
+        "two.txt",
+    ]
+
+
+def test_upload_task_reports_per_file_progress_and_result():
+    service = make_service(MagicMock())
+    service.init_task("task-1", kb_id="kb-1", file_names=["one.txt"])
+
+    service.update_progress(
+        "task-1",
+        file_index=0,
+        stage="embedding",
+        current=2,
+        total=3,
+        file_status="processing",
+    )
+    service.update_progress(
+        "task-1",
+        file_index=0,
+        stage="completed",
+        current=3,
+        total=3,
+        file_status="completed",
+        document={"doc_id": "doc-1"},
+    )
+    service.set_task_result(
+        "task-1",
+        "completed",
+        result={"uploaded": [{"doc_id": "doc-1"}], "failed": []},
+    )
+
+    task = service.get_upload_progress("task-1")
+    assert task["status"] == "completed"
+    assert task["result"] == {
+        "uploaded": [{"doc_id": "doc-1"}],
+        "failed": [],
+    }
+    assert task["files"][0] == {
+        "file_index": 0,
+        "file_name": "one.txt",
+        "status": "completed",
+        "stage": "completed",
+        "current": 3,
+        "total": 3,
+        "error": None,
+        "document": {"doc_id": "doc-1"},
+    }
+
+
+def test_failed_upload_task_marks_unfinished_files_failed():
+    service = make_service(MagicMock())
+    service.init_task("task-1", kb_id="kb-1", file_names=["one.txt"])
+    service.update_progress(
+        "task-1",
+        file_index=0,
+        stage="parsing",
+        file_status="processing",
+    )
+
+    service.set_task_result("task-1", "failed", error="connection lost")
+
+    task = service.get_upload_progress("task-1")
+    assert task["error"] == "connection lost"
+    assert task["files"][0]["status"] == "failed"
+    assert task["files"][0]["stage"] == "failed"
+    assert task["files"][0]["error"] == "connection lost"
+
+
+def test_list_upload_tasks_filters_and_orders_newest_first():
+    service = make_service(MagicMock())
+    service.init_task("older", kb_id="kb-1", file_names=["older.txt"])
+    service.init_task("other-kb", kb_id="kb-2", file_names=["other.txt"])
+    service.init_task("newer", kb_id="kb-1", file_names=["newer.txt"])
+    service.upload_tasks["older"]["created_at"] = 10
+    service.upload_tasks["other-kb"]["created_at"] = 30
+    service.upload_tasks["newer"]["created_at"] = 20
+
+    result = service.list_upload_tasks("kb-1")
+
+    assert result["total"] == 2
+    assert [task["task_id"] for task in result["items"]] == ["newer", "older"]
+
+
+@pytest.mark.asyncio
+async def test_list_upload_tasks_route_uses_knowledge_base_id():
+    service = MagicMock()
+    service.list_upload_tasks.return_value = {"items": [], "total": 0}
+
+    response = await list_knowledge_base_tasks(
+        "kb-1",
+        _auth=object(),
+        service=service,
+    )
+
+    assert response["status"] == "ok"
+    assert response["data"] == {"items": [], "total": 0}
+    service.list_upload_tasks.assert_called_once_with("kb-1")
 
 
 @pytest.mark.asyncio
