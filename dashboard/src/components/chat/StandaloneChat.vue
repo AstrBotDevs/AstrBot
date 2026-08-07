@@ -1,5 +1,13 @@
 <template>
-  <div class="standalone-chat">
+  <div class="standalone-chat" v-on="dragEvents">
+    <transition name="drop-fade">
+      <div v-if="isDragging" class="chat-drop-overlay">
+        <div class="chat-drop-overlay-content">
+          <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
+          <span class="chat-drop-text">{{ tm("input.dropToUpload") }}</span>
+        </div>
+      </div>
+    </transition>
     <section ref="messagesContainer" class="standalone-messages">
       <div v-if="initializing" class="standalone-state">
         <v-progress-circular indeterminate size="28" width="3" />
@@ -208,6 +216,7 @@ import {
 } from "vue";
 import { chatApi, configRouteApi, fileApi } from "@/api/v1";
 import ChatInput from "@/components/chat/ChatInput.vue";
+import { useDragUpload } from "@/composables/useDragUpload";
 import {
   CHAT_MARKDOWN_CUSTOM_TAGS,
   registerChatMarkdownComponents,
@@ -271,6 +280,8 @@ const {
   clearStaged,
   cleanupMediaCache,
 } = useMediaHandling();
+
+const { isDragging, dragEvents } = useDragUpload(handleFilesSelected);
 
 const {
   sending,
@@ -502,7 +513,48 @@ function closeImage() {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
   background: rgb(var(--v-theme-background));
+}
+
+/* 全区域拖拽上传遮罩 */
+.chat-drop-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(var(--v-theme-primary), 0.12);
+  border: 2px dashed rgba(var(--v-theme-primary), 0.45);
+  border-radius: 16px;
+}
+
+.chat-drop-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-drop-text {
+  font-size: 16px;
+  font-weight: 500;
+  color: rgb(var(--v-theme-primary));
+}
+
+.drop-fade-enter-active,
+.drop-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.drop-fade-enter-from,
+.drop-fade-leave-to {
+  opacity: 0;
 }
 
 .standalone-messages {
