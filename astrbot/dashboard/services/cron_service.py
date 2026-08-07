@@ -63,7 +63,14 @@ class CronService:
             session = str(payload.get("session") or "").strip()
             persona_id = payload.get("persona_id")
             provider_id = payload.get("provider_id")
-            timezone_name = payload.get("timezone")
+            timezone_name = str(payload.get("timezone") or "").strip()
+            if not timezone_name:
+                timezone_name = str(
+                    self.core_lifecycle.astrbot_config_mgr.get_conf(
+                        session or None
+                    ).get("timezone")
+                    or ""
+                ).strip()
             enabled = bool(payload.get("enabled", True))
             run_once = bool(payload.get("run_once", False))
             run_at = payload.get("run_at")
@@ -92,7 +99,7 @@ class CronService:
                 cron_expression=cron_expression,
                 payload=job_payload,
                 description=note,
-                timezone=timezone_name,
+                timezone=timezone_name or None,
                 enabled=enabled,
                 run_once=run_once,
                 run_at=run_at_dt,
