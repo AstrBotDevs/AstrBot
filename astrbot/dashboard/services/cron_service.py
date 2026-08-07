@@ -3,6 +3,7 @@ import traceback
 from datetime import UTC, datetime
 
 from astrbot import logger
+from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.cron.manager import CronJobManager
 
 
@@ -11,8 +12,13 @@ class CronServiceError(Exception):
 
 
 class CronService:
-    def __init__(self, cron_manager: CronJobManager) -> None:
+    def __init__(
+        self,
+        cron_manager: CronJobManager,
+        config_manager: AstrBotConfigManager,
+    ) -> None:
         self.cron_manager = cron_manager
+        self.config_manager = config_manager
         self._background_tasks: set[asyncio.Task] = set()
 
     def _get_cron_manager(self):
@@ -58,7 +64,11 @@ class CronService:
             session = str(payload.get("session") or "").strip()
             persona_id = payload.get("persona_id")
             provider_id = payload.get("provider_id")
-            timezone_name = payload.get("timezone")
+            timezone_name = str(payload.get("timezone") or "").strip()
+            if not timezone_name:
+                timezone_name = str(
+                    self.config_manager.get_conf(session or None).get("timezone") or ""
+                ).strip()
             enabled = bool(payload.get("enabled", True))
             run_once = bool(payload.get("run_once", False))
             run_at = payload.get("run_at")
@@ -87,7 +97,7 @@ class CronService:
                 cron_expression=cron_expression,
                 payload=job_payload,
                 description=note,
-                timezone=timezone_name,
+                timezone=timezone_name or None,
                 enabled=enabled,
                 run_once=run_once,
                 run_at=run_at_dt,

@@ -157,7 +157,7 @@ def create_dashboard_asgi_app(
             runtime.astrbot_config_mgr,
         ),
         conversations=ConversationService(db, runtime.conversation_manager),
-        cron=CronService(runtime.cron_manager),
+        cron=CronService(runtime.cron_manager, runtime.astrbot_config_mgr),
         files=FileService(runtime.services.file_token_service),
         knowledge_bases=KnowledgeBaseService(runtime.knowledge_base_manager),
         memory=MemoryService(db, runtime.memory_manager),
