@@ -427,17 +427,30 @@ class LLMResponse:
         """The same as to_openai_tool_calls but return pydantic model."""
         ret = []
         for idx, tool_call_arg in enumerate(self.tools_call_args):
+            # Some OpenAI-compatible gateways return tool_calls without a valid id
+            # (e.g. streaming snapshots misaligned by non-zero-based indexes).
+            # ToolCall.id is declared as str, so passing None would raise a pydantic
+            # ValidationError and fail the whole tool-calling turn.
+            raw_id = (
+                self.tools_call_ids[idx] if idx < len(self.tools_call_ids) else None
+            )
+            func_name = (
+                self.tools_call_name[idx] if idx < len(self.tools_call_name) else None
+            )
+            call_id = raw_id
+            if not isinstance(call_id, str) or not call_id:
+                call_id = f"call_{idx}"
             ret.append(
                 ToolCall(
-                    id=self.tools_call_ids[idx],
+                    id=call_id,
                     function=ToolCall.FunctionBody(
-                        name=self.tools_call_name[idx],
+                        name=func_name or "__malformed_tool_name__",
                         arguments=json.dumps(tool_call_arg),
                     ),
                     # the extra_content will not serialize if it's None when calling ToolCall.model_dump()
-                    extra_content=self.tools_call_extra_content.get(
-                        self.tools_call_ids[idx]
-                    ),
+                    # Note: look up extra_content by the raw upstream id; the fallback id
+                    # (call_{idx}) never exists in tools_call_extra_content.
+                    extra_content=self.tools_call_extra_content.get(raw_id),
                 ),
             )
         return ret
