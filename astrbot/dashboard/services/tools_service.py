@@ -256,9 +256,16 @@ class ToolsService:
                     tools.append(tool)
 
             config_entries = self._get_config_entries()
+            perms_store = (
+                await sp.global_get("tool_permissions", {})
+                if any(not self.tool_mgr.is_builtin_tool(tool.name) for tool in tools)
+                else {}
+            )
             tools_dict = []
             for tool in tools:
-                tools_dict.append(await self._serialize_tool(tool, config_entries))
+                tools_dict.append(
+                    self._serialize_tool(tool, config_entries, perms_store)
+                )
             return tools_dict
         except Exception as exc:
             logger.error(traceback.format_exc())
@@ -520,7 +527,12 @@ class ToolsService:
             )
         return config_entries
 
-    async def _serialize_tool(self, tool, config_entries: list[dict]) -> dict:
+    def _serialize_tool(
+        self,
+        tool,
+        config_entries: list[dict],
+        perms_store: object,
+    ) -> dict:
         readonly = False
         builtin_config_statuses = []
         builtin_config_tags = []
@@ -563,7 +575,6 @@ class ToolsService:
             "builtin_config_tags": builtin_config_tags,
         }
         if not readonly:
-            perms_store = await sp.global_get("tool_permissions", {})
             defaults = (
                 perms_store.get("_default", {}) if isinstance(perms_store, dict) else {}
             )

@@ -1,6 +1,6 @@
 """Tests for per-tool permission management."""
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -353,6 +353,35 @@ class TestGetToolListPermission:
         assert "permission" not in target
         assert "permission_configured" not in target
         assert target["readonly"] is True
+
+    @pytest.mark.asyncio
+    async def test_list_reads_permission_store_once(self, monkeypatch):
+        global_get = AsyncMock(
+            return_value={
+                "_default": {
+                    "first_tool": "admin",
+                    "second_tool": "member",
+                }
+            }
+        )
+        monkeypatch.setattr(sp, "global_get", global_get)
+        service = _make_tools_service()
+        service.tool_mgr.func_list.extend(
+            [_dummy_tool("first_tool"), _dummy_tool("second_tool")]
+        )
+
+        tools = await service.get_tool_list()
+
+        permissions = {
+            tool["name"]: tool["permission"]
+            for tool in tools
+            if tool["name"] in {"first_tool", "second_tool"}
+        }
+        assert permissions == {
+            "first_tool": "admin",
+            "second_tool": "member",
+        }
+        global_get.assert_awaited_once_with("tool_permissions", {})
 
 
 # ── API: update_tool_permission ──────────────────────────────────────
