@@ -185,6 +185,7 @@ class AstrBotCoreLifecycle:
             ucr=self.umop_config_router,
             sp=sp,
         )
+        await self.astrbot_config_mgr.initialize()
         self.temp_dir_cleaner = TempDirCleaner(
             max_size_getter=lambda: self.astrbot_config_mgr.default_conf.get(
                 TempDirCleaner.CONFIG_KEY,
