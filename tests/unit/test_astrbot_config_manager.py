@@ -36,6 +36,19 @@ async def test_initialize_loads_global_profile_mapping():
 
 
 @pytest.mark.asyncio
+async def test_persist_mapping_updates_memory_only_after_storage_succeeds():
+    manager, shared_preferences = _make_manager()
+    original_mapping = {"existing": {"path": "existing.json", "name": "Existing"}}
+    manager.abconf_data = original_mapping
+    shared_preferences.global_put.side_effect = RuntimeError("storage failed")
+
+    with pytest.raises(RuntimeError, match="storage failed"):
+        await manager._persist_abconf_mapping({"new": {}})
+
+    assert manager.abconf_data is original_mapping
+
+
+@pytest.mark.asyncio
 async def test_create_conf_uses_async_global_preferences(tmp_path):
     manager, shared_preferences = _make_manager()
     manager.abconf_data = {}

@@ -48,9 +48,26 @@ class AstrBotConfigManager:
 
     async def initialize(self) -> None:
         """Load configuration profile metadata and profile files."""
-        abconf_data = await self.sp.global_get("abconf_mapping", {})
-        self.abconf_data = abconf_data if abconf_data is not None else {}
+        self.abconf_data = await self._load_abconf_mapping()
         self._load_all_configs()
+
+    async def _load_abconf_mapping(self) -> dict:
+        """Load configuration profile metadata from persistent storage.
+
+        Returns:
+            The persisted mapping, or an empty mapping when no value exists.
+        """
+        abconf_data = await self.sp.global_get("abconf_mapping", {})
+        return abconf_data if abconf_data is not None else {}
+
+    async def _persist_abconf_mapping(self, abconf_data: dict) -> None:
+        """Persist configuration profile metadata and refresh memory.
+
+        Args:
+            abconf_data: Complete configuration profile metadata mapping.
+        """
+        await self.sp.global_put("abconf_mapping", abconf_data)
+        self.abconf_data = abconf_data
 
     def _get_abconf_data(self) -> dict:
         """Return configuration profile metadata loaded during initialization.
@@ -124,16 +141,13 @@ class AstrBotConfigManager:
             abconf_id: Generated profile ID.
             abconf_name: Optional profile display name.
         """
-        abconf_data = await self.sp.global_get("abconf_mapping", {})
-        if abconf_data is None:
-            abconf_data = {}
+        abconf_data = await self._load_abconf_mapping()
         random_word = abconf_name or uuid.uuid4().hex[:8]
         abconf_data[abconf_id] = {
             "path": abconf_path,
             "name": random_word,
         }
-        await self.sp.global_put("abconf_mapping", abconf_data)
-        self.abconf_data = abconf_data
+        await self._persist_abconf_mapping(abconf_data)
 
     def get_conf(self, umo: str | MessageSession | None) -> AstrBotConfig:
         """获取指定 umo 的配置文件。如果不存在，则 fallback 到默认配置文件。"""
@@ -219,9 +233,7 @@ class AstrBotConfigManager:
 
         async with self._abconf_lock:
             # 从映射中移除
-            abconf_data = await self.sp.global_get("abconf_mapping", {})
-            if abconf_data is None:
-                abconf_data = {}
+            abconf_data = await self._load_abconf_mapping()
             if conf_id not in abconf_data:
                 logger.warning(f"配置文件 {conf_id} 不存在于映射中")
                 return False
@@ -247,8 +259,7 @@ class AstrBotConfigManager:
 
             # 从映射中移除
             del abconf_data[conf_id]
-            await self.sp.global_put("abconf_mapping", abconf_data)
-            self.abconf_data = abconf_data
+            await self._persist_abconf_mapping(abconf_data)
 
             logger.info(f"成功删除配置文件 {conf_id}")
             return True
@@ -271,9 +282,7 @@ class AstrBotConfigManager:
             raise ValueError("不能更新默认配置文件的信息")
 
         async with self._abconf_lock:
-            abconf_data = await self.sp.global_get("abconf_mapping", {})
-            if abconf_data is None:
-                abconf_data = {}
+            abconf_data = await self._load_abconf_mapping()
             if conf_id not in abconf_data:
                 logger.warning(f"配置文件 {conf_id} 不存在于映射中")
                 return False
@@ -283,8 +292,7 @@ class AstrBotConfigManager:
                 abconf_data[conf_id]["name"] = name
 
             # 保存更新
-            await self.sp.global_put("abconf_mapping", abconf_data)
-            self.abconf_data = abconf_data
+            await self._persist_abconf_mapping(abconf_data)
             logger.info(f"成功更新配置文件 {conf_id} 的信息")
             return True
 
