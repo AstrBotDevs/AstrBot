@@ -243,7 +243,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     break
 
             chunks.append(remaining[:split_point])
-            remaining = remaining[split_point:].lstrip()
+            remaining = remaining[split_point:]
 
         return chunks
 
