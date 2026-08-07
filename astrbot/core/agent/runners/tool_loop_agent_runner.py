@@ -1,5 +1,7 @@
 import asyncio
 import copy
+import inspect
+import json
 import time
 import traceback
 import typing as T
@@ -26,7 +28,12 @@ from tenacity import (
 
 from astrbot import logger
 from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
-from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.agent.tool import (
+    FunctionTool,
+    ToolSet,
+    get_parallel_blocked_reason,
+    get_tool_id,
+)
 from astrbot.core.agent.tool_image_cache import ToolImageCache
 from astrbot.core.exceptions import EmptyModelOutputError, ProviderResponseError
 from astrbot.core.message.components import Json
@@ -36,6 +43,7 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_event,
 )
+from astrbot.core.utils.error_redaction import safe_error
 
 from ..chat_model import ChatModel
 from ..context.compressor import ContextCompressor
@@ -93,6 +101,18 @@ class FollowUpTicket:
 
 class _ToolExecutionInterrupted(Exception):
     """Raised when a running tool call is interrupted by a stop request."""
+
+
+@dataclass(slots=True)
+class _ParallelToolOutcome:
+    """Ordered, provider-neutral outcome of one concurrently executed call."""
+
+    tool_name: str
+    tool_call_id: str
+    tool_call_streak: int
+    content: str
+    cached_images: list[T.Any] = field(default_factory=list)
+    final_response: CallToolResult | None = None
 
 
 ToolExecutorResultT = T.TypeVar("ToolExecutorResultT")
@@ -1157,6 +1177,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         """Turn MCP result content into text and cached image records."""
         result_parts: list[str] = []
         cached_images: list[T.Any] = []
+        structured_content = getattr(result, "structured_content", None)
+        if structured_content is None:
+            structured_content = getattr(result, "structuredContent", None)
+        if structured_content is not None:
+            try:
+                result_parts.append(
+                    "Structured result:\n"
+                    + json.dumps(structured_content, ensure_ascii=False, default=str)
+                )
+            except TypeError, ValueError:
+                result_parts.append("The tool returned structured content.")
         for index, content_item in enumerate(result.content or []):
             image_data = None
             mime_type = "image/png"
@@ -1165,22 +1196,46 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 continue
             if isinstance(content_item, ImageContent):
                 image_data = content_item.data
-                mime_type = content_item.mime_type or mime_type
+                mime_type = (
+                    getattr(content_item, "mime_type", None)
+                    or getattr(content_item, "mimeType", None)
+                    or mime_type
+                )
             elif isinstance(content_item, EmbeddedResource):
                 resource = content_item.resource
                 if isinstance(resource, TextResourceContents):
                     result_parts.append(resource.text)
                     continue
                 if isinstance(resource, BlobResourceContents) and (
-                    resource.mime_type or ""
+                    getattr(resource, "mime_type", None)
+                    or getattr(resource, "mimeType", None)
+                    or ""
                 ).startswith("image/"):
                     image_data = resource.blob
-                    mime_type = resource.mime_type or mime_type
+                    mime_type = (
+                        getattr(resource, "mime_type", None)
+                        or getattr(resource, "mimeType", None)
+                        or mime_type
+                    )
                 else:
                     result_parts.append(
                         "The tool has returned a data type that is not supported."
                     )
                     continue
+            elif getattr(content_item, "type", None) == "audio":
+                result_parts.append(
+                    "The tool returned audio content, which is not available in the "
+                    "agent text context."
+                )
+                continue
+            elif getattr(content_item, "type", None) == "resource_link":
+                uri = getattr(content_item, "uri", None)
+                result_parts.append(
+                    f"The tool returned resource link: {uri}."
+                    if uri
+                    else "The tool returned a resource link."
+                )
+                continue
             else:
                 result_parts.append(
                     "The tool has returned a data type that is not supported."
@@ -1202,12 +1257,340 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
         return "\n\n".join(result_parts), cached_images
 
+    async def _authorize_tool(self, tool: FunctionTool) -> str | None:
+        """Run an optional tool-owned authorization check."""
+        authorize = getattr(tool, "authorize", None)
+        if not callable(authorize):
+            return None
+        result = authorize(self.run_context)
+        if inspect.isawaitable(result):
+            result = await result
+        return result if isinstance(result, str) else None
+
+    async def _parallel_tool_settings(self) -> tuple[bool, set[str], int, int]:
+        """Read the runtime parallel-tool policy from shared preferences."""
+        execution_context = getattr(self.run_context.context, "context", None)
+        preferences = getattr(execution_context, "preferences", None)
+        if preferences is None:
+            return False, set(), 8, 1
+        try:
+            raw = await preferences.global_get("tool_parallel_execution", {})
+        except Exception as exc:  # pragma: no cover - defensive runtime fallback
+            logger.warning("读取工具并行策略失败: %s", safe_error("", exc))
+            return False, set(), 8, 1
+        if not isinstance(raw, dict):
+            return False, set(), 8, 1
+        allowed_raw = raw.get("allowed_tool_ids", [])
+        allowed = (
+            {
+                value.strip()
+                for value in allowed_raw
+                if isinstance(value, str) and value.strip()
+            }
+            if isinstance(allowed_raw, list)
+            else set()
+        )
+        try:
+            max_calls = max(1, min(8, int(raw.get("max_calls", 8))))
+        except TypeError, ValueError:
+            max_calls = 8
+        try:
+            mcp_max_calls = max(1, min(8, int(raw.get("mcp_max_concurrency", 1))))
+        except TypeError, ValueError:
+            mcp_max_calls = 1
+        return bool(raw.get("enabled", False)), allowed, max_calls, mcp_max_calls
+
+    @staticmethod
+    def _parallel_blocked_reason(tool: FunctionTool) -> str | None:
+        """Return a stable explanation when a tool cannot run concurrently."""
+        if not getattr(tool, "active", True):
+            return "Tool is inactive."
+        return get_parallel_blocked_reason(tool)
+
+    async def _can_parallelize_function_tools(
+        self,
+        req: ProviderRequest,
+        llm_response: LLMResponse,
+    ) -> bool:
+        """Return whether this complete model batch can safely run in parallel."""
+        enabled, allowed_ids, max_calls, _ = await self._parallel_tool_settings()
+        names = llm_response.tools_call_name
+        if (
+            not enabled
+            or len(names) < 2
+            or len(names) > max_calls
+            or len(llm_response.tools_call_args) != len(names)
+            or len(llm_response.tools_call_ids) != len(names)
+            or not req.func_tool
+        ):
+            return False
+
+        for name, args in zip(
+            llm_response.tools_call_name,
+            llm_response.tools_call_args,
+            strict=True,
+        ):
+            tool, _, _ = self._resolve_function_tool(req, name, args)
+            if tool is None:
+                return False
+            blocked_reason = self._parallel_blocked_reason(tool)
+            if blocked_reason is not None or get_tool_id(tool) not in allowed_ids:
+                return False
+        return True
+
+    async def _execute_parallel_tool_call(
+        self,
+        req: ProviderRequest,
+        tool_name: str,
+        tool_args: dict[str, T.Any] | None,
+        tool_call_id: str,
+        tool_call_streak: int,
+        mcp_max_concurrency: int,
+    ) -> _ParallelToolOutcome:
+        """Execute one already-approved call for the parallel TaskGroup."""
+        func_tool, valid_params, available_tools = self._resolve_function_tool(
+            req,
+            tool_name,
+            tool_args,
+        )
+        guidance = self._build_repeated_tool_call_guidance(tool_name, tool_call_streak)
+        if func_tool is None:
+            return _ParallelToolOutcome(
+                tool_name,
+                tool_call_id,
+                tool_call_streak,
+                f"error: Tool {tool_name} not found. Available tools are: "
+                f"{', '.join(available_tools)}{guidance}",
+            )
+
+        authorization_error = await self._authorize_tool(func_tool)
+        if authorization_error is not None:
+            return _ParallelToolOutcome(
+                tool_name,
+                tool_call_id,
+                tool_call_streak,
+                authorization_error + guidance,
+            )
+
+        final_response: CallToolResult | None = None
+        result_parts: list[str] = []
+        cached_images: list[T.Any] = []
+        hook_started = False
+        try:
+            try:
+                await self.agent_hooks.on_tool_start(
+                    self.run_context,
+                    func_tool,
+                    valid_params,
+                )
+                hook_started = True
+            except Exception as exc:
+                logger.error("Error in on_tool_start hook: %s", safe_error("", exc))
+
+            authorization_error = await self._authorize_tool(func_tool)
+            if authorization_error is not None:
+                return _ParallelToolOutcome(
+                    tool_name,
+                    tool_call_id,
+                    tool_call_streak,
+                    authorization_error + guidance,
+                )
+
+            mcp_client = getattr(func_tool, "mcp_client", None)
+            configure_parallel_limit = getattr(
+                mcp_client, "configure_parallel_limit", None
+            )
+            if callable(configure_parallel_limit):
+                configure_parallel_limit(mcp_max_concurrency)
+
+            executor = self.tool_executor.execute(
+                tool=func_tool,
+                run_context=self.run_context,
+                **valid_params,
+            )
+            async for resp in self._iter_tool_executor_results(executor):  # type: ignore
+                if isinstance(resp, CallToolResult):
+                    final_response = resp
+                    if (
+                        not resp.content
+                        and getattr(resp, "structured_content", None) is None
+                        and getattr(resp, "structuredContent", None) is None
+                    ):
+                        result_parts.append(
+                            "error: The tool reported an execution error."
+                            if bool(
+                                getattr(resp, "is_error", False)
+                                or getattr(resp, "isError", False)
+                            )
+                            else "The tool returned no content."
+                        )
+                        continue
+                    inline_result, images = await self._normalize_call_tool_result(
+                        resp,
+                        tool_call_id=tool_call_id,
+                        tool_name=tool_name,
+                    )
+                    cached_images.extend(images)
+                    if inline_result:
+                        if bool(
+                            getattr(resp, "is_error", False)
+                            or getattr(resp, "isError", False)
+                        ):
+                            inline_result = f"error: {inline_result}"
+                        result_parts.append(inline_result)
+                elif resp is None:
+                    result_parts.append(
+                        "error: Direct-send tools are not supported in a parallel batch."
+                    )
+                else:
+                    result_parts.append(
+                        "*The tool has returned an unsupported type. Please check "
+                        "the tool definition and implementation.*"
+                    )
+        except _ToolExecutionInterrupted:
+            raise
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "Parallel tool %s failed: %s",
+                tool_name,
+                safe_error("", exc),
+                exc_info=True,
+            )
+            result_parts.append(f"error: {safe_error('', exc)}")
+        finally:
+            if hook_started:
+                try:
+                    await self.agent_hooks.on_tool_end(
+                        self.run_context,
+                        func_tool,
+                        valid_params,
+                        final_response,
+                    )
+                except Exception as exc:
+                    logger.error("Error in on_tool_end hook: %s", safe_error("", exc))
+
+        content = "\n\n".join(part for part in result_parts if part)
+        if not content:
+            content = "The tool returned no content."
+        content = await self._materialize_large_tool_result(
+            tool_call_id=tool_call_id,
+            content=content,
+        )
+        return _ParallelToolOutcome(
+            tool_name,
+            tool_call_id,
+            tool_call_streak,
+            content + guidance,
+            cached_images,
+            final_response,
+        )
+
+    async def _handle_parallel_function_tools(
+        self,
+        req: ProviderRequest,
+        llm_response: LLMResponse,
+    ) -> T.AsyncGenerator[_HandleFunctionToolsResult]:
+        """Execute an approved model batch concurrently and write it back ordered."""
+        calls = list(
+            zip(
+                llm_response.tools_call_name,
+                llm_response.tools_call_args,
+                llm_response.tools_call_ids,
+                strict=True,
+            )
+        )
+        for tool_name, tool_args, tool_call_id in calls:
+            yield _HandleFunctionToolsResult.from_message_chain(
+                MessageChain(
+                    type="tool_call",
+                    chain=[
+                        Json(
+                            data={
+                                "id": tool_call_id,
+                                "name": tool_name,
+                                "args": tool_args,
+                                "ts": time.time(),
+                            }
+                        )
+                    ],
+                )
+            )
+
+        outcomes: list[_ParallelToolOutcome | None] = [None] * len(calls)
+        interrupted = asyncio.Event()
+        _, _, _, mcp_max_concurrency = await self._parallel_tool_settings()
+        call_streaks = [
+            self._track_tool_call_streak(tool_name, tool_args)
+            for tool_name, tool_args, _ in calls
+        ]
+
+        async def _run_one(index: int, call: tuple[str, dict[str, T.Any], str]) -> None:
+            try:
+                outcomes[index] = await self._execute_parallel_tool_call(
+                    req,
+                    call[0],
+                    call[1],
+                    call[2],
+                    call_streaks[index],
+                    mcp_max_concurrency,
+                )
+            except _ToolExecutionInterrupted:
+                interrupted.set()
+
+        async with asyncio.TaskGroup() as task_group:
+            for index, call in enumerate(calls):
+                task_group.create_task(
+                    _run_one(index, call),
+                    name=f"parallel-tool:{call[0]}:{call[2]}",
+                )
+
+        if interrupted.is_set():
+            raise _ToolExecutionInterrupted("Parallel tool execution interrupted.")
+
+        result_blocks: list[ToolCallMessageSegment] = []
+        for outcome in outcomes:
+            if outcome is None:
+                continue
+            for cached_image in outcome.cached_images:
+                yield _HandleFunctionToolsResult.from_cached_image(cached_image)
+            block = ToolCallMessageSegment(
+                role="tool",
+                tool_call_id=outcome.tool_call_id,
+                content=self._merge_follow_up_notice(outcome.content),
+            )
+            result_blocks.append(block)
+            yield _HandleFunctionToolsResult.from_message_chain(
+                MessageChain(
+                    type="tool_call_result",
+                    chain=[
+                        Json(
+                            data={
+                                "id": outcome.tool_call_id,
+                                "ts": time.time(),
+                                "result": str(block.content),
+                            }
+                        )
+                    ],
+                )
+            )
+            logger.info("Tool `%s` Result: %s", outcome.tool_name, outcome.content)
+
+        if result_blocks:
+            yield _HandleFunctionToolsResult.from_tool_call_result_blocks(result_blocks)
+
     async def _handle_function_tools(
         self,
         req: ProviderRequest,
         llm_response: LLMResponse,
     ) -> T.AsyncGenerator[_HandleFunctionToolsResult]:
         """处理函数工具调用。"""
+        if await self._can_parallelize_function_tools(req, llm_response):
+            async for result in self._handle_parallel_function_tools(req, llm_response):
+                yield result
+            return
+
         tool_call_result_blocks: list[ToolCallMessageSegment] = []
         logger.info(f"Agent 使用工具: {llm_response.tools_call_name}")
 
@@ -1286,10 +1669,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     if isinstance(resp, CallToolResult):
                         res = resp
                         _final_resp = resp
-                        if not res.content:
+                        if (
+                            not res.content
+                            and getattr(res, "structured_content", None) is None
+                            and getattr(res, "structuredContent", None) is None
+                        ):
                             _append_tool_call_result(
                                 func_tool_id,
-                                "The tool returned no content.",
+                                "error: The tool reported an execution error."
+                                if bool(
+                                    getattr(res, "is_error", False)
+                                    or getattr(res, "isError", False)
+                                )
+                                else "The tool returned no content.",
                             )
                             continue
 
@@ -1306,6 +1698,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 cached_image
                             )
                         if inline_result:
+                            if bool(
+                                getattr(res, "is_error", False)
+                                or getattr(res, "isError", False)
+                            ):
+                                inline_result = f"error: {inline_result}"
                             inline_result = await self._materialize_large_tool_result(
                                 tool_call_id=func_tool_id,
                                 content=inline_result,

@@ -1,11 +1,12 @@
 """Tests for per-tool permission management."""
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
-from astrbot.core.agent.tool import FunctionTool
+from astrbot.core.agent.tool import FunctionTool, get_tool_id
 from astrbot.core.tools.function_tool_manager import (
     FunctionToolManager,
     _PermissionGuardedTool,
@@ -310,6 +311,30 @@ async def test_guarded_tool_handles_async_generator_handler():
     assert result == "C"
 
 
+@pytest.mark.asyncio
+async def test_guarded_tool_streaming_iterator_preserves_all_yields():
+    await preferences.global_put(
+        "tool_permissions", {"_default": {"gen_tool_stream": "member"}}
+    )
+    mgr = _manager()
+
+    async def gen_handler(_event, **_kw):  # type: ignore[misc]
+        yield "A"
+        yield "B"
+        yield "C"
+
+    wrapped = FunctionTool(
+        name="gen_tool_stream",
+        description="desc",
+        parameters={},
+        handler=gen_handler,
+    )
+    guarded = _PermissionGuardedTool(wrapped, mgr)
+    context = _make_context()
+
+    assert [item async for item in guarded.iter_call(context)] == ["A", "B", "C"]
+
+
 def test_get_full_tool_set_excludes_builtin_tools():
     """Builtin tools are added separately by astr_main_agent.py, not here."""
     mgr = _manager()
@@ -414,3 +439,68 @@ class TestUpdateToolPermission:
             await service.update_tool_permission(
                 {"name": "target_tool", "permission": "everyone"}
             )
+
+
+class TestToolParallelPolicy:
+    @pytest.mark.asyncio
+    async def test_list_exposes_parallel_identity_and_defaults(self):
+        service = _make_tools_service()
+        tool = _dummy_tool("parallel_candidate")
+        tool.handler_module_path = "data.plugins.example.main"
+        service.tool_mgr.func_list.append(tool)
+
+        tools = await service.get_tool_list()
+        target = next(item for item in tools if item["name"] == tool.name)
+
+        assert target["tool_id"] == get_tool_id(tool)
+        assert target["parallel_policy"] == "unknown"
+        assert target["parallel_eligible"] is True
+        assert target["parallel_enabled"] is False
+        assert target["parallel_execution_enabled"] is False
+
+    @pytest.mark.asyncio
+    async def test_toggle_parallel_persists_stable_tool_id(self):
+        service = _make_tools_service()
+        tool = _dummy_tool("parallel_candidate")
+        tool.handler_module_path = "data.plugins.example.main"
+        service.tool_mgr.func_list.append(tool)
+
+        await service.toggle_tool_parallel(
+            {"tool_id": get_tool_id(tool), "enabled": True}
+        )
+        stored = await preferences.global_get("tool_parallel_execution", {})
+        assert stored["allowed_tool_ids"] == [get_tool_id(tool)]
+
+        await service.set_parallel_enabled(True)
+        stored = await preferences.global_get("tool_parallel_execution", {})
+        assert stored["enabled"] is True
+
+    @pytest.mark.asyncio
+    async def test_parallel_rejects_direct_send_tool(self):
+        service = _make_tools_service()
+        tool = _dummy_tool("send_message_to_user")
+        service.tool_mgr.func_list.append(tool)
+
+        with pytest.raises(ToolsServiceError, match="Direct-send"):
+            await service.toggle_tool_parallel(
+                {"tool_id": get_tool_id(tool), "enabled": True}
+            )
+
+    def test_plugin_owner_uses_strict_module_prefix(self):
+        service = _make_tools_service()
+        metadata = SimpleNamespace(
+            name="Example",
+            module_path="data.plugins.example.main",
+            root_dir_name=None,
+            reserved=False,
+        )
+        service.plugin_catalog.get_by_module.return_value = None
+        service.plugin_catalog.all.return_value = (metadata,)
+
+        child_tool = _dummy_tool("child")
+        child_tool.handler_module_path = "data.plugins.example.main.tools"
+        sibling_tool = _dummy_tool("sibling")
+        sibling_tool.handler_module_path = "data.plugins.exampleland"
+
+        assert service._resolve_plugin_owner(child_tool) is metadata
+        assert service._resolve_plugin_owner(sibling_tool) is None

@@ -654,7 +654,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         awaitable = None
         method_name = ""
-        if tool.handler:
+        stream_override = getattr(tool, "iter_call", None)
+        if callable(stream_override):
+            awaitable = stream_override
+            method_name = "call"
+        elif tool.handler:
             awaitable = tool.handler
             method_name = "decorator_handler"
         elif is_override_call:

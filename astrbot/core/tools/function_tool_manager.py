@@ -232,33 +232,52 @@ class _PermissionGuardedTool(FunctionTool):
         # Mirror mutable state from the underlying tool
         self.active = getattr(tool, "active", True)
         self.handler_module_path = getattr(tool, "handler_module_path", None)
+        self.is_background_task = getattr(tool, "is_background_task", False)
+        self.parallel_policy = getattr(tool, "parallel_policy", "unknown")
+        self.mcp_server_name = getattr(tool, "mcp_server_name", None)
+        self.mcp_client = getattr(tool, "mcp_client", None)
+
+    async def authorize(self, context: Any) -> str | None:
+        """Return a permission error without invoking the wrapped tool."""
+        return await self._mgr._check_tool_permission(self.name, context)
+
+    async def _invoke_wrapped(self, context: Any, **kwargs: Any) -> Any:
+        """Invoke the original tool while preserving its native return type."""
+        if self._wrapped.handler is not None:
+            event = context.context.event
+            return self._wrapped.handler(event, **kwargs)
+
+        call_override = getattr(type(self._wrapped), "call", None)
+        if call_override is not None and call_override is not FunctionTool.call:
+            return self._wrapped.call(context, **kwargs)
+
+        return "error: tool has no callable handler"
+
+    async def iter_call(self, context: Any, **kwargs: Any):
+        """Execute the wrapped tool as an async stream for the tool executor."""
+        error = await self.authorize(context)
+        if error is not None:
+            yield error
+            return
+
+        result = await self._invoke_wrapped(context, **kwargs)
+        if inspect.isasyncgen(result):
+            async for item in result:
+                yield item
+            return
+        if inspect.isawaitable(result):
+            result = await result
+        yield result
 
     async def call(self, context: Any, **kwargs: Any) -> Any:
-        import inspect as _inspect
-
-        error = await self._mgr._check_tool_permission(self.name, context)
+        error = await self.authorize(context)
         if error is not None:
             return error
 
-        # @filter.llm_tool decorated tools have a handler attribute, which is the actual callable.
-        if self._wrapped.handler is not None:
-            event = context.context.event
-            result = self._wrapped.handler(event, **kwargs)
-            if isinstance(result, AsyncGenerator):
-                last: Any = None
-                async for item in result:
-                    last = item
-                return last
-            if _inspect.isawaitable(result):
-                return await result
-            return result
-
-        # If the tool has a "call" method that is not the default FunctionTool.call, invoke it.
-        call_override = getattr(type(self._wrapped), "call", None)
-        if call_override is not None and call_override is not FunctionTool.call:
-            return await self._wrapped.call(context, **kwargs)
-
-        return "error: tool has no callable handler"
+        last: Any = None
+        async for item in self.iter_call(context, **kwargs):
+            last = item
+        return last
 
 
 class FunctionToolManager:

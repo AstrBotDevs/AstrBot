@@ -513,6 +513,16 @@ class MCPClient:
         self._server_name: str | None = None
         self._reconnect_lock = asyncio.Lock()  # Lock for thread-safe reconnection
         self._reconnecting: bool = False
+        self._parallel_limit = 1
+        self._parallel_semaphore: asyncio.Semaphore | None = None
+
+    def configure_parallel_limit(self, limit: int) -> None:
+        """Set the per-server MCP call limit used by concurrent agent batches."""
+        normalized = max(1, min(8, int(limit)))
+        if normalized == self._parallel_limit and self._parallel_semaphore is not None:
+            return
+        self._parallel_limit = normalized
+        self._parallel_semaphore = asyncio.Semaphore(normalized)
 
     async def _run_connection(
         self,
@@ -874,7 +884,11 @@ class MCPClient:
                 # Reraise the exception to trigger tenacity retry
                 raise
 
-        return await _call_with_retry()
+        if self._parallel_semaphore is None:
+            self.configure_parallel_limit(1)
+        assert self._parallel_semaphore is not None
+        async with self._parallel_semaphore:
+            return await _call_with_retry()
 
     async def cleanup(self) -> None:
         """Clean up resources by cancelling the connection owner task."""

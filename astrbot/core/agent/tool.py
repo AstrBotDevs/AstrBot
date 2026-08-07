@@ -1,6 +1,6 @@
 import copy
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from typing import Any
+from typing import Any, Literal
 
 import jsonschema
 import mcp
@@ -13,6 +13,56 @@ from .run_context import ContextWrapper
 
 ParametersType = dict[str, Any]
 ToolExecResult = str | mcp.types.CallToolResult
+ToolParallelPolicy = Literal["unknown", "safe", "serial", "blocked"]
+
+
+def get_tool_id(tool: Any) -> str:
+    """Return a stable identity for an installed runtime tool.
+
+    Tool names are not stable enough for persisted policy: plugins and MCP
+    servers can replace a same-named tool between runtime generations.
+    """
+    server_name = getattr(tool, "mcp_server_name", None)
+    if isinstance(server_name, str) and server_name:
+        return f"mcp:{server_name}:{tool.name}"
+
+    handler_module_path = getattr(tool, "handler_module_path", None)
+    if isinstance(handler_module_path, str) and handler_module_path:
+        return f"plugin:{handler_module_path}:{tool.name}"
+
+    wrapped = getattr(tool, "_wrapped", None)
+    if wrapped is not None and wrapped is not tool:
+        return get_tool_id(wrapped)
+
+    tool_type = type(tool)
+    return f"builtin:{tool_type.__module__}.{tool_type.__qualname__}:{tool.name}"
+
+
+def get_parallel_blocked_reason(tool: Any) -> str | None:
+    """Return why a tool cannot be enabled for concurrent execution."""
+    if not getattr(tool, "active", True):
+        return "Tool is inactive."
+    wrapped = getattr(tool, "_wrapped", None)
+    if wrapped is not None and wrapped is not tool:
+        return get_parallel_blocked_reason(wrapped)
+    if type(tool).__name__ == "HandoffTool":
+        return "Handoff tools manage nested agent state and remain serial."
+    if getattr(tool, "is_background_task", False):
+        return "Background tools outlive the current call and remain serial."
+    if getattr(tool, "name", None) in {"send_message_to_user", "send_poke_to_user"}:
+        return "Direct-send tools have side effects and remain serial."
+    if (
+        not getattr(tool, "handler_module_path", None)
+        and not getattr(tool, "mcp_server_name", None)
+        and not type(tool).__module__.startswith("astrbot.")
+    ):
+        return "The tool source could not be verified."
+    policy = getattr(tool, "parallel_policy", "unknown")
+    if policy == "blocked":
+        return "The tool explicitly disallows parallel execution."
+    if policy == "serial":
+        return "The tool explicitly requires serial execution."
+    return None
 
 
 @dataclass
@@ -60,6 +110,13 @@ class FunctionTool[TContext](ToolSchema):
     """
     Declare this tool as a background task. Background tasks return immediately
     with a task identifier while the real work continues asynchronously.
+    """
+    parallel_policy: ToolParallelPolicy = "unknown"
+    """Whether this tool is suitable for concurrent execution.
+
+    ``unknown`` is the conservative default. Runtime policy still requires
+    explicit administrator opt-in, and hard-blocked tool types cannot be
+    enabled through configuration.
     """
 
     def __repr__(self) -> str:
@@ -136,6 +193,7 @@ class ToolSet:
                     parameters=light_params,
                     description=tool.description,
                     handler=None,
+                    parallel_policy=tool.parallel_policy,
                 )
             )
         return ToolSet(light_tools)
@@ -157,6 +215,7 @@ class ToolSet:
                     parameters=params,
                     description="",
                     handler=None,
+                    parallel_policy=tool.parallel_policy,
                 )
             )
         return ToolSet(param_tools)
