@@ -71,6 +71,14 @@
                   >
                     {{ tm("status.preset") }}
                   </v-chip>
+                  <v-chip
+                    v-if="isInactivePluginSkill(skill)"
+                    size="x-small"
+                    variant="tonal"
+                    color="warning"
+                  >
+                    {{ tm("skills.pluginDisabled") }}
+                  </v-chip>
                 </div>
               </template>
 
@@ -129,22 +137,32 @@
                       density="compact"
                       hide-details
                       inset
-                      :model-value="skill.active"
+                      :model-value="
+                        skill.active && !isInactivePluginSkill(skill)
+                      "
                       :aria-label="
-                        skill.active
+                        isInactivePluginSkill(skill)
+                          ? tm('skills.pluginDisabled')
+                          : skill.active
                           ? tm('skills.disable')
                           : tm('skills.enable')
                       "
                       :loading="itemLoading[skill.name] || false"
                       :disabled="
-                        itemLoading[skill.name] || isSandboxPresetSkill(skill)
+                        itemLoading[skill.name] ||
+                        isSandboxPresetSkill(skill) ||
+                        isInactivePluginSkill(skill)
                       "
                       @click.stop
                       @update:model-value="toggleSkill(skill)"
                     />
                   </template>
                   <span>{{
-                    skill.active ? tm("skills.disable") : tm("skills.enable")
+                    isInactivePluginSkill(skill)
+                      ? tm("skills.pluginDisabled")
+                      : skill.active
+                      ? tm("skills.disable")
+                      : tm("skills.enable")
                   }}</span>
                 </v-tooltip>
               </template>
@@ -982,6 +1000,8 @@ export default {
     const isSandboxPresetSkill = (skill) =>
       skill?.source_type === "sandbox_only";
     const isPluginProvidedSkill = (skill) => skill?.source_type === "plugin";
+    const isInactivePluginSkill = (skill) =>
+      isPluginProvidedSkill(skill) && skill?.plugin_active === false;
     const isReadOnlySourceSkill = (skill) =>
       isSandboxPresetSkill(skill) || isPluginProvidedSkill(skill);
 
@@ -1173,7 +1193,7 @@ export default {
     const fetchSkills = async () => {
       loading.value = true;
       try {
-        const res = await skillApi.list();
+        const res = await skillApi.list({ include_inactive_plugins: true });
         skills.value = normalizeSkillsPayload(res);
       } catch (_err) {
         showMessage(tm("skills.loadFailed"), "error");
@@ -1251,6 +1271,10 @@ export default {
     };
 
     const toggleSkill = async (skill) => {
+      if (isInactivePluginSkill(skill)) {
+        showMessage(tm("skills.pluginDisabled"), "warning");
+        return;
+      }
       if (isSandboxPresetSkill(skill)) {
         showMessage(tm("skills.sandboxPresetReadonly"), "warning");
         return;
@@ -1837,6 +1861,7 @@ export default {
       deleteRelease,
       isSandboxPresetSkill,
       isPluginProvidedSkill,
+      isInactivePluginSkill,
       isReadOnlySourceSkill,
     };
   },
