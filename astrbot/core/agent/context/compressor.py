@@ -144,6 +144,7 @@ class LLMSummaryCompressor:
         self.keep_recent_ratio = min(max(float(keep_recent_ratio), 0.0), 0.3)
         self.compression_threshold = compression_threshold
         self.token_counter = token_counter or EstimateTokenCounter()
+        self.last_call_failed = False
 
         self.instruction_text = instruction_text or (
             "Based on our full conversation history, produce a concise summary of key takeaways and/or project progress.\n"
@@ -212,6 +213,8 @@ class LLMSummaryCompressor:
         """
         from .round_utils import split_into_rounds
 
+        self.last_call_failed = False
+
         rounds = split_into_rounds(messages)
         message_rounds = [
             [seg for seg in rnd if isinstance(seg, Message)] for rnd in rounds
@@ -276,13 +279,19 @@ class LLMSummaryCompressor:
             response = await self.provider.text_chat(
                 contexts=sanitized_summary_contexts,
             )
+            if response.role == "err":
+                logger.error(f"Failed to generate summary: {response.completion_text}")
+                self.last_call_failed = True
+                return messages
             summary_content = (response.completion_text or "").strip()
         except Exception as e:
             logger.error(f"Failed to generate summary: {e}")
+            self.last_call_failed = True
             return messages
 
         if not summary_content:
             logger.warning("LLM context compression returned an empty summary.")
+            self.last_call_failed = True
             return messages
 
         # Build result: system messages + summary pair + recent rounds
