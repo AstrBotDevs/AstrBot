@@ -110,17 +110,17 @@ Para usuarios que desean un despliegue en un clic y no quieren administrar servi
 
 [![Desplegar en RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
-### Despliegue como aplicación de escritorio
+### Launcher de escritorio
 
-Para usuarios que quieran usar AstrBot en el escritorio y principalmente usen ChatUI, recomendamos AstrBot App.
+Para quienes quieran usar AstrBot tal cual en su equipo, recomendamos AstrBot Desktop Launcher (antes AstrBot Launcher). Mantiene la experiencia estándar de AstrBot y permite una instalación rápida, entornos aislados y varias instancias.
 
-Visita [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop) para descargar e instalar; este método está diseñado para uso en escritorio y no se recomienda para escenarios de servidor.
+Visita [AstrBot Desktop Launcher](https://github.com/Raven95676/astrbot-launcher) para descargarlo e instalarlo.
 
-### Despliegue con Launcher
+### AstrBot App
 
-Para usuarios de escritorio que también desean un despliegue rápido y uso aislado de múltiples instancias, recomendamos AstrBot Launcher.
+AstrBot App es un producto de escritorio independiente para explorar nuevas interacciones y funciones más allá de las capacidades actuales de AstrBot. Su experiencia puede evolucionar con estas exploraciones, en lugar de reproducir estrictamente la experiencia estándar de AstrBot.
 
-Visita [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) para descargar e instalar.
+Para usar AstrBot tal cual, elige AstrBot Desktop Launcher arriba. Para probar estas nuevas ideas, visita [AstrBot App](https://github.com/AstrBotDevs/AstrBot-desktop) para descargarlo e instalarlo.
 
 ### Desplegar en Replit
 

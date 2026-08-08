@@ -109,17 +109,17 @@ AstrBot をワンクリックでデプロイしたく、サーバーを自分で
 
 [![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
-### デスクトップアプリのデプロイ
+### デスクトップランチャー
 
-デスクトップで AstrBot を使い、主に ChatUI を入口として利用するユーザーには、AstrBot App をおすすめします。
+パソコンで AstrBot をそのまま使いたいユーザーには、AstrBot デスクトップランチャー（旧 AstrBot Launcher）をおすすめします。標準の AstrBot 体験を保ちながら、素早いセットアップ、環境の分離、多重起動に対応します。
 
-[AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop) からダウンロードしてインストールしてください。この方式はデスクトップ向けであり、サーバー用途には推奨されません。
+[AstrBot デスクトップランチャー](https://github.com/Raven95676/astrbot-launcher) からダウンロードしてインストールしてください。
 
-### ランチャーのデプロイ
+### AstrBot App
 
-同じくデスクトップで、素早くデプロイしつつ環境を分離して多重起動したいユーザーには、AstrBot Launcher をおすすめします。
+AstrBot App は、AstrBot の現在の機能を超える新しい操作方法や機能を探るための独立したデスクトップアプリです。標準の AstrBot 体験をそのまま再現することだけを目的とせず、探索に合わせて体験も進化していきます。
 
-[AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) からダウンロードしてインストールしてください。
+AstrBot をそのまま使いたい場合は、上記の AstrBot デスクトップランチャーを選んでください。新しい方向性を試す場合は、[AstrBot App](https://github.com/AstrBotDevs/AstrBot-desktop) からダウンロードしてインストールしてください。
 
 ### Replit でのデプロイ
 

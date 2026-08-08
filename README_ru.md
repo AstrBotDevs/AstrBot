@@ -109,17 +109,17 @@ uv tool upgrade astrbot --python 3.12
 
 [![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
-### Развёртывание десктопного приложения
+### Десктопный лаунчер
 
-Для пользователей, которые хотят использовать AstrBot на десктопе и в основном работают через ChatUI, мы рекомендуем AstrBot App.
+Тем, кто хочет использовать AstrBot на компьютере в его исходном виде, мы рекомендуем AstrBot Desktop Launcher (ранее AstrBot Launcher). Он сохраняет стандартный опыт AstrBot и поддерживает быструю установку, изоляцию окружений и несколько экземпляров.
 
-Перейдите в [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop), скачайте и установите приложение; этот вариант предназначен для десктопа и не рекомендуется для серверных сценариев.
+Перейдите в [AstrBot Desktop Launcher](https://github.com/Raven95676/astrbot-launcher), чтобы скачать и установить его.
 
-### Развёртывание через лаунчер
+### AstrBot App
 
-Также на десктопе, для пользователей, которым нужен быстрый запуск и мультиинстанс с изоляцией окружений, мы рекомендуем AstrBot Launcher.
+AstrBot App — самостоятельный настольный продукт для экспериментов с новыми способами взаимодействия и возможностями за пределами текущего набора функций AstrBot. По мере этих экспериментов его интерфейс и возможности могут развиваться, а не строго повторять стандартный AstrBot.
 
-Перейдите в [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher), чтобы скачать и установить.
+Чтобы использовать AstrBot в исходном виде, выберите AstrBot Desktop Launcher выше. Чтобы попробовать новые направления, перейдите в [AstrBot App](https://github.com/AstrBotDevs/AstrBot-desktop), скачайте и установите приложение.
 
 ### Развёртывание на Replit
 

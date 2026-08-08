@@ -109,17 +109,17 @@ uv tool upgrade astrbot --python 3.12
 
 [![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
-### 桌面客户端部署
+### 桌面启动器
 
-对于希望在桌面端使用 AstrBot、并以 ChatUI 为主要入口的用户，我们推荐使用 AstrBot App。
+对于希望在电脑上原样使用 AstrBot 的用户，我们推荐使用 AstrBot 桌面启动器（原 AstrBot Launcher）。它提供标准的 AstrBot 使用体验，并支持快速部署、环境隔离和多开。
 
-前往 [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop) 下载并安装；该方式面向桌面使用，不推荐服务器场景。
+前往 [AstrBot 桌面启动器](https://github.com/Raven95676/astrbot-launcher) 下载并安装。
 
-### 启动器部署
+### AstrBot App
 
-同样在桌面端，希望快速部署并实现环境隔离多开的用户，我们推荐使用 AstrBot Launcher。
+AstrBot App 是面向桌面场景的独立应用，用于探索 AstrBot 现有能力之外的新交互和新功能。它的体验可能随着这些探索不断演进，不以复刻标准 AstrBot 体验为唯一目标。
 
-前往 [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) 下载并安装。
+如果你希望原样使用 AstrBot，请选择上方的 AstrBot 桌面启动器。想体验这些探索方向，可前往 [AstrBot App](https://github.com/AstrBotDevs/AstrBot-desktop) 下载并安装。
 
 ### 在 Replit 上部署
 

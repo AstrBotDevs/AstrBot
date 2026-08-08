@@ -98,18 +98,18 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 > AstrBot 为了安全起见，运行环境选择 `local` 时，默认仅允许 AstrBot 管理员使用电脑能力。
 > 运行环境可以选择 `sandbox`，此时所有用户都可以使用电脑能力（在一个隔离的沙箱中）。详情请看 [AstrBot 沙箱环境](/use/astrbot-agent-sandbox.md)
 
-### 通过 AstrBot 桌面客户端安装的 AstrBot，data 目录在哪？
+### 通过 AstrBot App 安装的 AstrBot，data 目录在哪？
 
 在家目录下的 `.astrbot` 目录下。
 
 - Windows: `C:\Users\你的用户名\.astrbot`
 - MacOS / Linux: `/Users/你的用户名/.astrbot` 或者 `/home/你的用户名/.astrbot`
 
-### 通过 AstrBot Launcher 安装的 AstrBot，data 目录在哪？
+### 通过 AstrBot 桌面启动器安装的 AstrBot，data 目录在哪？
 
-如果是旧版本的 AstrBot Launcher（Powershell），data 目录就在 Launcher bat 脚本的同级目录下。
+如果是旧版 AstrBot Launcher（Powershell 脚本），data 目录就在 Launcher bat 脚本的同级目录下。
 
-如果是新版本的 AstrBot Launcher（可视化），data 目录在家目录下的 `.astrbot_launcher` 目录下。
+如果是新版 AstrBot 桌面启动器（可视化应用），data 目录在家目录下的 `.astrbot_launcher` 目录下。
 
 - Windows: `C:\Users\你的用户名\.astrbot_launcher`
 - MacOS / Linux: `/Users/你的用户名/.astrbot_launcher` 或者 `/home/你的用户名/.astrbot_launcher`

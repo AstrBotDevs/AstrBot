@@ -109,17 +109,17 @@ Pour les utilisateurs qui souhaitent déployer AstrBot en un clic sans gérer le
 
 [![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
-### Déploiement de l'application de bureau
+### Lanceur de bureau
 
-Pour les utilisateurs qui veulent utiliser AstrBot sur desktop et passer principalement par ChatUI, nous recommandons AstrBot App.
+Pour utiliser AstrBot tel quel sur un ordinateur, nous recommandons AstrBot Desktop Launcher (anciennement AstrBot Launcher). Il conserve l'expérience AstrBot standard tout en facilitant l'installation, l'isolation des environnements et l'exécution de plusieurs instances.
 
-Accédez à [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop) pour télécharger et installer l'application ; cette méthode est conçue pour un usage desktop et n'est pas recommandée pour les scénarios serveur.
+Accédez à [AstrBot Desktop Launcher](https://github.com/Raven95676/astrbot-launcher) pour le télécharger et l'installer.
 
-### Déploiement avec le lanceur
+### AstrBot App
 
-Également sur desktop, pour les utilisateurs qui souhaitent un déploiement rapide avec isolation d'environnement et multi-instances, nous recommandons AstrBot Launcher.
+AstrBot App est un produit de bureau indépendant conçu pour explorer de nouvelles interactions et fonctionnalités au-delà des capacités actuelles d'AstrBot. Son expérience peut évoluer avec ces explorations plutôt que de reproduire strictement l'expérience AstrBot standard.
 
-Accédez à [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) pour télécharger et installer.
+Pour utiliser AstrBot tel quel, choisissez AstrBot Desktop Launcher ci-dessus. Pour essayer ces nouvelles orientations, accédez à [AstrBot App](https://github.com/AstrBotDevs/AstrBot-desktop) afin de le télécharger et de l'installer.
 
 ### Déployer sur Replit
 

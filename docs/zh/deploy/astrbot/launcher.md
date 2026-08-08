@@ -1,8 +1,10 @@
-# 使用 AstrBot 启动器部署 AstrBot
+# 使用 AstrBot 桌面启动器部署 AstrBot
 
-## AstrBot 一键启动器
+AstrBot 桌面启动器（原 AstrBot Launcher）面向希望在个人电脑上原样使用 AstrBot 的用户，是标准 AstrBot 体验的桌面入口，并支持环境隔离和多开。
 
-AstrBot 一键启动器支持 Windows、MacOS、Linux 等多端部署。
+## 安装 AstrBot 桌面启动器
+
+AstrBot 桌面启动器支持 Windows、macOS、Linux。
 
 0. 打开 [AstrBotDevs/astrbot-launcher](https://github.com/AstrBotDevs/astrbot-launcher)
 1.  **(可选但推荐)** 给本项目点个 [**Star ⭐**](https://github.com/AstrBotDevs/astrbot-launcher)，你的支持是作者更新和维护的动力！
@@ -15,7 +17,7 @@ MacOS 用户下载安装好后，可能会遇到 "已损坏，无法打开" 的�
 1. 打开终端
 2. 输入以下命令并回车：
    `xattr -dr com.apple.quarantine /Applications/AstrBot\ Launcher.app`
-3. 重新尝试打开 AstrBot Launcher 应用
+3. 重新尝试打开 AstrBot 桌面启动器
 
 ## 旧版本 Windows 安装器（不推荐）
 
@@ -24,7 +26,7 @@ MacOS 用户下载安装好后，可能会遇到 "已损坏，无法打开" 的�
 > 需要您的电脑上预先安装好 Python 环境（3.10 - 3.13），并且将 Python 添加到环境变量中，否则安装器将无法正常工作。
 
 
-推荐使用上面提到的 AstrBot 一键启动器来部署 AstrBot，因为它更简单、更自动化、更现代化，适合大多数用户。
+推荐使用上面提到的 AstrBot 桌面启动器来部署 AstrBot，因为它更简单、更自动化、更现代化，适合大多数用户。
 
 安装器是一个使用 `Powershell` 编写的脚本，体积小巧，<20KB。需要您的电脑上安装有 `Powershell`，一般 `Windows 10` 及以上版本的设备都会自带这个工具。
 

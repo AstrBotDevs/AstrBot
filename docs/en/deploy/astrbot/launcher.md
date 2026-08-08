@@ -1,8 +1,10 @@
-# Deploy AstrBot with AstrBot Launcher
+# Deploy AstrBot with AstrBot Desktop Launcher
 
-## Recommended Method 1: AstrBot One-Click Launcher
+AstrBot Desktop Launcher (formerly AstrBot Launcher) is the standard desktop entry point for users who want to run AstrBot as-is on a personal computer. It also supports isolated environments and multiple instances.
 
-AstrBot One-Click Launcher supports Windows, macOS, and Linux.
+## Install AstrBot Desktop Launcher
+
+AstrBot Desktop Launcher supports Windows, macOS, and Linux.
 
 0. Open [AstrBotDevs/astrbot-launcher](https://github.com/AstrBotDevs/astrbot-launcher)
 1. **Optional but recommended**: give this project a [**Star ⭐**](https://github.com/AstrBotDevs/astrbot-launcher). Your support helps maintainers keep improving it.
@@ -19,11 +21,11 @@ For macOS users, if you see "damaged and can't be opened", it is caused by macOS
 1. Open Terminal.
 2. Run:
    `xattr -dr com.apple.quarantine /Applications/AstrBot\ Launcher.app`
-3. Reopen AstrBot Launcher.
+3. Reopen AstrBot Desktop Launcher.
 
 ## Method 2: Legacy Windows Installer
 
-We still recommend the One-Click Launcher above because it is simpler, more automated, and better for most users.
+We still recommend AstrBot Desktop Launcher above because it is simpler, more automated, and better for most users.
 
 The legacy installer is a `PowerShell` script, very small (<20KB). It requires `PowerShell` (usually built in on `Windows 10` and newer).
 
