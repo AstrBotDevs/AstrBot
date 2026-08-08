@@ -152,9 +152,16 @@ class ProviderRequest:
                 continue
             role = ctx.get("role", "unknown")
             content = ctx.get("content", "")
+            tool_call_names = []
+            for tool_call in ctx.get("tool_calls") or []:
+                if isinstance(tool_call, dict):
+                    function = tool_call.get("function") or {}
+                    name = function.get("name") if isinstance(function, dict) else None
+                    if name:
+                        tool_call_names.append(str(name))
 
             if isinstance(content, str):
-                result_parts.append(f"{role}: {content}")
+                content_text = content
             elif isinstance(content, list):
                 msg_parts = []
                 image_count = 0
@@ -181,7 +188,18 @@ class ProviderRequest:
                     else:
                         msg_parts.append(f"[{audio_count} audios]")
 
-                result_parts.append(f"{role}: {''.join(msg_parts)}")
+                content_text = "".join(msg_parts)
+            else:
+                content_text = str(content or "")
+
+            if tool_call_names:
+                tool_calls_text = f"[tool_calls: {', '.join(tool_call_names)}]"
+                content_text = (
+                    f"{content_text}\n{tool_calls_text}"
+                    if content_text
+                    else tool_calls_text
+                )
+            result_parts.append(f"{role}: {content_text}")
 
         return "\n".join(result_parts)
 

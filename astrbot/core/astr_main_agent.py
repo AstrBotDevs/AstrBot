@@ -12,9 +12,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from astrbot.core import logger
+from astrbot.core.agent.context.token_counter import EstimateTokenCounter
+from astrbot.core.agent.context.truncator import ContextTruncator
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
-from astrbot.core.agent.message import TextPart
+from astrbot.core.agent.message import Message, TextPart
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
@@ -212,6 +214,8 @@ class MainAgentBuildConfig:
     timezone: str | None = None
     max_quoted_fallback_images: int = 20
     """Maximum number of images injected from quoted-message fallback extraction."""
+    max_agent_step: int = 30
+    """Maximum number of agent steps for callers that drive the runner directly."""
 
 
 @dataclass(slots=True)
@@ -220,6 +224,159 @@ class MainAgentBuildResult:
     provider_request: ProviderRequest
     provider: Provider
     reset_coro: Coroutine | None = None
+
+
+PROACTIVE_HISTORY_MAX_TOKENS = 8192
+
+
+def build_proactive_agent_config(
+    *,
+    plugin_context: Context,
+    app_config: dict,
+    provider_settings: dict,
+    tool_call_timeout: int | None = None,
+    streaming_response: bool | None = None,
+    llm_safety_mode: bool | None = None,
+    add_cron_tools: bool | None = None,
+) -> MainAgentBuildConfig:
+    """Build a main-agent config for proactive entry points.
+
+    Proactive jobs must use the same provider settings as normal messages. The
+    explicit overrides are limited to behavior that is inherent to a wake-up
+    path, such as disabling streaming for cron delivery.
+
+    Args:
+        plugin_context: AstrBot context used for global configuration lookup.
+        app_config: Global AstrBot configuration.
+        provider_settings: Provider and agent settings.
+        tool_call_timeout: Optional timeout override for tool calls.
+        streaming_response: Optional streaming override for the caller.
+        llm_safety_mode: Optional safety-mode override for the caller.
+        add_cron_tools: Optional cron-tool availability override for the caller.
+
+    Returns:
+        Configuration shared by proactive and normal agent entry points.
+    """
+    settings = provider_settings or {}
+    file_extract_conf = settings.get("file_extract", {}) or {}
+    global_config = app_config or {}
+    proactive_cfg = settings.get("proactive_capability", {}) or {}
+    if streaming_response is None:
+        streaming_response = settings.get(
+            "streaming_response", settings.get("stream", False)
+        )
+    if add_cron_tools is None:
+        add_cron_tools = proactive_cfg.get("add_cron_tools", True)
+
+    return MainAgentBuildConfig(
+        tool_call_timeout=int(
+            settings.get("tool_call_timeout", 120)
+            if tool_call_timeout is None
+            else tool_call_timeout
+        ),
+        tool_schema_mode=settings.get("tool_schema_mode", "full"),
+        streaming_response=bool(streaming_response),
+        sanitize_context_by_modalities=bool(
+            settings.get("sanitize_context_by_modalities", False)
+        ),
+        kb_agentic_mode=bool(global_config.get("kb_agentic_mode", False)),
+        file_extract_enabled=bool(file_extract_conf.get("enable", False)),
+        file_extract_prov=file_extract_conf.get("provider", "moonshotai"),
+        file_extract_msh_api_key=file_extract_conf.get("moonshotai_api_key", ""),
+        context_limit_reached_strategy=settings.get(
+            "context_limit_reached_strategy", "truncate_by_turns"
+        ),
+        llm_compress_instruction=settings.get("llm_compress_instruction", ""),
+        llm_compress_keep_recent_ratio=float(
+            settings.get("llm_compress_keep_recent_ratio", 0.15)
+        ),
+        llm_compress_provider_id=settings.get("llm_compress_provider_id", ""),
+        max_context_length=int(settings.get("max_context_length", -1)),
+        dequeue_context_length=int(settings.get("dequeue_context_length", 1)),
+        fallback_max_context_tokens=int(
+            settings.get("fallback_max_context_tokens", 128000)
+        ),
+        llm_safety_mode=bool(
+            settings.get("llm_safety_mode", True)
+            if llm_safety_mode is None
+            else llm_safety_mode
+        ),
+        safety_mode_strategy=settings.get("safety_mode_strategy", "system_prompt"),
+        computer_use_runtime=settings.get("computer_use_runtime", "none"),
+        sandbox_cfg=settings.get("sandbox", {}) or {},
+        add_cron_tools=bool(add_cron_tools),
+        provider_settings=settings,
+        subagent_orchestrator=global_config.get("subagent_orchestrator", {}) or {},
+        timezone=global_config.get("timezone")
+        or plugin_context.get_config().get("timezone"),
+        max_quoted_fallback_images=int(settings.get("max_quoted_fallback_images", 20)),
+        max_agent_step=int(settings.get("max_agent_step", 30)),
+    )
+
+
+def append_proactive_history(
+    req: ProviderRequest,
+    conversation: Conversation,
+    config: MainAgentBuildConfig,
+) -> None:
+    """Add bounded conversation history to a proactive system prompt.
+
+    Wake-up prompts intentionally describe history as reference material, but
+    they still need a hard bound. Otherwise they bypass the runner's normal
+    context manager because proactive callers flatten history into the system
+    prompt.
+
+    Args:
+        req: Provider request receiving the formatted history.
+        conversation: Conversation whose history should be included.
+        config: Agent configuration controlling history truncation.
+    """
+    try:
+        raw_context = json.loads(conversation.history or "[]")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to parse proactive conversation history: %s", exc)
+        return
+
+    if not raw_context:
+        return
+
+    messages: list[Message] = []
+    for item in raw_context:
+        try:
+            messages.append(Message.model_validate(item))
+        except Exception:  # noqa: BLE001
+            logger.debug("Skip malformed proactive history item: %r", item)
+
+    if not messages:
+        return
+
+    truncator = ContextTruncator()
+    if config.max_context_length != -1:
+        messages = truncator.truncate_by_turns(
+            messages,
+            keep_most_recent_turns=config.max_context_length,
+            drop_turns=max(config.dequeue_context_length, 1),
+        )
+
+    token_counter = EstimateTokenCounter()
+    while (
+        len(messages) > 2
+        and token_counter.count_tokens(messages) > PROACTIVE_HISTORY_MAX_TOKENS
+    ):
+        next_messages = truncator.truncate_by_dropping_oldest_turns(
+            messages, drop_turns=max(config.dequeue_context_length, 1)
+        )
+        if len(next_messages) >= len(messages):
+            break
+        messages = next_messages
+
+    req.contexts = [message.model_dump(exclude_none=True) for message in messages]
+    context_dump = req._print_friendly_context()
+    req.contexts = []
+    req.system_prompt += (
+        "\n\nBelow is bounded previous conversation history for reference only:\n"
+        f"---\n{context_dump}\n---\n"
+    )
 
 
 def _set_llm_error_message(event: AstrMessageEvent, message: str) -> None:

@@ -520,9 +520,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         extra_result_fields: dict[str, T.Any] | None = None,
     ) -> None:
         from astrbot.core.astr_main_agent import (
-            MainAgentBuildConfig,
             _get_session_conv,
+            append_proactive_history,
             build_main_agent,
+            build_proactive_agent_config,
         )
 
         event = run_context.context.event
@@ -549,24 +550,17 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cron_event.role = event.role
         cfg = ctx.get_config(umo=event.unified_msg_origin) or {}
         provider_settings = cfg.get("provider_settings") or {}
-        config = MainAgentBuildConfig(
-            tool_call_timeout=run_context.tool_call_timeout,
-            streaming_response=provider_settings.get("stream", False),
+        config = build_proactive_agent_config(
+            plugin_context=ctx,
+            app_config=cfg,
             provider_settings=provider_settings,
+            tool_call_timeout=run_context.tool_call_timeout,
         )
 
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=ctx)
         req.conversation = conv
-        context = json.loads(conv.history)
-        if context:
-            req.contexts = context
-            context_dump = req._print_friendly_context()
-            req.contexts = []
-            req.system_prompt += (
-                "\n\nBellow is you and user previous conversation history:\n"
-                f"{context_dump}"
-            )
+        append_proactive_history(req, conv, config)
 
         bg = json.dumps(extras["background_task_result"], ensure_ascii=False)
         req.system_prompt += BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT.format(
@@ -590,14 +584,23 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             event=cron_event, plugin_context=ctx, config=config, req=req
         )
         if not result:
-            logger.error(f"Failed to build main agent for background task {tool_name}.")
-            return
+            raise RuntimeError(
+                f"Failed to build main agent for background task {tool_name}"
+            )
 
         runner = result.agent_runner
-        async for _ in runner.step_until_done(30):
+        async for _ in runner.step_until_done(config.max_agent_step):
             # agent will send message to user via using tools
             pass
         llm_resp = runner.get_final_llm_resp()
+        if not llm_resp or llm_resp.role == "err":
+            error_text = (
+                llm_resp.completion_text
+                if llm_resp and llm_resp.completion_text
+                else "Background task agent returned no usable response"
+            )
+            raise RuntimeError(error_text)
+
         task_meta = extras.get("background_task_result", {})
         summary_note = (
             f"[BackgroundTask] {summary_name} "
@@ -614,9 +617,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             req=req,
             summary_note=summary_note,
         )
-        if not llm_resp:
-            logger.warning("background task agent got no response")
-            return
 
     @classmethod
     async def _execute_local(

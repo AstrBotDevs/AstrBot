@@ -226,6 +226,75 @@ class TestMainAgentBuildConfig:
         assert config.add_cron_tools is False
 
 
+def test_build_proactive_agent_config_preserves_provider_settings(mock_context):
+    provider_settings = {
+        "tool_call_timeout": 77,
+        "tool_schema_mode": "skills-like",
+        "streaming_response": True,
+        "max_context_length": 12,
+        "dequeue_context_length": 2,
+        "max_agent_step": 18,
+        "proactive_capability": {"add_cron_tools": False},
+    }
+
+    config = ama.build_proactive_agent_config(
+        plugin_context=mock_context,
+        app_config={"kb_agentic_mode": True},
+        provider_settings=provider_settings,
+        streaming_response=False,
+    )
+
+    assert config.tool_call_timeout == 77
+    assert config.tool_schema_mode == "skills-like"
+    assert config.streaming_response is False
+    assert config.max_context_length == 12
+    assert config.dequeue_context_length == 2
+    assert config.max_agent_step == 18
+    assert config.kb_agentic_mode is True
+    assert config.add_cron_tools is False
+
+
+def test_append_proactive_history_is_bounded_and_keeps_tool_call_summary(
+    mock_conversation,
+):
+    history = []
+    for index in range(80):
+        history.extend(
+            [
+                {"role": "user", "content": f"request {index} " + "x" * 500},
+                {
+                    "role": "assistant",
+                    "content": f"answer {index} " + "y" * 500,
+                    "tool_calls": [
+                        {
+                            "id": f"call-{index}",
+                            "type": "function",
+                            "function": {"name": "write_diary", "arguments": "{}"},
+                        }
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "content": f"tool result {index}",
+                    "tool_call_id": f"call-{index}",
+                },
+            ]
+        )
+    mock_conversation.history = ama.json.dumps(history)
+    req = ProviderRequest()
+    config = ama.MainAgentBuildConfig(
+        tool_call_timeout=60,
+        max_context_length=-1,
+        dequeue_context_length=1,
+    )
+
+    ama.append_proactive_history(req, mock_conversation, config)
+
+    assert "[tool_calls: write_diary]" in req.system_prompt
+    assert "request 0" not in req.system_prompt
+    assert len(req.system_prompt) < 50000
+
+
 class TestSelectProvider:
     """Tests for _select_provider function."""
 

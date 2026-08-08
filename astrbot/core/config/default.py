@@ -159,6 +159,7 @@ DEFAULT_CONFIG = {
         "reachability_check": False,
         "max_agent_step": 30,
         "tool_call_timeout": 120,
+        "cron_job_timeout": 3600,
         "tool_schema_mode": "full",
         "llm_safety_mode": True,
         "safety_mode_strategy": "system_prompt",  # TODO: llm judge
@@ -2955,6 +2956,9 @@ CONFIG_METADATA_2 = {
                         "type": "int",
                     },
                     "tool_call_timeout": {
+                        "type": "int",
+                    },
+                    "cron_job_timeout": {
                         "type": "int",
                     },
                     "tool_schema_mode": {
