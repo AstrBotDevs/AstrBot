@@ -1799,6 +1799,11 @@ CONFIG_METADATA_2 = {
                         "minimax-voice-pitch": 0,
                         "minimax-is-timber-weight": False,
                         "minimax-voice-id": "female-shaonv",
+                        "minimax-voice-design-prompt": "",
+                        "minimax-voice-design-preview-text": "",
+                        "minimax-voice-design-voice-id": "",
+                        "minimax-voice-design-prompt-audio": "",
+                        "minimax-voice-design-api-base": "https://api.minimaxi.com/v1",
                         "minimax-timber-weight": '[\n    {\n        "voice_id": "Chinese (Mandarin)_Warm_Girl",\n        "weight": 25\n    },\n    {\n        "voice_id": "Chinese (Mandarin)_BashfulGirl",\n        "weight": 50\n    }\n]',
                         "minimax-voice-emotion": "auto",
                         "minimax-voice-latex": False,
@@ -2591,6 +2596,35 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "description": "单一音色",
                         "hint": "单一音色编号, 详见官网文档",
+                    },
+                    "minimax-voice-design-prompt": {
+                        "type": "string",
+                        "description": "音色设计提示词",
+                        "hint": "描述目标音色的文本。设置后将在合成前通过音色设计 API 创建自定义音色。",
+                    },
+                    "minimax-voice-design-preview-text": {
+                        "type": "string",
+                        "description": "音色设计预览文本",
+                        "hint": "用于生成音色设计预览音频的文本。音色设计 API 要求必填。",
+                    },
+                    "minimax-voice-design-voice-id": {
+                        "type": "string",
+                        "description": "音色设计音色 ID",
+                        "hint": "为设计的音色指定的自定义 ID。留空则由 API 自动生成。",
+                    },
+                    "minimax-voice-design-prompt-audio": {
+                        "type": "string",
+                        "description": "音色设计提示音频路径",
+                        "hint": "本地 .mp3, .m4a, 或 .wav 参考音频, 以 prompt_audio 用途上传, 用于增强音色相似度和稳定性。",
+                    },
+                    "minimax-voice-design-api-base": {
+                        "type": "string",
+                        "description": "音色设计 API 地址",
+                        "options": [
+                            "https://api.minimax.io/v1",
+                            "https://api.minimaxi.com/v1",
+                        ],
+                        "hint": "用于提示音频上传和音色设计的区域化 MiniMax API 地址。",
                     },
                     "minimax-voice-emotion": {
                         "type": "string",
