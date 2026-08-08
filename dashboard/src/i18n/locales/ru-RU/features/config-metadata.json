@@ -596,9 +596,13 @@
                 "description": "Интервал автообновления команд Telegram",
                 "hint": "Интервал автоматического обновления команд Telegram в секундах."
             },
+            "telegram_proxy": {
+                "description": "Proxy URL для Telegram",
+                "hint": "Формат: http://ip:port или socks5://ip:port. Используется только адаптером Telegram. Если поле пустое, применяются глобальные настройки прокси."
+            },
             "telegram_token": {
                 "description": "Токен бота",
-                "hint": "Если вы находитесь в материковом Китае, установите прокси или измените api_base в разделе «Другие настройки»."
+                "hint": "Введите сюда токен вашего Telegram-бота."
             },
             "mattermost_url": {
                 "description": "URL Mattermost",
