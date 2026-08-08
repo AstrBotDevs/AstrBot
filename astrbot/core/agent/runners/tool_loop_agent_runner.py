@@ -801,6 +801,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 self.stats.current_context_tokens = llm_response.usage.input
                 if self.req.conversation:
                     self.req.conversation.token_usage = llm_response.usage.total
+            # end_time must be set before the yield serializes to_dict().
+            self.stats.end_time = time.time()
             yield AgentResponse(
                 type="agent_stats",
                 data=AgentResponseData(
