@@ -68,6 +68,8 @@ Schema 文件必须是**严格 JSON**，不能包含注释、尾随逗号或 Pyt
 - `editor_mode`、`editor_language`、`editor_theme`：为文本/结构化输入启用代码编辑器。
 - `_special`：使用 AstrBot 提供的动态选择器。
 
+在 WebUI 编辑插件配置时，已修改且可写的字段可恢复为此 schema 默认值。该控件只用于插件配置，不会出现在 Core 设置中。`object` 类型会从 `items` 递归构造恢复值，object 自身的 `default` 不会覆盖这一结构；未知类型和 `readonly` 字段不会显示恢复控件。
+
 插件可稳定使用的常见 `_special` 值包括：
 
 - `select_provider`、`select_provider_tts`、`select_provider_stt`：返回 Provider ID 字符串；

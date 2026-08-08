@@ -24,6 +24,7 @@
   "enabled": "已启用",
   "disabled": "已禁用",
   "reload": "重载",
+  "restoreDefault": "恢复默认值",
   "expand": "展开",
   "collapse": "收起",
   "configure": "配置",

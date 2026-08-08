@@ -3,6 +3,7 @@ import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import '@/utils/monacoLoader';
 import { ref, computed } from 'vue';
 import ConfigItemRenderer from './ConfigItemRenderer.vue';
+import ConfigDefaultReset from './ConfigDefaultReset.vue';
 import TemplateListEditor from './TemplateListEditor.vue';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { useConfigTextResolver } from '@/composables/useConfigTextResolver';
@@ -35,6 +36,10 @@ const props = defineProps({
     default: '',
   },
   isEditing: {
+    type: Boolean,
+    default: false,
+  },
+  enableDefaultReset: {
     type: Boolean,
     default: false,
   },
@@ -260,17 +265,25 @@ function hasVisibleItemsAfter(items, currentIndex) {
               "
               class="nested-container"
             >
-              <v-expand-transition>
-                <AstrBotConfig
-                  :metadata="metadata[metadataKey].items"
-                  :iterable="iterable[key]"
-                  :metadata-key="key"
-                  :plugin-name="pluginName"
-                  :plugin-i18n="pluginI18n"
-                  :path-prefix="getItemPath(key)"
-                >
-                </AstrBotConfig>
-              </v-expand-transition>
+              <ConfigDefaultReset
+                :model-value="iterable[key]"
+                :item-meta="metadata[metadataKey].items[key]"
+                :enabled="enableDefaultReset"
+                @reset="iterable[key] = $event"
+              >
+                <v-expand-transition>
+                  <AstrBotConfig
+                    :metadata="metadata[metadataKey].items"
+                    :iterable="iterable[key]"
+                    :metadata-key="key"
+                    :plugin-name="pluginName"
+                    :plugin-i18n="pluginI18n"
+                    :path-prefix="getItemPath(key)"
+                    :enable-default-reset="enableDefaultReset"
+                  >
+                  </AstrBotConfig>
+                </v-expand-transition>
+              </ConfigDefaultReset>
             </div>
           </div>
 
@@ -320,14 +333,21 @@ function hasVisibleItemsAfter(items, currentIndex) {
                   }}
                 </v-list-item-subtitle>
               </div>
-              <TemplateListEditor
-                v-model="iterable[key]"
-                :templates="metadata[metadataKey].items[key]?.templates || {}"
-                :plugin-name="pluginName"
-                :plugin-i18n="pluginI18n"
-                :config-path="getItemPath(key)"
-                class="config-field"
-              />
+              <ConfigDefaultReset
+                :model-value="iterable[key]"
+                :item-meta="metadata[metadataKey].items[key]"
+                :enabled="enableDefaultReset"
+                @reset="iterable[key] = $event"
+              >
+                <TemplateListEditor
+                  v-model="iterable[key]"
+                  :templates="metadata[metadataKey].items[key]?.templates || {}"
+                  :plugin-name="pluginName"
+                  :plugin-i18n="pluginI18n"
+                  :config-path="getItemPath(key)"
+                  class="config-field"
+                />
+              </ConfigDefaultReset>
             </div>
           </div>
 
@@ -377,26 +397,33 @@ function hasVisibleItemsAfter(items, currentIndex) {
               </v-col>
 
               <v-col cols="12" sm="6" class="config-input">
-                <ConfigItemRenderer
-                  v-model="iterable[key]"
-                  :item-meta="metadata[metadataKey].items[key] || null"
-                  :plugin-name="pluginName"
-                  :plugin-i18n="pluginI18n"
-                  :config-key="getItemPath(key)"
-                  :loading="loadingEmbeddingDim"
-                  :show-fullscreen-btn="
-                    !!metadata[metadataKey].items[key]?.editor_mode
-                  "
-                  @get-embedding-dim="getEmbeddingDimensions(iterable)"
-                  @open-fullscreen="
-                    openEditorDialog(
-                      key,
-                      iterable,
-                      metadata[metadataKey].items[key]?.editor_theme,
-                      metadata[metadataKey].items[key]?.editor_language,
-                    )
-                  "
-                />
+                <ConfigDefaultReset
+                  :model-value="iterable[key]"
+                  :item-meta="metadata[metadataKey].items[key]"
+                  :enabled="enableDefaultReset"
+                  @reset="iterable[key] = $event"
+                >
+                  <ConfigItemRenderer
+                    v-model="iterable[key]"
+                    :item-meta="metadata[metadataKey].items[key] || null"
+                    :plugin-name="pluginName"
+                    :plugin-i18n="pluginI18n"
+                    :config-key="getItemPath(key)"
+                    :loading="loadingEmbeddingDim"
+                    :show-fullscreen-btn="
+                      !!metadata[metadataKey].items[key]?.editor_mode
+                    "
+                    @get-embedding-dim="getEmbeddingDimensions(iterable)"
+                    @open-fullscreen="
+                      openEditorDialog(
+                        key,
+                        iterable,
+                        metadata[metadataKey].items[key]?.editor_theme,
+                        metadata[metadataKey].items[key]?.editor_language,
+                      )
+                    "
+                  />
+                </ConfigDefaultReset>
               </v-col>
             </v-row>
 
@@ -449,26 +476,33 @@ function hasVisibleItemsAfter(items, currentIndex) {
           </v-col>
 
           <v-col cols="12" sm="5" class="config-input">
-            <TemplateListEditor
-              v-if="
-                metadata[metadataKey]?.type === 'template_list' &&
-                !metadata[metadataKey]?.invisible
-              "
-              v-model="iterable[metadataKey]"
-              :templates="metadata[metadataKey]?.templates || {}"
-              :plugin-name="pluginName"
-              :plugin-i18n="pluginI18n"
-              :config-path="getItemPath(metadataKey)"
-              class="config-field"
-            />
-            <ConfigItemRenderer
-              v-else
-              v-model="iterable[metadataKey]"
+            <ConfigDefaultReset
+              :model-value="iterable[metadataKey]"
               :item-meta="metadata[metadataKey]"
-              :plugin-name="pluginName"
-              :plugin-i18n="pluginI18n"
-              :config-key="getItemPath(metadataKey)"
-            />
+              :enabled="enableDefaultReset"
+              @reset="iterable[metadataKey] = $event"
+            >
+              <TemplateListEditor
+                v-if="
+                  metadata[metadataKey]?.type === 'template_list' &&
+                  !metadata[metadataKey]?.invisible
+                "
+                v-model="iterable[metadataKey]"
+                :templates="metadata[metadataKey]?.templates || {}"
+                :plugin-name="pluginName"
+                :plugin-i18n="pluginI18n"
+                :config-path="getItemPath(metadataKey)"
+                class="config-field"
+              />
+              <ConfigItemRenderer
+                v-else
+                v-model="iterable[metadataKey]"
+                :item-meta="metadata[metadataKey]"
+                :plugin-name="pluginName"
+                :plugin-i18n="pluginI18n"
+                :config-key="getItemPath(metadataKey)"
+              />
+            </ConfigDefaultReset>
           </v-col>
         </v-row>
 

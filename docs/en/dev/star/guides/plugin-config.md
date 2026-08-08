@@ -68,6 +68,13 @@ The current runtime supports:
 - `editor_mode`, `editor_language`, and `editor_theme` enable a code editor for text or structured input.
 - `_special` selects a dynamic AstrBot picker.
 
+When editing a plugin configuration in WebUI, a changed writable field can be
+restored to this schema default. The control is intentionally limited to plugin
+configuration: it is not shown for core settings. For an `object`, the runtime
+builds the restored value recursively from `items`; an object-level `default`
+does not replace that structure. Unknown types and `readonly` fields do not
+offer restoration.
+
 Common stable `_special` values for plugins include:
 
 - `select_provider`, `select_provider_tts`, and `select_provider_stt`, returning a Provider ID string;

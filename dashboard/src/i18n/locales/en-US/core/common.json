@@ -24,6 +24,7 @@
   "enabled": "Enabled",
   "disabled": "Disabled",
   "reload": "Reload",
+  "restoreDefault": "Restore default",
   "expand": "Expand",
   "collapse": "Collapse",
   "configure": "Configure",

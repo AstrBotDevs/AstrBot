@@ -398,6 +398,7 @@ const updateDialogPluginLogo = computed(() => {
             :metadata-key="curr_namespace"
             :plugin-name="curr_namespace"
             :plugin-i18n="extension_config.i18n"
+            enable-default-reset
           />
           <p v-else>{{ tm('dialogs.config.noConfig') }}</p>
         </div>
