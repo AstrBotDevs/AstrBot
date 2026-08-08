@@ -1561,6 +1561,22 @@
                 "description": "Одиночный голос",
                 "hint": "ID одиночного голоса; см. официальную документацию."
             },
+            "minimax-voice-clone-audio": {
+                "description": "Voice clone audio path",
+                "hint": "Local .mp3, .m4a, or .wav reference audio. Leave empty to disable automatic voice cloning."
+            },
+            "minimax-voice-clone-id": {
+                "description": "Voice clone ID",
+                "hint": "Custom voice ID to create before synthesis. Required when voice clone audio is configured."
+            },
+            "minimax-voice-clone-model": {
+                "description": "Voice clone model",
+                "hint": "HD speech model used to create the custom voice."
+            },
+            "minimax-voice-clone-api-base": {
+                "description": "Voice clone API base",
+                "hint": "Regional MiniMax API base for file upload and voice cloning."
+            },
             "minimax-voice-emotion": {
                 "description": "Эмоция",
                 "hint": "Эмоция речи. 'auto' выбирает эмоцию на основе текста."
