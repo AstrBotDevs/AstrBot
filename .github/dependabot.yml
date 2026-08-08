@@ -12,8 +12,8 @@ updates:
     directory: /
     schedule:
       interval: daily
-      time: '04:00'
-      timezone: Europe/Berlin
+      time: '00:00'
+      timezone: Etc/UTC
     open-pull-requests-limit: 20
     labels:
       - dependencies
@@ -38,8 +38,8 @@ updates:
     directory: /
     schedule:
       interval: daily
-      time: '04:10'
-      timezone: Europe/Berlin
+      time: '00:00'
+      timezone: Etc/UTC
     open-pull-requests-limit: 20
     labels:
       - dependencies
@@ -64,8 +64,8 @@ updates:
     directory: /dashboard
     schedule:
       interval: daily
-      time: '04:20'
-      timezone: Europe/Berlin
+      time: '00:00'
+      timezone: Etc/UTC
     open-pull-requests-limit: 20
     labels:
       - dependencies
@@ -90,8 +90,8 @@ updates:
     directory: /docs
     schedule:
       interval: daily
-      time: '04:30'
-      timezone: Europe/Berlin
+      time: '00:00'
+      timezone: Etc/UTC
     open-pull-requests-limit: 20
     labels:
       - dependencies
@@ -116,8 +116,8 @@ updates:
     directory: /
     schedule:
       interval: daily
-      time: '04:40'
-      timezone: Europe/Berlin
+      time: '00:00'
+      timezone: Etc/UTC
     open-pull-requests-limit: 20
     labels:
       - dependencies
