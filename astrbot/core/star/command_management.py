@@ -447,6 +447,8 @@ def _apply_config_to_runtime(
                 descriptor.filter_ref,
                 [str(x) for x in resolved_aliases if str(x).strip()],
             )
+        if isinstance(descriptor.filter_ref, CommandGroupFilter):
+            _refresh_sub_command_names(descriptor.filter_ref)
 
 
 def _bind_configs_to_descriptors(
@@ -483,6 +485,23 @@ def _set_filter_fragment(
     setattr(filter_ref, attr, fragment)
     if hasattr(filter_ref, "_cmpl_cmd_names"):
         filter_ref._cmpl_cmd_names = None
+
+
+def _refresh_sub_command_names(group_filter: CommandGroupFilter) -> None:
+    """Propagate a group rename/alias change to its sub-filters.
+
+    Sub-filters snapshot ``parent_command_names`` at registration and cache
+    their complete names, so after the group's fragment or aliases change they
+    would keep matching only the old prefix. Refresh the snapshots and clear
+    the caches (recursively for nested groups).
+    """
+    for sub in group_filter.sub_command_filters:
+        if isinstance(sub, CommandGroupFilter):
+            sub._cmpl_cmd_names = None
+            _refresh_sub_command_names(sub)
+        elif isinstance(sub, CommandFilter):
+            sub.parent_command_names = group_filter.get_complete_command_names()
+            sub._cmpl_cmd_names = None
 
 
 def _set_filter_aliases(
