@@ -9,7 +9,7 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import Image, Plain
 from astrbot.api.provider import LLMResponse, ProviderRequest
 from astrbot.core import logger
-from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.session_waiter import (
     FILTERS,
@@ -42,12 +42,14 @@ class Main(star.Star):
             logger.error(f"group chat context init failed: {e}")
 
     @filter.event_message_type(filter.EventMessageType.ALL, priority=maxsize)
-    async def handle_session_control_agent(self, event: AstrMessageEvent) -> None:
+    async def handle_session_control_agent(self, event: AstrMessageEvent):
         """会话控制代理"""
         for session_filter in FILTERS:
             session_id = session_filter.filter(event)
             if session_id in USER_SESSIONS:
-                await SessionWaiter.trigger(session_id, event)
+                result = await SessionWaiter.trigger(session_id, event)
+                if isinstance(result, MessageEventResult):
+                    yield result
                 event.stop_event()
 
     @filter.event_message_type(filter.EventMessageType.ALL, priority=maxsize - 1)

@@ -415,11 +415,15 @@ class TestSetResult:
 class TestStopContinueEvent:
     """Tests for stop_event and continue_event methods."""
 
-    def test_stop_event_creates_result_if_none(self, astr_message_event):
-        """Test stop_event creates result if none exists."""
+    def test_stop_event_does_not_create_result_if_none(self, astr_message_event):
+        """stop_event should NOT fabricate an empty result when none exists.
+
+        Fabricating an empty MessageEventResult triggers a spurious second
+        RespondStage invocation after the real reply has been sent and cleared.
+        """
         astr_message_event.stop_event()
 
-        assert astr_message_event._result is not None
+        assert astr_message_event._result is None
         assert astr_message_event.is_stopped() is True
 
     def test_stop_event_with_existing_result(self, astr_message_event):
@@ -429,11 +433,11 @@ class TestStopContinueEvent:
 
         assert astr_message_event.is_stopped() is True
 
-    def test_continue_event_creates_result_if_none(self, astr_message_event):
-        """Test continue_event creates result if none exists."""
+    def test_continue_event_does_not_create_result_if_none(self, astr_message_event):
+        """continue_event should NOT fabricate an empty result when none exists."""
         astr_message_event.continue_event()
 
-        assert astr_message_event._result is not None
+        assert astr_message_event._result is None
         assert astr_message_event.is_stopped() is False
 
     def test_continue_event_with_existing_result(self, astr_message_event):
