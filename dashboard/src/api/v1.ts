@@ -161,7 +161,7 @@ export interface ToolListParams {
   enabled?: boolean;
 }
 
-export interface SkillListParams {
+export interface SkillListParams extends Record<string, unknown> {
   enabled?: boolean;
   source?: string;
   include_inactive_plugins?: boolean;
