@@ -28,6 +28,7 @@ from astrbot.core.astr_main_agent_resources import (
     SANDBOX_MODE_PROMPT,
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
+    INJECTION_DETECTION_PROMPT,
 )
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.db import BaseDatabase
@@ -1115,6 +1116,7 @@ async def _handle_webchat(
 def _apply_llm_safety_mode(config: MainAgentBuildConfig, req: ProviderRequest) -> None:
     if config.safety_mode_strategy == "system_prompt":
         req.system_prompt = f"{LLM_SAFETY_MODE_SYSTEM_PROMPT}\n\n{req.system_prompt}"
+        req.system_prompt = f"{INJECTION_DETECTION_PROMPT}\n\n{req.system_prompt}"
     else:
         logger.warning(
             "Unsupported llm_safety_mode strategy: %s.",
