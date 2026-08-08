@@ -1,4 +1,11 @@
-import { computed, onBeforeUnmount, reactive, ref, type Ref } from "vue";
+import {
+  computed,
+  onBeforeUnmount,
+  reactive,
+  ref,
+  watch,
+  type Ref,
+} from "vue";
 import { chatApi, fileApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
 
@@ -150,6 +157,8 @@ export function useMessages(options: UseMessagesOptions) {
   const sessionProjects = reactive<Record<string, ChatSessionProject | null>>(
     {},
   );
+  let sessionPollTimer: number | undefined;
+  let isUnmounted = false;
 
   const activeMessages = computed(() =>
     options.currentSessionId.value
@@ -158,12 +167,41 @@ export function useMessages(options: UseMessagesOptions) {
   );
 
   onBeforeUnmount(() => {
+    isUnmounted = true;
+    if (sessionPollTimer !== undefined) {
+      window.clearTimeout(sessionPollTimer);
+      sessionPollTimer = undefined;
+    }
     cleanupConnections();
     for (const promise of attachmentBlobCache.values()) {
       promise.then((url) => URL.revokeObjectURL(url)).catch(() => {});
     }
     attachmentBlobCache.clear();
   });
+
+  watch(
+    () => options.currentSessionId.value,
+    (sessionId) => {
+      if (sessionPollTimer !== undefined) {
+        window.clearTimeout(sessionPollTimer);
+        sessionPollTimer = undefined;
+      }
+      if (!sessionId) return;
+
+      const poll = async () => {
+        if (!isSessionRunning(sessionId)) {
+          await loadSessionMessages(sessionId, false, false);
+        }
+
+        if (!isUnmounted && options.currentSessionId.value === sessionId) {
+          sessionPollTimer = window.setTimeout(poll, 2000);
+        }
+      };
+
+      sessionPollTimer = window.setTimeout(poll, 2000);
+    },
+    { immediate: true },
+  );
 
   function isSessionRunning(sessionId: string) {
     return Object.values(activeConnections).some(
