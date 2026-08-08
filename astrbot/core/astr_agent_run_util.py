@@ -331,10 +331,10 @@ async def run_agent(
                     if _should_stop_agent(astr_event):
                         agent_runner.request_stop()
                     if resp.type == "aborted":
-                        async for chain in _emit_buffered_llm_result(
-                            buffered_llm_chains, astr_event
-                        ):
-                            yield chain
+                        # Buffered output is intentionally transient. A stop
+                        # must not turn an unfinished response into a durable
+                        # UI result or persisted assistant history.
+                        buffered_llm_chains.clear()
                         astr_event.set_extra("agent_user_aborted", True)
                         astr_event.set_extra("agent_stop_requested", False)
                         return

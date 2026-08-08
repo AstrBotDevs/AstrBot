@@ -282,7 +282,7 @@ async def test_internal_save_to_history_sanitizes_images_without_mutating_agent_
 
 
 @pytest.mark.asyncio
-async def test_internal_save_to_history_keeps_aborted_error_response():
+async def test_internal_save_to_history_replaces_aborted_partial_response():
     stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.ctx = _pipeline_context(SimpleNamespace())
@@ -300,7 +300,10 @@ async def test_internal_save_to_history_keeps_aborted_error_response():
 
     stage.conv_manager.update_conversation.assert_not_awaited()
     assert pending is not None
-    assert pending.assistant_semantic_output == "partial output"
+    assert pending.assistant_semantic_output == "Output stopped."
+    assert list(pending.history_snapshot) == [
+        {"role": "user", "content": "Stop output."},
+    ]
 
 
 @pytest.mark.asyncio
@@ -413,7 +416,7 @@ async def test_internal_save_to_history_keeps_checkpoint_for_terminal_tool_turn(
 
 
 @pytest.mark.asyncio
-async def test_internal_save_to_history_saves_empty_placeholder_for_aborted_empty_response():
+async def test_internal_save_to_history_records_synthetic_aborted_turn():
     stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.ctx = _pipeline_context(SimpleNamespace())
@@ -428,7 +431,11 @@ async def test_internal_save_to_history_saves_empty_placeholder_for_aborted_empt
     )
 
     stage.conv_manager.update_conversation.assert_not_awaited()
-    assert pending is None
+    assert pending is not None
+    assert pending.assistant_semantic_output == "Output stopped."
+    assert list(pending.history_snapshot) == [
+        {"role": "user", "content": "Stop output."},
+    ]
 
 
 @pytest.mark.asyncio

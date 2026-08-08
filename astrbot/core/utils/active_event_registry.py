@@ -1,5 +1,9 @@
 from collections import defaultdict
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Protocol
+
+from astrbot import logger
+from astrbot.core.utils.error_redaction import safe_error
 
 if TYPE_CHECKING:
     from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -29,6 +33,9 @@ class ActiveEventRegistry:
 
     def __init__(self) -> None:
         self._events: dict[str, set[AstrMessageEvent]] = defaultdict(set)
+        self._agent_stop_callbacks: dict[
+            AstrMessageEvent, set[Callable[[], object]]
+        ] = defaultdict(set)
 
     def register(self, event: AstrMessageEvent) -> None:
         self._events[event.unified_msg_origin].add(event)
@@ -38,6 +45,28 @@ class ActiveEventRegistry:
         self._events[umo].discard(event)
         if not self._events[umo]:
             del self._events[umo]
+        self._agent_stop_callbacks.pop(event, None)
+
+    def register_agent_stop_callback(
+        self,
+        event: AstrMessageEvent,
+        callback: Callable[[], object],
+    ) -> None:
+        """Register the current runner's stop callback for one active event."""
+        self._agent_stop_callbacks[event].add(callback)
+
+    def unregister_agent_stop_callback(
+        self,
+        event: AstrMessageEvent,
+        callback: Callable[[], object],
+    ) -> None:
+        """Remove a runner stop callback after its lifecycle has ended."""
+        callbacks = self._agent_stop_callbacks.get(event)
+        if callbacks is None:
+            return
+        callbacks.discard(callback)
+        if not callbacks:
+            self._agent_stop_callbacks.pop(event, None)
 
     def stop_all(
         self,
@@ -74,5 +103,14 @@ class ActiveEventRegistry:
         for event in list(self._events.get(umo, [])):
             if event is not exclude:
                 event.set_extra("agent_stop_requested", True)
+                for callback in tuple(self._agent_stop_callbacks.get(event, ())):
+                    try:
+                        callback()
+                    except Exception as exc:  # noqa: BLE001
+                        logger.error(
+                            "Failed to stop active Agent for %s: %s",
+                            umo,
+                            safe_error("", exc),
+                        )
                 count += 1
         return count

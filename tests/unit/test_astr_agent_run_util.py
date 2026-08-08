@@ -250,7 +250,7 @@ async def test_run_agent_buffers_llm_results_until_done():
 
 
 @pytest.mark.asyncio
-async def test_run_agent_flushes_buffer_when_user_aborts():
+async def test_run_agent_discards_buffer_when_user_aborts():
     event = FakeEvent()
     runner = FakeRunner(
         [
@@ -268,10 +268,10 @@ async def test_run_agent_flushes_buffer_when_user_aborts():
         )
     ]
 
-    assert [chain.get_plain_text() for chain in outputs] == ["partial"]
+    assert outputs == []
     assert event.get_extra("agent_user_aborted") is True
     assert event.get_extra("agent_stop_requested") is False
-    assert event.clear_result_calls == 1
+    assert event.clear_result_calls == 0
 
 
 @pytest.mark.asyncio

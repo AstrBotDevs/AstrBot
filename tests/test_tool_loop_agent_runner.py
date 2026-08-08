@@ -250,6 +250,58 @@ class MockAbortableStreamProvider(MockProvider):
         )
 
 
+class CancellationDefiantProvider(MockProvider):
+    """Provider that ignores cancellation until the test explicitly releases it."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+        self.cancel_count = 0
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        del kwargs
+        self.started.set()
+        while not self.release.is_set():
+            try:
+                await self.release.wait()
+            except asyncio.CancelledError:
+                self.cancel_count += 1
+        return LLMResponse(role="assistant", completion_text="late response")
+
+
+class CancellationDefiantStreamProvider(MockProvider):
+    """Stream counterpart used to prove an interrupted generator is closed."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+        self.closed = False
+
+    async def text_chat_stream(self, **kwargs):
+        del kwargs
+        try:
+            yield LLMResponse(
+                role="assistant",
+                completion_text="partial ",
+                is_chunk=True,
+            )
+            self.started.set()
+            while not self.release.is_set():
+                try:
+                    await self.release.wait()
+                except asyncio.CancelledError:
+                    continue
+            yield LLMResponse(
+                role="assistant",
+                completion_text="late final",
+                is_chunk=False,
+            )
+        finally:
+            self.closed = True
+
+
 class MockToolCallProvider(MockProvider):
     def __init__(self, tool_name: str, tool_args: dict[str, str] | None = None):
         super().__init__()
@@ -1233,7 +1285,7 @@ async def test_empty_output_retries_exhausted_then_uses_fallback_provider(
 
 
 @pytest.mark.asyncio
-async def test_stop_signal_returns_aborted_and_persists_partial_message(
+async def test_stop_signal_returns_aborted_with_synthetic_terminal_message(
     runner, provider_request, mock_tool_executor, mock_hooks
 ):
     provider = MockAbortableStreamProvider()
@@ -1263,9 +1315,71 @@ async def test_stop_signal_returns_aborted_and_persists_partial_message(
     final_resp = runner.get_final_llm_resp()
     assert final_resp is not None
     assert final_resp.role == "assistant"
-    # When interrupted, the runner replaces completion_text with a system message
-    assert "interrupted" in final_resp.completion_text.lower()
-    assert runner.run_context.messages[-1].role == "assistant"
+    assert final_resp.completion_text == "Output stopped."
+
+
+@pytest.mark.asyncio
+async def test_stop_returns_promptly_for_cancellation_defiant_provider(
+    runner, provider_request, mock_tool_executor, mock_hooks, monkeypatch
+):
+    provider = CancellationDefiantProvider()
+    monkeypatch.setattr(runner, "STOP_CLEANUP_GRACE_SECONDS", 0.01)
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    step_iter = runner.step()
+    response_task = asyncio.create_task(anext(step_iter))
+    await asyncio.wait_for(provider.started.wait(), timeout=1)
+    runner.request_stop()
+
+    response = await asyncio.wait_for(response_task, timeout=1)
+    assert response.type == "aborted"
+    assert runner.was_aborted() is True
+    assert provider.cancel_count >= 1
+
+    provider.release.set()
+    for _ in range(20):
+        if not runner._stop_cleanup_tasks:
+            break
+        await asyncio.sleep(0.01)
+    assert runner._stop_cleanup_tasks == set()
+
+
+@pytest.mark.asyncio
+async def test_stop_closes_a_cancellation_defiant_provider_stream(
+    runner, provider_request, mock_tool_executor, mock_hooks, monkeypatch
+):
+    provider = CancellationDefiantStreamProvider()
+    monkeypatch.setattr(runner, "STOP_CLEANUP_GRACE_SECONDS", 0.01)
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=True,
+    )
+
+    step_iter = runner.step()
+    assert (await anext(step_iter)).type == "streaming_delta"
+    response_task = asyncio.create_task(anext(step_iter))
+    await asyncio.wait_for(provider.started.wait(), timeout=1)
+    runner.request_stop()
+
+    assert (await asyncio.wait_for(response_task, timeout=1)).type == "aborted"
+    provider.release.set()
+    for _ in range(20):
+        if provider.closed and not runner._stop_cleanup_tasks:
+            break
+        await asyncio.sleep(0.01)
+    assert provider.closed is True
+    assert runner._stop_cleanup_tasks == set()
 
 
 @pytest.mark.asyncio

@@ -53,6 +53,8 @@ from .....astr_agent_run_util import AgentRunner, run_agent, run_live_agent
 from ....context import PipelineContext, call_event_hook
 
 _FALLBACK_HISTORY_COMMITTER = AssistantHistoryCommitter()
+_STOP_HISTORY_USER_TEXT = "Stop output."
+_STOP_HISTORY_ASSISTANT_TEXT = "Output stopped."
 
 
 class InternalAgentSubStage:
@@ -327,6 +329,7 @@ class InternalAgentSubStage:
                 logger.debug("acquired session lock for llm request")
                 agent_runner: AgentRunner | None = None
                 runner_registered = False
+                runner_stop_callback = None
                 history_saved = False
                 try:
                     build_result = await self._build_checked_agent_runner(
@@ -371,6 +374,25 @@ class InternalAgentSubStage:
                     if reset_coro:
                         await reset_coro
 
+                    candidate_stop_callback = getattr(
+                        agent_runner,
+                        "request_stop",
+                        None,
+                    )
+                    if callable(candidate_stop_callback):
+                        runner_stop_callback = candidate_stop_callback
+                        registry = getattr(
+                            self.ctx.execution_context,
+                            "active_event_registry",
+                            None,
+                        )
+                        if registry is not None:
+                            registry.register_agent_stop_callback(
+                                event,
+                                runner_stop_callback,
+                            )
+                        else:
+                            runner_stop_callback = None
                     self.ctx.execution_context.follow_up_coordinator.register_active_runner(
                         event.unified_msg_origin,
                         agent_runner,
@@ -494,6 +516,11 @@ class InternalAgentSubStage:
                             event.unified_msg_origin,
                             agent_runner,
                         )
+                    if runner_stop_callback is not None:
+                        self.ctx.execution_context.active_event_registry.unregister_agent_stop_callback(
+                            event,
+                            runner_stop_callback,
+                        )
 
         except Exception as e:
             logger.error(
@@ -549,6 +576,12 @@ class InternalAgentSubStage:
         elif llm_response is None:
             llm_response = LLMResponse(role="assistant", completion_text="")
 
+        if user_aborted:
+            llm_response = LLMResponse(
+                role="assistant",
+                completion_text=_STOP_HISTORY_ASSISTANT_TEXT,
+            )
+
         if not llm_response.completion_text:
             logger.debug("LLM 响应为空，不保存记录。")
             return None
@@ -562,6 +595,32 @@ class InternalAgentSubStage:
             if message.role in ["assistant", "user"] and message._no_save:
                 continue
             messages_to_save.append(message)
+
+        if user_aborted:
+            # A stop is one synthetic turn.  Streaming deltas and partial tool
+            # work have already reached transient clients, but must never be
+            # replayed as durable conversation history.
+            last_user_index = max(
+                (
+                    index
+                    for index, message in enumerate(messages_to_save)
+                    if message.role == "user"
+                ),
+                default=0,
+            )
+            messages_to_save = messages_to_save[:last_user_index]
+            messages_to_save.extend(
+                [
+                    Message(
+                        role="user",
+                        content=_STOP_HISTORY_USER_TEXT,
+                    ),
+                    Message(
+                        role="assistant",
+                        content=_STOP_HISTORY_ASSISTANT_TEXT,
+                    ),
+                ]
+            )
 
         message_to_save = dump_messages_with_checkpoints(messages_to_save)
         # Replace only the terminal semantic assistant response later, after
@@ -630,10 +689,13 @@ class InternalAgentSubStage:
         stream: AsyncGenerator[MessageChain | None],
     ) -> AsyncGenerator[MessageChain | None]:
         """Freeze streaming history after Agent completion, before send returns."""
-        async for chain in stream:
-            yield chain
-        if agent_runner.done():
-            await self._capture_pending_history(event, req, agent_runner)
+        try:
+            async for chain in stream:
+                yield chain
+            if agent_runner.done():
+                await self._capture_pending_history(event, req, agent_runner)
+        finally:
+            await stream.aclose()
 
     async def _finalize_pending_history(
         self,
