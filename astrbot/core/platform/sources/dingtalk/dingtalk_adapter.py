@@ -228,13 +228,19 @@ class DingtalkPlatformAdapter(Platform):
                 or ""
             ).strip()
             if download_code and robot_code:
-                image_path = await self.download_ding_file(
-                    download_code,
-                    robot_code,
-                    "jpg",
-                )
-                if image_path:
-                    reply_chain.append(Image.fromFileSystem(image_path))
+                try:
+                    image_path = await self.download_ding_file(
+                        download_code,
+                        robot_code,
+                        "jpg",
+                    )
+                    if image_path:
+                        reply_chain.append(Image.fromFileSystem(image_path))
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to download quoted DingTalk image; "
+                        f"using placeholder: {e}"
+                    )
             if not reply_chain and quoted_text:
                 reply_chain.append(Plain(quoted_text))
         elif message_type == "richText":
@@ -256,14 +262,20 @@ class DingtalkPlatformAdapter(Platform):
                             or ""
                         ).strip()
                         if download_code and robot_code:
-                            image_path = await self.download_ding_file(
-                                download_code,
-                                robot_code,
-                                "jpg",
-                            )
-                            if image_path:
-                                reply_chain.append(Image.fromFileSystem(image_path))
-                                continue
+                            try:
+                                image_path = await self.download_ding_file(
+                                    download_code,
+                                    robot_code,
+                                    "jpg",
+                                )
+                                if image_path:
+                                    reply_chain.append(Image.fromFileSystem(image_path))
+                                    continue
+                            except Exception as e:
+                                logger.warning(
+                                    f"Failed to download quoted DingTalk image; "
+                                    f"using placeholder: {e}"
+                                )
                         reply_chain.append(Plain("[Image]"))
                         continue
                     item_text = item.get("content") or item.get("text")

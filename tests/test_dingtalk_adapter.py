@@ -356,3 +356,76 @@ async def test_dingtalk_picture_reply_downloads_quoted_image():
     assert len(reply.chain) == 1
     assert isinstance(reply.chain[0], Image)
     assert downloads == [("quoted-picture-code", "robot", "jpg")]
+
+
+@pytest.mark.asyncio
+async def test_dingtalk_picture_reply_falls_back_when_download_raises():
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+
+    async def failing_download(download_code, robot_code, ext):
+        raise OSError("download failed")
+
+    adapter.download_ding_file = failing_download
+    message = _dingtalk_group_message(
+        robotCode="robot",
+        msgtype="text",
+        text={
+            "content": "Keep this new message",
+            "isReplyMsg": True,
+            "repliedMsg": {
+                "msgType": "picture",
+                "msgId": "quoted-picture-message",
+                "content": {"downloadCode": "quoted-picture-code"},
+            },
+        },
+    )
+
+    result = await adapter.convert_msg(message)
+
+    reply = result.message[0]
+    assert result.message_str == "Keep this new message"
+    assert isinstance(reply, Reply)
+    assert len(reply.chain) == 1
+    assert isinstance(reply.chain[0], Plain)
+    assert reply.chain[0].text == "[Image]"
+    assert isinstance(result.message[1], Plain)
+    assert result.message[1].text == "Keep this new message"
+
+
+@pytest.mark.asyncio
+async def test_dingtalk_rich_text_reply_falls_back_when_download_raises():
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+
+    async def failing_download(download_code, robot_code, ext):
+        raise OSError("download failed")
+
+    adapter.download_ding_file = failing_download
+    message = _dingtalk_group_message(
+        robotCode="robot",
+        msgtype="text",
+        text={
+            "content": "Keep this new message",
+            "isReplyMsg": True,
+            "repliedMsg": {
+                "msgType": "richText",
+                "msgId": "rich-quoted-message",
+                "content": {
+                    "richText": [
+                        {"msgType": "text", "content": "Before "},
+                        {"msgType": "picture", "downloadCode": "image-code"},
+                        {"msgType": "text", "content": " after"},
+                    ]
+                },
+            },
+        },
+    )
+
+    result = await adapter.convert_msg(message)
+
+    reply = result.message[0]
+    assert result.message_str == "Keep this new message"
+    assert isinstance(reply, Reply)
+    assert [type(item) for item in reply.chain] == [Plain, Plain, Plain]
+    assert [item.text for item in reply.chain] == ["Before ", "[Image]", " after"]
+    assert isinstance(result.message[1], Plain)
+    assert result.message[1].text == "Keep this new message"
