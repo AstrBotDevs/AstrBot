@@ -20,7 +20,7 @@ from astrbot.core.utils.astrbot_path import (
 from astrbot.core.utils.io import ensure_dir, remove_dir
 
 from ..star.star import StarMetadata
-from ..zip_updater import _RepoZipUpdater
+from ..zip_updater import _RepoZipUpdater, _zip_slip_filter
 
 PLUGIN_METADATA_FILENAMES = ("metadata.yaml", "metadata.yml")
 PLUGIN_METADATA_REQUIRED_FIELDS = ("name", "desc", "version", "author")
@@ -459,6 +459,6 @@ class _PluginUpdater(_RepoZipUpdater):
         logger.info(f"Extracting archive: {zip_path}")
         with zipfile.ZipFile(zip_path, "r") as z:
             update_dir = self._resolve_archive_root_dir(z.namelist())
-            z.extractall(target_dir)
+            z.extractall(target_dir, filter=_zip_slip_filter)
 
         self._finalize_extracted_archive(zip_path, target_dir, update_dir)
