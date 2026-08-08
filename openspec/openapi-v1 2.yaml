@@ -1,0 +1,6152 @@
+openapi: 3.1.0
+info:
+  title: AstrBot OpenAPI v1
+  version: 0.1.0
+  description: >
+    Target REST contract for migrating AstrBot HTTP APIs to /api/v1.
+    Dynamic AstrBot configuration payloads are intentionally modeled as open
+    JSON objects because their schemas are provided at runtime by template
+    endpoints.
+    Developer API keys currently support these scopes only: bot, provider,
+    persona, im, config, chat, data, file, plugin, mcp, skill. The config scope also
+    grants bot and provider access.
+servers:
+  - url: http://localhost:6185
+    description: Local AstrBot server
+
+security:
+  - ApiKeyAuth: []
+
+tags:
+  - name: Open API
+  - name: Auth
+  - name: API Keys
+  - name: System Config
+  - name: Config Profiles
+  - name: Bot Config Routes
+  - name: Bots
+  - name: Provider Sources
+  - name: Providers
+  - name: Chat
+  - name: IM
+  - name: Files
+  - name: Plugins
+  - name: Plugin Sources
+  - name: Plugin Pages
+  - name: Commands
+  - name: Tools
+  - name: MCP
+  - name: Skills
+  - name: Knowledge Base
+  - name: Personas
+  - name: Sessions
+  - name: Conversations
+  - name: Stats
+  - name: Backups
+  - name: Updates
+  - name: Cron
+  - name: Logs
+  - name: T2I
+  - name: Subagents
+  - name: Webhooks
+
+paths:
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login to the dashboard API
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+        "401":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout from the dashboard API
+      operationId: logout
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/auth/setup-status:
+    get:
+      tags: [Auth]
+      summary: Get first-run setup status
+      operationId: getAuthSetupStatus
+      security: []
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/auth/setup:
+    post:
+      tags: [Auth]
+      summary: Complete first-run dashboard account setup
+      operationId: setupAuth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetupAuthRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/auth/totp/setup:
+    post:
+      tags: [Auth]
+      summary: Start or refresh TOTP setup
+      operationId: setupTotp
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TotpSetupRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/auth/totp/recovery:
+    post:
+      tags: [Auth]
+      summary: Generate or rotate TOTP recovery codes
+      operationId: recoverTotp
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/auth/account:
+    patch:
+      tags: [Auth]
+      summary: Update dashboard account credentials
+      operationId: updateAuthAccount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAccountRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/api-keys:
+    get:
+      tags: [API Keys]
+      summary: List OpenAPI keys
+      operationId: listApiKeys
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [API Keys]
+      summary: Create an OpenAPI key
+      operationId: createApiKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateApiKeyRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/api-keys/{key_id}/revoke:
+    post:
+      tags: [API Keys]
+      summary: Revoke an OpenAPI key
+      operationId: revokeApiKey
+      parameters:
+        - $ref: "#/components/parameters/KeyId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/api-keys/{key_id}:
+    delete:
+      tags: [API Keys]
+      summary: Delete an OpenAPI key
+      operationId: deleteApiKey
+      parameters:
+        - $ref: "#/components/parameters/KeyId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/system-config/schema:
+    get:
+      tags: [System Config]
+      summary: Get the system configuration schema
+      operationId: getSystemConfigSchema
+      x-astrbot-scope: config
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/system-config:
+    get:
+      tags: [System Config]
+      summary: Get the system configuration
+      operationId: getSystemConfig
+      x-astrbot-scope: config
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    put:
+      tags: [System Config]
+      summary: Replace the system configuration
+      operationId: updateSystemConfig
+      x-astrbot-scope: config
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DynamicConfig"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/system-config/runtime:
+    get:
+      tags: [System Config]
+      summary: Get runtime-enriched system configuration metadata
+      operationId: getSystemConfigRuntime
+      x-astrbot-scope: config
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/config-profiles/schema:
+    get:
+      tags: [Config Profiles]
+      summary: Get the configuration profile schema
+      operationId: getConfigProfileSchema
+      x-astrbot-scope: config
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/config-profiles:
+    get:
+      tags: [Config Profiles]
+      summary: List configuration profiles
+      operationId: listConfigProfiles
+      x-astrbot-scope: config
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Config Profiles]
+      summary: Create a configuration profile
+      operationId: createConfigProfile
+      x-astrbot-scope: config
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConfigProfileRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/config-profiles/{config_id}:
+    get:
+      tags: [Config Profiles]
+      summary: Get a configuration profile
+      operationId: getConfigProfile
+      x-astrbot-scope: config
+      parameters:
+        - $ref: "#/components/parameters/ConfigId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    put:
+      tags: [Config Profiles]
+      summary: Replace a configuration profile
+      operationId: updateConfigProfileContent
+      x-astrbot-scope: config
+      parameters:
+        - $ref: "#/components/parameters/ConfigId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DynamicConfig"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    patch:
+      tags: [Config Profiles]
+      summary: Rename a configuration profile
+      operationId: renameConfigProfile
+      x-astrbot-scope: config
+      parameters:
+        - $ref: "#/components/parameters/ConfigId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenameRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Config Profiles]
+      summary: Delete a configuration profile
+      operationId: deleteConfigProfile
+      x-astrbot-scope: config
+      parameters:
+        - $ref: "#/components/parameters/ConfigId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/config-routes:
+    get:
+      tags: [Bot Config Routes]
+      summary: List UMO to configuration profile bindings
+      operationId: listConfigRoutes
+      x-astrbot-scope: config
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    put:
+      tags: [Bot Config Routes]
+      summary: Replace all UMO to configuration profile bindings
+      operationId: replaceConfigRoutes
+      x-astrbot-scope: config
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfigRoutesReplaceRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/config-routes/{umo}:
+    put:
+      tags: [Bot Config Routes]
+      summary: Bind a UMO to a configuration profile
+      operationId: upsertConfigRoute
+      x-astrbot-scope: config
+      parameters:
+        - $ref: "#/components/parameters/Umo"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfigRouteUpsertRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Bot Config Routes]
+      summary: Remove a UMO configuration profile binding
+      operationId: deleteConfigRoute
+      x-astrbot-scope: config
+      parameters:
+        - $ref: "#/components/parameters/Umo"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/bot-types:
+    get:
+      tags: [Bots]
+      summary: List configurable bot types and their schemas
+      operationId: listBotTypes
+      x-astrbot-scope: bot
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/bot-types/{bot_type}/registration:
+    post:
+      tags: [Bots]
+      summary: Run a bot type registration flow action
+      operationId: registerBotType
+      x-astrbot-scope: bot
+      parameters:
+        - name: bot_type
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BotRegistrationRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/bots:
+    get:
+      tags: [Bots]
+      summary: List created bots and their configurations
+      operationId: listBots
+      x-astrbot-scope: bot
+      parameters:
+        - name: enabled
+          in: query
+          schema:
+            type: boolean
+        - name: type
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Bots]
+      summary: Create a bot from configuration
+      operationId: createBot
+      x-astrbot-scope: bot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BotConfigRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/bots/stats:
+    get:
+      tags: [Bots]
+      summary: List runtime status for all bots
+      operationId: listBotStats
+      x-astrbot-scope: bot
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/bots/by-id:
+    get:
+      tags: [Bots]
+      summary: Get a bot configuration by query ID
+      operationId: getBotById
+      x-astrbot-scope: bot
+      parameters:
+        - name: bot_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    put:
+      tags: [Bots]
+      summary: Replace a bot configuration by body ID
+      operationId: updateBotById
+      x-astrbot-scope: bot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bot_id, config]
+              properties:
+                bot_id:
+                  type: string
+                config:
+                  $ref: "#/components/schemas/DynamicConfig"
+              additionalProperties: false
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Bots]
+      summary: Delete a bot by query ID
+      operationId: deleteBotById
+      x-astrbot-scope: bot
+      parameters:
+        - name: bot_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/bots/enabled:
+    patch:
+      tags: [Bots]
+      summary: Enable or disable a bot by body ID
+      operationId: setBotEnabledById
+      x-astrbot-scope: bot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bot_id, enabled]
+              properties:
+                bot_id:
+                  type: string
+                enabled:
+                  type: boolean
+              additionalProperties: false
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/bots/test:
+    post:
+      tags: [Bots]
+      summary: Test a bot registration or connection by body ID
+      operationId: testBotById
+      x-astrbot-scope: bot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bot_id]
+              properties:
+                bot_id:
+                  type: string
+              additionalProperties: false
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/bots/{bot_id}:
+    get:
+      tags: [Bots]
+      summary: Get a bot configuration
+      operationId: getBot
+      x-astrbot-scope: bot
+      parameters:
+        - $ref: "#/components/parameters/BotId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    put:
+      tags: [Bots]
+      summary: Replace a bot configuration
+      operationId: updateBot
+      x-astrbot-scope: bot
+      parameters:
+        - $ref: "#/components/parameters/BotId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BotConfigRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Bots]
+      summary: Delete a bot
+      operationId: deleteBot
+      x-astrbot-scope: bot
+      parameters:
+        - $ref: "#/components/parameters/BotId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/bots/{bot_id}/enabled:
+    patch:
+      tags: [Bots]
+      summary: Enable or disable a bot
+      operationId: setBotEnabled
+      x-astrbot-scope: bot
+      parameters:
+        - $ref: "#/components/parameters/BotId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnabledPatch"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/bots/{bot_id}/test:
+    post:
+      tags: [Bots]
+      summary: Test a bot registration or connection
+      operationId: testBot
+      x-astrbot-scope: bot
+      parameters:
+        - $ref: "#/components/parameters/BotId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/providers/schema:
+    get:
+      tags: [Providers]
+      summary: Get the overall provider configuration schema
+      operationId: getProviderSchema
+      x-astrbot-scope: provider
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/provider-sources:
+    get:
+      tags: [Provider Sources]
+      summary: List provider sources
+      operationId: listProviderSources
+      x-astrbot-scope: provider
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Provider Sources]
+      summary: Create a provider source
+      operationId: createProviderSource
+      x-astrbot-scope: provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderSourceConfigRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/provider-sources/by-id:
+    get:
+      tags: [Provider Sources]
+      summary: Get a provider source by query ID
+      operationId: getProviderSourceById
+      x-astrbot-scope: provider
+      parameters:
+        - name: source_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    put:
+      tags: [Provider Sources]
+      summary: Update a provider source by body ID
+      operationId: upsertProviderSourceById
+      x-astrbot-scope: provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source_id, config]
+              properties:
+                source_id:
+                  type: string
+                config:
+                  $ref: "#/components/schemas/DynamicConfig"
+              additionalProperties: false
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Provider Sources]
+      summary: Delete a provider source by query ID
+      operationId: deleteProviderSourceById
+      x-astrbot-scope: provider
+      parameters:
+        - name: source_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/provider-sources/models:
+    get:
+      tags: [Provider Sources]
+      summary: List models available from a provider source by query ID
+      operationId: listProviderSourceModelsById
+      x-astrbot-scope: provider
+      parameters:
+        - name: source_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: capability
+          in: query
+          schema:
+            $ref: "#/components/schemas/ProviderCapability"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/provider-sources/providers:
+    get:
+      tags: [Providers]
+      summary: List providers under a provider source by query ID
+      operationId: listProvidersBySourceId
+      x-astrbot-scope: provider
+      parameters:
+        - name: source_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: capability
+          in: query
+          schema:
+            $ref: "#/components/schemas/ProviderCapability"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Providers]
+      summary: Create a provider under a provider source by body ID
+      operationId: createProviderInSourceById
+      x-astrbot-scope: provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source_id, config]
+              properties:
+                source_id:
+                  type: string
+                config:
+                  $ref: "#/components/schemas/DynamicConfig"
+              additionalProperties: false
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/provider-sources/{source_id}:
+    get:
+      tags: [Provider Sources]
+      summary: Get a provider source
+      operationId: getProviderSource
+      x-astrbot-scope: provider
+      parameters:
+        - $ref: "#/components/parameters/SourceId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    put:
+      tags: [Provider Sources]
+      summary: Update a provider source or create it if missing
+      operationId: upsertProviderSource
+      x-astrbot-scope: provider
+      parameters:
+        - $ref: "#/components/parameters/SourceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderSourceConfigRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Provider Sources]
+      summary: Delete a provider source and providers that reference it
+      operationId: deleteProviderSource
+      x-astrbot-scope: provider
+      parameters:
+        - $ref: "#/components/parameters/SourceId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/provider-sources/{source_id}/models:
+    get:
+      tags: [Provider Sources]
+      summary: List models available from a provider source
+      operationId: listProviderSourceModels
+      x-astrbot-scope: provider
+      parameters:
+        - $ref: "#/components/parameters/SourceId"
+        - name: capability
+          in: query
+          schema:
+            $ref: "#/components/schemas/ProviderCapability"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/provider-sources/{source_id}/providers:
+    get:
+      tags: [Providers]
+      summary: List providers under a provider source
+      operationId: listProvidersBySource
+      x-astrbot-scope: provider
+      parameters:
+        - $ref: "#/components/parameters/SourceId"
+        - name: capability
+          in: query
+          schema:
+            $ref: "#/components/schemas/ProviderCapability"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Providers]
+      summary: Create a provider under a provider source
+      operationId: createProviderInSource
+      x-astrbot-scope: provider
+      parameters:
+        - $ref: "#/components/parameters/SourceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderConfigRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/providers:
+    get:
+      tags: [Providers]
+      summary: List providers by capability or source
+      operationId: listProviders
+      x-astrbot-scope: provider
+      parameters:
+        - name: capability
+          in: query
+          schema:
+            $ref: "#/components/schemas/ProviderCapability"
+        - name: source_id
+          in: query
+          schema:
+            type: string
+        - name: enabled
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Providers]
+      summary: Create a standalone provider
+      operationId: createProvider
+      x-astrbot-scope: provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderConfigRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/providers/by-id:
+    get:
+      tags: [Providers]
+      summary: Get a provider configuration by query ID
+      operationId: getProviderById
+      x-astrbot-scope: provider
+      parameters:
+        - name: provider_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: merged
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    put:
+      tags: [Providers]
+      summary: Replace a provider configuration by body ID
+      operationId: updateProviderById
+      x-astrbot-scope: provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider_id, config]
+              properties:
+                provider_id:
+                  type: string
+                config:
+                  $ref: "#/components/schemas/DynamicConfig"
+              additionalProperties: false
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Providers]
+      summary: Delete a provider by query ID
+      operationId: deleteProviderById
+      x-astrbot-scope: provider
+      parameters:
+        - name: provider_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/providers/enabled:
+    patch:
+      tags: [Providers]
+      summary: Enable or disable a provider by body ID
+      operationId: setProviderEnabledById
+      x-astrbot-scope: provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider_id, enabled]
+              properties:
+                provider_id:
+                  type: string
+                enabled:
+                  type: boolean
+              additionalProperties: false
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/providers/test:
+    post:
+      tags: [Providers]
+      summary: Test a provider by body ID
+      operationId: testProviderById
+      x-astrbot-scope: provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider_id]
+              properties:
+                provider_id:
+                  type: string
+              additionalProperties: false
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/providers/embedding-dimension:
+    post:
+      tags: [Providers]
+      summary: Probe embedding dimension for a provider by body ID
+      operationId: getProviderEmbeddingDimensionById
+      x-astrbot-scope: provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider_id]
+              properties:
+                provider_id:
+                  type: string
+                provider_config:
+                  $ref: "#/components/schemas/DynamicConfig"
+              additionalProperties: false
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/providers/{provider_id}:
+    get:
+      tags: [Providers]
+      summary: Get a provider configuration
+      operationId: getProvider
+      x-astrbot-scope: provider
+      parameters:
+        - $ref: "#/components/parameters/ProviderId"
+        - name: merged
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    put:
+      tags: [Providers]
+      summary: Replace a provider configuration
+      operationId: updateProvider
+      x-astrbot-scope: provider
+      parameters:
+        - $ref: "#/components/parameters/ProviderId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderConfigRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Providers]
+      summary: Delete a provider
+      operationId: deleteProvider
+      x-astrbot-scope: provider
+      parameters:
+        - $ref: "#/components/parameters/ProviderId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DynamicConfig"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/providers/{provider_id}/enabled:
+    patch:
+      tags: [Providers]
+      summary: Enable or disable a provider
+      operationId: setProviderEnabled
+      x-astrbot-scope: provider
+      parameters:
+        - $ref: "#/components/parameters/ProviderId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnabledPatch"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/providers/{provider_id}/test:
+    post:
+      tags: [Providers]
+      summary: Test a provider
+      operationId: testProvider
+      x-astrbot-scope: provider
+      parameters:
+        - $ref: "#/components/parameters/ProviderId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/providers/{provider_id}/embedding-dimension:
+    post:
+      tags: [Providers]
+      summary: Probe embedding dimension for a provider
+      operationId: getProviderEmbeddingDimension
+      x-astrbot-scope: provider
+      parameters:
+        - $ref: "#/components/parameters/ProviderId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DynamicConfig"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/chat:
+    post:
+      tags: [Chat]
+      summary: Send a webchat message
+      operationId: sendChatMessage
+      x-astrbot-scope: chat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/chat/ws:
+    get:
+      tags: [Chat]
+      summary: Open a streaming chat WebSocket
+      operationId: openChatWebSocket
+      x-websocket: true
+      x-astrbot-scope: chat
+      parameters:
+        - name: api_key
+          in: query
+          schema:
+            type: string
+        - name: key
+          in: query
+          schema:
+            type: string
+      responses:
+        "101":
+          description: WebSocket upgrade accepted
+
+  /api/v1/live-chat/ws:
+    get:
+      tags: [Chat]
+      summary: Open the live voice chat WebSocket
+      operationId: openLiveChatWebSocket
+      x-websocket: true
+      x-astrbot-scope: chat
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "101":
+          description: WebSocket upgrade accepted
+
+  /api/v1/unified-chat/ws:
+    get:
+      tags: [Chat]
+      summary: Open the unified live/chat WebSocket
+      operationId: openUnifiedChatWebSocket
+      x-websocket: true
+      x-astrbot-scope: chat
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "101":
+          description: WebSocket upgrade accepted
+
+  /api/v1/chat/sessions:
+    get:
+      tags: [Chat]
+      summary: List webchat sessions
+      operationId: listChatSessions
+      x-astrbot-scope: chat
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: username
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/chat/sessions/new:
+    get:
+      tags: [Chat]
+      summary: Create a webchat session
+      operationId: createChatSession
+      x-astrbot-scope: chat
+      parameters:
+        - name: platform_id
+          in: query
+          schema:
+            type: string
+            default: webchat
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/chat/sessions/batch-delete:
+    post:
+      tags: [Chat]
+      summary: Delete multiple webchat sessions
+      operationId: batchDeleteChatSessions
+      x-astrbot-scope: chat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatSessionBatchDeleteRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/chat/sessions/{session_id}:
+    get:
+      tags: [Chat]
+      summary: Get a webchat session and its messages
+      operationId: getChatSession
+      x-astrbot-scope: chat
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    patch:
+      tags: [Chat]
+      summary: Update a webchat session
+      operationId: updateChatSession
+      x-astrbot-scope: chat
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatSessionPatchRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Chat]
+      summary: Delete a webchat session
+      operationId: deleteChatSession
+      x-astrbot-scope: chat
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/chat/sessions/{session_id}/stop:
+    post:
+      tags: [Chat]
+      summary: Stop active webchat work for a session
+      operationId: stopChatSession
+      x-astrbot-scope: chat
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/chat/sessions/{session_id}/messages/{message_id}:
+    patch:
+      tags: [Chat]
+      summary: Update the latest user message in a webchat session
+      operationId: updateChatMessage
+      x-astrbot-scope: chat
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - name: message_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatMessagePatchRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/chat/sessions/{session_id}/messages/{message_id}/regenerate:
+    post:
+      tags: [Chat]
+      summary: Regenerate a bot message in a webchat session
+      operationId: regenerateChatMessage
+      x-astrbot-scope: chat
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - name: message_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatMessageRegenerateRequest"
+      responses:
+        "200":
+          description: Server-sent chat stream or an error envelope
+
+  /api/v1/chat/configs:
+    get:
+      tags: [Chat]
+      summary: List chat-selectable configuration profiles
+      operationId: listChatConfigs
+      x-astrbot-scope: config
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/chat/threads:
+    post:
+      tags: [Chat]
+      summary: Create or reuse a side thread from a webchat message
+      operationId: createChatThread
+      x-astrbot-scope: chat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatThreadCreateRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/chat/threads/{thread_id}:
+    get:
+      tags: [Chat]
+      summary: Get a webchat side thread
+      operationId: getChatThread
+      x-astrbot-scope: chat
+      parameters:
+        - name: thread_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Chat]
+      summary: Delete a webchat side thread
+      operationId: deleteChatThread
+      x-astrbot-scope: chat
+      parameters:
+        - name: thread_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/chat/threads/{thread_id}/messages:
+    post:
+      tags: [Chat]
+      summary: Send a message inside a webchat side thread
+      operationId: sendChatThreadMessage
+      x-astrbot-scope: chat
+      parameters:
+        - name: thread_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatThreadMessageRequest"
+      responses:
+        "200":
+          description: Server-sent chat stream or an error envelope
+
+  /api/v1/chat/projects:
+    get:
+      tags: [Chat]
+      summary: List ChatUI projects
+      operationId: listChatProjects
+      x-astrbot-scope: chat
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Chat]
+      summary: Create a ChatUI project
+      operationId: createChatProject
+      x-astrbot-scope: chat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatProjectRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/chat/projects/{project_id}:
+    get:
+      tags: [Chat]
+      summary: Get a ChatUI project
+      operationId: getChatProject
+      x-astrbot-scope: chat
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    patch:
+      tags: [Chat]
+      summary: Update a ChatUI project
+      operationId: updateChatProject
+      x-astrbot-scope: chat
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatProjectRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Chat]
+      summary: Delete a ChatUI project
+      operationId: deleteChatProject
+      x-astrbot-scope: chat
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/chat/projects/{project_id}/sessions:
+    get:
+      tags: [Chat]
+      summary: List sessions in a ChatUI project
+      operationId: listChatProjectSessions
+      x-astrbot-scope: chat
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/chat/projects/{project_id}/sessions/{session_id}:
+    post:
+      tags: [Chat]
+      summary: Add a session to a ChatUI project
+      operationId: addChatProjectSession
+      x-astrbot-scope: chat
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/chat/projects/sessions/{session_id}:
+    delete:
+      tags: [Chat]
+      summary: Remove a session from its ChatUI project
+      operationId: removeChatProjectSession
+      x-astrbot-scope: chat
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/im/messages:
+    post:
+      tags: [IM]
+      summary: Send a message to a UMO
+      operationId: sendImMessage
+      x-astrbot-scope: im
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImMessageRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/im/bots:
+    get:
+      tags: [IM]
+      summary: List active IM bot IDs
+      operationId: listImBots
+      x-astrbot-scope: im
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/files:
+    post:
+      tags: [Files]
+      summary: Upload a file
+      operationId: uploadFile
+      x-astrbot-scope: file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/FileUploadRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/file:
+    post:
+      tags: [Open API]
+      summary: Upload a file
+      operationId: uploadOpenApiFile
+      x-astrbot-scope: file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/FileUploadRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    get:
+      tags: [Open API]
+      summary: Download an uploaded file by attachment ID
+      operationId: downloadOpenApiFile
+      x-astrbot-scope: file
+      parameters:
+        - $ref: "#/components/parameters/AttachmentIdQuery"
+      responses:
+        "200":
+          description: File content or an error envelope
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /api/v1/files/content:
+    get:
+      tags: [Files]
+      summary: Get an uploaded file by stored filename
+      operationId: getFileByName
+      x-astrbot-scope: file
+      parameters:
+        - name: filename
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: File bytes or an error envelope
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /api/v1/files/tokens/{file_token}:
+    get:
+      tags: [Files]
+      summary: Get a tokenized public file
+      operationId: getTokenFile
+      x-astrbot-scope: file
+      parameters:
+        - name: file_token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tokenized file bytes or an error envelope
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /api/v1/files/{attachment_id}:
+    get:
+      tags: [Files]
+      summary: Get attachment metadata
+      operationId: getAttachment
+      x-astrbot-scope: file
+      parameters:
+        - $ref: "#/components/parameters/AttachmentId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Files]
+      summary: Delete an attachment
+      operationId: deleteAttachment
+      x-astrbot-scope: file
+      parameters:
+        - $ref: "#/components/parameters/AttachmentId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/files/{attachment_id}/content:
+    get:
+      tags: [Files]
+      summary: Download attachment content
+      operationId: downloadAttachment
+      x-astrbot-scope: file
+      parameters:
+        - $ref: "#/components/parameters/AttachmentId"
+      responses:
+        "200":
+          description: File content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /api/v1/plugins:
+    get:
+      tags: [Plugins]
+      summary: List installed plugins
+      operationId: listPlugins
+      x-astrbot-scope: plugin
+      parameters:
+        - name: include_reserved
+          in: query
+          schema:
+            type: boolean
+            default: true
+        - name: enabled
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/by-id:
+    get:
+      tags: [Plugins]
+      summary: Get plugin details by query ID
+      operationId: getPluginById
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Plugins]
+      summary: Uninstall a plugin by query ID
+      operationId: uninstallPluginById
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_id
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                delete_config:
+                  type: boolean
+                delete_data:
+                  type: boolean
+              additionalProperties: true
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/config:
+    get:
+      tags: [Plugins]
+      summary: Get plugin configuration by query ID
+      operationId: getPluginConfigById
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    put:
+      tags: [Plugins]
+      summary: Save plugin configuration by body ID
+      operationId: updatePluginConfigById
+      x-astrbot-scope: plugin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plugin_id, config]
+              properties:
+                plugin_id:
+                  type: string
+                config:
+                  $ref: "#/components/schemas/DynamicConfig"
+              additionalProperties: false
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/config/schema:
+    get:
+      tags: [Plugins]
+      summary: Get plugin configuration schema by query ID
+      operationId: getPluginConfigSchemaById
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/config-files:
+    get:
+      tags: [Plugins]
+      summary: List uploaded files for a plugin file configuration item by query ID
+      operationId: listPluginConfigFilesById
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: config_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Plugins]
+      summary: Upload files for a plugin file configuration item by query ID
+      operationId: uploadPluginConfigFilesById
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: config_key
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Plugins]
+      summary: Delete a plugin file configuration upload by query ID
+      operationId: deletePluginConfigFileById
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_id
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginConfigFileDeleteRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/readme:
+    get:
+      tags: [Plugins]
+      summary: Get plugin README content by query ID
+      operationId: getPluginReadmeById
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Text"
+
+  /api/v1/plugins/changelog:
+    get:
+      tags: [Plugins]
+      summary: Get plugin CHANGELOG content by query ID
+      operationId: getPluginChangelogById
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Text"
+
+  /api/v1/plugins/reload:
+    post:
+      tags: [Plugins]
+      summary: Reload a plugin by body ID
+      operationId: reloadPluginById
+      x-astrbot-scope: plugin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plugin_id]
+              properties:
+                plugin_id:
+                  type: string
+              additionalProperties: false
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/enabled:
+    patch:
+      tags: [Plugins]
+      summary: Enable or disable a plugin by body ID
+      operationId: setPluginEnabledById
+      x-astrbot-scope: plugin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plugin_id, enabled]
+              properties:
+                plugin_id:
+                  type: string
+                enabled:
+                  type: boolean
+              additionalProperties: false
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/pages:
+    get:
+      tags: [Plugin Pages]
+      summary: List plugin pages by query ID
+      operationId: listPluginPagesById
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/page:
+    get:
+      tags: [Plugin Pages]
+      summary: Get plugin page entry HTML by query ID
+      operationId: getPluginPageById
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: page_name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Html"
+
+  /api/v1/plugins/page/assets:
+    get:
+      tags: [Plugin Pages]
+      summary: Get a plugin page asset by query ID
+      operationId: getPluginPageAssetById
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: page_name
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: asset_path
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Plugin asset content
+
+  /api/v1/plugins/{plugin_id}:
+    get:
+      tags: [Plugins]
+      summary: Get plugin details
+      operationId: getPlugin
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                delete_config:
+                  type: boolean
+                delete_data:
+                  type: boolean
+              additionalProperties: true
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Plugins]
+      summary: Uninstall a plugin
+      operationId: uninstallPlugin
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                delete_config:
+                  type: boolean
+                delete_data:
+                  type: boolean
+              additionalProperties: true
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/{plugin_id}/config:
+    get:
+      tags: [Plugins]
+      summary: Get plugin configuration
+      operationId: getPluginConfig
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    put:
+      tags: [Plugins]
+      summary: Save plugin configuration
+      operationId: updatePluginConfig
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DynamicConfig"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/{plugin_id}/config/schema:
+    get:
+      tags: [Plugins]
+      summary: Get plugin configuration schema
+      operationId: getPluginConfigSchema
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/{plugin_id}/config-files/{config_key}:
+    get:
+      tags: [Plugins]
+      summary: List uploaded files for a plugin file configuration item
+      operationId: listPluginConfigFiles
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+        - name: config_key
+          in: path
+          required: true
+          description: URL-encoded configuration key path.
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Plugins]
+      summary: Upload files for a plugin file configuration item
+      operationId: uploadPluginConfigFiles
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+        - name: config_key
+          in: path
+          required: true
+          description: URL-encoded configuration key path.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/{plugin_id}/config-files:
+    delete:
+      tags: [Plugins]
+      summary: Delete a plugin file configuration upload
+      operationId: deletePluginConfigFile
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginConfigFileDeleteRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/{plugin_id}/readme:
+    get:
+      tags: [Plugins]
+      summary: Get plugin README content
+      operationId: getPluginReadme
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Text"
+
+  /api/v1/plugins/{plugin_id}/changelog:
+    get:
+      tags: [Plugins]
+      summary: Get plugin CHANGELOG content
+      operationId: getPluginChangelog
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Text"
+
+  /api/v1/plugins/{plugin_id}/reload:
+    post:
+      tags: [Plugins]
+      summary: Reload a plugin
+      operationId: reloadPlugin
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/{plugin_id}/source:
+    post:
+      tags: [Plugins]
+      summary: Bind an installed plugin to a marketplace source
+      operationId: bindPluginSource
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginSourceBindRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/{plugin_id}/enabled:
+    patch:
+      tags: [Plugins]
+      summary: Enable or disable a plugin
+      operationId: setPluginEnabled
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnabledPatch"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/{plugin_id}/update:
+    post:
+      tags: [Plugins]
+      summary: Update or reinstall a plugin
+      operationId: updatePlugin
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginUpdateRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/update:
+    post:
+      tags: [Plugins]
+      summary: Update multiple plugins
+      operationId: updatePlugins
+      x-astrbot-scope: plugin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginBatchUpdateRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/version-support/check:
+    post:
+      tags: [Plugins]
+      summary: Check whether a plugin version constraint is supported
+      operationId: checkPluginVersionSupport
+      x-astrbot-scope: plugin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginVersionSupportRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/validate/repo:
+    post:
+      tags: [Plugins]
+      summary: Validate a GitHub plugin repository before installation
+      operationId: validatePluginRepo
+      x-astrbot-scope: plugin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginValidateRepoRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/failed:
+    get:
+      tags: [Plugins]
+      summary: List failed plugins and errors
+      operationId: listFailedPlugins
+      x-astrbot-scope: plugin
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/failed/{plugin_id}:
+    delete:
+      tags: [Plugins]
+      summary: Uninstall a failed plugin
+      operationId: uninstallFailedPlugin
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                delete_config:
+                  type: boolean
+                delete_data:
+                  type: boolean
+              additionalProperties: true
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/failed/{plugin_id}/reload:
+    post:
+      tags: [Plugins]
+      summary: Reload a failed plugin
+      operationId: reloadFailedPlugin
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/install/github:
+    post:
+      tags: [Plugins]
+      summary: Install a plugin from GitHub
+      operationId: installPluginFromGithub
+      x-astrbot-scope: plugin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginGithubInstallRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+  /api/v1/plugins/install/url:
+    post:
+      tags: [Plugins]
+      summary: Install a plugin from a downloadable ZIP URL
+      operationId: installPluginFromUrl
+      x-astrbot-scope: plugin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginUrlInstallRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/install/upload:
+    post:
+      tags: [Plugins]
+      summary: Install a plugin from an uploaded ZIP file
+      operationId: installPluginFromUpload
+      x-astrbot-scope: plugin
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/PluginUploadInstallRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/market:
+    get:
+      tags: [Plugins]
+      summary: List plugin marketplace entries
+      operationId: listPluginMarket
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [recommended, downloads, updated, name]
+        - name: keyword
+          in: query
+          schema:
+            type: string
+        - name: force_refresh
+          in: query
+          schema:
+            type: boolean
+        - name: custom_registry
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/market/categories:
+    get:
+      tags: [Plugins]
+      summary: List plugin marketplace categories
+      operationId: listPluginMarketCategories
+      x-astrbot-scope: plugin
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugin-sources:
+    get:
+      tags: [Plugin Sources]
+      summary: List plugin sources
+      operationId: listPluginSources
+      x-astrbot-scope: plugin
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Plugin Sources]
+      summary: Add a plugin source
+      operationId: createPluginSource
+      x-astrbot-scope: plugin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginSourceRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    put:
+      tags: [Plugin Sources]
+      summary: Replace plugin sources
+      operationId: replacePluginSources
+      x-astrbot-scope: plugin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sources]
+              properties:
+                sources:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/PluginSourceRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugin-sources/{source_id}:
+    delete:
+      tags: [Plugin Sources]
+      summary: Delete a plugin source
+      operationId: deletePluginSource
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/SourceId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugin-sources/by-id:
+    delete:
+      tags: [Plugin Sources]
+      summary: Delete a plugin source by query ID
+      operationId: deletePluginSourceById
+      x-astrbot-scope: plugin
+      parameters:
+        - name: source_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/{plugin_id}/pages:
+    get:
+      tags: [Plugin Pages]
+      summary: List plugin pages
+      operationId: listPluginPages
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/{plugin_id}/pages/{page_name}:
+    get:
+      tags: [Plugin Pages]
+      summary: Get plugin page entry HTML
+      operationId: getPluginPage
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+        - name: page_name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Html"
+
+  /api/v1/plugins/{plugin_id}/pages/{page_name}/assets/{asset_path}:
+    get:
+      tags: [Plugin Pages]
+      summary: Get a plugin page asset
+      operationId: getPluginPageAsset
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+        - name: page_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: asset_path
+          in: path
+          required: true
+          description: URL-encoded relative asset path.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Plugin asset content
+
+  /api/v1/plugins/page-bridge-sdk.js:
+    get:
+      tags: [Plugin Pages]
+      summary: Get the plugin page bridge SDK
+      operationId: getPluginPageBridgeSdk
+      x-astrbot-scope: plugin
+      responses:
+        "200":
+          description: JavaScript bridge SDK
+          content:
+            application/javascript:
+              schema:
+                type: string
+
+  /api/v1/plugins/extensions/{plugin_path}:
+    get:
+      tags: [Plugin Pages]
+      summary: Proxy a plugin extension GET route
+      operationId: getPluginExtensionRoute
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_path
+          in: path
+          required: true
+          description: Plugin extension path after /api/plug/. It may contain slash-separated segments.
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Plugin Pages]
+      summary: Proxy a plugin extension POST route
+      operationId: postPluginExtensionRoute
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_path
+          in: path
+          required: true
+          description: Plugin extension path after /api/plug/. It may contain slash-separated segments.
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DynamicConfig"
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    put:
+      tags: [Plugin Pages]
+      summary: Proxy a plugin extension PUT route
+      operationId: putPluginExtensionRoute
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_path
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DynamicConfig"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    patch:
+      tags: [Plugin Pages]
+      summary: Proxy a plugin extension PATCH route
+      operationId: patchPluginExtensionRoute
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_path
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DynamicConfig"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Plugin Pages]
+      summary: Proxy a plugin extension DELETE route
+      operationId: deletePluginExtensionRoute
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_path
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/commands:
+    get:
+      tags: [Commands]
+      summary: List plugin commands
+      operationId: listCommands
+      x-astrbot-scope: plugin
+      parameters:
+        - name: config_id
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/commands/{command_id}:
+    patch:
+      tags: [Commands]
+      summary: Update command enabled state, alias, or permission group
+      operationId: updateCommand
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/CommandId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommandPatchRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/commands/conflicts:
+    get:
+      tags: [Commands]
+      summary: List command conflicts
+      operationId: listCommandConflicts
+      x-astrbot-scope: plugin
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/tools:
+    get:
+      tags: [Tools]
+      summary: List LLM tools
+      operationId: listTools
+      x-astrbot-scope: tool
+      parameters:
+        - name: origin
+          in: query
+          schema:
+            type: string
+            enum: [builtin, plugin, mcp]
+        - name: enabled
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/tools/{tool_id}/enabled:
+    patch:
+      tags: [Tools]
+      summary: Enable or disable an LLM tool
+      operationId: setToolEnabled
+      x-astrbot-scope: tool
+      parameters:
+        - $ref: "#/components/parameters/ToolId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnabledPatch"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/tools/{tool_id}/permission:
+    patch:
+      tags: [Tools]
+      summary: Update an LLM tool permission
+      operationId: setToolPermission
+      x-astrbot-scope: tool
+      parameters:
+        - $ref: "#/components/parameters/ToolId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ToolPermissionPatch"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/mcp/servers:
+    get:
+      tags: [MCP]
+      summary: List MCP servers
+      operationId: listMcpServers
+      x-astrbot-scope: mcp
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [MCP]
+      summary: Add an MCP server
+      operationId: createMcpServer
+      x-astrbot-scope: mcp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/McpServerConfig"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/mcp/servers/by-name:
+    put:
+      tags: [MCP]
+      summary: Update an MCP server by body name
+      operationId: updateMcpServerByName
+      x-astrbot-scope: mcp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [server_name]
+              properties:
+                server_name:
+                  type: string
+                config:
+                  $ref: "#/components/schemas/DynamicConfig"
+                enabled:
+                  type: boolean
+              additionalProperties: true
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [MCP]
+      summary: Delete an MCP server by query name
+      operationId: deleteMcpServerByName
+      x-astrbot-scope: mcp
+      parameters:
+        - name: server_name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/mcp/servers/enabled:
+    patch:
+      tags: [MCP]
+      summary: Enable or disable an MCP server by body name
+      operationId: setMcpServerEnabledByName
+      x-astrbot-scope: mcp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [server_name, enabled]
+              properties:
+                server_name:
+                  type: string
+                enabled:
+                  type: boolean
+              additionalProperties: false
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/mcp/servers/test:
+    post:
+      tags: [MCP]
+      summary: Test an MCP server connection by body name
+      operationId: testMcpServerByName
+      x-astrbot-scope: mcp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [server_name]
+              properties:
+                server_name:
+                  type: string
+                mcp_server_config:
+                  $ref: "#/components/schemas/DynamicConfig"
+                config:
+                  $ref: "#/components/schemas/DynamicConfig"
+              additionalProperties: true
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/mcp/servers/{server_name}:
+    put:
+      tags: [MCP]
+      summary: Update an MCP server
+      operationId: updateMcpServer
+      x-astrbot-scope: mcp
+      parameters:
+        - $ref: "#/components/parameters/ServerName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/McpServerConfig"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [MCP]
+      summary: Delete an MCP server
+      operationId: deleteMcpServer
+      x-astrbot-scope: mcp
+      parameters:
+        - $ref: "#/components/parameters/ServerName"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/mcp/servers/{server_name}/enabled:
+    patch:
+      tags: [MCP]
+      summary: Enable or disable an MCP server
+      operationId: setMcpServerEnabled
+      x-astrbot-scope: mcp
+      parameters:
+        - $ref: "#/components/parameters/ServerName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnabledPatch"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/mcp/servers/{server_name}/test:
+    post:
+      tags: [MCP]
+      summary: Test an MCP server connection
+      operationId: testMcpServer
+      x-astrbot-scope: mcp
+      parameters:
+        - $ref: "#/components/parameters/ServerName"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mcp_server_config:
+                  type: object
+                  additionalProperties: true
+              additionalProperties: true
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/mcp/providers/modelscope/sync:
+    post:
+      tags: [MCP]
+      summary: Sync MCP servers from ModelScope
+      operationId: syncModelScopeMcpServers
+      x-astrbot-scope: mcp
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ModelScopeSyncRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/skills:
+    get:
+      tags: [Skills]
+      summary: List skills
+      operationId: listSkills
+      x-astrbot-scope: skill
+      parameters:
+        - name: enabled
+          in: query
+          schema:
+            type: boolean
+        - name: source
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Skills]
+      summary: Upload or import a skill archive
+      operationId: uploadSkill
+      x-astrbot-scope: skill
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/SkillUploadRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/skills/batch:
+    post:
+      tags: [Skills]
+      summary: Upload multiple skill archives
+      operationId: uploadSkillsBatch
+      x-astrbot-scope: skill
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [files]
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/skills/by-name:
+    patch:
+      tags: [Skills]
+      summary: Update skill metadata or enabled state by body name
+      operationId: updateSkillByName
+      x-astrbot-scope: skill
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [skill_name]
+              properties:
+                skill_name:
+                  type: string
+                enabled:
+                  type: boolean
+                active:
+                  type: boolean
+              additionalProperties: true
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Skills]
+      summary: Delete a skill by query name
+      operationId: deleteSkillByName
+      x-astrbot-scope: skill
+      parameters:
+        - name: skill_name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/skills/archive:
+    get:
+      tags: [Skills]
+      summary: Download a skill archive by query name
+      operationId: downloadSkillByName
+      x-astrbot-scope: skill
+      parameters:
+        - name: skill_name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Skill archive
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+
+  /api/v1/skills/files:
+    get:
+      tags: [Skills]
+      summary: List files in a skill by query name
+      operationId: listSkillFilesByName
+      x-astrbot-scope: skill
+      parameters:
+        - name: skill_name
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/skills/file:
+    get:
+      tags: [Skills]
+      summary: Get skill file content by query name and path
+      operationId: getSkillFileByName
+      x-astrbot-scope: skill
+      parameters:
+        - name: skill_name
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Text"
+    put:
+      tags: [Skills]
+      summary: Update skill file content by body name and path
+      operationId: updateSkillFileByName
+      x-astrbot-scope: skill
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [skill_name, path, content]
+              properties:
+                skill_name:
+                  type: string
+                path:
+                  type: string
+                content:
+                  type: string
+              additionalProperties: false
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/skills/{skill_name}:
+    patch:
+      tags: [Skills]
+      summary: Update skill metadata or enabled state
+      operationId: updateSkill
+      x-astrbot-scope: skill
+      parameters:
+        - $ref: "#/components/parameters/SkillName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SkillPatchRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Skills]
+      summary: Delete a skill
+      operationId: deleteSkill
+      x-astrbot-scope: skill
+      parameters:
+        - $ref: "#/components/parameters/SkillName"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/skills/{skill_name}/archive:
+    get:
+      tags: [Skills]
+      summary: Download a skill archive
+      operationId: downloadSkill
+      x-astrbot-scope: skill
+      parameters:
+        - $ref: "#/components/parameters/SkillName"
+      responses:
+        "200":
+          description: Skill archive
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+
+  /api/v1/skills/{skill_name}/files:
+    get:
+      tags: [Skills]
+      summary: List files in a skill
+      operationId: listSkillFiles
+      x-astrbot-scope: skill
+      parameters:
+        - $ref: "#/components/parameters/SkillName"
+        - name: path
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/skills/{skill_name}/files/{file_path}:
+    get:
+      tags: [Skills]
+      summary: Get skill file content
+      operationId: getSkillFile
+      x-astrbot-scope: skill
+      parameters:
+        - $ref: "#/components/parameters/SkillName"
+        - $ref: "#/components/parameters/FilePath"
+      responses:
+        "200":
+          $ref: "#/components/responses/Text"
+    put:
+      tags: [Skills]
+      summary: Update skill file content
+      operationId: updateSkillFile
+      x-astrbot-scope: skill
+      parameters:
+        - $ref: "#/components/parameters/SkillName"
+        - $ref: "#/components/parameters/FilePath"
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema:
+              type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/skills/neo/candidates:
+    get:
+      tags: [Skills]
+      summary: List Shipyard Neo skill candidates
+      operationId: listNeoSkillCandidates
+      x-astrbot-scope: skill
+      parameters:
+        - name: skill_key
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/skills/neo/releases:
+    get:
+      tags: [Skills]
+      summary: List Shipyard Neo skill releases
+      operationId: listNeoSkillReleases
+      x-astrbot-scope: skill
+      parameters:
+        - name: skill_key
+          in: query
+          schema:
+            type: string
+        - name: stage
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/skills/neo/payload:
+    get:
+      tags: [Skills]
+      summary: Get a Shipyard Neo skill payload
+      operationId: getNeoSkillPayload
+      x-astrbot-scope: skill
+      parameters:
+        - name: payload_ref
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/skills/neo/evaluate:
+    post:
+      tags: [Skills]
+      summary: Evaluate a Shipyard Neo skill candidate
+      operationId: evaluateNeoSkillCandidate
+      x-astrbot-scope: skill
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NeoCandidateActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/skills/neo/promote:
+    post:
+      tags: [Skills]
+      summary: Promote a Shipyard Neo skill candidate
+      operationId: promoteNeoSkillCandidate
+      x-astrbot-scope: skill
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NeoCandidateActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/skills/neo/rollback:
+    post:
+      tags: [Skills]
+      summary: Roll back a Shipyard Neo skill release
+      operationId: rollbackNeoSkillRelease
+      x-astrbot-scope: skill
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NeoReleaseActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/skills/neo/sync:
+    post:
+      tags: [Skills]
+      summary: Sync a Shipyard Neo skill release
+      operationId: syncNeoSkillRelease
+      x-astrbot-scope: skill
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NeoReleaseActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/skills/neo/candidates/delete:
+    post:
+      tags: [Skills]
+      summary: Delete a Shipyard Neo skill candidate
+      operationId: deleteNeoSkillCandidate
+      x-astrbot-scope: skill
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NeoCandidateActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/skills/neo/releases/delete:
+    post:
+      tags: [Skills]
+      summary: Delete a Shipyard Neo skill release
+      operationId: deleteNeoSkillRelease
+      x-astrbot-scope: skill
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NeoReleaseActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/knowledge-bases:
+    get:
+      tags: [Knowledge Base]
+      summary: List knowledge bases
+      operationId: listKnowledgeBases
+      x-astrbot-scope: kb
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: refresh_stats
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Knowledge Base]
+      summary: Create a knowledge base
+      operationId: createKnowledgeBase
+      x-astrbot-scope: kb
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeBaseCreateRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/knowledge-bases/{kb_id}:
+    get:
+      tags: [Knowledge Base]
+      summary: Get a knowledge base
+      operationId: getKnowledgeBase
+      x-astrbot-scope: kb
+      parameters:
+        - $ref: "#/components/parameters/KbId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    put:
+      tags: [Knowledge Base]
+      summary: Update a knowledge base
+      operationId: updateKnowledgeBase
+      x-astrbot-scope: kb
+      parameters:
+        - $ref: "#/components/parameters/KbId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeBaseRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Knowledge Base]
+      summary: Delete a knowledge base
+      operationId: deleteKnowledgeBase
+      x-astrbot-scope: kb
+      parameters:
+        - $ref: "#/components/parameters/KbId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/knowledge-bases/{kb_id}/stats:
+    get:
+      tags: [Knowledge Base]
+      summary: Get knowledge base stats
+      operationId: getKnowledgeBaseStats
+      x-astrbot-scope: kb
+      parameters:
+        - $ref: "#/components/parameters/KbId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/knowledge-bases/{kb_id}/documents:
+    get:
+      tags: [Knowledge Base]
+      summary: List knowledge base documents
+      operationId: listKnowledgeDocuments
+      x-astrbot-scope: kb
+      parameters:
+        - $ref: "#/components/parameters/KbId"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter documents by name (case-insensitive partial match).
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Knowledge Base]
+      summary: Upload a document to a knowledge base
+      operationId: uploadKnowledgeDocument
+      x-astrbot-scope: kb
+      parameters:
+        - $ref: "#/components/parameters/KbId"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/KnowledgeDocumentUploadRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/knowledge-bases/{kb_id}/documents/import:
+    post:
+      tags: [Knowledge Base]
+      summary: Import documents already available on the server
+      operationId: importKnowledgeDocuments
+      x-astrbot-scope: kb
+      parameters:
+        - $ref: "#/components/parameters/KbId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeDocumentImportRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/knowledge-bases/{kb_id}/documents/import-url:
+    post:
+      tags: [Knowledge Base]
+      summary: Import a document from URL
+      operationId: importKnowledgeDocumentFromUrl
+      x-astrbot-scope: kb
+      parameters:
+        - $ref: "#/components/parameters/KbId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeDocumentUrlImportRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/knowledge-bases/{kb_id}/documents/{document_id}:
+    get:
+      tags: [Knowledge Base]
+      summary: Get a knowledge base document
+      operationId: getKnowledgeDocument
+      x-astrbot-scope: kb
+      parameters:
+        - $ref: "#/components/parameters/KbId"
+        - $ref: "#/components/parameters/DocumentId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Knowledge Base]
+      summary: Delete a knowledge base document
+      operationId: deleteKnowledgeDocument
+      x-astrbot-scope: kb
+      parameters:
+        - $ref: "#/components/parameters/KbId"
+        - $ref: "#/components/parameters/DocumentId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/knowledge-bases/{kb_id}/chunks:
+    get:
+      tags: [Knowledge Base]
+      summary: List document chunks
+      operationId: listKnowledgeChunks
+      x-astrbot-scope: kb
+      parameters:
+        - $ref: "#/components/parameters/KbId"
+        - name: document_id
+          in: query
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/knowledge-bases/{kb_id}/chunks/{chunk_id}:
+    delete:
+      tags: [Knowledge Base]
+      summary: Delete a document chunk
+      operationId: deleteKnowledgeChunk
+      x-astrbot-scope: kb
+      parameters:
+        - $ref: "#/components/parameters/KbId"
+        - $ref: "#/components/parameters/ChunkId"
+        - name: document_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/knowledge-bases/{kb_id}/retrieve:
+    post:
+      tags: [Knowledge Base]
+      summary: Retrieve knowledge base chunks
+      operationId: retrieveKnowledgeBase
+      x-astrbot-scope: kb
+      parameters:
+        - $ref: "#/components/parameters/KbId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeRetrieveRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/knowledge-bases/tasks/{task_id}:
+    get:
+      tags: [Knowledge Base]
+      summary: Get knowledge base import task progress
+      operationId: getKnowledgeTask
+      x-astrbot-scope: kb
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/personas/tree:
+    get:
+      tags: [Personas]
+      summary: Get persona folder tree
+      operationId: getPersonaTree
+      x-astrbot-scope: persona
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/personas:
+    get:
+      tags: [Personas]
+      summary: List personas
+      operationId: listPersonas
+      x-astrbot-scope: persona
+      parameters:
+        - name: folder_id
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Personas]
+      summary: Create a persona
+      operationId: createPersona
+      x-astrbot-scope: persona
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PersonaRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/personas/by-id:
+    get:
+      tags: [Personas]
+      summary: Get a persona by query ID
+      operationId: getPersonaById
+      x-astrbot-scope: persona
+      parameters:
+        - name: persona_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    put:
+      tags: [Personas]
+      summary: Update a persona by body ID
+      operationId: updatePersonaById
+      x-astrbot-scope: persona
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [persona_id]
+              properties:
+                persona_id:
+                  type: string
+              additionalProperties: true
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Personas]
+      summary: Delete a persona by query ID
+      operationId: deletePersonaById
+      x-astrbot-scope: persona
+      parameters:
+        - name: persona_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/personas/{persona_id}:
+    get:
+      tags: [Personas]
+      summary: Get a persona
+      operationId: getPersona
+      x-astrbot-scope: persona
+      parameters:
+        - $ref: "#/components/parameters/PersonaId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    put:
+      tags: [Personas]
+      summary: Update a persona
+      operationId: updatePersona
+      x-astrbot-scope: persona
+      parameters:
+        - $ref: "#/components/parameters/PersonaId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PersonaRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Personas]
+      summary: Delete a persona
+      operationId: deletePersona
+      x-astrbot-scope: persona
+      parameters:
+        - $ref: "#/components/parameters/PersonaId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/persona-folders:
+    get:
+      tags: [Personas]
+      summary: List persona folders
+      operationId: listPersonaFolders
+      x-astrbot-scope: persona
+      parameters:
+        - name: parent_id
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Personas]
+      summary: Create a persona folder
+      operationId: createPersonaFolder
+      x-astrbot-scope: persona
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PersonaFolderRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/persona-folders/{folder_id}:
+    put:
+      tags: [Personas]
+      summary: Update a persona folder
+      operationId: updatePersonaFolder
+      x-astrbot-scope: persona
+      parameters:
+        - $ref: "#/components/parameters/FolderId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PersonaFolderRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Personas]
+      summary: Delete a persona folder
+      operationId: deletePersonaFolder
+      x-astrbot-scope: persona
+      parameters:
+        - $ref: "#/components/parameters/FolderId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/personas/move:
+    post:
+      tags: [Personas]
+      summary: Move a persona or folder
+      operationId: movePersonaItem
+      x-astrbot-scope: persona
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PersonaMoveRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/personas/reorder:
+    post:
+      tags: [Personas]
+      summary: Reorder personas or folders
+      operationId: reorderPersonaItems
+      x-astrbot-scope: persona
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReorderRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/sessions:
+    get:
+      tags: [Sessions]
+      summary: List active UMOs and session status
+      operationId: listSessions
+      x-astrbot-scope: data
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: platform
+          in: query
+          schema:
+            type: string
+        - name: message_type
+          in: query
+          schema:
+            type: string
+            enum: [all, group, private]
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/sessions/active-umos:
+    get:
+      tags: [Sessions]
+      summary: List active and known UMOs
+      operationId: listActiveUmos
+      x-astrbot-scope: data
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/sessions/rules:
+    get:
+      tags: [Sessions]
+      summary: List session rules
+      operationId: listSessionRules
+      x-astrbot-scope: data
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Sessions]
+      summary: Update or create a session rule
+      operationId: upsertSessionRule
+      x-astrbot-scope: data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionRuleRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/sessions/rules/delete:
+    post:
+      tags: [Sessions]
+      summary: Delete one or more session rules
+      operationId: deleteSessionRules
+      x-astrbot-scope: data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UmoListRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/sessions/provider:
+    patch:
+      tags: [Sessions]
+      summary: Batch update session provider selection
+      operationId: batchUpdateSessionProvider
+      x-astrbot-scope: data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchSessionProviderRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/sessions/service:
+    patch:
+      tags: [Sessions]
+      summary: Batch update session service settings
+      operationId: batchUpdateSessionService
+      x-astrbot-scope: data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchSessionServiceRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/session-groups:
+    get:
+      tags: [Sessions]
+      summary: List session groups
+      operationId: listSessionGroups
+      x-astrbot-scope: data
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Sessions]
+      summary: Create a session group
+      operationId: createSessionGroup
+      x-astrbot-scope: data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionGroupRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/session-groups/{group_id}:
+    put:
+      tags: [Sessions]
+      summary: Update a session group
+      operationId: updateSessionGroup
+      x-astrbot-scope: data
+      parameters:
+        - $ref: "#/components/parameters/GroupId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionGroupRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Sessions]
+      summary: Delete a session group
+      operationId: deleteSessionGroup
+      x-astrbot-scope: data
+      parameters:
+        - $ref: "#/components/parameters/GroupId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/conversations:
+    get:
+      tags: [Conversations]
+      summary: List conversation history data
+      operationId: listConversations
+      x-astrbot-scope: data
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: platform_id
+          in: query
+          schema:
+            type: string
+        - name: user_id
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: platforms
+          in: query
+          schema:
+            type: string
+          description: Comma-separated platform IDs.
+        - name: message_types
+          in: query
+          schema:
+            type: string
+          description: Comma-separated message types.
+        - name: exclude_ids
+          in: query
+          schema:
+            type: string
+          description: Comma-separated user IDs to exclude.
+        - name: exclude_platforms
+          in: query
+          schema:
+            type: string
+          description: Comma-separated platforms to exclude.
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/conversations/batch-delete:
+    post:
+      tags: [Conversations]
+      summary: Delete multiple conversations
+      operationId: batchDeleteConversations
+      x-astrbot-scope: data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConversationBatchDeleteRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/conversations/{conversation_id}:
+    get:
+      tags: [Conversations]
+      summary: Get conversation details and messages
+      operationId: getConversation
+      x-astrbot-scope: data
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    patch:
+      tags: [Conversations]
+      summary: Update conversation metadata
+      operationId: updateConversation
+      x-astrbot-scope: data
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConversationPatchRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Conversations]
+      summary: Delete a conversation
+      operationId: deleteConversation
+      x-astrbot-scope: data
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/conversations/{conversation_id}/messages:
+    put:
+      tags: [Conversations]
+      summary: Replace conversation message history
+      operationId: replaceConversationMessages
+      x-astrbot-scope: data
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConversationMessagesReplaceRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/conversations/export:
+    post:
+      tags: [Conversations]
+      summary: Export conversations
+      operationId: exportConversations
+      x-astrbot-scope: data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConversationExportRequest"
+      responses:
+        "200":
+          description: Exported conversation data
+
+  /api/v1/stats:
+    get:
+      tags: [Stats]
+      summary: Get runtime statistics
+      operationId: getStats
+      x-astrbot-scope: system
+      parameters:
+        - name: offset_sec
+          in: query
+          schema:
+            type: integer
+            default: 86400
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/stats/provider-tokens:
+    get:
+      tags: [Stats]
+      summary: Get provider token usage statistics
+      operationId: getProviderTokenStats
+      x-astrbot-scope: system
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/stats/version:
+    get:
+      tags: [Stats]
+      summary: Get AstrBot version
+      operationId: getVersion
+      x-astrbot-scope: system
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/stats/versions:
+    get:
+      tags: [Stats]
+      summary: Get public WebUI and AstrBot versions
+      operationId: getPublicVersions
+      security: []
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/stats/first-notice:
+    get:
+      tags: [Stats]
+      summary: Get first-run dashboard notice content
+      operationId: getFirstNotice
+      x-astrbot-scope: system
+      parameters:
+        - name: locale
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/stats/ghproxy/test:
+    post:
+      tags: [Stats]
+      summary: Test a GitHub proxy endpoint
+      operationId: testGhproxyConnection
+      x-astrbot-scope: system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GhproxyTestRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/changelogs:
+    get:
+      tags: [Stats]
+      summary: List available changelog versions
+      operationId: listChangelogVersions
+      x-astrbot-scope: system
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/changelogs/{version}:
+    get:
+      tags: [Stats]
+      summary: Get changelog content for a version
+      operationId: getChangelog
+      x-astrbot-scope: system
+      parameters:
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/stats/start-time:
+    get:
+      tags: [Stats]
+      summary: Get runtime start time
+      operationId: getStartTime
+      security: []
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/stats/storage:
+    get:
+      tags: [Stats]
+      summary: Get storage status
+      operationId: getStorageStatus
+      x-astrbot-scope: system
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/stats/storage/cleanup:
+    post:
+      tags: [Stats]
+      summary: Clean storage
+      operationId: cleanupStorage
+      x-astrbot-scope: system
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DynamicConfig"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/system/restart:
+    post:
+      tags: [Stats]
+      summary: Restart AstrBot core
+      operationId: restartCore
+      x-astrbot-scope: system
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/backups:
+    get:
+      tags: [Backups]
+      summary: List backups
+      operationId: listBackups
+      x-astrbot-scope: system
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Backups]
+      summary: Export a backup
+      operationId: createBackup
+      x-astrbot-scope: system
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackupExportRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/backups/upload:
+    post:
+      tags: [Backups]
+      summary: Upload a backup file
+      operationId: uploadBackup
+      x-astrbot-scope: system
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/BackupUploadRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/backups/upload/init:
+    post:
+      tags: [Backups]
+      summary: Initialize chunked backup upload
+      operationId: initBackupUpload
+      x-astrbot-scope: system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackupUploadInitRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/backups/upload/chunk:
+    post:
+      tags: [Backups]
+      summary: Upload a backup chunk
+      operationId: uploadBackupChunk
+      x-astrbot-scope: system
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/BackupChunkUploadRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/backups/upload/complete:
+    post:
+      tags: [Backups]
+      summary: Complete chunked backup upload
+      operationId: completeBackupUpload
+      x-astrbot-scope: system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackupUploadSessionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/backups/upload/abort:
+    post:
+      tags: [Backups]
+      summary: Abort chunked backup upload
+      operationId: abortBackupUpload
+      x-astrbot-scope: system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackupUploadSessionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/backups/tasks/{task_id}:
+    get:
+      tags: [Backups]
+      summary: Get backup task progress
+      operationId: getBackupProgress
+      x-astrbot-scope: system
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/backups/{filename}:
+    get:
+      tags: [Backups]
+      summary: Download a backup
+      operationId: downloadBackup
+      x-astrbot-scope: system
+      parameters:
+        - $ref: "#/components/parameters/Filename"
+      responses:
+        "200":
+          description: Backup archive
+    patch:
+      tags: [Backups]
+      summary: Rename a backup
+      operationId: renameBackup
+      x-astrbot-scope: system
+      parameters:
+        - $ref: "#/components/parameters/Filename"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackupRenameRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Backups]
+      summary: Delete a backup
+      operationId: deleteBackup
+      x-astrbot-scope: system
+      parameters:
+        - $ref: "#/components/parameters/Filename"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/backups/{filename}/check:
+    post:
+      tags: [Backups]
+      summary: Check a backup before import
+      operationId: checkBackup
+      x-astrbot-scope: system
+      parameters:
+        - $ref: "#/components/parameters/Filename"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/backups/{filename}/import:
+    post:
+      tags: [Backups]
+      summary: Import a backup
+      operationId: importBackup
+      x-astrbot-scope: system
+      parameters:
+        - $ref: "#/components/parameters/Filename"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackupImportRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/updates/check:
+    get:
+      tags: [Updates]
+      summary: Check for updates
+      operationId: checkUpdate
+      x-astrbot-scope: system
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/updates/releases:
+    get:
+      tags: [Updates]
+      summary: List releases
+      operationId: listReleases
+      x-astrbot-scope: system
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [core, dashboard]
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/updates/core:
+    post:
+      tags: [Updates]
+      summary: Update AstrBot core
+      operationId: updateCore
+      x-astrbot-scope: system
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/updates/dashboard:
+    post:
+      tags: [Updates]
+      summary: Update dashboard assets
+      operationId: updateDashboard
+      x-astrbot-scope: system
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/updates/progress/{task_id}:
+    get:
+      tags: [Updates]
+      summary: Get update progress
+      operationId: getUpdateProgress
+      x-astrbot-scope: system
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/pip/install:
+    post:
+      tags: [Updates]
+      summary: Install a Python package
+      operationId: installPipPackage
+      x-astrbot-scope: system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PipInstallRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/cron/jobs:
+    get:
+      tags: [Cron]
+      summary: List cron jobs
+      operationId: listCronJobs
+      x-astrbot-scope: system
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Cron]
+      summary: Create a cron job
+      operationId: createCronJob
+      x-astrbot-scope: system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CronJobRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/cron/jobs/{job_id}:
+    patch:
+      tags: [Cron]
+      summary: Update a cron job
+      operationId: updateCronJob
+      x-astrbot-scope: system
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CronJobPatchRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Cron]
+      summary: Delete a cron job
+      operationId: deleteCronJob
+      x-astrbot-scope: system
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/cron/jobs/{job_id}/run:
+    post:
+      tags: [Cron]
+      summary: Run a cron job immediately
+      operationId: runCronJob
+      x-astrbot-scope: system
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/logs/live:
+    get:
+      tags: [Logs]
+      summary: Stream live logs
+      operationId: streamLiveLogs
+      x-astrbot-scope: system
+      responses:
+        "200":
+          description: Server-sent log stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /api/v1/logs/history:
+    get:
+      tags: [Logs]
+      summary: Get log history
+      operationId: getLogHistory
+      x-astrbot-scope: system
+      responses:
+        "200":
+          $ref: "#/components/responses/Text"
+
+  /api/v1/trace/settings:
+    get:
+      tags: [Logs]
+      summary: Get trace settings
+      operationId: getTraceSettings
+      x-astrbot-scope: system
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    put:
+      tags: [Logs]
+      summary: Update trace settings
+      operationId: updateTraceSettings
+      x-astrbot-scope: system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TraceSettingsRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/t2i/templates:
+    get:
+      tags: [T2I]
+      summary: List text-to-image templates
+      operationId: listT2iTemplates
+      x-astrbot-scope: config
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [T2I]
+      summary: Create a text-to-image template
+      operationId: createT2iTemplate
+      x-astrbot-scope: config
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/T2iTemplateRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/t2i/templates/active:
+    get:
+      tags: [T2I]
+      summary: Get active text-to-image template
+      operationId: getActiveT2iTemplate
+      x-astrbot-scope: config
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    put:
+      tags: [T2I]
+      summary: Set active text-to-image template
+      operationId: setActiveT2iTemplate
+      x-astrbot-scope: config
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NameRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/t2i/templates/default/reset:
+    post:
+      tags: [T2I]
+      summary: Reset the default text-to-image template
+      operationId: resetDefaultT2iTemplate
+      x-astrbot-scope: config
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/t2i/templates/{name}:
+    get:
+      tags: [T2I]
+      summary: Get a text-to-image template
+      operationId: getT2iTemplate
+      x-astrbot-scope: config
+      parameters:
+        - $ref: "#/components/parameters/Name"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    put:
+      tags: [T2I]
+      summary: Update a text-to-image template
+      operationId: updateT2iTemplate
+      x-astrbot-scope: config
+      parameters:
+        - $ref: "#/components/parameters/Name"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/T2iTemplateContentRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [T2I]
+      summary: Delete a text-to-image template
+      operationId: deleteT2iTemplate
+      x-astrbot-scope: config
+      parameters:
+        - $ref: "#/components/parameters/Name"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/subagents/config:
+    get:
+      tags: [Subagents]
+      summary: Get subagent orchestrator configuration
+      operationId: getSubagentConfig
+      x-astrbot-scope: config
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    put:
+      tags: [Subagents]
+      summary: Update subagent orchestrator configuration
+      operationId: updateSubagentConfig
+      x-astrbot-scope: config
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DynamicConfig"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/subagents/available-tools:
+    get:
+      tags: [Subagents]
+      summary: List tools available to subagents
+      operationId: listSubagentAvailableTools
+      x-astrbot-scope: config
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/webhooks/platforms/{webhook_uuid}:
+    get:
+      tags: [Webhooks]
+      summary: Verify a platform webhook
+      operationId: verifyPlatformWebhook
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/WebhookUuid"
+      responses:
+        "200":
+          description: Webhook verification response
+    post:
+      tags: [Webhooks]
+      summary: Receive a platform webhook
+      operationId: receivePlatformWebhook
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/WebhookUuid"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DynamicConfig"
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "200":
+          description: Webhook accepted
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    Ok:
+      description: Standard AstrBot success response
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SuccessEnvelope"
+    Error:
+      description: Standard AstrBot error response
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Text:
+      description: Text response
+      content:
+        text/plain:
+          schema:
+            type: string
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SuccessEnvelope"
+    Html:
+      description: HTML response
+      content:
+        text/html:
+          schema:
+            type: string
+
+  parameters:
+    AttachmentId:
+      name: attachment_id
+      in: path
+      required: true
+      schema:
+        type: string
+    AttachmentIdQuery:
+      name: attachment_id
+      in: query
+      required: true
+      schema:
+        type: string
+    BotId:
+      name: bot_id
+      in: path
+      required: true
+      schema:
+        type: string
+    ChunkId:
+      name: chunk_id
+      in: path
+      required: true
+      schema:
+        type: string
+    CommandId:
+      name: command_id
+      in: path
+      required: true
+      description: URL-encoded command handler full name.
+      schema:
+        type: string
+    ConfigId:
+      name: config_id
+      in: path
+      required: true
+      schema:
+        type: string
+    ConversationId:
+      name: conversation_id
+      in: path
+      required: true
+      schema:
+        type: string
+    DocumentId:
+      name: document_id
+      in: path
+      required: true
+      schema:
+        type: string
+    FilePath:
+      name: file_path
+      in: path
+      required: true
+      description: URL-encoded relative file path.
+      schema:
+        type: string
+    Filename:
+      name: filename
+      in: path
+      required: true
+      schema:
+        type: string
+    FolderId:
+      name: folder_id
+      in: path
+      required: true
+      schema:
+        type: string
+    GroupId:
+      name: group_id
+      in: path
+      required: true
+      schema:
+        type: string
+    KbId:
+      name: kb_id
+      in: path
+      required: true
+      schema:
+        type: string
+    KeyId:
+      name: key_id
+      in: path
+      required: true
+      schema:
+        type: string
+    Name:
+      name: name
+      in: path
+      required: true
+      schema:
+        type: string
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 20
+    PersonaId:
+      name: persona_id
+      in: path
+      required: true
+      schema:
+        type: string
+    PluginId:
+      name: plugin_id
+      in: path
+      required: true
+      schema:
+        type: string
+    ProviderId:
+      name: provider_id
+      in: path
+      required: true
+      schema:
+        type: string
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema:
+        type: string
+    ServerName:
+      name: server_name
+      in: path
+      required: true
+      schema:
+        type: string
+    SkillName:
+      name: skill_name
+      in: path
+      required: true
+      schema:
+        type: string
+    SourceId:
+      name: source_id
+      in: path
+      required: true
+      schema:
+        type: string
+    TaskId:
+      name: task_id
+      in: path
+      required: true
+      schema:
+        type: string
+    ToolId:
+      name: tool_id
+      in: path
+      required: true
+      schema:
+        type: string
+    Umo:
+      name: umo
+      in: path
+      required: true
+      description: URL-encoded unified message origin.
+      schema:
+        type: string
+    WebhookUuid:
+      name: webhook_uuid
+      in: path
+      required: true
+      schema:
+        type: string
+
+  schemas:
+    SuccessEnvelope:
+      type: object
+      required: [status, data]
+      properties:
+        status:
+          type: string
+          const: ok
+        message:
+          type: string
+        data: {}
+      additionalProperties: false
+
+    ErrorEnvelope:
+      type: object
+      required: [status, message]
+      properties:
+        status:
+          type: string
+          const: error
+        message:
+          type: string
+        data: {}
+      additionalProperties: false
+
+    DynamicConfig:
+      type: object
+      additionalProperties: true
+
+    JsonSchema:
+      type: object
+      additionalProperties: true
+
+    ProviderCapability:
+      type: string
+      enum:
+        - chat
+        - agent
+        - stt
+        - tts
+        - embedding
+        - rerank
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        code:
+          type: string
+          description: TOTP code or recovery code when two-factor authentication is required.
+        trust_device_flag:
+          type: boolean
+      additionalProperties: false
+
+    SetupAuthRequest:
+      type: object
+      required: [username, password, confirm_password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        confirm_password:
+          type: string
+      additionalProperties: false
+
+    UpdateAccountRequest:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+        new_password:
+          type: string
+        confirm_password:
+          type: string
+        new_username:
+          type: string
+      additionalProperties: false
+
+    TotpSetupRequest:
+      type: object
+      properties:
+        code:
+          type: string
+        secret:
+          type: string
+      additionalProperties: false
+
+    CreateApiKeyRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+            enum: [bot, provider, persona, im, config, chat, data, file, plugin, mcp, skill]
+          example: [bot, provider, persona, im, config, chat, data, file, plugin, mcp, skill]
+        expires_at:
+          type: string
+          format: date-time
+        expires_in_days:
+          type: integer
+          minimum: 1
+      additionalProperties: false
+
+    CreateConfigProfileRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        config:
+          $ref: "#/components/schemas/DynamicConfig"
+      additionalProperties: false
+
+    RenameRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+      additionalProperties: false
+
+    NameRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+      additionalProperties: false
+
+    ConfigRoutesReplaceRequest:
+      type: object
+      required: [routing]
+      properties:
+        routing:
+          type: object
+          additionalProperties:
+            type: string
+      additionalProperties: false
+
+    ConfigRouteUpsertRequest:
+      type: object
+      required: [config_id]
+      properties:
+        config_id:
+          type: string
+          description: Use "default" to remove a custom route and fall back.
+      additionalProperties: false
+
+    BotConfigRequest:
+      type: object
+      required: [type, config]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          description: Platform adapter type, such as aiocqhttp, telegram, lark.
+        enabled:
+          type: boolean
+          default: true
+        config:
+          $ref: "#/components/schemas/DynamicConfig"
+      additionalProperties: false
+
+    BotRegistrationRequest:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [start, poll]
+        platform_config:
+          $ref: "#/components/schemas/DynamicConfig"
+        registration_code:
+          type: string
+        device_code:
+          type: string
+        qrcode:
+          type: string
+      additionalProperties: true
+
+    EnabledPatch:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+      additionalProperties: false
+
+    ToolPermissionPatch:
+      type: object
+      required: [permission]
+      properties:
+        permission:
+          type: string
+          enum: [admin, member]
+      additionalProperties: false
+
+    ProviderSourceConfigRequest:
+      type: object
+      required: [config]
+      properties:
+        id:
+          type: string
+        config:
+          $ref: "#/components/schemas/DynamicConfig"
+      additionalProperties: false
+
+    ProviderConfigRequest:
+      type: object
+      required: [config]
+      properties:
+        id:
+          type: string
+        provider_source_id:
+          type: string
+        capability:
+          $ref: "#/components/schemas/ProviderCapability"
+        enabled:
+          type: boolean
+          default: true
+        config:
+          $ref: "#/components/schemas/DynamicConfig"
+      additionalProperties: false
+
+    ChatRequest:
+      type: object
+      required: [message]
+      properties:
+        username:
+          type: string
+          description: Caller-declared WebChat sender/session owner. This value is used as the message sender identity and may participate in sender-ID-based command permission checks. Treat chat-scoped API keys as trusted backend credentials and map or validate usernames before accepting end-user input.
+        session_id:
+          type: string
+        conversation_id:
+          type: string
+          description: Deprecated alias for session_id.
+        message:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                $ref: "#/components/schemas/MessagePart"
+        config_id:
+          type: string
+        config_name:
+          type: string
+        selected_provider:
+          type: string
+        selected_model:
+          type: string
+        enable_streaming:
+          type: boolean
+          default: true
+        _skip_user_history:
+          type: boolean
+          description: Internal WebUI flag for edit/regenerate flows.
+        _llm_checkpoint_id:
+          type: string
+          description: Internal WebUI checkpoint override.
+        _platform_history_id:
+          type: string
+          description: Internal WebUI platform history override.
+        _thread_selected_text:
+          type: string
+          description: Internal WebUI side-thread context.
+      additionalProperties: false
+
+    ChatSessionBatchDeleteRequest:
+      type: object
+      required: [session_ids]
+      properties:
+        session_ids:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+
+    ChatSessionPatchRequest:
+      type: object
+      properties:
+        display_name:
+          type: string
+      additionalProperties: false
+
+    ChatMessagePatchRequest:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: object
+          additionalProperties: true
+      additionalProperties: false
+
+    ChatMessageRegenerateRequest:
+      type: object
+      properties:
+        selected_provider:
+          type: string
+        selected_model:
+          type: string
+        enable_streaming:
+          type: boolean
+          default: true
+      additionalProperties: false
+
+    ChatThreadCreateRequest:
+      type: object
+      required: [session_id, parent_message_id, selected_text]
+      properties:
+        session_id:
+          type: string
+        parent_message_id:
+          oneOf:
+            - type: string
+            - type: integer
+        selected_text:
+          type: string
+      additionalProperties: false
+
+    ChatThreadMessageRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                $ref: "#/components/schemas/MessagePart"
+        selected_provider:
+          type: string
+        selected_model:
+          type: string
+        enable_streaming:
+          type: boolean
+          default: true
+      additionalProperties: false
+
+    ChatProjectRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        emoji:
+          type: string
+        description:
+          type: string
+        workspace_type:
+          type: string
+          enum: [session, project, custom]
+        workspace_path:
+          type: string
+      additionalProperties: false
+
+    MessagePart:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [text, plain, image, file, audio, record, video, reply]
+        text:
+          type: string
+        attachment_id:
+          type: string
+        url:
+          type: string
+        filename:
+          type: string
+        stored_filename:
+          type: string
+        mime_type:
+          type: string
+      additionalProperties: true
+
+    ImMessageRequest:
+      type: object
+      required: [umo, message]
+      properties:
+        umo:
+          type: string
+        message:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                $ref: "#/components/schemas/MessagePart"
+      additionalProperties: false
+
+    FileUploadRequest:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
+
+    PluginUpdateRequest:
+      type: object
+      properties:
+        reinstall:
+          type: boolean
+          default: false
+      additionalProperties: false
+
+    PluginSourceBindRequest:
+      type: object
+      properties:
+        install_method:
+          type: string
+        registry_url:
+          type: string
+          nullable: true
+        market_plugin_id:
+          type: string
+      additionalProperties: false
+
+    PluginBatchUpdateRequest:
+      type: object
+      properties:
+        plugin_id:
+          type: string
+          description: When set, update this single plugin instead of a batch.
+        plugin_ids:
+          type: array
+          items:
+            type: string
+        reinstall:
+          type: boolean
+          default: false
+        update_all:
+          type: boolean
+          default: false
+      additionalProperties: true
+
+    PluginVersionSupportRequest:
+      type: object
+      properties:
+        astrbot_version:
+          type: string
+      additionalProperties: false
+
+    PluginGithubInstallRequest:
+      type: object
+      required: [repository]
+      properties:
+        repository:
+          type: string
+          description: GitHub URL or owner/repository slug.
+        ref:
+          type: string
+        download_url:
+          type: string
+          description: Optional downloadable ZIP URL to use instead of GitHub archive resolution.
+        proxy:
+          type: string
+        ignore_version_check:
+          type: boolean
+        install_method:
+          type: string
+        registry_url:
+          type: string
+          nullable: true
+        market_plugin_id:
+          type: string
+      additionalProperties: false
+
+    PluginUrlInstallRequest:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+        download_url:
+          type: string
+          format: uri
+          description: Optional downloadable ZIP URL when url is the plugin source page or repository.
+        proxy:
+          type: string
+        ignore_version_check:
+          type: boolean
+        install_method:
+          type: string
+        registry_url:
+          type: string
+          nullable: true
+        market_plugin_id:
+          type: string
+      additionalProperties: false
+
+    PluginValidateRepoRequest:
+      type: object
+      properties:
+        repository:
+          type: string
+        url:
+          type: string
+        proxy:
+          type: string
+      additionalProperties: false
+
+    PluginUploadInstallRequest:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
+
+    PluginConfigFileDeleteRequest:
+      type: object
+      required: [path]
+      properties:
+        path:
+          type: string
+      additionalProperties: false
+
+    PluginSourceRequest:
+      type: object
+      required: [url]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+      additionalProperties: false
+
+    CommandPatchRequest:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        alias:
+          type: string
+        aliases:
+          type: array
+          items:
+            type: string
+        permission_group:
+          type: string
+      additionalProperties: false
+
+    McpServerConfig:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        enabled:
+          type: boolean
+          default: true
+        transport:
+          type: string
+          enum: [stdio, sse, streamable_http]
+        command:
+          type: string
+        args:
+          type: array
+          items:
+            type: string
+        url:
+          type: string
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        timeout:
+          type: integer
+      additionalProperties: true
+
+    ModelScopeSyncRequest:
+      type: object
+      properties:
+        access_token:
+          type: string
+      additionalProperties: false
+
+    SkillUploadRequest:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
+        overwrite:
+          type: boolean
+          default: false
+
+    SkillPatchRequest:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        display_name:
+          type: string
+        description:
+          type: string
+      additionalProperties: false
+
+    NeoCandidateActionRequest:
+      type: object
+      required: [candidate_id]
+      properties:
+        candidate_id:
+          type: string
+      additionalProperties: true
+
+    NeoReleaseActionRequest:
+      type: object
+      required: [release_id]
+      properties:
+        release_id:
+          type: string
+      additionalProperties: true
+
+    KnowledgeBaseRequest:
+      type: object
+      properties:
+        kb_name:
+          type: string
+        description:
+          type: string
+        emoji:
+          type: string
+        embedding_provider_id:
+          type: [string, "null"]
+        rerank_provider_id:
+          type: [string, "null"]
+        chunk_size:
+          type: integer
+        chunk_overlap:
+          type: integer
+        top_k_dense:
+          type: integer
+        top_k_sparse:
+          type: integer
+        top_m_final:
+          type: integer
+      additionalProperties: false
+
+    KnowledgeBaseCreateRequest:
+      allOf:
+        - $ref: "#/components/schemas/KnowledgeBaseRequest"
+        - type: object
+          required: [kb_name, embedding_provider_id]
+          properties:
+            kb_name:
+              type: string
+            embedding_provider_id:
+              type: string
+
+    KnowledgeDocumentUploadRequest:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
+
+    KnowledgeDocumentImportRequest:
+      type: object
+      required: [paths]
+      properties:
+        paths:
+          type: array
+          items:
+            type: string
+        parser:
+          type: string
+      additionalProperties: false
+
+    KnowledgeDocumentUrlImportRequest:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+        parser:
+          type: string
+      additionalProperties: false
+
+    KnowledgeRetrieveRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+        top_k:
+          type: integer
+          default: 5
+        score_threshold:
+          type: number
+      additionalProperties: false
+
+    PersonaRequest:
+      type: object
+      required: [persona_id, system_prompt]
+      properties:
+        persona_id:
+          type: string
+        system_prompt:
+          type: string
+        begin_dialogs:
+          type: array
+          items:
+            type: string
+        folder_id:
+          type: string
+        tools:
+          type: array
+          items:
+            type: string
+        skills:
+          type: array
+          items:
+            type: string
+        custom_error_message:
+          type: string
+      additionalProperties: true
+
+    PersonaFolderRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        parent_id:
+          type: string
+        description:
+          type: string
+      additionalProperties: true
+
+    PersonaMoveRequest:
+      type: object
+      required: [persona_id]
+      properties:
+        persona_id:
+          type: string
+        folder_id:
+          type: string
+      additionalProperties: true
+
+    ReorderRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, type, sort_order]
+            properties:
+              id:
+                type: string
+              type:
+                type: string
+                enum: [persona, folder]
+              sort_order:
+                type: integer
+      additionalProperties: false
+
+    SessionRuleRequest:
+      type: object
+      required: [umo, rule_key]
+      properties:
+        umo:
+          type: string
+        rule_key:
+          type: string
+        rule_value:
+          $ref: "#/components/schemas/DynamicConfig"
+      additionalProperties: true
+
+    UmoListRequest:
+      type: object
+      properties:
+        umo:
+          type: string
+        umos:
+          type: array
+          items:
+            type: string
+        scope:
+          type: string
+          enum: [all, group, private, custom_group]
+        group_id:
+          type: string
+        rule_key:
+          type: string
+      additionalProperties: false
+
+    BatchSessionProviderRequest:
+      allOf:
+        - $ref: "#/components/schemas/UmoListRequest"
+        - type: object
+          required: [provider_id, provider_type]
+          properties:
+            provider_id:
+              type: string
+            provider_type:
+              type: string
+              enum: [chat_completion, speech_to_text, text_to_speech]
+
+    BatchSessionServiceRequest:
+      allOf:
+        - $ref: "#/components/schemas/UmoListRequest"
+        - type: object
+          properties:
+            session_enabled:
+              type: boolean
+            llm_enabled:
+              type: boolean
+            tts_enabled:
+              type: boolean
+
+    SessionGroupRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        umos:
+          type: array
+          items:
+            type: string
+        add_umos:
+          type: array
+          items:
+            type: string
+        remove_umos:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+
+    ConversationPatchRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        persona_id:
+          type: string
+      additionalProperties: false
+
+    ConversationMessagesReplaceRequest:
+      type: object
+      properties:
+        user_id:
+          type: string
+        messages:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        history:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+      additionalProperties: false
+
+    ConversationRef:
+      type: object
+      required: [user_id, cid]
+      properties:
+        user_id:
+          type: string
+        cid:
+          type: string
+      additionalProperties: false
+
+    ConversationBatchDeleteRequest:
+      type: object
+      required: [conversations]
+      properties:
+        conversations:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConversationRef"
+      additionalProperties: false
+
+    ConversationExportRequest:
+      type: object
+      properties:
+        conversations:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConversationRef"
+        conversation_ids:
+          type: array
+          items:
+            type: string
+        format:
+          type: string
+          enum: [json, markdown]
+          default: json
+      additionalProperties: false
+
+    CronJobRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        cron_expression:
+          type: string
+        timezone:
+          type: string
+        session:
+          type: string
+        note:
+          type: string
+        description:
+          type: string
+        persona_id:
+          type: string
+        provider_id:
+          type: string
+        enabled:
+          type: boolean
+          default: true
+        run_once:
+          type: boolean
+          default: false
+        run_at:
+          type: string
+          format: date-time
+        payload:
+          type: object
+          additionalProperties: true
+      additionalProperties: true
+
+    CronJobPatchRequest:
+      allOf:
+        - $ref: "#/components/schemas/CronJobRequest"
+
+    BackupExportRequest:
+      type: object
+      properties:
+        include:
+          type: array
+          items:
+            type: string
+        exclude:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+
+    BackupUploadRequest:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
+
+    BackupUploadInitRequest:
+      type: object
+      required: [filename, total_size]
+      properties:
+        filename:
+          type: string
+        total_size:
+          type: integer
+          minimum: 1
+      additionalProperties: false
+
+    BackupUploadSessionRequest:
+      type: object
+      required: [upload_id]
+      properties:
+        upload_id:
+          type: string
+      additionalProperties: false
+
+    BackupChunkUploadRequest:
+      type: object
+      required: [upload_id, chunk_index, chunk]
+      properties:
+        upload_id:
+          type: string
+        chunk_index:
+          type: integer
+          minimum: 0
+        chunk:
+          type: string
+          format: binary
+
+    BackupRenameRequest:
+      type: object
+      required: [new_name]
+      properties:
+        new_name:
+          type: string
+      additionalProperties: false
+
+    BackupImportRequest:
+      type: object
+      properties:
+        confirmed:
+          type: boolean
+          default: true
+      additionalProperties: false
+
+    UpdateRequest:
+      type: object
+      properties:
+        version:
+          type: string
+        proxy:
+          type: string
+        reboot:
+          type: boolean
+        progress_id:
+          type: string
+      additionalProperties: false
+
+    PipInstallRequest:
+      type: object
+      required: [package]
+      properties:
+        package:
+          type: string
+        mirror:
+          type: string
+      additionalProperties: false
+
+    GhproxyTestRequest:
+      type: object
+      required: [proxy_url]
+      properties:
+        proxy_url:
+          type: string
+      additionalProperties: false
+
+    TraceSettingsRequest:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        level:
+          type: string
+      additionalProperties: true
+
+    T2iTemplateRequest:
+      type: object
+      required: [name, content]
+      properties:
+        name:
+          type: string
+        content:
+          type: string
+      additionalProperties: true
+
+    T2iTemplateContentRequest:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+      additionalProperties: true
