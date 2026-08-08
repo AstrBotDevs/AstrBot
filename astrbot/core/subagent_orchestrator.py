@@ -61,6 +61,7 @@ class SubAgentOrchestrator:
             if provider_id is not None:
                 provider_id = str(provider_id).strip() or None
             tools = item.get("tools", [])
+            skills = item.get("skills", [])
             begin_dialogs = None
 
             if persona_data:
@@ -71,6 +72,7 @@ class SubAgentOrchestrator:
                     persona_data.get("_begin_dialogs_processed")
                 )
                 tools = persona_data.get("tools")
+                skills = persona_data.get("skills", [])
                 if public_description == "" and prompt:
                     public_description = prompt[:120]
             if tools is None:
@@ -79,11 +81,18 @@ class SubAgentOrchestrator:
                 tools = []
             else:
                 tools = [str(t).strip() for t in tools if str(t).strip()]
+            if skills is None:
+                skills = None
+            elif not isinstance(skills, list):
+                skills = []
+            else:
+                skills = [str(s).strip() for s in skills if str(s).strip()]
 
             agent = Agent[AstrAgentContext](
                 name=name,
                 instructions=instructions,
                 tools=tools,  # type: ignore
+                skills=skills,
             )
             agent.begin_dialogs = begin_dialogs
             # The tool description should be a short description for the main LLM,
