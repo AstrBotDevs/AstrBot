@@ -67,7 +67,7 @@ class Main(star.Star):
         self,
         event: AstrMessageEvent,
         idx: str | int | None = None,
-        idx2: int | None = None,
+        idx2: str | int | None = None,
     ) -> None:
         """View or switch LLM Provider"""
         await self.provider_c.provider(event, idx, idx2)

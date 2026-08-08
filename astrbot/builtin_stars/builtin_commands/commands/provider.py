@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 
 from astrbot import logger
-from astrbot.api import star
+from astrbot.api import sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.utils.error_redaction import safe_error
@@ -12,6 +12,23 @@ from astrbot.core.utils.error_redaction import safe_error
 class ProviderCommands:
     def __init__(self, context: star.Context) -> None:
         self.context = context
+
+    async def _reset_provider_override(
+        self,
+        event: AstrMessageEvent,
+        umo: str,
+        provider_type: ProviderType,
+        display_name: str,
+    ) -> None:
+        await sp.session_remove(
+            umo,
+            f"provider_perf_{provider_type.value}",
+        )
+        event.set_result(
+            MessageEventResult().message(
+                f"✅ Successfully reset {display_name} provider to global default."
+            )
+        )
 
     def _log_reachability_failure(
         self,
@@ -112,7 +129,7 @@ class ProviderCommands:
         self,
         event: AstrMessageEvent,
         idx: str | int | None = None,
-        idx2: int | None = None,
+        idx2: str | int | None = None,
     ) -> None:
         """查看或者切换 LLM Provider"""
         umo = event.unified_msg_origin
@@ -184,6 +201,7 @@ class ProviderCommands:
                 ret += "\nUse /provider tts <idx> to switch TTS providers."
             if stts:
                 ret += "\nUse /provider stt <idx> to switch STT providers."
+            ret += "\nUse /provider reset to clear session override."
 
             event.set_result(MessageEventResult().message(ret))
         elif idx == "tts":
@@ -192,12 +210,25 @@ class ProviderCommands:
                     MessageEventResult().message("Please enter the index.")
                 )
                 return
-            if idx2 > len(self.context.get_all_tts_providers()) or idx2 < 1:
+            if idx2 in ("default", "reset", "clear"):
+                await self._reset_provider_override(
+                    event, umo, ProviderType.TEXT_TO_SPEECH, "TTS"
+                )
+                return
+            try:
+                idx2_int = int(idx2)
+            except ValueError:
                 event.set_result(
                     MessageEventResult().message("❌ Invalid provider index.")
                 )
                 return
-            provider = self.context.get_all_tts_providers()[idx2 - 1]
+            providers = list(self.context.get_all_tts_providers())
+            if idx2_int > len(providers) or idx2_int < 1:
+                event.set_result(
+                    MessageEventResult().message("❌ Invalid provider index.")
+                )
+                return
+            provider = providers[idx2_int - 1]
             id_ = provider.meta().id
             await self.context.provider_manager.set_provider(
                 provider_id=id_,
@@ -213,12 +244,25 @@ class ProviderCommands:
                     MessageEventResult().message("Please enter the index.")
                 )
                 return
-            if idx2 > len(self.context.get_all_stt_providers()) or idx2 < 1:
+            if idx2 in ("default", "reset", "clear"):
+                await self._reset_provider_override(
+                    event, umo, ProviderType.SPEECH_TO_TEXT, "STT"
+                )
+                return
+            try:
+                idx2_int = int(idx2)
+            except ValueError:
                 event.set_result(
                     MessageEventResult().message("❌ Invalid provider index.")
                 )
                 return
-            provider = self.context.get_all_stt_providers()[idx2 - 1]
+            providers = list(self.context.get_all_stt_providers())
+            if idx2_int > len(providers) or idx2_int < 1:
+                event.set_result(
+                    MessageEventResult().message("❌ Invalid provider index.")
+                )
+                return
+            provider = providers[idx2_int - 1]
             id_ = provider.meta().id
             await self.context.provider_manager.set_provider(
                 provider_id=id_,
@@ -228,21 +272,33 @@ class ProviderCommands:
             event.set_result(
                 MessageEventResult().message(f"✅ Successfully switched to {id_}.")
             )
-        elif isinstance(idx, int):
-            if idx > len(self.context.get_all_providers()) or idx < 1:
-                event.set_result(
-                    MessageEventResult().message("❌ Invalid provider index.")
-                )
-                return
-            provider = self.context.get_all_providers()[idx - 1]
-            id_ = provider.meta().id
-            await self.context.provider_manager.set_provider(
-                provider_id=id_,
-                provider_type=ProviderType.CHAT_COMPLETION,
-                umo=umo,
-            )
-            event.set_result(
-                MessageEventResult().message(f"✅ Successfully switched to {id_}.")
+        elif idx in ("default", "reset", "clear"):
+            await self._reset_provider_override(
+                event, umo, ProviderType.CHAT_COMPLETION, "Chat Completion"
             )
         else:
-            event.set_result(MessageEventResult().message("❌ Invalid parameter."))
+            try:
+                idx_int = int(idx)
+                is_int = True
+            except (ValueError, TypeError):
+                is_int = False
+
+            if is_int:
+                providers = list(self.context.get_all_providers())
+                if idx_int > len(providers) or idx_int < 1:
+                    event.set_result(
+                        MessageEventResult().message("❌ Invalid provider index.")
+                    )
+                    return
+                provider = providers[idx_int - 1]
+                id_ = provider.meta().id
+                await self.context.provider_manager.set_provider(
+                    provider_id=id_,
+                    provider_type=ProviderType.CHAT_COMPLETION,
+                    umo=umo,
+                )
+                event.set_result(
+                    MessageEventResult().message(f"✅ Successfully switched to {id_}.")
+                )
+            else:
+                event.set_result(MessageEventResult().message("❌ Invalid parameter."))
