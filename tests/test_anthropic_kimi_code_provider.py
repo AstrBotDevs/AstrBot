@@ -9,6 +9,7 @@ import astrbot.core.provider.sources.kimi_code_source as kimi_code_source
 import astrbot.core.provider.sources.request_retry as request_retry
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
+from tests.fixtures.fake_tool_call import FAKE_TOOL_CALL_CONTEXTS
 
 
 class _FakeAsyncAnthropic:
@@ -864,3 +865,75 @@ async def test_tool_choice_empty_tool_list_skips_tool_choice(monkeypatch):
     kwargs = _capture_payloads_create.last_kwargs
     assert "tools" not in kwargs
     assert "tool_choice" not in kwargs
+
+
+# ── fake tool call 重排 ───────────────────────────────────────────────────────
+
+_EXPECTED_REORDERED_MESSAGES = [
+    {"role": "user", "content": "我的名字是？"},
+    {
+        "role": "assistant",
+        "content": [
+            {
+                "type": "tool_use",
+                "name": "recall_long_term_memory",
+                "input": {"query": "我的名字是？", "k": 5},
+                "id": "fake_recall_abc",
+            }
+        ],
+    },
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "tool_result",
+                "tool_use_id": "fake_recall_abc",
+                "content": "memory json",
+            }
+        ],
+    },
+]
+
+
+@pytest.mark.asyncio
+async def test_text_chat_reorders_fake_tool_call_pair(monkeypatch):
+    """伪造工具调用对应重排到用户消息之后，与真实工具调用时序对齐。"""
+    provider = _setup_provider_with_mock_client(monkeypatch)
+
+    await provider.text_chat(prompt="我的名字是？", contexts=FAKE_TOOL_CALL_CONTEXTS)
+
+    assert _capture_payloads_create.last_kwargs["messages"] == (
+        _EXPECTED_REORDERED_MESSAGES
+    )
+
+
+@pytest.mark.asyncio
+async def test_text_chat_stream_reorders_fake_tool_call_pair(monkeypatch):
+    """流式路径同样应将伪造工具调用对重排到用户消息之后。"""
+    monkeypatch.setattr(anthropic_source, "AsyncAnthropic", _FakeAsyncAnthropic)
+
+    provider = anthropic_source.ProviderAnthropic(
+        provider_config={
+            "id": "anthropic-test",
+            "type": "anthropic_chat_completion",
+            "model": "claude-test",
+            "key": ["test-key"],
+        },
+        provider_settings={},
+    )
+
+    captured: dict[str, object] = {}
+
+    async def fake_query_stream(payloads, tools, *, request_max_retries=None):
+        captured["messages"] = payloads["messages"]
+        return
+        yield  # pragma: no cover  # 保持 async generator 形态
+
+    monkeypatch.setattr(provider, "_query_stream", fake_query_stream)
+
+    async for _ in provider.text_chat_stream(
+        prompt="我的名字是？", contexts=FAKE_TOOL_CALL_CONTEXTS
+    ):
+        pass
+
+    assert captured["messages"] == _EXPECTED_REORDERED_MESSAGES

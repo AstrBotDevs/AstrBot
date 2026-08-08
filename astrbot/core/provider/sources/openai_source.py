@@ -28,6 +28,7 @@ from astrbot.core.agent.message import (
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.provider import reorder_tailing_tool_call_user
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
@@ -527,6 +528,8 @@ class ProviderOpenAIOfficial(Provider):
                 removed_tool_messages,
             )
         payloads["messages"] = final
+
+        reorder_tailing_tool_call_user(payloads["messages"])
 
     async def _query(
         self,

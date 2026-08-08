@@ -2,7 +2,7 @@ import abc
 import asyncio
 import os
 from collections.abc import AsyncGenerator
-from typing import Literal, TypeAlias, Union
+from typing import Any, Literal, TypeAlias, Union
 
 from astrbot.core.agent.message import ContentPart, Message, is_checkpoint_message
 from astrbot.core.agent.tool import ToolSet
@@ -209,6 +209,52 @@ class Provider(AbstractProvider):
             self.text_chat(prompt="REPLY `PONG` ONLY"),
             timeout=timeout,
         )
+
+
+def _is_valid_tool_pair(asst_msg: dict[str, Any], tool_msg: dict[str, Any]) -> bool:
+    """判断 assistant(tool_calls) 与 tool 是否为 tool_call_id 匹配的一对。"""
+    if asst_msg.get("role") != "assistant" or tool_msg.get("role") != "tool":
+        return False
+    tool_calls = asst_msg.get("tool_calls")
+    if not tool_calls:
+        return False
+    tc_ids = {tc.get("id") for tc in tool_calls if isinstance(tc, dict)}
+    return tool_msg.get("tool_call_id") in tc_ids
+
+
+def reorder_tailing_tool_call_user(messages: list[dict[str, Any]]) -> None:
+    """重排因伪造工具调用导致尾部 assistant(tc) → tool → user 乱序的消息。
+
+    此为轻量妥协修复。未来若实现专用的上下文操作钩子或伪造工具调用钩子，
+    可考虑移除此函数。
+    """
+    if not isinstance(messages, list) or len(messages) < 2:
+        return
+
+    last = messages[-1]
+    if last.get("role") != "user":
+        return
+
+    # 从最后一个非 user 元素向前扫描 assistant(tool_calls) + tool 成对消息
+    pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    i = len(messages) - 2
+    while i >= 1:
+        if not _is_valid_tool_pair(messages[i - 1], messages[i]):
+            break
+        pairs.append((messages[i - 1], messages[i]))
+        i -= 2
+
+    if not pairs:
+        return
+
+    # 重排：user → assistant_1, tool_1 → ... → assistant_N, tool_N
+    # pairs 从内到外收集（N, N-1, ..., 1），反转后按 1..N 顺序回插
+    new_tail: list[dict[str, Any]] = [last]
+    for asst_msg, tool_msg in reversed(pairs):
+        new_tail.append(asst_msg)
+        new_tail.append(tool_msg)
+
+    messages[:] = messages[: i + 1] + new_tail
 
 
 class STTProvider(AbstractProvider):
