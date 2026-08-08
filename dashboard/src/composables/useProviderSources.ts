@@ -56,6 +56,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const editableProviderSource = ref<any | null>(null)
   const availableModels = ref<any[]>([])
   const modelMetadata = ref<Record<string, any>>({})
+  const modelKeyIndexes = ref<Record<string, number[]>>({})
   const loadingModels = ref(false)
   const savingSource = ref(false)
   const savingProviderToggles = ref<string[]>([])
@@ -157,7 +158,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         type: 'configured',
         provider,
         metadata: metadata || buildMetadataFromProvider(provider),
-        hasModelMetadata: Boolean(metadata)
+        hasModelMetadata: Boolean(metadata),
+        keyIndexes: modelKeyIndexes.value?.[provider.model] || []
       }
     })
 
@@ -172,7 +174,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
           type: 'available',
           model: name,
           metadata: typeof item === 'object' ? item?.metadata : getModelMetadata(name),
-          hasModelMetadata: Boolean(typeof item === 'object' ? item?.metadata : getModelMetadata(name))
+          hasModelMetadata: Boolean(typeof item === 'object' ? item?.metadata : getModelMetadata(name)),
+          keyIndexes: modelKeyIndexes.value?.[name] || []
         }
       })
 
@@ -380,6 +383,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       suppressSourceWatch = false
     })
     availableModels.value = []
+    modelKeyIndexes.value = {}
     modelMetadata.value = {}
     isSourceModified.value = false
   }
@@ -439,6 +443,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       selectedProviderSourceOriginalId.value = null
       editableProviderSource.value = null
       availableModels.value = []
+      modelKeyIndexes.value = {}
       modelMetadata.value = {}
       isSourceModified.value = false
     }
@@ -467,6 +472,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     selectedProviderSourceOriginalId.value = newId
     editableProviderSource.value = JSON.parse(JSON.stringify(newSource))
     availableModels.value = []
+    modelKeyIndexes.value = {}
     modelMetadata.value = {}
     isSourceModified.value = true
   }
@@ -538,7 +544,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       return false
     } finally {
       savingSource.value = false
-      loadConfig()
+      await loadConfig()
     }
   }
 
@@ -558,7 +564,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       const response = await providerApi.sourceModels(sourceId)
       if (response.data.status === 'ok') {
         const metadataMap = (response.data.data.model_metadata || {}) as Record<string, any>
+        const keyIndexMap = (response.data.data.model_key_indexes || {}) as Record<string, number[]>
         modelMetadata.value = metadataMap
+        modelKeyIndexes.value = keyIndexMap
         availableModels.value = (response.data.data.models || []).map((model: string) => ({
           name: model,
           metadata: metadataMap?.[model] || null
@@ -571,6 +579,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       }
     } catch (error: any) {
       modelMetadata.value = {}
+      modelKeyIndexes.value = {}
       showMessage(error.response?.data?.message || error.message || tm('models.fetchError'), 'error')
     } finally {
       loadingModels.value = false

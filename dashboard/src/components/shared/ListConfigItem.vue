@@ -75,6 +75,9 @@
             rounded="md"
             class="ma-1 list-item-clickable"
             @click="startEdit(index, item)">
+            <template v-if="shouldShowItemIndex" v-slot:prepend>
+              <span class="item-index-label">Key {{ index + 1 }}</span>
+            </template>
             <v-list-item-title v-if="editIndex !== index" class="item-text">
               {{ item }}
             </v-list-item-title>
@@ -188,6 +191,10 @@ const props = defineProps({
   preferSingleItem: {
     type: Boolean,
     default: true
+  },
+  showItemIndex: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -202,6 +209,7 @@ const editItem = ref('')
 const showBatchImport = ref(false)
 const batchImportText = ref('')
 const isSingleItemMode = computed(() => (props.modelValue?.length ?? 0) <= 1 && props.preferSingleItem)
+const shouldShowItemIndex = computed(() => props.showItemIndex && localItems.value.length > 1)
 const singleItemValue = computed({
   get: () => props.modelValue?.[0] ?? '',
   set: (value) => {
@@ -340,6 +348,16 @@ function cancelBatchImport() {
 
 .item-text {
   user-select: none;
+}
+
+.item-index-label {
+  width: 44px;
+  flex-shrink: 0;
+  margin-right: 10px;
+  color: rgba(var(--v-theme-on-surface), 0.56);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
 }
 
 .v-chip {
