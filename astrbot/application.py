@@ -28,6 +28,7 @@ from astrbot.core.utils.io import (
     get_dashboard_dist_version,
     get_repo_dashboard_dist_path,
     is_dashboard_dist_compatible,
+    is_dashboard_version_compatible,
     remove_dir,
     should_use_bundled_dashboard_dist,
 )
@@ -90,7 +91,19 @@ async def resolve_dashboard_assets(webui_dir: str | None = None) -> str | None:
         The directory to serve, or ``None`` when no compatible build exists.
     """
     if webui_dir:
-        if os.path.exists(webui_dir):
+        explicit_dist = Path(webui_dir)
+        if explicit_dist.exists():
+            explicit_version = get_dashboard_dist_version(explicit_dist)
+            if not is_dashboard_version_compatible(explicit_version, VERSION):
+                logger.warning(
+                    "Serving the explicitly configured WebUI directory even though "
+                    "it does not declare a version matching core: %s, expected v%s "
+                    "(%s). Some Dashboard features may not work until matching "
+                    "assets are available.",
+                    explicit_version or "unknown",
+                    VERSION,
+                    explicit_dist,
+                )
             logger.info("Using WebUI directory: %s", webui_dir)
             return webui_dir
         logger.warning("WebUI directory not found: %s. Using default.", webui_dir)

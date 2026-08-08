@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 from pathlib import Path
@@ -563,13 +564,85 @@ async def test_resolve_dashboard_assets_prefers_repo_dist_when_data_dist_matches
     assert result == str(repo_dist)
 
 
-@pytest.mark.asyncio
-async def test_resolve_dashboard_assets_with_webui_dir_arg(monkeypatch):
-    """Tests that providing a valid webui_dir skips all checks."""
-    valid_dir = "/tmp/my-custom-webui"
-    monkeypatch.setattr(os.path, "exists", lambda path: path == valid_dir)
+def _make_explicit_dashboard_dist(tmp_path, version: str | None):
+    """Create a minimal explicitly selected Dashboard directory."""
+    dist = tmp_path / "explicit-webui"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<html></html>", encoding="utf-8")
+    if version is not None:
+        (dist / "assets" / "version").write_text(version, encoding="utf-8")
+    return dist
 
-    with mock.patch("astrbot.application.get_dashboard_dist_version") as mock_get_version:
-        result = await resolve_dashboard_assets(webui_dir=valid_dir)
-        assert result == valid_dir
-        mock_get_version.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_resolve_dashboard_assets_uses_matching_explicit_webui_dir(
+    tmp_path,
+    caplog,
+):
+    """An explicitly selected matching build remains the administrator's choice."""
+    from astrbot.application import VERSION
+
+    explicit_dist = _make_explicit_dashboard_dist(tmp_path, f"v{VERSION}")
+
+    with caplog.at_level(logging.WARNING):
+        result = await resolve_dashboard_assets(webui_dir=str(explicit_dist))
+
+    assert result == str(explicit_dist)
+    assert "does not declare a version matching core" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_resolve_dashboard_assets_warns_for_mismatched_explicit_webui_dir(
+    tmp_path,
+    caplog,
+):
+    """An explicit stale build is served with an actionable compatibility warning."""
+    explicit_dist = _make_explicit_dashboard_dist(tmp_path, "v0.0.1")
+
+    with caplog.at_level(logging.WARNING):
+        result = await resolve_dashboard_assets(webui_dir=str(explicit_dist))
+
+    assert result == str(explicit_dist)
+    assert "does not declare a version matching core" in caplog.text
+    assert "v0.0.1" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_resolve_dashboard_assets_warns_for_explicit_webui_without_marker(
+    tmp_path,
+    caplog,
+):
+    """A marker-less explicit build is served but cannot be silently verified."""
+    explicit_dist = _make_explicit_dashboard_dist(tmp_path, None)
+
+    with caplog.at_level(logging.WARNING):
+        result = await resolve_dashboard_assets(webui_dir=str(explicit_dist))
+
+    assert result == str(explicit_dist)
+    assert "does not declare a version matching core" in caplog.text
+    assert "unknown" in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("webui_dir", ["", None])
+async def test_resolve_dashboard_assets_empty_explicit_dir_has_no_stale_warning(
+    webui_dir,
+    caplog,
+):
+    """An absent option must keep ordinary resolution behavior unchanged."""
+    with caplog.at_level(logging.WARNING):
+        await resolve_dashboard_assets(webui_dir=webui_dir)
+
+    assert "does not declare a version matching core" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_resolve_dashboard_assets_missing_explicit_dir_has_no_stale_warning(
+    tmp_path,
+    caplog,
+):
+    """A nonexistent option falls through instead of being labelled stale."""
+    with caplog.at_level(logging.WARNING):
+        await resolve_dashboard_assets(webui_dir=str(tmp_path / "missing"))
+
+    assert "does not declare a version matching core" not in caplog.text
