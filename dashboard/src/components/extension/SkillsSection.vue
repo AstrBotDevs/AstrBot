@@ -58,6 +58,10 @@
               :key="skill.name"
               :title="skill.name"
               class="skill-list-item"
+              :class="{
+                'skill-list-item--inactive':
+                  skill.active === false || isInactivePluginSkill(skill),
+              }"
               clickable
               @click="openSkillEditor(skill)"
             >
@@ -1881,6 +1885,10 @@ export default {
 
 .skill-list-item :deep(.outlined-action-list-item__main) {
   gap: 0;
+}
+
+.skill-list-item--inactive {
+  opacity: 0.58;
 }
 
 .skill-list-item :deep(.outlined-action-list-item__content) {
