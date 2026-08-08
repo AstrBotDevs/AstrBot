@@ -68,22 +68,61 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
 
     @staticmethod
     async def _parse_onebot_json(message_chain: MessageChain):
-        """解析成 OneBot json 格式"""
+        """解析成 OneBot json 格式
+
+        将消息链转换为 OneBot 协议的消息段数组.
+        特别处理 At 组件与后续内容的间距:
+        - At + Plain 文本:确保一个空格分隔,避免粘连或双空格
+        - At + 非 Plain(图片/文件等):插入空格文本段分隔
+        - At 在链末尾:不添加多余空格
+        - 纯空白 Plain(如仅含换行/空格):跳过,不重置 At 标志位
+        """
         ret = []
+
+        # 标记前一个段是否为 At 组件，用于决定是否需要在当前段前插入空格
+        prev_is_at = False
+
         for segment in message_chain.chain:
             if isinstance(segment, At):
-                # At 组件后插入一个空格，避免与后续文本粘连
+                # At 组件:记录到结果,并设置标志位
+                # 空格由后续段决定如何插入(避免无条件插入导致末尾多余空格)
                 d = await AiocqhttpMessageEvent._from_segment_to_dict(segment)
                 ret.append(d)
-                ret.append({"type": "text", "data": {"text": " "}})
+                prev_is_at = True
+
             elif isinstance(segment, Plain):
+                # 跳过纯空白文本(如单独的换行符、空格等)
+                # 注意:不重置 prev_is_at,避免 [At, Plain("\n"), Plain("你好")]
+                #   这种场景下空白 Plain 阻断空格插入
                 if not segment.text.strip():
                     continue
+
+                if prev_is_at:
+                    # 前一个是 At：去除 Plain 的前导空白后，统一在前面加一个空格
+                    # .lstrip() 的作用：
+                    # result_decorate 阶段可能已在文本前加了空格或换行，
+                    # 直接拼接会导致 "@用户  \n你好" 这样的双空白
+                    # 统一用 " " 替换所有前导空白，确保 @ 与正文之间仅有一个空格
+                    # 注意：不修改 segment.text，避免污染原始 MessageChain（影响 hook 等消费者）
+                    text = " " + segment.text.lstrip()
+                    prev_is_at = False
+                    ret.append({"type": "text", "data": {"text": text}})
+                    continue
+
                 d = await AiocqhttpMessageEvent._from_segment_to_dict(segment)
                 ret.append(d)
+
             else:
+                # 非 At、非 Plain 的组件(Image、Record、Video、File 等)
+                if prev_is_at:
+                    # At 后紧跟媒体组件，插入一个空格文本段防止粘连
+                    # 例如：[At] [Image] → [At] [空格] [Image]
+                    ret.append({"type": "text", "data": {"text": " "}})
+                    prev_is_at = False
+
                 d = await AiocqhttpMessageEvent._from_segment_to_dict(segment)
                 ret.append(d)
+
         return ret
 
     @classmethod
