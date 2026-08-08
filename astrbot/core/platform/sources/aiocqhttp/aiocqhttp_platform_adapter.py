@@ -21,6 +21,8 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.utils.quoted_message.chain_parser import OneBotPayloadParser
+from astrbot.core.utils.quoted_message.settings import SETTINGS
 
 from ...register import register_platform_adapter
 from .aiocqhttp_message_event import *
@@ -240,6 +242,7 @@ class AiocqhttpAdapter(Platform):
 
         # 按消息段类型类型适配
         routing_params = {"self_id": event.self_id} if event.self_id else {}
+        forward_payload_parser = OneBotPayloadParser()
         for t, m_group in itertools.groupby(event.message, key=lambda x: x["type"]):
             a = None
             if t == "text":
@@ -402,6 +405,92 @@ class AiocqhttpAdapter(Platform):
                     text = m["data"].get("markdown") or m["data"].get("content", "")
                     abm.message.append(Plain(text=text))
                     message_str += text
+            elif t == "forward":
+                for m in m_group:
+                    forward_id = m.get("data", {}).get("id") or m.get("data", {}).get(
+                        "message_id"
+                    )
+                    if not forward_id:
+                        logger.warning(
+                            f"合并转发消息段缺少 id，已忽略: data={m.get('data')}"
+                        )
+                        continue
+
+                    forward_id_str = str(forward_id).strip()
+                    if not forward_id_str:
+                        logger.warning(
+                            f"合并转发消息段 id 为空，已忽略: data={m.get('data')}"
+                        )
+                        continue
+
+                    abm.message.append(Forward(id=forward_id_str))
+
+                    pending_forward_ids = [forward_id_str]
+                    seen_forward_ids: set[str] = set()
+                    forward_text_parts: list[str] = []
+                    fetch_count = 0
+                    while (
+                        pending_forward_ids and fetch_count < SETTINGS.max_forward_fetch
+                    ):
+                        current_id = pending_forward_ids.pop(0)
+                        if current_id in seen_forward_ids:
+                            continue
+
+                        seen_forward_ids.add(current_id)
+                        fetch_count += 1
+                        params_list: list[dict[str, str | int]] = [
+                            {"message_id": current_id},
+                            {"id": current_id},
+                        ]
+                        if current_id.isdigit():
+                            int_id = int(current_id)
+                            params_list.extend([{"message_id": int_id}, {"id": int_id}])
+
+                        forward_payload = None
+                        last_error = None
+                        for params in params_list:
+                            try:
+                                forward_payload = await self.bot.call_action(
+                                    action="get_forward_msg",
+                                    **params,
+                                    **routing_params,
+                                )
+                                if isinstance(forward_payload, dict):
+                                    break
+                            except Exception as e:
+                                last_error = e
+
+                        if not isinstance(forward_payload, dict):
+                            if last_error:
+                                logger.error(f"获取合并转发消息失败: {last_error}。")
+                            continue
+
+                        parsed = forward_payload_parser.parse_get_forward_payload(
+                            forward_payload
+                        )
+                        if parsed["text"]:
+                            forward_text_parts.append(parsed["text"])
+                        for nested_id in parsed["forward_ids"]:
+                            nested_id = str(nested_id).strip()
+                            if nested_id and nested_id not in seen_forward_ids:
+                                pending_forward_ids.append(nested_id)
+
+                    if pending_forward_ids:
+                        logger.warning(
+                            "aiocqhttp: stop fetching nested forward messages "
+                            "after %d hops",
+                            SETTINGS.max_forward_fetch,
+                        )
+
+                    forward_text = "\n".join(forward_text_parts).strip()
+                    if forward_text:
+                        abm.message.append(Plain(text=forward_text))
+                    else:
+                        forward_text = "[Forward Message]"
+
+                    if message_str and not message_str.endswith("\n"):
+                        message_str += "\n"
+                    message_str += forward_text
             else:
                 for m in m_group:
                     try:
