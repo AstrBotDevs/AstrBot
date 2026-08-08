@@ -81,7 +81,17 @@ _DENIED_STDIO_COMMANDS = frozenset(
     }
 )
 _SHELL_META_RE = re.compile(r"[\r\n\x00;&|<>`$]")
+_PYTHON_MODULE_REQUIRED_MSG = (
+    "MCP stdio Python servers must be launched from a module or package; "
+    "local Python script/archive paths are not allowed."
+)
+_PYTHON_INLINE_CODE_DENIED_MSG = (
+    "MCP stdio Python servers must be launched from a module or package; "
+    "inline code flags such as -c are not allowed."
+)
 _PYTHON_INLINE_CODE_FLAGS = frozenset({"-c"})
+_PYTHON_OPTIONS_WITH_VALUE = frozenset({"-W", "-X", "--check-hash-based-pycs"})
+_PYTHON_OPTION_PREFIXES_WITH_VALUE = ("-W", "-X", "--check-hash-based-pycs=")
 _JS_INLINE_CODE_FLAGS = frozenset({"-e", "--eval", "-p", "--print"})
 _DENIED_DOCKER_ARGS = frozenset(
     {
@@ -145,6 +155,50 @@ def _normalize_stdio_command_name(command: str) -> str:
     return command_name
 
 
+def _is_python_option_with_inline_value(arg: str) -> bool:
+    return any(
+        arg.startswith(prefix) and arg != prefix
+        for prefix in _PYTHON_OPTION_PREFIXES_WITH_VALUE
+    )
+
+
+def _ensure_valid_python_module(module_name: str | None) -> None:
+    if not module_name or module_name.startswith("-"):
+        raise ValueError(_PYTHON_MODULE_REQUIRED_MSG)
+
+
+def _validate_python_stdio_args(args: list[str]) -> None:
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--":
+            index += 1
+            break
+        if arg in _PYTHON_OPTIONS_WITH_VALUE:
+            index += 2
+            continue
+        if _is_python_option_with_inline_value(arg):
+            index += 1
+            continue
+        if arg == "-m":
+            module_name = args[index + 1] if index + 1 < len(args) else None
+            _ensure_valid_python_module(module_name)
+            return
+        if arg.startswith("-m") and not arg.startswith("--"):
+            _ensure_valid_python_module(arg[2:])
+            return
+        if arg in _PYTHON_INLINE_CODE_FLAGS or (
+            arg.startswith("-") and not arg.startswith("--") and "c" in arg
+        ):
+            raise ValueError(_PYTHON_INLINE_CODE_DENIED_MSG)
+        if arg.startswith("-"):
+            index += 1
+            continue
+        break
+
+    raise ValueError(_PYTHON_MODULE_REQUIRED_MSG)
+
+
 def _get_stdio_command_allowlist() -> set[str]:
     allowed = set(_DEFAULT_STDIO_COMMAND_ALLOWLIST)
     configured = os.environ.get(_STDIO_ALLOWLIST_ENV, "")
@@ -163,7 +217,10 @@ def _is_stdio_config(config: dict) -> bool:
 
 
 def _validate_stdio_args(command_name: str, args: object) -> None:
+    is_python_command = command_name.startswith("python") or command_name == "py"
     if args is None:
+        if is_python_command:
+            raise ValueError(_PYTHON_MODULE_REQUIRED_MSG)
         return
     if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
         raise ValueError("MCP stdio args must be a list of strings.")
@@ -172,15 +229,8 @@ def _validate_stdio_args(command_name: str, args: object) -> None:
         if "\x00" in arg or "\r" in arg or "\n" in arg:
             raise ValueError("MCP stdio args cannot contain control characters.")
 
-    if command_name.startswith("python") or command_name == "py":
-        if any(
-            arg == "-c"
-            or (arg.startswith("-") and not arg.startswith("--") and "c" in arg)
-            for arg in args
-        ):
-            raise ValueError(
-                "MCP stdio Python servers must be launched from a module or file; inline code flags such as -c are not allowed."
-            )
+    if is_python_command:
+        _validate_python_stdio_args(args)
     elif command_name in {"node", "deno", "bun"} or command_name.startswith("node"):
         if any(
             arg in _JS_INLINE_CODE_FLAGS

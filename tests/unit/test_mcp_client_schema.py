@@ -1,7 +1,13 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from astrbot.core.agent.mcp_client import MCPTool, _normalize_mcp_input_schema
+import pytest
+
+from astrbot.core.agent.mcp_client import (
+    MCPTool,
+    _normalize_mcp_input_schema,
+    validate_mcp_stdio_config,
+)
 
 
 class TestNormalizeMcpInputSchema:
@@ -115,3 +121,92 @@ class TestMCPToolSchemaNormalization:
         assert tool.parameters["required"] == ["stock_code"]
         assert "required" not in tool.parameters["properties"]["stock_code"]
         assert "required" not in tool.parameters["properties"]["market"]
+
+
+class TestValidateMcpStdioConfig:
+    @pytest.mark.parametrize("suffix", [".py", ".pyw", ".pyc", ".pyo", ".pyz"])
+    def test_rejects_python_local_script_targets(self, suffix: str) -> None:
+        config = {"command": "python", "args": [f"./payload{suffix}"]}
+
+        with pytest.raises(ValueError, match="local Python script/archive"):
+            validate_mcp_stdio_config(config)
+
+    def test_rejects_windows_python_archive_target_case_insensitively(self) -> None:
+        config = {
+            "command": "python3",
+            "args": ["-I", "-u", "C:\\Users\\Public\\payload.PYZ"],
+        }
+
+        with pytest.raises(ValueError, match="local Python script/archive"):
+            validate_mcp_stdio_config(config)
+
+    def test_rejects_python_script_target_after_option_separator(self) -> None:
+        config = {"command": "python", "args": ["--", "payload.py"]}
+
+        with pytest.raises(ValueError, match="local Python script/archive"):
+            validate_mcp_stdio_config(config)
+
+    def test_rejects_python_local_target_without_known_suffix(self) -> None:
+        config = {"command": "python", "args": ["./payload"]}
+
+        with pytest.raises(ValueError, match="local Python script/archive"):
+            validate_mcp_stdio_config(config)
+
+    @pytest.mark.parametrize(
+        "config",
+        [
+            {"command": "python", "args": ["-m", "mcp_server"]},
+            {"command": "python3", "args": ["-I", "-m", "package.module"]},
+            {"command": "python3", "args": ["-mmcp_server"]},
+            {"command": "py", "args": ["-3.12", "-m", "mcp_server"]},
+            {
+                "command": "python",
+                "args": ["-m", "mcp_server", "--config", "server.py"],
+            },
+            {
+                "mcpServers": {
+                    "demo": {"command": "python", "args": ["-m", "mcp_server"]}
+                }
+            },
+        ],
+    )
+    def test_allows_python_module_launches(self, config: dict) -> None:
+        validate_mcp_stdio_config(config)
+
+    def test_rejects_python_inline_code_flags(self) -> None:
+        config = {"command": "python", "args": ["-c", "print('x')"]}
+
+        with pytest.raises(ValueError, match="inline code flags"):
+            validate_mcp_stdio_config(config)
+
+    def test_rejects_python_compact_inline_code_flags(self) -> None:
+        config = {"command": "python", "args": ["-Ic", "print('x')"]}
+
+        with pytest.raises(ValueError, match="inline code flags"):
+            validate_mcp_stdio_config(config)
+
+    def test_rejects_python_missing_module_name(self) -> None:
+        config = {"command": "python", "args": ["-m"]}
+
+        with pytest.raises(ValueError, match="module or package"):
+            validate_mcp_stdio_config(config)
+
+    def test_rejects_python_option_only_launch(self) -> None:
+        config = {"command": "python", "args": ["-I", "-u"]}
+
+        with pytest.raises(ValueError, match="module or package"):
+            validate_mcp_stdio_config(config)
+
+    def test_rejects_python_launch_without_args(self) -> None:
+        config = {"command": "python"}
+
+        with pytest.raises(ValueError, match="module or package"):
+            validate_mcp_stdio_config(config)
+
+    def test_allows_module_owned_dash_c_argument(self) -> None:
+        config = {
+            "command": "python",
+            "args": ["-m", "mcp_server", "-c", "config.toml"],
+        }
+
+        validate_mcp_stdio_config(config)
