@@ -129,6 +129,9 @@ class MockTelegramBuilder:
         bot.set_message_reaction = AsyncMock()
         bot.edit_message_text = AsyncMock()
         bot.send_message_draft = AsyncMock()
+        webhook_info = MagicMock()
+        webhook_info.pending_update_count = 0
+        bot.get_webhook_info = AsyncMock(return_value=webhook_info)
         return bot
 
     @staticmethod

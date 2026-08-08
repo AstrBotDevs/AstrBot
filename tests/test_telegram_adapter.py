@@ -320,6 +320,347 @@ async def test_telegram_polling_error_requests_rebuild_after_threshold():
     assert adapter._polling_recovery_requested.is_set()
 
 
+def test_telegram_polling_watchdog_uses_configured_settings():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    module_globals = TelegramPlatformAdapter.__init__.__globals__
+    builder = MagicMock()
+    builder.build.return_value = MockTelegramBuilder.create_application()
+
+    with patch.dict(
+        module_globals,
+        {
+            "ApplicationBuilder": MagicMock(return_value=builder),
+            "AsyncIOScheduler": MagicMock(
+                return_value=MockTelegramBuilder.create_scheduler()
+            ),
+        },
+    ):
+        adapter = TelegramPlatformAdapter(
+            make_platform_config(
+                "telegram",
+                telegram_connect_timeout=7.5,
+                telegram_polling_watchdog_interval=20.0,
+                telegram_polling_watchdog_failure_threshold=4,
+                telegram_polling_watchdog_pending_update_threshold=5,
+            ),
+            {},
+            asyncio.Queue(),
+        )
+
+    builder.connect_timeout.assert_called_once_with(7.5)
+    builder.get_updates_connect_timeout.assert_called_once_with(7.5)
+    assert adapter._polling_watchdog_interval == 20.0
+    assert adapter._polling_watchdog_failure_threshold == 4
+    assert adapter._polling_pending_update_threshold == 5
+    assert adapter._polling_shutdown_timeout == 15.0
+
+
+def test_telegram_polling_watchdog_validates_configured_settings():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config(
+            "telegram",
+            telegram_polling_restart_delay=float("inf"),
+            telegram_connect_timeout="invalid",
+            telegram_polling_watchdog_interval=0,
+            telegram_polling_watchdog_failure_threshold=0,
+            telegram_polling_watchdog_pending_update_threshold="invalid",
+        ),
+        {},
+        asyncio.Queue(),
+    )
+
+    assert adapter._polling_restart_delay == 5.0
+    assert adapter._telegram_connect_timeout == 15.0
+    assert adapter._polling_watchdog_interval == 1.0
+    assert adapter._polling_watchdog_failure_threshold == 1
+    assert adapter._polling_pending_update_threshold == 2
+
+
+@pytest.mark.asyncio
+async def test_telegram_polling_watchdog_tolerates_transient_network_error():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    module_globals = TelegramPlatformAdapter.__init__.__globals__
+    application = MockTelegramBuilder.create_application()
+    webhook_info = MagicMock()
+    webhook_info.pending_update_count = 0
+    application.bot.get_webhook_info.side_effect = [
+        MockTelegramNetworkError("proxy switching"),
+        webhook_info,
+    ]
+    builder = MagicMock()
+    builder.build.return_value = application
+
+    with patch.dict(
+        module_globals,
+        {
+            "ApplicationBuilder": MagicMock(return_value=builder),
+            "AsyncIOScheduler": MagicMock(
+                return_value=MockTelegramBuilder.create_scheduler()
+            ),
+        },
+    ):
+        adapter = TelegramPlatformAdapter(
+            make_platform_config("telegram"),
+            {},
+            asyncio.Queue(),
+        )
+        await adapter._check_polling_health()
+        await adapter._check_polling_health()
+
+    builder.connect_timeout.assert_called_once_with(15.0)
+    builder.get_updates_connect_timeout.assert_called_once_with(15.0)
+    assert adapter._polling_watchdog_failures == 0
+    assert not adapter._polling_recovery_requested.is_set()
+
+
+@pytest.mark.asyncio
+async def test_telegram_polling_watchdog_replaces_failed_outbound_client():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    module_globals = TelegramPlatformAdapter.__init__.__globals__
+    app_one = MockTelegramBuilder.create_application()
+    app_one.bot.get_webhook_info.side_effect = MockTelegramNetworkError(
+        "proxy unavailable"
+    )
+    app_two = MockTelegramBuilder.create_application()
+    builder = MagicMock()
+    builder.build.side_effect = [app_one, app_two]
+
+    with patch.dict(
+        module_globals,
+        {
+            "ApplicationBuilder": MagicMock(return_value=builder),
+            "AsyncIOScheduler": MagicMock(
+                return_value=MockTelegramBuilder.create_scheduler()
+            ),
+        },
+    ):
+        adapter = TelegramPlatformAdapter(
+            make_platform_config("telegram"),
+            {},
+            asyncio.Queue(),
+        )
+        await adapter._start_application()
+        for _ in range(adapter._polling_watchdog_failure_threshold):
+            await adapter._check_polling_health()
+        await adapter._recreate_application()
+
+    assert app_one.bot.get_webhook_info.await_count == 3
+    app_one.stop.assert_awaited_once()
+    app_one.shutdown.assert_awaited_once()
+    assert adapter.client is app_two.bot
+    assert adapter._outbound_application is app_two
+    assert adapter._outbound_application_initialized is False
+
+
+@pytest.mark.asyncio
+async def test_telegram_polling_watchdog_ignores_pending_updates_with_progress():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    module_globals = TelegramPlatformAdapter.__init__.__globals__
+    application = MockTelegramBuilder.create_application()
+    pending_counts = [3, 2, 2, 2]
+    application.bot.get_webhook_info.side_effect = [
+        MagicMock(pending_update_count=count) for count in pending_counts
+    ]
+    builder = MagicMock()
+    builder.build.return_value = application
+
+    with patch.dict(
+        module_globals,
+        {
+            "ApplicationBuilder": MagicMock(return_value=builder),
+            "AsyncIOScheduler": MagicMock(
+                return_value=MockTelegramBuilder.create_scheduler()
+            ),
+        },
+    ):
+        adapter = TelegramPlatformAdapter(
+            make_platform_config("telegram"),
+            {},
+            asyncio.Queue(),
+        )
+        await adapter._check_polling_health()
+        await adapter._check_polling_health()
+        adapter._received_message_count += 1
+        await adapter._check_polling_health()
+        await adapter._check_polling_health()
+
+    assert adapter._polling_pending_update_checks == 1
+    assert not adapter._polling_recovery_requested.is_set()
+
+
+@pytest.mark.asyncio
+async def test_telegram_polling_watchdog_preserves_sends_and_cleans_up():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    module_globals = TelegramPlatformAdapter.__init__.__globals__
+    app_one = MockTelegramBuilder.create_application()
+    webhook_info = MagicMock()
+    webhook_info.pending_update_count = 1
+    app_one.bot.get_webhook_info.return_value = webhook_info
+    app_two = MockTelegramBuilder.create_application()
+    builder = MagicMock()
+    builder.build.side_effect = [app_one, app_two]
+
+    with patch.dict(
+        module_globals,
+        {
+            "ApplicationBuilder": MagicMock(return_value=builder),
+            "AsyncIOScheduler": MagicMock(
+                return_value=MockTelegramBuilder.create_scheduler()
+            ),
+        },
+    ):
+        adapter = TelegramPlatformAdapter(
+            make_platform_config("telegram"),
+            {},
+            asyncio.Queue(),
+        )
+        await adapter._start_application()
+        for _ in range(adapter._polling_pending_update_threshold):
+            await adapter._check_polling_health()
+        await adapter._recreate_application()
+
+        assert adapter.client is app_one.bot
+        app_one.shutdown.assert_not_awaited()
+        await adapter.client.send_message(chat_id=123, text="still available")
+        app_one.bot.send_message.assert_awaited_once_with(
+            chat_id=123,
+            text="still available",
+        )
+
+        await adapter.terminate()
+
+    app_one.shutdown.assert_awaited_once()
+    app_two.shutdown.assert_awaited_once()
+    assert adapter._outbound_application is None
+    assert adapter._outbound_application_initialized is False
+
+
+@pytest.mark.asyncio
+async def test_telegram_run_rebuilds_polling_when_watchdog_detects_stall():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    module_globals = TelegramPlatformAdapter.__init__.__globals__
+    app_one = MockTelegramBuilder.create_application()
+    app_one.updater.running = True
+    webhook_info = MagicMock()
+    webhook_info.pending_update_count = 1
+    app_one.bot.get_webhook_info.return_value = webhook_info
+    app_two = MockTelegramBuilder.create_application()
+    app_two.updater.running = True
+    builder = MagicMock()
+    builder.build.side_effect = [app_one, app_two]
+    adapter = None
+
+    async def second_start_polling(*args, **kwargs):
+        assert adapter is not None
+        adapter._terminating = True
+
+    app_two.updater.start_polling.side_effect = second_start_polling
+
+    with patch.dict(
+        module_globals,
+        {
+            "ApplicationBuilder": MagicMock(return_value=builder),
+            "AsyncIOScheduler": MagicMock(
+                return_value=MockTelegramBuilder.create_scheduler()
+            ),
+        },
+    ):
+        adapter = TelegramPlatformAdapter(
+            make_platform_config("telegram"),
+            {},
+            asyncio.Queue(),
+        )
+        adapter._polling_watchdog_interval = 0.01
+        await adapter.run()
+
+    assert app_one.bot.get_webhook_info.await_count == 2
+    assert builder.build.call_count == 2
+    app_one.shutdown.assert_not_awaited()
+    app_two.initialize.assert_awaited_once()
+    app_two.start.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_telegram_initialization_failure_replaces_uninitialized_client():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    module_globals = TelegramPlatformAdapter.__init__.__globals__
+    app_one = MockTelegramBuilder.create_application()
+    app_one.initialize.side_effect = MockTelegramNetworkError("proxy switching")
+    app_two = MockTelegramBuilder.create_application()
+    builder = MagicMock()
+    builder.build.side_effect = [app_one, app_two]
+    adapter = None
+
+    async def second_start_polling(*args, **kwargs):
+        assert adapter is not None
+        adapter._terminating = True
+
+    app_two.updater.start_polling.side_effect = second_start_polling
+
+    with patch.dict(
+        module_globals,
+        {
+            "ApplicationBuilder": MagicMock(return_value=builder),
+            "AsyncIOScheduler": MagicMock(
+                return_value=MockTelegramBuilder.create_scheduler()
+            ),
+        },
+    ):
+        adapter = TelegramPlatformAdapter(
+            make_platform_config(
+                "telegram",
+                telegram_polling_restart_delay=0.1,
+            ),
+            {},
+            asyncio.Queue(),
+        )
+        await adapter.run()
+
+    app_one.shutdown.assert_awaited_once()
+    assert adapter.client is app_two.bot
+    assert adapter._outbound_application is app_two
+    assert adapter._outbound_application_initialized
+
+
+@pytest.mark.asyncio
+async def test_telegram_shutdown_bounds_stalled_updater_stop():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    module_globals = TelegramPlatformAdapter.__init__.__globals__
+    application = MockTelegramBuilder.create_application()
+    builder = MagicMock()
+    builder.build.return_value = application
+
+    async def stalled_stop():
+        await asyncio.Event().wait()
+
+    application.updater.stop.side_effect = stalled_stop
+
+    with patch.dict(
+        module_globals,
+        {
+            "ApplicationBuilder": MagicMock(return_value=builder),
+            "AsyncIOScheduler": MagicMock(
+                return_value=MockTelegramBuilder.create_scheduler()
+            ),
+        },
+    ):
+        adapter = TelegramPlatformAdapter(
+            make_platform_config(
+                "telegram",
+                telegram_connect_timeout=120.0,
+            ),
+            {},
+            asyncio.Queue(),
+        )
+        adapter._polling_shutdown_timeout = 0.01
+        await adapter._shutdown_application(delete_commands=False)
+
+    builder.connect_timeout.assert_called_once_with(120.0)
+    application.stop.assert_awaited_once()
+    application.shutdown.assert_awaited_once()
+
+
 @pytest.mark.asyncio
 async def test_telegram_run_rebuilds_application_after_repeated_polling_errors():
     TelegramPlatformAdapter = _load_telegram_adapter()
@@ -379,9 +720,10 @@ async def test_telegram_run_rebuilds_application_after_repeated_polling_errors()
     app_one.updater.stop.assert_awaited()
     app_one.bot.delete_my_commands.assert_not_awaited()
     app_one.stop.assert_awaited()
-    app_one.shutdown.assert_awaited()
+    app_one.shutdown.assert_not_awaited()
     app_two.initialize.assert_awaited()
     app_two.start.assert_awaited()
+    assert adapter.client is app_one.bot
 
 
 @pytest.mark.asyncio
