@@ -3331,10 +3331,13 @@ async def test_v1_skill_scope_accepts_api_key_and_rejects_plural_scope(
     fake_db: FakeDb,
     monkeypatch: pytest.MonkeyPatch,
 ):
+    def fake_get_skills():
+        return {"skills": [{"name": "demo_skill"}]}
+
     monkeypatch.setattr(
         asgi_app.state.services.skills,
         "get_skills",
-        lambda: {"skills": [{"name": "demo_skill"}]},
+        fake_get_skills,
     )
 
     plural_key = "abk_fastapi_v1_skills"
