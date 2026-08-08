@@ -1423,7 +1423,7 @@
         "hint": "Gemini Embedding 无需手动添加 /v1beta。"
       },
       "dashscope_embedding": {
-        "hint": "阿里云百炼 Embedding，默认地址为 https://dashscope.aliyuncs.com/api/v1。"
+        "hint": "阿里云百炼 Embedding，默认地址为 https://dashscope.aliyuncs.com/api/v1，批次上限为 10。"
       },
       "volcengine_cluster": {
         "description": "火山引擎集群",
