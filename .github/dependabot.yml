@@ -1,25 +1,131 @@
-# Keep GitHub Actions up to date with GitHub's Dependabot...
+# Keep all dependency surfaces current. The repository uses uv for Python,
+# npm-compatible Dependabot entries for npm/pnpm lockfiles, and pinned GitHub
+# Actions revisions.
+#
+# Dependabot runs daily, keeps a generous queue of update PRs, and groups
+# compatible updates while leaving major upgrades in a separate PR.
 # https://docs.github.com/en/code-security/dependabot/working-with-dependabot/keeping-your-actions-up-to-date-with-dependabot
-# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file#package-ecosystem
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 version: 2
 updates:
   - package-ecosystem: uv
     directory: /
     schedule:
       interval: daily
+      time: '04:00'
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 20
+    labels:
+      - dependencies
+      - python
+    commit-message:
+      prefix: deps
+      include: scope
+    groups:
+      python-minor-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      python-major:
+        patterns:
+          - '*'
+        update-types:
+          - major
+
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: daily
+      time: '04:10'
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 20
+    labels:
+      - dependencies
+      - tooling
+    commit-message:
+      prefix: deps
+      include: scope
+    groups:
+      root-minor-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      root-major:
+        patterns:
+          - '*'
+        update-types:
+          - major
+
   - package-ecosystem: npm
     directory: /dashboard
     schedule:
       interval: daily
+      time: '04:20'
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 20
+    labels:
+      - dependencies
+      - dashboard
+    commit-message:
+      prefix: deps
+      include: scope
+    groups:
+      dashboard-minor-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      dashboard-major:
+        patterns:
+          - '*'
+        update-types:
+          - major
+
+  - package-ecosystem: npm
+    directory: /docs
+    schedule:
+      interval: daily
+      time: '04:30'
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 20
+    labels:
+      - dependencies
+      - documentation
+    commit-message:
+      prefix: deps
+      include: scope
+    groups:
+      docs-minor-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      docs-major:
+        patterns:
+          - '*'
+        update-types:
+          - major
+
   - package-ecosystem: github-actions
     directory: /
+    schedule:
+      interval: daily
+      time: '04:40'
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 20
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: ci
+      include: scope
     groups:
       github-actions:
         patterns:
-          - '*' # Group all Actions updates into a single larger pull request
-    schedule:
-      interval: daily
+          - '*'
