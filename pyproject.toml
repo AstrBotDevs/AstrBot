@@ -98,6 +98,11 @@ astrbot = "astrbot.cli.__main__:cli"
 [project.urls]
 Repository = "https://github.com/AstrBotDevs/AstrBot"
 
+[[tool.uv.index]]
+name = "aliyun"
+url = "https://mirrors.aliyun.com/pypi/simple"
+default = true
+
 [tool.ruff]
 exclude = [
   "astrbot/core/utils/t2i/local_strategy.py",
