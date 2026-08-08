@@ -87,6 +87,12 @@ LIVE_MODE_SYSTEM_PROMPT = (
     "Sound like a real conversation, not a Q&A system."
 )
 
+# The WOKE prompts below are split into a static system half and a dynamic user
+# half on purpose. Anything that changes between two wakeups (the job payload,
+# the conversation history) has to stay out of the system prompt, otherwise it
+# sits in front of the persona and tool declarations that build_main_agent
+# appends later and invalidates the provider's prefix cache on every run.
+
 PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT = (
     "You are an autonomous proactive agent.\n\n"
     "You are awakened by a scheduled cron job, not by a user message.\n"
@@ -95,7 +101,10 @@ PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT = (
     "2. Use historical conversation and memory to understand you and user's relationship, preferences, and context.\n"
     "3. If messaging the user: Explain WHY you are contacting them; Reference the cron task implicitly (not technical details).\n"
     "4. Use your available tools and skills to finish the task if needed.\n"
-    "5. Use `send_message_to_user` tool to send message to user if needed."
+    "5. Use `send_message_to_user` tool to send message to user if needed.\n"
+)
+
+PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT = (
     "# CRON JOB CONTEXT\n"
     "The following object describes the scheduled task that triggered you:\n"
     "{cron_job}"
@@ -109,10 +118,17 @@ BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT = (
     "2. Use historical conversation and memory to understand you and user's relationship, preferences, and context."
     "3. If messaging the user: Explain WHY you are contacting them; Reference the background task implicitly (not technical details)."
     "4. You can use your available tools and skills to finish the task if needed.\n"
-    "5. Use `send_message_to_user` tool to send message to user if needed."
+    "5. Use `send_message_to_user` tool to send message to user if needed.\n"
+)
+
+BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT = (
     "# BACKGROUND TASK CONTEXT\n"
     "The following object describes the background task that completed:\n"
     "{background_task_result}"
+)
+
+CONVERSATION_HISTORY_USER_PROMPT = (
+    "Bellow is you and user previous conversation history:\n---\n{history}\n---\n"
 )
 
 # we prevent astrbot from connecting to known malicious hosts
