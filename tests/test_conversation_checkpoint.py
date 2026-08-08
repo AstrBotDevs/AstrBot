@@ -234,7 +234,6 @@ async def test_aborted_response_persists_synthetic_stop_turn():
         LLMResponse(role="assistant", completion_text="Output stopped."),
         [
             Message(role="user", content="Explain the result."),
-            Message(role="assistant", content=[TextPart(text="Partial response")]),
             Message(role="user", content=[TextPart(text="Stop output.")]),
             Message(role="assistant", content=[TextPart(text="Output stopped.")]),
         ],
@@ -247,10 +246,6 @@ async def test_aborted_response_persists_synthetic_stop_turn():
         "conversation-1",
         history=[
             {"role": "user", "content": "Explain the result."},
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "Partial response"}],
-            },
             {
                 "role": "user",
                 "content": [{"type": "text", "text": "Stop output."}],

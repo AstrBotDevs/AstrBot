@@ -1304,7 +1304,7 @@ async def test_empty_output_retries_exhausted_then_uses_fallback_provider(
 
 
 @pytest.mark.asyncio
-async def test_stop_signal_returns_aborted_and_persists_partial_message(
+async def test_stop_signal_returns_aborted_and_discards_partial_message(
     runner, provider_request, mock_tool_executor, mock_hooks
 ):
     provider = MockAbortableStreamProvider()
@@ -1335,18 +1335,20 @@ async def test_stop_signal_returns_aborted_and_persists_partial_message(
     assert final_resp is not None
     assert final_resp.role == "assistant"
     assert final_resp.completion_text == runner.USER_INTERRUPTION_MESSAGE
-    assert [message.role for message in runner.run_context.messages[-3:]] == [
-        "assistant",
+    assert [message.role for message in runner.run_context.messages[-2:]] == [
         "user",
         "assistant",
     ]
-    assert runner.run_context.messages[-3].content == [TextPart(text="partial ")]
     assert runner.run_context.messages[-2].content == [
         TextPart(text=runner.USER_INTERRUPTION_REQUEST)
     ]
     assert runner.run_context.messages[-1].content == [
         TextPart(text=runner.USER_INTERRUPTION_MESSAGE)
     ]
+    assert all(
+        message.content != [TextPart(text="partial ")]
+        for message in runner.run_context.messages
+    )
 
 
 @pytest.mark.asyncio

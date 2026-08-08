@@ -800,9 +800,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # 开始处理，转换到运行状态
         self._transition_state(AgentState.RUNNING)
         llm_resp_result = None
-        streamed_completion_parts: list[str] = []
-        streamed_reasoning_parts: list[str] = []
-        streamed_reasoning_signature: str | None = None
 
         # Process request-time context before sending it to the provider.
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
@@ -825,7 +822,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     self.stats.time_to_first_token = time.time() - self.stats.start_time
 
                 if llm_response.reasoning_content:
-                    streamed_reasoning_parts.append(llm_response.reasoning_content)
                     yield AgentResponse(
                         type="streaming_delta",
                         data=AgentResponseData(
@@ -834,11 +830,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             ),
                         ),
                     )
-                if llm_response.completion_text:
-                    streamed_completion_parts.append(llm_response.completion_text)
-                if llm_response.reasoning_signature:
-                    streamed_reasoning_signature = llm_response.reasoning_signature
-
                 if llm_response.result_chain:
                     yield AgentResponse(
                         type="streaming_delta",
@@ -879,19 +870,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             break  # got final response
 
-        if not llm_resp_result:
-            if self._is_stop_requested():
-                llm_resp_result = LLMResponse(
-                    role="assistant",
-                    completion_text="".join(streamed_completion_parts),
-                    reasoning_content="".join(streamed_reasoning_parts) or None,
-                    reasoning_signature=streamed_reasoning_signature,
-                )
-            else:
-                return
-
         if self._is_stop_requested():
-            yield await self._finalize_aborted_step(llm_resp_result)
+            yield await self._finalize_aborted_step()
+            return
+
+        if not llm_resp_result:
             return
 
         # 处理 LLM 响应
@@ -946,7 +929,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if self.tool_schema_mode == "skills_like":
                 requery_resp, _ = await self._resolve_tool_exec(llm_resp)
                 if self._is_stop_requested():
-                    yield await self._finalize_aborted_step(llm_resp)
+                    yield await self._finalize_aborted_step()
                     return
                 if not requery_resp.tools_call_name:
                     llm_resp = requery_resp
@@ -1007,7 +990,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             data=AgentResponseData(chain=chain),
                         )
             except _ToolExecutionInterrupted:
-                yield await self._finalize_aborted_step(llm_resp)
+                yield await self._finalize_aborted_step()
                 return
 
             # 将结果添加到上下文中
@@ -1497,27 +1480,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     def get_final_llm_resp(self) -> LLMResponse | None:
         return self.final_llm_resp
 
-    async def _finalize_aborted_step(
-        self,
-        llm_resp: LLMResponse | None = None,
-    ) -> AgentResponse:
+    async def _finalize_aborted_step(self) -> AgentResponse:
         logger.info("Agent execution was requested to stop by user.")
-
-        partial_parts = []
-        if llm_resp is not None and llm_resp.role == "assistant":
-            if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
-                partial_parts.append(
-                    ThinkPart(
-                        think=llm_resp.reasoning_content or "",
-                        encrypted=llm_resp.reasoning_signature,
-                    )
-                )
-            if llm_resp.completion_text:
-                partial_parts.append(TextPart(text=llm_resp.completion_text))
-        if partial_parts:
-            self.run_context.messages.append(
-                Message(role="assistant", content=partial_parts)
-            )
 
         self.run_context.messages.extend(
             [
