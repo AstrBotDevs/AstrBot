@@ -2476,6 +2476,10 @@ export type SyncModelScopeMcpServersError = unknown;
 export type ListSkillsData = {
     query?: {
         enabled?: boolean;
+        /**
+         * Include plugin Skills whose owning plugin is inactive.
+         */
+        include_inactive_plugins?: boolean;
         source?: string;
     };
 };

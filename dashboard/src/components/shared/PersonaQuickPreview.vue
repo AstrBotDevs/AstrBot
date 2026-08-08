@@ -181,7 +181,7 @@ async function loadToolsMeta() {
 
 async function loadSkillsMeta() {
   try {
-    const response = await skillApi.list();
+    const response = await skillApi.list({ include_inactive_plugins: true });
     if (response.data?.status === "ok") {
       const payload = response.data?.data || [];
       const skills = Array.isArray(payload) ? payload : payload.skills || [];

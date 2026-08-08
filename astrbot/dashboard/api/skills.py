@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 
 from astrbot.core import logger
@@ -105,10 +105,15 @@ async def _download_skill(service: SkillsService, name: str):
 
 @router.get("/skills")
 async def list_skills(
+    include_inactive_plugins: bool = Query(default=False),
     _auth: AuthContext = Depends(require_skill_scope),
     service: SkillsService = Depends(get_service),
 ):
-    return await _run(service.get_skills)
+    return await _run(
+        lambda: service.get_skills(
+            include_inactive_plugins=include_inactive_plugins,
+        )
+    )
 
 
 @router.post("/skills")

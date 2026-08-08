@@ -243,7 +243,16 @@ class SkillsService:
             logger.error(traceback.format_exc())
             return SkillsOperationResult(ok=False, message=str(exc))
 
-    def get_skills(self) -> dict:
+    def get_skills(self, *, include_inactive_plugins: bool = False) -> dict:
+        """Return the Skill inventory for Dashboard consumers.
+
+        Args:
+            include_inactive_plugins: Whether to include Skills owned by inactive
+                plugins so capability selectors can render them as unavailable.
+
+        Returns:
+            The serialized Skill inventory and current runtime metadata.
+        """
         provider_settings = self.core_lifecycle.astrbot_config.get(
             "provider_settings", {}
         )
@@ -255,24 +264,28 @@ class SkillsService:
             show_sandbox_path=False,
         )
         plugin_display_names = {}
-        active_plugin_root_names = set()
+        plugin_activation_by_root_name = {}
         for plugin in self.core_lifecycle.plugin_manager.context.get_all_stars():
             display_name = str(plugin.display_name or plugin.name or "").strip()
             for plugin_name in (plugin.name, plugin.root_dir_name):
                 if plugin_name:
                     plugin_display_names[str(plugin_name)] = display_name
-            if plugin.activated and plugin.root_dir_name:
-                active_plugin_root_names.add(str(plugin.root_dir_name))
+            if plugin.root_dir_name:
+                plugin_activation_by_root_name[str(plugin.root_dir_name)] = bool(
+                    plugin.activated
+                )
 
         serialized_skills = []
         for skill in skills:
-            if (
-                skill.source_type == "plugin"
-                and skill.plugin_name not in active_plugin_root_names
-            ):
-                continue
             skill_data = dict(skill.__dict__)
             if skill.source_type == "plugin":
+                plugin_active = plugin_activation_by_root_name.get(
+                    skill.plugin_name,
+                    False,
+                )
+                if not plugin_active and not include_inactive_plugins:
+                    continue
+                skill_data["plugin_active"] = plugin_active
                 skill_data["plugin_display_name"] = plugin_display_names.get(
                     skill.plugin_name,
                     "",

@@ -3126,6 +3126,12 @@ paths:
           in: query
           schema:
             type: string
+        - name: include_inactive_plugins
+          in: query
+          description: Include plugin Skills whose owning plugin is inactive.
+          schema:
+            type: boolean
+            default: false
       responses:
         "200":
           $ref: "#/components/responses/Ok"

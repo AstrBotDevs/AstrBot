@@ -161,6 +161,12 @@ export interface ToolListParams {
   enabled?: boolean;
 }
 
+export interface SkillListParams {
+  enabled?: boolean;
+  source?: string;
+  include_inactive_plugins?: boolean;
+}
+
 export interface BackupListParams {
   page?: number;
   page_size?: number;
@@ -1535,7 +1541,7 @@ export const knowledgeApi = {
 };
 
 export const skillApi = {
-  list(params?: { enabled?: boolean; source?: string }) {
+  list(params?: SkillListParams) {
     return typed<any>(openApiV1.listSkills({ query: params }));
   },
   uploadBatch(files: File[]) {
