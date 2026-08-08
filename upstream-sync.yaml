@@ -5,23 +5,22 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 609e576b31eb5d7f4598eeeb4d23b67e34d0f1bf
-  synced_at_utc: 2026-08-07T17:09:46Z
+  commit: 30e20318cbaaa2e1ba57f3e0eee265d9ee98115c
+  synced_at_utc: 2026-08-08T15:22:00Z
   sync_method: manual-adaptation
-  source_pr: '9579, 9581, 9582, 9584, 9585, 9577, 9547, 9564, 9578, 9568'
+  source_pr: '9587, 9534, 9518, 9596, 9597, 9599, 9602'
   note: >-
-    Reviewed all upstream/master commits after the previous marker through
-    609e576b31eb5d7f4598eeeb4d23b67e34d0f1bf. The marker is not an ancestor
-    of this fork branch, so no upstream commit was merged or mechanically
-    cherry-picked. Ported the cron timezone inheritance, effective server time
-    preview, profile mapping async serialization and rollback behavior, server
-    side knowledge-base document search/pagination, full-area chat drag upload,
-    favicon plugin defaults, knowledge-base loading error states, and provider
-    API search forwarding. The async shared-preferences migration and
-    in-memory provider refresh were already present in the fork and were
-    verified without duplicate changes. Skipped passwordless desktop sessions:
-    this fork does not publish the desktop runtime and the feature would bypass
-    its password/TOTP authentication boundary. Kept only zh-CN and en-US
-    resources; upstream ru-RU resources were not synchronized. Existing fork
-    policies for Python 3.14+, source-built deployment, protocol contracts, and
-    secure authentication were preserved.
+    Reviewed the audited interval from 609e576b31eb5d7f4598eeeb4d23b67e34d0f1bf
+    through 30e20318cbaaa2e1ba57f3e0eee265d9ee98115c. No upstream commit was
+    merged or mechanically cherry-picked. Manually adapted chat project session
+    refresh ordering, collision-safe MCP tool naming, explicit WebUI directory
+    freshness warnings, runtime-catalog plugin Skill activation, per-call
+    agent_stats end times, plugin-only configuration default restore, and
+    immediate Agent stop handling. The adaptation deliberately did not import
+    ru-RU resources or obsolete upstream paths/architecture including
+    dashboard_assets, pipeline process-stage follow_up, global star_registry,
+    dashboard/src/api/v1.ts, or the removed PersonaCapabilitiesEditor.vue.
+    Current RuntimeCatalogs ownership, OpenAPI generation, Python 3.14+ policy,
+    Dashboard security boundary, and source-build deployment contract remain in
+    force. The fetched upstream/master head was
+    30e20318cbaaa2e1ba57f3e0eee265d9ee98115c.
