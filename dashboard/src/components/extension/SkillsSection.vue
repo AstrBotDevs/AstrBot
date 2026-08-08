@@ -1197,7 +1197,7 @@ export default {
     const fetchSkills = async () => {
       loading.value = true;
       try {
-        const res = await skillApi.list({ include_inactive_plugins: true });
+        const res = await skillApi.list();
         skills.value = normalizeSkillsPayload(res);
       } catch (_err) {
         showMessage(tm("skills.loadFailed"), "error");

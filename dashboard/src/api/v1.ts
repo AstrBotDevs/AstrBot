@@ -164,7 +164,6 @@ export interface ToolListParams {
 export interface SkillListParams extends Record<string, unknown> {
   enabled?: boolean;
   source?: string;
-  include_inactive_plugins?: boolean;
 }
 
 export interface BackupListParams {

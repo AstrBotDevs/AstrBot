@@ -3331,10 +3331,7 @@ async def test_v1_skill_scope_accepts_api_key_and_rejects_plural_scope(
     fake_db: FakeDb,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    include_inactive_plugins_calls = []
-
-    def fake_get_skills(*, include_inactive_plugins=False):
-        include_inactive_plugins_calls.append(include_inactive_plugins)
+    def fake_get_skills():
         return {"skills": [{"name": "demo_skill"}]}
 
     monkeypatch.setattr(
@@ -3366,15 +3363,6 @@ async def test_v1_skill_scope_accepts_api_key_and_rejects_plural_scope(
     data = response.json()
     assert data["status"] == "ok"
     assert data["data"]["skills"] == [{"name": "demo_skill"}]
-    assert include_inactive_plugins_calls == [False]
-
-    persona_response = await asgi_client.get(
-        "/api/v1/skills?include_inactive_plugins=true",
-        headers={"X-API-Key": raw_key},
-    )
-
-    assert persona_response.status_code == 200
-    assert include_inactive_plugins_calls == [False, True]
 
 
 @pytest.mark.asyncio

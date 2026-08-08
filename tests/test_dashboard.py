@@ -58,7 +58,7 @@ PLUGIN_PAGE_DEMO_NAME = "astrbot_plugin_page_demo"
 PLUGIN_PAGE_DEMO_PAGE_NAME = "bridge-demo"
 
 
-def test_skills_service_filters_or_marks_inactive_plugin_skills(monkeypatch):
+def test_skills_service_marks_inactive_plugin_skills(monkeypatch):
     skills = [
         SimpleNamespace(
             name="local-skill",
@@ -110,23 +110,12 @@ def test_skills_service_filters_or_marks_inactive_plugin_skills(monkeypatch):
     assert [skill["name"] for skill in result["skills"]] == [
         "local-skill",
         "active-plugin-skill",
+        "inactive-plugin-skill",
     ]
     assert result["skills"][1]["plugin_display_name"] == "Active Plugin"
     assert result["skills"][1]["plugin_active"] is True
-
-    result_with_inactive = SkillsService(core_lifecycle).get_skills(
-        include_inactive_plugins=True
-    )
-
-    assert [skill["name"] for skill in result_with_inactive["skills"]] == [
-        "local-skill",
-        "active-plugin-skill",
-        "inactive-plugin-skill",
-    ]
-    assert result_with_inactive["skills"][2]["plugin_display_name"] == (
-        "Inactive Plugin"
-    )
-    assert result_with_inactive["skills"][2]["plugin_active"] is False
+    assert result["skills"][2]["plugin_display_name"] == "Inactive Plugin"
+    assert result["skills"][2]["plugin_active"] is False
 
 
 def _removed_md5_hint_alias_key() -> str:

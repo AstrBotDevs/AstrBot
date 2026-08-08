@@ -243,12 +243,8 @@ class SkillsService:
             logger.error(traceback.format_exc())
             return SkillsOperationResult(ok=False, message=str(exc))
 
-    def get_skills(self, *, include_inactive_plugins: bool = False) -> dict:
+    def get_skills(self) -> dict:
         """Return the Skill inventory for Dashboard consumers.
-
-        Args:
-            include_inactive_plugins: Whether to include Skills owned by inactive
-                plugins so capability selectors can render them as unavailable.
 
         Returns:
             The serialized Skill inventory and current runtime metadata.
@@ -283,8 +279,6 @@ class SkillsService:
                     skill.plugin_name,
                     False,
                 )
-                if not plugin_active and not include_inactive_plugins:
-                    continue
                 skill_data["plugin_active"] = plugin_active
                 skill_data["plugin_display_name"] = plugin_display_names.get(
                     skill.plugin_name,

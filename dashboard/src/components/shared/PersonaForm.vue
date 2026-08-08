@@ -290,7 +290,7 @@ async function loadTools() {
 async function loadSkills() {
   loadingSkills.value = true;
   try {
-    const response = await skillApi.list({ include_inactive_plugins: true });
+    const response = await skillApi.list();
     if (response.data?.status === "ok") {
       const payload = response.data?.data || [];
       const skills = Array.isArray(payload) ? payload : payload.skills || [];
