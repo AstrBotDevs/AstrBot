@@ -1,0 +1,66 @@
+{
+  "page": {
+    "title": "SubAgent 編排",
+    "beta": "實驗性",
+    "subtitle": "主 LLM 可直接使用自身工具，也可透過 handoff 分派給各個 SubAgent。"
+  },
+  "actions": {
+    "refresh": "重新整理",
+    "save": "儲存",
+    "add": "新增 SubAgent",
+    "delete": "刪除",
+    "close": "關閉"
+  },
+  "switches": {
+    "enable": "啟用 SubAgent 編排",
+    "enableHint": "啟用子代理功能",
+    "dedupe": "主 LLM 去除重複工具（與 SubAgent 重疊的工具將被隱藏）",
+    "dedupeHint": "從主代理中移除重複工具"
+  },
+  "description": {
+    "disabled": "不啟動：SubAgent 關閉；主 LLM 按 persona 規則掛載工具（預設全部），並直接呼叫。",
+    "enabled": "啟動：主 LLM 會保留自身工具並掛載 transfer_to_* 委派工具。若開啟「去除重複工具」，與 SubAgent 指定的工具重疊部分會從主 LLM 工具集中移除。"
+  },
+  "section": {
+    "title": "SubAgents 設定",
+    "globalSettings": "全域設定"
+  },
+  "cards": {
+    "statusEnabled": "啟用",
+    "statusDisabled": "停用",
+    "unnamed": "未命名 SubAgent",
+    "transferPrefix": "transfer_to_{name}",
+    "switchLabel": "啟用",
+    "previewTitle": "預覽：主 LLM 將看到的 handoff 工具",
+    "personaChip": "Persona: {id}",
+    "noDescription": "暫無描述"
+  },
+  "form": {
+    "nameLabel": "Agent 名稱（用於 transfer_to_{name}）",
+    "nameHint": "建議使用英文小寫+底線，且全域唯一",
+    "providerLabel": "Chat Provider（選填）",
+    "providerHint": "留空表示跟隨全域預設 provider。",
+    "personaLabel": "選擇人格設定",
+    "personaHint": "SubAgent 將直接繼承所選 Persona 的系統設定與工具。在人格設定頁管理和新建人格。",
+    "personaPreview": "人格預覽",
+    "descriptionLabel": "對主 LLM 的描述（用於決定是否 handoff）",
+    "descriptionHint": "這段會作為 transfer_to_* 工具的描述給主 LLM 看，建議簡短明確。"
+  },
+  "messages": {
+    "loadConfigFailed": "取得設定失敗",
+    "loadPersonaFailed": "取得 Persona 列表失敗",
+    "nameMissing": "存在未填寫名稱的 SubAgent",
+    "nameInvalid": "SubAgent 名稱不合法：僅允許英文小寫字母/數字/底線，且需以字母開頭",
+    "nameDuplicate": "SubAgent 名稱重複：{name}",
+    "personaMissing": "SubAgent {name} 未選擇 Persona",
+    "saveSuccess": "儲存成功",
+    "saveFailed": "儲存失敗",
+    "nameRequired": "名稱必填",
+    "namePattern": "僅支援小寫字母、數字和底線"
+  },
+  "empty": {
+    "title": "未設定 SubAgent",
+    "subtitle": "新增一個新的子代理以開始",
+    "action": "建立第一個 Agent"
+  }
+}

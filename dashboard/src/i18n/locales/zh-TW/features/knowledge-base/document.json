@@ -1,0 +1,55 @@
+{
+  "title": "文件詳情",
+  "backToKB": "返回知識庫",
+  "info": {
+    "title": "文件資訊",
+    "name": "文件名稱",
+    "type": "檔案類型",
+    "size": "檔案大小",
+    "chunkCount": "區塊數量",
+    "createdAt": "上傳時間"
+  },
+  "chunks": {
+    "title": "區塊列表",
+    "empty": "暫無區塊",
+    "index": "序號",
+    "content": "內容",
+    "charCount": "字元數",
+    "actions": "操作",
+    "view": "查看",
+    "edit": "編輯",
+    "delete": "刪除",
+    "preview": "預覽",
+    "search": "搜尋區塊",
+    "searchPlaceholder": "輸入關鍵字搜尋區塊內容...",
+    "showing": "顯示",
+    "deleteConfirm": "確定要刪除該區塊嗎？",
+    "deleteSuccess": "區塊刪除成功",
+    "deleteFailed": "區塊刪除失敗"
+  },
+  "edit": {
+    "title": "編輯區塊",
+    "content": "區塊內容",
+    "cancel": "取消",
+    "save": "儲存",
+    "saveSuccess": "區塊儲存成功",
+    "saveFailed": "區塊儲存失敗"
+  },
+  "delete": {
+    "title": "刪除區塊",
+    "confirmText": "確定要刪除此區塊嗎？",
+    "warning": "刪除後將無法復原，可能影響知識庫檢索效果。",
+    "cancel": "取消",
+    "confirm": "刪除",
+    "deleteSuccess": "區塊刪除成功",
+    "deleteFailed": "區塊刪除失敗"
+  },
+  "view": {
+    "title": "區塊詳情",
+    "index": "序號",
+    "content": "內容",
+    "charCount": "字元數",
+    "vecDocId": "向量 ID",
+    "close": "關閉"
+  }
+}

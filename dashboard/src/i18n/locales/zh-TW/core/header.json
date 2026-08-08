@@ -1,0 +1,108 @@
+{
+  "logoTitle": "AstrBot 儀表板",
+  "version": {
+    "hasNewVersion": "AstrBot 有新版本！",
+    "dashboardHasNewVersion": "WebUI 有新版本！"
+  },
+  "buttons": {
+    "update": "更新",
+    "account": "帳號",
+    "theme": {
+      "light": "淺色模式",
+      "dark": "深色模式"
+    }
+  },
+  "updateDialog": {
+    "title": "更新 AstrBot",
+    "currentVersion": "目前版本",
+    "status": {
+      "checking": "正在檢查更新...",
+      "switching": "正在切換版本...",
+      "updating": "正在更新..."
+    },
+    "tabs": {
+      "release": "😊 正式版"
+    },
+    "updateToLatest": "更新到最新版本",
+    "preRelease": "預發布",
+    "preReleaseWarning": {
+      "title": "預發布版本提醒",
+      "description": "標有預發布標籤的版本可能存在未知問題或 Bug，不建議在正式環境使用。如發現問題，請提交至 ",
+      "issueLink": "GitHub Issues"
+    },
+    "tip": "💡 提示：",
+    "tipContinue": "預設在切換版本時會下載對應版本的 WebUI 檔案。WebUI 程式碼位於專案的 dashboard 目錄，您可使用 npm 自行建置。",
+    "dockerTip": "切換版本時，會同時嘗試更新機器人主程式和管理面板。如果您正在使用 Docker 部署，也可以重新拉取映像檔或者使用",
+    "dockerTipLink": "watchtower",
+    "dockerTipContinue": "來自動監控拉取。",
+    "table": {
+      "tag": "標籤",
+      "publishDate": "發布時間",
+      "content": "內容",
+      "sourceUrl": "原始碼位址",
+      "actions": "操作",
+      "view": "查看",
+      "switch": "切換"
+    },
+    "releaseNotes": {
+      "title": "更新日誌"
+    },
+    "redirectConfirm": {
+      "title": "即將跳轉",
+      "message": "將跳轉到 GitHub Releases 頁面，是否繼續？",
+      "latestLabel": "最新版本",
+      "targetVersion": "目標版本：",
+      "currentVersion": "目前版本：",
+      "guideTitle": "跳轉後建議：",
+      "guideStep1": "根據您的系統架構下載對應安裝檔。",
+      "guideStep2": "完成安裝後重新啟動 AstrBot。",
+      "guideStep3": "如果您使用 Docker，請優先使用映像檔更新方式。"
+    },
+    "desktopApp": {
+      "title": "更新桌面應用程式",
+      "message": "將檢查並升級 AstrBot 桌面端程式。",
+      "currentVersion": "目前版本：",
+      "latestVersion": "最新版本：",
+      "checking": "正在檢查桌面應用程式更新...",
+      "hasNewVersion": "發現新版本，可點擊確認升級。",
+      "isLatest": "已經是最新版本",
+      "installing": "正在下載並安裝更新，完成後將自動重新啟動應用程式...",
+      "checkFailed": "檢查更新失敗，請稍後重試。",
+      "installFailed": "升級失敗，請稍後重試。"
+    },
+    "dashboardUpdate": {
+      "title": "單獨更新管理面板到最新版本",
+      "currentVersion": "目前版本",
+      "hasNewVersion": "有新版本！",
+      "isLatest": "已經是最新版本了。",
+      "downloadAndUpdate": "下載並更新"
+    }
+  },
+  "accountDialog": {
+    "title": "修改帳號",
+    "securityWarning": "安全提醒：請修改預設密碼以確保帳號安全",
+    "form": {
+      "currentPassword": "目前密碼",
+      "newPassword": "新密碼",
+      "confirmPassword": "確認新密碼",
+      "newUsername": "新使用者名稱 (選填)",
+      "passwordHint": "密碼長度至少 8 位",
+      "confirmPasswordHint": "請再次輸入新密碼以確認",
+      "usernameHint": "留空表示不修改使用者名稱",
+      "defaultCredentials": "預設使用者名稱和密碼均為 astrbot"
+    },
+    "validation": {
+      "passwordRequired": "請輸入密碼",
+      "passwordMinLength": "密碼長度至少 8 位",
+      "passwordMatch": "兩次輸入的密碼不一致",
+      "usernameMinLength": "使用者名稱長度至少 3 位"
+    },
+    "actions": {
+      "save": "儲存修改",
+      "cancel": "取消"
+    },
+    "messages": {
+      "updateFailed": "修改失敗，請重試"
+    }
+  }
+}
