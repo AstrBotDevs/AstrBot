@@ -1209,6 +1209,34 @@
                 "description": "Включить нативный поиск",
                 "hint": "Если включено, использует Live Search от xAI для веб-запросов (тарифицируется отдельно). Применимо только к провайдерам xAI."
             },
+            "responses_web_search": {
+                "description": "Включить веб-поиск Responses",
+                "hint": "Использовать инструмент web_search API OpenAI Responses для поиска в интернете. Применимо только к провайдерам openai_responses."
+            },
+            "responses_web_search_context_size": {
+                "description": "Размер контекста веб-поиска",
+                "hint": "Определяет объём контекста, выделяемого инструментом веб-поиска для результатов."
+            },
+            "responses_web_search_allowed_domains": {
+                "description": "Разрешённые домены веб-поиска",
+                "hint": "Оставьте пустым без ограничений. При заполнении поиск выполняется только по указанным доменам и их поддоменам."
+            },
+            "responses_file_search_vector_store_ids": {
+                "description": "Идентификаторы Vector Store для поиска по файлам",
+                "hint": "Укажите идентификаторы OpenAI Vector Store для включения file_search; оставьте пустым, чтобы отключить."
+            },
+            "responses_code_interpreter": {
+                "description": "Включить интерпретатор кода Responses",
+                "hint": "Запускать код Python в контейнере OpenAI."
+            },
+            "responses_image_generation": {
+                "description": "Включить генерацию изображений Responses",
+                "hint": "Разрешить поддерживаемым моделям создавать изображения с помощью инструмента image_generation."
+            },
+            "responses_tool_choice": {
+                "description": "Выбор инструмента Responses",
+                "hint": "Выберите автоматический выбор инструментов, обязательный вызов инструмента или запрет вызова инструментов."
+            },
             "rerank_api_base": {
                 "description": "Base URL API модели Rerank",
                 "hint": "Полный URL запроса формируется путём добавления суффикса к Base URL (по умолчанию /v1/rerank)."
