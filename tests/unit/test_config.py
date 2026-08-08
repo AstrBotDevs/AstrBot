@@ -853,6 +853,46 @@ class TestConfigSchemaToDefault:
 
         assert config.templates == []
 
+    def test_dict_schema_type(self, temp_config_path):
+        """Test dict schema type."""
+        schema = {
+            "headers": {"type": "dict"},
+        }
+
+        config = AstrBotConfig(config_path=temp_config_path, schema=schema)
+
+        assert config.headers == {}
+
+    @pytest.mark.parametrize(
+        ("schema", "error"),
+        [
+            (
+                {"field": {"type": "string", "default": 1}},
+                "default 与类型 string 不匹配",
+            ),
+            (
+                {"field": {"type": "list", "options": "bad"}},
+                "options 必须是列表",
+            ),
+            (
+                {"field": {"type": "string", "obvious_hint": "yes"}},
+                "obvious_hint 必须是布尔值",
+            ),
+            (
+                {"field": {"type": "float", "slider": {"min": "0", "max": 1, "step": 1}}},
+                "slider 必须包含数字 min/max/step",
+            ),
+            (
+                {"field": {"type": "string", "slider": {"min": 0, "max": 1, "step": 1}}},
+                "只有 int/float 类型支持 slider",
+            ),
+        ],
+    )
+    def test_schema_metadata_validation(self, temp_config_path, schema, error):
+        """Test schema metadata validation."""
+        with pytest.raises(TypeError, match=error):
+            AstrBotConfig(config_path=temp_config_path, schema=schema)
+
     def test_nested_object_schema(self, temp_config_path):
         """Test nested object schema conversion."""
         schema = {
