@@ -6,7 +6,14 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from astrbot.core.agent import mcp_client as mcp_client_module
-from astrbot.core.agent.mcp_client import MCPTool, _normalize_mcp_input_schema
+from astrbot.core.agent.mcp_client import (
+    MCPTool,
+    MCPToolNameAllocationError,
+    MCPToolNameAllocator,
+    _normalize_mcp_input_schema,
+)
+from astrbot.core.agent.tool import get_tool_id
+from astrbot.core.tools.function_tool_manager import FunctionToolManager
 
 
 class TestNormalizeMcpInputSchema:
@@ -120,6 +127,97 @@ class TestMCPToolSchemaNormalization:
         assert tool.parameters["required"] == ["stock_code"]
         assert "required" not in tool.parameters["properties"]["stock_code"]
         assert "required" not in tool.parameters["properties"]["market"]
+
+    def test_mcp_tool_uses_a_safe_name_and_keeps_original_call_name(self):
+        mcp_tool = SimpleNamespace(
+            name="t_drive.create/doc",
+            description="Create a doc",
+            inputSchema={"type": "object", "properties": {}},
+        )
+
+        tool = MCPTool(mcp_tool, MagicMock(), "tencent-docs")
+
+        assert len(tool.name) <= 64
+        assert tool.name
+        assert all(char.isascii() and (char.isalnum() or char in "_-") for char in tool.name)
+        assert tool.mcp_tool_name == "t_drive.create/doc"
+        assert get_tool_id(tool) == "mcp:tencent-docs:t_drive.create/doc"
+
+    @pytest.mark.asyncio
+    async def test_mcp_tool_calls_the_original_name(self):
+        mcp_tool = SimpleNamespace(
+            name="t_drive.create/doc",
+            description="Create a doc",
+            inputSchema={"type": "object", "properties": {}},
+        )
+        client = MagicMock()
+        client.call_tool_with_reconnect = AsyncMock(return_value="ok")
+        tool = MCPTool(mcp_tool, client, "tencent-docs")
+
+        result = await tool.call(SimpleNamespace(tool_call_timeout=7), title="A")
+
+        assert result == "ok"
+        client.call_tool_with_reconnect.assert_awaited_once_with(
+            tool_name="t_drive.create/doc",
+            arguments={"title": "A"},
+            read_timeout_seconds=7,
+        )
+
+
+def _mcp_tool(name: str):
+    return SimpleNamespace(
+        name=name,
+        description="Test MCP tool",
+        inputSchema={"type": "object", "properties": {}},
+    )
+
+
+def test_mcp_name_allocator_avoids_illegal_character_and_server_collisions():
+    allocator = MCPToolNameAllocator()
+
+    dotted = allocator.allocate("alpha", "a.b")
+    underscored = allocator.allocate("alpha", "a_b")
+    other_server = allocator.allocate("beta", "a.b")
+    long_name = allocator.allocate("alpha", "x" * 300)
+
+    assert len({dotted, underscored, other_server, long_name}) == 4
+    for name in (dotted, underscored, other_server, long_name):
+        assert 1 <= len(name) <= 64
+        assert all(char.isascii() and (char.isalnum() or char in "_-") for char in name)
+
+
+def test_mcp_name_allocator_reuses_a_mapping_across_reconnect_order():
+    allocator = MCPToolNameAllocator()
+    first = allocator.allocate("first", "a.b")
+    second = allocator.allocate("second", "a.b")
+
+    assert allocator.allocate("second", "a.b") == second
+    assert allocator.allocate("first", "a.b") == first
+
+
+def test_mcp_name_allocator_rejects_an_ambiguous_candidate():
+    allocator = MCPToolNameAllocator(lambda _server, _tool: "mcp_fixed")
+    assert allocator.allocate("first", "one") == "mcp_fixed"
+
+    with pytest.raises(MCPToolNameAllocationError, match="collision"):
+        allocator.allocate("second", "two")
+
+
+def test_mcp_tool_registration_is_stable_and_refuses_empty_names():
+    manager = FunctionToolManager()
+    client = MagicMock()
+    client.tools = [_mcp_tool("a.b"), _mcp_tool("a_b"), _mcp_tool("")]
+
+    first_registered = manager._register_mcp_tools("alpha", client)
+    first_names = [tool.name for tool in first_registered]
+    assert len(first_names) == 2
+    assert [tool.mcp_tool_name for tool in first_registered] == ["a.b", "a_b"]
+
+    client.tools = list(reversed(client.tools[:-1]))
+    second_registered = manager._register_mcp_tools("alpha", client)
+    assert {tool.mcp_tool_name: tool.name for tool in second_registered} == {
+        tool.mcp_tool_name: tool.name for tool in first_registered
+    }
 
 
 @pytest.mark.asyncio

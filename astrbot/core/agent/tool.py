@@ -24,7 +24,8 @@ def get_tool_id(tool: Any) -> str:
     """
     server_name = getattr(tool, "mcp_server_name", None)
     if isinstance(server_name, str) and server_name:
-        return f"mcp:{server_name}:{tool.name}"
+        original_name = getattr(tool, "mcp_tool_name", tool.name)
+        return f"mcp:{server_name}:{original_name}"
 
     handler_module_path = getattr(tool, "handler_module_path", None)
     if isinstance(handler_module_path, str) and handler_module_path:

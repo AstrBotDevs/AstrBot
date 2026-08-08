@@ -16,7 +16,12 @@ from typing import Any, Protocol
 import aiohttp
 
 from astrbot import logger
-from astrbot.core.agent.mcp_client import MCPClient, MCPTool
+from astrbot.core.agent.mcp_client import (
+    MCPClient,
+    MCPTool,
+    MCPToolNameAllocationError,
+    MCPToolNameAllocator,
+)
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.tools.registry import (
     BUILTIN_TOOL_DECLARATION_ATTR,
@@ -236,6 +241,7 @@ class _PermissionGuardedTool(FunctionTool):
         self.parallel_policy = getattr(tool, "parallel_policy", "unknown")
         self.mcp_server_name = getattr(tool, "mcp_server_name", None)
         self.mcp_client = getattr(tool, "mcp_client", None)
+        self.mcp_tool_name = getattr(tool, "mcp_tool_name", None)
 
     async def authorize(self, context: Any) -> str | None:
         """Return a permission error without invoking the wrapped tool."""
@@ -301,6 +307,7 @@ class FunctionToolManager:
         self._timeout_warn_lock = threading.Lock()
         self._runtime_lock = asyncio.Lock()
         self._mcp_starting: set[str] = set()
+        self._mcp_tool_name_allocator = MCPToolNameAllocator()
         self._init_timeout_default = _resolve_timeout(
             timeout=None,
             env_name=MCP_INIT_TIMEOUT_ENV,
@@ -323,6 +330,52 @@ class FunctionToolManager:
     def bind_plugin_lookup(self, plugins: PluginLookup) -> None:
         """Bind the runtime-owned plugin catalog used for activation checks."""
         self._plugins = plugins
+
+    def _register_mcp_tools(self, name: str, mcp_client: MCPClient) -> list[MCPTool]:
+        """Replace one server's tools using stable, unambiguous LLM names."""
+        self.func_list = [
+            tool
+            for tool in self.func_list
+            if not (isinstance(tool, MCPTool) and tool.mcp_server_name == name)
+        ]
+        registered: list[MCPTool] = []
+        raw_names: set[str] = set()
+        for mcp_tool in mcp_client.tools:
+            original_name = getattr(mcp_tool, "name", None)
+            if not isinstance(original_name, str) or not original_name:
+                logger.error(
+                    "Refusing to register an MCP tool from server %r with an empty name.",
+                    name,
+                )
+                continue
+            if original_name in raw_names:
+                logger.error(
+                    "Refusing duplicate MCP tool registration for server %r and tool %r.",
+                    name,
+                    original_name,
+                )
+                continue
+            raw_names.add(original_name)
+            try:
+                llm_tool_name = self._mcp_tool_name_allocator.allocate(
+                    name,
+                    original_name,
+                )
+                function_tool = MCPTool(
+                    mcp_tool=mcp_tool,
+                    mcp_client=mcp_client,
+                    mcp_server_name=name,
+                    llm_tool_name=llm_tool_name,
+                )
+            except MCPToolNameAllocationError as exc:
+                logger.error(
+                    "Refusing to register MCP tool for server %r: %s", name, exc
+                )
+                continue
+            registered.append(function_tool)
+
+        self.func_list.extend(registered)
+        return registered
 
     def get_or_create_runtime_state(
         self,
@@ -786,23 +839,14 @@ class FunctionToolManager:
                 connect_done.set()
                 return
 
-            # Register tools
-            self.func_list = [
-                f
-                for f in self.func_list
-                if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
-            ]
-            for tool in mcp_client.tools:
-                func_tool = MCPTool(
-                    mcp_tool=tool,
-                    mcp_client=mcp_client,
-                    mcp_server_name=name,
-                )
-                self.func_list.append(func_tool)
+            # Register tools only through the runtime-owned allocator. It is
+            # independent of server connection order and never aliases a
+            # provider-facing name to the wrong MCP endpoint.
+            registered_tools = self._register_mcp_tools(name, mcp_client)
 
             logger.info(
                 f"Connected to MCP server {name}, "
-                f"Tools: {[t.name for t in mcp_client.tools]}"
+                f"Tools: {[t.name for t in registered_tools]}"
             )
 
             connect_done.set()

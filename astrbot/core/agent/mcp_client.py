@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import hashlib
 import ipaddress
 import logging
 import os
@@ -25,6 +26,73 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.utils.log_pipe import LogPipe
 
 from .tool import FunctionTool
+
+_LLM_MCP_TOOL_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+class MCPToolNameAllocationError(ValueError):
+    """Raised when an MCP tool cannot receive a safe LLM-facing name."""
+
+
+def _default_llm_mcp_tool_name(server_name: str, tool_name: str) -> str:
+    """Build a bounded, readable, collision-resistant LLM tool name."""
+    identity = f"{server_name}\x00{tool_name}".encode()
+    digest = hashlib.blake2s(identity, digest_size=8).hexdigest()
+    readable = re.sub(r"[^A-Za-z0-9_-]+", "_", f"{server_name}_{tool_name}")
+    readable = readable.strip("_-") or "tool"
+    prefix = "mcp_"
+    suffix = f"_{digest}"
+    return f"{prefix}{readable[: 64 - len(prefix) - len(suffix)]}{suffix}"
+
+
+class MCPToolNameAllocator:
+    """Own the stable LLM-facing MCP name mapping for one runtime catalog."""
+
+    def __init__(self, candidate_factory=_default_llm_mcp_tool_name) -> None:
+        self._candidate_factory = candidate_factory
+        self._name_by_identity: dict[tuple[str, str], str] = {}
+        self._identity_by_name: dict[str, tuple[str, str]] = {}
+
+    def allocate(self, server_name: str, tool_name: object) -> str:
+        """Allocate one safe name without allowing ambiguous routing.
+
+        Args:
+            server_name: Runtime MCP server identifier.
+            tool_name: Original MCP tool name used for the actual call.
+
+        Returns:
+            A stable name accepted by LLM provider APIs.
+
+        Raises:
+            MCPToolNameAllocationError: If the original identity is invalid or
+                the candidate would route two different tools to one name.
+        """
+        if not isinstance(server_name, str) or not server_name:
+            raise MCPToolNameAllocationError("MCP server name is empty.")
+        if not isinstance(tool_name, str) or not tool_name:
+            raise MCPToolNameAllocationError("MCP tool name is empty.")
+
+        identity = (server_name, tool_name)
+        existing = self._name_by_identity.get(identity)
+        if existing is not None:
+            return existing
+
+        candidate = self._candidate_factory(server_name, tool_name)
+        if not isinstance(candidate, str) or not _LLM_MCP_TOOL_NAME_RE.fullmatch(
+            candidate
+        ):
+            raise MCPToolNameAllocationError(
+                "MCP tool name allocator produced an invalid LLM name."
+            )
+        conflicting_identity = self._identity_by_name.get(candidate)
+        if conflicting_identity is not None and conflicting_identity != identity:
+            raise MCPToolNameAllocationError(
+                "MCP tool name collision; refusing ambiguous registration."
+            )
+
+        self._name_by_identity[identity] = candidate
+        self._identity_by_name[candidate] = identity
+        return candidate
 
 _DEFAULT_STDIO_COMMAND_ALLOWLIST = frozenset(
     {
@@ -912,16 +980,31 @@ class MCPTool[TContext](FunctionTool):
     """A function tool that calls an MCP service."""
 
     def __init__(
-        self, mcp_tool: Any, mcp_client: MCPClient, mcp_server_name: str, **kwargs
+        self,
+        mcp_tool: Any,
+        mcp_client: MCPClient,
+        mcp_server_name: str,
+        *,
+        llm_tool_name: str | None = None,
+        **kwargs,
     ) -> None:
+        original_name = getattr(mcp_tool, "name", None)
+        if llm_tool_name is None:
+            llm_tool_name = MCPToolNameAllocator().allocate(
+                mcp_server_name,
+                original_name,
+            )
+        if not _LLM_MCP_TOOL_NAME_RE.fullmatch(llm_tool_name):
+            raise MCPToolNameAllocationError("Invalid LLM-facing MCP tool name.")
         super().__init__(
-            name=mcp_tool.name,
+            name=llm_tool_name,
             description=mcp_tool.description or "",
             parameters=_normalize_mcp_input_schema(mcp_tool.inputSchema),
         )
         self.mcp_tool = mcp_tool
         self.mcp_client = mcp_client
         self.mcp_server_name = mcp_server_name
+        self.mcp_tool_name = original_name
 
     async def call(self, context: ContextWrapper[TContext], **kwargs) -> Any:
         return await self.mcp_client.call_tool_with_reconnect(
