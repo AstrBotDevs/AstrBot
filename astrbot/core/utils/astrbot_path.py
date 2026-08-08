@@ -209,6 +209,13 @@ def get_astrbot_plugin_path() -> str:
     return os.path.realpath(os.path.join(get_astrbot_data_path(), "plugins"))
 
 
+def get_astrbot_builtin_plugin_path() -> str:
+    """Return the AstrBot built-in plugin directory path."""
+    return os.path.realpath(
+        os.path.join(get_astrbot_path(), "astrbot", "builtin_stars")
+    )
+
+
 def get_astrbot_plugin_data_path() -> str:
     """获取Astrbot插件数据目录路径"""
     return os.path.realpath(os.path.join(get_astrbot_data_path(), "plugin_data"))

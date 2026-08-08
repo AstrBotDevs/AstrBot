@@ -1,5 +1,13 @@
 <template>
-  <v-card class="standalone-chat-card" elevation="0" rounded="0">
+  <v-card class="standalone-chat-card" elevation="0" rounded="0" v-on="dragEvents">
+    <transition name="drop-fade">
+      <div v-if="isDragging" class="chat-drop-overlay">
+        <div class="chat-drop-overlay-content">
+          <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
+          <span class="chat-drop-text">{{ t("features.chat.input.dropToUpload") }}</span>
+        </div>
+      </div>
+    </transition>
     <v-card-text class="standalone-chat-container">
       <div class="chat-layout">
         <!-- 聊天内容区域 -->
@@ -72,18 +80,18 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
-import { configRouteApi } from "@/api/v1";
+import { chatApi, configRouteApi } from "@/api/v1";
 // biome-ignore lint/style/useImportType: Vue template components require runtime imports.
 import ChatInput from "@/components/chat/ChatInput.vue";
 // biome-ignore lint/style/useImportType: Vue template components require runtime imports.
 import MessageList from "@/components/chat/MessageList.vue";
+import { useDragUpload } from "@/composables/useDragUpload";
 import { useMediaHandling } from "@/composables/useMediaHandling";
 import { type MessagePart, useMessages } from "@/composables/useMessages";
 import { useRecording } from "@/composables/useRecording";
 import { useI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { buildWebchatUmoDetails } from "@/utils/chatConfigBinding";
-import axios from "@/utils/request";
 import { useToast } from "@/utils/toast";
 
 interface Props {
@@ -118,7 +126,7 @@ async function bindConfigToSession(sessionId: string) {
 
 async function newSession() {
   try {
-    const response = await axios.get("/api/chat/new_session");
+    const response = await chatApi.createSession();
     const sessionId = response.data.data.session_id;
 
     try {
@@ -164,9 +172,7 @@ const {
   currentSessionId: currSessionId,
   onStreamUpdate: () => scrollToBottom(),
 });
-const isStreaming = computed(() =>
-  currSessionId.value ? isSessionRunning(currSessionId.value) : false,
-);
+const isStreaming = computed(() => (currSessionId.value ? isSessionRunning(currSessionId.value) : false));
 
 // 组件引用
 const messageList = ref<InstanceType<typeof MessageList> | null>(null);
@@ -191,7 +197,7 @@ async function handleStopRecording() {
   await processAndUploadFile(audioFile);
 }
 
-async function handleFileSelect(files: FileList) {
+async function handleFileSelect(files: FileList | File[]) {
   for (const file of Array.from(files)) {
     if (file.type.startsWith("image/")) {
       await processAndUploadImage(file);
@@ -200,6 +206,8 @@ async function handleFileSelect(files: FileList) {
     }
   }
 }
+
+const { isDragging, dragEvents } = useDragUpload(handleFileSelect);
 
 async function handleSendMessage() {
   if (!prompt.value.trim() && stagedFiles.value.length === 0) {
@@ -305,10 +313,47 @@ onBeforeUnmount(() => {
 }
 
 .standalone-chat-card {
+  position: relative;
   width: 100%;
   height: 100%;
   max-height: 100%;
   overflow: hidden;
+}
+
+.chat-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background-color: rgba(var(--v-theme-primary), 0.12);
+  border: 2px dashed rgba(var(--v-theme-primary), 0.45);
+  border-radius: 16px;
+}
+
+.chat-drop-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-drop-text {
+  color: rgb(var(--v-theme-primary));
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.drop-fade-enter-active,
+.drop-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.drop-fade-enter-from,
+.drop-fade-leave-to {
+  opacity: 0;
 }
 
 .standalone-chat-container {

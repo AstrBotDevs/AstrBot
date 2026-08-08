@@ -6,9 +6,9 @@ from quart import request
 from astrbot.core import DEMO_MODE, logger, pip_installer
 from astrbot.core.config.default import VERSION
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.dashboard_assets import get_dashboard_version
 from astrbot.core.db.migration.helper import check_migration_needed_v4, do_migration_v4
-from astrbot.core.updator import AstrBotUpdator
-from astrbot.core.utils.io import download_dashboard, get_dashboard_version
+from astrbot.core.updater import AstrBotUpdater, UpdateProgress
 
 from .route import Response, Route, RouteContext
 
@@ -19,7 +19,7 @@ class UpdateRoute(Route):
     def __init__(
         self,
         context: RouteContext,
-        astrbot_updator: AstrBotUpdator,
+        astrbot_updater: AstrBotUpdater,
         core_lifecycle: AstrBotCoreLifecycle,
     ) -> None:
         super().__init__(context)
@@ -32,7 +32,7 @@ class UpdateRoute(Route):
             "/update/pip-install": ("POST", self.install_pip_package),
             "/update/migration": ("POST", self.do_migration),
         }
-        self.astrbot_updator = astrbot_updator
+        self.astrbot_updater = astrbot_updater
         self.core_lifecycle = core_lifecycle
         self.update_progress: dict[str, dict] = {}
         self.register_routes()
@@ -160,7 +160,7 @@ class UpdateRoute(Route):
                     .ok({"has_new_version": dv != f"v{VERSION}", "current_version": dv})
                     .to_json()
                 )
-            ret = await self.astrbot_updator.check_update(None, None, False)
+            ret = await self.astrbot_updater.check_update(False)
             return Response(
                 status="success",
                 message=str(ret) if ret is not None else "已经是最新版本了｡",
@@ -177,8 +177,21 @@ class UpdateRoute(Route):
 
     async def get_releases(self):
         try:
-            ret = await self.astrbot_updator.get_releases()
-            return Response().ok(ret).to_json()
+            releases = await self.astrbot_updater.get_releases()
+            return (
+                Response()
+                .ok(
+                    [
+                        {
+                            "tag_name": release.version,
+                            "published_at": release.published_at,
+                            "body": release.body,
+                        }
+                        for release in releases
+                    ]
+                )
+                .to_json()
+            )
         except Exception as e:
             logger.error(f"/api/update/releases: {traceback.format_exc()}")
             return Response().error(e.__str__()).to_json()
@@ -188,11 +201,8 @@ class UpdateRoute(Route):
         version = data.get("version", "")
         reboot = data.get("reboot", True)
         progress_id = data.get("progress_id") or uuid.uuid4().hex
-        if version == "" or version == "latest":
-            latest = True
+        if version in {"", "latest"}:
             version = ""
-        else:
-            latest = False
 
         proxy: str = data.get("proxy", None)
         if proxy:
@@ -200,56 +210,26 @@ class UpdateRoute(Route):
 
         self._init_update_progress(progress_id, version)
         try:
-            self._set_update_stage(
-                progress_id,
-                "dashboard",
-                "running",
-                "正在下载 WebUI...",
-                0,
-            )
-            await download_dashboard(
-                latest=latest,
-                version=version,
-                proxy=proxy,
-                progress_callback=self._make_progress_callback(
-                    progress_id,
-                    "dashboard",
-                    0,
-                    45,
-                ),
-            )
-            self._set_update_stage(
-                progress_id,
-                "dashboard",
-                "done",
-                "WebUI 下载完成。",
-                45,
-            )
 
-            self._set_update_stage(
-                progress_id,
-                "core",
-                "running",
-                "正在下载 AstrBot 项目代码...",
-                45,
-            )
-            await self.astrbot_updator.update(
-                latest=latest,
-                version=version,
+            async def record_progress(update: UpdateProgress) -> None:
+                stage = update.stage
+                progress = self.update_progress[progress_id]
+                progress["stage"] = stage
+                progress["message"] = update.message
+                progress["overall_percent"] = update.overall_percent
+                progress["stages"].setdefault(stage, self._empty_stage())
+                progress["stages"][stage] = {
+                    "status": update.status,
+                    "downloaded": update.downloaded_bytes or 0,
+                    "total": update.total_bytes or 0,
+                    "percent": update.overall_percent,
+                    "speed": update.speed_kib_per_second or 0,
+                }
+
+            await self.astrbot_updater.update(
+                version=version or None,
                 proxy=proxy,
-                progress_callback=self._make_progress_callback(
-                    progress_id,
-                    "core",
-                    45,
-                    45,
-                ),
-            )
-            self._set_update_stage(
-                progress_id,
-                "core",
-                "done",
-                "项目代码下载完成。",
-                90,
+                progress_callback=record_progress,
             )
 
             # pip 更新依赖
@@ -323,7 +303,7 @@ class UpdateRoute(Route):
     async def update_dashboard(self):
         try:
             try:
-                await download_dashboard(version=f"v{VERSION}", latest=False)
+                await self.astrbot_updater.ensure_dashboard()
             except Exception as e:
                 logger.error(f"下载管理面板文件失败: {e}｡")
                 return Response().error(f"下载管理面板文件失败: {e}").to_json()

@@ -20,15 +20,13 @@ from hypercorn.logging import Logger as HypercornLogger
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.dashboard_assets import resolve_dashboard_dist
 from astrbot.core.db import BaseDatabase
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-from astrbot.core.utils.io import (
-    get_bundled_dashboard_dist_path,
-    get_dashboard_dist_version,
-    get_local_ip_addresses,
-    should_use_bundled_dashboard_dist,
+from astrbot.core.utils.io import get_local_ip_addresses
+from astrbot.dashboard.asgi_runtime import (
+    DashboardRequestState,
+    FastAPIAppAdapter,
 )
-from astrbot.dashboard.asgi_runtime import DashboardRequestState, FastAPIAppAdapter
 from astrbot.dashboard.responses import error
 from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 
@@ -42,6 +40,7 @@ _RATE_LIMITED_ENDPOINTS: frozenset = frozenset(
         "/api/v1/auth/totp/setup",
         "/api/auth/login",
         "/api/v1/auth/login",
+        "/api/v1/auth/desktop-session",
     }
 )
 
@@ -258,39 +257,8 @@ class AstrBotDashboard:
         return cfg.get("enable", True)
 
     def _init_paths(self, webui_dir: str | None):
-        if webui_dir and os.path.exists(webui_dir):
-            self.data_path = os.path.abspath(webui_dir)
-        else:
-            user_dist = os.path.join(get_astrbot_data_path(), "dist")
-            bundled_dist = get_bundled_dashboard_dist_path()
-            user_index = Path(user_dist) / "index.html"
-            user_version = get_dashboard_dist_version(user_dist)
-            if (
-                os.path.exists(user_dist)
-                and user_index.is_file()
-                and not should_use_bundled_dashboard_dist(user_dist, VERSION)
-            ):
-                self.data_path = os.path.abspath(user_dist)
-            elif bundled_dist.exists():
-                self.data_path = str(bundled_dist)
-                logger.info("Using bundled dashboard dist: %s", self.data_path)
-            elif os.path.exists(user_dist) and user_index.is_file():
-                logger.warning(
-                    "Using existing data/dist as a fallback even though WebUI "
-                    "version mismatches core: %s, expected v%s. Some dashboard "
-                    "features may not work until the matching WebUI is available.",
-                    user_version,
-                    VERSION,
-                )
-                self.data_path = os.path.abspath(user_dist)
-            elif os.path.exists(user_dist):
-                logger.warning(
-                    "Ignoring data/dist because WebUI files are incomplete for core v%s.",
-                    VERSION,
-                )
-                self.data_path = None
-            else:
-                self.data_path = os.path.abspath(user_dist)
+        dashboard_dist = resolve_dashboard_dist(webui_dir)
+        self.data_path = str(dashboard_dist) if dashboard_dist else None
 
         if self.enable_webui and (
             self.data_path is None or not (Path(self.data_path) / "index.html").exists()

@@ -5,6 +5,8 @@ import traceback
 from collections.abc import Awaitable, Callable
 from typing import Protocol, runtime_checkable
 
+from deprecated import deprecated
+
 from astrbot.core import astrbot_config, logger, sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
@@ -148,6 +150,7 @@ class ProviderManager:
         return self.persona_mgr.personas_v3
 
     @property
+    @deprecated(reason="Use persona_mgr.get_default_persona_v3() instead.")
     def selected_default_persona(self):
         """动态获取最新的默认选中 persona｡已弃用,请使用 context.persona_mgr.get_default_persona_v3()"""
         return self.persona_mgr.selected_default_persona_v3
@@ -379,6 +382,10 @@ class ProviderManager:
                 from .sources.openai_source import (
                     ProviderOpenAIOfficial as ProviderOpenAIOfficial,
                 )
+            case "openai_responses":
+                from .sources.openai_responses_source import (
+                    ProviderOpenAIResponses as ProviderOpenAIResponses,
+                )
             case "longcat_chat_completion":
                 from .sources.longcat_source import ProviderLongCat as ProviderLongCat
             case "minimax_token_plan":
@@ -504,6 +511,10 @@ class ProviderManager:
             case "ollama_embedding":
                 from .sources.ollama_embedding_source import (
                     OllamaEmbeddingProvider as OllamaEmbeddingProvider,
+                )
+            case "dashscope_embedding":
+                from .sources.dashscope_embedding_source import (
+                    DashScopeEmbeddingProvider as DashScopeEmbeddingProvider,
                 )
             case "vllm_rerank":
                 from .sources.vllm_rerank_source import (
@@ -874,6 +885,8 @@ class ProviderManager:
                     prov for prov in config["provider"] if prov.get("id") != tpid
                 ]
             config.save_config()
+            # sync in-memory config for API queries (e.g., provider list)
+            self.providers_config = config["provider"]
             logger.info(f"Providers {target_prov_ids} were removed from configuration.")
 
     async def update_provider(self, origin_provider_id: str, new_config: dict) -> None:

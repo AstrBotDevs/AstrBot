@@ -5,24 +5,17 @@ import os
 import sys
 from pathlib import Path
 
-import anyio
-
 from astrbot.core import LogBroker, LogManager, db_helper, logger
-from astrbot.core.config.default import VERSION
 from astrbot.core.initial_loader import InitialLoader
+from astrbot.core.updater import AstrBotUpdater
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
-    get_astrbot_data_path,
     get_astrbot_knowledge_base_path,
     get_astrbot_plugin_path,
     get_astrbot_root,
     get_astrbot_site_packages_path,
     get_astrbot_skills_path,
     get_astrbot_temp_path,
-)
-from astrbot.core.utils.io import (
-    download_dashboard,
-    get_dashboard_version,
 )
 
 # 将父目录添加到 sys.path
@@ -67,44 +60,18 @@ def check_env() -> None:
 
 async def check_dashboard_files(webui_dir: str | None = None):
     """下载管理面板文件"""
-    # 指定webui目录
     if webui_dir:
-        if await anyio.Path(webui_dir).exists():
+        if Path(webui_dir).exists():
             logger.info(f"使用指定的 WebUI 目录: {webui_dir}")
             return webui_dir
         logger.warning(f"指定的 WebUI 目录 {webui_dir} 不存在,将使用默认逻辑｡")
 
-    data_dist_path = os.path.join(get_astrbot_data_path(), "dist")
-    if await anyio.Path(data_dist_path).exists():
-        v = await get_dashboard_version()
-        if v is not None:
-            # 存在文件
-            if v == f"v{VERSION}":
-                logger.info("WebUI 版本已是最新｡")
-            else:
-                logger.warning(
-                    f"检测到 WebUI 版本 ({v}) 与当前 AstrBot 版本 (v{VERSION}) 不符｡",
-                )
-        return data_dist_path
-
-    logger.info(
-        "开始下载管理面板文件...高峰期(晚上)可能导致较慢的速度｡如多次下载失败,请前往 https://github.com/AstrBotDevs/AstrBot/releases/latest 下载 dist.zip,并将其中的 dist 文件夹解压至 data 目录下｡",
-    )
-
     try:
-        await download_dashboard(version=f"v{VERSION}", latest=False)
+        dashboard_dist = await AstrBotUpdater().ensure_dashboard()
     except Exception as e:
-        logger.warning(
-            f"下载指定版本(v{VERSION})的管理面板文件失败: {e},尝试下载最新版本｡",
-        )
-        try:
-            await download_dashboard(latest=True)
-        except Exception as e:
-            logger.critical(f"下载管理面板文件失败: {e}｡")
-            return None
-
-    logger.info("管理面板下载完成｡")
-    return data_dist_path
+        logger.critical(f"准备管理面板文件失败: {e}｡")
+        return None
+    return str(dashboard_dist)
 
 
 async def main_async(webui_dir_arg: str | None, log_broker: LogBroker) -> None:

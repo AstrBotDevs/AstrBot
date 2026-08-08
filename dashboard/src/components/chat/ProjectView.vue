@@ -20,10 +20,6 @@
       </div>
     </div>
 
-    <div class="project-input-slot">
-      <slot />
-    </div>
-
     <v-card flat class="project-sessions-list">
       <v-list v-if="sessions.length > 0">
         <v-list-item
@@ -77,6 +73,10 @@
         <p>{{ tm("project.noSessions") }}</p>
       </div>
     </v-card>
+
+    <div class="project-input-slot">
+      <slot />
+    </div>
   </div>
 </template>
 
@@ -127,8 +127,7 @@ function formatDate(dateString: string): string {
 }
 
 async function handleDeleteSession(session: Session) {
-  const sessionTitle =
-    session.display_name || tm("conversation.newConversation");
+  const sessionTitle = session.display_name || tm("conversation.newConversation");
   const message = tm("conversation.confirmDelete", { name: sessionTitle });
   if (await askForConfirmation(message, confirmDialog)) {
     emit("deleteSession", session.session_id);
@@ -139,11 +138,12 @@ async function handleDeleteSession(session: Session) {
 <style scoped>
 .project-sessions-container {
   height: 100%;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 32px;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .project-header {
@@ -194,14 +194,18 @@ async function handleDeleteSession(session: Session) {
 }
 
 .project-input-slot {
+  flex: 0 0 auto;
   width: 100%;
   max-width: 800px;
-  margin-bottom: 24px;
+  padding-top: 18px;
 }
 
 .project-sessions-list {
+  flex: 1;
+  min-height: 0;
   width: 100%;
   max-width: 680px;
+  overflow-y: auto;
   background-color: transparent !important;
 }
 

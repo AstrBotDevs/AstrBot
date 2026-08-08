@@ -652,6 +652,10 @@
   content: "\F140B";
 }
 
+.mdi-lightning-bolt-outline::before {
+  content: "\F140C";
+}
+
 .mdi-link::before {
   content: "\F0337";
 }
@@ -1006,10 +1010,6 @@
 
 .mdi-stop-circle::before {
   content: "\F0666";
-}
-
-.mdi-store::before {
-  content: "\F04DC";
 }
 
 .mdi-subdirectory-arrow-right::before {

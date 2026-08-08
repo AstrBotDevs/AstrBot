@@ -57,6 +57,25 @@
                           mdi-puzzle-outline
                         </v-icon>
                       </template>
+                      <v-tooltip
+                        v-if="
+                          [
+                            'qq_official',
+                            'qq_official_webhook',
+                            'aiocqhttp',
+                            'weixin_oc',
+                          ].includes(platformTemplates[item.raw].type)
+                        "
+                        activator="parent"
+                        :text="
+                          tm(
+                            `createDialog.platformTooltips.${platformTemplates[item.raw].type}`,
+                          )
+                        "
+                        location="end"
+                        max-width="360"
+                        open-delay="50"
+                      />
                     </v-list-item>
                   </template>
                   <template #selection="{ item }">
@@ -1076,9 +1095,7 @@ export default {
       return this.selectedPlatformConfig?.type === "dingtalk";
     },
     isQqOfficialPlatform(): boolean {
-      return ["qq_official", "qq_official_webhook"].includes(
-        String(this.selectedPlatformConfig?.type || ""),
-      );
+      return ["qq_official", "qq_official_webhook"].includes(String(this.selectedPlatformConfig?.type || ""));
     },
     scanPlatformIdError(): string {
       const platformId = String(this.selectedPlatformConfig?.id || "");

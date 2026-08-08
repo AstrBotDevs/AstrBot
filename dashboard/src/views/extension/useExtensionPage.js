@@ -1,12 +1,12 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { commandApi, pluginApi } from "@/api/v1";
 import { pluginSidebarState } from "@/composables/usePluginSidebarItems";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCommonStore } from "@/stores/common";
 import { resolveErrorMessage } from "@/utils/errorUtils";
 import { getValidHashTab, replaceTabRoute } from "@/utils/hashRouteTabs.mjs";
 import { getPlatformDisplayName } from "@/utils/platformUtils";
-import { pluginApi } from "@/api/v1";
 import { buildSearchQuery, matchesPluginSearch, normalizeStr, toInitials, toPinyinText } from "@/utils/pluginSearch";
 import axios from "@/utils/request";
 
@@ -25,7 +25,7 @@ const buildFailedPluginItems = (raw) => {
   });
 };
 
-export const useExtensionPage = () => {
+export const useExtensionPage = (initialTab = "installed") => {
   const commonStore = useCommonStore();
   const { t } = useI18n();
   const { tm } = useModuleI18n("features/extension");
@@ -46,7 +46,7 @@ export const useExtensionPage = () => {
   });
   const checkAndPromptConflicts = async () => {
     try {
-      const res = await axios.get("/api/commands");
+      const res = await commandApi.list();
       if (res.data.status === "ok") {
         const conflicts = res.data.data.summary?.conflicts || 0;
         if (conflicts > 0) {
@@ -59,12 +59,13 @@ export const useExtensionPage = () => {
     }
   };
   const handleConflictConfirm = () => {
-    activeTab.value = "commands";
+    conflictDialog.show = false;
+    void router.push({ name: "ExtensionComponents" });
   };
 
   const fileInput = ref(null);
-  const activeTab = ref("installed");
   const validTabs = ["installed", "market", "mcp", "skills", "components"];
+  const activeTab = ref(validTabs.includes(initialTab) ? initialTab : "installed");
   const isValidTab = (tab) => validTabs.includes(tab);
   const getLocationHash = () => route.hash || "";
   const extractTabFromHash = (hash) => getValidHashTab(hash, validTabs);
@@ -613,11 +614,7 @@ export const useExtensionPage = () => {
 
   const getMarketInstallSourcePayload = () => {
     const plugin = selectedMarketInstallPlugin.value;
-    if (
-      !plugin ||
-      normalizeInstallUrl(plugin.repo) !==
-        normalizeInstallUrl(extension_url.value)
-    ) {
+    if (!plugin || normalizeInstallUrl(plugin.repo) !== normalizeInstallUrl(extension_url.value)) {
       return {};
     }
 
@@ -682,12 +679,7 @@ export const useExtensionPage = () => {
       extension.update_market_plugin = null;
 
       const source = extension.install_source;
-      if (
-        !extension.updates_enabled ||
-        !source ||
-        source.implicit === true ||
-        source.install_method !== "market"
-      ) {
+      if (!extension.updates_enabled || !source || source.implicit === true || source.install_method !== "market") {
         return;
       }
 
@@ -705,10 +697,7 @@ export const useExtensionPage = () => {
           marketPlugins =
             registryUrl === normalizeRegistryUrl(selectedSource.value)
               ? pluginMarketData.value
-              : await commonStore.getPluginCollections(
-                  false,
-                  registryUrl || null,
-                );
+              : await commonStore.getPluginCollections(false, registryUrl || null);
         } catch (error) {
           console.warn("Failed to load plugin source for update check:", error);
           return;
@@ -719,9 +708,7 @@ export const useExtensionPage = () => {
           const source = extension.install_source || {};
           const sourceIdentifier = String(source.market_plugin_id || "").trim();
           const sourceRepo = normalizeInstallUrl(source.repo).toLowerCase();
-          const normalizedExtensionName = normalizeStr(
-            extension.marketplace_name,
-          );
+          const normalizedExtensionName = normalizeStr(extension.marketplace_name);
           const matchedPlugin =
             (sourceIdentifier && lookup.byIdentifier.get(sourceIdentifier)) ||
             (sourceRepo && lookup.byRepo.get(sourceRepo)) ||
@@ -735,20 +722,14 @@ export const useExtensionPage = () => {
           const localVersion = String(extension.version || "").trim();
           const onlineVersion = String(matchedPlugin.version || "").trim();
           const isKnownVersion =
-            /^v?\d+/.test(localVersion) &&
-            /^v?\d+/.test(onlineVersion) &&
-            onlineVersion !== tm("status.unknown");
-          const versionCompare = isKnownVersion
-            ? compareVersions(localVersion, onlineVersion)
-            : 0;
+            /^v?\d+/.test(localVersion) && /^v?\d+/.test(onlineVersion) && onlineVersion !== tm("status.unknown");
+          const versionCompare = isKnownVersion ? compareVersions(localVersion, onlineVersion) : 0;
 
           extension.online_version = onlineVersion;
           extension.has_update =
             isKnownVersion &&
             (versionCompare < 0 ||
-              (versionCompare === 0 &&
-                localVersion.includes("-") &&
-                !onlineVersion.includes("-")));
+              (versionCompare === 0 && localVersion.includes("-") && !onlineVersion.includes("-")));
         });
       }),
     );
@@ -796,25 +777,14 @@ export const useExtensionPage = () => {
       .toLowerCase();
     const repoUrl = normalizeInstallUrl(ext?.repo || source?.repo);
     const needsSourceSelection =
-      Boolean(ext) &&
-      (!source ||
-        source.implicit === true ||
-        !["market", "github"].includes(installMethod));
+      Boolean(ext) && (!source || source.implicit === true || !["market", "repository"].includes(installMethod));
 
     return { source, installMethod, repoUrl, needsSourceSelection };
   };
 
-  const performUpdateWithoutSourceSelection = (
-    extensionName,
-    ext,
-    forceUpdate,
-    repoUrl,
-  ) => {
+  const performUpdateWithoutSourceSelection = (extensionName, ext, forceUpdate, repoUrl) => {
     if (ext && ext.updates_enabled === false && !repoUrl) {
-      toast(
-        ext.update_disabled_reason || tm("messages.updateDisabled"),
-        "info",
-      );
+      toast(ext.update_disabled_reason || tm("messages.updateDisabled"), "info");
       return;
     }
 
@@ -828,19 +798,11 @@ export const useExtensionPage = () => {
     openUpdateConfirmDialog(extensionName, forceUpdate);
   };
 
-  const updateExtension = async (
-    extension_name,
-    forceUpdate = false,
-    options = {},
-  ) => {
+  const updateExtension = async (extension_name, forceUpdate = false, options = {}) => {
     const ext = getInstalledExtensionByName(extension_name);
     const { repoUrl, needsSourceSelection } = buildUpdateContext(ext);
 
-    if (
-      needsSourceSelection &&
-      !options.skipSourceCheck &&
-      !repoUrl
-    ) {
+    if (needsSourceSelection && !options.skipSourceCheck && !repoUrl) {
       toast(tm("messages.updateDisabled"), "info");
       return;
     }
@@ -852,12 +814,7 @@ export const useExtensionPage = () => {
       return;
     }
 
-    performUpdateWithoutSourceSelection(
-      extension_name,
-      ext,
-      forceUpdate,
-      repoUrl,
-    );
+    performUpdateWithoutSourceSelection(extension_name, ext, forceUpdate, repoUrl);
   };
 
   const confirmUpdatePlugin = async () => {
@@ -1065,10 +1022,7 @@ export const useExtensionPage = () => {
         const serverLevel = res.data.data?.log_level;
         // Preserve null as "follow global" and only skip synchronization
         // when an older server does not return the field.
-        if (
-          curr_namespace.value === pluginName &&
-          serverLevel !== undefined
-        ) {
+        if (curr_namespace.value === pluginName && serverLevel !== undefined) {
           extension_config.log_level = serverLevel;
         }
         toast(tm("messages.logLevelUpdated"), "success");
@@ -1222,7 +1176,7 @@ export const useExtensionPage = () => {
     }
     return {
       url,
-      proxy: getSelectedGitHubProxy(),
+      proxy: getRepositoryProxy(url),
     };
   };
 
@@ -1325,12 +1279,11 @@ export const useExtensionPage = () => {
   const sourceResolveCurrent = computed(
     () =>
       Boolean(sourceResolvedUrl.value) &&
-      normalizeRegistryUrl(sourceResolvedUrl.value) ===
-        normalizeRegistryUrl(sourceUrl.value),
+      normalizeRegistryUrl(sourceResolvedUrl.value) === normalizeRegistryUrl(sourceUrl.value),
   );
 
   const validateSourceBindingRepoCandidate = async (candidate) => {
-    if (!candidate || candidate.install_method !== "github") {
+    if (!candidate || candidate.install_method !== "repository") {
       return;
     }
     if (candidate.validation_status === "loading") {
@@ -1344,7 +1297,7 @@ export const useExtensionPage = () => {
     try {
       const { data, message } = await validatePluginRepo({
         url: candidate.repo,
-        proxy: getSelectedGitHubProxy(),
+        proxy: getRepositoryProxy(candidate.repo),
       });
       if (serial !== sourceBindingDialog.validationSerial) {
         return;
@@ -1359,17 +1312,12 @@ export const useExtensionPage = () => {
       }
       candidate.version = tm("status.unknown");
       candidate.validation_status = "error";
-      candidate.validation_message = resolveErrorMessage(
-        error,
-        tm("messages.pluginValidateFailed"),
-      );
+      candidate.validation_message = resolveErrorMessage(error, tm("messages.pluginValidateFailed"));
     }
   };
 
   const resolvePluginSourceCandidates = async (extension) => {
-    const extensionRepo = normalizeInstallUrl(
-      extension.repo || extension.install_source?.repo,
-    ).toLowerCase();
+    const extensionRepo = normalizeInstallUrl(extension.repo || extension.install_source?.repo).toLowerCase();
     if (!extensionRepo) {
       return { candidates: [], selectedKey: "" };
     }
@@ -1382,15 +1330,9 @@ export const useExtensionPage = () => {
         url: source.url,
       })),
     ];
-    const currentMarketPluginId = String(
-      extension.install_source?.market_plugin_id || "",
-    ).trim();
-    const currentRegistryUrl = normalizeRegistryUrl(
-      extension.install_source?.registry_url,
-    );
-    const currentInstallMethod = String(
-      extension.install_source?.install_method || "",
-    )
+    const currentMarketPluginId = String(extension.install_source?.market_plugin_id || "").trim();
+    const currentRegistryUrl = normalizeRegistryUrl(extension.install_source?.registry_url);
+    const currentInstallMethod = String(extension.install_source?.install_method || "")
       .trim()
       .toLowerCase();
     const seen = new Set();
@@ -1399,10 +1341,7 @@ export const useExtensionPage = () => {
     for (const source of sources) {
       let marketPlugins = [];
       try {
-        marketPlugins = await commonStore.getPluginCollections(
-          false,
-          source.url || null,
-        );
+        marketPlugins = await commonStore.getPluginCollections(false, source.url || null);
       } catch (error) {
         console.warn("Failed to load plugin source for binding:", error);
         continue;
@@ -1414,10 +1353,7 @@ export const useExtensionPage = () => {
         if (!marketPluginId || !pluginRepo || pluginRepo !== extensionRepo) {
           return;
         }
-        if (
-          currentMarketPluginId &&
-          marketPluginId !== currentMarketPluginId
-        ) {
+        if (currentMarketPluginId && marketPluginId !== currentMarketPluginId) {
           return;
         }
 
@@ -1443,8 +1379,8 @@ export const useExtensionPage = () => {
     }
 
     candidates.push({
-      key: `github||${extensionRepo}`,
-      install_method: "github",
+      key: `repository||${extensionRepo}`,
+      install_method: "repository",
       registry_url: null,
       registry_name: tm("dialogs.sourceBinding.repoOption"),
       market_plugin_id: "",
@@ -1456,19 +1392,17 @@ export const useExtensionPage = () => {
     });
 
     const currentCandidate =
-      currentInstallMethod === "github"
+      currentInstallMethod === "repository"
         ? candidates.find(
             (candidate) =>
-              candidate.install_method === "github" &&
+              candidate.install_method === "repository" &&
               normalizeInstallUrl(candidate.repo).toLowerCase() === extensionRepo,
           )
         : candidates.find((candidate) => {
             return (
               candidate.install_method === "market" &&
-              normalizeRegistryUrl(candidate.registry_url) ===
-                currentRegistryUrl &&
-              (!currentMarketPluginId ||
-                candidate.market_plugin_id === currentMarketPluginId) &&
+              normalizeRegistryUrl(candidate.registry_url) === currentRegistryUrl &&
+              (!currentMarketPluginId || candidate.market_plugin_id === currentMarketPluginId) &&
               normalizeInstallUrl(candidate.repo).toLowerCase() === extensionRepo
             );
           });
@@ -1490,8 +1424,7 @@ export const useExtensionPage = () => {
     sourceBindingDialog.pendingUpdate = options.pendingUpdate || null;
 
     try {
-      const { candidates, selectedKey } =
-        await resolvePluginSourceCandidates(extension);
+      const { candidates, selectedKey } = await resolvePluginSourceCandidates(extension);
       sourceBindingDialog.candidates = candidates;
       sourceBindingDialog.selectedKey = selectedKey;
     } finally {
@@ -1500,7 +1433,7 @@ export const useExtensionPage = () => {
     const selectedCandidate = sourceBindingDialog.candidates.find(
       (item) => item.key === sourceBindingDialog.selectedKey,
     );
-    if (selectedCandidate?.install_method === "github") {
+    if (selectedCandidate?.install_method === "repository") {
       void validateSourceBindingRepoCandidate(selectedCandidate);
     }
   };
@@ -1528,9 +1461,7 @@ export const useExtensionPage = () => {
 
   const confirmPluginSourceBinding = async () => {
     const extension = sourceBindingDialog.extension;
-    const candidate = sourceBindingDialog.candidates.find(
-      (item) => item.key === sourceBindingDialog.selectedKey,
-    );
+    const candidate = sourceBindingDialog.candidates.find((item) => item.key === sourceBindingDialog.selectedKey);
     if (!extension || !candidate || sourceBindingDialog.saving) {
       return;
     }
@@ -1539,8 +1470,8 @@ export const useExtensionPage = () => {
     try {
       const pendingUpdate = sourceBindingDialog.pendingUpdate;
       const payload =
-        candidate.install_method === "github"
-          ? { install_method: "github" }
+        candidate.install_method === "repository"
+          ? { install_method: "repository" }
           : {
               install_method: "market",
               registry_url: candidate.registry_url,
@@ -1559,8 +1490,7 @@ export const useExtensionPage = () => {
       await checkUpdate();
       await continuePendingUpdateAfterBinding(pendingUpdate);
     } catch (error) {
-      const errorMsg =
-        error.response?.data?.message || error.message || String(error);
+      const errorMsg = error.response?.data?.message || error.message || String(error);
       toast(errorMsg, "error");
     } finally {
       sourceBindingDialog.saving = false;
@@ -1626,9 +1556,7 @@ export const useExtensionPage = () => {
     const originalRegistryUrl = normalizeRegistryUrl(originalSourceUrl.value);
     if (
       (!editingSource.value || normalizedRegistryUrl !== originalRegistryUrl) &&
-      customSources.value.some(
-        (source) => normalizeRegistryUrl(source.url) === normalizedRegistryUrl,
-      )
+      customSources.value.some((source) => normalizeRegistryUrl(source.url) === normalizedRegistryUrl)
     ) {
       toast(tm("market.sourceExists"), "error");
       return;
@@ -1646,8 +1574,7 @@ export const useExtensionPage = () => {
       }
 
       const meta = res.data.data?.$meta;
-      sourceMarketMeta.value =
-        meta && typeof meta === "object" && !Array.isArray(meta) ? meta : null;
+      sourceMarketMeta.value = meta && typeof meta === "object" && !Array.isArray(meta) ? meta : null;
 
       const metaName = String(sourceMarketMeta.value?.name || "").trim();
       if (metaName && !sourceName.value.trim()) {
@@ -1657,10 +1584,7 @@ export const useExtensionPage = () => {
       sourceResolveVisible.value = true;
       toast(tm("market.sourceResolved"), "success");
     } catch (error) {
-      toast(
-        resolveErrorMessage(error, tm("messages.sourceResolveFailed")),
-        "error",
-      );
+      toast(resolveErrorMessage(error, tm("messages.sourceResolveFailed")), "error");
     } finally {
       sourceResolving.value = false;
     }
@@ -1695,30 +1619,21 @@ export const useExtensionPage = () => {
     const originalRegistryUrl = normalizeRegistryUrl(originalSourceUrl.value);
 
     if (editingSource.value) {
-      const index = customSources.value.findIndex(
-        (s) => normalizeRegistryUrl(s.url) === originalRegistryUrl,
-      );
+      const index = customSources.value.findIndex((s) => normalizeRegistryUrl(s.url) === originalRegistryUrl);
       if (index !== -1) {
         customSources.value[index] = {
           name: sourceName.value.trim(),
           url: normalizedRegistryUrl,
         };
 
-        if (
-          normalizeRegistryUrl(selectedSource.value) === originalRegistryUrl
-        ) {
+        if (normalizeRegistryUrl(selectedSource.value) === originalRegistryUrl) {
           selectedSource.value = normalizedRegistryUrl;
           localStorage.setItem("selectedPluginSource", selectedSource.value);
           refreshPluginMarket();
         }
       }
     } else {
-      if (
-        customSources.value.some(
-          (source) =>
-            normalizeRegistryUrl(source.url) === normalizedRegistryUrl,
-        )
-      ) {
+      if (customSources.value.some((source) => normalizeRegistryUrl(source.url) === normalizedRegistryUrl)) {
         toast(tm("market.sourceExists"), "error");
         return;
       }
@@ -1768,8 +1683,7 @@ export const useExtensionPage = () => {
     data.forEach((ext) => {
       const source = ext.install_source || {};
       const isCurrentMarketInstall =
-        source.install_method === "market" &&
-        normalizeRegistryUrl(source.registry_url) === currentRegistryUrl;
+        source.install_method === "market" && normalizeRegistryUrl(source.registry_url) === currentRegistryUrl;
       const identifier = String(source.market_plugin_id || "").trim();
       if (isCurrentMarketInstall && identifier) {
         installedByIdentifier.set(identifier, ext);
@@ -1779,10 +1693,7 @@ export const useExtensionPage = () => {
       if (repo) {
         installedByRepo.set(repo, ext);
       } else {
-        installedByName.set(
-          normalizeStr(ext.marketplace_name || ext.name),
-          ext,
-        );
+        installedByName.set(normalizeStr(ext.marketplace_name || ext.name), ext);
       }
     });
 
@@ -1992,9 +1903,10 @@ export const useExtensionPage = () => {
       ...getMarketInstallSourcePayload(),
     };
 
-    return installUsesGithubSource.value
-      ? pluginApi.installGithub(payload)
-      : pluginApi.installUrl(payload);
+    if (!installUsesRepositorySource.value) {
+      return pluginApi.installUrl(payload);
+    }
+    return isGithubArchiveUrl(extension_url.value) ? pluginApi.installGithub(payload) : pluginApi.installGit(payload);
   };
 
   const finalizeSuccessfulInstall = async (resData, source) => {
@@ -2034,8 +1946,8 @@ export const useExtensionPage = () => {
 
     try {
       if (source === "url" && !selectedInstallDownloadUrl.value) {
-        if (!installUsesGithubSource.value) {
-          toast(tm("messages.invalidGithubRepo"), "error");
+        if (!installUsesRepositorySource.value) {
+          toast(tm("messages.invalidRepositoryUrl"), "error");
           loading_.value = false;
           return;
         }
@@ -2058,10 +1970,7 @@ export const useExtensionPage = () => {
           installUrlValidation.version = data.version || "";
           installUrlValidation.metadata = data;
         } catch (error) {
-          const message = resolveErrorMessage(
-            error,
-            tm("messages.pluginValidateFailed"),
-          );
+          const message = resolveErrorMessage(error, tm("messages.pluginValidateFailed"));
           installUrlValidation.status = "error";
           installUrlValidation.message = message;
           toast(message, "error");
@@ -2113,15 +2022,10 @@ export const useExtensionPage = () => {
   const selectedUpdateMarketPlugin = computed(() => findMarketPluginForExtension(selectedUpdateExtension.value));
 
   const selectedSourceBindingCandidate = computed(
-    () =>
-      sourceBindingDialog.candidates.find(
-        (item) => item.key === sourceBindingDialog.selectedKey,
-      ) || null,
+    () => sourceBindingDialog.candidates.find((item) => item.key === sourceBindingDialog.selectedKey) || null,
   );
 
-  const selectedUpdateDownloadUrl = computed(() =>
-    String(selectedUpdateMarketPlugin.value?.download_url || "").trim(),
-  );
+  const selectedUpdateDownloadUrl = computed(() => String(selectedUpdateMarketPlugin.value?.download_url || "").trim());
 
   const selectedUpdateSourceUrl = computed(
     () => selectedUpdateDownloadUrl.value || String(selectedUpdateExtension.value?.repo || "").trim(),
@@ -2174,15 +2078,13 @@ export const useExtensionPage = () => {
 
   // 生命周期
   onMounted(async () => {
-    if (!syncTabFromHash(getLocationHash())) {
+    const hasRouteTab = isValidTab(route.meta.extensionTab);
+    if (!hasRouteTab && !syncTabFromHash(getLocationHash())) {
       await replaceTabRoute(router, route, activeTab.value);
     }
     loading_.value = true;
     try {
       await getExtensions({ withLoading: false });
-
-      // 加载自定义插件源
-      await loadCustomSources();
 
       // 检查是否有 open_config 参数
       const plugin_name = Array.isArray(route.query.open_config) ? route.query.open_config[0] : route.query.open_config;
@@ -2202,6 +2104,23 @@ export const useExtensionPage = () => {
       toast(`${tm("messages.getMarketDataFailed")} ${err}`, "error");
     } finally {
       loading_.value = false;
+    }
+
+    if (activeTab.value === "installed") {
+      void (async () => {
+        try {
+          await loadCustomSources();
+          const data = await commonStore.getPluginCollections(false, selectedSource.value);
+          pluginMarketData.value = data;
+          trimExtensionName();
+          checkAlreadyInstalled();
+          await annotateMarketVersionSupport();
+          await checkUpdate();
+          refreshRandomPlugins();
+        } catch (err) {
+          console.debug("Failed to load plugin update metadata:", err);
+        }
+      })();
     }
   });
 
@@ -2252,27 +2171,20 @@ export const useExtensionPage = () => {
     },
   );
 
-  watch(
-    [() => sourceBindingDialog.show, () => sourceBindingDialog.selectedKey],
-    ([dialogOpen]) => {
-      if (!dialogOpen || sourceBindingDialog.loading) {
-        return;
-      }
-      const candidate = sourceBindingDialog.candidates.find(
-        (item) => item.key === sourceBindingDialog.selectedKey,
-      );
-      if (
-        candidate?.install_method === "github" &&
-        candidate.validation_status !== "valid"
-      ) {
-        void validateSourceBindingRepoCandidate(candidate);
-      }
-    },
-  );
+  watch([() => sourceBindingDialog.show, () => sourceBindingDialog.selectedKey], ([dialogOpen]) => {
+    if (!dialogOpen || sourceBindingDialog.loading) {
+      return;
+    }
+    const candidate = sourceBindingDialog.candidates.find((item) => item.key === sourceBindingDialog.selectedKey);
+    if (candidate?.install_method === "repository" && candidate.validation_status !== "valid") {
+      void validateSourceBindingRepoCandidate(candidate);
+    }
+  });
 
   watch(
     () => route.hash,
     (newHash) => {
+      if (isValidTab(route.meta.extensionTab)) return;
       const tab = extractTabFromHash(newHash);
       if (tab && tab !== activeTab.value) {
         activeTab.value = tab;
@@ -2281,6 +2193,7 @@ export const useExtensionPage = () => {
   );
 
   watch(activeTab, (newTab) => {
+    if (isValidTab(route.meta.extensionTab)) return;
     if (!isValidTab(newTab)) return;
     if (route.hash === `#${newTab}`) return;
     void replaceTabRoute(router, route, newTab);
@@ -2452,7 +2365,8 @@ export const useExtensionPage = () => {
     selectedInstallPlugin,
     selectedInstallDownloadUrl,
     selectedInstallSourceUrl,
-    installUsesGithubSource,
+    installUsesRepositorySource,
+    installUsesGithubArchiveSource,
     selectedUpdateExtension,
     selectedUpdateMarketPlugin,
     selectedUpdateDownloadUrl,

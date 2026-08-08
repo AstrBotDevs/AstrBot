@@ -12,6 +12,7 @@ from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.provider import TTSProvider
 from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.datetime_utils import generate_timestamp_id
 
 
 @register_provider_adapter(
@@ -149,7 +150,9 @@ class ProviderVolcengineTTS(TTSProvider):
 
                         temp_dir = anyio.Path(get_astrbot_temp_path())
                         await temp_dir.mkdir(parents=True, exist_ok=True)
-                        file_path = temp_dir / f"volcengine_tts_{uuid.uuid4()}.mp3"
+                        file_path = temp_dir / (
+                            f"volcengine_tts_{generate_timestamp_id()}.mp3"
+                        )
 
                         async with await anyio.open_file(file_path, "wb") as audio_file:
                             await audio_file.write(audio_data)

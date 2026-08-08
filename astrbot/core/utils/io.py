@@ -3,15 +3,14 @@ import base64
 import inspect
 import logging
 import os
-import re
 import shutil
 import socket
 import ssl
 import time
 import uuid
-import zipfile
 from ipaddress import IPv4Address, IPv6Address, ip_address
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 import aiohttp
 import anyio
@@ -19,10 +18,19 @@ import certifi
 import psutil
 from PIL import Image
 
-from .astrbot_path import get_astrbot_data_path, get_astrbot_path, get_astrbot_temp_path
-from .version_comparator import VersionComparator
+from .astrbot_path import get_astrbot_temp_path
 
 logger = logging.getLogger("astrbot")
+
+
+def _safe_url_for_log(url: str) -> str:
+    """Return a URL summary that omits query strings and fragments."""
+    parsed = urlparse(url)
+    if parsed.scheme in {"http", "https"}:
+        filename = Path(unquote(parsed.path or "")).name
+        suffix = f" file={filename!r}" if filename else ""
+        return f"{parsed.scheme} URL host={parsed.netloc!r}{suffix} len={len(url)}"
+    return f"URL len={len(url)}"
 
 
 def _get_aiohttp():
@@ -136,7 +144,7 @@ async def download_image_by_url(
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
         # 关闭SSL验证(仅在证书验证失败时作为fallback)
         logger.warning(
-            f"SSL certificate verification failed for {url}. "
+            f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
             "Disabling SSL verification (CERT_NONE) as a fallback. "
             "This is insecure and exposes the application to man-in-the-middle attacks. "
             "Please investigate and resolve certificate issues.",
@@ -180,11 +188,12 @@ def _raise_for_download_status(resp, url: str) -> None:
         return
     logger.error(
         "Failed to download file from %s. HTTP status code: %s",
-        url,
+        _safe_url_for_log(url),
         resp.status,
     )
     raise DownloadFileHTTPError(
-        f"Failed to download file from {url}. HTTP status code: {resp.status}"
+        "Failed to download file from "
+        f"{_safe_url_for_log(url)}. HTTP status code: {resp.status}"
     )
 
 
@@ -193,8 +202,9 @@ async def download_file(
     path: str,
     show_progress: bool = False,
     progress_callback=None,
+    allow_insecure_ssl_fallback: bool = True,
 ) -> None:
-    """从指定 url 下载文件到指定路径 path"""
+    """Download a remote file to a local path."""
     aiohttp = _get_aiohttp()
     try:
         ssl_context = ssl.create_default_context(
@@ -215,7 +225,9 @@ async def download_file(
                 start_time = time.time()
                 if show_progress:
                     logger.info(
-                        f"Downloading: {url} | Size: {total_size / 1024:.2f} KB",
+                        "Downloading: %s | Size: %.2f KB",
+                        _safe_url_for_log(url),
+                        total_size / 1024,
                     )
                 await _emit_download_progress(
                     progress_callback,
@@ -266,13 +278,11 @@ async def download_file(
                     },
                 )
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
+        if not allow_insecure_ssl_fallback:
+            raise
         # 关闭SSL验证(仅在证书验证失败时作为fallback)
         logger.warning(
-            f"SSL certificate verification failed for {url}. "
-            "Falling back to unverified connection (CERT_NONE). ",
-        )
-        logger.warning(
-            f"SSL certificate verification failed for {url}. "
+            f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
             "Falling back to unverified connection (CERT_NONE). "
             "This is insecure and exposes the application to man-in-the-middle attacks. "
             "Please investigate certificate issues with the remote server.",
@@ -293,7 +303,11 @@ async def download_file(
             downloaded_size = 0
             start_time = time.time()
             if show_progress:
-                logger.info(f"Size: {total_size / 1024:.2f} KB | URL: {url}")
+                logger.info(
+                    "Size: %.2f KB | URL: %s",
+                    total_size / 1024,
+                    _safe_url_for_log(url),
+                )
             await _emit_download_progress(
                 progress_callback,
                 {
@@ -396,211 +410,3 @@ async def get_public_ip_address() -> list[IPv4Address | IPv6Address]:
 
     # 返回找到的所有 IP 对象列表
     return list(found_ips.values())
-
-
-def _read_dashboard_dist_version(dist_dir: str | Path) -> str | None:
-    version_file = Path(dist_dir) / "assets" / "version"
-    if version_file.exists():
-        return version_file.read_text(encoding="utf-8").strip()
-    return None
-
-
-def get_dashboard_dist_version(dist_dir: str | Path) -> str | None:
-    """Read the version marker from a given dashboard dist directory."""
-    return _read_dashboard_dist_version(dist_dir)
-
-
-def get_bundled_dashboard_dist_path() -> Path:
-    return Path(get_astrbot_path()) / "astrbot" / "dashboard" / "dist"
-
-
-def _normalize_dashboard_version(version: str) -> str:
-    version = version.strip()
-    if version[:1].lower() == "v":
-        version = version[1:]
-    if not re.match(
-        r"^[0-9]+(?:\.[0-9]+)*"
-        r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
-        r"(?:\+.+)?$",
-        version,
-    ):
-        raise ValueError(f"invalid dashboard version: {version!r}")
-    return version
-
-
-def is_dashboard_version_compatible(
-    dashboard_version: str | None, current_version: str
-) -> bool:
-    """Check whether a WebUI version matches the current core version.
-
-    Args:
-        dashboard_version: Version read from the WebUI assets/version file.
-        current_version: Current AstrBot core version.
-
-    Returns:
-        True when both versions are valid SemVer values and compare equal.
-    """
-
-    if dashboard_version is None:
-        return False
-    try:
-        return (
-            VersionComparator.compare_version(
-                _normalize_dashboard_version(dashboard_version),
-                _normalize_dashboard_version(current_version),
-            )
-            == 0
-        )
-    except (TypeError, ValueError):
-        return False
-
-
-def is_dashboard_dist_compatible(dist_dir: str | Path, current_version: str) -> bool:
-    """Check whether a WebUI dist is complete and matches the core version.
-
-    Args:
-        dist_dir: Dashboard dist directory path.
-        current_version: Current AstrBot core version.
-
-    Returns:
-        True when the dist has an index file and a compatible assets/version.
-    """
-
-    dist_path = Path(dist_dir)
-    return (dist_path / "index.html").is_file() and is_dashboard_version_compatible(
-        get_dashboard_dist_version(dist_path),
-        current_version,
-    )
-
-
-def should_use_bundled_dashboard_dist(
-    user_dist: str | Path,
-    current_version: str,
-) -> bool:
-    user_version = _read_dashboard_dist_version(user_dist)
-    bundled_dist = get_bundled_dashboard_dist_path()
-    if user_version is None or not bundled_dist.exists():
-        return False
-    try:
-        return (
-            VersionComparator.compare_version(
-                _normalize_dashboard_version(current_version),
-                _normalize_dashboard_version(user_version),
-            )
-            > 0
-        )
-    except (TypeError, ValueError):
-        return False
-
-
-async def get_dashboard_version():
-    # First check user data directory (manually updated / downloaded dashboard).
-    dist_dir = os.path.join(get_astrbot_data_path(), "dist")
-    if await asyncio.to_thread(os.path.exists, dist_dir):
-        from astrbot.core.config.default import VERSION
-
-        if should_use_bundled_dashboard_dist(dist_dir, VERSION):
-            bundled_version = _read_dashboard_dist_version(
-                get_bundled_dashboard_dist_path(),
-            )
-            if bundled_version is not None:
-                return bundled_version
-        return _read_dashboard_dist_version(dist_dir)
-
-    bundled = get_bundled_dashboard_dist_path()
-    if bundled.exists():
-        return _read_dashboard_dist_version(bundled)
-    return None
-
-
-async def download_dashboard(
-    path: str | None = None,
-    extract_path: str = "data",
-    latest: bool = True,
-    version: str | None = None,
-    proxy: str | None = None,
-    progress_callback=None,
-    extract: bool = True,
-) -> None:
-    """下载管理面板文件"""
-    if path is None:
-        zip_path = anyio.Path(get_astrbot_data_path()) / "dashboard.zip"
-    else:
-        zip_path = anyio.Path(path)
-    await zip_path.parent.mkdir(parents=True, exist_ok=True)
-
-    if latest or len(str(version)) != 40:
-        ver_name = "latest" if latest else version
-        dashboard_release_url = f"https://astrbot-registry.soulter.top/download/astrbot-dashboard/{ver_name}/dist.zip"
-        logger.info(
-            f"Downloading AstrBot WebUI from {dashboard_release_url}",
-        )
-        try:
-            await download_file(
-                dashboard_release_url,
-                str(zip_path),
-                show_progress=True,
-                progress_callback=progress_callback,
-            )
-            if not zipfile.is_zipfile(zip_path):
-                raise RuntimeError(
-                    "Downloaded dashboard package is not a valid ZIP file"
-                )
-        except BaseException as _:
-            if latest:
-                # Resolve latest release tag from GitHub API to construct correct asset URL
-                ssl_context = ssl.create_default_context(cafile=certifi.where())
-                async with (
-                    aiohttp.ClientSession(
-                        connector=aiohttp.TCPConnector(ssl=ssl_context),
-                        trust_env=True,
-                    ) as session,
-                    session.get(
-                        "https://api.github.com/repos/AstrBotDevs/AstrBot/releases/latest",
-                        timeout=30,
-                        headers={"Accept": "application/vnd.github+json"},
-                    ) as api_resp,
-                ):
-                    api_resp.raise_for_status()
-                    release_data = await api_resp.json()
-                    tag = release_data["tag_name"]
-            else:
-                tag = version
-            dashboard_release_url = f"https://github.com/AstrBotDevs/AstrBot/releases/download/{tag}/AstrBot-{tag}-dashboard.zip"
-            if proxy:
-                dashboard_release_url = f"{proxy}/{dashboard_release_url}"
-            await download_file(
-                dashboard_release_url,
-                str(zip_path),
-                show_progress=True,
-                progress_callback=progress_callback,
-            )
-    else:
-        url = f"https://github.com/AstrBotDevs/astrbot-release-harbour/releases/download/release-{version}/dist.zip"
-        logger.info(f"Downloading AstrBot WebUI from {url}")
-        if proxy:
-            url = f"{proxy}/{url}"
-        await download_file(
-            url,
-            str(zip_path),
-            show_progress=True,
-            progress_callback=progress_callback,
-        )
-    if not zipfile.is_zipfile(zip_path):
-        raise RuntimeError("Downloaded dashboard package is not a valid ZIP file")
-    if extract:
-        extract_dashboard(zip_path, extract_path)
-
-
-def extract_dashboard(zip_path: str | Path, extract_path: str | Path) -> None:
-    """Extract a downloaded dashboard archive."""
-    extract_root = Path(extract_path).resolve()
-    ensure_dir(extract_root)
-    with zipfile.ZipFile(zip_path, "r") as z:
-        for member in z.infolist():
-            target_path = (extract_root / member.filename).resolve()
-            if not target_path.is_relative_to(extract_root):
-                raise ValueError(
-                    f"Unsafe dashboard archive path: {member.filename}",
-                )
-            z.extract(member, extract_root)

@@ -12,6 +12,7 @@ from types import MappingProxyType
 from typing import Any
 
 import aiohttp
+from deprecated import deprecated
 
 from astrbot import logger
 from astrbot.core import sp
@@ -245,7 +246,7 @@ class _PermissionGuardedTool(FunctionTool):
     async def call(self, context: Any, **kwargs: Any) -> Any:
         import inspect as _inspect
 
-        error = self._mgr._check_tool_permission(self.name, context)
+        error = await self._mgr._check_tool_permission(self.name, context)
         if error is not None:
             return error
 
@@ -328,6 +329,7 @@ class FunctionToolManager:
         return self._mcp_server_runtime_view
 
     @property
+    @deprecated(reason="Use mcp_server_runtime_view instead.")
     def mcp_server_runtime(self) -> Mapping[str, _MCPServerRuntime]:
         """Backward-compatible read-only view (deprecated). Do not mutate.
 
@@ -455,7 +457,7 @@ class FunctionToolManager:
         Builtin tools are never routed through this method."""
         return "member"
 
-    def _check_tool_permission(
+    async def _check_tool_permission(
         self,
         tool_name: str,
         context: Any,
@@ -467,9 +469,7 @@ class FunctionToolManager:
         no explicit entry exists the tool inherits the fallback
         ``_default_permission``."""
         try:
-            perms_raw = sp.get(
-                "tool_permissions", {}, scope="global", scope_id="global"
-            )
+            perms_raw = await sp.global_get("tool_permissions", {})
         except Exception:
             perms_raw = {}
         defaults = perms_raw.get("_default", {}) if isinstance(perms_raw, dict) else {}

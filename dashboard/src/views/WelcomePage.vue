@@ -14,7 +14,7 @@
 
       <v-row class="px-4">
         <v-col cols="12">
-          <v-card class="welcome-card pa-6" elevation="0" border>
+          <v-card class="welcome-card pa-6" elevation="0">
             <div class="mb-4 text-h3 font-weight-bold">
               {{ tm("onboard.title") }}
             </div>
@@ -248,7 +248,7 @@
 
       <v-row class="px-4 mt-4">
         <v-col cols="12">
-          <v-card class="welcome-card pa-6" elevation="0" border>
+          <v-card class="welcome-card pa-6" elevation="0">
             <div class="mb-4 text-h3 font-weight-bold">
               {{ tm("resources.title") }}
             </div>
@@ -319,7 +319,7 @@
 
       <v-row v-if="showAnnouncement" class="px-4 mb-4">
         <v-col cols="12">
-          <v-card class="welcome-card pa-6" elevation="0" border>
+          <v-card class="welcome-card pa-6" elevation="0">
             <div class="mb-4 text-h3 font-weight-bold">
               {{ tm("announcement.title") }}
             </div>

@@ -28,6 +28,7 @@ async def _get_kb_manager():
         ucr=ucr,
         sp=sp,
     )
+    await acm.initialize()
 
     persona_mgr = PersonaManager(db_helper, acm)
     await persona_mgr.initialize()

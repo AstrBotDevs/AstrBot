@@ -8,7 +8,7 @@ from astrbot.cli.i18n import t
 from astrbot.cli.utils import (
     PluginStatus,
     build_plug_list,
-    get_git_repo,
+    download_repository,
     install_local_plugin,
     manage_plugin,
 )
@@ -58,7 +58,7 @@ def new(name: str) -> None:
         raise click.ClickException("Repository URL must start with http")
 
     click.echo("Downloading plugin template...")
-    get_git_repo(
+    download_repository(
         "https://github.com/Soulter/helloworld",
         plug_path,
     )

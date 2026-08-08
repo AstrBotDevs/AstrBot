@@ -821,7 +821,15 @@ export default {
         const url = this.editingPersona ? "/api/persona/update" : "/api/persona/create";
 
         // 白名单过滤字段
-        const allowedFields = ["persona_id", "system_prompt", "begin_dialogs", "tools"];
+        const allowedFields = [
+          "persona_id",
+          "system_prompt",
+          "custom_error_message",
+          "begin_dialogs",
+          "tools",
+          "skills",
+          "folder_id",
+        ];
         const filteredData = {};
         allowedFields.forEach((field) => {
           if (Object.hasOwn(this.personaForm, field)) {
@@ -833,6 +841,7 @@ export default {
 
         if (response.data.status === "ok") {
           this.$emit("saved", response.data.message || this.tm("messages.saveSuccess"));
+          window.dispatchEvent(new CustomEvent("astrbot:persona-saved"));
           this.closeDialog();
         } else {
           this.$emit("error", response.data.message || this.tm("messages.saveError"));

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, useAttrs, watch } from "vue";
-import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 import { useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { usePluginI18n } from "@/utils/pluginI18n";
+import defaultPluginIcon from "/favicon.svg";
 import PluginPlatformChip from "./PluginPlatformChip.vue";
 import StyledMenu from "./StyledMenu.vue";
 import UninstallConfirmDialog from "./UninstallConfirmDialog.vue";
@@ -49,15 +49,11 @@ const { tm } = useModuleI18n("features/extension");
 const { pluginName, pluginDesc } = usePluginI18n();
 
 const hasPages = computed(() => {
-  return (
-    Array.isArray(props.extension?.pages) && props.extension.pages.length > 0
-  );
+  return Array.isArray(props.extension?.pages) && props.extension.pages.length > 0;
 });
 
 const updateDisabledReason = computed(() => {
-  return (
-    props.extension?.update_disabled_reason || tm("messages.updateDisabled")
-  );
+  return props.extension?.update_disabled_reason || tm("messages.updateDisabled");
 });
 
 const hasKnownInstallSource = computed(() => {
@@ -65,11 +61,7 @@ const hasKnownInstallSource = computed(() => {
   const installMethod = String(source?.install_method || "")
     .trim()
     .toLowerCase();
-  return Boolean(
-    source &&
-      source.implicit !== true &&
-      ["market", "github"].includes(installMethod),
-  );
+  return Boolean(source && source.implicit !== true && ["market", "repository"].includes(installMethod));
 });
 
 const hasUsableRepo = computed(() => {
@@ -78,11 +70,7 @@ const hasUsableRepo = computed(() => {
 });
 
 const canUpdateExtension = computed(() => {
-  return (
-    props.marketMode ||
-    (!props.extension?.reserved &&
-      (hasKnownInstallSource.value || hasUsableRepo.value))
-  );
+  return props.marketMode || (!props.extension?.reserved && (hasKnownInstallSource.value || hasUsableRepo.value));
 });
 
 const canChangePluginSource = computed(() => {
@@ -250,6 +238,24 @@ const openWebui = () => {
               >
                 {{ tm("status.system") }}
               </v-chip>
+              <v-chip
+                v-if="!marketMode"
+                :color="extension.activated ? 'success' : 'default'"
+                :prepend-icon="
+                  extension.activated
+                    ? 'mdi-check-circle'
+                    : 'mdi-close-circle-outline'
+                "
+                size="x-small"
+                variant="tonal"
+                class="ml-1"
+              >
+                {{
+                  extension.activated
+                    ? tm("status.loaded")
+                    : tm("status.stopped")
+                }}
+              </v-chip>
               <v-tooltip
                 v-if="extension?.has_update && !marketMode"
                 location="top"
@@ -282,6 +288,11 @@ const openWebui = () => {
                     >
                       <v-switch
                         :model-value="extension.activated"
+                        :aria-label="
+                          extension.activated
+                            ? tm('buttons.stop')
+                            : tm('buttons.load')
+                        "
                         color="success"
                         density="compact"
                         hide-details
@@ -293,8 +304,8 @@ const openWebui = () => {
                 </template>
                 <span>{{
                   extension.activated
-                    ? tm("buttons.disable")
-                    : tm("buttons.enable")
+                    ? tm("buttons.stop")
+                    : tm("buttons.load")
                 }}</span>
               </v-tooltip>
             </template>

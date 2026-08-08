@@ -716,10 +716,7 @@ export default defineComponent({
 
     // 导出人格数据
     async handleExportPersona(persona: Persona) {
-      const confirmed = await askForConfirmationDialog(
-        this.tm("messages.exportConfirm"),
-        this.confirmDialog,
-      );
+      const confirmed = await askForConfirmationDialog(this.tm("messages.exportConfirm"), this.confirmDialog);
       if (!confirmed) return;
 
       try {
@@ -838,9 +835,7 @@ export default defineComponent({
             importData = {
               persona_id: data.persona_id || "imported_persona",
               system_prompt: data.system_prompt,
-              begin_dialogs: Array.isArray(data.begin_dialogs)
-                ? data.begin_dialogs
-                : [],
+              begin_dialogs: Array.isArray(data.begin_dialogs) ? data.begin_dialogs : [],
             };
           } else {
             throw new Error(this.tm("messages.importFormatError"));
@@ -854,9 +849,7 @@ export default defineComponent({
           const listResponse = await personaApi.list();
           const existingIds =
             listResponse.data.status === "ok"
-              ? (listResponse.data.data || []).map(
-                  (item: Persona) => item.persona_id,
-                )
+              ? (listResponse.data.data || []).map((item: Persona) => item.persona_id)
               : [];
           const originalId = importData.persona_id;
           let renamed = false;
@@ -866,9 +859,7 @@ export default defineComponent({
             do {
               counter += 1;
               importData.persona_id =
-                counter === 1
-                  ? `${originalId}_imported`
-                  : `${originalId}_imported_${counter - 1}`;
+                counter === 1 ? `${originalId}_imported` : `${originalId}_imported_${counter - 1}`;
             } while (existingIds.includes(importData.persona_id));
           }
 

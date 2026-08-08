@@ -21,6 +21,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.platform import Platform
 from astrbot.core.platform.astr_message_event import AstrMessageEvent, MessageSesion
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, ProviderType
 from astrbot.core.provider.func_tool_manager import FunctionTool, FunctionToolManager
@@ -558,6 +559,35 @@ class Context:
         for platform in self.platform_manager.platform_insts:
             if platform.meta().id == session.platform_name:
                 await platform.send_by_session(session, message_chain)
+                settings = self.get_config(umo=str(session)).get(
+                    "provider_ltm_settings",
+                    {},
+                )
+                if (
+                    session.message_type == MessageType.GROUP_MESSAGE
+                    and platform.meta().name != "webchat"
+                    and settings.get("group_message_history_enable", False)
+                ):
+                    try:
+                        await self.message_history_manager.insert_message_chain(
+                            platform_id=session.platform_id,
+                            user_id=str(session),
+                            message_chain=message_chain,
+                            role="bot",
+                            sender_id="bot",
+                            sender_name="bot",
+                            max_messages=max(
+                                1,
+                                int(
+                                    settings.get(
+                                        "group_message_history_max_cnt",
+                                        700,
+                                    )
+                                ),
+                            ),
+                        )
+                    except Exception:
+                        logger.exception("Failed to persist a proactive group message.")
                 return True
         logger.warning(
             f"cannot find platform for session {session!s}, message not sent",
@@ -684,6 +714,7 @@ class Context:
         """
         self.provider_manager.provider_insts.append(provider)
 
+    @deprecated(reason="Use decorator-based tool registration instead.")
     def register_llm_tool(
         self,
         name: str,
@@ -717,6 +748,7 @@ class Context:
         star_handlers_registry.append(md)
         self.provider_manager.llm_tools.add_func(name, func_args, desc, func_obj)
 
+    @deprecated(reason="Use deactivate_llm_tool() to disable a tool instead.")
     def unregister_llm_tool(self, name: str) -> None:
         """[DEPRECATED]删除一个函数调用工具。
 
@@ -730,6 +762,7 @@ class Context:
         """
         self.provider_manager.llm_tools.remove_func(name)
 
+    @deprecated(reason="Use the command decorator (@filter.command) instead.")
     def register_commands(
         self,
         star_name: str,
@@ -772,6 +805,9 @@ class Context:
             )
         star_handlers_registry.append(md)
 
+    @deprecated(
+        reason="Start background tasks in the plugin's initialize() method instead."
+    )
     def register_task(self, task: Awaitable, desc: str) -> None:
         """[DEPRECATED]注册一个异步任务。
 

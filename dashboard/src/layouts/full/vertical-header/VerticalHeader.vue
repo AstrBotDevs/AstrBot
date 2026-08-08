@@ -15,7 +15,7 @@ import "highlight.js/styles/github.css";
 import { useRoute } from "vue-router";
 import { useDisplay, useTheme } from "vuetify";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
-import { useI18n, useLanguageSwitcher } from "@/i18n/composables";
+import { useI18n, useLanguageSwitcher, useModuleI18n } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
 import { router } from "@/router";
 import { getDesktopRuntimeInfo } from "@/utils/desktopRuntime";
@@ -30,6 +30,7 @@ const chatHeader = useChatHeaderStore();
 const theme = useTheme();
 const { lgAndUp } = useDisplay();
 const { t } = useI18n();
+const { tm } = useModuleI18n("features/chat");
 const route = useRoute();
 const LAST_BOT_ROUTE_KEY = "astrbot:last_bot_route";
 const LAST_CHAT_ROUTE_KEY = "astrbot:last_chat_route";
@@ -106,16 +107,10 @@ const desktopUpdateCurrentVersion = ref("-");
 const desktopUpdateLatestVersion = ref("-");
 const desktopUpdateStatus = ref("");
 const isChatPath = computed(() => route.path === "/chat" || route.path.startsWith("/chat/"));
-const isDarkTheme = computed(
-  () => theme.global.current.value.dark || customizer.isDarkTheme,
-);
+const isDarkTheme = computed(() => theme.global.current.value.dark || customizer.isDarkTheme);
 const chatHeaderStyle = computed(() => {
   if (!isChatPath.value) return undefined;
-  const sidebarWidth = lgAndUp.value
-    ? customizer.chatSidebarCollapsed
-      ? 56
-      : 280
-    : 0;
+  const sidebarWidth = lgAndUp.value ? (customizer.chatSidebarCollapsed ? 56 : 280) : 0;
   return {
     left: `${sidebarWidth}px`,
     width: `calc(100% - ${sidebarWidth}px)`,
@@ -943,6 +938,28 @@ onMounted(async () => {
 
       <v-spacer />
 
+      <v-btn
+        v-if="isChatPath && chatHeader.projectId"
+        class="workspace-files-trigger mr-2"
+        :class="{
+          'workspace-files-trigger--active': chatHeader.workspaceFilesOpen,
+        }"
+        variant="text"
+        size="small"
+        rounded="sm"
+        icon
+        :title="tm('workspaceFiles.open')"
+        @click="chatHeader.TOGGLE_WORKSPACE_FILES"
+      >
+        <v-icon size="20">
+          {{
+            chatHeader.workspaceFilesOpen
+              ? "mdi-folder-open-outline"
+              : "mdi-folder-outline"
+          }}
+        </v-icon>
+      </v-btn>
+
       <!-- Bot/Chat 模式切换按钮 - 手机端隐藏，移入 ... 菜单 -->
       <div class="hidden-sm-and-down mr-4">
         <v-btn-toggle
@@ -1762,6 +1779,14 @@ onMounted(async () => {
 
 .theme-toggle-btn {
   margin-left: 0;
+}
+
+.workspace-files-trigger {
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.workspace-files-trigger--active {
+  background: rgba(var(--v-theme-on-surface), 0.08) !important;
 }
 
 /* 响应式布局样式 */

@@ -10,10 +10,11 @@
     "cancel": "Cancel",
     "save": "Save",
     "move": "Move",
-    "clone": "Clone",
     "addDialogPair": "Add Dialog Pair",
+    "export": "Export",
     "import": "Import Persona",
-    "export": "Export"
+    "more": "More actions",
+    "clone": "Clone"
   },
   "labels": {
     "presetDialogs": "Preset Dialogs ({count} pairs)",
@@ -29,6 +30,8 @@
     "presetDialogsHelp": "Add some preset dialogs to help the bot better understand the role settings. The number of dialogs must be even (users and assistants take turns).",
     "userMessage": "User Message",
     "assistantMessage": "Assistant Message",
+    "capabilities": "Persona Capabilities",
+    "capabilitiesHelp": "Choose the tools and Skills available to this persona by source. Use the cog button to select individual capabilities.",
     "tools": "Tool Selection",
     "toolsHelp": "Select available tools for this persona. Tools allow the bot to perform specific functions such as searching, calculating, getting information, etc.",
     "toolsSelection": "Tool Selection Actions",
@@ -87,7 +90,6 @@
     "deleteConfirm": "Are you sure you want to delete persona \"{id}\"? This action cannot be undone.",
     "deleteSuccess": "Deleted successfully",
     "deleteError": "Delete failed",
-    "importExists": "Persona with ID {id} already exists.",
     "exportConfirm": "Export only includes system prompt and preset dialogs, not tools and Skills config. Continue?",
     "exportSuccess": "Exported successfully",
     "exportError": "Export failed: {error}",
@@ -108,9 +110,8 @@
     "messages": {
       "moveSuccess": "Persona moved successfully",
       "moveError": "Failed to move persona",
-      "exportSuccess": "Exported successfully(excluding skills and tools)",
       "exportError": "Failed to export persona",
-      "importSuccess": "Imported successfully",
+      "exportSuccess": "Exported successfully(excluding skills and tools)",
       "importError": "Failed to import persona"
     }
   },
@@ -162,15 +163,14 @@
     "error": "Failed to move"
   },
   "cloneDialog": {
-    "title": "Clone Persona",
     "description": "Create a copy of \"{name}\" with a new ID",
+    "error": "Failed to clone persona",
     "newPersonaId": "New Persona ID",
     "newPersonaIdHint": "Enter a unique name for the cloned persona",
     "success": "Persona cloned successfully",
-    "error": "Failed to clone persona",
+    "title": "Clone Persona",
     "validation": {
-      "required": "Persona ID is required",
-      "exists": "This persona ID already exists"
+      "required": "Persona ID is required"
     }
   }
 }

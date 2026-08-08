@@ -4,9 +4,11 @@ This module tests the ComputerClient, Booter implementations (local, shipyard, b
 filesystem operations, Python execution, shell execution, and security restrictions.
 """
 
-import sys
 import os
+import shlex
 import shutil
+import subprocess
+import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -19,23 +21,6 @@ from astrbot.core.computer.booters.local import (
     LocalShellComponent,
     _is_safe_command,
 )
-from astrbot.core.computer.shell_session import PersistentShellSession
-
-
-@pytest.fixture(autouse=True, scope="session")
-def _cleanup_all_shell_sessions():
-    yield
-    import asyncio
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            loop.create_task(PersistentShellSession.cleanup_all())
-        else:
-            loop.run_until_complete(PersistentShellSession.cleanup_all())
-    except RuntimeError:
-        pass
-
-
 from astrbot.core.computer.booters.bwrap import (
     BwrapBooter,
     BwrapConfig,
@@ -44,6 +29,12 @@ from astrbot.core.computer.booters.bwrap import (
     BwrapPythonComponent,
     BwrapShellComponent,
 )
+
+
+def _python_command(code: str) -> str:
+    """Build a shell-safe Python command for the current operating system."""
+    args = [sys.executable, "-u", "-c", code]
+    return subprocess.list2cmdline(args) if os.name == "nt" else shlex.join(args)
 
 
 class TestLocalBooterInit:
@@ -80,8 +71,11 @@ class TestLocalBooterLifecycle:
     async def test_shutdown(self):
         """Test LocalBooter shutdown method."""
         booter = LocalBooter()
-        # Should not raise any exception
+        booter._shell.shutdown_sessions = AsyncMock()
+
         await booter.shutdown()
+
+        booter._shell.shutdown_sessions.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_available(self):
@@ -175,54 +169,99 @@ class TestLocalShellComponent:
     @pytest.mark.asyncio
     async def test_exec_with_timeout(self):
         """Test command with timeout."""
-        mock_session = AsyncMock()
-        mock_session.exec.return_value = {"exit_code": 0, "stdout": "test", "stderr": ""}
-        with patch(
-            "astrbot.core.computer.booters.local.PersistentShellSession.get_or_create",
-            return_value=mock_session,
-        ):
-            shell = LocalShellComponent()
-            result = await shell.exec("echo test", timeout=5)
-            assert result["exit_code"] == 0
-            mock_session.exec.assert_called_once()
-            kwargs = mock_session.exec.call_args.kwargs
-            assert kwargs.get("timeout") == 5
+        shell = LocalShellComponent()
+        result = await shell.exec_managed(
+            _python_command("import time; time.sleep(30)"),
+            owner_id="owner-a",
+            creator_id="sender-a",
+            creator_is_admin=False,
+            sandboxed=False,
+            timeout=1,
+            yield_time_ms=0,
+        )
+
+        try:
+            session_id = result["session_id"]
+            with pytest.raises(ValueError, match="was not found"):
+                await shell.poll_session(
+                    owner_id="owner-a",
+                    requester_id="sender-b",
+                    requester_is_admin=False,
+                    session_id=session_id,
+                )
+            with pytest.raises(ValueError, match="was not found"):
+                await shell.poll_session(
+                    owner_id="owner-b",
+                    requester_id="admin-b",
+                    requester_is_admin=True,
+                    session_id=session_id,
+                )
+
+            timed_out = await shell.poll_session(
+                owner_id="owner-a",
+                requester_id="sender-a",
+                requester_is_admin=False,
+                session_id=session_id,
+                yield_time_ms=3_000,
+            )
+
+            assert timed_out["status"] == "timed_out"
+            assert timed_out["exit_code"] is not None
+            assert timed_out["session_closed"] is True
+        finally:
+            await shell.shutdown_sessions()
+
+        assert await shell.list_sessions(
+            owner_id="owner-a",
+            requester_id="sender-a",
+            requester_is_admin=False,
+        ) == {"sessions": []}
 
     @pytest.mark.asyncio
     async def test_exec_with_cwd(self, tmp_path):
         """Test command execution with custom working directory."""
-        mock_session = AsyncMock()
-        mock_session.exec.return_value = {"exit_code": 0, "stdout": "", "stderr": ""}
-        with (
-            patch(
-                "astrbot.core.computer.booters.local.get_astrbot_root",
-                return_value=str(tmp_path),
-            ),
-            patch(
-                "astrbot.core.computer.booters.local.PersistentShellSession.get_or_create",
-                return_value=mock_session,
-            ),
-        ):
-            shell = LocalShellComponent()
-            result = await shell.exec("pwd", cwd=str(tmp_path))
+        shell = LocalShellComponent()
+
+        try:
+            result = await shell.exec_managed(
+                _python_command("import os; print(os.getcwd())"),
+                owner_id="owner-a",
+                creator_id="sender-a",
+                creator_is_admin=False,
+                sandboxed=False,
+                cwd=str(tmp_path),
+                yield_time_ms=5_000,
+            )
+
+            assert result["status"] == "completed"
             assert result["exit_code"] == 0
+            assert result["stdout"].strip() == str(tmp_path.resolve())
+            assert result["session_closed"] is True
+        finally:
+            await shell.shutdown_sessions()
 
     @pytest.mark.asyncio
     async def test_exec_with_env(self):
         """Test command execution with custom environment variables."""
-        mock_session = AsyncMock()
-        mock_session.exec.return_value = {"exit_code": 0, "stdout": "test_value", "stderr": ""}
-        with patch(
-            "astrbot.core.computer.booters.local.PersistentShellSession.get_or_create",
-            return_value=mock_session,
-        ):
-            shell = LocalShellComponent()
-            result = await shell.exec(
-                'echo $TEST_VAR',
+        shell = LocalShellComponent()
+
+        try:
+            result = await shell.exec_managed(
+                _python_command('import os; print(os.environ["TEST_VAR"])'),
+                owner_id="owner-a",
+                creator_id="sender-a",
+                creator_is_admin=False,
+                sandboxed=False,
                 env={"TEST_VAR": "test_value"},
+                yield_time_ms=5_000,
             )
+
+            assert result["status"] == "completed"
             assert result["exit_code"] == 0
-            assert "test_value" in result["stdout"]
+            assert result["stdout"] == "test_value\n"
+            assert result["session_closed"] is True
+        finally:
+            await shell.shutdown_sessions()
 
 
 class TestLocalPythonComponent:
@@ -508,7 +547,9 @@ class TestShipyardBooter:
 class TestBoxliteBooter:
     """Tests for BoxliteBooter."""
 
-    @pytest.mark.skip(reason="BoxliteBooter is now abstract and requires boxlite module")
+    @pytest.mark.skip(
+        reason="BoxliteBooter is now abstract and requires boxlite module"
+    )
     @pytest.mark.asyncio
     async def test_boxlite_booter_init(self):
         """Test BoxliteBooter can be instantiated via __new__."""
@@ -542,6 +583,20 @@ class TestComputerClient:
 
         # Reset for other tests
         computer_client.local_booter = None
+
+    @pytest.mark.asyncio
+    async def test_shutdown_local_booter_clears_singleton(self):
+        """Test local managed resources are released during lifecycle shutdown."""
+        from astrbot.core.computer import computer_client
+
+        booter = MagicMock(spec=LocalBooter)
+        booter.shutdown = AsyncMock()
+        computer_client.local_booter = booter
+
+        await computer_client.shutdown_local_booter()
+
+        booter.shutdown.assert_awaited_once()
+        assert computer_client.local_booter is None
 
     @pytest.mark.asyncio
     async def test_get_booter_shipyard(self):
@@ -817,6 +872,7 @@ class TestSyncSkillsToSandbox:
             # Should not raise
             await computer_client._sync_skills_to_sandbox(mock_booter)
 
+
 class TestBwrapConfigAndBuilder:
     def test_bwrap_config_defaults(self):
         config = BwrapConfig(workspace_dir="/tmp/test")
@@ -882,6 +938,7 @@ class TestBwrapBooterLifecycle:
         assert dl_path.read_text() == "hello bwrap"
 
         await booter.shutdown()
+
 
 @pytest.mark.skipif(shutil.which("bwrap") is None, reason="bwrap is not installed")
 class TestBwrapShellComponent:

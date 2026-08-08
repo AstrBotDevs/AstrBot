@@ -4,7 +4,6 @@ import json
 import re
 import secrets
 import time
-import uuid
 from pathlib import Path
 from xml.sax.saxutils import escape
 
@@ -16,6 +15,7 @@ from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.provider import TTSProvider
 from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.datetime_utils import generate_timestamp_id
 
 TEMP_DIR = Path(get_astrbot_temp_path()) / "azure_tts"
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -78,7 +78,7 @@ class OTTSProvider:
         return f"{timestamp}-{nonce}-0-{hashlib.md5(f'{path}-{timestamp}-{nonce}-0-{self.skey}'.encode()).hexdigest()}"
 
     async def get_audio(self, text: str, voice_params: dict) -> str:
-        file_path = TEMP_DIR / f"otts-{uuid.uuid4()}.wav"
+        file_path = TEMP_DIR / f"otts-{generate_timestamp_id()}.wav"
         signature = await self._generate_signature()
         for attempt in range(self.retry_count):
             try:
@@ -176,7 +176,7 @@ class AzureNativeProvider(TTSProvider):
     async def get_audio(self, text: str) -> str:
         if not self.token or time.time() > self.token_expire:
             await self._refresh_token()
-        file_path = TEMP_DIR / f"azure-{uuid.uuid4()}.wav"
+        file_path = TEMP_DIR / f"azure-{generate_timestamp_id()}.wav"
         ssml = f"""<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis'
             xmlns:mstts='http://www.w3.org/2001/mstts' xml:lang='zh-CN'>
             <voice name='{escape(self.voice_params["voice"])}'>

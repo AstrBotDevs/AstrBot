@@ -611,14 +611,14 @@
 <script lang="ts">
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import { debounce } from "lodash";
-import { defineComponent } from "vue";
+import { defineComponent, markRaw } from "vue";
 import MessageList from "@/components/chat/MessageList.vue";
 import UmoDisplay from "@/components/shared/UmoDisplay.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCommonStore } from "@/stores/common";
 import { useCustomizerStore } from "@/stores/customizer";
 import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
-import axios, { AxiosError } from "@/utils/request";
+import axios, { AxiosError, isCancel } from "@/utils/request";
 
 interface UmoInfo {
   umo?: string;
@@ -721,7 +721,10 @@ export default defineComponent({
       valid: true,
 
       // 状态控制
-      loading: false,
+      listLoading: false,
+      listAbortController: null as AbortController | null,
+      listRequestId: 0,
+      actionLoading: false,
       showMessage: false,
       message: "",
       messageType: "success",
@@ -734,20 +737,23 @@ export default defineComponent({
       umoDisplayMode: "parsed",
 
       commonStore: useCommonStore(),
-      debouncedApplyFilters: undefined as (() => void) | undefined,
+      debouncedApplyFilters: undefined as ReturnType<typeof debounce> | undefined,
     };
   },
 
   watch: {
     // 监听筛选条件变化，使用防抖处理
     platformFilter() {
-      this.debouncedApplyFilters();
+      this.invalidateConversationListRequest();
+      this.debouncedApplyFilters?.();
     },
     messageTypeFilter() {
-      this.debouncedApplyFilters();
+      this.invalidateConversationListRequest();
+      this.debouncedApplyFilters?.();
     },
     search() {
-      this.debouncedApplyFilters();
+      this.invalidateConversationListRequest();
+      this.debouncedApplyFilters?.();
     },
   },
 
@@ -759,7 +765,16 @@ export default defineComponent({
     }, 300);
   },
 
+  beforeUnmount() {
+    this.debouncedApplyFilters?.cancel();
+    this.listRequestId += 1;
+    this.listAbortController?.abort();
+  },
+
   computed: {
+    loading() {
+      return this.listLoading || this.actionLoading;
+    },
     // 动态表头
     tableHeaders() {
       return [
@@ -1023,98 +1038,102 @@ export default defineComponent({
       }
     },
 
+    invalidateConversationListRequest() {
+      this.listRequestId += 1;
+      this.listAbortController?.abort();
+      this.listAbortController = null;
+      this.listLoading = true;
+    },
+
     // 获取对话列表
-    fetchConversations: (() => {
-      let controller = new AbortController();
-
-      return async function () {
-        // 新请求前停止之前的请求
-        controller?.abort();
-        controller = new AbortController();
-
-        this.loading = true;
-        try {
-          // 准备请求参数，包含分页和筛选条件
-          const params = {
-            page: this.pagination.page,
-            page_size: this.pagination.page_size,
-          };
-
-          // 添加筛选条件 - 处理combobox的混合数据格式
-          if (this.platformFilter.length > 0) {
-            const platforms = this.platformFilter.map((item) => (typeof item === "object" ? item.value : item));
-            params.platforms = platforms.join(",");
-          }
-
-          if (this.messageTypeFilter.length > 0) {
-            params.message_types = this.messageTypeFilter.join(",");
-          }
-
-          if (this.search) {
-            params.search = this.search.trim();
-          }
-
-          // 添加排除条件
-          params.exclude_ids = "astrbot";
-          params.exclude_platforms = "webchat";
-
-          const response = await axios.get("/api/conversation/list", {
-            signal: controller.signal,
-            params,
-          });
-
-          this.lastAppliedFilters = { ...this.currentFilters }; // 记录已应用的筛选条件
-
-          if (response.data.status === "ok") {
-            const data = response.data.data;
-
-            if (!data || !data.conversations) {
-              console.error("API 返回数据格式不符合预期:", data);
-              this.showErrorMessage(this.tm("messages.fetchError"));
-              return;
-            }
-
-            // 处理会话数据，解析sessionId
-            this.conversations = (data.conversations || []).map((conv) => {
-              // 为每个会话添加会话信息
-              const umoInfo = this.getConversationUmoInfo(conv);
-              conv.sessionInfo = {
-                platform: umoInfo.platform,
-                messageType: umoInfo.message_type,
-                sessionId: umoInfo.session_id,
-              };
-              return conv;
-            });
-
-            // 更新分页信息
-            if (data.pagination) {
-              this.pagination = {
-                page: data.pagination.page || 1,
-                page_size: data.pagination.page_size || 20,
-                total: data.pagination.total || 0,
-                total_pages: data.pagination.total_pages || 1,
-              };
-            } else {
-              console.warn("API 响应中没有分页信息");
-            }
-          } else {
-            this.showErrorMessage(response.data.message || this.tm("messages.fetchError"));
-          }
-        } catch (error: unknown) {
-          if (axios.isCancel(error)) return;
-
-          console.error("获取对话列表出错:", error);
-          this.showErrorMessage(this.getErrorMessage(error, this.tm("messages.fetchError")));
-        } finally {
-          this.loading = false;
-        }
+    async fetchConversations() {
+      this.debouncedApplyFilters?.cancel();
+      this.listAbortController?.abort();
+      const controller = new AbortController();
+      const requestId = ++this.listRequestId;
+      const filtersSnapshot = {
+        platforms: this.platformFilter.map((item) => (typeof item === "object" ? item.value : item)),
+        messageTypes: [...this.messageTypeFilter],
+        search: this.search,
       };
-    })(),
+      this.listAbortController = markRaw(controller);
+      this.listLoading = true;
+
+      try {
+        const params: Record<string, string | number | boolean> = {
+          page: this.pagination.page,
+          page_size: this.pagination.page_size,
+          exclude_ids: "astrbot",
+          exclude_platforms: "webchat",
+          include_history: false,
+        };
+
+        if (filtersSnapshot.platforms.length > 0) {
+          params.platforms = filtersSnapshot.platforms.join(",");
+        }
+        if (filtersSnapshot.messageTypes.length > 0) {
+          params.message_types = filtersSnapshot.messageTypes.join(",");
+        }
+        const search = filtersSnapshot.search.trim();
+        if (search) {
+          params.search = search;
+        }
+
+        const response = await axios.get("/api/conversation/list", {
+          signal: controller.signal,
+          params,
+        });
+
+        if (requestId !== this.listRequestId) return;
+        if (response.data.status !== "ok") {
+          throw new Error(response.data.message || this.tm("messages.fetchError"));
+        }
+
+        const data = response.data.data;
+        if (!data || !Array.isArray(data.conversations)) {
+          throw new Error(this.tm("messages.fetchError"));
+        }
+
+        this.conversations = data.conversations.map((conversation: ConversationItem) => {
+          const umoInfo = this.getConversationUmoInfo(conversation);
+          conversation.sessionInfo = {
+            platform: umoInfo.platform || "",
+            messageType: umoInfo.message_type || "",
+            sessionId: umoInfo.session_id || "",
+          };
+          return conversation;
+        });
+
+        if (data.pagination) {
+          this.pagination = {
+            page: data.pagination.page || 1,
+            page_size: data.pagination.page_size || 20,
+            total: data.pagination.total || 0,
+            total_pages: data.pagination.total_pages || 1,
+          };
+        }
+        this.lastAppliedFilters = filtersSnapshot;
+      } catch (error: unknown) {
+        if (requestId !== this.listRequestId || isCancel(error) || controller.signal.aborted) {
+          return;
+        }
+
+        console.error("获取对话列表出错:", error);
+        this.showErrorMessage(this.getErrorMessage(error, this.tm("messages.fetchError")));
+      } finally {
+        if (requestId === this.listRequestId) {
+          this.listLoading = false;
+          if (this.listAbortController === controller) {
+            this.listAbortController = null;
+          }
+        }
+      }
+    },
 
     // 查看对话详情
     async viewConversation(item: ConversationItem) {
       this.selectedConversation = item;
-      this.loading = true;
+      this.actionLoading = true;
       this.isEditingHistory = false;
 
       try {
@@ -1155,7 +1174,7 @@ export default defineComponent({
         console.error("获取对话详情出错:", error);
         this.showErrorMessage(this.getErrorMessage(error, this.tm("messages.historyError")));
       } finally {
-        this.loading = false;
+        this.actionLoading = false;
       }
     },
 
@@ -1218,7 +1237,7 @@ export default defineComponent({
     async saveConversation() {
       if (!(this.$refs.form as unknown as VFormRef).validate()) return;
 
-      this.loading = true;
+      this.actionLoading = true;
       try {
         const response = await axios.post("/api/conversation/update", {
           user_id: this.editedItem.user_id,
@@ -1247,7 +1266,7 @@ export default defineComponent({
       } catch (error: unknown) {
         this.showErrorMessage(this.getErrorMessage(error, this.tm("messages.saveError")));
       } finally {
-        this.loading = false;
+        this.actionLoading = false;
       }
     },
 
@@ -1261,7 +1280,7 @@ export default defineComponent({
     async deleteConversation() {
       const target = this.selectedConversation;
       if (!target) return;
-      this.loading = true;
+      this.actionLoading = true;
       try {
         const response = await axios.post("/api/conversation/delete", {
           user_id: target.user_id,
@@ -1285,7 +1304,7 @@ export default defineComponent({
       } catch (error: unknown) {
         this.showErrorMessage(this.getErrorMessage(error, this.tm("messages.deleteError")));
       } finally {
-        this.loading = false;
+        this.actionLoading = false;
         this.selectedItems = this.selectedItems.filter(
           (item) => !(item.user_id === target.user_id && item.cid === target.cid),
         );
@@ -1325,7 +1344,7 @@ export default defineComponent({
         return;
       }
 
-      this.loading = true;
+      this.actionLoading = true;
       try {
         // 准备批量删除的数据
         const conversations = this.selectedItems.map((item) => ({
@@ -1367,7 +1386,7 @@ export default defineComponent({
         console.error("批量删除对话出错:", error);
         this.showErrorMessage(this.getErrorMessage(error, this.tm("messages.batchDeleteError")));
       } finally {
-        this.loading = false;
+        this.actionLoading = false;
       }
     },
 
@@ -1378,7 +1397,7 @@ export default defineComponent({
         return;
       }
 
-      this.loading = true;
+      this.actionLoading = true;
       try {
         // 准备导出的数据
         const conversations = this.selectedItems.map((item) => ({
@@ -1418,7 +1437,7 @@ export default defineComponent({
         console.error(this.tm("messages.exportError"), error);
         this.showErrorMessage(this.getErrorMessage(error, this.tm("messages.exportError")));
       } finally {
-        this.loading = false;
+        this.actionLoading = false;
       }
     },
 

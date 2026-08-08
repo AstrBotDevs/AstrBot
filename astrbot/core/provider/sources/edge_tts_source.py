@@ -1,16 +1,16 @@
 import asyncio
 import os
 import subprocess
-import uuid
 
 import anyio
-import edge_tts  # type: ignore
+import edge_tts
 
 from astrbot.core import logger
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.provider import TTSProvider
 from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.datetime_utils import generate_timestamp_id
 
 """
 edge_tts 方式,能够免费､快速生成语音,使用需要先安装edge-tts库
@@ -47,8 +47,14 @@ class ProviderEdgeTTS(TTSProvider):
 
     async def get_audio(self, text: str) -> str:
         temp_dir = get_astrbot_temp_path()
-        mp3_path = os.path.join(temp_dir, f"edge_tts_temp_{uuid.uuid4()}.mp3")
-        wav_path = os.path.join(temp_dir, f"edge_tts_{uuid.uuid4()}.wav")
+        mp3_path = os.path.join(
+            temp_dir,
+            f"edge_tts_temp_{generate_timestamp_id()}.mp3",
+        )
+        wav_path = os.path.join(
+            temp_dir,
+            f"edge_tts_{generate_timestamp_id()}.wav",
+        )
 
         # 构建 Edge TTS 参数
         kwargs = {"text": text, "voice": self.voice}
@@ -64,7 +70,7 @@ class ProviderEdgeTTS(TTSProvider):
             await communicate.save(mp3_path)
 
             try:
-                from pyffmpeg import FFmpeg  # type: ignore
+                from pyffmpeg import FFmpeg
 
                 ff = FFmpeg()
                 ff.convert(input_file=mp3_path, output_file=wav_path)

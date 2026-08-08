@@ -796,6 +796,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 self.stats.current_context_tokens = llm_response.usage.input
                 if self.req.conversation:
                     self.req.conversation.token_usage = llm_response.usage.total
+            # end_time must be set before the yield serializes to_dict().
+            self.stats.end_time = time.time()
             yield AgentResponse(
                 type="agent_stats",
                 data=AgentResponseData(
@@ -945,7 +947,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 parts = None
             tool_calls_result = ToolCallsResult(
                 tool_calls_info=AssistantMessageSegment(
-                    tool_calls=llm_resp.to_openai_to_calls_model(),
+                    tool_calls=llm_resp.to_openai_tool_calls_model(),
                     content=parts,
                 ),
                 tool_calls_result=tool_call_result_blocks,

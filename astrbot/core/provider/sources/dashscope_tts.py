@@ -2,7 +2,6 @@ import asyncio
 import base64
 import logging
 import os
-import uuid
 from typing import Any
 
 import aiofiles
@@ -14,6 +13,7 @@ from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.provider import TTSProvider
 from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.datetime_utils import generate_timestamp_id
 
 MultiModalConversation: Any = None
 try:
@@ -62,7 +62,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
                 "Audio synthesis failed, returned empty content. The model may not be supported or the service is unavailable.",
             )
 
-        path = os.path.join(temp_dir, f"dashscope_tts_{uuid.uuid4()}{ext}")
+        path = os.path.join(temp_dir, f"dashscope_tts_{generate_timestamp_id()}{ext}")
         async with aiofiles.open(path, "wb") as f:
             await f.write(audio_bytes)
         return path

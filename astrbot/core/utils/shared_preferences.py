@@ -5,6 +5,7 @@ from collections import defaultdict
 from typing import Any, TypeVar, overload
 
 from apscheduler.schedulers.background import BackgroundScheduler
+from deprecated import deprecated
 
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Preference
@@ -169,6 +170,10 @@ class SharedPreferences:
     # DEPRECATED METHODS
     # ====
 
+    @deprecated(
+        version="4.0.0",
+        reason="Use get_async() instead. Plugins: use PluginKVStoreMixin.get_kv_data().",
+    )
     def get(
         self,
         key: str,
@@ -191,6 +196,7 @@ class SharedPreferences:
 
         return result if result is not None else default
 
+    @deprecated(version="4.0.0", reason="Use range_get_async() instead.")
     def range_get(
         self,
         scope: str,
@@ -205,6 +211,10 @@ class SharedPreferences:
 
         return result
 
+    @deprecated(
+        version="4.0.0",
+        reason="Use put_async() instead. Plugins: use PluginKVStoreMixin.put_kv_data().",
+    )
     def put(
         self,
         key,
@@ -218,6 +228,10 @@ class SharedPreferences:
             self._sync_loop,
         ).result()
 
+    @deprecated(
+        version="4.0.0",
+        reason="Use remove_async() instead. Plugins: use PluginKVStoreMixin.delete_kv_data().",
+    )
     def remove(
         self,
         key,
@@ -230,6 +244,7 @@ class SharedPreferences:
             self._sync_loop,
         ).result()
 
+    @deprecated(version="4.0.0", reason="Use clear_async() instead.")
     def clear(self, scope: str | None = None, scope_id: str | None = None) -> None:
         """清空偏好设置(已弃用)"""
         asyncio.run_coroutine_threadsafe(

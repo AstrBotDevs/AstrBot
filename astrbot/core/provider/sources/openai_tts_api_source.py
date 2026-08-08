@@ -1,5 +1,4 @@
 import os
-import uuid
 
 import aiofiles
 import httpx
@@ -10,6 +9,7 @@ from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.provider import TTSProvider
 from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.datetime_utils import generate_timestamp_id
 
 
 @register_provider_adapter(
@@ -47,7 +47,10 @@ class ProviderOpenAITTSAPI(TTSProvider):
 
     async def get_audio(self, text: str) -> str:
         temp_dir = get_astrbot_temp_path()
-        path = os.path.join(temp_dir, f"openai_tts_api_{uuid.uuid4()}.wav")
+        path = os.path.join(
+            temp_dir,
+            f"openai_tts_api_{generate_timestamp_id()}.wav",
+        )
         async with (
             self.client.audio.speech.with_streaming_response.create(
                 model=self.model_name,

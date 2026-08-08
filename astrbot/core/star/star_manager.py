@@ -55,7 +55,7 @@ from .error_messages import format_plugin_error
 from .filter.permission import PermissionType, PermissionTypeFilter
 from .star import star_map, star_registry
 from .star_handler import EventType, star_handlers_registry
-from .updator import PLUGIN_METADATA_FILENAMES, PluginUpdator
+from .updater import PLUGIN_METADATA_FILENAMES, _PluginUpdater
 
 try:
     from watchfiles import PythonFilter, awatch
@@ -211,7 +211,7 @@ async def _get_global_dict_preference(key: str) -> dict[Any, Any]:
 
 class PluginManager:
     def __init__(self, context: Context, config: AstrBotConfig) -> None:
-        self.updator = PluginUpdator()
+        self._updater = _PluginUpdater()
 
         self.context = context
         self.context._star_manager = self  # type: ignore
@@ -542,7 +542,10 @@ class PluginManager:
                 raw_metadata["desc"] = raw_metadata["description"]
 
             try:
-                PluginUpdator.validate_plugin_metadata(raw_metadata, metadata_label)
+                _PluginUpdater.validate_plugin_metadata(
+                    raw_metadata,
+                    metadata_label,
+                )
             except ValueError as exc:
                 raise Exception(f"插件元数据校验失败：{exc!s}") from exc
             metadata = StarMetadata(
@@ -1221,7 +1224,7 @@ class PluginManager:
                             )
                         )
                         if not is_valid:
-                            raise PluginVersionIncompatibleError(
+                            raise PluginVersionUnsupportedError(
                                 error_message
                                 or "The plugin is not compatible with the current AstrBot version.",
                             )
@@ -1371,7 +1374,7 @@ class PluginManager:
                             )
                         )
                         if not is_valid:
-                            raise PluginVersionIncompatibleError(
+                            raise PluginVersionUnsupportedError(
                                 error_message
                                 or "The plugin is not compatible with the current AstrBot version.",
                             )
@@ -1669,21 +1672,14 @@ class PluginManager:
             plugin_path = ""
             dir_name = ""
             try:
-                _, repo_name, _ = self.updator.parse_github_url(repo_url)
-                repo_name = self.updator.format_name(repo_name)
-                plugin_path = os.path.join(self.plugin_store_path, repo_name)
-                if await asyncio.to_thread(os.path.exists, plugin_path):
-                    raise Exception(
-                        f"安装失败：目录 {os.path.basename(plugin_path)} 已存在。",
-                    )
                 if download_url:
-                    plugin_path = await self.updator.install(
+                    plugin_path = await self._updater.install(
                         repo_url,
                         proxy,
                         download_url=download_url,
                     )
                 else:
-                    plugin_path = await self.updator.install(repo_url, proxy)
+                    plugin_path = await self._updater.install(repo_url, proxy)
 
                 # reload the plugin
                 dir_name = os.path.basename(plugin_path)
@@ -1760,6 +1756,26 @@ class PluginManager:
                         f"directory: {plugin_path}",
                     )
                 raise
+
+    async def inspect_plugin_repository(
+        self,
+        repo_url: str,
+        proxy: str = "",
+    ) -> dict[str, object]:
+        """Inspect the important metadata exposed by a plugin repository.
+
+        Args:
+            repo_url: Supported plugin repository URL.
+            proxy: Optional URL-prefix mirror.
+
+        Returns:
+            Validated plugin metadata for installation decisions.
+
+        Raises:
+            ValueError: If the repository is not a valid AstrBot plugin.
+            Exception: If the repository provider cannot be reached.
+        """
+        return await self._updater.inspect_repository(repo_url, proxy)
 
     async def uninstall_plugin(
         self,
@@ -1951,15 +1967,35 @@ class PluginManager:
         plugin_name: str,
         proxy="",
         download_url: str = "",
+        repo_url: str = "",
     ) -> None:
-        """升级一个插件"""
+        """Update and reload an installed plugin.
+
+        Args:
+            plugin_name: Registered plugin name.
+            proxy: Optional URL-prefix mirror for archive downloads.
+            download_url: Optional direct plugin archive URL.
+            repo_url: Repository locator selected by the update source.
+
+        Returns:
+            None.
+
+        Raises:
+            Exception: If the plugin does not exist, is reserved, or cannot be
+                updated and reloaded.
+        """
         plugin = self.context.get_registered_star(plugin_name)
         if not plugin:
             raise Exception("插件不存在。")
         if plugin.reserved:
             raise Exception("该插件是 AstrBot 保留插件，无法更新。")
 
-        await self.updator.update(plugin, proxy=proxy, download_url=download_url)
+        await self._updater.update(
+            plugin,
+            proxy=proxy,
+            download_url=download_url,
+            repo_url=repo_url,
+        )
         if plugin.root_dir_name:
             plugin_dir_path = os.path.join(self.plugin_store_path, plugin.root_dir_name)
             await self._ensure_plugin_requirements(
@@ -2087,7 +2123,7 @@ class PluginManager:
         skip_failed_tracking = False
 
         try:
-            self.updator.unzip_file(zip_file_path, desti_dir)
+            self._updater._extract_plugin_archive(zip_file_path, desti_dir)
             metadata_dir_name = self._get_plugin_dir_name_from_metadata(desti_dir)
             target_plugin_path = os.path.join(
                 self.plugin_store_path,

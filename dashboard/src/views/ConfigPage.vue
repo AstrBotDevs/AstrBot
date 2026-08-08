@@ -89,7 +89,7 @@
         >
           <!-- 可视化编辑 -->
           <AstrBotCoreConfigWrapper
-            :metadata="metadata"
+            :metadata="displayMetadata"
             :config_data="config_data"
             :search-keyword="configSearchKeyword"
           />
@@ -346,6 +346,7 @@
 <script lang="ts">
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import type { RouteLocationNormalized } from "vue-router";
+import { systemConfigApi } from "@/api/v1";
 import StandaloneChat from "@/components/chat/StandaloneChat.vue";
 import AstrBotCoreConfigWrapper from "@/components/config/AstrBotCoreConfigWrapper.vue";
 import UnsavedChangesConfirmDialog from "@/components/config/UnsavedChangesConfirmDialog.vue";
@@ -378,6 +379,11 @@ interface UnsavedChangesOptions {
 
 type ConfigData = Record<string, unknown>;
 
+interface TimezoneTimePreview {
+  localTime: string;
+  offsetLabel: string;
+}
+
 interface ConfigUpdatePayload {
   config: ConfigData;
   conf_id: string | null;
@@ -386,6 +392,58 @@ interface ConfigUpdatePayload {
 interface SaveResult {
   success: boolean;
   requires2fa?: boolean;
+}
+
+function isConfigData(value: unknown): value is ConfigData {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function withTimezoneTimePreview(
+  metadata: ConfigData,
+  preview: TimezoneTimePreview,
+  label: string,
+  translateMetadata: (key: string) => string,
+): ConfigData {
+  const systemGroup = metadata.system_group;
+  if (!isConfigData(systemGroup)) return metadata;
+
+  const groupMetadata = systemGroup.metadata;
+  if (!isConfigData(groupMetadata)) return metadata;
+
+  const system = groupMetadata.system;
+  if (!isConfigData(system)) return metadata;
+
+  const items = system.items;
+  if (!isConfigData(items)) return metadata;
+
+  const timezone = items.timezone;
+  if (!isConfigData(timezone)) return metadata;
+
+  const rawHint = typeof timezone.hint === "string" ? timezone.hint : "";
+  const translatedHint = rawHint ? translateMetadata(rawHint) : "";
+  const hint =
+    translatedHint.startsWith("[MISSING:") || translatedHint.startsWith("[INVALID:") ? rawHint : translatedHint;
+  const timePreview = `**${label}** · ${preview.offsetLabel} ${preview.localTime}`;
+
+  return {
+    ...metadata,
+    system_group: {
+      ...systemGroup,
+      metadata: {
+        ...groupMetadata,
+        system: {
+          ...system,
+          items: {
+            ...items,
+            timezone: {
+              ...timezone,
+              hint: hint ? `${hint}\n${timePreview}` : timePreview,
+            },
+          },
+        },
+      },
+    },
+  };
 }
 
 export default {
@@ -446,12 +504,14 @@ export default {
     const { t } = useI18n();
     const { tm } = useModuleI18n("features/config");
     const { tm: tmMeta } = useModuleI18n("features/config-metadata");
+    const { tm: tmSettings } = useModuleI18n("features/settings");
     const confirmDialog = useConfirmDialog();
 
     return {
       t,
       tm,
       tmMeta,
+      tmSettings,
       confirmDialog,
     };
   },
@@ -487,6 +547,11 @@ export default {
 
       // 系统配置开关
       isSystemConfig: false,
+      serverUtcEpochMs: null as number | null,
+      serverUtcOffsetMinutes: null as number | null,
+      serverClockAnchorMs: null as number | null,
+      serverClockTickMs: null as number | null,
+      serverClockTimer: null as number | null,
 
       // 多配置文件管理
       selectedConfigID: null as string | null, // 用于存储当前选中的配置项信息
@@ -526,6 +591,49 @@ export default {
     },
     configInfoNameList() {
       return this.configInfoList.map((info) => info.name);
+    },
+    timezoneTimePreview(): TimezoneTimePreview | null {
+      if (
+        this.serverUtcEpochMs === null ||
+        this.serverUtcOffsetMinutes === null ||
+        this.serverClockAnchorMs === null ||
+        this.serverClockTickMs === null
+      ) {
+        return null;
+      }
+
+      const localDate = new Date(
+        this.serverUtcEpochMs +
+          Math.max(0, this.serverClockTickMs - this.serverClockAnchorMs) +
+          this.serverUtcOffsetMinutes * 60_000,
+      );
+      const localIsoTime = localDate.toISOString();
+      const absoluteOffset = Math.abs(this.serverUtcOffsetMinutes);
+      const offsetHours = Math.floor(absoluteOffset / 60);
+      const offsetMinutes = absoluteOffset % 60;
+      const offsetLabel =
+        this.serverUtcOffsetMinutes === 0
+          ? "UTC"
+          : `UTC${this.serverUtcOffsetMinutes > 0 ? "+" : "-"}${offsetHours}${
+              offsetMinutes ? `:${String(offsetMinutes).padStart(2, "0")}` : ""
+            }`;
+
+      return {
+        localTime: `${localIsoTime.slice(0, 4)}/${localIsoTime.slice(5, 7)}/${localIsoTime.slice(8, 10)} ${localIsoTime.slice(11, 16)}`,
+        offsetLabel,
+      };
+    },
+    displayMetadata(): ConfigData {
+      const metadata = this.metadata as ConfigData;
+      if (!this.isSystemConfig || !this.timezoneTimePreview) {
+        return metadata;
+      }
+      return withTimezoneTimePreview(
+        metadata,
+        this.timezoneTimePreview,
+        this.tmSettings("systemConfig.timePreview.label"),
+        this.tmMeta,
+      );
     },
     selectedConfigInfo(): Partial<ConfigInfoItem> {
       return this.configInfoList.find((info) => info.id === this.selectedConfigID) || {};
@@ -583,6 +691,9 @@ export default {
 
     // 监听语言切换事件，重新加载配置以获取插件的 i18n 数据
     window.addEventListener("astrbot-locale-changed", this.handleLocaleChange);
+    this.serverClockTimer = window.setInterval(() => {
+      this.serverClockTickMs = performance.now();
+    }, 1000);
 
     // 保存初始配置
     this.$watch(
@@ -599,8 +710,48 @@ export default {
   beforeUnmount() {
     // 移除语言切换事件监听器
     window.removeEventListener("astrbot-locale-changed", this.handleLocaleChange);
+    if (this.serverClockTimer !== null) {
+      clearInterval(this.serverClockTimer);
+      this.serverClockTimer = null;
+    }
   },
   methods: {
+    resetServerClock() {
+      this.serverUtcEpochMs = null;
+      this.serverUtcOffsetMinutes = null;
+      this.serverClockAnchorMs = null;
+      this.serverClockTickMs = null;
+    },
+    setServerClock(data: ConfigData) {
+      const rawServerTime = data.server_utc_time;
+      const rawUtcOffset = data.server_utc_offset_minutes;
+      const parsedServerTime = typeof rawServerTime === "string" ? Date.parse(rawServerTime) : Number.NaN;
+      const parsedUtcOffset =
+        typeof rawUtcOffset === "number" || typeof rawUtcOffset === "string" ? Number(rawUtcOffset) : Number.NaN;
+
+      if (Number.isNaN(parsedServerTime) || !Number.isFinite(parsedUtcOffset)) {
+        this.resetServerClock();
+        return;
+      }
+
+      this.serverUtcEpochMs = parsedServerTime;
+      this.serverUtcOffsetMinutes = parsedUtcOffset;
+      this.serverClockAnchorMs = performance.now();
+      this.serverClockTickMs = this.serverClockAnchorMs;
+    },
+    async refreshServerTime(): Promise<void> {
+      this.resetServerClock();
+      if (!this.isSystemConfig) return;
+
+      try {
+        const response = await systemConfigApi.get();
+        if (this.isSystemConfig && response.data.status === "ok") {
+          this.setServerClock(response.data.data);
+        }
+      } catch {
+        // Keep the preview hidden until the backend time can be confirmed.
+      }
+    },
     // 处理语言切换事件，重新加载配置以获取插件的 i18n 数据
     handleLocaleChange() {
       // 重新加载当前配置
@@ -668,6 +819,9 @@ export default {
     },
     getConfig(abconf_id?: string, reloadFromFile = false) {
       this.fetched = false;
+      if (!this.isSystemConfig) {
+        this.resetServerClock();
+      }
       const params: Record<string, string> = {};
 
       if (this.isSystemConfig) {
@@ -691,6 +845,9 @@ export default {
           this.fetched = true;
           this.metadata = res.data.data.metadata;
           this.configContentKey += 1;
+          if (this.isSystemConfig) {
+            void this.refreshServerTime();
+          }
           // 获取配置后更新
           this.$nextTick(() => {
             this.originalConfigData = JSON.parse(JSON.stringify(this.config_data));
@@ -786,6 +943,7 @@ export default {
           this.onConfigSaved();
 
           if (this.isSystemConfig) {
+            await this.refreshServerTime();
             restartAstrBotRuntime(this.$refs.wfr as WfrRef | null | undefined).catch(() => undefined);
           }
           return { success: true };

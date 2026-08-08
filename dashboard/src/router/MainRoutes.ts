@@ -1,3 +1,4 @@
+import type { RouteLocationGeneric } from "vue-router";
 import { EXTENSION_DETAILS_ROUTE_NAME, EXTENSION_ROUTE_NAME } from "./routeConstants.mjs";
 
 const MainRoutes = {
@@ -19,9 +20,72 @@ const MainRoutes = {
       component: () => import("@/views/WelcomePage.vue"),
     },
     {
-      name: EXTENSION_ROUTE_NAME,
       path: "/extension",
-      component: () => import("@/views/ExtensionPage.vue"),
+      component: () => import("@/views/extension/PluginWorkspacePage.vue"),
+      children: [
+        {
+          path: "",
+          redirect: (to: RouteLocationGeneric) => {
+            const legacyTab = String(to.hash || "").replace(/^#/, "");
+            const routeNames: Record<string, string> = {
+              market: "ExtensionMarketplace",
+              mcp: "ExtensionMcp",
+              skills: "ExtensionSkills",
+              components: "ExtensionComponents",
+            };
+            return {
+              name: routeNames[legacyTab] || EXTENSION_ROUTE_NAME,
+              query: to.query,
+            };
+          },
+        },
+        {
+          name: EXTENSION_ROUTE_NAME,
+          path: "plugins",
+          component: () => import("@/views/ExtensionPage.vue"),
+          props: { initialTab: "installed" },
+          meta: { extensionTab: "installed", pluginView: "installed" },
+        },
+        {
+          name: "ExtensionMarketplace",
+          path: "plugins/market",
+          component: () => import("@/views/ExtensionPage.vue"),
+          props: { initialTab: "market" },
+          meta: { extensionTab: "installed", pluginView: "market" },
+        },
+        {
+          name: "ExtensionMcp",
+          path: "mcp",
+          component: () => import("@/views/extension/McpServersPage.vue"),
+          meta: { extensionTab: "mcp" },
+        },
+        {
+          name: "ExtensionSkills",
+          path: "skills",
+          component: () => import("@/views/extension/SkillsPage.vue"),
+          meta: { extensionTab: "skills" },
+        },
+        {
+          name: "ExtensionComponents",
+          path: "components",
+          component: () => import("@/views/extension/ComponentsPage.vue"),
+          meta: { extensionTab: "components" },
+        },
+        {
+          name: EXTENSION_DETAILS_ROUTE_NAME,
+          path: "plugins/:pluginId",
+          component: () => import("@/views/ExtensionPage.vue"),
+          props: { initialTab: "installed" },
+          meta: { extensionTab: "installed", pluginView: "installed" },
+        },
+        {
+          name: "ExtensionMarketDetails",
+          path: "plugins/market/:pluginId",
+          component: () => import("@/views/ExtensionPage.vue"),
+          props: { initialTab: "market" },
+          meta: { extensionTab: "installed", pluginView: "market" },
+        },
+      ],
     },
     {
       name: "PluginPage",
@@ -29,14 +93,32 @@ const MainRoutes = {
       component: () => import("@/views/PluginPagePage.vue"),
     },
     {
-      name: EXTENSION_DETAILS_ROUTE_NAME,
       path: "/extension/:pluginId",
-      component: () => import("@/views/ExtensionPage.vue"),
+      redirect: (to: RouteLocationGeneric) => ({
+        name:
+          String(to.hash || "").replace(/^#/, "") === "market"
+            ? "ExtensionMarketDetails"
+            : EXTENSION_DETAILS_ROUTE_NAME,
+        params: { pluginId: to.params.pluginId },
+        query: to.query,
+        hash: to.hash === "#plugin-components" ? to.hash : "",
+      }),
     },
     {
-      name: "ExtensionMarketplace",
+      path: "/extension/market",
+      redirect: { name: "ExtensionMarketplace" },
+    },
+    {
+      path: "/extension/market/:pluginId",
+      redirect: (to: RouteLocationGeneric) => ({
+        name: "ExtensionMarketDetails",
+        params: { pluginId: to.params.pluginId },
+        query: to.query,
+      }),
+    },
+    {
       path: "/extension-marketplace",
-      component: () => import("@/views/ExtensionPage.vue"),
+      redirect: { name: "ExtensionMarketplace" },
     },
     {
       name: "Platforms",

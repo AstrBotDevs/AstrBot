@@ -1,11 +1,11 @@
 <script setup>
-import axios from "axios";
 import DOMPurify from "dompurify";
 import MarkdownIt from "markdown-it";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
 import { usePluginI18n } from "@/utils/pluginI18n";
+import axios from "@/utils/request";
+import defaultPluginIcon from "/favicon.svg";
 
 const props = defineProps({
   plugin: {
@@ -439,7 +439,9 @@ const openExternal = (url) => {
 };
 
 const goBack = () => {
-  router.push({ name: "Extensions", hash: `#${detailSourceTab.value}` });
+  router.push({
+    name: detailSourceTab.value === "market" ? "ExtensionMarketplace" : "Extensions",
+  });
 };
 
 const renderMarkdown = (source) => {
@@ -937,7 +939,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .plugin-detail-page {
   margin: 0 auto;
-  max-width: 1040px;
+  max-width: 1200px;
   padding: 16px 24px 32px;
   width: 100%;
 }

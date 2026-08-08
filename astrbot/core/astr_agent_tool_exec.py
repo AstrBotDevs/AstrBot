@@ -32,6 +32,10 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
+from astrbot.core.tools.computer_tools import (
+    LocalExecuteShellTool,
+    ShellSessionTool,
+)
 from astrbot.core.tools.send_message import SEND_MESSAGE_TO_USER_TOOL
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.history_saver import persist_agent_history
@@ -256,6 +260,15 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             session_id=session_id,
         )
         tools = ComputerToolProvider().get_tools(ctx)
+        if runtime == "local":
+            shell_tool = LocalExecuteShellTool()
+            shell_session_tool = ShellSessionTool()
+            tools = [
+                tool
+                for tool in tools
+                if tool.name not in {shell_tool.name, shell_session_tool.name}
+            ]
+            tools.extend((shell_tool, shell_session_tool))
         return {t.name: t for t in tools}
 
     @classmethod
@@ -274,6 +287,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             runtime,
             tool_mgr,
             provider_settings.get("sandbox", {}).get("booter"),
+            session_id=event.unified_msg_origin,
+            sandbox_cfg=provider_settings.get("sandbox", {}),
         )
         if tools is None:
             toolset = ToolSet()

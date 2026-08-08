@@ -312,7 +312,16 @@
     <main
       class="chat-main"
       :class="{ 'empty-chat': isEmptyChat }"
+      v-on="dragEvents"
     >
+      <transition name="drop-fade">
+        <div v-if="isDragging" class="chat-drop-overlay">
+          <div class="chat-drop-overlay-content">
+            <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
+            <span class="chat-drop-text">{{ tm("input.dropToUpload") }}</span>
+          </div>
+        </div>
+      </transition>
       <ProjectView
         v-if="selectedProject"
         :project="selectedProject"
@@ -340,6 +349,7 @@
             :reply-to="chatInputReplyTarget"
             :send-shortcut="sendShortcut"
             :show-provider-selector="false"
+            :placeholder="tm('input.projectPlaceholder')"
             @send="sendCurrentMessage"
             @stop="stopCurrentSession"
             @toggle-streaming="toggleStreaming"
@@ -404,7 +414,7 @@
           </div>
         </section>
 
-        <section class="composer-shell">
+        <section ref="composerShell" class="composer-shell">
           <ChatInput
             ref="inputRef"
             v-model:prompt="draft"
@@ -423,6 +433,9 @@
             :reply-to="chatInputReplyTarget"
             :send-shortcut="sendShortcut"
             :show-provider-selector="false"
+            :placeholder="
+              activeProject ? tm('input.projectPlaceholder') : undefined
+            "
             @send="sendCurrentMessage"
             @stop="stopCurrentSession"
             @toggle-streaming="toggleStreaming"
@@ -504,13 +517,16 @@
       @delete="deleteThread"
     />
     <RefsSidebar v-model="refsSidebarOpen" :refs="selectedRefs" />
+    <WorkspaceFilesPanel
+      :model-value="chatHeader.workspaceFilesOpen"
+      :project-id="activeProject?.project_id || ''"
+      :project-title="activeProject?.title || ''"
+      @update:model-value="chatHeader.SET_WORKSPACE_FILES_OPEN"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
-import { useDisplay } from "vuetify";
 import {
   Cable,
   Check,
@@ -524,7 +540,11 @@ import {
   Sun,
   Trash2,
 } from "@lucide/vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { useDisplay } from "vuetify";
 import { providerApi } from "@/api/v1";
+// biome-ignore lint/style/useImportType: Vue template components require runtime imports.
 import ChatInput from "@/components/chat/ChatInput.vue";
 import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 import ChatUILogo from "@/components/chat/ChatUILogo.vue";
@@ -535,7 +555,9 @@ import ProjectView from "@/components/chat/ProjectView.vue";
 import ProviderConfigDialog from "@/components/chat/ProviderConfigDialog.vue";
 import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
 import ThreadPanel from "@/components/chat/ThreadPanel.vue";
+import WorkspaceFilesPanel from "@/components/chat/WorkspaceFilesPanel.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
+import { useDragUpload } from "@/composables/useDragUpload";
 import { useMediaHandling } from "@/composables/useMediaHandling";
 import {
   type ChatRecord,
@@ -548,15 +570,15 @@ import { useProjects } from "@/composables/useProjects";
 import { useRecording } from "@/composables/useRecording";
 import { type Session, useSessions } from "@/composables/useSessions";
 import { useI18n, useLanguageSwitcher, useModuleI18n } from "@/i18n/composables";
-import { useChatHeaderStore } from "@/stores/chatHeader";
 import type { Locale } from "@/i18n/types";
+import { useChatHeaderStore } from "@/stores/chatHeader";
 import { useCustomizerStore } from "@/stores/customizer";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 import {
   contextLimit,
   formatTokenCount,
-  type ProviderModelMetadata,
   type ProviderMetadataSource,
+  type ProviderModelMetadata,
 } from "@/utils/providerMetadata";
 import axios from "@/utils/request";
 import { useToast } from "@/utils/toast";
@@ -621,6 +643,8 @@ const {
   cleanupMediaCache,
 } = useMediaHandling();
 
+const { isDragging, dragEvents } = useDragUpload(handleFilesSelected);
+
 const providerDialog = ref(false);
 
 interface TokenProviderConfig extends ProviderMetadataSource {
@@ -648,6 +672,8 @@ const tokenProviderConfigs = ref<TokenProviderConfig[]>([]);
 const tokenModelMetadata = ref<Record<string, ProviderModelMetadata>>({});
 const selectedTokenProviderId = ref("");
 const messagesContainer = ref<HTMLElement | null>(null);
+const composerShell = ref<HTMLElement | null>(null);
+let composerResizeObserver: ResizeObserver | null = null;
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const shouldStickToBottom = ref(true);
 const replyTarget = ref<ChatRecord | null>(null);
@@ -737,12 +763,8 @@ const isDark = computed(() => customizer.uiTheme === "PurpleThemeDark");
 const canSend = computed(() => Boolean(draft.value.trim() || stagedFiles.value.length) && !sending.value);
 const currentSession = computed(
   () =>
-    sessions.value.find(
-      (session) => session.session_id === currSessionId.value,
-    ) ||
-    projectSessions.value.find(
-      (session) => session.session_id === currSessionId.value,
-    ) ||
+    sessions.value.find((session) => session.session_id === currSessionId.value) ||
+    projectSessions.value.find((session) => session.session_id === currSessionId.value) ||
     Object.values(projectSessionsById.value)
       .flat()
       .find((session) => session.session_id === currSessionId.value) ||
@@ -753,19 +775,15 @@ const currentSessionTitle = computed(() => (currentSession.value ? sessionTitle(
 const selectedProject = computed(
   () => projects.value.find((project) => project.project_id === selectedProjectId.value) || null,
 );
-const isEmptyChat = computed(
-  () =>
-    !selectedProject.value &&
-    !loadingMessages.value &&
-    !activeMessages.value.length,
-);
-const chatHeaderTitle = computed(
-  () => currentSessionTitle.value || selectedProject.value?.title || "",
-);
+const activeProject = computed(() => {
+  if (selectedProject.value) return selectedProject.value;
+  const projectId = sessionProject.value?.project_id;
+  return projects.value.find((project) => project.project_id === projectId) || null;
+});
+const isEmptyChat = computed(() => !selectedProject.value && !loadingMessages.value && !activeMessages.value.length);
+const chatHeaderTitle = computed(() => currentSessionTitle.value || selectedProject.value?.title || "");
 const chatHeaderSubtitle = computed(() =>
-  currentSessionTitle.value
-    ? sessionProject.value?.title || selectedProject.value?.title || ""
-    : "",
+  currentSessionTitle.value ? sessionProject.value?.title || selectedProject.value?.title || "" : "",
 );
 const chatInputReplyTarget = computed(() =>
   replyTarget.value?.id == null
@@ -776,9 +794,7 @@ const chatInputReplyTarget = computed(() =>
       },
 );
 const currentTokenProvider = computed(() => {
-  const selectedProvider = tokenProviderConfigs.value.find(
-    (provider) => provider.id === selectedTokenProviderId.value,
-  );
+  const selectedProvider = tokenProviderConfigs.value.find((provider) => provider.id === selectedTokenProviderId.value);
   return selectedProvider || tokenProviderConfigs.value[0] || null;
 });
 const currentTokenMetadata = computed(() => {
@@ -796,11 +812,7 @@ const latestContextTokens = computed(() => {
     }
     const usage = stats.token_usage;
     if (!usage) continue;
-    return (
-      readTokenCount(usage.input_other) +
-      readTokenCount(usage.input_cached) +
-      readTokenCount(usage.output)
-    );
+    return readTokenCount(usage.input_other) + readTokenCount(usage.input_cached) + readTokenCount(usage.output);
   }
   return 0;
 });
@@ -841,14 +853,43 @@ function getSelectedProviderSelection() {
 provide("isDark", isDark);
 
 watch(
-  [chatHeaderTitle, chatHeaderSubtitle],
-  ([title, subtitle]) => {
-    chatHeader.SET_CONTEXT({ title, subtitle });
+  [chatHeaderTitle, chatHeaderSubtitle, activeProject],
+  ([title, subtitle, project]) => {
+    chatHeader.SET_CONTEXT({
+      title,
+      subtitle,
+      projectId: project?.project_id,
+    });
   },
   { immediate: true },
 );
 
+watch(
+  () => chatHeader.workspaceFilesOpen,
+  (open) => {
+    if (!open) return;
+    threadSelection.visible = false;
+    threadPanelOpen.value = false;
+    activeThread.value = null;
+    refsSidebarOpen.value = false;
+    selectedRefs.value = undefined;
+  },
+);
+
 onMounted(async () => {
+  if (typeof ResizeObserver !== "undefined") {
+    composerResizeObserver = new ResizeObserver(([entry]) => {
+      const container = messagesContainer.value;
+      if (!entry || !container) return;
+      const height = Math.ceil(entry.target.getBoundingClientRect().height);
+      container.style.setProperty("--chat-composer-height", `${height}px`);
+      if (shouldStickToBottom.value) scrollToBottom();
+    });
+    if (composerShell.value) {
+      composerResizeObserver.observe(composerShell.value);
+    }
+  }
+
   loadingSessions.value = true;
   try {
     await Promise.all([getSessions(), getProjects(), loadTokenProviders()]);
@@ -862,8 +903,15 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  composerResizeObserver?.disconnect();
   chatHeader.CLEAR_CONTEXT();
   cleanupMediaCache();
+});
+
+watch(composerShell, (element, previousElement) => {
+  if (!composerResizeObserver) return;
+  if (previousElement) composerResizeObserver.unobserve(previousElement);
+  if (element) composerResizeObserver.observe(element);
 });
 
 watch(
@@ -914,12 +962,10 @@ async function loadTokenProviders() {
   try {
     const response = await providerApi.listByProviderType("chat_completion");
     if (response.data.status === "ok") {
-      tokenModelMetadata.value = (
-        (response.data as any).model_metadata || {}
-      ) as Record<string, ProviderModelMetadata>;
-      tokenProviderConfigs.value = (
-        (response.data.data || []) as unknown as TokenProviderConfig[]
-      ).filter((provider) => provider.enable !== false);
+      tokenModelMetadata.value = ((response.data as any).model_metadata || {}) as Record<string, ProviderModelMetadata>;
+      tokenProviderConfigs.value = ((response.data.data || []) as unknown as TokenProviderConfig[]).filter(
+        (provider) => provider.enable !== false,
+      );
     }
   } catch (error) {
     console.error("Failed to load provider context metadata:", error);
@@ -990,9 +1036,7 @@ async function handleProjectToggle(projectId: string, expanded: boolean) {
   try {
     await loadProjectSessions(projectId);
   } finally {
-    loadingProjectSessionIds.value = loadingProjectSessionIds.value.filter(
-      (item) => item !== projectId,
-    );
+    loadingProjectSessionIds.value = loadingProjectSessionIds.value.filter((item) => item !== projectId);
   }
 }
 
@@ -1001,9 +1045,7 @@ async function handleDeleteProject(projectId: string) {
   const nextSessionsById = { ...projectSessionsById.value };
   delete nextSessionsById[projectId];
   projectSessionsById.value = nextSessionsById;
-  loadingProjectSessionIds.value = loadingProjectSessionIds.value.filter(
-    (item) => item !== projectId,
-  );
+  loadingProjectSessionIds.value = loadingProjectSessionIds.value.filter((item) => item !== projectId);
   if (selectedProjectId.value === projectId) {
     selectedProjectId.value = null;
     projectSessions.value = [];
@@ -1034,9 +1076,7 @@ async function saveSessionTitleDialog() {
       projectSession.display_name = displayName;
     }
     Object.values(projectSessionsById.value).forEach((projectSessionList) => {
-      const cachedProjectSession = projectSessionList.find(
-        (session) => session.session_id === sessionId,
-      );
+      const cachedProjectSession = projectSessionList.find((session) => session.session_id === sessionId);
       if (cachedProjectSession) {
         cachedProjectSession.display_name = displayName;
       }
@@ -1076,10 +1116,7 @@ async function editProjectSessionTitle(sessionId: string, title: string) {
   openSessionTitleDialog(sessionId, title, true);
 }
 
-async function deleteProjectSession(
-  sessionId: string,
-  projectId = selectedProjectId.value,
-) {
+async function deleteProjectSession(sessionId: string, projectId = selectedProjectId.value) {
   await deleteSession(sessionId);
   if (projectId) {
     await loadProjectSessions(projectId);
@@ -1113,8 +1150,7 @@ async function saveProject(formData: ProjectFormData, projectId?: string) {
     projectDialogOpen.value = false;
     editingProject.value = null;
   } catch (error) {
-    projectDialogError.value =
-      error instanceof Error ? error.message : "Failed to save project";
+    projectDialogError.value = error instanceof Error ? error.message : "Failed to save project";
   } finally {
     savingProject.value = false;
   }
@@ -1164,6 +1200,8 @@ async function sendCurrentMessage() {
         await loadProjectSessions(targetProjectId);
         selectedProjectId.value = null;
       }
+      // 关联项目后再刷新，否则新会话会短暂出现在"对话"列表
+      await getSessions();
     }
 
     const text = draft.value.trim();
@@ -1226,9 +1264,7 @@ function buildOutgoingParts(text: string): MessagePart[] {
 
 function updateTitleFromText(sessionId: string, text: string) {
   const session = sessions.value.find((item) => item.session_id === sessionId);
-  const projectSession = projectSessions.value.find(
-    (item) => item.session_id === sessionId,
-  );
+  const projectSession = projectSessions.value.find((item) => item.session_id === sessionId);
   const cachedProjectSessions = Object.values(projectSessionsById.value)
     .flat()
     .filter((item) => item.session_id === sessionId);
@@ -1322,11 +1358,12 @@ async function saveMessageEdit() {
 async function handleRegenerateMessage(message: ChatRecord, selection?: RegenerateModelSelection) {
   if (!currSessionId.value || isUserMessage(message)) return;
   message.threads = [];
+  const effectiveSelection = selection ?? getSelectedProviderSelection();
   await regenerateMessage(
     currSessionId.value,
     message,
-    selection?.providerId || "",
-    selection?.modelName || "",
+    effectiveSelection?.providerId || "",
+    effectiveSelection?.modelName || "",
     enableStreaming.value,
   );
 }
@@ -1424,7 +1461,7 @@ function removeThreadFromMessages(threadId: string) {
   }
 }
 
-async function handleFilesSelected(files: FileList) {
+async function handleFilesSelected(files: FileList | File[]) {
   const selectedFiles = Array.from(files || []);
   for (const file of selectedFiles) {
     if (file.type.startsWith("image/")) {
@@ -1951,6 +1988,46 @@ function toggleTheme() {
   position: relative;
 }
 
+/* 全区域拖拽上传遮罩 */
+.chat-drop-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(var(--v-theme-primary), 0.12);
+  border: 2px dashed rgba(var(--v-theme-primary), 0.45);
+  border-radius: 16px;
+}
+
+.chat-drop-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-drop-text {
+  font-size: 16px;
+  font-weight: 500;
+  color: rgb(var(--v-theme-primary));
+}
+
+.drop-fade-enter-active,
+.drop-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.drop-fade-enter-from,
+.drop-fade-leave-to {
+  opacity: 0;
+}
+
 .conversation-stack.is-empty {
   display: flex;
   flex-direction: column;
@@ -1961,8 +2038,8 @@ function toggleTheme() {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 24px 0 116px;
-  scroll-padding-bottom: 116px;
+  padding: 24px 0 calc(var(--chat-composer-height, 82px) + 34px);
+  scroll-padding-bottom: calc(var(--chat-composer-height, 82px) + 34px);
 }
 
 .conversation-stack.is-empty .messages-panel {
@@ -2087,8 +2164,8 @@ kbd {
   }
 
   .messages-panel {
-    padding: 18px 0 92px;
-    scroll-padding-bottom: 92px;
+    padding: 18px 0 calc(var(--chat-composer-height, 72px) + 20px);
+    scroll-padding-bottom: calc(var(--chat-composer-height, 72px) + 20px);
   }
 
   .conversation-stack.is-empty .messages-panel {

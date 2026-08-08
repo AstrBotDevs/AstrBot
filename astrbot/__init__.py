@@ -1,13 +1,8 @@
 from __future__ import annotations
 
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as _pkg_version
 from typing import TYPE_CHECKING, Any
 
-try:
-    __version__ = _pkg_version("astrbot")
-except PackageNotFoundError:
-    __version__ = "4.26.7"
+__version__ = "4.27.2"
 
 
 if TYPE_CHECKING:

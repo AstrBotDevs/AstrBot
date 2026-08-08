@@ -50,6 +50,7 @@ interface LogObject {
   time: number;
   data: string;
   level: string;
+  category?: string;
 }
 
 export default {
@@ -100,6 +101,10 @@ export default {
       type: Boolean,
       default: true,
     },
+    hideUserChat: {
+      type: Boolean,
+      default: false,
+    },
   },
   watch: {
     selectedLevels: {
@@ -107,6 +112,9 @@ export default {
         this.refreshDisplay();
       },
       deep: true,
+    },
+    hideUserChat() {
+      this.refreshDisplay();
     },
   },
   async mounted() {
@@ -219,7 +227,7 @@ export default {
           this.localLogCache.push(log);
           hasUpdate = true;
 
-          if (this.isLevelSelected(log.level)) {
+          if (this.isLevelSelected(log.level) && !this.isHiddenByCategory(log)) {
             this.printLog(log.data);
           }
         }
@@ -260,6 +268,10 @@ export default {
       return false;
     },
 
+    isHiddenByCategory(log: LogObject) {
+      return this.hideUserChat && log.category === "user_chat";
+    },
+
     refreshDisplay() {
       const termElement = document.getElementById("term");
       if (termElement) {
@@ -267,7 +279,7 @@ export default {
 
         if (this.localLogCache && this.localLogCache.length > 0) {
           this.localLogCache.forEach((logItem) => {
-            if (this.isLevelSelected(logItem.level)) {
+            if (this.isLevelSelected(logItem.level) && !this.isHiddenByCategory(logItem)) {
               this.printLog(logItem.data);
             }
           });

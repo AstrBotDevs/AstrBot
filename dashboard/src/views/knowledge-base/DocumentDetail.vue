@@ -22,6 +22,14 @@
       <v-progress-circular indeterminate color="primary" size="64" />
     </div>
 
+    <div v-else-if="loadError" class="loading-container">
+      <v-icon size="72" color="error">mdi-alert-circle-outline</v-icon>
+      <p class="mt-4 text-medium-emphasis">{{ t('states.loadError') }}</p>
+      <v-btn class="mt-4" prepend-icon="mdi-refresh" color="primary" variant="tonal" @click="loadDocument">
+        {{ t('states.retry') }}
+      </v-btn>
+    </div>
+
     <!-- 主内容 -->
     <div v-else class="document-content">
       <!-- 文档信息卡片 -->
@@ -122,7 +130,16 @@
         </v-card-title>
 
         <v-card-text class="pa-0">
+          <v-alert v-if="chunksLoadError" type="error" variant="tonal" class="ma-4">
+            <div class="d-flex align-center justify-space-between ga-4">
+              <span>{{ t('states.chunksLoadError') }}</span>
+              <v-btn prepend-icon="mdi-refresh" variant="tonal" size="small" @click="loadChunks">
+                {{ t('states.retry') }}
+              </v-btn>
+            </div>
+          </v-alert>
           <v-data-table
+            v-else
             :headers="headers"
             :items="filteredChunks"
             :loading="loadingChunks"
@@ -298,6 +315,8 @@ const docId = ref(route.params.docId as string);
 // 状态
 const loading = ref(true);
 const loadingChunks = ref(false);
+const loadError = ref(false);
+const chunksLoadError = ref(false);
 const document = ref<any>({});
 const chunks = ref<any[]>([]);
 const searchQuery = ref("");
@@ -339,16 +358,21 @@ const filteredChunks = computed(() => {
 // 加载文档详情
 const loadDocument = async () => {
   loading.value = true;
+  loadError.value = false;
   try {
     const response = await axios.get("/api/kb/document/get", {
       params: { doc_id: docId.value, kb_id: kbId.value },
     });
     if (response.data.status === "ok") {
       document.value = response.data.data;
+    } else {
+      loadError.value = true;
+      showSnackbar(response.data.message || t("states.loadError"), "error");
     }
   } catch (error) {
     console.error("Failed to load document:", error);
-    showSnackbar("加载文档详情失败", "error");
+    loadError.value = true;
+    showSnackbar(t("states.loadError"), "error");
   } finally {
     loading.value = false;
   }
@@ -357,6 +381,7 @@ const loadDocument = async () => {
 // 加载分块列表
 const loadChunks = async () => {
   loadingChunks.value = true;
+  chunksLoadError.value = false;
   try {
     const response = await axios.get("/api/kb/chunk/list", {
       params: {
@@ -369,10 +394,14 @@ const loadChunks = async () => {
     if (response.data.status === "ok") {
       chunks.value = response.data.data.items || [];
       totalChunks.value = response.data.data.total || 0;
+    } else {
+      chunksLoadError.value = true;
+      showSnackbar(response.data.message || t("states.chunksLoadError"), "error");
     }
   } catch (error) {
     console.error("Failed to load chunks:", error);
-    showSnackbar("加载分块列表失败", "error");
+    chunksLoadError.value = true;
+    showSnackbar(t("states.chunksLoadError"), "error");
   } finally {
     loadingChunks.value = false;
   }

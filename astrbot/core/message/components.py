@@ -32,6 +32,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 import anyio
+from deprecated import deprecated
 
 if sys.version_info >= (3, 14):
     from pydantic import BaseModel
@@ -700,6 +701,7 @@ class Nodes(BaseMessageComponent):
     def __init__(self, nodes: list[Node], **_) -> None:
         super().__init__(nodes=nodes, **_)
 
+    @deprecated(reason="Use to_dict instead.")
     def toDict(self):
         """Deprecated. Use to_dict instead"""
         ret = {

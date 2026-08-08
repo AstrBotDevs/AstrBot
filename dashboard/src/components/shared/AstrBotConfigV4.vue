@@ -349,7 +349,7 @@ function getSpecialSubtype(value) {
           class="persona-preview-row"
         >
           <v-col cols="12" class="persona-preview-display">
-            <PersonaQuickPreview :model-value="createSelectorModel(itemKey).value" />
+            <PersonaQuickPreview :model-value="createSelectorModel(itemKey).value" editable />
           </v-col>
         </v-row>
 
@@ -436,7 +436,7 @@ function getSpecialSubtype(value) {
                 class="persona-preview-row"
               >
                 <v-col cols="12" class="persona-preview-display">
-                  <PersonaQuickPreview :model-value="createSelectorModel(itemKey).value" />
+                  <PersonaQuickPreview :model-value="createSelectorModel(itemKey).value" editable />
                 </v-col>
               </v-row>
 

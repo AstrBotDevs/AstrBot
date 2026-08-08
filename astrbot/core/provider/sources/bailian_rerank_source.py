@@ -1,4 +1,5 @@
 import os
+from urllib.parse import urlsplit
 
 import aiohttp
 
@@ -29,6 +30,10 @@ class BailianRerankProvider(RerankProvider):
     """阿里云百炼文本重排序适配器."""
 
     QWEN3_RERANK_MODEL = "qwen3-rerank"
+    COMPATIBLE_API_PATH_SUFFIXES = (
+        "/compatible-api/v1/reranks",
+        "/compatible-mode/v1/reranks",
+    )
 
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config, provider_settings)
@@ -69,6 +74,10 @@ class BailianRerankProvider(RerankProvider):
 
         logger.info(f"AstrBot 百炼 Rerank 初始化完成｡模型: {self.model}")
 
+    def _uses_compatible_api(self) -> bool:
+        base_url_path = urlsplit(self.base_url).path.rstrip("/")
+        return base_url_path.endswith(self.COMPATIBLE_API_PATH_SUFFIXES)
+
     def _build_payload(
         self,
         query: str,
@@ -88,10 +97,9 @@ class BailianRerankProvider(RerankProvider):
         """
         normalized_model = self.model.strip().lower()
         normalized_top_n = top_n if top_n is not None and top_n > 0 else None
+        is_compatible_api = self._uses_compatible_api()
 
-        # qwen3-rerank follows a model-specific payload:
-        # query/documents/top_n/instruct should be at the top level.
-        if normalized_model == self.QWEN3_RERANK_MODEL:
+        if normalized_model == self.QWEN3_RERANK_MODEL and is_compatible_api:
             payload = {
                 "model": self.model,
                 "query": query,
@@ -115,6 +123,12 @@ class BailianRerankProvider(RerankProvider):
             for k, v in [
                 ("top_n", normalized_top_n),
                 ("return_documents", True if self.return_documents else None),
+                (
+                    "instruct",
+                    self.instruct
+                    if self.instruct and normalized_model == self.QWEN3_RERANK_MODEL
+                    else None,
+                ),
             ]
             if v is not None
         }
@@ -138,14 +152,22 @@ class BailianRerankProvider(RerankProvider):
             KeyError: 结果缺少必要字段
 
         """
-        # 检查响应状态
-        if data.get("code", "200") != "200":
-            raise BailianAPIError(
-                f"百炼 API 错误: {data.get('code')} – {data.get('message', '')}",
-            )
+        is_compatible_api = self._uses_compatible_api()
 
-        # 兼容旧版 API (output.results) 和新版 compatible API (results)
-        results = (data.get("output") or {}).get("results") or data.get("results") or []
+        if is_compatible_api:
+            code = data.get("code")
+            if code:
+                raise BailianAPIError(
+                    f"百炼 API 错误: {code} – {data.get('message', '')}"
+                )
+            results = data.get("results", [])
+        else:
+            code = data.get("code", "200")
+            if code != "200":
+                raise BailianAPIError(
+                    f"百炼 API 错误: {code} – {data.get('message', '')}"
+                )
+            results = data.get("output", {}).get("results", [])
         if not results:
             logger.warning(f"百炼 Rerank 返回空结果: {data}")
             return []

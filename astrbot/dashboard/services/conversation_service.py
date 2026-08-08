@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import traceback
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime
 from io import BytesIO
 
@@ -42,13 +42,18 @@ class ConversationService:
         search_query: str,
         exclude_ids: str,
         exclude_platforms: str,
+        include_history: bool = True,
     ) -> dict:
-        platform_list = platforms.split(",") if platforms else []
-        message_type_list = message_types.split(",") if message_types else []
-        exclude_id_list = exclude_ids.split(",") if exclude_ids else []
-        exclude_platform_list = (
-            exclude_platforms.split(",") if exclude_platforms else []
-        )
+        platform_list = [item.strip() for item in platforms.split(",") if item.strip()]
+        message_type_list = [
+            item.strip() for item in message_types.split(",") if item.strip()
+        ]
+        exclude_id_list = [
+            item.strip() for item in exclude_ids.split(",") if item.strip()
+        ]
+        exclude_platform_list = [
+            item.strip() for item in exclude_platforms.split(",") if item.strip()
+        ]
 
         page = max(page, 1)
         if page_size < 1:
@@ -64,6 +69,7 @@ class ConversationService:
                 search_query=search_query,
                 exclude_ids=exclude_id_list,
                 exclude_platforms=exclude_platform_list,
+                include_history=include_history,
             )
         except Exception as exc:
             logger.error(f"数据库查询出错: {exc!s}\n{traceback.format_exc()}")
@@ -77,7 +83,11 @@ class ConversationService:
 
         return {
             "conversations": [
-                self._serialize_conversation(conversation, alias_map)
+                self._serialize_conversation(
+                    conversation,
+                    alias_map,
+                    include_history=include_history,
+                )
                 for conversation in conversations
             ],
             "pagination": {
@@ -270,11 +280,37 @@ class ConversationService:
             "failed_items": failed_items,
         }
 
-    def _serialize_conversation(self, conversation, alias_map: dict) -> dict:
-        return {
-            **asdict(conversation),
+    def _serialize_conversation(
+        self,
+        conversation,
+        alias_map: dict,
+        *,
+        include_history: bool,
+    ) -> dict:
+        """Serialize a conversation for a list response.
+
+        Args:
+            conversation: Conversation object returned by the manager.
+            alias_map: UMO aliases keyed by unified message origin.
+            include_history: Whether to include the serialized message history.
+
+        Returns:
+            Conversation data suitable for a dashboard API response.
+        """
+        result = {
+            "platform_id": conversation.platform_id,
+            "user_id": conversation.user_id,
+            "cid": conversation.cid,
+            "title": conversation.title,
+            "persona_id": conversation.persona_id,
+            "token_usage": conversation.token_usage,
+            "created_at": conversation.created_at,
+            "updated_at": conversation.updated_at,
             "umo_info": self._build_umo_info(conversation.user_id, alias_map),
         }
+        if include_history:
+            result["history"] = conversation.history
+        return result
 
     @staticmethod
     def _build_umo_info(umo: str | None, alias_map: dict) -> dict:

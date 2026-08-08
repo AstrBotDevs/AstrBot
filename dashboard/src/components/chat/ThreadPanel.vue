@@ -56,24 +56,24 @@
 
 <script setup lang="ts">
 import { nextTick, ref, watch } from "vue";
-import { chatApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
+import { chatApi } from "@/api/v1";
 import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 import {
   appendPlain,
   appendReasoningPart,
   buildChatRequestFlags,
+  type ChatRecord,
+  type ChatThread,
   extractReasoningText,
   finishToolCall,
   hasPlainText,
+  type MessagePart,
   markMessageStarted,
   normalizeMessageParts,
   parseJsonSafe,
   payloadText,
   upsertToolCall,
-  type ChatRecord,
-  type MessagePart,
-  type ChatThread,
 } from "@/composables/useMessages";
 import { useModuleI18n } from "@/i18n/composables";
 
@@ -182,10 +182,7 @@ async function send() {
 
 function normalizeRecord(record: any): ChatRecord {
   const content = record.content || {};
-  const normalizedMessage = normalizeMessageParts(
-    content.message || [],
-    content.reasoning || "",
-  );
+  const normalizedMessage = normalizeMessageParts(content.message || [], content.reasoning || "");
   return {
     ...record,
     content: {
@@ -265,7 +262,14 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
   if (type === "complete" || type === "break") {
     markMessageStarted(botRecord);
     const finalText = payloadText(data);
-    if (finalText && !hasPlainText(botRecord)) {
+    const existingText = botRecord.content.message
+      .filter((part) => part.type === "plain")
+      .map((part) => part.text || "")
+      .join("");
+    const missingText = finalText.slice(existingText.length);
+    if (type === "complete" && missingText && finalText.startsWith(existingText)) {
+      appendPlain(botRecord, missingText);
+    } else if (finalText && !hasPlainText(botRecord)) {
       appendPlain(botRecord, finalText, false);
     }
     return;
@@ -302,10 +306,8 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
       .replace("[FILE]", "")
       .replace("[VIDEO]", "");
     const separatorIndex = rawFilename.indexOf("|");
-    const storedFilename =
-      separatorIndex >= 0 ? rawFilename.slice(0, separatorIndex) : rawFilename;
-    const displayFilename =
-      separatorIndex >= 0 ? rawFilename.slice(separatorIndex + 1) : storedFilename;
+    const storedFilename = separatorIndex >= 0 ? rawFilename.slice(0, separatorIndex) : rawFilename;
+    const displayFilename = separatorIndex >= 0 ? rawFilename.slice(separatorIndex + 1) : storedFilename;
     const filename = displayFilename || storedFilename;
     const mediaPart: MessagePart = { type, filename };
     if (storedFilename && storedFilename !== filename) {

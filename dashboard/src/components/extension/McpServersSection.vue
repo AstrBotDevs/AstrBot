@@ -17,6 +17,23 @@
           clickable
           @click="editServer(server)"
         >
+          <template #title-extra>
+            <v-chip
+              :color="server.connected ? 'success' : 'default'"
+              :prepend-icon="
+                server.connected ? 'mdi-lan-connect' : 'mdi-close-circle-outline'
+              "
+              size="x-small"
+              variant="tonal"
+            >
+              {{
+                server.connected
+                  ? tm('mcpServers.status.connected')
+                  : tm('mcpServers.status.disconnected')
+              }}
+            </v-chip>
+          </template>
+
           <div
             class="mcp-server-config text-body-2 text-medium-emphasis"
             :title="getServerConfigSummary(server)"
@@ -116,7 +133,12 @@
                   density="compact"
                   hide-details
                   inset
-                  :model-value="server.active"
+                  :model-value="server.connected"
+                  :aria-label="
+                    server.connected
+                      ? tm('mcpServers.buttons.disconnect')
+                      : tm('mcpServers.buttons.connect')
+                  "
                   :loading="mcpServerUpdateLoaders[server.name] || false"
                   :disabled="mcpServerUpdateLoaders[server.name] || false"
                   @click.stop
@@ -124,9 +146,9 @@
                 />
               </template>
               <span>{{
-                server.active
-                  ? t('core.common.itemCard.enabled')
-                  : t('core.common.itemCard.disabled')
+                server.connected
+                  ? tm('mcpServers.buttons.disconnect')
+                  : tm('mcpServers.buttons.connect')
               }}</span>
             </v-tooltip>
           </template>
@@ -621,6 +643,7 @@ export default {
       const configCopy = { ...server };
       delete configCopy.name;
       delete configCopy.active;
+      delete configCopy.connected;
       delete configCopy.tools;
       delete configCopy.errlogs;
       this.currentServer = {

@@ -594,7 +594,13 @@ async def _simulated_stream_tts(
     text_queue: asyncio.Queue[str | None],
     audio_queue: "asyncio.Queue[bytes | tuple[str, bytes] | None]",
 ) -> None:
-    """模拟流式 TTS 分句生成音频"""
+    """模拟流式 TTS 分句生成音频.
+
+    Args:
+        tts_provider: Provider used to synthesize audio files.
+        text_queue: Text chunks to synthesize. ``None`` ends the worker.
+        audio_queue: Synthesized audio bytes output queue.
+    """
     try:
         while True:
             text = await text_queue.get()

@@ -1,6 +1,5 @@
 import asyncio
 import os
-import uuid
 
 import aiofiles
 import aiohttp
@@ -10,6 +9,7 @@ from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.provider import TTSProvider
 from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.datetime_utils import generate_timestamp_id
 
 
 @register_provider_adapter(
@@ -124,7 +124,7 @@ class ProviderGSVTTS(TTSProvider):
 
         temp_dir = get_astrbot_temp_path()
         os.makedirs(temp_dir, exist_ok=True)
-        path = os.path.join(temp_dir, f"gsv_tts_{uuid.uuid4().hex}.wav")
+        path = os.path.join(temp_dir, f"gsv_tts_{generate_timestamp_id()}.wav")
 
         logger.debug(f"[GSV TTS] 正在调用语音合成接口,参数:{params}")
 

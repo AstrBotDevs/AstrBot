@@ -15,7 +15,10 @@ class DashboardManager:
     async def ensure_installed(self, astrbot_root: Path) -> None:
         """Ensure the dashboard assets are installed and up to date."""
         from astrbot.core.config.default import VERSION
-        from astrbot.core.utils.io import download_dashboard, get_dashboard_version
+        from astrbot.core.dashboard_assets import get_dashboard_version
+        from astrbot.core.updater import AstrBotUpdater
+
+        updater = AstrBotUpdater()
 
         if self._bundled_dist.is_dir():
             click.echo(t("dashboard_bundled"))
@@ -33,12 +36,7 @@ class DashboardManager:
                     if click.confirm(t("dashboard_install_confirm"), default=True):
                         click.echo(t("dashboard_installing"))
                         try:
-                            await download_dashboard(
-                                path="data/dashboard.zip",
-                                extract_path=str(astrbot_root / "data"),
-                                version=f"v{VERSION}",
-                                latest=False,
-                            )
+                            await updater.ensure_dashboard()
                             click.echo(t("dashboard_install_success"))
                         except Exception as e:
                             click.echo(t("dashboard_install_failed", error=str(e)))
@@ -55,24 +53,14 @@ class DashboardManager:
                     try:
                         version = dashboard_version.split("v")[1]
                         click.echo(t("dashboard_version", version=version))
-                        await download_dashboard(
-                            path="data/dashboard.zip",
-                            extract_path=str(astrbot_root / "data"),
-                            version=f"v{VERSION}",
-                            latest=False,
-                        )
+                        await updater.ensure_dashboard()
                     except Exception as e:
                         click.echo(t("dashboard_download_failed", error=str(e)))
                         return
         except FileNotFoundError:
             click.echo(t("dashboard_init_dir"))
             try:
-                await download_dashboard(
-                    path=str(astrbot_root / "data" / "dashboard.zip"),
-                    extract_path=str(astrbot_root / "data"),
-                    version=f"v{VERSION}",
-                    latest=False,
-                )
+                await updater.ensure_dashboard()
                 click.echo(t("dashboard_init_success"))
             except Exception as e:
                 click.echo(t("dashboard_download_failed", error=str(e)))

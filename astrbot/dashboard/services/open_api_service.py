@@ -22,7 +22,10 @@ from astrbot.core.platform.sources.webchat.request_flags import (
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from astrbot.dashboard.services.api_key_service import ApiKeyService
-from astrbot.dashboard.services.auth_service import ALL_OPEN_API_SCOPES
+from astrbot.dashboard.services.auth_service import (
+    CHAT_ADMIN_SCOPE,
+    DEFAULT_OPEN_API_SCOPES,
+)
 from astrbot.dashboard.services.chat_service import (
     BotMessageAccumulator,
     collect_plain_text_from_message_parts,
@@ -128,7 +131,22 @@ class OpenApiService:
         self,
         post_data: dict,
         conf_list: list[dict],
+        *,
+        allow_admin_username: bool = False,
     ) -> tuple[str, str, str | None]:
+        """Validate and prepare an API chat request.
+
+        Args:
+            post_data: Mutable chat request payload.
+            conf_list: Available chat configuration descriptors.
+            allow_admin_username: Whether the API key has the chat-admin subscope.
+
+        Returns:
+            Effective username, session ID, and optional config ID.
+
+        Raises:
+            OpenApiServiceError: If identity, session, or config validation fails.
+        """
         effective_username, username_err = self.resolve_open_username(
             post_data.get("username")
         )
@@ -136,6 +154,18 @@ class OpenApiService:
             raise OpenApiServiceError(username_err)
         if not effective_username:
             raise OpenApiServiceError("Invalid username")
+        for config in self.core_lifecycle.astrbot_config_mgr.confs.values():
+            if not isinstance(config, dict):
+                continue
+            admin_ids = config.get("admins_id", [])
+            if (
+                not allow_admin_username
+                and isinstance(admin_ids, list)
+                and any(str(admin_id) == effective_username for admin_id in admin_ids)
+            ):
+                raise OpenApiServiceError(
+                    "username is reserved for an AstrBot administrator"
+                )
 
         raw_session_id = post_data.get("session_id", post_data.get("conversation_id"))
         session_id = str(raw_session_id).strip() if raw_session_id is not None else ""
@@ -185,25 +215,34 @@ class OpenApiService:
 
     async def authenticate_api_key(
         self, raw_key: str | None
-    ) -> tuple[bool, str | None]:
+    ) -> tuple[list[str] | None, str | None]:
+        """Authenticate a WebSocket API key and return its effective scopes.
+
+        Args:
+            raw_key: API key supplied by the WebSocket client.
+
+        Returns:
+            Effective scopes and no error on success, otherwise no scopes and
+            a public authentication error.
+        """
         if not raw_key:
-            return False, "Missing API key"
+            return None, "Missing API key"
 
         key_hash = ApiKeyService.hash_key(raw_key)
         api_key = await self.db.get_active_api_key_by_hash(key_hash)
         if not api_key:
-            return False, "Invalid API key"
+            return None, "Invalid API key"
 
         if isinstance(api_key.scopes, list):
             scopes = api_key.scopes
         else:
-            scopes = list(ALL_OPEN_API_SCOPES)
+            scopes = list(DEFAULT_OPEN_API_SCOPES)
 
         if "*" not in scopes and "chat" not in scopes:
-            return False, "Insufficient API key scope"
+            return None, "Insufficient API key scope"
 
         await self.db.touch_api_key(api_key.key_id)
-        return True, None
+        return [str(scope) for scope in scopes], None
 
     @staticmethod
     async def send_chat_ws_error(
@@ -229,8 +268,8 @@ class OpenApiService:
         conf_list: list[dict],
         chat_bridge: OpenApiWebSocketChatBridge,
     ) -> None:
-        authed, auth_err = await self.authenticate_api_key(raw_api_key)
-        if not authed:
+        scopes, auth_err = await self.authenticate_api_key(raw_api_key)
+        if scopes is None:
             message = auth_err or "Unauthorized"
             await self.send_chat_ws_error(send_json, message, "UNAUTHORIZED")
             await close(1008, message)
@@ -266,6 +305,7 @@ class OpenApiService:
                     chat_bridge=chat_bridge,
                     send_json=send_json,
                     send_error=send_error,
+                    allow_admin_username=("*" in scopes or CHAT_ADMIN_SCOPE in scopes),
                 )
         except Exception as exc:
             logger.debug("Open API WS connection closed: %s", exc)
@@ -334,6 +374,7 @@ class OpenApiService:
         chat_bridge: OpenApiWebSocketChatBridge,
         send_json: SendJson,
         send_error: Callable[[str, str], Awaitable[None]],
+        allow_admin_username: bool = False,
     ) -> None:
         message = post_data.get("message")
         if message is None:
@@ -348,6 +389,7 @@ class OpenApiService:
             ) = await self.prepare_chat_send(
                 post_data,
                 conf_list,
+                allow_admin_username=allow_admin_username,
             )
         except OpenApiServiceError as exc:
             message = str(exc)
@@ -389,6 +431,7 @@ class OpenApiService:
                         "selected_model": selected_model,
                         "flags": flags,
                         "message_id": message_id,
+                        "_api_key_allow_admin_role": allow_admin_username,
                     },
                 )
             )

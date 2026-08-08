@@ -1,9 +1,9 @@
 import base64
-import uuid
 
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.provider import TTSProvider
 from astrbot.core.provider.register import register_provider_adapter
+from astrbot.core.utils.datetime_utils import generate_timestamp_id
 
 from .mimo_api_common import (
     DEFAULT_MIMO_API_BASE,
@@ -125,7 +125,8 @@ class ProviderMiMoTTSAPI(TTSProvider):
             raise MiMoAPIError(f"MiMo TTS API returned no audio payload: {data}")
 
         output_path = (
-            get_temp_dir() / f"mimo_tts_api_{uuid.uuid4()}.{self.audio_format}"
+            get_temp_dir()
+            / f"mimo_tts_api_{generate_timestamp_id()}.{self.audio_format}"
         )
         output_path.write_bytes(base64.b64decode(audio_data))
         return str(output_path)

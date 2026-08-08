@@ -2,9 +2,6 @@
   <div
     class="input-area fade-in"
     :class="{ 'is-dark': isDark }"
-    @dragover.prevent="handleDragOver"
-    @dragleave.prevent="handleDragLeave"
-    @drop.prevent="handleDrop"
   >
     <div
       class="input-container"
@@ -19,15 +16,6 @@
         position: 'relative',
       }"
     >
-      <!-- 拖拽上传遮罩 -->
-      <transition name="fade">
-        <div v-if="isDragging" class="drop-overlay">
-          <div class="drop-overlay-content">
-            <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
-            <span class="drop-text">{{ tm("input.dropToUpload") }}</span>
-          </div>
-        </div>
-      </transition>
       <!-- 引用预览区 -->
       <transition name="slideReply" @after-leave="handleReplyAfterLeave">
         <div class="reply-preview" v-if="props.replyTo && !isReplyClosing">
@@ -55,7 +43,7 @@
         @compositioncancel="handleCompositionEnd"
         @blur="clearCompositionState()"
         :disabled="disabled"
-        :placeholder="tm('input.placeholder')"
+        :placeholder="props.placeholder || tm('input.placeholder')"
         class="chat-textarea"
         autocomplete="off"
         autocorrect="off"
@@ -366,6 +354,7 @@ interface Props {
   sendShortcut?: "enter" | "shift_enter";
   showProviderSelector?: boolean;
   tokenUsage?: TokenUsageInfo | null;
+  placeholder?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -390,7 +379,7 @@ const emit = defineEmits<{
   startRecording: [];
   stopRecording: [];
   pasteImage: [event: ClipboardEvent];
-  fileSelect: [files: FileList];
+  fileSelect: [files: FileList | File[]];
   clearReply: [];
   openLiveMode: [];
 }>();
@@ -405,8 +394,7 @@ const providerSelectorAvailable = ref(true);
 const isReplyClosing = ref(false);
 const isComposing = ref(false);
 const lastCompositionEndAt = ref<number | null>(null);
-const isDragging = ref(false);
-let dragLeaveTimeout: number | null = null;
+const longPasteThreshold = 10_000;
 
 const localPrompt = computed({
   get: () => props.prompt,
@@ -429,18 +417,12 @@ function filePresentation(file: StagedFileInfo) {
   return attachmentPresentation(file);
 }
 
-const providerSelectorVisible = computed(
-  () => props.showProviderSelector && providerSelectorAvailable.value,
-);
+const providerSelectorVisible = computed(() => props.showProviderSelector && providerSelectorAvailable.value);
 
 const tokenUsageVisible = computed(() => {
   const usage = props.tokenUsage;
   return Boolean(
-    usage &&
-      Number.isFinite(usage.used) &&
-      Number.isFinite(usage.limit) &&
-      usage.used > 0 &&
-      usage.limit > 0,
+    usage && Number.isFinite(usage.used) && Number.isFinite(usage.limit) && usage.used > 0 && usage.limit > 0,
   );
 });
 
@@ -451,9 +433,7 @@ const tokenUsagePercent = computed(() => {
 });
 
 const tokenUsageColor = computed(() =>
-  isDark.value
-    ? "rgba(var(--v-theme-on-surface), 0.82)"
-    : "rgba(var(--v-theme-on-surface), 0.72)",
+  isDark.value ? "rgba(var(--v-theme-on-surface), 0.82)" : "rgba(var(--v-theme-on-surface), 0.72)",
 );
 
 // Ctrl+B 长按录音相关
@@ -557,36 +537,17 @@ function handleKeyUp(e: KeyboardEvent) {
 }
 
 function handlePaste(e: ClipboardEvent) {
+  const pastedText = e.clipboardData?.getData("text/plain") || "";
+  if (pastedText.length > longPasteThreshold) {
+    e.preventDefault();
+    emit("fileSelect", [
+      new File([pastedText], `pasted-text-${Date.now()}.txt`, {
+        type: "text/plain;charset=utf-8",
+      }),
+    ]);
+    return;
+  }
   emit("pasteImage", e);
-}
-
-function handleDragOver(e: DragEvent) {
-  // 清除之前的 leave timeout
-  if (dragLeaveTimeout) {
-    clearTimeout(dragLeaveTimeout);
-    dragLeaveTimeout = null;
-  }
-
-  // 检查是否有文件
-  if (e.dataTransfer?.types.includes("Files")) {
-    isDragging.value = true;
-  }
-}
-
-function handleDragLeave(e: DragEvent) {
-  // 使用 timeout 避免在子元素间移动时闪烁
-  dragLeaveTimeout = window.setTimeout(() => {
-    isDragging.value = false;
-  }, 50);
-}
-
-function handleDrop(e: DragEvent) {
-  isDragging.value = false;
-
-  const files = e.dataTransfer?.files;
-  if (files && files.length > 0) {
-    emit("fileSelect", files);
-  }
 }
 
 function triggerImageInput() {
@@ -743,47 +704,6 @@ defineExpose({
 .input-area.is-dark .input-action-btn:disabled {
   background: rgba(var(--v-theme-on-surface), 0.14) !important;
   color: rgba(var(--v-theme-on-surface), 0.4) !important;
-}
-
-/* 拖拽上传遮罩 */
-.drop-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(var(--v-theme-primary), 0.12);
-  border: 2px dashed rgba(var(--v-theme-primary), 0.45);
-  border-radius: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  pointer-events: none;
-}
-
-.drop-overlay-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.drop-text {
-  font-size: 16px;
-  font-weight: 500;
-  color: rgb(var(--v-theme-primary));
-}
-
-/* Fade transition for drop overlay */
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
 }
 
 .reply-preview {
