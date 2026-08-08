@@ -10,8 +10,6 @@ Function calling aims to provide large language models with **the ability to inv
 
 For example, when you ask the LLM: "Help me search for information about cats", the model will call external search tools, such as search engines, and return the search results.
 
-Here is the revised text, updated to reflect your new content while maintaining a formal documentation tone:
-
 Currently, supported models include but are not limited to:
 
 - GPT-5.x series

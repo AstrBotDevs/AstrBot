@@ -6,7 +6,7 @@
 
 ## 创建 AstrBot Misskey 平台适配器
 
-进入消息平台，点击新增适配器，找到 Misskey 并单击进入 Misskey 配置页。
+点击左边栏 `机器人`，然后点击 `+ 创建机器人`，找到 Misskey 并单击进入 Misskey 配置页。
 
 ![创建 Misskey 平台适配器](https://files.astrbot.app/docs/source/images/misskey/create.png)
 
@@ -87,7 +87,7 @@ Misskey 在`v2025.4.0`及以后的版本中为加入“聊天”组件支持，�
 
 ## 历史记录
 
-聊天和贴文单个用户的对话历史在 AstrBot 的 WebUI 控制台“对话历史”会以`chat:UserID`的 id 记录，传统贴文则是以`note:UserID`的 id 记录。
+聊天和贴文单个用户的对话历史在 AstrBot 的 WebUI 平台日志“对话历史”会以`chat:UserID`的 id 记录，传统贴文则是以`note:UserID`的 id 记录。
 
 ::: tip Misskey 用户的 UserID 在哪里？
 位于用户个人页面部分的`Raw`页面内可以查询，UserID 是单个实例中 Misskey 用户唯一的关键身份标识。

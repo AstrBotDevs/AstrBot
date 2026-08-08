@@ -45,7 +45,7 @@ AstrBot 支持接入所有适配了 OneBotv11 反向 Websockets（AstrBot 做服
 
 ## 3. 验证
 
-前往 AstrBot WebUI `控制台`，如果出现 ` aiocqhttp(OneBot v11) 适配器已连接。` 蓝色的日志，说明连接成功。如果没有，若干秒后出现` aiocqhttp 适配器已被关闭` 则为连接超时（失败），请检查配置是否正确。
+前往 AstrBot WebUI `平台日志`，如果出现 ` aiocqhttp(OneBot v11) 适配器已连接。` 蓝色的日志，说明连接成功。如果没有，若干秒后出现` aiocqhttp 适配器已被关闭` 则为连接超时（失败），请检查配置是否正确。
 
 ## 附录：部署 Napcat
 

@@ -59,11 +59,11 @@ Both services started in the background.
 AstrBot 支持接入优云智算提供的模型 API。
 
 1. 在 [优云智算](https://console.compshare.cn/light-gpu/model-center) 找到想要接入的模型
-2. 在 AstrBot 面板的 服务提供商页面点击「+ 新增服务提供商」，点击优云智算（如果没有，点击“接入 OpenAI”，并且修改下一步弹出窗口的 API Base URL 为 `https://api.modelverse.cn/v1`）。在模型配置-模型名称输入模型名，点击保存。
+2. 在 AstrBot 面板的 服务提供商页面点击「新增服务提供商」，点击优云智算（如果没有，点击“接入 OpenAI”，并且修改下一步弹出窗口的 API Base URL 为 `https://api.modelverse.cn/v1`）。在模型配置-模型名称输入模型名，点击保存。
 
 ### 测试
 
-在 AstrBot 面板左侧点击 `聊天`，输入 `/provider`，可以查看和切换您当前接入的提供商。
+在 AstrBot 面板顶部点击 `Chat` 按钮，输入 `/provider`，可以查看和切换您当前接入的提供商。
 
 您可以直接聊天来测试模型是否正常。
 

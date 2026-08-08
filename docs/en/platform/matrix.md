@@ -26,7 +26,7 @@ Please refer to [Matrix Server](https://matrix.org/ecosystem/servers/) to view a
 
 Go to the AstrBot WebUI plugin marketplace, search for `astrbot_plugin_matrix_adapter`, and click Install.
 
-After installation, navigate to Messaging Platforms (older versions: `Bot`) → Add Adapter → Select Matrix (if the option is missing, try restarting AstrBot or check the plugin installation status).
+After installation, navigate to Platforms (older versions: `Bot`) → Add Adapter → Select Matrix (if the option is missing, try restarting AstrBot or check the plugin installation status).
 
 Click `Enable` in the configuration dialog that appears.
 

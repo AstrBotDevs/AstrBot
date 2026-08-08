@@ -48,7 +48,7 @@ AstrBot v4.2.1 之后的版本, 支持接入 [Coze](https://www.coze.cn/) 的 Ag
 
 完成了所有预备工作, 现在我们就可以在 AstrBot 中配置 Coze 了。
 
-进入 AstrBot 管理面板 -> 服务提供商 -> 新增服务提供商 -> Coze, 进入配置页面。
+进入 AstrBot 管理面板 -> 模型提供商 -> 新增模型提供商 -> Coze, 进入配置页面。
 
 ![Coze 供应商](https://files.astrbot.app/docs/source/images/coze/image_8.png)
 
@@ -61,4 +61,4 @@ AstrBot v4.2.1 之后的版本, 支持接入 [Coze](https://www.coze.cn/) 的 Ag
 
 ## 选择 Agent 执行器
 
-进入左边栏配置页面，点击「Agent 执行方式」，选择「Coze」，然后在下方出现的新的配置项中选择你刚刚创建的 Coze Agent 执行器的 ID，点击右下角「保存」，即可完成配置。
+进入左边栏配置文件，点击「Agent 执行方式」，选择「Coze」，然后在下方出现的新的配置项中选择你刚刚创建的 Coze Agent 执行器的 ID，点击右下角「保存」，即可完成配置。
