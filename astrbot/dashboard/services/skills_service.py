@@ -294,7 +294,7 @@ class SkillsService:
         )
         plugin_metadata = {}
         ambiguous_plugin_roots: set[str] = set()
-        for metadata in (self.plugins.all() if self.plugins is not None else ()):
+        for metadata in self.plugins.all() if self.plugins is not None else ():
             root_dir_name = metadata.root_dir_name
             if not root_dir_name:
                 continue

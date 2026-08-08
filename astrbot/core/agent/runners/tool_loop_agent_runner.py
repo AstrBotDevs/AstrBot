@@ -399,7 +399,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
         except TimeoutError:
             self._detach_stop_cleanup(task)
-        except (asyncio.CancelledError, StopAsyncIteration):
+        except asyncio.CancelledError, StopAsyncIteration:
             pass
         except Exception:  # The caller handles the original operation result.
             pass
@@ -412,7 +412,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         """Close a generator once a cancellation-resistant anext finishes."""
         try:
             await asyncio.shield(operation)
-        except (asyncio.CancelledError, StopAsyncIteration, Exception):
+        except asyncio.CancelledError, StopAsyncIteration, Exception:
             pass
         await close()
 
@@ -459,7 +459,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         close = getattr(generator, "aclose", None)
         if not callable(close):
             return
-        close_task = asyncio.create_task(close())
+        close_task = asyncio.create_task(
+            cast(T.Coroutine[T.Any, T.Any, T.Any], close())
+        )
         try:
             await asyncio.wait_for(
                 asyncio.shield(close_task),
@@ -467,7 +469,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
         except TimeoutError:
             self._detach_stop_cleanup(close_task)
-        except (RuntimeError, StopAsyncIteration):
+        except RuntimeError, StopAsyncIteration:
             pass
 
     def _read_tool_hint(self) -> str:
@@ -635,7 +637,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             finally:
                 await self._close_async_generator(stream)
         else:
-            yield await self._await_stop_interruptibly(self.provider.text_chat(**payload))
+            yield await self._await_stop_interruptibly(
+                self.provider.text_chat(**payload)
+            )
 
     async def _iter_llm_responses_with_fallback(
         self,
@@ -2013,7 +2017,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     ) -> tuple[LLMResponse, ToolSet | None]:
         """Used in 'skills_like' tool schema mode to re-query LLM with param-only tool schemas."""
         if self._is_stop_requested():
-            raise AgentStopRequested("Agent stop requested before skills-like re-query.")
+            raise AgentStopRequested(
+                "Agent stop requested before skills-like re-query."
+            )
         tool_names = llm_resp.tools_call_name
         if not tool_names:
             return llm_resp, self.req.func_tool

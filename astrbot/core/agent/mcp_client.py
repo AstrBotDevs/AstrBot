@@ -94,6 +94,7 @@ class MCPToolNameAllocator:
         self._identity_by_name[candidate] = identity
         return candidate
 
+
 _DEFAULT_STDIO_COMMAND_ALLOWLIST = frozenset(
     {
         "python",
