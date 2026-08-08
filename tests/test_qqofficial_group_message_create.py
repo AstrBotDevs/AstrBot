@@ -2,14 +2,14 @@ import asyncio
 import re
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import botpy
 import botpy.message
 import pytest
 from botpy import ConnectionSession
 
-from astrbot.api.event import MessageChain
+from astrbot.api.event import MessageChain, QQOfficialInteractionResultCode
 from astrbot.api.message_components import At, Image, Plain, Reply
 from astrbot.core.message.message_event_result import (
     MessageEventResult,
@@ -29,6 +29,7 @@ from astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter import
 from astrbot.core.platform.sources.qqofficial_webhook.qo_webhook_adapter import (
     QQOfficialWebhookPlatformAdapter,
 )
+from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
 
 def _make_group_payload(
@@ -429,3 +430,122 @@ async def test_result_decorate_segments_qqofficial_ws_plain_result():
         "第一段",
         "第二段",
     ]
+
+
+def test_ws_interaction_result_code_rejects_boolean():
+    assert QQOfficialPlatformAdapter._normalize_interaction_result_code(True) is None
+
+
+def _make_qqofficial_adapter() -> QQOfficialPlatformAdapter:
+    return QQOfficialPlatformAdapter(
+        {
+            "id": "qq-official-test",
+            "appid": "123",
+            "secret": "secret",
+            "enable_group_c2c": True,
+            "enable_guild_direct_message": False,
+        },
+        {},
+        asyncio.Queue(),
+    )
+
+
+@pytest.mark.asyncio
+async def test_ws_qqofficial_enables_interaction_intent():
+    adapter = _make_qqofficial_adapter()
+
+    assert adapter.intents.interaction is True
+
+
+@pytest.mark.asyncio
+async def test_ws_client_forwards_interaction_to_platform():
+    platform = SimpleNamespace(dispatch_interaction=AsyncMock())
+    client = QQOfficialBotClient(
+        intents=botpy.Intents(interaction=True),
+        bot_log=False,
+    )
+    client.set_platform(platform)
+    interaction = SimpleNamespace(id="interaction-1")
+
+    await client.on_interaction_create(interaction)
+
+    platform.dispatch_interaction.assert_awaited_once_with(interaction)
+
+
+@pytest.mark.asyncio
+async def test_ws_interaction_dispatch_acknowledges_first_handler_result(monkeypatch):
+    adapter = _make_qqofficial_adapter()
+    adapter.client.api = SimpleNamespace(on_interaction_result=AsyncMock())
+    interaction = SimpleNamespace(id="interaction-1")
+    # Covers integer subclasses returned by third-party libraries, e.g. numpy.int64.
+    result_code = type("ResultCode", (int,), {})(
+        QQOfficialInteractionResultCode.SUCCESS
+    )
+    handler = SimpleNamespace(
+        handler=AsyncMock(return_value=result_code),
+        handler_full_name="test.callback_handler",
+    )
+    requested_event_types: list[EventType] = []
+
+    def get_handlers(event_type: EventType):
+        requested_event_types.append(event_type)
+        return [handler]
+
+    monkeypatch.setattr(
+        star_handlers_registry,
+        "get_handlers_by_event_type",
+        get_handlers,
+    )
+
+    await adapter.dispatch_interaction(interaction)
+
+    assert requested_event_types == [EventType.OnQQOfficialInteractionEvent]
+    handler.handler.assert_awaited_once_with(interaction)
+    adapter.client.api.on_interaction_result.assert_awaited_once_with(
+        "interaction-1", QQOfficialInteractionResultCode.SUCCESS
+    )
+
+
+@pytest.mark.asyncio
+async def test_ws_interaction_dispatch_acknowledges_failure_when_unhandled(monkeypatch):
+    adapter = _make_qqofficial_adapter()
+    adapter.client.api = SimpleNamespace(on_interaction_result=AsyncMock())
+    monkeypatch.setattr(
+        star_handlers_registry,
+        "get_handlers_by_event_type",
+        lambda event_type: [],
+    )
+
+    await adapter.dispatch_interaction(SimpleNamespace(id="interaction-2"))
+
+    adapter.client.api.on_interaction_result.assert_awaited_once_with(
+        "interaction-2", QQOfficialInteractionResultCode.FAILED
+    )
+
+
+@pytest.mark.asyncio
+async def test_ws_interaction_dispatch_logs_invalid_result_handler(monkeypatch):
+    adapter = _make_qqofficial_adapter()
+    adapter.client.api = SimpleNamespace(on_interaction_result=AsyncMock())
+    debug = MagicMock()
+    handler = SimpleNamespace(
+        handler=AsyncMock(return_value="invalid"),
+        handler_full_name="test.invalid_callback_handler",
+    )
+    monkeypatch.setattr(
+        star_handlers_registry,
+        "get_handlers_by_event_type",
+        lambda event_type: [handler],
+    )
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter.logger.debug",
+        debug,
+    )
+
+    await adapter.dispatch_interaction(SimpleNamespace(id="interaction-3"))
+
+    debug.assert_called_once()
+    assert "test.invalid_callback_handler" in debug.call_args.args[0]
+    adapter.client.api.on_interaction_result.assert_awaited_once_with(
+        "interaction-3", QQOfficialInteractionResultCode.FAILED
+    )

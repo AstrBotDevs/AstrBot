@@ -224,6 +224,7 @@ class EventType(enum.Enum):
 
     OnAstrBotLoadedEvent = enum.auto()  # AstrBot 加载完成
     OnPlatformLoadedEvent = enum.auto()  # 平台加载完成
+    OnQQOfficialInteractionEvent = enum.auto()  # QQ Official callback button
 
     AdapterMessageEvent = enum.auto()  # 收到适配器发来的消息
     OnWaitingLLMRequestEvent = enum.auto()  # 等待调用 LLM（在获取锁之前，仅通知）
