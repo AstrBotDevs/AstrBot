@@ -4,7 +4,7 @@ import {
   canRestorePluginConfigDefault,
   getPluginConfigDefaultValue,
   isPluginConfigValueModified,
-} from '../src/utils/pluginConfigDefaults.mjs';
+} from '../src/utils/pluginConfigDefaults';
 
 describe('plugin configuration defaults', () => {
   it('uses explicit scalar defaults', () => {

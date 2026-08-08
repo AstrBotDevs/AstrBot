@@ -4,7 +4,7 @@ import { useI18n } from '@/i18n/composables';
 import {
   canRestorePluginConfigDefault,
   getPluginConfigDefaultValue,
-} from '@/utils/pluginConfigDefaults.mjs';
+} from '@/utils/pluginConfigDefaults';
 
 const props = defineProps({
   modelValue: {
