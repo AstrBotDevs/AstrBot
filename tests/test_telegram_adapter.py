@@ -156,7 +156,7 @@ async def test_telegram_reply_without_quote_text_uses_full_message(quote_text):
 
 
 @pytest.mark.asyncio
-async def test_telegram_document_caption_populates_message_text_and_plain():
+async def test_telegram_document_caption_populates_message_text_and_plain(tmp_path):
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(
         make_platform_config("telegram"),
@@ -172,8 +172,16 @@ async def test_telegram_document_caption_populates_message_text_and_plain():
         caption="@alice 请总结这份文档",
         caption_entities=[mention],
     )
+    convert_message_globals = adapter.convert_message.__func__.__globals__
 
-    result = await adapter.convert_message(update, _build_context())
+    with patch.dict(
+        convert_message_globals,
+        {
+            "get_astrbot_temp_path": MagicMock(return_value=str(tmp_path)),
+            "download_file": AsyncMock(),
+        },
+    ):
+        result = await adapter.convert_message(update, _build_context())
 
     assert result is not None
     assert result.message_str == "@alice 请总结这份文档"
@@ -189,7 +197,7 @@ async def test_telegram_document_caption_populates_message_text_and_plain():
 
 
 @pytest.mark.asyncio
-async def test_telegram_video_caption_populates_message_text_and_plain():
+async def test_telegram_video_caption_populates_message_text_and_plain(tmp_path):
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(
         make_platform_config("telegram"),
@@ -203,8 +211,16 @@ async def test_telegram_video_caption_populates_message_text_and_plain():
         video=video,
         caption="这段视频讲了什么",
     )
+    convert_message_globals = adapter.convert_message.__func__.__globals__
 
-    result = await adapter.convert_message(update, _build_context())
+    with patch.dict(
+        convert_message_globals,
+        {
+            "get_astrbot_temp_path": MagicMock(return_value=str(tmp_path)),
+            "download_file": AsyncMock(),
+        },
+    ):
+        result = await adapter.convert_message(update, _build_context())
 
     assert result is not None
     assert result.message_str == "这段视频讲了什么"
@@ -213,6 +229,184 @@ async def test_telegram_video_caption_populates_message_text_and_plain():
         isinstance(component, Comp.Plain) and component.text == "这段视频讲了什么"
         for component in result.message
     )
+
+
+@pytest.mark.asyncio
+async def test_download_to_temp_returns_local_path_without_downloading(tmp_path):
+    """#9448: a local-mode Bot API server returns an absolute local path, which
+    should be reused as-is instead of being downloaded as a URL."""
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    local_file = tmp_path / "photos" / "file_10.jpg"
+    local_file.parent.mkdir(parents=True)
+    local_file.write_bytes(b"local-bytes")
+    convert_message_globals = adapter._download_to_temp.__func__.__globals__
+    mock_download = AsyncMock()
+
+    with patch.dict(convert_message_globals, {"download_file": mock_download}):
+        result = await adapter._download_to_temp(str(local_file))
+
+    assert result == str(local_file)
+    mock_download.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_download_to_temp_downloads_remote_url(tmp_path):
+    """A remote URL should still be downloaded to the temp dir, not returned as-is."""
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    url = "https://api.telegram.org/file/bot123/photos/file_10.jpg"
+    convert_message_globals = adapter._download_to_temp.__func__.__globals__
+    mock_download = AsyncMock()
+
+    with patch.dict(
+        convert_message_globals,
+        {
+            "get_astrbot_temp_path": MagicMock(return_value=str(tmp_path)),
+            "download_file": mock_download,
+        },
+    ):
+        result = await adapter._download_to_temp(url)
+
+    assert result.startswith(str(tmp_path))
+    assert result != url
+    mock_download.assert_awaited_once()
+    assert mock_download.await_args.args[0] == url
+
+
+@pytest.mark.asyncio
+async def test_telegram_document_downloads_to_local_temp_path(tmp_path):
+    """#9448: the document component must hold a local path, not the raw Telegram file_path/URL."""
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    document = create_mock_file("https://api.telegram.org/file/test/report.md")
+    document.file_name = "report.md"
+    update = create_mock_update(message_text=None, document=document)
+    convert_message_globals = adapter.convert_message.__func__.__globals__
+    mock_download = AsyncMock()
+
+    with patch.dict(
+        convert_message_globals,
+        {
+            "get_astrbot_temp_path": MagicMock(return_value=str(tmp_path)),
+            "download_file": mock_download,
+        },
+    ):
+        result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    file_comp = next(c for c in result.message if isinstance(c, Comp.File))
+    assert file_comp.name == "report.md"
+    assert file_comp.file_.startswith(str(tmp_path))
+    assert file_comp.file_ != "https://api.telegram.org/file/test/report.md"
+    mock_download.assert_awaited_once()
+    assert (
+        mock_download.await_args.args[0]
+        == "https://api.telegram.org/file/test/report.md"
+    )
+
+
+@pytest.mark.asyncio
+async def test_telegram_video_downloads_to_local_temp_path(tmp_path):
+    """#9448: the video component must hold a local path, not the raw Telegram file_path/URL."""
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    video = create_mock_file("https://api.telegram.org/file/test/lesson.mp4")
+    video.file_name = "lesson.mp4"
+    update = create_mock_update(message_text=None, video=video)
+    convert_message_globals = adapter.convert_message.__func__.__globals__
+    mock_download = AsyncMock()
+
+    with patch.dict(
+        convert_message_globals,
+        {
+            "get_astrbot_temp_path": MagicMock(return_value=str(tmp_path)),
+            "download_file": mock_download,
+        },
+    ):
+        result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    video_comp = next(c for c in result.message if isinstance(c, Comp.Video))
+    assert video_comp.file.startswith(str(tmp_path))
+    assert video_comp.path.startswith(str(tmp_path))
+    assert video_comp.file != "https://api.telegram.org/file/test/lesson.mp4"
+
+
+@pytest.mark.asyncio
+async def test_telegram_photo_downloads_to_local_temp_path(tmp_path):
+    """#9448: the photo component must hold a local path, not the raw Telegram file_path/URL."""
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    photo = create_mock_file("https://api.telegram.org/file/test/photo.jpg")
+    update = create_mock_update(message_text=None, photo=[photo])
+    convert_message_globals = adapter.convert_message.__func__.__globals__
+    mock_download = AsyncMock()
+
+    with patch.dict(
+        convert_message_globals,
+        {
+            "get_astrbot_temp_path": MagicMock(return_value=str(tmp_path)),
+            "download_file": mock_download,
+        },
+    ):
+        result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    image_comp = next(c for c in result.message if isinstance(c, Comp.Image))
+    assert image_comp.file.startswith(str(tmp_path))
+    assert image_comp.file != "https://api.telegram.org/file/test/photo.jpg"
+
+
+@pytest.mark.asyncio
+async def test_telegram_sticker_downloads_to_local_temp_path(tmp_path):
+    """#9448: the sticker component must hold a local path, not the raw Telegram file_path/URL."""
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    sticker = create_mock_file("https://api.telegram.org/file/test/sticker.webp")
+    sticker.emoji = "😀"
+    update = create_mock_update(message_text=None, sticker=sticker)
+    convert_message_globals = adapter.convert_message.__func__.__globals__
+    mock_download = AsyncMock()
+
+    with patch.dict(
+        convert_message_globals,
+        {
+            "get_astrbot_temp_path": MagicMock(return_value=str(tmp_path)),
+            "download_file": mock_download,
+        },
+    ):
+        result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    image_comp = next(c for c in result.message if isinstance(c, Comp.Image))
+    assert image_comp.file.startswith(str(tmp_path))
+    assert image_comp.file != "https://api.telegram.org/file/test/sticker.webp"
+    assert result.message_str == "Sticker: 😀"
 
 
 @pytest.mark.asyncio

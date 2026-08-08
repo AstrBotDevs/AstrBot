@@ -436,6 +436,31 @@ class TelegramPlatformAdapter(Platform):
         if abm:
             await self.handle_msg(abm)
 
+    async def _download_to_temp(self, file_path: str) -> str:
+        """Download a Telegram file to a local temp path.
+
+        On the cloud Bot API (and non-local self-hosted servers), get_file()
+        returns an http(s) URL, which we fetch into a temp file so downstream
+        components get a readable local path. But when the Bot API server runs
+        in local mode, get_file() returns an absolute local path instead; that
+        file already lives on disk, so we return it as-is rather than feeding a
+        local path into download_file() (an aiohttp GET, which cannot resolve
+        it).
+
+        Args:
+            file_path: The file_path returned by Telegram's getFile API.
+
+        Returns:
+            Local absolute path of the file.
+        """
+        if os.path.isfile(file_path):
+            return file_path
+        file_basename = os.path.basename(file_path)
+        temp_dir = get_astrbot_temp_path()
+        temp_path = os.path.join(temp_dir, f"{uuid.uuid4().hex}_{file_basename}")
+        await download_file(file_path, path=temp_path)
+        return temp_path
+
     async def convert_message(
         self,
         update: Update,
@@ -591,13 +616,27 @@ class TelegramPlatformAdapter(Platform):
         elif update.message.photo:
             photo = update.message.photo[-1]  # get the largest photo
             file = await photo.get_file()
-            message.message.append(Comp.Image(file=file.file_path, url=file.file_path))
-            _apply_caption()
+            file_path = file.file_path
+            if file_path is None:
+                logger.warning(
+                    "Telegram photo file_path is None, cannot save the file."
+                )
+            else:
+                temp_path = await self._download_to_temp(file_path)
+                message.message.append(Comp.Image(file=temp_path, url=temp_path))
+                _apply_caption()
 
         elif update.message.sticker:
             # 将sticker当作图片处理
             file = await update.message.sticker.get_file()
-            message.message.append(Comp.Image(file=file.file_path, url=file.file_path))
+            file_path = file.file_path
+            if file_path is None:
+                logger.warning(
+                    "Telegram sticker file_path is None, cannot save the file."
+                )
+            else:
+                temp_path = await self._download_to_temp(file_path)
+                message.message.append(Comp.Image(file=temp_path, url=temp_path))
             if update.message.sticker.emoji:
                 sticker_text = f"Sticker: {update.message.sticker.emoji}"
                 message.message_str = sticker_text
@@ -612,8 +651,9 @@ class TelegramPlatformAdapter(Platform):
                     f"Telegram document file_path is None, cannot save the file {file_name}.",
                 )
             else:
+                temp_path = await self._download_to_temp(file_path)
                 message.message.append(
-                    Comp.File(file=file_path, name=file_name, url=file_path)
+                    Comp.File(file=temp_path, name=file_name, url=temp_path)
                 )
                 _apply_caption()
 
@@ -626,7 +666,8 @@ class TelegramPlatformAdapter(Platform):
                     f"Telegram video file_path is None, cannot save the file {file_name}.",
                 )
             else:
-                message.message.append(Comp.Video(file=file_path, path=file.file_path))
+                temp_path = await self._download_to_temp(file_path)
+                message.message.append(Comp.Video(file=temp_path, path=temp_path))
                 _apply_caption()
 
         return message
