@@ -10,7 +10,7 @@ Visit the TokenPony [Models page](https://www.tokenpony.cn/#/model) to select yo
 
 Open the AstrBot WebUI, click `Service Providers` in the left sidebar -> `Add Provider` -> select `TokenPony` (requires version >= 4.3.3)
 
-![Configuring Chat Model](https://files.astrbot.app/docs/source/images/tokenpony/image.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/c9aaadc7-8442-47dc-93f0-4ac07d17f03d" />
 
 > If you don't see the `TokenPony` option, you can also click `Connect to OpenAI` as shown in the image and change the `API Base URL` to `https://api.tokenpony.cn/v1`.
 
@@ -20,4 +20,4 @@ Paste the `API Key` and `Model Name` you obtained earlier, then click Save to co
 
 In the AstrBot WebUI, click `Configuration` in the left sidebar, find `Default Chat Model` under AI Configuration, select the `tokenpony` (TokenPony) provider you just created, and click Save.
 
-![Configuring Chat Model 2](https://files.astrbot.app/docs/source/images/tokenpony/image_1.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/9ca0d6e8-40bd-4424-9aad-3f2779ac6306" />

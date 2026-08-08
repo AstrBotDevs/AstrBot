@@ -24,4 +24,6 @@ docker run -itd -p 8999:8999 soulter/astrbot-t2i-service:latest
 
 >如果部署在与 AstrBot 相同的机器上，url 应为 `http://localhost:8999`。
 
-<img width="591" height="228" alt="image" src="https://github.com/user-attachments/assets/f3564b46-11a4-402a-85e3-5f44a82713fe" />
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/5b1cac37-660b-493d-b45f-344ec1568b0f" />
+
+

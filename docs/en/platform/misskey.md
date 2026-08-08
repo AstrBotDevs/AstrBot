@@ -9,7 +9,7 @@
 
 Navigate to the messaging platform, click to add a new adapter, find Misskey and click to enter the Misskey configuration page.
 
-![Create Misskey Platform Adapter](https://files.astrbot.app/docs/source/images/misskey/create.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/9070c6b3-d243-4e4e-b437-ed277aa2ecbf" />
 
 ## Configure Platform Adapter Settings
 
@@ -21,7 +21,7 @@ Don't forget to click `Enable` before saving to activate the Misskey platform ad
 
 How to obtain the Misskey connection information is described below.
 
-![Misskey Platform Adapter Configuration](https://files.astrbot.app/docs/source/images/misskey/config.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/75095637-ac79-4ec3-b2de-0e1978392d41" />
 
 ## Misskey Instance URL
 

@@ -4,7 +4,8 @@
 
 Navigate to the `Bots` page, click `+ Create Bot`, find Slack and click to enter the Slack configuration page.
 
-![image](https://files.astrbot.app/docs/source/images/slack/image-1.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/8fc6604c-7b0e-4af5-b38c-ac378b1c23df" />
+
 
 In the configuration dialog that appears, click `Enable`.
 
