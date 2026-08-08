@@ -20,6 +20,7 @@ from .booters.local import LocalBooter
 
 if TYPE_CHECKING:
     from astrbot.core.execution_context import CoreExecutionContext
+    from astrbot.core.star.star import PluginRegistry
 
 
 _MANAGED_SKILLS_FILE = ".astrbot_managed_skills.json"
@@ -136,6 +137,7 @@ def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
 
 def _collect_sync_skill_dirs(
     skill_manager: SkillManager | None = None,
+    plugins: PluginRegistry | None = None,
 ) -> list[tuple[str, Path]]:
     """Collect local, plugin, and builtin Skills that should be synced."""
     skills_root = Path(get_astrbot_skills_path())
@@ -146,6 +148,23 @@ def _collect_sync_skill_dirs(
         logger.warning("[Computer] Failed to initialize skill manager: %s", exc)
         return []
 
+    plugin_by_root: dict[str, object] = {}
+    ambiguous_plugin_roots: set[str] = set()
+    if plugins is not None:
+        for metadata in plugins.all():
+            root_dir_name = metadata.root_dir_name
+            if not root_dir_name:
+                continue
+            if root_dir_name in plugin_by_root:
+                ambiguous_plugin_roots.add(root_dir_name)
+                continue
+            plugin_by_root[root_dir_name] = metadata
+    active_plugin_root_names = {
+        root_dir_name
+        for root_dir_name, metadata in plugin_by_root.items()
+        if root_dir_name not in ambiguous_plugin_roots
+        and getattr(metadata, "activated", False)
+    }
     sync_dirs: list[tuple[str, Path]] = []
     for skill in skill_manager.list_skills(
         active_only=False,
@@ -153,6 +172,11 @@ def _collect_sync_skill_dirs(
         show_sandbox_path=False,
     ):
         if skill.source_type == "sandbox_only":
+            continue
+        if (
+            skill.source_type == "plugin"
+            and skill.plugin_name not in active_plugin_root_names
+        ):
             continue
         skill_md = Path(skill.path)
         if not skill_md.is_file():
@@ -519,13 +543,14 @@ async def _scan_sandbox_skills(booter: ComputerBooter) -> dict | None:
 async def _sync_skills_to_sandbox(
     booter: ComputerBooter,
     skill_manager: SkillManager | None = None,
+    plugins: PluginRegistry | None = None,
 ) -> None:
     """Sync local skills to sandbox and refresh cache.
 
     The flow keeps two explicit phases: apply filesystem changes, then scan
     metadata for cache refresh.
     """
-    sync_skill_dirs = _collect_sync_skill_dirs(skill_manager)
+    sync_skill_dirs = _collect_sync_skill_dirs(skill_manager, plugins)
 
     temp_dir = Path(get_astrbot_temp_path())
     temp_dir.mkdir(parents=True, exist_ok=True)
@@ -584,10 +609,16 @@ class ComputerRuntime(_ComputerRuntimeState):
     def __init__(self) -> None:
         super().__init__()
         self._skill_manager: SkillManager | None = None
+        self._plugins: PluginRegistry | None = None
 
-    def bind_skill_manager(self, skill_manager: SkillManager) -> None:
+    def bind_skill_manager(
+        self,
+        skill_manager: SkillManager,
+        plugins: PluginRegistry,
+    ) -> None:
         """Bind the lifecycle-owned Skill inventory after plugin loading."""
         self._skill_manager = skill_manager
+        self._plugins = plugins
 
     async def get_booter(
         self,
@@ -695,7 +726,11 @@ class ComputerRuntime(_ComputerRuntimeState):
                         booter_type,
                         session_id,
                     )
-                    await _sync_skills_to_sandbox(client, self._skill_manager)
+                    await _sync_skills_to_sandbox(
+                        client,
+                        self._skill_manager,
+                        self._plugins,
+                    )
                 except asyncio.CancelledError:
                     try:
                         await self._shutdown_booter(client, booter_type)
@@ -752,7 +787,11 @@ class ComputerRuntime(_ComputerRuntimeState):
             try:
                 if not await booter.available():
                     continue
-                await _sync_skills_to_sandbox(booter, self._skill_manager)
+                await _sync_skills_to_sandbox(
+                    booter,
+                    self._skill_manager,
+                    self._plugins,
+                )
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001

@@ -16,6 +16,7 @@ from astrbot.core.computer.computer_client import (
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.skills.neo_skill_sync import NeoSkillSyncManager
 from astrbot.core.skills.skill_manager import SkillManager
+from astrbot.core.star.star import PluginRegistry
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.dashboard.upload_utils import save_upload_to_path
@@ -102,11 +103,13 @@ class SkillsService:
         skill_manager: SkillManager,
         *,
         demo_mode: bool,
+        plugins: PluginRegistry | None = None,
     ) -> None:
         self.config = config
         self.computer_runtime = computer_runtime
         self.skill_manager = skill_manager
         self.demo_mode = demo_mode
+        self.plugins = plugins
 
     @staticmethod
     def _payload(data: object) -> dict[str, Any]:
@@ -280,6 +283,7 @@ class SkillsService:
             return SkillsOperationResult(ok=False, message="Neo operation failed")
 
     def get_skills(self) -> dict:
+        """Return the Skill inventory with runtime plugin activation state."""
         provider_settings = self.config.get("provider_settings", {})
         runtime = provider_settings.get("computer_use_runtime", "local")
         skill_mgr = self.skill_manager
@@ -288,8 +292,35 @@ class SkillsService:
             runtime=runtime,
             show_sandbox_path=False,
         )
+        plugin_metadata = {}
+        ambiguous_plugin_roots: set[str] = set()
+        for metadata in (self.plugins.all() if self.plugins is not None else ()):
+            root_dir_name = metadata.root_dir_name
+            if not root_dir_name:
+                continue
+            if root_dir_name in plugin_metadata:
+                ambiguous_plugin_roots.add(root_dir_name)
+                continue
+            plugin_metadata[root_dir_name] = metadata
+        serialized_skills = []
+        for skill in skills:
+            data = dict(skill.__dict__)
+            if skill.source_type == "plugin":
+                metadata = (
+                    None
+                    if skill.plugin_name in ambiguous_plugin_roots
+                    else plugin_metadata.get(skill.plugin_name)
+                )
+                data["plugin_active"] = bool(metadata and metadata.activated)
+                data["plugin_display_name"] = (
+                    str(metadata.display_name or metadata.name or "").strip()
+                    if metadata is not None
+                    else ""
+                )
+            serialized_skills.append(data)
+
         return {
-            "skills": [skill.__dict__ for skill in skills],
+            "skills": serialized_skills,
             "runtime": runtime,
             "sandbox_cache": skill_mgr.get_sandbox_skills_cache_status(),
         }

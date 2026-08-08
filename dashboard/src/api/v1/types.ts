@@ -261,6 +261,11 @@ export interface SkillItemData {
   path?: string;
   active?: boolean;
   source_type?: string;
+  source_label?: string;
+  plugin_name?: string;
+  plugin_active?: boolean;
+  plugin_display_name?: string;
+  readonly?: boolean;
   [key: string]: unknown;
 }
 

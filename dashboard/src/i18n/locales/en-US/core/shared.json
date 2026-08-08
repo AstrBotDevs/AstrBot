@@ -75,6 +75,8 @@
     "originNameLabel": "Origin Name",
     "toolInactive": "Disabled",
     "toolInactiveTooltip": "This tool is disabled. Re-enable it in Extensions -> Handlers -> Function Tools.",
+    "skillInactive": "Plugin disabled",
+    "skillInactiveTooltip": "This Skill belongs to a disabled plugin and is not available to agents.",
     "allTools": "All tools available",
     "allToolsWithCount": "All tools available ({count})",
     "noTools": "No tools configured",

@@ -422,6 +422,7 @@
     "sandboxDiscoveryPending": "尚未发现 Sandbox 预置 Skill。请至少启动一次 Sandbox 会话后再查看。",
     "sandboxPresetReadonly": "Sandbox 预置 Skill 在此处为只读，无法在本地 Skills 页面删除或启用/禁用。",
     "pluginReadonly": "插件提供的 Skill 由插件管理，无法在本地 Skills 页面删除或下载。",
+    "pluginDisabled": "插件已禁用",
     "builtinReadonly": "内置预设 Skill 为只读，无法在本地 Skills 页面编辑、下载、删除或启用/禁用。",
     "openEditor": "查看/编辑",
     "editorTitle": "编辑 Skill",

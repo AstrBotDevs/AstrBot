@@ -222,6 +222,7 @@ def create_dashboard_asgi_app(
             runtime.services.computer_runtime,
             SkillManager(builtin_skill_catalog=runtime.catalogs.builtin_skills),
             demo_mode=runtime.services.demo_mode,
+            plugins=runtime.catalogs.plugins,
         ),
         stats=StatService(
             db,

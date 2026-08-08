@@ -2522,7 +2522,11 @@ paths:
             type: string
       responses:
         '200':
-          $ref: '#/components/responses/Ok'
+          description: Skills inventory
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillInventoryResponse'
     post:
       tags: [Skills]
       summary: Upload or import a skill archive
@@ -4721,6 +4725,62 @@ components:
         message:
           type: string
         data: {}
+      additionalProperties: false
+
+    SkillInventoryItem:
+      type: object
+      required: [name, description, path, active]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        path:
+          type: string
+        active:
+          type: boolean
+        source_type:
+          type: string
+        source_label:
+          type: string
+        plugin_name:
+          type: string
+        plugin_active:
+          type: boolean
+          description: Whether the owning plugin is active in the runtime catalog.
+        plugin_display_name:
+          type: string
+          description: Display name of the owning runtime plugin, when known.
+        readonly:
+          type: boolean
+      additionalProperties: true
+
+    SkillInventoryData:
+      type: object
+      required: [skills, runtime, sandbox_cache]
+      properties:
+        skills:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillInventoryItem'
+        runtime:
+          type: string
+        sandbox_cache:
+          type: object
+          additionalProperties: true
+      additionalProperties: false
+
+    SkillInventoryResponse:
+      type: object
+      required: [status, data]
+      properties:
+        status:
+          type: string
+          enum: [ok, warning]
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/SkillInventoryData'
       additionalProperties: false
 
     ErrorEnvelope:

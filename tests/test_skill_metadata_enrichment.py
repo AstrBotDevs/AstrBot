@@ -635,6 +635,61 @@ def test_list_skills_includes_inactive_plugin_provided_skills_for_inventory(
     assert skills[0].name == "demo-skill"
 
 
+def test_skills_service_exposes_runtime_plugin_activation_for_inventory(
+    monkeypatch,
+    tmp_path: Path,
+):
+    data_dir = tmp_path / "data"
+    skills_root = tmp_path / "skills"
+    plugins_root = tmp_path / "plugins"
+    data_dir.mkdir()
+    skills_root.mkdir()
+    for root_name in ("active_plugin", "disabled_plugin", "unknown_plugin"):
+        skill_dir = plugins_root / root_name / "skills" / f"{root_name}-skill"
+        skill_dir.mkdir(parents=True)
+        skill_dir.joinpath("SKILL.md").write_text("# Demo", encoding="utf-8")
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+    catalogs = RuntimeCatalogs()
+    catalogs.plugins.publish(
+        StarMetadata(
+            name="Active Plugin",
+            display_name="Friendly Active Plugin",
+            module_path="astrbot.plugins.active.main",
+            root_dir_name="active_plugin",
+            activated=True,
+        )
+    )
+    catalogs.plugins.publish(
+        StarMetadata(
+            name="Disabled Plugin",
+            module_path="astrbot.plugins.disabled.main",
+            root_dir_name="disabled_plugin",
+            activated=False,
+        )
+    )
+    service = SkillsService(
+        {"provider_settings": {"computer_use_runtime": "local"}},
+        SimpleNamespace(),
+        SkillManager(skills_root=str(skills_root), plugins_root=str(plugins_root)),
+        demo_mode=False,
+        plugins=catalogs.plugins,
+    )
+
+    skills = {item["name"]: item for item in service.get_skills()["skills"]}
+
+    assert skills["active_plugin-skill"]["plugin_active"] is True
+    assert (
+        skills["active_plugin-skill"]["plugin_display_name"]
+        == "Friendly Active Plugin"
+    )
+    assert skills["disabled_plugin-skill"]["plugin_active"] is False
+    assert skills["unknown_plugin-skill"]["plugin_active"] is False
+    assert skills["unknown_plugin-skill"]["plugin_display_name"] == ""
+
+
 def test_builtin_skill_catalog_is_runtime_owned_and_readonly(
     monkeypatch,
     tmp_path: Path,

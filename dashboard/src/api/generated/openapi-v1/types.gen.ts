@@ -10,6 +10,40 @@ export type SuccessEnvelope = {
   data: unknown;
 };
 
+export type SkillInventoryItem = {
+  name: string;
+  description: string;
+  path: string;
+  active: boolean;
+  source_type?: string;
+  source_label?: string;
+  plugin_name?: string;
+  /**
+   * Whether the owning plugin is active in the runtime catalog.
+   */
+  plugin_active?: boolean;
+  /**
+   * Display name of the owning runtime plugin, when known.
+   */
+  plugin_display_name?: string;
+  readonly?: boolean;
+  [key: string]: unknown;
+};
+
+export type SkillInventoryData = {
+  skills: Array<SkillInventoryItem>;
+  runtime: string;
+  sandbox_cache: {
+    [key: string]: unknown;
+  };
+};
+
+export type SkillInventoryResponse = {
+  status: 'ok' | 'warning';
+  message?: string;
+  data: SkillInventoryData;
+};
+
 export type ErrorEnvelope = {
   status: 'error';
   message: string;
@@ -3812,9 +3846,9 @@ export type ListSkillsData = {
 
 export type ListSkillsResponses = {
   /**
-   * Standard AstrBot success response
+   * Skills inventory
    */
-  200: SuccessEnvelope;
+  200: SkillInventoryResponse;
 };
 
 export type ListSkillsResponse = ListSkillsResponses[keyof ListSkillsResponses];

@@ -192,10 +192,25 @@ def test_sync_skills_includes_plugin_provided_skills(
         _fake_set_cache,
     )
 
+    catalogs = RuntimeCatalogs()
+    catalogs.plugins.publish(
+        StarMetadata(
+            name="Demo",
+            module_path="astrbot.plugins.demo.main",
+            root_dir_name="astrbot_plugin_demo",
+            activated=True,
+        )
+    )
+
     booter = _FakeBooter(
         '{"skills":[{"name":"demo-skill","description":"","path":"skills/demo-skill/SKILL.md"}]}'
     )
-    asyncio.run(computer_client._sync_skills_to_sandbox(cast(ComputerBooter, booter)))
+    asyncio.run(
+        computer_client._sync_skills_to_sandbox(
+            cast(ComputerBooter, booter),
+            plugins=catalogs.plugins,
+        )
+    )
 
     assert len(booter.uploads) == 1
     assert booter.uploads[0][1] == "skills/skills.zip"
@@ -206,6 +221,54 @@ def test_sync_skills_includes_plugin_provided_skills(
             "path": "skills/demo-skill/SKILL.md",
         }
     ]
+
+
+def test_sync_skills_fails_closed_for_disabled_or_unknown_plugin_skills(
+    monkeypatch,
+    tmp_path: Path,
+):
+    skills_root = tmp_path / "skills"
+    plugins_root = tmp_path / "plugins"
+    temp_root = tmp_path / "temp"
+    skills_root.mkdir()
+    temp_root.mkdir()
+    for plugin_name in ("disabled_plugin", "unknown_plugin"):
+        skill_dir = plugins_root / plugin_name / "skills" / f"{plugin_name}-skill"
+        skill_dir.mkdir(parents=True)
+        skill_dir.joinpath("SKILL.md").write_text("# demo", encoding="utf-8")
+    _isolate_skill_manager_data(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.get_astrbot_skills_path",
+        lambda: str(skills_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_plugin_path",
+        lambda: str(plugins_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.get_astrbot_temp_path",
+        lambda: str(temp_root),
+    )
+
+    catalogs = RuntimeCatalogs()
+    catalogs.plugins.publish(
+        StarMetadata(
+            name="Disabled",
+            module_path="astrbot.plugins.disabled.main",
+            root_dir_name="disabled_plugin",
+            activated=False,
+        )
+    )
+    booter = _FakeBooter('{"skills":[]}')
+
+    asyncio.run(
+        computer_client._sync_skills_to_sandbox(
+            cast(ComputerBooter, booter),
+            plugins=catalogs.plugins,
+        )
+    )
+
+    assert booter.uploads == []
 
 
 def test_sync_skills_includes_builtin_only_skills_without_local_root(

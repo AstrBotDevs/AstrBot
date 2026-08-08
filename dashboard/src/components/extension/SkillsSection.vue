@@ -52,6 +52,9 @@
             v-for="skill in skills"
             :key="skill.name"
             :title="skill.name"
+            :class="{
+              'skill-list-item--inactive': isInactivePluginSkill(skill),
+            }"
             clickable
             @click="openSkillEditor(skill)"
           >
@@ -62,6 +65,14 @@
                 :color="sourceTypeColor(skill.source_type)"
               >
                 {{ sourceTypeLabel(skill.source_type, skill) }}
+              </v-chip>
+              <v-chip
+                v-if="isInactivePluginSkill(skill)"
+                size="x-small"
+                color="warning"
+                variant="tonal"
+              >
+                {{ tm('skills.pluginDisabled') }}
               </v-chip>
             </template>
 
@@ -120,10 +131,12 @@
                     density="compact"
                     hide-details
                     inset
-                    :model-value="skill.active"
+                    :model-value="skill.active && !isInactivePluginSkill(skill)"
                     :loading="itemLoading[skill.name] || false"
                     :disabled="
-                      itemLoading[skill.name] || isReadOnlySourceSkill(skill)
+                      itemLoading[skill.name] ||
+                      isReadOnlySourceSkill(skill) ||
+                      isInactivePluginSkill(skill)
                     "
                     @click.stop
                     @update:model-value="toggleSkill(skill)"
@@ -799,6 +812,8 @@ interface SkillItem extends SkillItemData {
   source_type?: string;
   source_label?: string;
   plugin_name?: string;
+  plugin_active?: boolean;
+  plugin_display_name?: string;
   readonly?: boolean;
 }
 
@@ -979,6 +994,11 @@ function normalizeSkillItem(value: unknown): SkillItem | null {
     source_type: getString(record.source_type) || undefined,
     source_label: getString(record.source_label) || undefined,
     plugin_name: getString(record.plugin_name) || undefined,
+    plugin_active:
+      typeof record.plugin_active === 'boolean'
+        ? record.plugin_active
+        : undefined,
+    plugin_display_name: getString(record.plugin_display_name) || undefined,
     readonly: getBoolean(record.readonly),
   };
 }
@@ -1227,6 +1247,10 @@ function isSandboxPresetSkill(skill: SkillItem) {
 
 function isPluginProvidedSkill(skill: SkillItem) {
   return skill.source_type === 'plugin';
+}
+
+function isInactivePluginSkill(skill: SkillItem) {
+  return isPluginProvidedSkill(skill) && skill.plugin_active === false;
 }
 
 function isBuiltinPresetSkill(skill: SkillItem) {
@@ -1539,6 +1563,10 @@ async function uploadSkillBatch() {
 }
 
 async function toggleSkill(skill: SkillItem) {
+  if (isInactivePluginSkill(skill)) {
+    showMessage(tm('skills.pluginDisabled'), 'warning');
+    return;
+  }
   if (isReadOnlySourceSkill(skill)) {
     showReadOnlySkillMessage(skill);
     return;
@@ -2093,6 +2121,10 @@ onMounted(async () => {
   margin-top: 6px;
   overflow: hidden;
   word-break: break-all;
+}
+
+.skill-list-item--inactive {
+  opacity: 0.58;
 }
 
 .skill-editor-dialog {

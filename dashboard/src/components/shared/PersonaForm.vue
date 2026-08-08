@@ -622,6 +622,9 @@ interface SkillItemOption {
   name: string;
   description: string;
   active: boolean;
+  source_type?: string;
+  plugin_active?: boolean;
+  plugin_display_name?: string;
 }
 
 const props = withDefaults(
@@ -918,6 +921,9 @@ function normalizeSkillItem(value: unknown): SkillItemOption | null {
     name,
     description: getString(record.description) ?? '',
     active: getBoolean(record.active) ?? true,
+    source_type: getString(record.source_type) ?? undefined,
+    plugin_active: getBoolean(record.plugin_active) ?? undefined,
+    plugin_display_name: getString(record.plugin_display_name) ?? undefined,
   };
 }
 
@@ -1003,7 +1009,9 @@ async function loadSkills() {
       .map(normalizeSkillItem)
       .filter(
         (skill): skill is SkillItemOption =>
-          skill !== null && skill.active !== false,
+          skill !== null &&
+          skill.active !== false &&
+          skill.plugin_active !== false,
       );
   } catch (error) {
     emit('error', getApiErrorMessage(error, 'Failed to load skills'));

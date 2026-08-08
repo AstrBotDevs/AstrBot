@@ -15,4 +15,11 @@ describe('SkillsSection builtin presets', () => {
     expect(skillsSection).toContain('isReadOnlySourceSkill(skill)');
     expect(skillsSection).toContain("tm('skills.builtinReadonly')");
   });
+
+  it('keeps skills from disabled plugins visible but non-interactive', () => {
+    expect(skillsSection).toContain('plugin_active?: boolean');
+    expect(skillsSection).toContain('isInactivePluginSkill(skill)');
+    expect(skillsSection).toContain('skill-list-item--inactive');
+    expect(skillsSection).toContain("tm('skills.pluginDisabled')");
+  });
 });

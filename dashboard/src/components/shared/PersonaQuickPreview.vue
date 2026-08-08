@@ -111,17 +111,29 @@
             })
           }}
         </v-chip>
-        <v-chip
-          v-for="skillName in normalizedSkills"
+        <div
+          v-for="skill in resolvedSkills"
           v-else
-          :key="skillName"
-          size="small"
-          color="primary"
-          variant="outlined"
-          label
+          :key="skill.name"
+          class="tool-item"
         >
-          {{ skillName }}
-        </v-chip>
+          <v-chip
+            size="small"
+            :color="skill.plugin_active === false ? 'warning' : 'primary'"
+            variant="outlined"
+            label
+          >
+            {{ skill.name }}
+          </v-chip>
+          <v-tooltip v-if="skill.plugin_active === false" location="top">
+            <template #activator="{ props: tooltipProps }">
+              <small class="text-warning tool-inactive" v-bind="tooltipProps">
+                {{ tm('personaQuickPreview.skillInactive') }}
+              </small>
+            </template>
+            {{ tm('personaQuickPreview.skillInactiveTooltip') }}
+          </v-tooltip>
+        </div>
         <small
           v-if="personaData.skills !== null && normalizedSkills.length === 0"
           class="text-grey"
@@ -150,6 +162,7 @@ const { tm } = useModuleI18n('core.shared');
 const loading = ref(false);
 const personaData = ref(null);
 const toolMetaMap = ref({});
+const skillMetaMap = ref({});
 const availableSkills = ref([]);
 
 const defaultPersonaData = {
@@ -182,6 +195,12 @@ const resolvedTools = computed(() =>
     };
   }),
 );
+const resolvedSkills = computed(() =>
+  normalizedSkills.value.map((skillName) => ({
+    name: skillName,
+    ...(skillMetaMap.value[skillName] || {}),
+  })),
+);
 
 async function loadToolsMeta() {
   try {
@@ -212,22 +231,26 @@ async function loadSkillsMeta() {
     const response = await skillApi.list();
     if (response.data?.status === 'ok') {
       const payload = response.data?.data || [];
-      if (Array.isArray(payload)) {
-        availableSkills.value = payload.filter(
-          (skill) => skill.active !== false,
-        );
-      } else {
-        const skills = payload.skills || [];
-        availableSkills.value = skills.filter(
-          (skill) => skill.active !== false,
-        );
+      const skills = Array.isArray(payload) ? payload : payload.skills || [];
+      const nextMap = {};
+      for (const skill of skills) {
+        if (skill?.name) {
+          nextMap[skill.name] = {
+            plugin_active: skill.plugin_active,
+          };
+        }
       }
+      skillMetaMap.value = nextMap;
+      availableSkills.value = skills.filter(
+        (skill) => skill.active !== false && skill.plugin_active !== false,
+      );
     } else {
       availableSkills.value = [];
     }
   } catch (error) {
     console.error('Failed to load skills metadata:', error);
     availableSkills.value = [];
+    skillMetaMap.value = {};
   }
 }
 

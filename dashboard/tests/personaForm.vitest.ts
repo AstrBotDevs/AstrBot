@@ -150,4 +150,73 @@ describe('PersonaForm', () => {
     expect(wrapper.text()).toContain('tool.alpha');
     expect(wrapper.text()).toContain('tool.beta');
   });
+
+  it('keeps disabled plugin skills in an existing persona without offering them again', async () => {
+    testState.skillListMock.mockResolvedValue({
+      data: {
+        status: 'ok',
+        data: {
+          skills: [
+            {
+              name: 'disabled-plugin-skill',
+              description: 'Installed by a disabled plugin',
+              active: true,
+              source_type: 'plugin',
+              plugin_active: false,
+            },
+            {
+              name: 'available-skill',
+              description: 'Available local skill',
+              active: true,
+            },
+          ],
+        },
+      },
+    });
+    const wrapper = mountWithVuetify(PersonaForm, {
+      props: {
+        modelValue: false,
+        editingPersona: {
+          persona_id: 'helper',
+          system_prompt: 'This is a sufficiently long system prompt.',
+          custom_error_message: '',
+          begin_dialogs: [],
+          tools: [],
+          skills: ['disabled-plugin-skill'],
+          folder_id: null,
+        },
+      },
+      global: {
+        stubs: {
+          VDialog: {
+            props: ['modelValue'],
+            template: '<div class="v-dialog-stub"><slot /></div>',
+          },
+        },
+      },
+    });
+
+    await wrapper.setProps({ modelValue: true });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('disabled-plugin-skill');
+    expect(wrapper.text()).toContain('available-skill');
+    expect(wrapper.find('.skills-selection').text()).not.toContain(
+      'disabled-plugin-skill',
+    );
+
+    const saveButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().trim() === 'Save');
+    expect(saveButton).toBeDefined();
+    await saveButton!.trigger('click');
+    await flushPromises();
+
+    expect(testState.personaUpdateMock).toHaveBeenCalledWith(
+      'helper',
+      expect.objectContaining({
+        skills: ['disabled-plugin-skill'],
+      }),
+    );
+  });
 });

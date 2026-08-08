@@ -506,7 +506,10 @@ class AstrBotCoreLifecycle:
             builtin_skill_catalog=self.services.catalogs.builtin_skills,
         )
         execution_context.skill_manager = skill_manager
-        self.services.computer_runtime.bind_skill_manager(skill_manager)
+        self.services.computer_runtime.bind_skill_manager(
+            skill_manager,
+            self.services.catalogs.plugins,
+        )
         await self._migrate_legacy_builtin_command_switch()
 
         # 根据配置实例化各个 Provider

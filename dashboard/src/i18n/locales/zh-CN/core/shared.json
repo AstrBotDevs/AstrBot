@@ -75,6 +75,8 @@
     "originNameLabel": "来源名称",
     "toolInactive": "已禁用",
     "toolInactiveTooltip": "该工具已被禁用。在插件->管理行为->函数工具中重新启用。",
+    "skillInactive": "插件已禁用",
+    "skillInactiveTooltip": "此 Skill 所属插件已禁用，无法供 Agent 使用。",
     "allTools": "全部工具可用",
     "allToolsWithCount": "全部工具可用（{count}）",
     "noTools": "未配置工具",
