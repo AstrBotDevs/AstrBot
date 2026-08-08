@@ -21,7 +21,7 @@ class ContentPart(BaseModel):
 
     __content_part_registry: ClassVar[dict[str, type["ContentPart"]]] = {}
 
-    type: Literal["text", "think", "image_url", "audio_url"]
+    type: Literal["text", "think", "image_url", "audio_url", "video_url"]
     _no_save: bool = PrivateAttr(default=False)
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
@@ -139,6 +139,22 @@ class AudioURLPart(ContentPart):
 
     type: str = "audio_url"
     audio_url: AudioURL
+
+
+class VideoURLPart(ContentPart):
+    """
+    >>> VideoURLPart(video_url=VideoURLPart.VideoURL(url="https://example.com/video.mp4")).model_dump()
+    {'type': 'video_url', 'video_url': {'url': 'https://example.com/video.mp4', 'id': None}}
+    """
+
+    class VideoURL(BaseModel):
+        url: str
+        """The URL of the video, can be a data URI scheme like `data:video/mp4;base64,...`."""
+        id: str | None = None
+        """The ID of the video, to allow LLMs to distinguish different videos."""
+
+    type: str = "video_url"
+    video_url: VideoURL
 
 
 class ToolCall(BaseModel):

@@ -312,6 +312,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             request.prompt is not None
             or request.image_urls
             or request.audio_urls
+            or request.video_urls
             or request.extra_user_content_parts
         ):
             m = await self._assemble_request_context_for_provider(request)
@@ -341,13 +342,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         supports_image = "image" in modalities
         supports_audio = "audio" in modalities
-        if supports_image and supports_audio:
+        supports_video = "video" in modalities
+        if supports_image and supports_audio and supports_video:
             return await request.assemble_context()
 
         adjusted_request = replace(
             request,
             image_urls=request.image_urls if supports_image else [],
             audio_urls=request.audio_urls if supports_audio else [],
+            video_urls=request.video_urls if supports_video else [],
         )
         context = await adjusted_request.assemble_context()
         content = context.get("content")
@@ -364,6 +367,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if not supports_audio:
             for _ in request.audio_urls:
                 content_blocks.append({"type": "text", "text": "[Audio]"})
+        if not supports_video:
+            for _ in request.video_urls:
+                content_blocks.append({"type": "text", "text": "[Video]"})
 
         return {"role": "user", "content": content_blocks}
 

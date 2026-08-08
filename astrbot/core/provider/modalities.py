@@ -13,6 +13,7 @@ from astrbot.core.agent.message import Message
 class ContextSanitizeStats:
     fixed_image_blocks: int = 0
     fixed_audio_blocks: int = 0
+    fixed_video_blocks: int = 0
     fixed_tool_messages: int = 0
     removed_tool_calls: int = 0
 
@@ -21,6 +22,7 @@ class ContextSanitizeStats:
         return bool(
             self.fixed_image_blocks
             or self.fixed_audio_blocks
+            or self.fixed_video_blocks
             or self.fixed_tool_messages
             or self.removed_tool_calls
         )
@@ -50,8 +52,9 @@ def sanitize_contexts_by_modalities(
 
     supports_image = "image" in modalities
     supports_audio = "audio" in modalities
+    supports_video = "video" in modalities
     supports_tool_use = "tool_use" in modalities
-    if supports_image and supports_audio and supports_tool_use:
+    if supports_image and supports_audio and supports_video and supports_tool_use:
         copied_contexts = []
         for msg in contexts:
             copied_msg = _message_to_dict(msg)
@@ -83,7 +86,7 @@ def sanitize_contexts_by_modalities(
                 msg.pop("tool_calls", None)
                 msg.pop("tool_call_id", None)
 
-        if not supports_image or not supports_audio:
+        if not supports_image or not supports_audio or not supports_video:
             content = msg.get("content")
             if isinstance(content, list):
                 filtered_parts: list[Any] = []
@@ -103,6 +106,11 @@ def sanitize_contexts_by_modalities(
                             removed_any_multimodal = True
                             stats.fixed_audio_blocks += 1
                             filtered_parts.append({"type": "text", "text": "[Audio]"})
+                            continue
+                        if not supports_video and part_type in {"video_url", "video"}:
+                            removed_any_multimodal = True
+                            stats.fixed_video_blocks += 1
+                            filtered_parts.append({"type": "text", "text": "[Video]"})
                             continue
                     filtered_parts.append(part)
                 if removed_any_multimodal:

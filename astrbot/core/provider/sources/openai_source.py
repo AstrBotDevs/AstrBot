@@ -24,6 +24,7 @@ from astrbot.core.agent.message import (
     ImageURLPart,
     Message,
     TextPart,
+    VideoURLPart,
 )
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
@@ -143,6 +144,7 @@ class ProviderOpenAIOfficial(Provider):
                 if isinstance(item, dict) and item.get("type") in {
                     "image_url",
                     "audio_url",
+                    "video_url",
                 }:
                     return True
         return False
@@ -266,6 +268,34 @@ class ProviderOpenAIOfficial(Provider):
             },
         }
 
+    def _extract_video_part_info(self, part: dict) -> str | None:
+        if not isinstance(part, dict) or part.get("type") != "video_url":
+            return None
+
+        video_url_data = part.get("video_url")
+        if not isinstance(video_url_data, dict):
+            logger.warning("Video content block has invalid format, keeping original.")
+            return None
+
+        url = video_url_data.get("url")
+        if not isinstance(url, str) or not url:
+            logger.warning("Video content block has no valid URL, keeping original.")
+            return None
+        return url
+
+    async def _resolve_video_part(self, video_ref: str) -> dict | None:
+        video_data = await resolve_media_ref_to_base64_data(
+            video_ref,
+            media_type="video",
+        )
+        if not video_data:
+            logger.warning("Video preprocessing result is empty, will ignore.")
+            return None
+        return {
+            "type": "video_url",
+            "video_url": {"url": video_data.to_data_url()},
+        }
+
     async def _transform_content_part(self, part: dict) -> dict:
         if not isinstance(part, dict):
             return part
@@ -294,6 +324,21 @@ class ProviderOpenAIOfficial(Provider):
             if not audio_ref:
                 return part
             resolved_part = await self._resolve_audio_part(audio_ref)
+            return resolved_part or part
+
+        if part.get("type") == "video_url":
+            video_ref = self._extract_video_part_info(part)
+            if not video_ref:
+                return part
+            try:
+                resolved_part = await self._resolve_video_part(video_ref)
+            except Exception as exc:
+                logger.warning(
+                    "Video %s preprocessing failed, keeping original. Error: %s",
+                    video_ref,
+                    exc,
+                )
+                return part
             return resolved_part or part
 
         return part
@@ -956,6 +1001,7 @@ class ProviderOpenAIOfficial(Provider):
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
+        video_urls: list[str] | None = None,
         **kwargs,
     ) -> tuple:
         """准备聊天所需的有效载荷和上下文"""
@@ -968,6 +1014,7 @@ class ProviderOpenAIOfficial(Provider):
                 image_urls,
                 audio_urls,
                 extra_user_content_parts,
+                video_urls,
             )
         context_query = copy.deepcopy(self._ensure_message_to_dicts(contexts))
         if new_record:
@@ -1194,6 +1241,7 @@ class ProviderOpenAIOfficial(Provider):
         tool_calls_result=None,
         model=None,
         extra_user_content_parts=None,
+        video_urls=None,
         tool_choice: Literal["auto", "required"] = "auto",
         request_max_retries: int | None = None,
         **kwargs,
@@ -1207,6 +1255,7 @@ class ProviderOpenAIOfficial(Provider):
             tool_calls_result,
             model=model,
             extra_user_content_parts=extra_user_content_parts,
+            video_urls=video_urls,
             **kwargs,
         )
         if func_tool and not func_tool.empty():
@@ -1271,6 +1320,7 @@ class ProviderOpenAIOfficial(Provider):
         system_prompt=None,
         tool_calls_result=None,
         model=None,
+        video_urls=None,
         tool_choice: Literal["auto", "required"] = "auto",
         request_max_retries: int | None = None,
         **kwargs,
@@ -1284,6 +1334,7 @@ class ProviderOpenAIOfficial(Provider):
             system_prompt,
             tool_calls_result,
             model=model,
+            video_urls=video_urls,
             **kwargs,
         )
         if func_tool and not func_tool.empty():
@@ -1370,6 +1421,7 @@ class ProviderOpenAIOfficial(Provider):
         image_urls: list[str] | None = None,
         audio_urls: list[str] | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
+        video_urls: list[str] | None = None,
     ) -> dict:
         """组装成符合 OpenAI 格式的 role 为 user 的消息段"""
 
@@ -1384,6 +1436,8 @@ class ProviderOpenAIOfficial(Provider):
             content_blocks.append({"type": "text", "text": "[Image]"})
         elif audio_urls:
             content_blocks.append({"type": "text", "text": "[Audio]"})
+        elif video_urls:
+            content_blocks.append({"type": "text", "text": "[Video]"})
         elif extra_user_content_parts:
             # 如果只有额外内容块，也需要添加占位文本
             content_blocks.append({"type": "text", "text": " "})
@@ -1403,6 +1457,10 @@ class ProviderOpenAIOfficial(Provider):
                     audio_part = await self._resolve_audio_part(part.audio_url.url)
                     if audio_part:
                         content_blocks.append(audio_part)
+                elif isinstance(part, VideoURLPart):
+                    video_part = await self._resolve_video_part(part.video_url.url)
+                    if video_part:
+                        content_blocks.append(video_part)
                 else:
                     raise ValueError(f"不支持的额外内容块类型: {type(part)}")
 
@@ -1419,12 +1477,19 @@ class ProviderOpenAIOfficial(Provider):
                 if audio_part:
                     content_blocks.append(audio_part)
 
+        if video_urls:
+            for video_ref in video_urls:
+                video_part = await self._resolve_video_part(video_ref)
+                if video_part:
+                    content_blocks.append(video_part)
+
         # 如果只有主文本且没有额外内容块和图片，返回简单格式以保持向后兼容
         if (
             text
             and not extra_user_content_parts
             and not image_urls
             and not audio_urls
+            and not video_urls
             and len(content_blocks) == 1
             and content_blocks[0]["type"] == "text"
         ):
