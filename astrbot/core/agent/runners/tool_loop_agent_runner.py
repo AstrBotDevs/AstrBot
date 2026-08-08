@@ -187,6 +187,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     def __init__(self, tool_image_cache: ToolImageCache) -> None:
         """Create a runner with its runtime-owned tool image cache."""
         self.tool_image_cache = tool_image_cache
+        # reset() replaces these sets for every run.  Initializing them here keeps
+        # the runner safe for focused internal consumers that exercise tool
+        # execution before a full agent reset.
+        self._inflight_operations: set[asyncio.Future[T.Any]] = set()
+        self._stop_cleanup_tasks: set[asyncio.Future[T.Any]] = set()
 
     def _get_persona_custom_error_message(self) -> str | None:
         """Read persona-level custom error message from event extras when available."""
