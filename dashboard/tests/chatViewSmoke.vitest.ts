@@ -28,8 +28,10 @@ const testState = vi.hoisted(() => ({
   sessionProjects: {} as Record<string, unknown>,
   currSessionId: '',
   getSessionsMock: vi.fn(),
+  newSessionMock: vi.fn(),
   getProjectsMock: vi.fn(),
   getProjectSessionsMock: vi.fn(),
+  addSessionToProjectMock: vi.fn(),
   chatApiUpdateSessionMock: vi.fn(),
   regenerateMessageMock: vi.fn(),
   inputSelection: {
@@ -73,7 +75,7 @@ vi.mock('@/composables/useSessions', () => ({
     sessions: ref(testState.sessions),
     currSessionId: ref(testState.currSessionId),
     getSessions: testState.getSessionsMock,
-    newSession: vi.fn(),
+    newSession: testState.newSessionMock,
     newChat: vi.fn(),
     deleteSession: vi.fn(),
     updateSessionTitle: vi.fn(),
@@ -88,7 +90,7 @@ vi.mock('@/composables/useProjects', () => ({
     createProject: vi.fn(),
     updateProject: vi.fn(),
     deleteProject: vi.fn(),
-    addSessionToProject: vi.fn(),
+    addSessionToProject: testState.addSessionToProjectMock,
     getProjectSessions: testState.getProjectSessionsMock,
   }),
 }));
@@ -208,13 +210,14 @@ vi.mock('@/components/chat/ProjectView.vue', () => ({
 
 vi.mock('@/components/chat/ChatInput.vue', () => ({
   default: {
-    props: ['placeholder'],
+    props: ['placeholder', 'prompt'],
     template:
-      '<div class="chat-input-stub" :data-placeholder="placeholder"></div>',
+      '<div class="chat-input-stub" :data-placeholder="placeholder"><input class="chat-input-draft" :value="prompt" @input="$emit(\'update:prompt\', $event.target.value)" /><button class="chat-input-send" @click="$emit(\'send\')">send</button></div>',
     setup(_props: unknown, { expose }: { expose: (value: unknown) => void }) {
       expose({
         getCurrentSelection: () => testState.inputSelection,
         focus: vi.fn(),
+        focusInput: vi.fn(),
       });
       return {};
     },
@@ -285,8 +288,10 @@ describe('Chat view smoke', () => {
     testState.sessionProjects = {};
     testState.currSessionId = '';
     testState.getSessionsMock.mockResolvedValue(undefined);
+    testState.newSessionMock.mockResolvedValue('session-new');
     testState.getProjectsMock.mockResolvedValue(undefined);
     testState.getProjectSessionsMock.mockResolvedValue([]);
+    testState.addSessionToProjectMock.mockResolvedValue(undefined);
     testState.chatApiUpdateSessionMock.mockResolvedValue(undefined);
     testState.regenerateMessageMock.mockResolvedValue(undefined);
     testState.inputSelection = {
@@ -335,6 +340,66 @@ describe('Chat view smoke', () => {
     expect(wrapper.find('.composer-shell .chat-input-stub').exists()).toBe(
       false,
     );
+  });
+
+  it('refreshes sessions only after associating a new project session', async () => {
+    const calls: string[] = [];
+    testState.projects = [
+      { project_id: 'project-1', title: 'Planning', emoji: 'P' },
+    ];
+    testState.selectedProjectId = 'project-1';
+    testState.newSessionMock.mockImplementation(async () => {
+      calls.push('new-session');
+      return 'session-new';
+    });
+    testState.addSessionToProjectMock.mockImplementation(async () => {
+      calls.push('associate-project');
+    });
+    testState.getProjectSessionsMock.mockImplementation(async () => {
+      calls.push('refresh-project');
+      return [];
+    });
+    testState.getSessionsMock.mockImplementation(async () => {
+      calls.push('refresh-ordinary');
+    });
+
+    const wrapper = mountChat();
+    await flushPromises();
+    calls.length = 0;
+
+    await wrapper
+      .find('.project-view-stub .chat-input-draft')
+      .setValue('Project task');
+    await wrapper.find('.project-view-stub .chat-input-send').trigger('click');
+    await flushPromises();
+
+    expect(calls).toEqual([
+      'new-session',
+      'associate-project',
+      'refresh-project',
+      'refresh-ordinary',
+    ]);
+  });
+
+  it('refreshes ordinary sessions after creating a non-project session', async () => {
+    const calls: string[] = [];
+    testState.newSessionMock.mockImplementation(async () => {
+      calls.push('new-session');
+      return 'session-new';
+    });
+    testState.getSessionsMock.mockImplementation(async () => {
+      calls.push('refresh-ordinary');
+    });
+
+    const wrapper = mountChat();
+    await flushPromises();
+    calls.length = 0;
+
+    await wrapper.find('.composer-shell .chat-input-draft').setValue('Hello');
+    await wrapper.find('.composer-shell .chat-input-send').trigger('click');
+    await flushPromises();
+
+    expect(calls).toEqual(['new-session', 'refresh-ordinary']);
   });
 
   it('opens the refs sidebar from the message list interaction path', async () => {

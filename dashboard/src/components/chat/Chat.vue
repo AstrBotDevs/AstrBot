@@ -1153,6 +1153,9 @@ async function sendCurrentMessage() {
         await loadProjectSessions(targetProjectId);
         selectedProjectId.value = null;
       }
+      // Refresh only after the project association completes. Otherwise the
+      // newly created project session briefly appears in the ordinary list.
+      await getSessions();
     }
 
     const text = draft.value.trim();
