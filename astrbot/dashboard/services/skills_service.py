@@ -255,14 +255,22 @@ class SkillsService:
             show_sandbox_path=False,
         )
         plugin_display_names = {}
+        active_plugin_root_names = set()
         for plugin in self.core_lifecycle.plugin_manager.context.get_all_stars():
             display_name = str(plugin.display_name or plugin.name or "").strip()
             for plugin_name in (plugin.name, plugin.root_dir_name):
                 if plugin_name:
                     plugin_display_names[str(plugin_name)] = display_name
+            if plugin.activated and plugin.root_dir_name:
+                active_plugin_root_names.add(str(plugin.root_dir_name))
 
         serialized_skills = []
         for skill in skills:
+            if (
+                skill.source_type == "plugin"
+                and skill.plugin_name not in active_plugin_root_names
+            ):
+                continue
             skill_data = dict(skill.__dict__)
             if skill.source_type == "plugin":
                 skill_data["plugin_display_name"] = plugin_display_names.get(
