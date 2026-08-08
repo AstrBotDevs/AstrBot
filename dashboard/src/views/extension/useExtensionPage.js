@@ -14,6 +14,7 @@ import {
 } from "@/utils/pluginSearch";
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { sortMarketPluginsByDownloads } from "./marketPluginSort.mjs";
 
 const buildFailedPluginItems = (raw) => {
   return Object.entries(raw || {}).map(([dirName, info]) => {
@@ -209,7 +210,7 @@ export const useExtensionPage = (initialTab = "installed") => {
   const marketSearch = ref("");
   const debouncedMarketSearch = ref("");
   const refreshingMarket = ref(false);
-  const sortBy = ref("default"); // default, stars, author, updated
+  const sortBy = ref("default"); // default, stars, downloads, author, updated
   const sortOrder = ref("desc"); // desc (降序) or asc (升序)
   const randomPluginNames = ref([]);
   const marketCategoryFilter = ref("all");
@@ -392,6 +393,9 @@ export const useExtensionPage = (initialTab = "installed") => {
         const starsB = b.stars ?? 0;
         return sortOrder.value === "desc" ? starsB - starsA : starsA - starsB;
       });
+    } else if (sortBy.value === "downloads") {
+      // 按下载量排序
+      plugins = sortMarketPluginsByDownloads(plugins, sortOrder.value);
     } else if (sortBy.value === "author") {
       // 按作者名字典序排序
       plugins.sort((a, b) => {
