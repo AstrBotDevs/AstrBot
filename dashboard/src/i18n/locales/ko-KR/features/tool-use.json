@@ -1,0 +1,188 @@
+{
+  "title": "함수 도구 관리",
+  "subtitle": "MCP 서버를 관리하고 사용 가능한 함수 도구를 확인합니다",
+  "tooltip": {
+    "info": "Function Calling과 MCP란?",
+    "marketplace": "커뮤니티에서 MCP 서버를 찾아보고 설치하세요",
+    "serverConfig": "MCP 서버(stdio) 설정은 다음 필드를 지원합니다:\ncommand: 명령어 이름(예: python 또는 uv)\nargs: 명령어 인자 배열(예: [\"run\", \"server.py\"])\nenv: 환경 변수 객체(예: {\"api_key\": \"abc\"})\ncwd: 작업 디렉터리 경로(예: /path/to/server)\nencoding: 출력 인코딩(기본값 utf-8)\nencoding_error_handler: 텍스트 인코딩 오류 처리기입니다. 기본값은 strict입니다.\n그 밖의 필드는 MCP 문서를 참조하세요\n⚠️ Docker로 AstrBot을 배포하는 경우, AstrBot이 마운트한 data 디렉터리에 MCP 서버를 설치했는지 확인하세요"
+  },
+  "tabs": {
+    "local": "로컬 서버",
+    "marketplace": "MCP 마켓플레이스"
+  },
+  "mcpServers": {
+    "title": "MCP 서버",
+    "description": "MCP 서버를 관리합니다",
+    "buttons": {
+      "refresh": "새로고침",
+      "add": "서버 추가",
+      "useTemplateStdio": "Stdio 템플릿",
+      "useTemplateStreamableHttp": "Streamable HTTP 템플릿",
+      "useTemplateSse": "SSE 템플릿",
+      "sync": "MCP 서버 동기화"
+    },
+    "empty": "사용 가능한 MCP 서버가 없습니다. 서버 추가를 클릭해 추가하세요",
+    "status": {
+      "noTools": "사용 가능한 도구 없음",
+      "availableTools": "사용 가능한 도구",
+      "configSummary": "설정: {keys}",
+      "noConfig": "설정된 항목 없음"
+    }
+  },
+  "functionTools": {
+    "title": "함수 도구",
+    "buttons": {
+      "view": "도구 보기"
+    },
+    "search": "함수 도구 검색",
+    "empty": "사용 가능한 함수 도구가 없습니다",
+    "description": "함수 설명",
+    "parameters": "매개변수 목록",
+    "noParameters": "이 도구에는 매개변수가 없습니다",
+    "filter": {
+      "showBuiltin": "빌트인 도구 표시"
+    },
+    "table": {
+      "paramName": "매개변수 이름",
+      "type": "유형",
+      "description": "설명",
+      "required": "필수",
+      "origin": "출처",
+      "originName": "출처 이름",
+      "readonly": "읽기 전용",
+      "permission": "권한",
+      "permissionAdmin": "관리자",
+      "permissionMember": "모든 사용자",
+      "permissionEveryone": "모든 사용자",
+      "permissionBuiltin": "시스템 빌트인",
+      "actions": "작업"
+    },
+    "configTags": {
+      "tooltipTitle": "이 도구는 다음 이유로 설정 파일 {config}에서 사용 중입니다:",
+      "conditions": {
+        "truthy": "{key}이(가) 사용 중임",
+        "equals": "{key} = {expected}",
+        "in": "{key}이(가) {expected}와(과) 일치함",
+        "fallback": "{key}이(가) 현재 {actual}임"
+      }
+    },
+    "summary": {
+      "total": "전체",
+      "active": "사용 중",
+      "inactive": "사용 안 함"
+    }
+  },
+  "marketplace": {
+    "title": "MCP 서버 마켓플레이스",
+    "search": "서버 검색",
+    "buttons": {
+      "refresh": "새로고침",
+      "detail": "상세 정보",
+      "import": "가져오기"
+    },
+    "loading": "MCP 서버 마켓플레이스를 불러오는 중...",
+    "empty": "사용 가능한 MCP 서버가 없습니다",
+    "status": {
+      "availableTools": "사용 가능한 도구 ({count})",
+      "noToolsInfo": "사용 가능한 도구 정보가 없습니다"
+    }
+  },
+  "dialogs": {
+    "addServer": {
+      "title": "MCP 서버 추가",
+      "editTitle": "MCP 서버 편집",
+      "fields": {
+        "name": "서버 이름",
+        "nameRequired": "이름은 필수입니다",
+        "enable": "서버 사용",
+        "config": "서버 설정"
+      },
+      "errors": {
+        "configEmpty": "설정은 비워둘 수 없습니다",
+        "jsonFormat": "JSON 형식 오류: {error}",
+        "jsonParse": "JSON 파싱 오류: {error}"
+      },
+      "buttons": {
+        "cancel": "취소",
+        "save": "저장",
+        "testConnection": "연결 테스트",
+        "sync": "동기화"
+      },
+      "tips": {
+        "timeoutConfig": "도구 호출 제한 시간은 설정 페이지에서 별도로 구성하세요",
+        "transportRecommendation": "Streamable HTTP 또는 SSE 모드를 우선 사용하세요. Stdio 모드는 AstrBot 호스트에서 로컬 프로세스를 시작하므로 신뢰할 수 있는 MCP 서버에만 사용해야 합니다."
+      }
+    },
+    "serverDetail": {
+      "title": "서버 상세 정보",
+      "installConfig": "설치 설정",
+      "availableTools": "사용 가능한 도구",
+      "buttons": {
+        "close": "닫기",
+        "importConfig": "설정 가져오기"
+      }
+    },
+    "confirmDelete": "서버 {name}을(를) 삭제하시겠습니까?"
+  },
+  "syncProvider": {
+    "title": "MCP 서버 동기화",
+    "subtitle": "공급자로부터 MCP 서버 설정을 로컬로 동기화합니다",
+    "steps": {
+      "selectProvider": "1단계: 공급자 선택",
+      "configureAuth": "2단계: 인증 설정",
+      "syncServers": "3단계: 서버 동기화"
+    },
+    "providers": {
+      "modelscope": "ModelScope",
+      "description": "ModelScope는 다양한 머신러닝 및 AI 서비스를 위한 MCP 서버를 제공하는 오픈 모델 커뮤니티입니다"
+    },
+    "fields": {
+      "provider": "공급자 선택",
+      "accessToken": "액세스 토큰",
+      "tokenRequired": "액세스 토큰은 필수입니다",
+      "tokenHint": "ModelScope 액세스 토큰을 입력하세요"
+    },
+    "buttons": {
+      "cancel": "취소",
+      "previous": "이전",
+      "next": "다음",
+      "sync": "동기화 시작",
+      "getToken": "토큰 발급받기"
+    },
+    "status": {
+      "selectProvider": "MCP 서버 공급자를 선택하세요",
+      "enterToken": "계속하려면 액세스 토큰을 입력하세요",
+      "readyToSync": "서버 설정을 동기화할 준비가 되었습니다"
+    },
+    "messages": {
+      "syncSuccess": "MCP 서버 동기화에 성공했습니다!",
+      "syncError": "동기화 실패: {error}",
+      "tokenHelp": "ModelScope 액세스 토큰은 어떻게 발급받나요? 오른쪽 버튼을 클릭해 안내를 확인하세요"
+    }
+  },
+  "messages": {
+    "getServersError": "MCP 서버 목록을 가져오지 못했습니다: {error}",
+    "getToolsError": "함수 도구 목록을 가져오지 못했습니다: {error}",
+    "saveSuccess": "저장 성공!",
+    "saveError": "저장 실패: {error}",
+    "deleteSuccess": "삭제 성공!",
+    "deleteError": "삭제 실패: {error}",
+    "updateSuccess": "업데이트 성공!",
+    "updateError": "업데이트 실패: {error}",
+    "getMarketError": "MCP 마켓플레이스 서버 목록을 가져오지 못했습니다: {error}",
+    "importError": {
+      "noConfig": "이 서버에는 사용 가능한 설정이 없습니다",
+      "invalidFormat": "서버 설정 형식이 올바르지 않습니다",
+      "failed": "설정 가져오기에 실패했습니다: {error}"
+    },
+    "configParseError": "설정 파싱 오류: {error}",
+    "noAvailableConfig": "사용 가능한 설정이 없습니다",
+    "toggleToolSuccess": "도구 상태를 전환했습니다!",
+    "toggleToolReadonly": "빌트인 도구는 읽기 전용이며 사용 여부를 전환할 수 없습니다.",
+    "toggleToolError": "도구 상태 전환에 실패했습니다: {error}",
+    "updateToolPermissionSuccess": "{name}의 권한이 업데이트되었습니다",
+    "updateToolPermissionFailed": "도구 권한 업데이트에 실패했습니다",
+    "updateToolPermissionBuiltin": "빌트인 도구는 도구별 권한 설정을 지원하지 않습니다.",
+    "testError": "연결 테스트 실패: {error}"
+  }
+}
