@@ -694,6 +694,12 @@ async def test_stats_emit_update_after_each_completed_llm_request(
     ]
     assert stats_snapshots[0]["token_usage"]["input_other"] == 100
     assert stats_snapshots[1]["token_usage"]["input_other"] == 300
+    # The first snapshot comes from the intermediate model call that chose a
+    # tool; the second comes from the final model response. Both are complete
+    # model-call snapshots, not an end-of-run-only summary.
+    assert stats_snapshots[0]["end_time"] >= stats_snapshots[0]["start_time"]
+    assert stats_snapshots[1]["end_time"] >= stats_snapshots[1]["start_time"]
+    assert stats_snapshots[1]["end_time"] >= stats_snapshots[0]["end_time"]
 
     runner.stats.token_usage.input_other = 999
     assert stats_snapshots[0]["token_usage"]["input_other"] == 100

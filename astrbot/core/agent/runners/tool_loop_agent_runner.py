@@ -1010,6 +1010,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_resp_result = llm_response
 
             self._record_final_response_usage(llm_response)
+            # Agent statistics are serialized immediately below. Record the
+            # completed model-call boundary first so intermediate tool-loop
+            # updates and the final update carry a meaningful duration.
+            self.stats.end_time = time.time()
             yield AgentResponse(
                 type="agent_stats",
                 data=AgentResponseData(
