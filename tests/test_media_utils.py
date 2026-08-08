@@ -400,6 +400,34 @@ async def test_media_resolver_accepts_unpadded_base64_payloads(tmp_path, monkeyp
 
 
 @pytest.mark.asyncio
+async def test_ensure_wav_converts_non_wav_bytes_with_wav_suffix(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    source_path = tmp_path / "voice.wav"
+    source_path.write_bytes(b"#!AMR\n" + b"\x00" * 64)
+
+    class _Process:
+        returncode = 0
+
+        async def communicate(self):
+            return b"", b""
+
+    async def fake_create_subprocess_exec(*args, **_kwargs):
+        Path(args[-1]).write_bytes(b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 16)
+        return _Process()
+
+    monkeypatch.setattr(
+        media_utils.asyncio,
+        "create_subprocess_exec",
+        fake_create_subprocess_exec,
+    )
+
+    resolved_path = await media_utils.ensure_wav(str(source_path))
+
+    assert resolved_path != str(source_path)
+    assert Path(resolved_path).read_bytes().startswith(b"RIFF")
+
+
+@pytest.mark.asyncio
 async def test_media_resolver_cleans_materialized_file_when_audio_conversion_fails(
     tmp_path, monkeypatch
 ):
