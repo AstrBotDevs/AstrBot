@@ -68,6 +68,12 @@ Additionally, the OneBot v11 platform (QQ personal accounts, etc.) also supports
 
 In AstrBot, message chains are represented as lists of type `List[BaseMessageComponent]`.
 
+#### QQ system-face model context
+
+For inbound `Face` segments from OneBot v11 and NapCat, AstrBot adds readable QQ system-face semantics to the component context sent to the model. For example, `Face(id=111)` is rendered as `[QQ Face: 可怜 (id: 111)]`. Known system faces include their names; unknown or malformed IDs retain the ID and are rendered as `unknown` rather than guessed or discarded.
+
+This enrichment covers the current message, quoted messages, forwarded messages, and group-chat context, and is also passed to built-in third-party Agent Runners that accept text prompts only. It does not modify `event.message_str`, the original `Face` component, or outbound messages. Plugins that need ID-based handling can continue to inspect `Face.id` directly.
+
 ## Commands
 
 ![message-event-simple-command](https://files.astrbot.app/docs/en/dev/star/guides/message-event-simple-command.svg)

@@ -6,6 +6,7 @@ from typing import Any, TypedDict
 from astrbot.core.message.components import (
     At,
     AtAll,
+    Face,
     File,
     Forward,
     Image,
@@ -15,6 +16,7 @@ from astrbot.core.message.components import (
     Reply,
     Video,
 )
+from astrbot.core.message.qq_face import format_qq_face
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
@@ -134,6 +136,8 @@ def _extract_text_from_component_chain(
             parts.append("@all")
         elif isinstance(seg, Image):
             parts.append("[Image]")
+        elif isinstance(seg, Face):
+            parts.append(format_qq_face(seg.id))
         elif isinstance(seg, Video):
             parts.append("[Video]")
         elif isinstance(seg, File):
@@ -289,7 +293,7 @@ def _parse_simple_onebot_segment(seg_type: str, seg_data: dict[Any, Any]) -> str
         target = seg_data.get("name") or seg_data.get("qq")
         return f"@{target}" if target is not None else None
     if seg_type == "face":
-        return f"[Face:{seg_data.get('id', '')}]"
+        return format_qq_face(seg_data.get("id"))
     if seg_type == "mface":
         summary = seg_data.get("summary")
         return summary if isinstance(summary, str) else "[Market Face]"

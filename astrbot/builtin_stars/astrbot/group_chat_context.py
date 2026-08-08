@@ -18,6 +18,7 @@ from astrbot.api.message_components import (
     Record,
     Reply,
     Video,
+    format_qq_face,
 )
 from astrbot.api.platform import MessageType
 from astrbot.api.provider import Provider, ProviderRequest
@@ -226,15 +227,19 @@ class GroupChatContext:
                     parts.insert(1, "⚠️[DIRECTED AT YOU] ")
                 parts.append(f" [At: {comp.name}]")
             elif isinstance(comp, Reply):
-                if comp.message_str:
+                if comp.chain:
+                    chain_desc = _describe_chain(comp.chain)
+                    parts.append(
+                        f" [Quote({comp.sender_nickname}: {_truncate_reply_text(chain_desc)})]"
+                    )
+                elif comp.message_str:
                     parts.append(
                         f" [Quote({comp.sender_nickname}: {_truncate_reply_text(comp.message_str)})]"
                     )
-                elif comp.chain:
-                    chain_desc = _describe_chain(comp.chain)
-                    parts.append(f" [Quote({comp.sender_nickname}: {chain_desc})]")
                 else:
                     parts.append(" [Quote]")
+            elif isinstance(comp, Face):
+                parts.append(f" {format_qq_face(comp.id)}")
 
         return "".join(parts)
 
@@ -264,7 +269,7 @@ def _describe_chain(chain: list) -> str:
         elif isinstance(c, AtAll):
             desc.append("[At: All]")
         elif isinstance(c, Face):
-            desc.append(f"[Sticker: {getattr(c, 'id', '')}]")
+            desc.append(format_qq_face(getattr(c, "id", None)))
         elif isinstance(c, Reply):
             desc.append("[Quote]")
         else:

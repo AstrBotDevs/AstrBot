@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from astrbot.core.message.components import Image, Plain, Reply
+from astrbot.core.message.components import Face, Image, Plain, Reply
 from astrbot.core.utils.quoted_message.settings import QuotedMessageParserSettings
 from astrbot.core.utils.quoted_message_parser import (
     extract_quoted_message_images,
@@ -165,6 +165,33 @@ async def test_extract_quoted_message_text_from_reply_chain():
     event = _make_event(reply)
     text = await extract_quoted_message_text(event)
     assert text == "quoted content"
+
+
+@pytest.mark.asyncio
+async def test_extract_quoted_message_text_renders_qq_face_semantics():
+    reply = Reply(id="1", chain=[Face(id=111)], message_str="")
+    event = _make_event(reply)
+
+    text = await extract_quoted_message_text(event)
+
+    assert text == "[QQ Face: 可怜 (id: 111)]"
+
+
+@pytest.mark.asyncio
+async def test_extract_quoted_message_text_renders_raw_onebot_face_semantics():
+    reply = Reply(id="face-message", chain=None, message_str="")
+    event = _make_event(
+        reply,
+        responses={
+            ("get_msg", "face-message"): {
+                "data": {"message": [{"type": "face", "data": {"id": "111"}}]}
+            }
+        },
+    )
+
+    text = await extract_quoted_message_text(event)
+
+    assert text == "[QQ Face: 可怜 (id: 111)]"
 
 
 @pytest.mark.asyncio

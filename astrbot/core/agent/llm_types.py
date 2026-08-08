@@ -73,6 +73,8 @@ class ProviderRequest:
     """Audio URLs or local paths."""
     extra_user_content_parts: list[ContentPart] = field(default_factory=list)
     """Additional user content parts appended after the prompt."""
+    message_component_context: str = ""
+    """Rendered non-plain current-message context for prompt-only runners."""
     func_tool: ToolSet | None = None
     """Available function tools."""
     contexts: list[dict] = field(default_factory=list)

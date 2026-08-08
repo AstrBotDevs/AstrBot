@@ -329,7 +329,7 @@ class TestGetMessageOutline:
             session_id="session123",
         )
         outline = event.get_message_outline()
-        assert "[表情:123]" in outline
+        assert "[QQ Face: NO (id: 123)]" in outline
 
     def test_outline_with_forward(self, platform_meta, astrbot_message):
         """Test outline with Forward component."""

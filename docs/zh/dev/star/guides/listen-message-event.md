@@ -68,6 +68,12 @@ class AstrBotMessage:
 
 在 AstrBot 中，消息链表示为 `List[BaseMessageComponent]` 类型的列表。
 
+#### QQ 系统表情的模型上下文
+
+对 OneBot v11 与 NapCat 入站的 `Face` 消息段，AstrBot 会在发送给模型的组件上下文中附加可读的 QQ 系统表情语义，例如 `Face(id=111)` 会显示为 `[QQ Face: 可怜 (id: 111)]`。已知系统表情会显示名称；未识别或异常的 ID 会保留 ID 并显示为 `unknown`，不会被猜测或丢弃。
+
+这项补全覆盖当前消息、引用消息、合并转发和群聊上下文，也会传给仅接受文本 prompt 的内置第三方 Agent Runner。它不会修改 `event.message_str`、原始 `Face` 组件或出站消息；插件如需按编号处理表情，仍可直接检查 `Face.id`。
+
 ## 指令
 
 ![message-event-simple-command](https://files.astrbot.app/docs/zh/dev/star/guides/message-event-simple-command.svg)

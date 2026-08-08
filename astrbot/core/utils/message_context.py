@@ -35,6 +35,7 @@ from astrbot.core.message.components import (
     Video,
     Xml,
 )
+from astrbot.core.message.qq_face import format_qq_face
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 from .quoted_message.chain_parser import OneBotPayloadParser
@@ -116,7 +117,7 @@ def _render_metadata_component(component: BaseMessageComponent) -> str:
     if isinstance(component, MFace):
         return component.summary or "[Market Face]"
     if isinstance(component, Face):
-        return f"[Face: {component.id}]"
+        return format_qq_face(component.id)
     if isinstance(component, Poke):
         return f"[Poke: {component.id}]"
     if isinstance(component, OnlineFile):

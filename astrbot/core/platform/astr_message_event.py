@@ -42,6 +42,7 @@ from astrbot.core.message.components import (
     Xml,
 )
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
+from astrbot.core.message.qq_face import format_qq_face
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.metrics import MetricsSink
 from astrbot.core.utils.task_utils import create_tracked_task
@@ -258,7 +259,7 @@ class AstrMessageEvent(abc.ABC):
             elif isinstance(i, Image):
                 parts.append("[图片]")
             elif isinstance(i, Face):
-                parts.append(f"[表情:{i.id}]")
+                parts.append(format_qq_face(i.id))
             elif isinstance(i, MFace):
                 parts.append(f"[商城表情:{i.summary}]")
             elif isinstance(i, At):

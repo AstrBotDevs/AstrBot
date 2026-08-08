@@ -17,7 +17,11 @@ from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
 )
 from astrbot.core.agent.runners.dify.dify_agent_runner import DifyAgentRunner
 from astrbot.core.astr_agent_hooks import MainAgentHooks
-from astrbot.core.astr_main_agent import MainAgentBuildConfig, prepare_event_attachments
+from astrbot.core.astr_main_agent import (
+    MainAgentBuildConfig,
+    append_message_component_context_to_prompt,
+    prepare_event_attachments,
+)
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -342,15 +346,17 @@ class ThirdPartyAgentSubStage:
         req.session_id = event.unified_msg_origin
         req.prompt = event.message_str[len(provider_wake_prefix) :]
         settings = self.conf.get("provider_settings", {})
+        build_config = MainAgentBuildConfig(
+            tool_call_timeout=int(settings.get("tool_call_timeout", 120)),
+            provider_settings=settings,
+        )
         await prepare_event_attachments(
             event,
             req,
-            MainAgentBuildConfig(
-                tool_call_timeout=int(settings.get("tool_call_timeout", 120)),
-                provider_settings=settings,
-            ),
+            build_config,
             self.ctx.execution_context,
         )
+        await append_message_component_context_to_prompt(event, req, build_config)
 
         if (
             not req.prompt

@@ -1600,10 +1600,11 @@ async def _append_message_component_context(
     )
     rendered = await renderer.render_event_components()
     if rendered.text:
+        req.message_component_context = (
+            f"<Message Components>\n{rendered.text}\n</Message Components>"
+        )
         req.extra_user_content_parts.append(
-            TextPart(
-                text=(f"<Message Components>\n{rendered.text}\n</Message Components>")
-            )
+            TextPart(text=req.message_component_context)
         )
 
     for image_ref in rendered.image_refs:
@@ -1792,6 +1793,48 @@ async def prepare_event_attachments(
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
     req.audio_urls = normalize_and_dedupe_strings(req.audio_urls)
     req._attachments_prepared = True
+
+
+async def append_message_component_context_to_prompt(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    config: MainAgentBuildConfig,
+) -> None:
+    """Inline safe message semantics for runners limited to a text prompt.
+
+    Local providers consume ``extra_user_content_parts`` directly. Third-party
+    Agent runners accept only ``ProviderRequest.prompt``, so this deliberately
+    promotes only rendered message metadata and quoted-message text. Attachment
+    paths and unrelated request-scoped reminders remain out of the prompt.
+    """
+    contexts = [req.message_component_context] if req.message_component_context else []
+    settings = _get_quoted_message_parser_settings(config.provider_settings)
+
+    for component in event.message_obj.message:
+        if not isinstance(component, Reply):
+            continue
+        try:
+            quoted_text = await extract_quoted_message_text(
+                event,
+                component,
+                settings=settings,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to render quoted message context for third-party runner: %s",
+                type(exc).__name__,
+            )
+            continue
+        if quoted_text:
+            contexts.append(f"<Quoted Message>\n{quoted_text}\n</Quoted Message>")
+
+    if not contexts:
+        return
+
+    context_text = "\n\n".join(contexts)
+    req.prompt = f"{req.prompt}\n\n{context_text}" if req.prompt else context_text
 
 
 def _create_main_runner_reset(

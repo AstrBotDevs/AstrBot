@@ -5,6 +5,7 @@ import pytest
 from astrbot.core import astr_main_agent as ama
 from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.message.components import (
+    Face,
     File,
     Forward,
     Json,
@@ -152,6 +153,29 @@ async def test_message_context_renders_embedded_components_and_rich_messages():
     assert "Mock Sender: embedded text" in (rendered.text or "")
     assert '[JSON]\n{"mock": true}' in (rendered.text or "")
     assert client.forward_requests == []
+
+
+@pytest.mark.asyncio
+async def test_message_context_renders_qq_face_semantics_for_direct_and_forwarded_faces():
+    client = _NapCatContextClient(
+        {
+            "forward-face": {
+                "data": {
+                    "messages": [
+                        {
+                            "sender": {"nickname": "Mock Sender"},
+                            "message": [{"type": "face", "data": {"id": "111"}}],
+                        }
+                    ]
+                }
+            }
+        }
+    )
+    event = _make_event([Face(id=111), Forward(id="forward-face")], client)
+
+    rendered = await MessageContextRenderer(event).render_event_components()
+
+    assert (rendered.text or "").count("[QQ Face: 可怜 (id: 111)]") == 2
 
 
 @pytest.mark.asyncio

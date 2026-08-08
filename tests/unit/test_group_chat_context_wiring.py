@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.api.message_components import Plain
+from astrbot.api.message_components import Face, Plain, Reply
 from astrbot.api.provider import Provider
 from astrbot.builtin_stars.astrbot.group_chat_context import GroupChatContext
 from astrbot.builtin_stars.astrbot.main import Main
@@ -65,6 +65,41 @@ async def test_group_context_image_caption_normalizes_missing_completion_text():
     )
 
     assert caption == ""
+
+
+@pytest.mark.asyncio
+async def test_group_context_renders_qq_face_semantics() -> None:
+    context = GroupChatContext(SimpleNamespace())
+    event = SimpleNamespace(
+        message_obj=SimpleNamespace(sender=SimpleNamespace(nickname="tester")),
+        get_messages=lambda: [Plain("hello"), Face(id=111)],
+        get_self_id=lambda: "",
+    )
+
+    formatted = await context._format_message(event, {})
+
+    assert "[QQ Face: 可怜 (id: 111)]" in formatted
+
+
+@pytest.mark.asyncio
+async def test_group_context_prefers_structured_quoted_face_context() -> None:
+    context = GroupChatContext(SimpleNamespace())
+    event = SimpleNamespace(
+        message_obj=SimpleNamespace(sender=SimpleNamespace(nickname="tester")),
+        get_messages=lambda: [
+            Reply(
+                id="quoted-face",
+                message_str="[Face:111]",
+                chain=[Face(id=111)],
+            )
+        ],
+        get_self_id=lambda: "",
+    )
+
+    formatted = await context._format_message(event, {})
+
+    assert "[QQ Face: 可怜 (id: 111)]" in formatted
+    assert "[Face:111]" not in formatted
 
 
 @pytest.mark.asyncio

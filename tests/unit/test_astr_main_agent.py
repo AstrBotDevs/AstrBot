@@ -9,10 +9,10 @@ import pytest
 from astrbot.core import astr_main_agent as ama
 from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.mcp_client import MCPTool
-from astrbot.core.agent.message import Message, dump_messages_with_checkpoints
+from astrbot.core.agent.message import Message, TextPart, dump_messages_with_checkpoints
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.conversation_mgr import Conversation
-from astrbot.core.message.components import File, Image, Plain, Reply, Video
+from astrbot.core.message.components import Face, File, Image, Plain, Reply, Video
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
@@ -130,6 +130,40 @@ async def test_prepare_event_attachments_is_idempotent(mock_event, mock_context)
     append_direct.assert_awaited_once_with(mock_event, req, config)
     append_quoted.assert_not_awaited()
     assert req._attachments_prepared is True
+
+
+@pytest.mark.asyncio
+async def test_prepare_event_attachments_adds_qq_face_context(mock_event, mock_context):
+    mock_event.message_obj.message = [Face(id=111)]
+    req = ProviderRequest()
+    config = ama.MainAgentBuildConfig(tool_call_timeout=120)
+
+    await ama.prepare_event_attachments(mock_event, req, config, mock_context)
+
+    expected = "<Message Components>\n[QQ Face: 可怜 (id: 111)]\n</Message Components>"
+    assert req.message_component_context == expected
+    assert [part.text for part in req.extra_user_content_parts] == [expected]
+
+
+@pytest.mark.asyncio
+async def test_prompt_only_component_context_excludes_unrelated_attachment_paths():
+    event = SimpleNamespace(message_obj=SimpleNamespace(message=[]))
+    req = ProviderRequest(
+        prompt="hello",
+        message_component_context="<Message Components>\n[QQ Face: 可怜 (id: 111)]\n</Message Components>",
+        extra_user_content_parts=[
+            TextPart(text="[File Attachment: path /private/file]")
+        ],
+    )
+
+    await ama.append_message_component_context_to_prompt(
+        event,
+        req,
+        ama.MainAgentBuildConfig(tool_call_timeout=120),
+    )
+
+    assert "[QQ Face: 可怜 (id: 111)]" in (req.prompt or "")
+    assert "/private/file" not in (req.prompt or "")
 
 
 @pytest.mark.asyncio

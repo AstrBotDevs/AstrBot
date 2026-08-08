@@ -7,7 +7,7 @@ import pytest
 from astrbot.core.agent.llm_types import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.agent.message import CheckpointData, Message
 from astrbot.core.assistant_history import build_pending_assistant_history
-from astrbot.core.message.components import Image, Record, Reply
+from astrbot.core.message.components import Face, Image, Record, Reply
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -1782,6 +1782,87 @@ async def test_third_party_process_builds_media_only_request_and_uses_non_stream
     set_persona_error.assert_called_once_with(event, None)
     assert runner.close.await_count == 1
     assert metric_upload.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_third_party_process_inlines_qq_face_component_and_quote_context(
+    monkeypatch,
+):
+    stage = third_party.ThirdPartyAgentSubStage.__new__(
+        third_party.ThirdPartyAgentSubStage
+    )
+    stage.prov_id = "runner-1"
+    stage.runner_type = "dify"
+    stage.streaming_response = False
+    stage.unsupported_streaming_strategy = "ignore"
+    stage.stream_consumption_close_timeout_sec = 1
+    stage.ctx = _pipeline_context(SimpleNamespace())
+    stage.conf = {"provider_settings": {}}
+    event = FakeInternalProcessEvent(
+        message_str="askhello",
+        message_components=[
+            Face(id=111),
+            Reply(id="quoted-face", chain=[Face(id=111)], message_str=""),
+        ],
+    )
+    metric_upload = AsyncMock()
+    runner = FakeThirdPartyRunner()
+
+    class FakeDifyRunner:
+        def __new__(cls):
+            return runner
+
+        @classmethod
+        def __class_getitem__(cls, _item):
+            return cls
+
+    async def fake_non_streaming_response(**_kwargs):
+        yield
+
+    stage.conf["provider"] = [{"id": "runner-1", "name": "Runner One"}]
+    stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
+    monkeypatch.setattr(
+        third_party,
+        "set_persona_custom_error_message_on_event",
+        MagicMock(),
+    )
+    request_hook = AsyncMock(return_value=False)
+    monkeypatch.setattr(third_party, "call_event_hook", request_hook)
+    monkeypatch.setattr(third_party, "DifyAgentRunner", FakeDifyRunner)
+    monkeypatch.setattr(
+        third_party,
+        "AstrAgentContext",
+        lambda context, event: SimpleNamespace(context=context, event=event),
+    )
+    monkeypatch.setattr(
+        third_party,
+        "AgentContextWrapper",
+        lambda context, tool_call_timeout: SimpleNamespace(
+            context=context,
+            tool_call_timeout=tool_call_timeout,
+        ),
+    )
+    monkeypatch.setattr(
+        stage, "_handle_non_streaming_response", fake_non_streaming_response
+    )
+    _set_metrics_upload(stage, metric_upload)
+
+    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+
+    assert yielded == [None]
+    req = runner.reset.await_args.kwargs["request"]
+    assert req.prompt == (
+        "hello\n\n"
+        "<Message Components>\n"
+        "[QQ Face: 可怜 (id: 111)]\n"
+        "</Message Components>\n\n"
+        "<Quoted Message>\n"
+        "[QQ Face: 可怜 (id: 111)]\n"
+        "</Quoted Message>"
+    )
+    assert request_hook.await_args.args[2] is req
+    assert event.message_str == "askhello"
+    assert event.message_obj.message[0].id == 111
 
 
 @pytest.mark.asyncio
