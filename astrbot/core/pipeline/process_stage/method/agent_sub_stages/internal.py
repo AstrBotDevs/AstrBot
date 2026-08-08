@@ -6,6 +6,9 @@ from collections.abc import AsyncGenerator
 from dataclasses import replace
 
 from astrbot.core import db_helper, logger
+from astrbot.core.agent.context.config import (
+    DEFAULT_FALLBACK_MAX_CONTEXT_TOKENS,
+)
 from astrbot.core.agent.message import (
     CheckpointData,
     CheckpointMessageSegment,
@@ -35,6 +38,10 @@ from astrbot.core.provider.entities import (
     ProviderRequest,
 )
 from astrbot.core.star.star_handler import EventType
+from astrbot.core.utils.config_number import (
+    coerce_float_config,
+    coerce_int_config,
+)
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
 
@@ -94,6 +101,22 @@ class InternalAgentSubStage(Stage):
         self.context_limit_reached_strategy: str = settings.get(
             "context_limit_reached_strategy", "truncate_by_turns"
         )
+        self.compression_threshold_mode: str = settings.get(
+            "compression_threshold_mode", "percentage"
+        )
+        self.compression_threshold_percentage = coerce_float_config(
+            settings.get("compression_threshold_percentage", 0.82),
+            default=0.82,
+            min_value=0.01,
+            max_value=1.0,
+            field_name="compression_threshold_percentage",
+        )
+        self.compression_max_output_tokens = coerce_int_config(
+            settings.get("compression_max_output_tokens", 0),
+            default=0,
+            min_value=0,
+            field_name="compression_max_output_tokens",
+        )
         self.llm_compress_instruction: str = settings.get(
             "llm_compress_instruction", ""
         )
@@ -110,8 +133,13 @@ class InternalAgentSubStage(Stage):
         )
         if self.dequeue_context_length <= 0:
             self.dequeue_context_length = 1
-        self.fallback_max_context_tokens: int = settings.get(
-            "fallback_max_context_tokens", 128000
+        self.fallback_max_context_tokens = coerce_int_config(
+            settings.get(
+                "fallback_max_context_tokens", DEFAULT_FALLBACK_MAX_CONTEXT_TOKENS
+            ),
+            default=DEFAULT_FALLBACK_MAX_CONTEXT_TOKENS,
+            min_value=1,
+            field_name="fallback_max_context_tokens",
         )
 
         self.llm_safety_mode = settings.get("llm_safety_mode", True)
@@ -137,6 +165,9 @@ class InternalAgentSubStage(Stage):
             file_extract_prov=self.file_extract_prov,
             file_extract_msh_api_key=self.file_extract_msh_api_key,
             context_limit_reached_strategy=self.context_limit_reached_strategy,
+            compression_threshold_mode=self.compression_threshold_mode,
+            compression_threshold_percentage=self.compression_threshold_percentage,
+            compression_max_output_tokens=self.compression_max_output_tokens,
             llm_compress_instruction=self.llm_compress_instruction,
             llm_compress_keep_recent_ratio=self.llm_compress_keep_recent_ratio,
             llm_compress_provider_id=self.llm_compress_provider_id,
