@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 265 icons */
+/* Auto-generated MDI subset – 266 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -450,6 +450,10 @@
 
 .mdi-file-music-outline::before {
   content: "\F0E2A";
+}
+
+.mdi-file-outline::before {
+  content: "\F0224";
 }
 
 .mdi-file-pdf-box::before {

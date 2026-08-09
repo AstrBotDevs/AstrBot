@@ -171,4 +171,37 @@ export const chatApi = {
       openApiV1.removeChatProjectSession({ path: { session_id: sessionId } }),
     );
   },
+  listProjectWorkspaceFiles(projectId: string, path = '') {
+    return typed<{
+      path: string;
+      entries: Array<{
+        name: string;
+        path: string;
+        type: 'directory' | 'file';
+        size: number;
+        readable: boolean;
+      }>;
+    }>(
+      openApiV1.listChatProjectWorkspaceFiles({
+        path: { project_id: projectId },
+        query: { path },
+      }),
+    );
+  },
+  previewProjectWorkspaceFile(projectId: string, path: string) {
+    return typed<{
+      path: string;
+      content?: string;
+      size: number;
+      binary: boolean;
+    }>(
+      openApiV1.getChatProjectWorkspaceFile({
+        path: { project_id: projectId },
+        query: { path },
+      }),
+    );
+  },
+  downloadProjectWorkspaceFileUrl(projectId: string, path: string) {
+    return `/api/v1/chat/projects/${encodeURIComponent(projectId)}/workspace/file/download?path=${encodeURIComponent(path)}`;
+  },
 };

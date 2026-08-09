@@ -25,4 +25,6 @@ last_synced:
     force. The fetched upstream/master head was
     30e20318cbaaa2e1ba57f3e0eee265d9ee98115c. Historical replay is explicitly
     authorized after the marker advanced; e80e01c77693355cf7ef42a607ea89e9093b9b2b
-    is manually adapted without regressing the shared marker.
+    is manually adapted without regressing the shared marker. The replay also
+    includes 73ecc394deb2f6fc37fd41a82f5bb247e4781b13 for secure ChatUI project
+    workspace browsing and generated OpenAPI client updates.

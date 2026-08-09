@@ -1,4 +1,11 @@
+from pathlib import Path
+
 from astrbot.core.db.protocols import ChatProjectSessionStore
+from astrbot.core.project_workspace import (
+    WORKSPACE_PREVIEW_MAX_BYTES,
+    ProjectWorkspaceError,
+    ProjectWorkspaceResolver,
+)
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 
 
@@ -9,6 +16,7 @@ class ChatUIProjectServiceError(Exception):
 class ChatUIProjectService:
     def __init__(self, db: ChatProjectSessionStore) -> None:
         self.db = db
+        self.workspace_resolver = ProjectWorkspaceResolver()
 
     async def create_project(self, username: str, data: object) -> dict:
         payload = self._as_payload(data)
@@ -115,6 +123,101 @@ class ChatUIProjectService:
         project_id: str | None,
     ) -> list[dict]:
         return await self.get_project_sessions(username, project_id)
+
+    async def list_workspace_files(
+        self,
+        username: str,
+        project_id: str,
+        relative_path: str = "",
+    ) -> dict:
+        """List direct children of an owned project workspace directory."""
+        project = await self._get_owned_project(username, project_id)
+        try:
+            root = self.workspace_resolver.root_for(project.creator, project.project_id)
+            if not root.exists() and not relative_path:
+                return {"path": "", "entries": []}
+            _, directory = self.workspace_resolver.resolve_directory(
+                project.creator,
+                project.project_id,
+                relative_path,
+            )
+            entries = []
+            for entry in self.workspace_resolver.iter_entries(directory):
+                try:
+                    stat = entry.lstat()
+                except OSError:
+                    continue
+                if entry.is_symlink() or not (entry.is_dir() or entry.is_file()):
+                    continue
+                if entry.is_file() and stat.st_nlink > 1:
+                    continue
+                entries.append(
+                    {
+                        "name": entry.name,
+                        "path": entry.relative_to(root).as_posix(),
+                        "type": "directory" if entry.is_dir() else "file",
+                        "size": 0 if entry.is_dir() else stat.st_size,
+                        "readable": entry.is_file()
+                        and stat.st_size <= WORKSPACE_PREVIEW_MAX_BYTES,
+                    }
+                )
+            return {
+                "path": directory.relative_to(root).as_posix()
+                if directory != root
+                else "",
+                "entries": entries,
+            }
+        except ProjectWorkspaceError as exc:
+            raise ChatUIProjectServiceError(str(exc)) from exc
+
+    async def get_workspace_file(
+        self,
+        username: str,
+        project_id: str,
+        relative_path: str,
+    ) -> dict:
+        """Return UTF-8 preview text or metadata for a binary file."""
+        _, target = await self.get_workspace_file_location(
+            username, project_id, relative_path
+        )
+        try:
+            with self.workspace_resolver.open_for_read(target) as handle:
+                content_bytes = handle.read(WORKSPACE_PREVIEW_MAX_BYTES + 1)
+        except ProjectWorkspaceError as exc:
+            raise ChatUIProjectServiceError(str(exc)) from exc
+        if len(content_bytes) > WORKSPACE_PREVIEW_MAX_BYTES:
+            raise ChatUIProjectServiceError("Workspace file is too large to preview")
+        try:
+            content = content_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            return {
+                "path": relative_path,
+                "size": len(content_bytes),
+                "binary": True,
+            }
+        return {
+            "path": Path(relative_path.replace("\\", "/")).as_posix(),
+            "content": content,
+            "size": len(content_bytes),
+            "binary": False,
+        }
+
+    async def get_workspace_file_location(
+        self,
+        username: str,
+        project_id: str,
+        relative_path: str,
+    ) -> tuple[Path, Path]:
+        """Resolve and revalidate a downloadable workspace file."""
+        project = await self._get_owned_project(username, project_id)
+        try:
+            return self.workspace_resolver.resolve_file(
+                project.creator,
+                project.project_id,
+                relative_path,
+            )
+        except ProjectWorkspaceError as exc:
+            raise ChatUIProjectServiceError(str(exc)) from exc
 
     async def _get_owned_project(self, username: str, project_id: str):
         project = await self.db.get_chatui_project_by_id(project_id)

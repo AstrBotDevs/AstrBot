@@ -139,6 +139,8 @@ import type {
   DownloadAttachmentResponses,
   DownloadBackupData,
   DownloadBackupResponses,
+  DownloadChatProjectWorkspaceFileData,
+  DownloadChatProjectWorkspaceFileResponses,
   DownloadOpenApiFileData,
   DownloadOpenApiFileResponses,
   DownloadSkillData,
@@ -168,6 +170,8 @@ import type {
   GetChangelogResponses,
   GetChatProjectData,
   GetChatProjectResponses,
+  GetChatProjectWorkspaceFileData,
+  GetChatProjectWorkspaceFileResponses,
   GetChatSessionData,
   GetChatSessionResponses,
   GetChatThreadData,
@@ -304,6 +308,8 @@ import type {
   ListChatProjectSessionsData,
   ListChatProjectSessionsResponses,
   ListChatProjectsResponses,
+  ListChatProjectWorkspaceFilesData,
+  ListChatProjectWorkspaceFilesResponses,
   ListChatSessionsData,
   ListChatSessionsResponses,
   ListCommandConflictsData,
@@ -2015,6 +2021,71 @@ export const addChatProjectSession = <ThrowOnError extends boolean = false>(
     responseType: 'json',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/chat/projects/{project_id}/sessions/{session_id}',
+    ...options,
+  });
+
+/**
+ * List files in a ChatUI project workspace directory
+ */
+export const listChatProjectWorkspaceFiles = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<ListChatProjectWorkspaceFilesData, ThrowOnError>,
+): RequestResult<
+  ListChatProjectWorkspaceFilesResponses,
+  unknown,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    ListChatProjectWorkspaceFilesResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/chat/projects/{project_id}/workspace/files',
+    ...options,
+  });
+
+/**
+ * Preview a ChatUI project workspace file
+ */
+export const getChatProjectWorkspaceFile = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<GetChatProjectWorkspaceFileData, ThrowOnError>,
+): RequestResult<GetChatProjectWorkspaceFileResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).get<
+    GetChatProjectWorkspaceFileResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/chat/projects/{project_id}/workspace/file',
+    ...options,
+  });
+
+/**
+ * Download a ChatUI project workspace file
+ */
+export const downloadChatProjectWorkspaceFile = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<DownloadChatProjectWorkspaceFileData, ThrowOnError>,
+): RequestResult<
+  DownloadChatProjectWorkspaceFileResponses,
+  unknown,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    DownloadChatProjectWorkspaceFileResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'blob',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/chat/projects/{project_id}/workspace/file/download',
     ...options,
   });
 

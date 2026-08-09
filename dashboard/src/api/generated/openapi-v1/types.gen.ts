@@ -2335,6 +2335,69 @@ export type AddChatProjectSessionResponses = {
 export type AddChatProjectSessionResponse =
   AddChatProjectSessionResponses[keyof AddChatProjectSessionResponses];
 
+export type ListChatProjectWorkspaceFilesData = {
+  body?: never;
+  path: {
+    project_id: string;
+  };
+  query?: {
+    path?: string;
+  };
+  url: '/api/v1/chat/projects/{project_id}/workspace/files';
+};
+
+export type ListChatProjectWorkspaceFilesResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type ListChatProjectWorkspaceFilesResponse =
+  ListChatProjectWorkspaceFilesResponses[keyof ListChatProjectWorkspaceFilesResponses];
+
+export type GetChatProjectWorkspaceFileData = {
+  body?: never;
+  path: {
+    project_id: string;
+  };
+  query: {
+    path: string;
+  };
+  url: '/api/v1/chat/projects/{project_id}/workspace/file';
+};
+
+export type GetChatProjectWorkspaceFileResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type GetChatProjectWorkspaceFileResponse =
+  GetChatProjectWorkspaceFileResponses[keyof GetChatProjectWorkspaceFileResponses];
+
+export type DownloadChatProjectWorkspaceFileData = {
+  body?: never;
+  path: {
+    project_id: string;
+  };
+  query: {
+    path: string;
+  };
+  url: '/api/v1/chat/projects/{project_id}/workspace/file/download';
+};
+
+export type DownloadChatProjectWorkspaceFileResponses = {
+  /**
+   * Workspace file bytes
+   */
+  200: Blob | File;
+};
+
+export type DownloadChatProjectWorkspaceFileResponse =
+  DownloadChatProjectWorkspaceFileResponses[keyof DownloadChatProjectWorkspaceFileResponses];
+
 export type RemoveChatProjectSessionData = {
   body?: never;
   path: {

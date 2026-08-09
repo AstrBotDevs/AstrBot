@@ -65,11 +65,57 @@
     <div class="project-input-slot">
       <slot></slot>
     </div>
+
+    <v-card flat class="project-workspace-card">
+      <div class="workspace-toolbar">
+        <v-icon size="18">mdi-folder-open-outline</v-icon>
+        <span class="workspace-path">{{ workspacePath || '/' }}</span>
+        <v-spacer />
+        <v-btn
+          icon="mdi-refresh"
+          size="small"
+          variant="text"
+          @click="loadWorkspace"
+        />
+      </div>
+      <v-list density="compact" class="workspace-list">
+        <v-list-item
+          v-for="entry in workspaceEntries"
+          :key="entry.path"
+          :title="entry.name"
+          :subtitle="
+            entry.type === 'file' ? formatSize(entry.size) : 'Directory'
+          "
+          @click="openWorkspaceEntry(entry)"
+        >
+          <template #prepend>
+            <v-icon>{{
+              entry.type === 'directory'
+                ? 'mdi-folder-outline'
+                : 'mdi-file-outline'
+            }}</v-icon>
+          </template>
+        </v-list-item>
+        <v-list-item
+          v-if="!workspaceEntries.length"
+          title="No workspace files"
+        />
+      </v-list>
+      <pre
+        v-if="workspacePreview && !workspacePreview.binary"
+        class="workspace-preview"
+        >{{ workspacePreview.content }}</pre>
+      <div v-else-if="workspacePreview?.binary" class="workspace-binary">
+        Binary file ({{ formatSize(workspacePreview.size) }})
+      </div>
+    </v-card>
   </div>
 </template>
 
 <script setup lang="ts">
+import { onMounted, ref, watch } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
+import { chatApi } from '@/api/v1/chat';
 import type { Project } from '@/components/chat/ProjectList.vue';
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
 
@@ -84,7 +130,7 @@ interface Props {
   sessions: Session[];
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
 
 const emit = defineEmits<{
   selectSession: [sessionId: string];
@@ -93,6 +139,68 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n('features/chat');
+
+interface WorkspaceEntry {
+  name: string;
+  path: string;
+  type: 'directory' | 'file';
+  size: number;
+  readable: boolean;
+}
+
+const workspacePath = ref('');
+const workspaceEntries = ref<WorkspaceEntry[]>([]);
+const workspacePreview = ref<{
+  content?: string;
+  size: number;
+  binary: boolean;
+} | null>(null);
+
+async function loadWorkspace() {
+  if (!props.project?.project_id) return;
+  const response = await chatApi.listProjectWorkspaceFiles(
+    props.project.project_id,
+    workspacePath.value,
+  );
+  if (response.data.status === 'ok') {
+    workspaceEntries.value = response.data.data?.entries || [];
+  }
+}
+
+async function openWorkspaceEntry(entry: WorkspaceEntry) {
+  if (!props.project?.project_id) return;
+  workspacePreview.value = null;
+  if (entry.type === 'directory') {
+    workspacePath.value = entry.path;
+    await loadWorkspace();
+    return;
+  }
+  if (entry.readable) {
+    const response = await chatApi.previewProjectWorkspaceFile(
+      props.project.project_id,
+      entry.path,
+    );
+    if (response.data.status === 'ok') {
+      workspacePreview.value = response.data.data || null;
+    }
+  }
+}
+
+function formatSize(size: number): string {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KiB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MiB`;
+}
+
+watch(
+  () => props.project?.project_id,
+  () => {
+    workspacePath.value = '';
+    workspacePreview.value = null;
+    void loadWorkspace();
+  },
+);
+onMounted(() => void loadWorkspace());
 
 const confirmDialog = useConfirmDialog();
 
@@ -203,6 +311,44 @@ async function handleDeleteSession(session: Session) {
 
 .fade-in {
   animation: fadeIn 0.3s ease-in-out;
+}
+
+.project-workspace-card {
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: 680px;
+  margin-top: 16px;
+}
+
+.workspace-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.workspace-path {
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.workspace-list {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.workspace-preview {
+  max-height: 260px;
+  overflow: auto;
+  padding: 12px;
+  white-space: pre-wrap;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.workspace-binary {
+  padding: 12px;
+  opacity: 0.7;
 }
 
 @keyframes fadeIn {
