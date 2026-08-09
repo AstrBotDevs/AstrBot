@@ -185,7 +185,8 @@ class ShellSessionTool(FunctionTool):
 
     name: str = "astrbot_shell_session"
     description: str = (
-        "List, poll, write to, interrupt, or terminate managed shell sessions "
+        "List, poll, write raw text or complete lines to, interrupt, or terminate "
+        "managed shell sessions "
         "owned by the current conversation."
     )
     parameters: dict = field(
@@ -194,7 +195,14 @@ class ShellSessionTool(FunctionTool):
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["list", "poll", "write", "interrupt", "terminate"],
+                    "enum": [
+                        "list",
+                        "poll",
+                        "write",
+                        "write_line",
+                        "interrupt",
+                        "terminate",
+                    ],
                 },
                 "session_id": {"type": "string"},
                 "chars": {"type": "string", "default": ""},
@@ -256,11 +264,11 @@ class ShellSessionTool(FunctionTool):
                         max_output_chars=max_output_chars,
                         sender_id=sender_id,
                     )
-                elif action == "write":
+                elif action in {"write", "write_line"}:
                     result = await shell.write_session(
                         owner_id=owner_id,
                         session_id=session_id,
-                        chars=chars,
+                        chars=f"{chars}\n" if action == "write_line" else chars,
                         sender_id=sender_id,
                     )
                 elif action == "interrupt":

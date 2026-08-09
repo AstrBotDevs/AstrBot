@@ -553,3 +553,10 @@ async def test_modelscope_sync_enables_only_synced_servers(monkeypatch):
             },
         )
     ]
+
+
+def test_shell_session_schema_supports_line_writes():
+    from astrbot.core.tools.computer_tools import ShellSessionTool
+
+    tool = ShellSessionTool()
+    assert "write_line" in tool.parameters["properties"]["action"]["enum"]

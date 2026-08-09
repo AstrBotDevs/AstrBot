@@ -82,6 +82,7 @@ from astrbot.core.tools.computer_tools import (
     PythonTool,
     RollbackSkillReleaseTool,
     RunBrowserSkillTool,
+    ShellSessionTool,
     SyncSkillReleaseTool,
     normalize_umo_for_workspace,
 )
@@ -433,6 +434,7 @@ def _apply_local_env_tools(
         req.func_tool = ToolSet()
     tool_mgr = plugin_context.get_llm_tool_manager()
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ShellSessionTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(LocalPythonTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileReadTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
@@ -452,7 +454,9 @@ def _build_local_mode_prompt() -> str:
     return (
         "You have access to the host local environment and can execute shell commands and Python code. "
         f"Current operating system: {system_name}. "
-        f"{shell_hint}"
+        f"{shell_hint} "
+        "Long-running commands return managed sessions; use astrbot_shell_session "
+        "with write_line for line-oriented programs."
     )
 
 
