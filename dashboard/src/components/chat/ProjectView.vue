@@ -69,12 +69,15 @@
     <v-card flat class="project-workspace-card">
       <div class="workspace-toolbar">
         <v-icon size="18">mdi-folder-open-outline</v-icon>
+        <span class="workspace-title">{{ tm('workspace.title') }}</span>
         <span class="workspace-path">{{ workspacePath || '/' }}</span>
         <v-spacer />
         <v-btn
           icon="mdi-refresh"
           size="small"
           variant="text"
+          :aria-label="tm('workspace.refresh')"
+          :title="tm('workspace.refresh')"
           @click="loadWorkspace"
         />
       </div>
@@ -84,7 +87,9 @@
           :key="entry.path"
           :title="entry.name"
           :subtitle="
-            entry.type === 'file' ? formatSize(entry.size) : 'Directory'
+            entry.type === 'file'
+              ? formatSize(entry.size)
+              : tm('workspace.directory')
           "
           @click="openWorkspaceEntry(entry)"
         >
@@ -98,7 +103,7 @@
         </v-list-item>
         <v-list-item
           v-if="!workspaceEntries.length"
-          title="No workspace files"
+          :title="tm('workspace.empty')"
         />
       </v-list>
       <pre
@@ -106,7 +111,11 @@
         class="workspace-preview"
         >{{ workspacePreview.content }}</pre>
       <div v-else-if="workspacePreview?.binary" class="workspace-binary">
-        Binary file ({{ formatSize(workspacePreview.size) }})
+        {{
+          tm('workspace.binaryFile', {
+            size: formatSize(workspacePreview.size),
+          })
+        }}
       </div>
     </v-card>
   </div>

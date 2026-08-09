@@ -135,6 +135,13 @@
     "noSessions": "该项目暂无对话",
     "confirmDelete": "确定要删除项目 \"{title}\" 吗？项目中的对话不会被删除。"
   },
+  "workspace": {
+    "title": "工作区",
+    "refresh": "刷新工作区",
+    "directory": "目录",
+    "empty": "工作区暂无文件",
+    "binaryFile": "二进制文件（{size}）"
+  },
   "time": {
     "today": "今天",
     "yesterday": "昨天"

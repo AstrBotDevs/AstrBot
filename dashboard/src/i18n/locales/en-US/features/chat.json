@@ -135,6 +135,13 @@
     "noSessions": "No conversations in this project",
     "confirmDelete": "Are you sure you want to delete project \"{title}\"? Conversations in this project will not be deleted."
   },
+  "workspace": {
+    "title": "Workspace",
+    "refresh": "Refresh workspace",
+    "directory": "Directory",
+    "empty": "No workspace files",
+    "binaryFile": "Binary file ({size})"
+  },
   "time": {
     "today": "Today",
     "yesterday": "Yesterday"
