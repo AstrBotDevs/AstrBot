@@ -5,27 +5,41 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: runtime
+      args:
+        ASTRBOT_FEATURES: '${ASTRBOT_FEATURES:-full}'
     image: astrbot:local
-    container_name: astrbot
     restart: always
-    security_opt:
-      - no-new-privileges:true
+    # Computer tools and Docker-backed integrations intentionally require full
+    # container capabilities for this deployment profile.
+    privileged: true
+    init: true
     ports:
-      - '6185:6185' # AstrBot WebUI
-      - '6199:6199' # Optional. OneBot v11 Napcat Websocket Port
+      - '${ASTRBOT_BIND_ADDRESS:-127.0.0.1}:6185:6185' # AstrBot WebUI
+      - '${ASTRBOT_BIND_ADDRESS:-127.0.0.1}:6199:6199' # Optional. OneBot v11 Napcat Websocket Port
     environment:
-      - TZ=Asia/Shanghai
+      TZ: '${TZ:-Asia/Shanghai}'
+      ASTRBOT_DASHBOARD_HOST: '0.0.0.0'
     volumes:
       - ./data:/AstrBot/data
-      # - /etc/timezone:/etc/timezone:ro
-      - /etc/localtime:/etc/localtime:ro
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:6185/api/v1/openapi.json', timeout=3)
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   docs:
     build:
       context: .
       dockerfile: Dockerfile.docs
     image: astrbot-docs:local
-    container_name: astrbotdocs
     restart: always
     security_opt:
       - no-new-privileges:true
@@ -33,4 +47,4 @@ services:
     tmpfs:
       - /tmp:mode=1777
     ports:
-      - '6186:8080' # AstrBot documentation
+      - '${DOCS_BIND_ADDRESS:-127.0.0.1}:6186:8080' # AstrBot documentation

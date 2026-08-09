@@ -1,4 +1,4 @@
-# One-click deployment: AstrBot (built natively from this repo) + the latest official NapCat.
+# One-click deployment: AstrBot (built natively from this repo) + NapCat.
 #
 # Usage (after `git clone` of this repo):
 #   docker compose -f compose-with-napcat.yml up -d --build
@@ -17,26 +17,43 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: runtime
+      args:
+        ASTRBOT_FEATURES: '${ASTRBOT_FEATURES:-full}'
     image: astrbot:local
-    container_name: astrbot
     restart: always
+    # Computer tools and Docker-backed integrations intentionally require full
+    # container capabilities for this deployment profile.
+    privileged: true
+    init: true
     ports:
-      - '6185:6185' # AstrBot WebUI
+      - '${ASTRBOT_BIND_ADDRESS:-127.0.0.1}:6185:6185' # AstrBot WebUI
     environment:
-      - TZ=Asia/Shanghai
+      TZ: '${TZ:-Asia/Shanghai}'
+      ASTRBOT_DASHBOARD_HOST: '0.0.0.0'
     volumes:
       - ./data:/AstrBot/data
       - /var/run/docker.sock:/var/run/docker.sock
-      # - /etc/localtime:/etc/localtime:ro
     networks:
       - astrbot_network
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:6185/api/v1/openapi.json', timeout=3)
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   docs:
     build:
       context: .
       dockerfile: Dockerfile.docs
     image: astrbot-docs:local
-    container_name: astrbotdocs
     restart: always
     security_opt:
       - no-new-privileges:true
@@ -44,30 +61,32 @@ services:
     tmpfs:
       - /tmp:mode=1777
     ports:
-      - '6186:8080' # AstrBot documentation
+      - '${DOCS_BIND_ADDRESS:-127.0.0.1}:6186:8080' # AstrBot documentation
     networks:
       - astrbot_network
 
   napcat:
-    image: mlikiowa/napcat-docker:latest
-    container_name: napcat
+    image: mlikiowa/napcat-docker:latest@sha256:02ddf329894887552bc6207a41e471bcf51ef0f04751804905aeb8cf1f737d4f
     restart: always
+    # NapCat's desktop/QQ runtime requires the same full-capability profile.
+    privileged: true
+    init: true
     environment:
       - NAPCAT_UID=${NAPCAT_UID:-1000}
       - NAPCAT_GID=${NAPCAT_GID:-1000}
       - MODE=astrbot
     ports:
-      - '6099:6099' # NapCat WebUI
+      - '${NAPCAT_BIND_ADDRESS:-127.0.0.1}:6099:6099' # NapCat WebUI
     volumes:
       - ./data:/AstrBot/data
       - ./napcat/config:/app/napcat/config
       - ./ntqq:/app/.config/QQ
     depends_on:
-      - astrbot
+      astrbot:
+        condition: service_healthy
     networks:
       - astrbot_network
 
 networks:
   astrbot_network:
-    name: astrbot_network
     driver: bridge

@@ -1,6 +1,20 @@
 # syntax=docker/dockerfile:1.7
-FROM python:3.14.6-slim
+# Runtime feature groups are selected with the BuildKit argument
+# ASTRBOT_FEATURES. `full` expands to all groups; `minimal` keeps only the
+# Python application and core shell utilities. Comma-separated group names may
+# be used for a tailored image:
+#   browser  Chromium and Playwright system libraries
+#   documents  Pandoc, Poppler, and TeX
+#   media  FFmpeg, ImageMagick, Ghostscript, and codecs
+#   ocr  Tesseract language data
+#   fonts  fontconfig and runtime font families
+#   node  Node.js, npm, npx, and pnpm
+#   docker  Docker CLI and Compose plugin
+ARG ASTRBOT_FEATURES=full
+FROM python:3.14.6-slim@sha256:7bec7ddcddeff7975d6ba9b4be7dd6f6b2f55e7491539145e2978f7f97ce9144 AS builder
 WORKDIR /AstrBot
+
+ARG ASTRBOT_FEATURES
 
 # Enable pipefail so failures in install pipes abort the build.
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -326,10 +340,14 @@ RUN cp -a /tmp/docker-local/. /root/
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,target=/root/.cache/uv,sharing=locked \
-    uv pip install "playwright==${PLAYWRIGHT_VERSION}" --no-cache-dir --system \
-    && PLAYWRIGHT_NODEJS_PATH=/usr/local/bin/node \
-       PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 \
-       playwright install --with-deps chromium
+    if [[ "${ASTRBOT_FEATURES}" == "full" || ",${ASTRBOT_FEATURES}," == *,browser,* ]]; then \
+        uv pip install "playwright==${PLAYWRIGHT_VERSION}" --no-cache-dir --system \
+        && PLAYWRIGHT_NODEJS_PATH=/usr/local/bin/node \
+           PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 \
+           playwright install --with-deps chromium; \
+    else \
+        mkdir -p /ms-playwright; \
+    fi
 
 RUN arch="$(dpkg --print-architecture)" \
     && case "${arch}" in \
@@ -379,6 +397,114 @@ if [ -S /var/run/docker.sock ]; then
   export DOCKER_HOST="${DOCKER_HOST:-unix:///var/run/docker.sock}"
 fi
 EOF
+
+FROM builder AS runtime-assets
+
+ARG ASTRBOT_FEATURES
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN set -eux; \
+    features="${ASTRBOT_FEATURES}"; \
+    case "${features}" in \
+        full) features="browser,documents,media,ocr,fonts,node,docker" ;; \
+        minimal) features="" ;; \
+    esac; \
+    for feature in ${features//,/ }; do \
+        case "${feature}" in \
+            browser|documents|media|ocr|fonts|node|docker) ;; \
+            *) echo "Unknown AstrBot feature: ${feature}" >&2; exit 1 ;; \
+        esac; \
+    done; \
+    mkdir -p \
+        /opt/astrbot/runtime-assets/bin \
+        /opt/astrbot/runtime-assets/docker-config/cli-plugins \
+        /opt/astrbot/runtime-assets/ms-playwright \
+        /opt/astrbot/runtime-assets/nvm; \
+    install -m 0755 /usr/local/bin/uv /opt/astrbot/runtime-assets/bin/uv; \
+    install -m 0755 /usr/local/bin/playwright /opt/astrbot/runtime-assets/bin/playwright; \
+    if [[ ",${features}," == *,node,* ]]; then \
+        cp -a /root/.nvm/. /opt/astrbot/runtime-assets/nvm/; \
+    fi; \
+    if [[ ",${features}," == *,docker,* ]]; then \
+        install -m 0755 /usr/bin/docker /opt/astrbot/runtime-assets/bin/docker; \
+        install -m 0755 \
+            /usr/libexec/docker/cli-plugins/docker-compose \
+            /opt/astrbot/runtime-assets/docker-config/cli-plugins/docker-compose; \
+    fi; \
+    if [[ ",${features}," == *,browser,* ]]; then \
+        cp -a /ms-playwright/. /opt/astrbot/runtime-assets/ms-playwright/; \
+    fi
+
+FROM builder AS dev
+
+EXPOSE 6185
+
+CMD ["python", "main.py"]
+
+# Keep the development image above separate from the production runtime. The
+# runtime copies only the application, installed Python packages, browser
+# assets, and the Node/uv tools needed by runtime MCP integrations.
+FROM python:3.14.6-slim@sha256:7bec7ddcddeff7975d6ba9b4be7dd6f6b2f55e7491539145e2978f7f97ce9144 AS runtime
+
+WORKDIR /AstrBot
+
+ARG ASTRBOT_FEATURES
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/astrbot/runtime-assets/ms-playwright \
+    DOCKER_CONFIG=/opt/astrbot/runtime-assets/docker-config \
+    NVM_DIR=/opt/astrbot/runtime-assets/nvm \
+    PATH=/opt/astrbot/runtime-assets/bin:/opt/astrbot/runtime-assets/nvm/versions/node/v26.5.0/bin:/usr/local/bin:${PATH} \
+    UV_LINK_MODE=copy \
+    UV_INSTALL_DIR=/usr/local/bin \
+    HOME=/root
+
+COPY --from=runtime-assets /opt/astrbot/runtime-assets/ /opt/astrbot/runtime-assets/
+
+COPY --from=builder /usr/local/lib/python3.14/site-packages/ \
+    /usr/local/lib/python3.14/site-packages/
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    features="${ASTRBOT_FEATURES}" \
+    && case "${features}" in \
+        full) features="browser,documents,media,ocr,fonts,node,docker" ;; \
+        minimal) features="" ;; \
+    esac \
+    && for feature in ${features//,/ }; do \
+        case "${feature}" in \
+            browser|documents|media|ocr|fonts|node|docker) ;; \
+            *) echo "Unknown AstrBot feature: ${feature}" >&2; exit 1 ;; \
+        esac; \
+    done \
+    && apt_packages="bash ca-certificates curl file git jq openssh-client procps psmisc ripgrep sqlite3 unzip wget xxd zip" \
+    && if [[ ",${features}," == *,media,* ]]; then \
+        apt_packages="${apt_packages} ffmpeg ghostscript imagemagick libavcodec-extra libmagic1"; \
+    fi \
+    && if [[ ",${features}," == *,documents,* ]]; then \
+        apt_packages="${apt_packages} lmodern pandoc poppler-utils texlive-fonts-recommended texlive-lang-chinese texlive-latex-extra texlive-latex-recommended texlive-pictures texlive-xetex"; \
+    fi \
+    && if [[ ",${features}," == *,ocr,* ]]; then \
+        apt_packages="${apt_packages} tesseract-ocr tesseract-ocr-chi-sim tesseract-ocr-eng"; \
+    fi \
+    && if [[ ",${features}," == *,fonts,* ]]; then \
+        apt_packages="${apt_packages} fontconfig fonts-croscore fonts-crosextra-caladea fonts-crosextra-carlito fonts-dejavu-core fonts-dejavu-extra fonts-freefont-otf fonts-firacode fonts-inter fonts-liberation fonts-liberation2 fonts-noto-cjk fonts-noto-color-emoji fonts-noto-core fonts-noto-extra fonts-noto-mono fonts-roboto fonts-texgyre fonts-texgyre-math fonts-wqy-microhei fonts-wqy-zenhei"; \
+    fi \
+    && read -r -a apt_package_array <<< "${apt_packages}" \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends "${apt_package_array[@]}" \
+    && if [[ ",${features}," == *,browser,* ]]; then \
+        playwright install-deps chromium; \
+    fi \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /AstrBot/astrbot /AstrBot/astrbot
+COPY --from=builder /AstrBot/main.py /AstrBot/runtime_bootstrap.py \
+    /AstrBot/pyproject.toml /AstrBot/requirements.txt /AstrBot/.python-version /AstrBot/
 
 EXPOSE 6185
 
