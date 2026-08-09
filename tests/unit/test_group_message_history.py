@@ -2,7 +2,9 @@ import pytest
 
 from astrbot.core.message.components import File, Image, Plain
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
+from astrbot.core.tools.message_tools import GetGroupMessageHistoryTool
 
 
 @pytest.mark.asyncio
@@ -86,3 +88,114 @@ async def test_group_history_retention_is_atomic_and_excludes_non_group_rows(tem
         "first",
         "second",
     }
+
+
+@pytest.mark.asyncio
+async def test_group_history_tool_scopes_paginates_and_disambiguates_senders(temp_db):
+    manager = PlatformMessageHistoryManager(temp_db)
+    group_id = "telegram:GroupMessage:group-1"
+    for text, sender_id in (
+        ("oldest", "alice-1"),
+        ("middle", "alice-2"),
+        ("newest", "bob-1"),
+    ):
+        await manager.insert_message_chain(
+            platform_id="telegram",
+            user_id=group_id,
+            message_chain=MessageChain([Plain(text)]),
+            role="user",
+            is_group=True,
+            sender_id=sender_id,
+            sender_name="Alice" if sender_id.startswith("alice") else "Bob",
+        )
+
+    extras = {"_group_history_current_id": None}
+    event = type(
+        "Event",
+        (),
+        {
+            "unified_msg_origin": group_id,
+            "get_message_type": lambda self: MessageType.GROUP_MESSAGE,
+            "get_platform_id": lambda self: "telegram",
+            "get_extra": lambda self, key, default=None: extras.get(key, default),
+        },
+    )()
+    context = type(
+        "Context",
+        (),
+        {
+            "context": type(
+                "Runtime",
+                (),
+                {
+                    "event": event,
+                    "context": type(
+                        "Services",
+                        (),
+                        {
+                            "get_config": lambda self, umo: {
+                                "provider_ltm_settings": {
+                                    "group_message_history_enable": True
+                                }
+                            },
+                            "message_history_manager": manager,
+                        },
+                    )(),
+                },
+            )()
+        },
+    )()
+
+    result = await GetGroupMessageHistoryTool().call(
+        context,
+        limit=2,
+        sender="alice",
+    )
+    assert "Alice [alice-2" in result
+    assert "middle" in result
+    assert "newest" not in result
+    assert "has_more=false" in result
+    assert "untrusted data" in result
+
+    inserted_rows = await manager.get_group("telegram", group_id, limit=20)
+    extras["_group_history_current_id"] = inserted_rows[-1].id
+    result = await GetGroupMessageHistoryTool().call(context, limit=20)
+    assert "newest" not in result
+
+
+@pytest.mark.asyncio
+async def test_group_history_tool_rejects_non_group_and_disabled_context(temp_db):
+    manager = PlatformMessageHistoryManager(temp_db)
+    event = type(
+        "Event",
+        (),
+        {
+            "unified_msg_origin": "telegram:PrivateMessage:user-1",
+            "get_message_type": lambda self: MessageType.FRIEND_MESSAGE,
+        },
+    )()
+    context = type(
+        "Context",
+        (),
+        {
+            "context": type(
+                "Runtime",
+                (),
+                {
+                    "event": event,
+                    "context": type(
+                        "Services", (), {"message_history_manager": manager}
+                    )(),
+                },
+            )()
+        },
+    )()
+    tool = GetGroupMessageHistoryTool()
+    assert "only available in group chats" in await tool.call(context)
+
+    event.get_message_type = lambda: MessageType.GROUP_MESSAGE
+    context.context.context.get_config = lambda umo: {
+        "provider_ltm_settings": {"group_message_history_enable": False}
+    }
+    event.get_platform_id = lambda: "telegram"
+    assert "disabled" in await tool.call(context)

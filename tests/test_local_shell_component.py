@@ -361,3 +361,121 @@ def test_managed_shell_owner_isolation_and_write(tmp_path):
         await shell.shutdown_sessions()
 
     asyncio.run(scenario())
+
+
+def test_managed_shell_rejects_cwd_outside_allowed_workspace(tmp_path):
+    async def scenario() -> None:
+        shell = LocalShellComponent()
+        with pytest.raises(PermissionError, match="outside the allowed workspace"):
+            await shell.exec_managed(
+                "pwd",
+                owner_id="owner",
+                cwd=str(tmp_path / "outside"),
+                allowed_root=str(tmp_path / "allowed"),
+                yield_time_ms=0,
+            )
+
+    asyncio.run(scenario())
+
+
+def test_managed_shell_enforces_session_count_and_shutdown(tmp_path):
+    async def scenario() -> None:
+        shell = LocalShellComponent(max_sessions=1, session_ttl_seconds=60)
+        first = await shell.exec_managed(
+            _python_command("import time; time.sleep(10)"),
+            owner_id="owner",
+            cwd=str(tmp_path),
+            allowed_root=str(tmp_path),
+            yield_time_ms=0,
+        )
+        assert first["status"] == "running"
+        with pytest.raises(ValueError, match="session limit"):
+            await shell.exec_managed(
+                "echo second",
+                owner_id="owner",
+                cwd=str(tmp_path),
+                allowed_root=str(tmp_path),
+                yield_time_ms=0,
+            )
+        await shell.shutdown_sessions()
+        assert (await shell.list_sessions("owner"))["sessions"] == []
+
+    asyncio.run(scenario())
+
+
+def test_managed_shell_timeout_marks_session_and_terminates(tmp_path):
+    async def scenario() -> None:
+        shell = LocalShellComponent(session_ttl_seconds=60)
+        result = await shell.exec_managed(
+            _python_command("import time; time.sleep(5)"),
+            owner_id="owner",
+            cwd=str(tmp_path),
+            allowed_root=str(tmp_path),
+            timeout=1,
+            yield_time_ms=0,
+        )
+        polled = await shell.poll_session(
+            owner_id="owner",
+            session_id=result["session_id"],
+            yield_time_ms=3_000,
+        )
+        assert polled["status"] == "timed_out"
+        await shell.shutdown_sessions()
+
+    asyncio.run(scenario())
+
+
+def test_managed_shell_output_is_bounded(tmp_path):
+    async def scenario() -> None:
+        shell = LocalShellComponent(
+            max_output_bytes=32,
+            session_ttl_seconds=60,
+        )
+        result = await shell.exec_managed(
+            _python_command("print('x' * 100, flush=True)"),
+            owner_id="owner",
+            cwd=str(tmp_path),
+            allowed_root=str(tmp_path),
+            yield_time_ms=5_000,
+            max_output_chars=1000,
+        )
+        assert len(result["stdout"].encode()) <= 32
+        # The reader can terminate the process at the quota boundary, but a
+        # short-lived command may win the race and exit normally.  The quota
+        # invariant is the bounded output, not one particular exit status.
+        assert result["status"] in {"completed", "terminated", "failed"}
+        await shell.shutdown_sessions()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.asyncio
+async def test_managed_shell_poll_propagates_cancellation_and_shutdowns(tmp_path):
+    shell = LocalShellComponent(session_ttl_seconds=60)
+    started = await shell.exec_managed(
+        _python_command("import time; time.sleep(10)"),
+        owner_id="owner",
+        runtime_id="runtime-a",
+        sender_id="sender-a",
+        cwd=str(tmp_path),
+        allowed_root=str(tmp_path),
+        yield_time_ms=0,
+    )
+    poll_task = asyncio.create_task(
+        shell.poll_session(
+            owner_id="owner",
+            runtime_id="runtime-a",
+            sender_id="sender-a",
+            session_id=started["session_id"],
+            yield_time_ms=30_000,
+        )
+    )
+    await asyncio.sleep(0)
+    poll_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await poll_task
+
+    await shell.shutdown_sessions()
+    assert (await shell.list_sessions("owner", runtime_id="runtime-a"))[
+        "sessions"
+    ] == []

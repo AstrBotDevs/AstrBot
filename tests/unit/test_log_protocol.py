@@ -47,6 +47,33 @@ def test_log_queue_emits_stable_protocol_and_redacts_sensitive_data():
     assert entry["event_id"]
 
 
+def test_log_enricher_normalizes_unknown_fields_and_bounds_summary():
+    broker = LogBroker()
+    handler = LogQueueHandler(broker)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    record = logging.LogRecord(
+        "test",
+        logging.INFO,
+        __file__,
+        10,
+        "ordinary message",
+        (),
+        None,
+    )
+    record.category = "not-a-category"
+    record.privacy = "not-a-privacy"
+    record.summary = "api_key=secret " * 200
+    _RecordEnricherFilter().filter(record)
+    handler.emit(record)
+
+    entry = broker.log_cache[-1]
+    assert entry["category"] == "system"
+    assert entry["privacy"] == "internal"
+    assert len(entry["summary"]) <= 512
+    assert "secret" not in entry["summary"]
+
+
+
 def test_log_service_filters_categories_and_replays_by_event_id():
     broker = LogBroker()
     broker.publish(
@@ -84,6 +111,77 @@ def test_log_service_filters_categories_and_replays_by_event_id():
 
     events = asyncio.run(collect())
     assert [event["event_id"] for event in events] == ["two"]
+
+
+def test_log_service_replays_after_timestamp_when_event_id_is_unknown():
+    broker = LogBroker()
+    for event_id, timestamp in (("one", 1.0), ("two", 2.0), ("three", 3.0)):
+        broker.publish(
+            {
+                "event_id": event_id,
+                "time": timestamp,
+                "timestamp": timestamp,
+                "category": "system",
+                "privacy": "internal",
+                "level": "INFO",
+                "data": event_id,
+            }
+        )
+    service = LogService(broker, object())
+
+    async def collect() -> list[dict]:
+        events = []
+        async for item in service.replay_cached_logs("1.5"):
+            events.append(json.loads(item.split("data: ", 1)[1]))
+        return events
+
+    events = asyncio.run(collect())
+    assert [event["event_id"] for event in events] == ["two", "three"]
+
+
+@pytest.mark.asyncio
+async def test_log_stream_filters_live_events_and_unregisters():
+    broker = LogBroker()
+    service = LogService(broker, object())
+    stream = service.stream_log_events(
+        None,
+        categories={"security"},
+        privacy={"internal"},
+    )
+    pending = asyncio.create_task(stream.__anext__())
+    await asyncio.sleep(0)
+    assert len(broker.subscribers) == 1
+
+    broker.publish(
+        {
+            "event_id": "private-chat",
+            "time": 1.0,
+            "timestamp": 1.0,
+            "category": "user_chat",
+            "privacy": "private",
+            "level": "INFO",
+            "data": "ignored",
+        }
+    )
+    broker.publish(
+        {
+            "event_id": "security-event",
+            "time": 2.0,
+            "timestamp": 2.0,
+            "category": "security",
+            "privacy": "internal",
+            "level": "WARNING",
+            "data": "allowed",
+        }
+    )
+    event = await asyncio.wait_for(pending, timeout=1)
+    payload = json.loads(event.split("data: ", 1)[1])
+    assert payload["event_id"] == "security-event"
+    assert payload["type"] == "log"
+    assert event.startswith("id: security-event\n")
+
+    await stream.aclose()
+    assert broker.subscribers == []
 
 
 @pytest.mark.asyncio
