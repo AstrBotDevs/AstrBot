@@ -50,7 +50,14 @@ def _is_safe_command(command: str) -> bool:
 
 def _windows_shell_executable() -> str:
     """Choose PowerShell 7 when available, with the inbox fallback."""
-    return shutil.which("pwsh") or shutil.which("powershell.exe") or "powershell.exe"
+    for candidate in ("pwsh", "powershell.exe"):
+        try:
+            resolved = shutil.which(candidate)
+        except (AttributeError, OSError):
+            resolved = None
+        if resolved:
+            return resolved
+    return "powershell.exe"
 
 
 def _decode_bytes_with_fallback(
@@ -121,13 +128,27 @@ class LocalShellComponent(ShellComponent):
             if env:
                 run_env.update({str(k): str(v) for k, v in env.items()})
             working_dir = os.path.abspath(cwd) if cwd else get_astrbot_root()
+            popen_command: str | list[str] = command
+            popen_shell = shell
+            if sys.platform == "win32" and shell:
+                popen_command = [
+                    _windows_shell_executable(),
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    command,
+                ]
+                popen_shell = False
             popen_kwargs: dict[str, Any] = {
-                "shell": shell,
+                "shell": popen_shell,
                 "cwd": working_dir,
                 "env": run_env,
             }
             if sys.platform == "win32":
-                popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+                popen_kwargs["creationflags"] = getattr(
+                    subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+                )
             else:
                 popen_kwargs["start_new_session"] = True
             if background:
@@ -135,7 +156,7 @@ class LocalShellComponent(ShellComponent):
                 # local computer-use behavior matches existing tool semantics.
                 # Safety relies on `_is_safe_command()` and the allowed-root checks.
                 proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
-                    command,
+                    popen_command,
                     # Controlled local computer-use command.
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
@@ -146,7 +167,7 @@ class LocalShellComponent(ShellComponent):
             # local computer-use behavior matches existing tool semantics.
             # Safety relies on `_is_safe_command()` and the allowed-root checks.
             proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
-                command,
+                popen_command,
                 # Controlled local computer-use command.
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -251,15 +272,25 @@ class LocalShellComponent(ShellComponent):
             "cwd": str(working_dir),
             "env": {**os.environ, **{str(k): str(v) for k, v in (env or {}).items()}},
         }
-        if os.name == "nt":
+        if sys.platform == "win32":
             process_kwargs["creationflags"] = getattr(
                 subprocess, "CREATE_NEW_PROCESS_GROUP", 0
             )
-            process_kwargs["executable"] = _windows_shell_executable()
         else:
             process_kwargs["start_new_session"] = True
         try:
-            process = await asyncio.create_subprocess_shell(command, **process_kwargs)
+            if sys.platform == "win32":
+                process = await asyncio.create_subprocess_exec(
+                    _windows_shell_executable(),
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    command,
+                    **process_kwargs,
+                )
+            else:
+                process = await asyncio.create_subprocess_shell(command, **process_kwargs)
         except BaseException:
             output_path.unlink(missing_ok=True)
             raise
@@ -458,7 +489,7 @@ class LocalShellComponent(ShellComponent):
             session_id, owner_id, runtime_id, sender_id
         )
         if session.process.returncode is None:
-            if os.name == "nt":
+            if sys.platform == "win32":
                 session.process.send_signal(
                     getattr(signal, "CTRL_BREAK_EVENT", signal.SIGTERM)
                 )
@@ -598,7 +629,7 @@ class LocalShellComponent(ShellComponent):
     async def _terminate_process(self, process: asyncio.subprocess.Process) -> None:
         if process.returncode is not None:
             return
-        if os.name == "nt":
+        if sys.platform == "win32":
             try:
                 result = await asyncio.to_thread(
                     subprocess.run,
@@ -619,7 +650,7 @@ class LocalShellComponent(ShellComponent):
         try:
             await asyncio.wait_for(process.wait(), 5)
         except TimeoutError:
-            if os.name == "nt":
+            if sys.platform == "win32":
                 process.kill()
             else:
                 try:

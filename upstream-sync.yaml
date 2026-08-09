@@ -31,3 +31,6 @@ last_synced:
     d749d6fd41189ec002f3a24a61ea6fda479b582a is manually adapted as a
     runtime-owned managed local shell session facility with owner isolation,
     bounded output, process-group termination, and explicit shutdown cleanup.
+    809517311a63b38a9a5a4d6f299ae2139841442e is manually adapted to prefer
+    PowerShell 7 (pwsh), fall back to powershell.exe, and use exec semantics on
+    Windows while retaining the fork's process-group and admin controls.

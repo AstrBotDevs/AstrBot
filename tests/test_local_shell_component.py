@@ -223,6 +223,89 @@ def test_local_shell_component_starts_a_windows_process_group(monkeypatch):
     assert "start_new_session" not in popen_kwargs
 
 
+def test_local_shell_component_prefers_powershell_on_windows(monkeypatch):
+    calls = []
+
+    def fake_run(*args, **kwargs):
+        calls.append((args, kwargs))
+        return _FakePopen(stdout=b"")
+
+    monkeypatch.setattr(subprocess, "Popen", fake_run)
+    monkeypatch.setattr(local_booter.sys, "platform", "win32")
+    monkeypatch.setattr(
+        local_booter.shutil,
+        "which",
+        lambda name: "C:/pwsh.exe" if name == "pwsh" else None,
+    )
+
+    result = asyncio.run(LocalShellComponent().exec("Get-ChildItem"))
+
+    assert result["exit_code"] == 0
+    assert calls[0][0][0] == [
+        "C:/pwsh.exe",
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "Get-ChildItem",
+    ]
+    assert calls[0][1]["shell"] is False
+
+
+@pytest.mark.asyncio
+async def test_managed_shell_uses_powershell_exec_on_windows(monkeypatch, tmp_path):
+    calls = []
+
+    class FakeStdout:
+        async def read(self, _limit):
+            if hasattr(self, "done"):
+                return b""
+            self.done = True
+            return b"done\n"
+
+    class FakeProcess:
+        pid = 12345
+        returncode = None
+        stdin = None
+        stdout = FakeStdout()
+
+        async def wait(self):
+            self.returncode = 0
+            return 0
+
+    async def fake_exec(*args, **kwargs):
+        calls.append((args, kwargs))
+        return FakeProcess()
+
+    monkeypatch.setattr(local_booter.sys, "platform", "win32")
+    monkeypatch.setattr(
+        local_booter.shutil,
+        "which",
+        lambda name: "pwsh" if name == "pwsh" else None,
+    )
+    monkeypatch.setattr(local_booter.asyncio, "create_subprocess_exec", fake_exec)
+
+    result = await LocalShellComponent().exec_managed(
+        "Get-ChildItem",
+        owner_id="owner-a",
+        cwd=str(tmp_path),
+        allowed_root=str(tmp_path),
+        yield_time_ms=5_000,
+    )
+
+    assert result["status"] == "completed"
+    assert result["stdout"] == "done\n"
+    assert calls[0][0] == (
+        "pwsh",
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "Get-ChildItem",
+    )
+    assert "creationflags" in calls[0][1]
+
+
 def test_managed_shell_captures_output_and_supports_incremental_poll(tmp_path):
     async def scenario() -> None:
         shell = LocalShellComponent(session_ttl_seconds=60)
