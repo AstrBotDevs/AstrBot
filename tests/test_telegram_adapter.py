@@ -288,6 +288,29 @@ async def test_telegram_animated_sticker_without_thumbnail_skips_image():
 
 
 @pytest.mark.asyncio
+async def test_telegram_video_note_becomes_video_component():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    file_path = "https://api.telegram.org/file/test/note.mp4"
+    update = create_mock_update(
+        message_text=None,
+        video_note=create_mock_file(file_path),
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert len(result.message) == 1
+    assert isinstance(result.message[0], Comp.Video)
+    assert result.message[0].file == file_path
+    assert result.message[0].path == file_path
+
+
+@pytest.mark.asyncio
 async def test_telegram_voice_message_creates_record_component(tmp_path):
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(

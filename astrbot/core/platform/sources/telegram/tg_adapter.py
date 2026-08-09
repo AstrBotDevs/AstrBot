@@ -637,6 +637,17 @@ class TelegramPlatformAdapter(Platform):
                 message.message.append(Comp.Video(file=file_path, path=file.file_path))
                 _apply_caption()
 
+        elif update.message.video_note:
+            # Video notes carry no file_name and cannot have a caption.
+            file = await update.message.video_note.get_file()
+            file_path = file.file_path
+            if file_path is None:
+                logger.warning(
+                    "Telegram video note file_path is None, cannot save the file.",
+                )
+            else:
+                message.message.append(Comp.Video(file=file_path, path=file_path))
+
         return message
 
     async def handle_media_group_message(
