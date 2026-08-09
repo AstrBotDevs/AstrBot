@@ -77,13 +77,7 @@ uv run main.py
 
 ### Docker 部署
 
-当前 fork 不提供官方预构建镜像，请从当前 checkout 本地构建。Dashboard 默认只监听 `127.0.0.1`；如果宿主机需要访问容器中的 WebUI，请先在所选 Compose 文件的 `astrbot.environment` 下显式加入：
-
-```yaml
-environment:
-  - TZ=Asia/Shanghai
-  - ASTRBOT_DASHBOARD_HOST=0.0.0.0
-```
+当前 fork 不提供官方预构建镜像，请从当前 checkout 本地构建。Compose 会将容器内 Dashboard 监听在 `0.0.0.0`，宿主机端口默认只绑定 `127.0.0.1`；需要远程访问时，请显式设置 `ASTRBOT_BIND_ADDRESS=0.0.0.0`，并配置防火墙或 HTTPS 反向代理。
 
 然后构建并启动：
 
@@ -92,6 +86,28 @@ git clone https://github.com/Xero-Team/AstrBot.git
 cd AstrBot
 docker compose up -d --build
 docker compose logs -f astrbot
+```
+
+Compose 默认构建完整运行时。如果不需要浏览器、文档转换、媒体处理、OCR、Node.js
+或 Docker CLI，可以通过 `ASTRBOT_FEATURES` 缩小镜像；它是构建参数，修改后需要重新构建：
+
+`minimal` 仍然可以正常使用 WebUI：Dashboard 已在镜像构建阶段编译成静态文件，运行时由
+Python/FastAPI 提供；只有 Node.js MCP 启动器等集成才需要加入 `node`。
+
+```bash
+# 一次性使用最小运行时
+ASTRBOT_FEATURES=minimal docker compose up -d --build
+
+# 只启用浏览器、Node.js 和 Docker CLI
+ASTRBOT_FEATURES=browser,node,docker docker compose up -d --build
+```
+
+如需固定配置，可在仓库根目录 `.env` 中写入，例如
+`ASTRBOT_FEATURES=browser,media,fonts`。NapCat 组合使用同样的参数：
+
+```bash
+ASTRBOT_FEATURES=browser,node,docker \
+  docker compose -f compose-with-napcat.yml up -d --build
 ```
 
 如果希望一并拉起 AstrBot 和 NapCat：

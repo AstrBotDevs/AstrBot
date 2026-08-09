@@ -8,7 +8,7 @@
 The repository provides two locally built deployment paths:
 
 - `compose.yml`: runs AstrBot and the locally built static documentation site. Use it for QQ Official Bot, Telegram, Discord, and other platforms, or when you manage the bot protocol implementation separately.
-- `compose-with-napcat.yml`: runs AstrBot, the static documentation site, and NapCat together for personal QQ accounts. AstrBot and the documentation are still built from the local checkout; NapCat uses its official container image.
+- `compose-with-napcat.yml`: runs AstrBot, the static documentation site, and NapCat together for personal QQ accounts. AstrBot and the documentation are still built from the local checkout; NapCat uses the referenced NapCat container image.
 
 Clone the repository first:
 
@@ -17,26 +17,97 @@ git clone https://github.com/Xero-Team/AstrBot.git
 cd AstrBot
 ```
 
-## Allow Access to the WebUI from Outside the Container
+## Container Listener and Host Ports
 
-The AstrBot WebUI listens on `127.0.0.1` by default. Inside a container, this means that publishing port `6185` alone does not make the WebUI reachable from the host.
+The Compose deployments explicitly set the container's WebUI listener to `0.0.0.0`; otherwise the host cannot reach the published port. Host ports bind to `127.0.0.1` by default. For remote access, explicitly set `ASTRBOT_BIND_ADDRESS` and configure a firewall or HTTPS reverse proxy.
 
-Before starting, add the following entry under `astrbot.environment` in the Compose file you selected:
+For example:
 
-```yaml
-environment:
-  - TZ=Asia/Shanghai
-  - ASTRBOT_DASHBOARD_HOST=0.0.0.0
+```bash
+ASTRBOT_BIND_ADDRESS=0.0.0.0 docker compose up -d --build
 ```
 
-`ASTRBOT_DASHBOARD_HOST` takes precedence over `dashboard.host` in `data/cmd_config.json`. If external access is no longer needed, remove the environment variable and restore the configured host to a loopback address.
+`ASTRBOT_DASHBOARD_HOST` takes precedence over `dashboard.host` in `data/cmd_config.json`.
 
 > [!CAUTION]
 > `0.0.0.0` makes the WebUI listen on every container interface. Do not expose the admin panel directly to the public internet. Restrict firewall access and use a reverse proxy, HTTPS, a strong password, and TOTP.
 
+The AstrBot service intentionally uses `privileged: true`; the NapCat variant
+also mounts `/var/run/docker.sock`. These settings are required by the selected
+computer and Docker-backed integrations and grant host-level control. Run only
+trusted plugins and protect the host. The static documentation service remains
+read-only and unprivileged.
+
 ## Start AstrBot and the Documentation Site
 
-The root `compose.yml` builds the current checkout as the local images `astrbot:local` and `astrbot-docs:local`:
+The root `compose.yml` uses the root Dockerfile's `runtime` stage to build the current checkout as `astrbot:local`; the documentation image is `astrbot-docs:local`. The Dockerfile's `dev` stage remains available for the development tool environment:
+
+```bash
+docker build --target dev -t astrbot:dev .
+```
+
+### Select Runtime Features
+
+`ASTRBOT_FEATURES` is a Docker **build argument**, not a runtime container
+environment variable. Compose passes it to the Dockerfile's `runtime` stage.
+It defaults to `full`, which preserves the complete feature set. Changing it
+requires rebuilding the image; an existing container is not changed in place.
+Use one of these forms:
+
+Set it for one build only:
+
+```bash
+ASTRBOT_FEATURES=minimal docker compose up -d --build
+```
+
+Persist it in a `.env` file at the project root (Compose loads this file
+automatically):
+
+```dotenv
+ASTRBOT_FEATURES=browser,documents,media,ocr,fonts,node,docker
+```
+
+Override `.env` from the command line when needed:
+
+```bash
+ASTRBOT_FEATURES=browser,node,docker docker compose up -d --build
+```
+
+The NapCat stack uses the same argument:
+
+```bash
+ASTRBOT_FEATURES=browser,node,docker \
+  docker compose -f compose-with-napcat.yml up -d --build
+```
+
+Available feature groups:
+
+- `browser`: Chromium and its system dependencies.
+- `documents`: Pandoc, Poppler, TeX, and related fonts.
+- `media`: FFmpeg, ImageMagick, Ghostscript, and codec libraries.
+- `ocr`: Tesseract with English and Simplified Chinese data.
+- `fonts`: runtime font families and fontconfig.
+- `node`: Node.js, npm, npx, and pnpm for MCP launchers.
+- `docker`: Docker CLI and Compose plugin.
+
+Note that `node` is not required to serve the WebUI. The Dashboard is built
+with Node.js in the Dockerfile's `builder` stage, and the generated static
+files are copied into the `runtime` image. AstrBot's Python/FastAPI service
+serves those files at runtime, so the `minimal` profile still includes and
+serves the WebUI. Add `node` only for Node-based MCP launchers or other
+Node.js integrations.
+
+For example:
+
+```bash
+docker compose config
+```
+
+Use this command to inspect the final `ASTRBOT_FEATURES` build argument passed
+by Compose. The `minimal` profile keeps the Python application and core shell
+utilities; enable the groups required by your integrations explicitly.
+The builder still retains the toolchain needed to produce the Dashboard and
+documentation, while the selected features affect the final runtime image.
 
 ```bash
 docker compose up -d --build
@@ -46,17 +117,15 @@ docker compose logs -f astrbot docs
 Its default mount and published ports are:
 
 - `./data` -> `/AstrBot/data`: configuration, database, plugins, and other runtime data.
-- `6185:6185`: AstrBot WebUI.
-- `6199:6199`: optional OneBot v11 reverse WebSocket endpoint.
-- `6186:8080`: the locally built documentation site, available at `http://localhost:6186`.
+- `127.0.0.1:6185:6185`: AstrBot WebUI.
+- `127.0.0.1:6199:6199`: optional OneBot v11 reverse WebSocket endpoint.
+- `127.0.0.1:6186:8080`: the locally built documentation site, available at `http://localhost:6186`.
 
 The documentation is an independent read-only static service. It neither reads `data/` nor shares the WebUI login state. Publish port `6186` only when you need to serve the documentation externally, and protect it with firewall rules or an HTTPS reverse proxy as appropriate.
 
 Publishing `6199` does not change the OneBot listener address. Only set that platform's `ws_reverse_host` to `0.0.0.0` when its OneBot client runs outside the AstrBot container. Also configure `ws_reverse_token` and restrict network access to the port.
 
 ## Start AstrBot and NapCat Together
-
-First add `ASTRBOT_DASHBOARD_HOST=0.0.0.0` to `compose-with-napcat.yml` as described above.
 
 The file currently also sets NapCat `MODE=astrbot`. On every NapCat startup, that mode writes a **reverse** WebSocket client targeting `ws://astrbot:6199/ws`. To use AstrBot's currently recommended dedicated `NapCat` platform, change it first to:
 
@@ -78,7 +147,7 @@ NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) \
   docker compose -f compose-with-napcat.yml up -d --build
 ```
 
-This Compose file publishes:
+This Compose file publishes (host ports bind to loopback by default):
 
 - `6185`: AstrBot WebUI.
 - `6186`: the locally built documentation site.

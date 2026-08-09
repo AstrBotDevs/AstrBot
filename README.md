@@ -79,13 +79,7 @@ If you enable local text-to-image or plugin HTML rendering, also run `uv run ast
 
 ### Docker Deployment
 
-This fork does not publish an official prebuilt image. Build from the current checkout. Because the Dashboard securely binds to `127.0.0.1` by default, first add `ASTRBOT_DASHBOARD_HOST=0.0.0.0` under the `astrbot` service's `environment` section if the host must access the containerized WebUI:
-
-```yaml
-environment:
-  - TZ=Asia/Shanghai
-  - ASTRBOT_DASHBOARD_HOST=0.0.0.0
-```
+This fork does not publish an official prebuilt image. Build from the current checkout. Compose binds the containerized Dashboard to `0.0.0.0`, while host ports bind to `127.0.0.1` by default. For remote access, explicitly set `ASTRBOT_BIND_ADDRESS=0.0.0.0` and configure a firewall or HTTPS reverse proxy.
 
 Then build and start it:
 
@@ -94,6 +88,32 @@ git clone https://github.com/Xero-Team/AstrBot.git
 cd AstrBot
 docker compose up -d --build
 docker compose logs -f astrbot
+```
+
+Compose builds the complete runtime by default. To omit optional browser,
+document-conversion, media, OCR, Node.js, or Docker CLI assets, set the
+`ASTRBOT_FEATURES` build argument and rebuild the image:
+
+The `minimal` profile still serves the WebUI: the Dashboard is compiled into
+static files during the image build and served by AstrBot's Python/FastAPI
+runtime. Add `node` only for Node-based MCP launchers and other Node.js
+integrations.
+
+```bash
+# Minimal runtime for a smaller image
+ASTRBOT_FEATURES=minimal docker compose up -d --build
+
+# Enable only Chromium, Node.js, and Docker CLI
+ASTRBOT_FEATURES=browser,node,docker docker compose up -d --build
+```
+
+To persist the choice, add for example
+`ASTRBOT_FEATURES=browser,media,fonts` to `.env` in the repository root.
+The NapCat stack accepts the same argument:
+
+```bash
+ASTRBOT_FEATURES=browser,node,docker \
+  docker compose -f compose-with-napcat.yml up -d --build
 ```
 
 If you want to start AstrBot and NapCat together from this repository:

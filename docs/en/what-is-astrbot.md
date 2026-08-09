@@ -36,7 +36,7 @@ This fork currently publishes no independent PyPI package, GitHub release assets
 - images such as `soulter/astrbot`;
 - Dashboard assets from upstream releases; startup entry points neither download nor use them.
 
-Use the current checkout for source deployments, or build the root `Dockerfile` through `compose.yml` or `compose-with-napcat.yml`. The WebUI generates a random initial password and binds to `127.0.0.1:6185` by default; remote or container access requires an explicit bind-address change plus firewall and reverse-proxy protection.
+Use the current checkout for source deployments, or build the root `Dockerfile` through `compose.yml` or `compose-with-napcat.yml`. Source deployments bind the WebUI to `127.0.0.1:6185` by default. The Compose files explicitly set the container listener to `0.0.0.0` while keeping host ports on loopback; remote publishing requires `ASTRBOT_BIND_ADDRESS` plus firewall and reverse-proxy protection.
 
 ## How It Works
 
