@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TypedDict
 
-from sqlmodel import JSON, Field, SQLModel, Text, UniqueConstraint
+from sqlmodel import JSON, Field, Index, SQLModel, Text, UniqueConstraint
 
 
 class TimestampMixin(SQLModel):
@@ -515,7 +515,21 @@ class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
         default=None,
     )  # Name of the sender in the platform
     content: dict = Field(sa_type=JSON, nullable=False)  # a message chain list
+    role: str = Field(default="user", nullable=False)
+    """Normalized message role: ``user``, ``assistant`` or ``system``."""
+    is_group: bool = Field(default=False, nullable=False, index=True)
+    """Whether this row belongs to an isolated group-message history."""
     llm_checkpoint_id: str | None = Field(default=None, index=True)
+
+    __table_args__ = (
+        Index(
+            "ix_platform_message_history_scope_order",
+            "platform_id",
+            "user_id",
+            "is_group",
+            "id",
+        ),
+    )
 
 
 class WebChatThread(TimestampMixin, SQLModel, table=True):

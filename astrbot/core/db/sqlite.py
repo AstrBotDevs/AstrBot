@@ -54,6 +54,7 @@ class SQLiteDatabase(BaseDatabase):
         """Initialize the database by creating tables if they do not exist."""
         async with self.engine.begin() as conn:
             await conn.run_sync(SQLModel.metadata.create_all)
+            await self._ensure_platform_message_history_columns(conn)
             await conn.execute(text("PRAGMA journal_mode=WAL"))
             await conn.execute(text("PRAGMA busy_timeout=30000"))
             await conn.execute(text("PRAGMA synchronous=NORMAL"))
@@ -62,6 +63,31 @@ class SQLiteDatabase(BaseDatabase):
             await conn.execute(text("PRAGMA mmap_size=134217728"))
             await conn.execute(text("PRAGMA optimize"))
             await conn.commit()
+
+    async def _ensure_platform_message_history_columns(self, conn) -> None:
+        """Add current history columns to databases created by older revisions."""
+        result = await conn.execute(text("PRAGMA table_info(platform_message_history)"))
+        columns = {str(row[1]) for row in result.fetchall()}
+        if "role" not in columns:
+            await conn.execute(
+                text(
+                    "ALTER TABLE platform_message_history "
+                    "ADD COLUMN role VARCHAR NOT NULL DEFAULT 'user'"
+                )
+            )
+        if "is_group" not in columns:
+            await conn.execute(
+                text(
+                    "ALTER TABLE platform_message_history "
+                    "ADD COLUMN is_group BOOLEAN NOT NULL DEFAULT 0"
+                )
+            )
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_platform_message_history_scope_order "
+                "ON platform_message_history (platform_id, user_id, is_group, id)"
+            )
+        )
 
     # ====
     # Platform Statistics
@@ -1341,7 +1367,10 @@ class SQLiteDatabase(BaseDatabase):
         content: dict,
         sender_id: str | None = None,
         sender_name: str | None = None,
+        role: str = "user",
+        is_group: bool = False,
         llm_checkpoint_id: str | None = None,
+        max_messages: int | None = None,
     ) -> PlatformMessageHistory:
         """Insert a new platform message history record."""
         async with self.get_db() as session:
@@ -1353,21 +1382,47 @@ class SQLiteDatabase(BaseDatabase):
                     content=content,
                     sender_id=sender_id,
                     sender_name=sender_name,
+                    role=role,
+                    is_group=is_group,
                     llm_checkpoint_id=llm_checkpoint_id,
                 )
                 session.add(new_history)
+                await session.flush()
+                if max_messages is not None:
+                    keep_count = max(1, int(max_messages))
+                    keep_ids = (
+                        select(PlatformMessageHistory.id)
+                        .where(
+                            col(PlatformMessageHistory.platform_id) == platform_id,
+                            col(PlatformMessageHistory.user_id) == user_id,
+                            col(PlatformMessageHistory.is_group) == is_group,
+                        )
+                        .order_by(desc(PlatformMessageHistory.id))
+                        .limit(keep_count)
+                    )
+                    await session.execute(
+                        delete(PlatformMessageHistory).where(
+                            col(PlatformMessageHistory.platform_id) == platform_id,
+                            col(PlatformMessageHistory.user_id) == user_id,
+                            col(PlatformMessageHistory.is_group) == is_group,
+                            col(PlatformMessageHistory.id).not_in(keep_ids),
+                        )
+                    )
                 return new_history
 
     async def update_platform_message_history(
         self,
         message_id: int,
         content: dict | None = None,
+        role: str | None = None,
         llm_checkpoint_id: str | None = None,
     ) -> None:
         """Update a platform message history record."""
         values = {}
         if content is not None:
             values["content"] = content
+        if role is not None:
+            values["role"] = role
         if llm_checkpoint_id is not None:
             values["llm_checkpoint_id"] = llm_checkpoint_id
         if not values:
@@ -1419,6 +1474,9 @@ class SQLiteDatabase(BaseDatabase):
         user_id: str,
         page: int = 1,
         page_size: int = 20,
+        *,
+        is_group: bool | None = None,
+        before_id: int | None = None,
     ) -> list[PlatformMessageHistory]:
         """Get platform message history records."""
         async with self.get_db() as session:
@@ -1430,10 +1488,35 @@ class SQLiteDatabase(BaseDatabase):
                     PlatformMessageHistory.platform_id == platform_id,
                     PlatformMessageHistory.user_id == user_id,
                 )
-                .order_by(desc(PlatformMessageHistory.created_at))
+                .order_by(
+                    desc(PlatformMessageHistory.created_at),
+                    desc(PlatformMessageHistory.id),
+                )
             )
+            if is_group is not None:
+                query = query.where(PlatformMessageHistory.is_group == is_group)
+            if before_id is not None:
+                query = query.where(PlatformMessageHistory.id < before_id)
             result = await session.execute(query.offset(offset).limit(page_size))
             return list(result.scalars().all())
+
+    async def get_group_message_history(
+        self,
+        platform_id: str,
+        group_id: str,
+        *,
+        limit: int = 50,
+        before_id: int | None = None,
+    ) -> list[PlatformMessageHistory]:
+        """Return only explicitly marked rows for one group scope."""
+        return await self.get_platform_message_history(
+            platform_id,
+            group_id,
+            page=1,
+            page_size=max(1, min(int(limit), 500)),
+            is_group=True,
+            before_id=before_id,
+        )
 
     async def get_platform_message_history_by_id(
         self, message_id: int

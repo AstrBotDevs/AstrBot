@@ -6,7 +6,7 @@ upstream:
 
 last_synced:
   commit: 30e20318cbaaa2e1ba57f3e0eee265d9ee98115c
-  synced_at_utc: 2026-08-08T15:22:00Z
+  synced_at_utc: 2026-08-09T00:00:00Z
   sync_method: manual-adaptation
   source_pr: '9587, 9534, 9518, 9596, 9597, 9599, 9602'
   note: >-
@@ -23,4 +23,6 @@ last_synced:
     Current RuntimeCatalogs ownership, OpenAPI generation, Python 3.14+ policy,
     Dashboard security boundary, and source-build deployment contract remain in
     force. The fetched upstream/master head was
-    30e20318cbaaa2e1ba57f3e0eee265d9ee98115c.
+    30e20318cbaaa2e1ba57f3e0eee265d9ee98115c. Historical replay is explicitly
+    authorized after the marker advanced; e80e01c77693355cf7ef42a607ea89e9093b9b2b
+    is manually adapted without regressing the shared marker.

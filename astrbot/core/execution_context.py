@@ -239,6 +239,7 @@ class CoreExecutionContext:
         self.session_waiter_registry = (
             session_waiter_registry or SessionWaiterRegistry()
         )
+        self._persisted_group_send_objects: set[int] = set()
         """Runtime-owned interactive message waits."""
         self.demo_mode = demo_mode
         self.subagent_orchestrator = subagent_orchestrator
@@ -648,6 +649,7 @@ class CoreExecutionContext:
 
         result = await self._platform_manager.send_to_session(session, message_chain)
         if result.success:
+            await self._persist_accepted_group_send(session, message_chain)
             return result
         logger.warning(
             "send_message failed for session %s: %s",
@@ -655,6 +657,43 @@ class CoreExecutionContext:
             result.error_message or "unknown error",
         )
         return result
+
+    async def _persist_accepted_group_send(
+        self,
+        session: MessageSession,
+        message_chain: MessageChain,
+    ) -> None:
+        """Persist one accepted assistant group send without duplicating retries."""
+        if session.message_type.value != "GroupMessage":
+            return
+        if session.platform_id == "webchat":
+            return
+        marker = id(message_chain)
+        if marker in self._persisted_group_send_objects:
+            return
+        settings = self.get_config(umo=str(session)).get("provider_ltm_settings", {})
+        if not settings.get("group_message_history_enable", False):
+            return
+        try:
+            max_messages = max(1, int(settings.get("group_message_history_max_cnt", 700)))
+        except (TypeError, ValueError):
+            max_messages = 700
+        try:
+            await self.message_history_manager.insert_message_chain(
+                platform_id=session.platform_id,
+                user_id=str(session),
+                message_chain=message_chain,
+                role="assistant",
+                is_group=True,
+                sender_id="assistant",
+                sender_name="AstrBot",
+                max_messages=max_messages,
+            )
+            self._persisted_group_send_objects.add(marker)
+            if len(self._persisted_group_send_objects) > 2048:
+                self._persisted_group_send_objects.clear()
+        except Exception:
+            logger.exception("Failed to persist accepted group message.")
 
     def add_llm_tools(self, *tools: FunctionTool) -> None:
         """添加 LLM 工具。

@@ -434,13 +434,17 @@ class MessageHistoryStore(Protocol):
         content: dict,
         sender_id: str | None = None,
         sender_name: str | None = None,
+        role: str = "user",
+        is_group: bool = False,
         llm_checkpoint_id: str | None = None,
+        max_messages: int | None = None,
     ) -> PlatformMessageHistory: ...
 
     async def update_platform_message_history(
         self,
         message_id: int,
         content: dict | None = None,
+        role: str | None = None,
         llm_checkpoint_id: str | None = None,
     ) -> None: ...
 
@@ -459,6 +463,18 @@ class MessageHistoryStore(Protocol):
         user_id: str,
         page: int = 1,
         page_size: int = 20,
+        *,
+        is_group: bool | None = None,
+        before_id: int | None = None,
+    ) -> list[PlatformMessageHistory]: ...
+
+    async def get_group_message_history(
+        self,
+        platform_id: str,
+        group_id: str,
+        *,
+        limit: int = 50,
+        before_id: int | None = None,
     ) -> list[PlatformMessageHistory]: ...
 
     async def get_platform_message_history_by_id(

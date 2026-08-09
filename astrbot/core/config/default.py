@@ -228,6 +228,8 @@ DEFAULT_CONFIG = {
     "provider_ltm_settings": {
         "group_icl_enable": False,
         "group_message_max_cnt": 300,
+        "group_message_history_enable": False,
+        "group_message_history_max_cnt": 700,
         "image_caption": False,
         "image_caption_provider_id": "",
         "active_reply": {
@@ -3043,6 +3045,12 @@ CONFIG_METADATA_2 = {
                     "group_message_max_cnt": {
                         "type": "int",
                     },
+                    "group_message_history_enable": {
+                        "type": "bool",
+                    },
+                    "group_message_history_max_cnt": {
+                        "type": "int",
+                    },
                     "image_caption": {
                         "type": "bool",
                     },
@@ -4227,6 +4235,14 @@ CONFIG_METADATA_3 = {
                     },
                     "provider_ltm_settings.group_message_max_cnt": {
                         "description": "最大消息数量",
+                        "type": "int",
+                    },
+                    "provider_ltm_settings.group_message_history_enable": {
+                        "description": "持久化群消息历史",
+                        "type": "bool",
+                    },
+                    "provider_ltm_settings.group_message_history_max_cnt": {
+                        "description": "持久化群消息历史保留数量",
                         "type": "int",
                     },
                     "provider_ltm_settings.image_caption": {
