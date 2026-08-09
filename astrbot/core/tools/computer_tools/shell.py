@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import shlex
@@ -9,6 +10,7 @@ from typing import Any
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.computer.booters.local import LocalShellComponent
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 
 from ..registry import builtin_tool
@@ -16,6 +18,9 @@ from .util import check_admin_permission, is_local_runtime, workspace_root
 
 _COMPUTER_RUNTIME_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": ("local", "sandbox"),
+}
+_LOCAL_RUNTIME_TOOL_CONFIG = {
+    "provider_settings.computer_use_runtime": "local",
 }
 
 
@@ -69,6 +74,13 @@ class ExecuteShellTool(FunctionTool):
                     "description": "Optional timeout in seconds for the command execution.",
                     "default": 300,
                 },
+                "yield_time_ms": {
+                    "type": "integer",
+                    "description": "Maximum time to wait before returning a managed local session.",
+                    "default": 10000,
+                    "minimum": 0,
+                    "maximum": 30000,
+                },
                 "env": {
                     "type": "object",
                     "description": "Optional environment variables to set.",
@@ -85,8 +97,9 @@ class ExecuteShellTool(FunctionTool):
         context: ContextWrapper[AstrAgentContext],
         command: str,
         background: bool = False,
-        timeout_seconds: int | None = 300,
+        timeout_seconds: int | None = None,
         env: dict[str, Any] | None = None,
+        yield_time_ms: int = 10_000,
         **kwargs: Any,
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Shell execution"):
@@ -98,12 +111,34 @@ class ExecuteShellTool(FunctionTool):
         )
         try:
             cwd: str | None = None
-            if is_local_runtime(context):
+            local_runtime = is_local_runtime(context)
+            if local_runtime:
                 current_workspace_root = workspace_root(
                     context.context.event.unified_msg_origin
                 )
                 current_workspace_root.mkdir(parents=True, exist_ok=True)
                 cwd = str(current_workspace_root)
+
+                if not isinstance(sb.shell, LocalShellComponent):
+                    return (
+                        "Error executing command: local shell component is unavailable."
+                    )
+                return json.dumps(
+                    await sb.shell.exec_managed(
+                        command,
+                        owner_id=context.context.event.unified_msg_origin,
+                        runtime_id="local",
+                        sender_id=str(context.context.event.get_sender_id()),
+                        cwd=cwd,
+                        env=dict(env or {}),
+                        timeout=kwargs.get("timeout", timeout_seconds)
+                        if kwargs.get("timeout", timeout_seconds) is not None
+                        else None,
+                        yield_time_ms=0 if background else yield_time_ms,
+                        allowed_root=str(current_workspace_root),
+                    ),
+                    ensure_ascii=False,
+                )
 
             env = dict(env or {})
             effective_background = background and not _is_self_detached_command(command)
@@ -141,6 +176,116 @@ class ExecuteShellTool(FunctionTool):
         except Exception as e:
             detail = str(e) or type(e).__name__
             return f"Error executing command: {detail}"
+
+
+@builtin_tool(config=_LOCAL_RUNTIME_TOOL_CONFIG)
+@dataclass
+class ShellSessionTool(FunctionTool):
+    """Manage sessions created by the local shell execution tool."""
+
+    name: str = "astrbot_shell_session"
+    description: str = (
+        "List, poll, write to, interrupt, or terminate managed shell sessions "
+        "owned by the current conversation."
+    )
+    parameters: dict = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["list", "poll", "write", "interrupt", "terminate"],
+                },
+                "session_id": {"type": "string"},
+                "chars": {"type": "string", "default": ""},
+                "cursor": {"type": "integer", "minimum": 0},
+                "yield_time_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 30_000,
+                    "default": 5_000,
+                },
+                "max_output_chars": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100_000,
+                    "default": 10_000,
+                },
+            },
+            "required": ["action"],
+        }
+    )
+
+    async def call(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        action: str,
+        session_id: str | None = None,
+        chars: str = "",
+        cursor: int | None = None,
+        yield_time_ms: int = 5_000,
+        max_output_chars: int = 10_000,
+        **_: Any,
+    ) -> ToolExecResult:
+        if permission_error := check_admin_permission(
+            context, "Shell session management"
+        ):
+            return permission_error
+        if not is_local_runtime(context):
+            return "Error managing shell session: only local runtime is supported."
+        owner_id = context.context.event.unified_msg_origin
+        sender_id = str(context.context.event.get_sender_id())
+        try:
+            booter = await context.context.context.computer_runtime.get_booter(
+                context.context.context, owner_id
+            )
+            if not isinstance(booter.shell, LocalShellComponent):
+                return "Error managing shell session: local shell component is unavailable."
+            shell = booter.shell
+            if action == "list":
+                result = await shell.list_sessions(owner_id, sender_id=sender_id)
+            else:
+                if not session_id:
+                    return "Error managing shell session: session_id is required."
+                if action == "poll":
+                    result = await shell.poll_session(
+                        owner_id=owner_id,
+                        session_id=session_id,
+                        cursor=cursor,
+                        yield_time_ms=yield_time_ms,
+                        max_output_chars=max_output_chars,
+                        sender_id=sender_id,
+                    )
+                elif action == "write":
+                    result = await shell.write_session(
+                        owner_id=owner_id,
+                        session_id=session_id,
+                        chars=chars,
+                        sender_id=sender_id,
+                    )
+                elif action == "interrupt":
+                    result = await shell.interrupt_session(
+                        owner_id=owner_id,
+                        session_id=session_id,
+                        yield_time_ms=yield_time_ms,
+                        max_output_chars=max_output_chars,
+                        sender_id=sender_id,
+                    )
+                elif action == "terminate":
+                    result = await shell.terminate_session(
+                        owner_id=owner_id,
+                        session_id=session_id,
+                        max_output_chars=max_output_chars,
+                        sender_id=sender_id,
+                    )
+                else:
+                    return f"Error managing shell session: unsupported action {action}."
+            return json.dumps(result, ensure_ascii=False)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            detail = str(exc) or type(exc).__name__
+            return f"Error managing shell session: {detail}"
 
 
 def _is_self_detached_command(command: str) -> bool:

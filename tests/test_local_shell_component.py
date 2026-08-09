@@ -1,11 +1,17 @@
 import asyncio
+import shlex
 import signal
 import subprocess
+import sys
 
 import pytest
 
 from astrbot.core.computer.booters import local as local_booter
 from astrbot.core.computer.booters.local import LocalShellComponent
+
+
+def _python_command(code: str) -> str:
+    return f"{shlex.quote(sys.executable)} -c {shlex.quote(code)}"
 
 
 class _FakePopen:
@@ -215,3 +221,60 @@ def test_local_shell_component_starts_a_windows_process_group(monkeypatch):
     assert result["exit_code"] == 0
     assert popen_kwargs["creationflags"] == subprocess.CREATE_NEW_PROCESS_GROUP
     assert "start_new_session" not in popen_kwargs
+
+
+def test_managed_shell_captures_output_and_supports_incremental_poll(tmp_path):
+    async def scenario() -> None:
+        shell = LocalShellComponent(session_ttl_seconds=60)
+        result = await shell.exec_managed(
+            _python_command("print('managed-output')"),
+            owner_id="umo-a",
+            sender_id="sender-a",
+            cwd=str(tmp_path),
+            allowed_root=str(tmp_path),
+            yield_time_ms=30_000,
+        )
+        assert result["status"] == "completed"
+        assert "managed-output" in result["stdout"]
+        assert result["session_closed"] is True
+        await shell.shutdown_sessions()
+
+    asyncio.run(scenario())
+
+
+def test_managed_shell_owner_isolation_and_write(tmp_path):
+    async def scenario() -> None:
+        shell = LocalShellComponent(session_ttl_seconds=60)
+        result = await shell.exec_managed(
+            _python_command(
+                "import sys; line=sys.stdin.readline(); print('got:'+line.strip(), flush=True)"
+            ),
+            owner_id="umo-a",
+            sender_id="sender-a",
+            cwd=str(tmp_path),
+            allowed_root=str(tmp_path),
+            yield_time_ms=0,
+        )
+        session_id = result["session_id"]
+        with pytest.raises(ValueError):
+            await shell.poll_session(
+                owner_id="umo-b",
+                sender_id="sender-b",
+                session_id=session_id,
+            )
+        await shell.write_session(
+            owner_id="umo-a",
+            sender_id="sender-a",
+            session_id=session_id,
+            chars="hello\n",
+        )
+        polled = await shell.poll_session(
+            owner_id="umo-a",
+            sender_id="sender-a",
+            session_id=session_id,
+            yield_time_ms=5_000,
+        )
+        assert "got:hello" in polled["stdout"]
+        await shell.shutdown_sessions()
+
+    asyncio.run(scenario())

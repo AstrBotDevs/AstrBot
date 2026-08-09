@@ -1,5 +1,6 @@
 import asyncio
 import fnmatch
+import hashlib
 import locale
 import os
 import re
@@ -7,7 +8,9 @@ import shutil
 import signal
 import subprocess
 import sys
-from dataclasses import dataclass
+import time
+import uuid
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +19,10 @@ from astrbot.core.computer.file_read_utils import (
     detect_text_encoding,
     read_local_text_range_sync,
 )
-from astrbot.core.utils.astrbot_path import get_astrbot_root
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_root,
+    get_astrbot_system_tmp_path,
+)
 
 from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
 from .base import ComputerBooter
@@ -40,6 +46,11 @@ def _is_safe_command(command: str) -> bool:
     return not any(
         pattern.search(normalized_command) for pattern in _BLOCKED_COMMAND_PATTERNS
     )
+
+
+def _windows_shell_executable() -> str:
+    """Choose PowerShell 7 when available, with the inbox fallback."""
+    return shutil.which("pwsh") or shutil.which("powershell.exe") or "powershell.exe"
 
 
 def _decode_bytes_with_fallback(
@@ -85,6 +96,13 @@ def _decode_shell_output(output: bytes | str | None) -> str:
 
 @dataclass
 class LocalShellComponent(ShellComponent):
+    _sessions: dict[str, _LocalShellSession] = field(default_factory=dict, init=False)
+    _sessions_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False)
+    max_sessions: int = 16
+    max_output_bytes: int = 4 * 1024 * 1024
+    session_ttl_seconds: int = 30 * 60
+    disk_quota_bytes: int = 32 * 1024 * 1024
+
     async def exec(  # noqa: ASYNC109
         self,
         command: str,
@@ -173,6 +191,461 @@ class LocalShellComponent(ShellComponent):
             }
 
         return await asyncio.to_thread(_run)
+
+    async def exec_managed(
+        self,
+        command: str,
+        *,
+        owner_id: str,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+        timeout: int | None = None,  # noqa: ASYNC109
+        yield_time_ms: int = 10_000,
+        max_output_chars: int = 10_000,
+        runtime_id: str = "local",
+        sender_id: str = "",
+        allowed_root: str | None = None,
+    ) -> dict[str, Any]:  # noqa: ASYNC109
+        """Start a runtime-owned interactive shell session."""
+        if not _is_safe_command(command):
+            raise PermissionError("Blocked unsafe shell command.")
+        if not 0 <= yield_time_ms <= 30_000:
+            raise ValueError("yield_time_ms must be between 0 and 30000")
+        if timeout is not None and timeout <= 0:
+            raise ValueError("timeout must be greater than zero")
+        max_output_chars = max(1, min(max_output_chars, 100_000))
+        async with self._sessions_lock:
+            if len(self._sessions) >= self.max_sessions:
+                raise ValueError("Managed shell session limit reached")
+
+        working_dir = Path(cwd or get_astrbot_root()).resolve(strict=False)
+        boundary = Path(allowed_root or get_astrbot_root()).resolve(strict=False)
+        if not working_dir.is_relative_to(boundary):
+            raise PermissionError("Shell cwd is outside the allowed workspace")
+        working_dir.mkdir(parents=True, exist_ok=True)
+        owner_runtime_id = str(runtime_id or "local")
+        owner_sender_id = str(sender_id or "")
+        session_id = f"sh_{uuid.uuid4().hex[:16]}"
+        owner_digest = hashlib.sha256(
+            f"{owner_runtime_id}\0{owner_id}\0{owner_sender_id}".encode()
+        ).hexdigest()[:16]
+        output_dir = Path(get_astrbot_system_tmp_path()) / "shell" / owner_digest
+        output_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            current_usage = sum(
+                path.stat().st_size
+                for path in output_dir.parent.rglob("*.log")
+                if path.is_file()
+            )
+        except OSError:
+            current_usage = self.disk_quota_bytes
+        if current_usage >= self.disk_quota_bytes:
+            raise ValueError("Managed shell disk quota exceeded")
+        output_path = output_dir / f"{session_id}.log"
+        output_path.touch()
+
+        process_kwargs: dict[str, Any] = {
+            "stdin": asyncio.subprocess.PIPE,
+            "stdout": asyncio.subprocess.PIPE,
+            "stderr": asyncio.subprocess.STDOUT,
+            "cwd": str(working_dir),
+            "env": {**os.environ, **{str(k): str(v) for k, v in (env or {}).items()}},
+        }
+        if os.name == "nt":
+            process_kwargs["creationflags"] = getattr(
+                subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+            )
+            process_kwargs["executable"] = _windows_shell_executable()
+        else:
+            process_kwargs["start_new_session"] = True
+        try:
+            process = await asyncio.create_subprocess_shell(command, **process_kwargs)
+        except BaseException:
+            output_path.unlink(missing_ok=True)
+            raise
+
+        output_event = asyncio.Event()
+
+        async def capture_output() -> None:
+            if process.stdout is None:
+                return
+            try:
+                with output_path.open("ab") as output_file:
+                    while chunk := await process.stdout.read(8192):
+                        if output_path.stat().st_size >= self.max_output_bytes:
+                            await self._terminate_process(process)
+                            break
+                        try:
+                            total_usage = sum(
+                                path.stat().st_size
+                                for path in output_path.parent.parent.rglob("*.log")
+                                if path.is_file()
+                            )
+                        except OSError:
+                            total_usage = self.disk_quota_bytes
+                        if total_usage >= self.disk_quota_bytes:
+                            await self._terminate_process(process)
+                            break
+                        remaining = self.max_output_bytes - output_path.stat().st_size
+                        remaining = min(
+                            remaining,
+                            self.disk_quota_bytes - total_usage,
+                        )
+                        output_file.write(chunk[:remaining])
+                        output_file.flush()
+                        output_event.set()
+            except asyncio.CancelledError:
+                raise
+
+        reader_task = asyncio.create_task(
+            capture_output(), name=f"shell-reader-{session_id}"
+        )
+        wait_task = asyncio.create_task(process.wait(), name=f"shell-wait-{session_id}")
+        wait_task.add_done_callback(lambda _: output_event.set())
+        session = _LocalShellSession(
+            session_id=session_id,
+            runtime_id=owner_runtime_id,
+            umo=owner_id,
+            sender_id=owner_sender_id,
+            process=process,
+            output_path=output_path,
+            started_at=time.monotonic(),
+            last_activity=time.monotonic(),
+            output_event=output_event,
+            reader_task=reader_task,
+            wait_task=wait_task,
+        )
+        effective_ttl = timeout if timeout is not None else self.session_ttl_seconds
+        if effective_ttl > 0:
+            session.timeout_task = asyncio.create_task(
+                self._timeout_session(session, effective_ttl),
+                name=f"shell-timeout-{session_id}",
+            )
+        async with self._sessions_lock:
+            self._sessions[session_id] = session
+        if yield_time_ms:
+            try:
+                await asyncio.wait_for(asyncio.shield(wait_task), yield_time_ms / 1000)
+            except TimeoutError:
+                pass
+        return await self.poll_session(
+            owner_id=owner_id,
+            session_id=session_id,
+            yield_time_ms=0,
+            max_output_chars=max_output_chars,
+            runtime_id=owner_runtime_id,
+            sender_id=owner_sender_id,
+        )
+
+    async def list_sessions(
+        self,
+        owner_id: str,
+        *,
+        runtime_id: str = "local",
+        sender_id: str = "",
+    ) -> dict[str, Any]:
+        sessions = await self._owned_sessions(owner_id, runtime_id, sender_id)
+        return {"sessions": [self._session_summary(session) for session in sessions]}
+
+    async def poll_session(
+        self,
+        *,
+        owner_id: str,
+        session_id: str,
+        cursor: int | None = None,
+        yield_time_ms: int = 0,
+        max_output_chars: int = 10_000,
+        runtime_id: str = "local",
+        sender_id: str = "",
+    ) -> dict[str, Any]:
+        if not 0 <= yield_time_ms <= 30_000:
+            raise ValueError("yield_time_ms must be between 0 and 30000")
+        session = await self._get_owned_session(
+            session_id, owner_id, runtime_id, sender_id
+        )
+        session.last_activity = time.monotonic()
+        read_cursor = session.cursor if cursor is None else max(0, cursor)
+
+        async def read_output() -> tuple[bytes, int, int]:
+            def _read() -> tuple[bytes, int, int]:
+                try:
+                    size = session.output_path.stat().st_size
+                except OSError:
+                    return b"", read_cursor, read_cursor
+                start = min(read_cursor, size)
+                with session.output_path.open("rb") as output_file:
+                    output_file.seek(start)
+                    data = output_file.read(max_output_chars)
+                return data, start + len(data), size
+
+            return await asyncio.to_thread(_read)
+
+        data, next_cursor, size = await read_output()
+        if not data and session.process.returncode is None and yield_time_ms:
+            session.output_event.clear()
+            waiter = asyncio.create_task(session.output_event.wait())
+            try:
+                await asyncio.wait(
+                    {waiter, session.wait_task},
+                    timeout=yield_time_ms / 1000,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+            finally:
+                if not waiter.done():
+                    waiter.cancel()
+                    try:
+                        await waiter
+                    except asyncio.CancelledError:
+                        pass
+            if session.wait_task.done():
+                await session.reader_task
+            data, next_cursor, size = await read_output()
+        if session.process.returncode is not None:
+            await session.reader_task
+            data, next_cursor, size = await read_output()
+        session.cursor = next_cursor
+        status = self._session_status(session)
+        has_more = next_cursor < size
+        result = {
+            "session_id": session.session_id,
+            "pid": session.process.pid,
+            "status": status,
+            "stdout": _decode_shell_output(data),
+            "stderr": "",
+            "exit_code": session.process.returncode,
+            "cursor": next_cursor,
+            "has_more": has_more,
+            "session_closed": session.process.returncode is not None and not has_more,
+        }
+        if result["session_closed"]:
+            await self._remove_session(session)
+        return result
+
+    async def write_session(
+        self,
+        *,
+        owner_id: str,
+        session_id: str,
+        chars: str,
+        runtime_id: str = "local",
+        sender_id: str = "",
+    ) -> dict[str, Any]:
+        session = await self._get_owned_session(
+            session_id, owner_id, runtime_id, sender_id
+        )
+        session.last_activity = time.monotonic()
+        if session.process.returncode is not None or session.process.stdin is None:
+            raise ValueError("Shell session is not accepting input")
+        session.process.stdin.write(chars.encode("utf-8"))
+        await session.process.stdin.drain()
+        return {
+            "session_id": session_id,
+            "status": "running",
+            "written_chars": len(chars),
+        }
+
+    async def interrupt_session(
+        self,
+        *,
+        owner_id: str,
+        session_id: str,
+        yield_time_ms: int = 1000,
+        max_output_chars: int = 10000,
+        runtime_id: str = "local",
+        sender_id: str = "",
+    ) -> dict[str, Any]:
+        session = await self._get_owned_session(
+            session_id, owner_id, runtime_id, sender_id
+        )
+        if session.process.returncode is None:
+            if os.name == "nt":
+                session.process.send_signal(
+                    getattr(signal, "CTRL_BREAK_EVENT", signal.SIGTERM)
+                )
+            else:
+                try:
+                    os.killpg(session.process.pid, signal.SIGINT)
+                except ProcessLookupError:
+                    pass
+        return await self.poll_session(
+            owner_id=owner_id,
+            session_id=session_id,
+            yield_time_ms=yield_time_ms,
+            max_output_chars=max_output_chars,
+            runtime_id=runtime_id,
+            sender_id=sender_id,
+        )
+
+    async def terminate_session(
+        self,
+        *,
+        owner_id: str,
+        session_id: str,
+        max_output_chars: int = 10000,
+        runtime_id: str = "local",
+        sender_id: str = "",
+    ) -> dict[str, Any]:
+        session = await self._get_owned_session(
+            session_id, owner_id, runtime_id, sender_id
+        )
+        session.terminated = True
+        await self._terminate_process(session.process)
+        return await self.poll_session(
+            owner_id=owner_id,
+            session_id=session_id,
+            max_output_chars=max_output_chars,
+            runtime_id=runtime_id,
+            sender_id=sender_id,
+        )
+
+    async def shutdown_sessions(self) -> None:
+        async with self._sessions_lock:
+            sessions = list(self._sessions.values())
+        for session in sessions:
+            session.terminated = True
+        for session in sessions:
+            await self._terminate_process(session.process)
+        await asyncio.gather(*(session.reader_task for session in sessions))
+        for session in sessions:
+            await self._remove_session(session)
+
+    async def _timeout_session(  # noqa: ASYNC109
+        self,
+        session: _LocalShellSession,
+        timeout: int,  # noqa: ASYNC109
+    ) -> None:
+        try:
+            while not session.wait_task.done():
+                remaining = timeout - (time.monotonic() - session.last_activity)
+                if remaining <= 0:
+                    session.timed_out = True
+                    await self._terminate_process(session.process)
+                    return
+                try:
+                    await asyncio.wait_for(asyncio.shield(session.wait_task), remaining)
+                except TimeoutError:
+                    continue
+        except asyncio.CancelledError:
+            raise
+
+    async def _owned_sessions(
+        self, owner_id: str, runtime_id: str, sender_id: str
+    ) -> list[_LocalShellSession]:
+        async with self._sessions_lock:
+            return [
+                session
+                for session in self._sessions.values()
+                if session.runtime_id == runtime_id
+                and session.umo == owner_id
+                and session.sender_id == sender_id
+            ]
+
+    async def _get_owned_session(
+        self, session_id: str, owner_id: str, runtime_id: str, sender_id: str
+    ) -> _LocalShellSession:
+        async with self._sessions_lock:
+            session = self._sessions.get(session_id)
+        if session is None or (session.runtime_id, session.umo, session.sender_id) != (
+            runtime_id,
+            owner_id,
+            sender_id,
+        ):
+            raise ValueError("Shell session was not found")
+        return session
+
+    def _session_status(self, session: _LocalShellSession) -> str:
+        if session.process.returncode is None:
+            return "running"
+        if session.timed_out:
+            return "timed_out"
+        if session.terminated:
+            return "terminated"
+        return "completed" if session.process.returncode == 0 else "failed"
+
+    def _session_summary(self, session: _LocalShellSession) -> dict[str, Any]:
+        try:
+            size = session.output_path.stat().st_size
+        except OSError:
+            size = session.cursor
+        return {
+            "session_id": session.session_id,
+            "pid": session.process.pid,
+            "status": self._session_status(session),
+            "exit_code": session.process.returncode,
+            "started_at": session.started_at,
+            "unread_output_bytes": max(0, size - session.cursor),
+        }
+
+    async def _remove_session(self, session: _LocalShellSession) -> None:
+        async with self._sessions_lock:
+            self._sessions.pop(session.session_id, None)
+        if (
+            session.timeout_task
+            and not session.timeout_task.done()
+            and session.timeout_task is not asyncio.current_task()
+        ):
+            session.timeout_task.cancel()
+            try:
+                await session.timeout_task
+            except asyncio.CancelledError:
+                pass
+        session.output_path.unlink(missing_ok=True)
+        try:
+            session.output_path.parent.rmdir()
+        except OSError:
+            pass
+
+    async def _terminate_process(self, process: asyncio.subprocess.Process) -> None:
+        if process.returncode is not None:
+            return
+        if os.name == "nt":
+            try:
+                result = await asyncio.to_thread(
+                    subprocess.run,
+                    ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=5,
+                )
+                if result.returncode != 0:
+                    process.terminate()
+            except Exception:
+                process.terminate()
+        else:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+        try:
+            await asyncio.wait_for(process.wait(), 5)
+        except TimeoutError:
+            if os.name == "nt":
+                process.kill()
+            else:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            await process.wait()
+
+
+@dataclass
+class _LocalShellSession:
+    session_id: str
+    runtime_id: str
+    umo: str
+    sender_id: str
+    process: asyncio.subprocess.Process
+    output_path: Path
+    started_at: float
+    output_event: asyncio.Event
+    reader_task: asyncio.Task
+    wait_task: asyncio.Task
+    last_activity: float
+    timeout_task: asyncio.Task | None = None
+    cursor: int = 0
+    timed_out: bool = False
+    terminated: bool = False
 
 
 @dataclass
@@ -445,6 +918,7 @@ class LocalBooter(ComputerBooter):
 
     async def shutdown(self, **kwargs: Any) -> None:
         _ = kwargs
+        await self._shell.shutdown_sessions()
         logger.info("Local computer booter shutdown complete.")
 
     @property

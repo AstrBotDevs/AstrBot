@@ -28,3 +28,6 @@ last_synced:
     is manually adapted without regressing the shared marker. The replay also
     includes 73ecc394deb2f6fc37fd41a82f5bb247e4781b13 for secure ChatUI project
     workspace browsing and generated OpenAPI client updates.
+    d749d6fd41189ec002f3a24a61ea6fda479b582a is manually adapted as a
+    runtime-owned managed local shell session facility with owner isolation,
+    bounded output, process-group termination, and explicit shutdown cleanup.
