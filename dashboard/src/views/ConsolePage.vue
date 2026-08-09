@@ -11,6 +11,9 @@ const toast = useToast();
 const autoScrollEnabled = ref(
   localStorage.getItem('console_auto_scroll') !== 'false',
 );
+const hideUserChatEnabled = ref(
+  localStorage.getItem('console_hide_user_chat') !== 'false',
+);
 const pipDialog = ref(false);
 const loading = ref(false);
 const pipInstallPayload = ref({
@@ -20,6 +23,10 @@ const pipInstallPayload = ref({
 
 watch(autoScrollEnabled, (value) => {
   localStorage.setItem('console_auto_scroll', String(value));
+});
+
+watch(hideUserChatEnabled, (value) => {
+  localStorage.setItem('console_hide_user_chat', String(value));
 });
 
 async function pipInstall(): Promise<void> {
@@ -50,6 +57,19 @@ async function pipInstall(): Promise<void> {
         </p>
       </div>
       <div class="d-flex align-center">
+        <v-switch
+          v-model="hideUserChatEnabled"
+          :label="
+            hideUserChatEnabled
+              ? tm('hideUserChat.enabled')
+              : tm('hideUserChat.disabled')
+          "
+          hide-details
+          density="compact"
+          inset
+          color="primary"
+          style="margin-right: 16px"
+        ></v-switch>
         <v-switch
           v-model="autoScrollEnabled"
           :label="
@@ -106,6 +126,7 @@ async function pipInstall(): Promise<void> {
     <ConsoleDisplayer
       class="console-display"
       :auto-scroll="autoScrollEnabled"
+      :hide-user-chat="hideUserChatEnabled"
     />
   </div>
 </template>

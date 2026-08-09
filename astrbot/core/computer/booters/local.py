@@ -53,7 +53,7 @@ def _windows_shell_executable() -> str:
     for candidate in ("pwsh", "powershell.exe"):
         try:
             resolved = shutil.which(candidate)
-        except (AttributeError, OSError):
+        except AttributeError, OSError:
             resolved = None
         if resolved:
             return resolved
@@ -290,7 +290,9 @@ class LocalShellComponent(ShellComponent):
                     **process_kwargs,
                 )
             else:
-                process = await asyncio.create_subprocess_shell(command, **process_kwargs)
+                process = await asyncio.create_subprocess_shell(
+                    command, **process_kwargs
+                )
         except BaseException:
             output_path.unlink(missing_ok=True)
             raise

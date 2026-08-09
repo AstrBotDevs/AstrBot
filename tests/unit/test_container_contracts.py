@@ -22,10 +22,8 @@ def test_compose_keeps_astrbot_as_a_local_source_build(compose_name: str) -> Non
     astrbot = compose["services"]["astrbot"]
 
     assert astrbot["image"] == "astrbot:local"
-    assert astrbot["build"] == {
-        "context": ".",
-        "dockerfile": "Dockerfile",
-    }
+    assert astrbot["build"]["context"] == "."
+    assert astrbot["build"]["dockerfile"] == "Dockerfile"
     assert "./data:/AstrBot/data" in astrbot["volumes"]
 
 
@@ -49,12 +47,13 @@ def test_docs_dockerfile_builds_from_the_locked_docs_workspace() -> None:
     """The docs image must install from the lockfile before building static assets."""
     dockerfile = (REPO_ROOT / "Dockerfile.docs").read_text(encoding="utf-8")
 
-    assert "FROM node:26.5.0-alpine AS builder" in dockerfile
+    assert "FROM node:26.5.0-alpine@sha256:" in dockerfile
+    assert " AS builder" in dockerfile
     assert "COPY docs/package.json docs/pnpm-lock.yaml ./" in dockerfile
     assert "pnpm fetch --frozen-lockfile" in dockerfile
     assert "pnpm install --frozen-lockfile --offline" in dockerfile
     assert "pnpm run docs:build" in dockerfile
-    assert "FROM nginxinc/nginx-unprivileged:1.29.8-alpine" in dockerfile
+    assert "FROM nginxinc/nginx-unprivileged:1.29.8-alpine@sha256:" in dockerfile
     assert "COPY docs/nginx.conf /etc/nginx/nginx.conf" in dockerfile
     assert (
         "COPY --from=builder /src/.vitepress/dist/ /usr/share/nginx/html/" in dockerfile

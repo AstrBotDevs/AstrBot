@@ -145,10 +145,23 @@ async def get_chat_project_workspace_file(
     auth: AuthContext = Depends(require_chat_scope),
     service: ChatUIProjectService = Depends(get_service),
 ):
-    return await _run(lambda: service.get_workspace_file(auth.username, project_id, path))
+    return await _run(
+        lambda: service.get_workspace_file(auth.username, project_id, path)
+    )
 
 
-@router.get("/chat/projects/{project_id}/workspace/file/download")
+@router.get(
+    "/chat/projects/{project_id}/workspace/file/download",
+    responses={
+        200: {
+            "content": {
+                "application/octet-stream": {
+                    "schema": {"type": "string", "format": "binary"}
+                }
+            }
+        }
+    },
+)
 async def download_chat_project_workspace_file(
     project_id: str,
     path: str = Query(...),
@@ -164,6 +177,10 @@ async def download_chat_project_workspace_file(
     except ChatUIProjectServiceError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     # Re-check the ownership boundary immediately before constructing the response.
-    if not target.is_file() or target.is_symlink() or not target.resolve().is_relative_to(root):
+    if (
+        not target.is_file()
+        or target.is_symlink()
+        or not target.resolve().is_relative_to(root)
+    ):
         raise HTTPException(status_code=400, detail="Invalid workspace path")
     return FileResponse(target, filename=Path(path).name)

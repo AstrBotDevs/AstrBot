@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header, Query, Request
 from fastapi.responses import StreamingResponse
 
 from astrbot.dashboard.responses import ApiError, ok
@@ -42,9 +42,14 @@ def _log_stream_response(last_event_id: str | None, service: LogService):
     )
 
 
-def _get_log_history(service: LogService):
+def _get_log_history(
+    service: LogService,
+    *,
+    categories: set[str] | None = None,
+    privacy: set[str] | None = None,
+):
     try:
-        return ok(service.get_log_history())
+        return ok(service.get_log_history(categories=categories, privacy=privacy))
     except LogServiceError as exc:
         _raise_log_error(exc)
 
@@ -68,8 +73,14 @@ async def _update_trace_settings(payload: TraceSettingsRequest, service: LogServ
 async def get_log_history(
     _auth: AuthContext = Depends(require_system_scope),
     service: LogService = Depends(get_service),
+    category: list[str] | None = Query(default=None),
+    privacy: list[str] | None = Query(default=None),
 ):
-    return _get_log_history(service)
+    return _get_log_history(
+        service,
+        categories=set(category or ()),
+        privacy=set(privacy or ()),
+    )
 
 
 @router.get("/logs/live", responses=_SSE_RESPONSE)
@@ -77,8 +88,22 @@ async def live_logs(
     last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
     _auth: AuthContext = Depends(require_system_scope),
     service: LogService = Depends(get_service),
+    category: list[str] | None = Query(default=None),
+    privacy: list[str] | None = Query(default=None),
 ):
-    return _log_stream_response(last_event_id, service)
+    return StreamingResponse(
+        service.stream_log_events(
+            last_event_id,
+            categories=set(category or ()),
+            privacy=set(privacy or ()),
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Transfer-Encoding": "chunked",
+        },
+    )
 
 
 @router.get("/trace/settings")

@@ -1652,6 +1652,111 @@
         }
       }
     },
+    "/api/v1/chat/projects/{project_id}/workspace/files": {
+      "get": {
+        "tags": ["Chat"],
+        "summary": "List files in a ChatUI project workspace directory",
+        "operationId": "listChatProjectWorkspaceFiles",
+        "x-astrbot-scope": "chat",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/chat/projects/{project_id}/workspace/file": {
+      "get": {
+        "tags": ["Chat"],
+        "summary": "Preview a ChatUI project workspace file",
+        "operationId": "getChatProjectWorkspaceFile",
+        "x-astrbot-scope": "chat",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/chat/projects/{project_id}/workspace/file/download": {
+      "get": {
+        "tags": ["Chat"],
+        "summary": "Download a ChatUI project workspace file",
+        "operationId": "downloadChatProjectWorkspaceFile",
+        "x-astrbot-scope": "chat",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workspace file bytes",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/chat/projects/sessions/{session_id}": {
       "delete": {
         "tags": ["Chat"],

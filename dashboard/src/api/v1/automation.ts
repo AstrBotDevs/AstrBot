@@ -192,10 +192,20 @@ export const t2iApi = {
 };
 
 export const logApi = {
-  history() {
-    return typed<{ logs?: OpenConfig[] }>(openApiV1.getLogHistory());
+  history(filters?: { category?: string[]; privacy?: string[] }) {
+    return typed<{ logs?: OpenConfig[] }>(
+      openApiV1.getLogHistory({ query: filters }),
+    );
   },
-  liveUrl() {
-    return '/api/v1/logs/live';
+  liveUrl(filters?: { category?: string[]; privacy?: string[] }) {
+    const params = new URLSearchParams();
+    for (const category of filters?.category || []) {
+      params.append('category', category);
+    }
+    for (const privacy of filters?.privacy || []) {
+      params.append('privacy', privacy);
+    }
+    const query = params.toString();
+    return `/api/v1/logs/live${query ? `?${query}` : ''}`;
   },
 };

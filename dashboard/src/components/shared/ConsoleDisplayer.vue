@@ -50,10 +50,12 @@ const props = withDefaults(
   defineProps<{
     showLevelBtns?: boolean;
     autoScroll?: boolean;
+    hideUserChat?: boolean;
   }>(),
   {
     showLevelBtns: true,
     autoScroll: true,
+    hideUserChat: true,
   },
 );
 
@@ -129,6 +131,13 @@ function isLevelSelected(level: string): boolean {
   return selectedLevels.value.some((index) => logLevels[index] === level);
 }
 
+function isVisible(log: ConsoleLogEntry): boolean {
+  return (
+    isLevelSelected(log.level) &&
+    !(props.hideUserChat && log.category === 'user_chat')
+  );
+}
+
 function appendLogContent(element: HTMLPreElement, log: string): void {
   const levelMatch = log.match(
     /\[(DEBG|INFO|WARN|ERRO|CRIT|DEBUG|WARNING|ERROR|CRITICAL)\]/,
@@ -196,7 +205,7 @@ function refreshDisplay(): void {
   }
   target.innerHTML = '';
   for (const logItem of localLogCache.value) {
-    if (isLevelSelected(logItem.level)) {
+    if (isVisible(logItem)) {
       printLog(logItem.data);
     }
   }
@@ -225,7 +234,7 @@ function processNewLogs(newLogs: unknown[]): void {
       localLogCache.value.push(log);
       hasUpdate = true;
 
-      if (isLevelSelected(log.level)) {
+      if (isVisible(log)) {
         printLog(log.data);
       }
     }

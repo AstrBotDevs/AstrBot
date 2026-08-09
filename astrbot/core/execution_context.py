@@ -675,8 +675,10 @@ class CoreExecutionContext:
         if not settings.get("group_message_history_enable", False):
             return
         try:
-            max_messages = max(1, int(settings.get("group_message_history_max_cnt", 700)))
-        except (TypeError, ValueError):
+            max_messages = max(
+                1, int(settings.get("group_message_history_max_cnt", 700))
+            )
+        except TypeError, ValueError:
             max_messages = 700
         try:
             await self.message_history_manager.insert_message_chain(

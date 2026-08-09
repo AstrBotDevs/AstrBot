@@ -6,9 +6,9 @@ upstream:
 
 last_synced:
   commit: 30e20318cbaaa2e1ba57f3e0eee265d9ee98115c
-  synced_at_utc: 2026-08-09T00:00:00Z
+  synced_at_utc: 2026-08-09T22:45:08Z
   sync_method: manual-adaptation
-  source_pr: '9587, 9534, 9518, 9596, 9597, 9599, 9602'
+  source_pr: '9587, 9534, 9518, 9596, 9597, 9599, 9602, 9465, 9432, 9470, 9471, 9501, 9165'
   note: >-
     Reviewed the audited interval from 609e576b31eb5d7f4598eeeb4d23b67e34d0f1bf
     through 30e20318cbaaa2e1ba57f3e0eee265d9ee98115c. No upstream commit was
@@ -37,3 +37,7 @@ last_synced:
     49095d3ba3fca9272a67aa5eeab2f6c0719c5091 is manually adapted with an
     explicit write_line session action that appends exactly one LF for
     line-oriented programs.
+    5b29f6f730274713b91e0acf988cda4c57c617c9 is manually adapted into a
+    stable category/privacy/event metadata protocol, redacted structured log
+    broker entries, server-side category/privacy filters, consistent SSE
+    replay/live IDs, and a default-hidden user-chat console toggle.

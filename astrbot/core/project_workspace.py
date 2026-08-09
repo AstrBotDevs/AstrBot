@@ -65,7 +65,7 @@ class ProjectWorkspaceResolver:
         normalized = decoded.replace("\\", "/")
         if "\x00" in normalized or normalized.startswith("/"):
             raise ProjectWorkspaceError("Invalid workspace path")
-        parts = tuple(part for part in normalized.split("/") if part not in {"" , "."})
+        parts = tuple(part for part in normalized.split("/") if part not in {"", "."})
         if any(part in {"..", "~"} or "/" in part or "\\" in part for part in parts):
             raise ProjectWorkspaceError("Invalid workspace path")
         if any(part.startswith("/") or Path(part).is_absolute() for part in parts):
@@ -92,14 +92,22 @@ class ProjectWorkspaceResolver:
             current = candidate
         return current
 
-    def resolve_directory(self, creator: str, project_id: str, relative_path: str = "") -> tuple[Path, Path]:
+    def resolve_directory(
+        self, creator: str, project_id: str, relative_path: str = ""
+    ) -> tuple[Path, Path]:
         root = self.root_for(creator, project_id)
-        target = self._walk(root, self._parts(relative_path, allow_empty=True)) if root.exists() else root
+        target = (
+            self._walk(root, self._parts(relative_path, allow_empty=True))
+            if root.exists()
+            else root
+        )
         if not target.exists() or not target.is_dir():
             raise ProjectWorkspaceError("Workspace directory not found")
         return root, target
 
-    def resolve_file(self, creator: str, project_id: str, relative_path: str) -> tuple[Path, Path]:
+    def resolve_file(
+        self, creator: str, project_id: str, relative_path: str
+    ) -> tuple[Path, Path]:
         root = self.root_for(creator, project_id)
         target = self._walk(root, self._parts(relative_path, allow_empty=False))
         if not target.is_file():

@@ -4,6 +4,10 @@
     "enabled": "Auto-scroll enabled",
     "disabled": "Auto-scroll disabled"
   },
+  "hideUserChat": {
+    "enabled": "User chat hidden",
+    "disabled": "User chat visible"
+  },
   "pipInstall": {
     "button": "Install pip Package",
     "dialogTitle": "Install Pip Package",

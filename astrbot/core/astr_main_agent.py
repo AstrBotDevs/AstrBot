@@ -1950,9 +1950,8 @@ async def build_main_agent(
     ltm_settings = plugin_context.get_config(umo=event.unified_msg_origin).get(
         "provider_ltm_settings", {}
     )
-    if (
-        event.get_message_type() == MessageType.GROUP_MESSAGE
-        and ltm_settings.get("group_message_history_enable", False)
+    if event.get_message_type() == MessageType.GROUP_MESSAGE and ltm_settings.get(
+        "group_message_history_enable", False
     ):
         if req.func_tool is None:
             req.func_tool = ToolSet()

@@ -5983,7 +5983,10 @@ export type RunCronJobResponse = RunCronJobResponses[keyof RunCronJobResponses];
 export type StreamLiveLogsData = {
   body?: never;
   path?: never;
-  query?: never;
+  query?: {
+    category?: Array<string>;
+    privacy?: Array<string>;
+  };
   url: '/api/v1/logs/live';
 };
 
@@ -6000,7 +6003,10 @@ export type StreamLiveLogsResponse =
 export type GetLogHistoryData = {
   body?: never;
   path?: never;
-  query?: never;
+  query?: {
+    category?: Array<string>;
+    privacy?: Array<string>;
+  };
   url: '/api/v1/logs/history';
 };
 

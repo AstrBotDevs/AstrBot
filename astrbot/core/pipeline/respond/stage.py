@@ -263,7 +263,20 @@ class RespondStage(Stage):
                 semantic_text=self._chain_semantic_text(chain),
                 error_summary="platform returned an unexpected multi-part receipt",
             )
-        return attempts[0]
+        attempt = attempts[0]
+        if attempt.status == "accepted":
+            logger.info(
+                "Platform message accepted",
+                extra={
+                    "category": "platform_send",
+                    "privacy": "internal",
+                    "platform": event.get_platform_id(),
+                    "conversation_id": getattr(event, "unified_msg_origin", ""),
+                    "sender_id": str(event.get_sender_id()),
+                    "summary": "Platform message accepted",
+                },
+            )
+        return attempt
 
     async def _send_streaming_result(
         self, event: AstrMessageEvent, result
@@ -323,6 +336,17 @@ class RespondStage(Stage):
                 ],
             )
         self._log_send_result(send_result)
+        logger.info(
+            "Platform streaming message accepted",
+            extra={
+                "category": "platform_send",
+                "privacy": "internal",
+                "platform": event.get_platform_id(),
+                "conversation_id": getattr(event, "unified_msg_origin", ""),
+                "sender_id": str(event.get_sender_id()),
+                "summary": "Platform streaming message accepted",
+            },
+        )
         return self._receipt_for_attempts(
             event,
             list(

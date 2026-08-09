@@ -370,7 +370,12 @@ class GetGroupMessageHistoryTool(FunctionTool[AstrAgentContext]):
         default_factory=lambda: {
             "type": "object",
             "properties": {
-                "limit": {"type": "integer", "default": 20, "minimum": 1, "maximum": 50},
+                "limit": {
+                    "type": "integer",
+                    "default": 20,
+                    "minimum": 1,
+                    "maximum": 50,
+                },
                 "before_id": {"type": "integer", "minimum": 1},
                 "keyword": {"type": "string"},
                 "sender": {"type": "string"},
@@ -396,7 +401,7 @@ class GetGroupMessageHistoryTool(FunctionTool[AstrAgentContext]):
             return "error: persisted group message history is disabled."
         try:
             limit = max(1, min(50, int(limit)))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return "error: limit must be an integer."
         if before_id is not None and before_id <= 0:
             return "error: before_id must be greater than zero."
@@ -446,7 +451,11 @@ class GetGroupMessageHistoryTool(FunctionTool[AstrAgentContext]):
                 display_name += f" [{str(record.sender_id or '')[:8]}]"
             if keyword and keyword not in text_value.casefold():
                 continue
-            if sender and sender not in display_name.casefold() and sender not in str(record.sender_id or "").casefold():
+            if (
+                sender
+                and sender not in display_name.casefold()
+                and sender not in str(record.sender_id or "").casefold()
+            ):
                 continue
             rows.append(
                 {

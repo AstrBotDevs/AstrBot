@@ -64,6 +64,10 @@ NON_JSON_SUCCESS_MEDIA = {
     ("get", "/api/v1/files/{attachment_id}/content"): frozenset(
         {"application/octet-stream"}
     ),
+    (
+        "get",
+        "/api/v1/chat/projects/{project_id}/workspace/file/download",
+    ): frozenset({"application/octet-stream"}),
     ("get", "/api/v1/skills/{skill_name}/archive"): frozenset({"application/zip"}),
     ("post", "/api/v1/conversations/export"): frozenset({"application/x-ndjson"}),
     ("get", "/api/v1/backups/{filename}"): frozenset({"application/zip"}),

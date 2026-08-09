@@ -8,6 +8,7 @@ import os
 import sys
 import tempfile
 import time
+import uuid
 from asyncio import Queue
 from collections import deque
 from pathlib import Path
@@ -20,10 +21,19 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
     get_astrbot_data_path,
 )
+from astrbot.core.utils.error_redaction import redact_sensitive_text
 
 CACHED_SIZE = 500
 PLUGIN_LOGGER_PREFIX = "astrbot.plugin."
 PLUGIN_LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+LOG_CATEGORIES = frozenset({"system", "user_chat", "platform_send", "security"})
+LOG_PRIVACY = frozenset({"public", "internal", "private"})
+
+
+def _new_event_id() -> str:
+    value = uuid.uuid4()
+    return str(getattr(value, "hex", value))
+
 
 if TYPE_CHECKING:
     from loguru import Record
@@ -46,6 +56,18 @@ class _RecordEnricherFilter(logging.Filter):
         record.source_file = _build_source_file(record.pathname)
         record.source_line = record.lineno
         record.is_trace = record.name == "astrbot.trace"
+        category = str(getattr(record, "category", "system") or "system")
+        record.category = category if category in LOG_CATEGORIES else "system"
+        privacy = str(getattr(record, "privacy", "internal") or "internal")
+        record.privacy = privacy if privacy in LOG_PRIVACY else "internal"
+        record.event_id = str(getattr(record, "event_id", "") or _new_event_id())
+        record.timestamp = float(getattr(record, "timestamp", record.created))
+        record.platform = getattr(record, "platform", None)
+        record.conversation_id = getattr(record, "conversation_id", None)
+        record.sender_id = getattr(record, "sender_id", None)
+        record.summary = redact_sensitive_text(
+            str(getattr(record, "summary", record.getMessage()))[:512]
+        )
         return True
 
 
@@ -102,6 +124,14 @@ def _patch_record(record: Record) -> None:
     extra.setdefault("source_file", _build_source_file(record["file"].path))
     extra.setdefault("source_line", record["line"])
     extra.setdefault("is_trace", False)
+    extra.setdefault("category", "system")
+    extra.setdefault("privacy", "internal")
+    extra.setdefault("event_id", _new_event_id())
+    extra.setdefault("timestamp", time.time())
+    extra.setdefault("platform", None)
+    extra.setdefault("conversation_id", None)
+    extra.setdefault("sender_id", None)
+    extra.setdefault("summary", redact_sensitive_text(str(record["message"])[:512]))
 
 
 _loguru = _raw_loguru_logger.patch(_patch_record)
@@ -198,7 +228,8 @@ class LogBroker:
         return q
 
     def unregister(self, q: Queue) -> None:
-        self.subscribers.remove(q)
+        if q in self.subscribers:
+            self.subscribers.remove(q)
 
     def publish(self, log_entry: dict) -> None:
         self.log_cache.append(log_entry)
@@ -217,12 +248,26 @@ class LogQueueHandler(logging.Handler):
         self.log_broker = log_broker
 
     def emit(self, record: logging.LogRecord) -> None:
-        log_entry = self.format(record)
+        timestamp = float(getattr(record, "timestamp", record.created))
+        category = str(getattr(record, "category", "system") or "system")
+        privacy = str(getattr(record, "privacy", "internal") or "internal")
+        summary = redact_sensitive_text(
+            str(getattr(record, "summary", record.getMessage()))[:512]
+        )
+        log_entry = redact_sensitive_text(self.format(record))
         self.log_broker.publish(
             {
                 "level": record.levelname,
-                "time": time.time(),
+                "time": timestamp,
+                "timestamp": timestamp,
                 "data": log_entry,
+                "category": category if category in LOG_CATEGORIES else "system",
+                "privacy": privacy if privacy in LOG_PRIVACY else "internal",
+                "event_id": str(getattr(record, "event_id", "") or _new_event_id()),
+                "platform": getattr(record, "platform", None),
+                "conversation_id": getattr(record, "conversation_id", None),
+                "sender_id": getattr(record, "sender_id", None),
+                "summary": summary,
             },
         )
 

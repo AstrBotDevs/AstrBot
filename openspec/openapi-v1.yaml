@@ -4316,6 +4316,21 @@ paths:
       summary: Stream live logs
       operationId: streamLiveLogs
       x-astrbot-scope: system
+      parameters:
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+        - name: privacy
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
       responses:
         '200':
           description: Server-sent log stream
@@ -4330,6 +4345,21 @@ paths:
       summary: Get log history
       operationId: getLogHistory
       x-astrbot-scope: system
+      parameters:
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+        - name: privacy
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
       responses:
         '200':
           $ref: '#/components/responses/Text'

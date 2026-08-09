@@ -17,6 +17,7 @@ from asyncio import Queue
 from astrbot import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.pipeline.scheduler import PipelineScheduler
+from astrbot.core.utils.error_redaction import redact_sensitive_text
 
 from .platform import AstrMessageEvent
 
@@ -111,13 +112,21 @@ class EventBus:
             if queue_wait >= self._QUEUE_WAIT_LOG_THRESHOLD_S:
                 queue_wait_suffix = f" (queued {queue_wait:.2f}s)"
 
-        # 如果有发送者名称: [平台名] 发送者名称/发送者ID: 消息概要
-        if event.get_sender_name():
-            logger.info(
-                f"[{conf_name}] [{event.get_platform_id()}({event.get_platform_name()})] {event.get_sender_name()}/{event.get_sender_id()}: {event.get_message_outline()}{queue_wait_suffix}",
-            )
-        # 没有发送者名称: [平台名] 发送者ID: 消息概要
-        else:
-            logger.info(
-                f"[{conf_name}] [{event.get_platform_id()}({event.get_platform_name()})] {event.get_sender_id()}: {event.get_message_outline()}{queue_wait_suffix}",
-            )
+        sender_name = event.get_sender_name()
+        sender_id = str(event.get_sender_id())
+        platform_id = event.get_platform_id()
+        platform_name = event.get_platform_name()
+        outline = redact_sensitive_text(str(event.get_message_outline()))[:160]
+        summary = f"{conf_name} event from {sender_name or sender_id}: {outline}{queue_wait_suffix}"
+        sender_label = f"{sender_name}/{sender_id}" if sender_name else sender_id
+        logger.info(
+            f"[{conf_name}] Inbound platform event from {sender_label}: {outline}",
+            extra={
+                "category": "user_chat",
+                "privacy": "private",
+                "platform": str(platform_id or platform_name),
+                "conversation_id": event.unified_msg_origin,
+                "sender_id": sender_id,
+                "summary": summary,
+            },
+        )
