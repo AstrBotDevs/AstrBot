@@ -172,6 +172,11 @@
           "description": "运行环境",
           "hint": "允许 Agent 访问的环境。local 为本机环境，sandbox 为沙箱环境，none 为不允许任何环境。"
         },
+        "windows_shell": {
+          "description": "Windows PowerShell 版本",
+          "hint": "Windows 下本地运行时使用的 Shell。PowerShell 7 需自行安装。",
+          "labels": ["Windows PowerShell 5.1", "PowerShell 7"]
+        },
         "computer_use_require_admin": {
           "description": "需要 AstrBot 管理员权限",
           "hint": "开启后，需要 AstrBot 管理员权限才能调用使用电脑能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。"

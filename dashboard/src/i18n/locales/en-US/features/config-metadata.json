@@ -170,6 +170,11 @@
           "description": "Computer Use Runtime",
           "hint": "Environment allowed for Agent usage. `local` means the local machine environment, `sandbox` means the sandbox environment, and `none` means no environment is allowed."
         },
+        "windows_shell": {
+          "description": "Windows PowerShell Version",
+          "hint": "Shell used by the Windows local runtime. PowerShell 7 must be installed separately.",
+          "labels": ["Windows PowerShell 5.1", "PowerShell 7"]
+        },
         "computer_use_require_admin": {
           "description": "Require AstrBot Admin Permission",
           "hint": "When enabled, AstrBot admin permission is required to use computer capabilities. Admins can be added in Platform Config. Use the /sid command to view admin IDs."

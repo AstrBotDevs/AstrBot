@@ -170,6 +170,11 @@
                     "description": "Среда выполнения (Runtime)",
                     "hint": "Среда, к которой разрешён доступ Agent: `local` — локальная среда компьютера, `sandbox` — изолированная песочница, `none` — запретить доступ к любым средам."
                 },
+                "windows_shell": {
+                    "description": "Версия Windows PowerShell",
+                    "hint": "Оболочка Windows Local runtime. PowerShell 7 нужно устанавливать отдельно.",
+                    "labels": ["Windows PowerShell 5.1", "PowerShell 7"]
+                },
                 "computer_use_require_admin": {
                     "description": "Требовать права администратора AstrBot",
                     "hint": "Если включено, только администраторы смогут использовать возможности управления компьютером. Добавить администраторов можно в конфиге платформы."
