@@ -19,7 +19,6 @@ from ..registry import builtin_tool
 from .util import (
     check_admin_permission,
     is_local_runtime,
-    windows_shell_setting,
     workspace_root_for_context,
 )
 
@@ -125,6 +124,10 @@ class ExecuteShellTool(FunctionTool):
                 if not creator_id:
                     return "Error executing command: sender identity is unavailable."
                 started_at = monotonic()
+                cfg = context.context.context.get_config(
+                    umo=context.context.event.unified_msg_origin
+                )
+                windows_shell = cfg.get("provider_settings", {}).get("windows_shell")
                 result = await sb.shell.exec_managed(
                     command,
                     owner_id=context.context.event.unified_msg_origin,
@@ -135,7 +138,7 @@ class ExecuteShellTool(FunctionTool):
                     env=env,
                     timeout=timeout,
                     yield_time_ms=0 if background else yield_time_ms,
-                    windows_shell=windows_shell_setting(context),
+                    windows_shell=str(windows_shell) if windows_shell else None,
                 )
                 elapsed_seconds = monotonic() - started_at
                 if result.get("session_closed") and result.get("status") in {

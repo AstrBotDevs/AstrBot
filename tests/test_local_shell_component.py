@@ -101,32 +101,44 @@ def test_local_shell_component_uses_pwsh_when_configured(monkeypatch):
     assert calls[0][1]["shell"] is False
 
 
-def test_resolve_windows_shell_defaults_to_powershell_51():
-    assert local_booter._resolve_windows_shell(None) == "powershell.exe"
-    assert local_booter._resolve_windows_shell("powershell.exe") == "powershell.exe"
-
-
-def test_resolve_windows_shell_returns_configured_pwsh():
-    assert local_booter._resolve_windows_shell("pwsh.exe") == "pwsh.exe"
-
-
-def test_resolve_windows_shell_raises_when_missing_on_windows(monkeypatch):
+def test_exec_raises_when_windows_shell_missing(monkeypatch):
+    monkeypatch.setattr(local_booter.sys, "platform", "win32")
     monkeypatch.setattr(local_booter.os, "name", "nt")
     monkeypatch.setattr(local_booter.shutil, "which", lambda _cmd: None)
 
     with pytest.raises(RuntimeError, match="pwsh.exe"):
-        local_booter._resolve_windows_shell("pwsh.exe")
+        asyncio.run(
+            LocalShellComponent().exec("Get-ChildItem", windows_shell="pwsh.exe")
+        )
 
 
-def test_resolve_windows_shell_skips_check_outside_windows(monkeypatch):
-    monkeypatch.setattr(local_booter.os, "name", "posix")
+def test_exec_skips_windows_shell_check_outside_windows(monkeypatch):
+    calls = []
+
+    def fake_run(*args, **kwargs):
+        calls.append((args, kwargs))
+        return _FakePopen(stdout=b"")
 
     def fail_if_called(_cmd):
         raise AssertionError("shutil.which must not be called outside Windows")
 
+    monkeypatch.setattr(subprocess, "Popen", fake_run)
+    monkeypatch.setattr(local_booter.sys, "platform", "win32")
     monkeypatch.setattr(local_booter.shutil, "which", fail_if_called)
 
-    assert local_booter._resolve_windows_shell("pwsh.exe") == "pwsh.exe"
+    result = asyncio.run(
+        LocalShellComponent().exec("Get-ChildItem", windows_shell="pwsh.exe")
+    )
+
+    assert result["exit_code"] == 0
+    assert calls[0][0][0] == [
+        "pwsh.exe",
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "Get-ChildItem",
+    ]
 
 
 def test_local_shell_component_keeps_platform_shell_outside_windows(monkeypatch):

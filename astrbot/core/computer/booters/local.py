@@ -92,17 +92,6 @@ def _decode_shell_output(output: bytes | None) -> str:
     return _decode_bytes_with_fallback(output, preferred_encoding="utf-8")
 
 
-def _resolve_windows_shell(windows_shell: str | None) -> str:
-    """Return the Windows PowerShell executable, failing when it is missing."""
-    executable = windows_shell or "powershell.exe"
-    if os.name == "nt" and shutil.which(executable) is None:
-        raise RuntimeError(
-            f"The Windows PowerShell executable '{executable}' was not found on "
-            "PATH. Install it or reset the 'Windows PowerShell version' setting."
-        )
-    return executable
-
-
 @dataclass
 class _LocalShellSession:
     """Runtime state for one managed local shell process."""
@@ -158,8 +147,15 @@ class LocalShellComponent(ShellComponent):
             popen_command: str | list[str] = command
             popen_shell = shell
             if sys.platform == "win32" and shell:
+                shell_executable = windows_shell or "powershell.exe"
+                if os.name == "nt" and shutil.which(shell_executable) is None:
+                    raise RuntimeError(
+                        f"The Windows PowerShell executable '{shell_executable}' "
+                        "was not found on PATH. Install it or reset the "
+                        "'Windows PowerShell version' setting."
+                    )
                 popen_command = [
-                    _resolve_windows_shell(windows_shell),
+                    shell_executable,
                     "-NoLogo",
                     "-NoProfile",
                     "-NonInteractive",
@@ -291,8 +287,15 @@ class LocalShellComponent(ShellComponent):
         try:
             if sys.platform == "win32":
                 process_factory = asyncio.create_subprocess_exec
+                shell_executable = windows_shell or "powershell.exe"
+                if os.name == "nt" and shutil.which(shell_executable) is None:
+                    raise RuntimeError(
+                        f"The Windows PowerShell executable '{shell_executable}' "
+                        "was not found on PATH. Install it or reset the "
+                        "'Windows PowerShell version' setting."
+                    )
                 process_args = (
-                    _resolve_windows_shell(windows_shell),
+                    shell_executable,
                     "-NoLogo",
                     "-NoProfile",
                     "-NonInteractive",
