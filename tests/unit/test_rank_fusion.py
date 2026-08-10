@@ -7,7 +7,11 @@ from astrbot.core.knowledge_base.retrieval.rank_fusion import RankFusion
 from astrbot.core.knowledge_base.retrieval.sparse_retriever import SparseResult
 
 
-def make_dense_result(chunk_id: str, similarity: float) -> Result:
+def make_dense_result(
+    chunk_id: str,
+    similarity: float,
+    kb_id: str = "kb",
+) -> Result:
     return Result(
         similarity=similarity,
         data={
@@ -17,7 +21,7 @@ def make_dense_result(chunk_id: str, similarity: float) -> Result:
                 {
                     "chunk_index": 0,
                     "kb_doc_id": f"doc-{chunk_id}",
-                    "kb_id": "kb",
+                    "kb_id": kb_id,
                 }
             ),
         },
@@ -177,3 +181,29 @@ async def test_rank_fusion_keeps_only_the_best_chunk_per_document():
 
     assert [result.chunk_id for result in results] == ["doc-a-best", "doc-b"]
     assert [result.doc_id for result in results] == ["doc-a", "doc-b"]
+
+
+@pytest.mark.asyncio
+async def test_rank_fusion_does_not_promote_a_single_low_scoring_kb_result():
+    dense_results = [
+        make_dense_result("strong", 0.99, kb_id="kb-large"),
+        make_dense_result("moderate", 0.80, kb_id="kb-large"),
+        make_dense_result("weak", 0.10, kb_id="kb-small"),
+    ]
+    sparse_results = [
+        make_sparse_result("strong", "kb-large", 10.0, 1),
+        make_sparse_result("moderate", "kb-large", 5.0, 2),
+        make_sparse_result("weak", "kb-small", 0.01, 1),
+    ]
+
+    results = await RankFusion(kb_db=None).fuse(
+        dense_results=dense_results,
+        sparse_results=sparse_results,
+    )
+
+    assert [result.chunk_id for result in results] == [
+        "strong",
+        "moderate",
+        "weak",
+    ]
+    assert results[-1].score == pytest.approx(0.1)
