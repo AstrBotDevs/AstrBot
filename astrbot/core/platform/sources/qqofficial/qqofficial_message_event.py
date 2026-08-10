@@ -5,6 +5,7 @@ import hashlib
 import logging
 import os
 import random
+from dataclasses import dataclass
 from typing import cast
 
 import aiofiles
@@ -144,6 +145,20 @@ def _parse_upload_prepare_response(
         config.get("retry_timeout") or src.get("retry_timeout") or 0.0
     )
     return upload_id, block_size, parts, concurrency, retry_timeout
+
+
+@dataclass
+class _ChunkUploadSession:
+    """Shared state for one chunked upload (prepare -> parts -> finish)."""
+
+    base: str
+    receiver: dict
+    upload_id: str
+    block_size: int
+    file_source: str
+    file_size: int
+    retry_timeout: float
+    total_parts: int
 
 
 class APIReturnNoneError(Exception):
@@ -681,47 +696,29 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             # 纯文本兜底：markdown 或媒体消息发送失败时降级为 msg_type=0 纯文本。
             # 覆盖长任务超过被动回复有效期、以及 40034011 无效 markdown content 等场景。
             if plain_text and (payload.get("markdown") or payload.get("media")):
-                content_payload = payload.copy()
-                content_payload.pop("markdown", None)
-                content_payload.pop("media", None)
-                content_payload["content"] = plain_text
-                content_payload["msg_type"] = 0
-                if stream:
-                    content_value = cast(str, content_payload.get("content") or "")
-                    if content_value and not content_value.endswith("\n"):
-                        content_payload["content"] = content_value + "\n"
+                plain_text = self._degrade_media_payload_to_text(
+                    payload, plain_text, err, stream
+                )
                 try:
-                    ret = await send_func(content_payload)
+                    ret = await send_func(payload)
                     logger.info("[QQOfficial] 主动发送接口（纯文本）发送成功。")
                     return ret
                 except _QQOFFICIAL_SEND_API_ERRORS as content_err:
                     err = content_err
-                    payload = content_payload
 
             # 媒体消息发送失败且无文本时，发送失败说明，避免用户收不到任何回复。
             if not plain_text and (
                 payload.get("media") or payload.get("msg_type") == 7
             ):
-                explanation = (
-                    f"文件已生成，但发送到 QQ 失败：{err}。"
-                    "文件仍保存在服务器上，可联系管理员获取。"
+                plain_text = self._degrade_media_payload_to_text(
+                    payload, plain_text, err, stream
                 )
-                content_payload = payload.copy()
-                content_payload.pop("markdown", None)
-                content_payload.pop("media", None)
-                content_payload["content"] = explanation
-                content_payload["msg_type"] = 0
-                if stream:
-                    content_value = cast(str, content_payload.get("content") or "")
-                    if content_value and not content_value.endswith("\n"):
-                        content_payload["content"] = content_value + "\n"
                 try:
-                    ret = await send_func(content_payload)
+                    ret = await send_func(payload)
                     logger.info("[QQOfficial] 媒体发送失败，已发送文本说明。")
                     return ret
                 except _QQOFFICIAL_SEND_API_ERRORS as content_err:
                     err = content_err
-                    payload = content_payload
 
             if not isinstance(err, botpy.errors.ServerError):
                 raise
@@ -924,6 +921,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
     ) -> dict:
         """Perform a QQ API request with bot auth headers.
 
+        Uses the botpy HTTP session directly (same pattern as the existing
+        ``self.bot.api._http.request`` usage in this file) because botpy only
+        surfaces the API error message text and drops the platform error code
+        needed for 40093001/40093002 handling.
+
         Args:
             method: HTTP method.
             path: API path with path parameters already substituted.
@@ -1047,21 +1049,20 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             len(parts),
         )
         sem = asyncio.Semaphore(max(1, min(concurrency, 4)))
-        total_parts = len(parts)
+        session = _ChunkUploadSession(
+            base=base,
+            receiver=receiver_field,
+            upload_id=upload_id,
+            block_size=block_size,
+            file_source=file_source,
+            file_size=file_size,
+            retry_timeout=retry_timeout,
+            total_parts=len(parts),
+        )
 
         async def upload_part(part: dict) -> None:
             async with sem:
-                await self._upload_one_part(
-                    base,
-                    receiver_field,
-                    upload_id,
-                    block_size,
-                    file_source,
-                    file_size,
-                    part,
-                    retry_timeout,
-                    total_parts,
-                )
+                await self._upload_one_part(session, part)
 
         await asyncio.gather(*(upload_part(p) for p in parts))
 
@@ -1085,42 +1086,41 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
     async def _upload_one_part(
         self,
-        base: str,
-        receiver_field: dict,
-        upload_id: str,
-        block_size: int,
-        file_source: str,
-        file_size: int,
+        session: _ChunkUploadSession,
         part: dict,
-        retry_timeout: float,
-        total_parts: int,
     ) -> None:
         """PUT one part to its presigned URL, then acknowledge via part_finish."""
-        part_index = int(part.get("part_index") or part.get("index") or 0)
+        part_index_raw = part.get("part_index") or part.get("index")
+        try:
+            part_index = int(part_index_raw)
+        except (TypeError, ValueError):
+            raise QQMediaUploadError(
+                f"upload_prepare 分片返回非法 part_index: {part_index_raw!r}, "
+                f"part: {str(part)[:200]}"
+            ) from None
+        if part_index <= 0:
+            raise QQMediaUploadError(
+                f"upload_prepare 分片返回非法 part_index={part_index}, "
+                f"part: {str(part)[:200]}"
+            )
         presigned_url = str(part.get("presigned_url") or part.get("url") or "")
         if not presigned_url:
             raise QQMediaUploadError(
                 f"upload_prepare 分片缺少 presigned_url: {str(part)[:200]}"
             )
-        part_block_size = int(part.get("block_size") or block_size)
-        offset = (part_index - 1) * block_size
-        length = min(part_block_size, file_size - offset)
+        part_block_size = int(part.get("block_size") or session.block_size)
+        offset = (part_index - 1) * session.block_size
+        length = min(part_block_size, session.file_size - offset)
 
         data = await asyncio.get_running_loop().run_in_executor(
-            None, _read_file_chunk, file_source, offset, length
+            None, _read_file_chunk, session.file_source, offset, length
         )
         md5_hex = hashlib.md5(data).hexdigest()
 
-        await self._put_part_with_retry(presigned_url, data, part_index, total_parts)
-        await self._part_finish_with_retry(
-            base,
-            receiver_field,
-            upload_id,
-            part_index,
-            length,
-            md5_hex,
-            retry_timeout,
+        await self._put_part_with_retry(
+            presigned_url, data, part_index, session.total_parts
         )
+        await self._part_finish_with_retry(session, part_index, length, md5_hex)
 
     async def _put_part_with_retry(
         self,
@@ -1154,32 +1154,31 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
     async def _part_finish_with_retry(
         self,
-        base: str,
-        receiver_field: dict,
-        upload_id: str,
+        session: _ChunkUploadSession,
         part_index: int,
         block_size: int,
         md5: str,
-        retry_timeout: float,
     ) -> None:
         """Acknowledge a finished part, retrying on biz_code 40093001."""
         body = {
-            "upload_id": upload_id,
+            "upload_id": session.upload_id,
             "part_index": part_index,
             "block_size": block_size,
             "md5": md5,
-            **receiver_field,
+            **session.receiver,
         }
         timeout = (
             _QQOFFICIAL_PART_FINISH_DEFAULT_TIMEOUT
-            if not retry_timeout
-            else min(retry_timeout, _QQOFFICIAL_PART_FINISH_MAX_TIMEOUT)
+            if not session.retry_timeout
+            else min(session.retry_timeout, _QQOFFICIAL_PART_FINISH_MAX_TIMEOUT)
         )
         loop = asyncio.get_running_loop()
         start = loop.time()
         while True:
             try:
-                await self._qq_api_request("POST", f"{base}/upload_part_finish", body)
+                await self._qq_api_request(
+                    "POST", f"{session.base}/upload_part_finish", body
+                )
                 return
             except QQApiError as e:
                 if e.code != _QQOFFICIAL_BIZ_PART_RETRYABLE:
