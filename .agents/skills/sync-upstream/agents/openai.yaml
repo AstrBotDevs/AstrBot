@@ -1,0 +1,7 @@
+interface:
+  display_name: 'Sync AstrBot Upstream'
+  short_description: 'Review and record upstream sync decisions'
+  default_prompt: 'Use $sync-upstream to inspect upstream/master and maintain fork integration decisions.'
+
+policy:
+  allow_implicit_invocation: false
