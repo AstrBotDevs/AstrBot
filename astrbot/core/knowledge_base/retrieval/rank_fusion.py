@@ -65,7 +65,8 @@ class RankFusion:
 
         在所有候选中对稠密相似度做 min-max 归一化，BM25 分数则在
         每个独立知识库内归一化，再按权重合并。RRF 分数仅用于融合分数
-        相同时的稳定排序。
+        相同时的稳定排序。最终结果只去除完全相同的文本块，
+        不按来源文档去重。
 
         Args:
             dense_results: 稠密检索结果
@@ -164,9 +165,9 @@ class RankFusion:
             ),
         )
 
-        # 6. 构建融合结果，每篇来源文档只保留得分最高的块。
+        # 6. Keep distinct chunk text regardless of how many chunks share a document.
         fused_results = []
-        seen_documents: set[tuple[str, str]] = set()
+        seen_contents: set[str] = set()
         for identifier in sorted_ids:
             # 优先从稀疏检索获取完整信息
             if identifier in chunk_id_to_sparse:
@@ -194,10 +195,9 @@ class RankFusion:
             else:
                 continue
 
-            document_key = (fused_result.kb_id, fused_result.doc_id)
-            if document_key in seen_documents:
+            if fused_result.content in seen_contents:
                 continue
-            seen_documents.add(document_key)
+            seen_contents.add(fused_result.content)
             fused_results.append(fused_result)
             if len(fused_results) >= top_k:
                 break
