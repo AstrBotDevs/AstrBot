@@ -19,6 +19,7 @@ from ..registry import builtin_tool
 from .util import (
     check_admin_permission,
     is_local_runtime,
+    windows_shell_setting,
     workspace_root_for_context,
 )
 
@@ -134,6 +135,7 @@ class ExecuteShellTool(FunctionTool):
                     env=env,
                     timeout=timeout,
                     yield_time_ms=0 if background else yield_time_ms,
+                    windows_shell=windows_shell_setting(context),
                 )
                 elapsed_seconds = monotonic() - started_at
                 if result.get("session_closed") and result.get("status") in {

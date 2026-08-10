@@ -54,6 +54,15 @@ def is_local_runtime(context: ContextWrapper[AstrAgentContext]) -> bool:
     return runtime == "local"
 
 
+def windows_shell_setting(context: ContextWrapper[AstrAgentContext]) -> str | None:
+    """Return the configured Windows PowerShell executable, if any."""
+    cfg = context.context.context.get_config(
+        umo=context.context.event.unified_msg_origin
+    )
+    value = cfg.get("provider_settings", {}).get("windows_shell")
+    return str(value) if value else None
+
+
 def check_admin_permission(
     context: ContextWrapper[AstrAgentContext], operation_name: str
 ) -> str | None:

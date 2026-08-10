@@ -75,6 +75,60 @@ def test_local_shell_component_uses_windows_powershell(monkeypatch):
     assert calls[0][1]["shell"] is False
 
 
+def test_local_shell_component_uses_pwsh_when_configured(monkeypatch):
+    calls = []
+
+    def fake_run(*args, **kwargs):
+        calls.append((args, kwargs))
+        return _FakePopen(stdout=b"")
+
+    monkeypatch.setattr(subprocess, "Popen", fake_run)
+    monkeypatch.setattr(local_booter.sys, "platform", "win32")
+
+    result = asyncio.run(
+        LocalShellComponent().exec("Get-ChildItem", windows_shell="pwsh.exe")
+    )
+
+    assert result["exit_code"] == 0
+    assert calls[0][0][0] == [
+        "pwsh.exe",
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "Get-ChildItem",
+    ]
+    assert calls[0][1]["shell"] is False
+
+
+def test_resolve_windows_shell_defaults_to_powershell_51():
+    assert local_booter._resolve_windows_shell(None) == "powershell.exe"
+    assert local_booter._resolve_windows_shell("powershell.exe") == "powershell.exe"
+
+
+def test_resolve_windows_shell_returns_configured_pwsh():
+    assert local_booter._resolve_windows_shell("pwsh.exe") == "pwsh.exe"
+
+
+def test_resolve_windows_shell_raises_when_missing_on_windows(monkeypatch):
+    monkeypatch.setattr(local_booter.os, "name", "nt")
+    monkeypatch.setattr(local_booter.shutil, "which", lambda _cmd: None)
+
+    with pytest.raises(RuntimeError, match="pwsh.exe"):
+        local_booter._resolve_windows_shell("pwsh.exe")
+
+
+def test_resolve_windows_shell_skips_check_outside_windows(monkeypatch):
+    monkeypatch.setattr(local_booter.os, "name", "posix")
+
+    def fail_if_called(_cmd):
+        raise AssertionError("shutil.which must not be called outside Windows")
+
+    monkeypatch.setattr(local_booter.shutil, "which", fail_if_called)
+
+    assert local_booter._resolve_windows_shell("pwsh.exe") == "pwsh.exe"
+
+
 def test_local_shell_component_keeps_platform_shell_outside_windows(monkeypatch):
     calls = []
 
@@ -147,6 +201,71 @@ async def test_managed_shell_uses_windows_powershell(monkeypatch, tmp_path):
     assert result["stdout"] == "done\n"
     assert calls[0][0] == (
         "powershell.exe",
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "Get-ChildItem",
+    )
+    assert "creationflags" in calls[0][1]
+
+
+@pytest.mark.asyncio
+async def test_managed_shell_uses_pwsh_when_configured(monkeypatch, tmp_path):
+    calls = []
+
+    class FakeStdout:
+        def __init__(self):
+            self.chunks = [b"done\n", b""]
+
+        async def read(self, _limit):
+            return self.chunks.pop(0)
+
+    class FakeProcess:
+        def __init__(self):
+            self.pid = 12345
+            self.returncode = None
+            self.stdout = FakeStdout()
+            self.stdin = None
+
+        async def wait(self):
+            self.returncode = 0
+            return 0
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        calls.append((args, kwargs))
+        return FakeProcess()
+
+    async def fail_create_subprocess_shell(*_args, **_kwargs):
+        raise AssertionError("Windows managed commands must not use cmd.exe.")
+
+    monkeypatch.setattr(local_booter.sys, "platform", "win32")
+    monkeypatch.setattr(
+        local_booter.asyncio,
+        "create_subprocess_exec",
+        fake_create_subprocess_exec,
+    )
+    monkeypatch.setattr(
+        local_booter.asyncio,
+        "create_subprocess_shell",
+        fail_create_subprocess_shell,
+    )
+
+    result = await LocalShellComponent().exec_managed(
+        "Get-ChildItem",
+        owner_id="owner-a",
+        creator_id="user-a",
+        creator_is_admin=False,
+        sandboxed=False,
+        cwd=str(tmp_path),
+        yield_time_ms=5_000,
+        windows_shell="pwsh.exe",
+    )
+
+    assert result["status"] == "completed"
+    assert result["stdout"] == "done\n"
+    assert calls[0][0] == (
+        "pwsh.exe",
         "-NoLogo",
         "-NoProfile",
         "-NonInteractive",

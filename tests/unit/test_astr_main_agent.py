@@ -178,6 +178,24 @@ def test_local_mode_prompt_uses_windows_powershell_51():
     assert "cmd.exe" not in prompt
 
 
+def test_local_mode_prompt_uses_pwsh_when_configured():
+    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"):
+        prompt = ama._build_local_mode_prompt("pwsh.exe")
+
+    assert "PowerShell 7 (pwsh.exe)" in prompt
+    assert "Windows PowerShell 5.1" not in prompt
+    assert "Unix-like" not in prompt
+
+
+def test_local_mode_prompt_ignores_pwsh_on_non_windows():
+    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Linux"):
+        prompt = ama._build_local_mode_prompt("pwsh.exe")
+
+    assert "Unix-like" in prompt
+    assert "POSIX-compatible" in prompt
+    assert "PowerShell" not in prompt
+
+
 def test_local_mode_prompt_keeps_posix_shell_guidance():
     with patch("astrbot.core.astr_main_agent.platform.system", return_value="Linux"):
         prompt = ama._build_local_mode_prompt()

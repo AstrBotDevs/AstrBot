@@ -428,7 +428,11 @@ async def _apply_workspace_extra_prompt(
     )
 
 
-def _apply_local_env_tools(req: ProviderRequest, plugin_context: Context) -> None:
+def _apply_local_env_tools(
+    req: ProviderRequest,
+    plugin_context: Context,
+    windows_shell: str | None = None,
+) -> None:
     if req.func_tool is None:
         req.func_tool = ToolSet()
     tool_mgr = plugin_context.get_llm_tool_manager()
@@ -439,18 +443,29 @@ def _apply_local_env_tools(req: ProviderRequest, plugin_context: Context) -> Non
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
-    req.system_prompt = f"{req.system_prompt or ''}\n{_build_local_mode_prompt()}\n"
-
-
-def _build_local_mode_prompt() -> str:
-    system_name = platform.system() or "Unknown"
-    shell_hint = (
-        "The runtime shell is Windows PowerShell 5.1 (powershell.exe). "
-        "Use Windows PowerShell 5.1-compatible syntax and cmdlets; do not use "
-        "PowerShell 7-only syntax or assume Unix commands like cat/ls/grep are available."
-        if system_name.lower() == "windows"
-        else "The runtime shell is Unix-like. Use POSIX-compatible shell commands."
+    req.system_prompt = (
+        f"{req.system_prompt or ''}\n{_build_local_mode_prompt(windows_shell)}\n"
     )
+
+
+def _build_local_mode_prompt(windows_shell: str | None = None) -> str:
+    system_name = platform.system() or "Unknown"
+    if system_name.lower() != "windows":
+        shell_hint = (
+            "The runtime shell is Unix-like. Use POSIX-compatible shell commands."
+        )
+    elif windows_shell and "pwsh" in windows_shell.lower():
+        shell_hint = (
+            "The runtime shell is PowerShell 7 (pwsh.exe). "
+            "Use PowerShell 7-compatible syntax and cmdlets; do not "
+            "assume Unix commands like cat/ls/grep are available."
+        )
+    else:
+        shell_hint = (
+            "The runtime shell is Windows PowerShell 5.1 (powershell.exe). "
+            "Use Windows PowerShell 5.1-compatible syntax and cmdlets; do not use "
+            "PowerShell 7-only syntax or assume Unix commands like cat/ls/grep are available."
+        )
     return (
         "You have access to the host local environment and can execute shell commands and Python code. "
         f"Current operating system: {system_name}. "
@@ -1584,7 +1599,11 @@ async def build_main_agent(
     if config.computer_use_runtime == "sandbox":
         _apply_sandbox_tools(config, req, req.session_id)
     elif config.computer_use_runtime == "local":
-        _apply_local_env_tools(req, plugin_context)
+        _apply_local_env_tools(
+            req,
+            plugin_context,
+            config.provider_settings.get("windows_shell"),
+        )
 
     agent_runner = AgentRunner()
     astr_agent_ctx = AstrAgentContext(

@@ -92,6 +92,17 @@ def _decode_shell_output(output: bytes | None) -> str:
     return _decode_bytes_with_fallback(output, preferred_encoding="utf-8")
 
 
+def _resolve_windows_shell(windows_shell: str | None) -> str:
+    """Return the Windows PowerShell executable, failing when it is missing."""
+    executable = windows_shell or "powershell.exe"
+    if os.name == "nt" and shutil.which(executable) is None:
+        raise RuntimeError(
+            f"The Windows PowerShell executable '{executable}' was not found on "
+            "PATH. Install it or reset the 'Windows PowerShell version' setting."
+        )
+    return executable
+
+
 @dataclass
 class _LocalShellSession:
     """Runtime state for one managed local shell process."""
@@ -134,6 +145,7 @@ class LocalShellComponent(ShellComponent):
         timeout: int | None = 300,
         shell: bool = True,
         background: bool = False,
+        windows_shell: str | None = None,
     ) -> dict[str, Any]:
         if not _is_safe_command(command):
             raise PermissionError("Blocked unsafe shell command.")
@@ -147,7 +159,7 @@ class LocalShellComponent(ShellComponent):
             popen_shell = shell
             if sys.platform == "win32" and shell:
                 popen_command = [
-                    "powershell.exe",
+                    _resolve_windows_shell(windows_shell),
                     "-NoLogo",
                     "-NoProfile",
                     "-NonInteractive",
@@ -223,6 +235,7 @@ class LocalShellComponent(ShellComponent):
         timeout: int | None = None,
         yield_time_ms: int = 10_000,
         max_output_chars: int = 10_000,
+        windows_shell: str | None = None,
     ) -> dict[str, Any]:
         """Start a locally managed shell process and briefly wait for it.
 
@@ -279,7 +292,7 @@ class LocalShellComponent(ShellComponent):
             if sys.platform == "win32":
                 process_factory = asyncio.create_subprocess_exec
                 process_args = (
-                    "powershell.exe",
+                    _resolve_windows_shell(windows_shell),
                     "-NoLogo",
                     "-NoProfile",
                     "-NonInteractive",
