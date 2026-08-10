@@ -150,6 +150,7 @@ async def test_local_execute_shell_manages_running_and_closed_results(
         env={},
         timeout=None,
         yield_time_ms=250,
+        windows_shell=None,
     )
     for status, exit_code, wall_time in (
         ("completed", 0, "1.23"),
