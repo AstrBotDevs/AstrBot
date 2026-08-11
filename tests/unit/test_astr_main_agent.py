@@ -2,6 +2,7 @@
 
 import datetime
 import os
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -1891,6 +1892,7 @@ class TestBuildMainAgent:
     ):
         """Test building main agent with video attachments."""
         module = ama
+        video_path = str(Path("/path/to/video.mp4"))
         mock_video = Video(file="file:///path/to/video.mp4")
         mock_event.message_obj.message = [mock_video]
 
@@ -1918,7 +1920,7 @@ class TestBuildMainAgent:
         assert result is not None
         assert [
             part.text for part in result.provider_request.extra_user_content_parts
-        ] == ["[Video Attachment: name video.mp4, path /path/to/video.mp4]"]
+        ] == [f"[Video Attachment: name video.mp4, path {video_path}]"]
 
     @pytest.mark.asyncio
     async def test_build_main_agent_with_quoted_video_attachment(
@@ -1926,6 +1928,7 @@ class TestBuildMainAgent:
     ):
         """Test building main agent with quoted video attachments."""
         module = ama
+        video_path = str(Path("/path/to/quoted-video.mp4"))
         mock_video = Video(file="file:///path/to/quoted-video.mp4")
         mock_reply = Reply(
             id="reply-1",
@@ -1959,7 +1962,7 @@ class TestBuildMainAgent:
         assert result is not None
         assert (
             "[Video Attachment in quoted message: "
-            "name quoted-video.mp4, path /path/to/quoted-video.mp4]"
+            f"name quoted-video.mp4, path {video_path}]"
         ) in [part.text for part in result.provider_request.extra_user_content_parts]
 
     @pytest.mark.asyncio

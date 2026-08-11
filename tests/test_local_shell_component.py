@@ -124,6 +124,7 @@ def test_exec_skips_windows_shell_check_outside_windows(monkeypatch):
 
     monkeypatch.setattr(subprocess, "Popen", fake_run)
     monkeypatch.setattr(local_booter.sys, "platform", "win32")
+    monkeypatch.setattr(local_booter.os, "name", "posix")
     monkeypatch.setattr(local_booter.shutil, "which", fail_if_called)
 
     result = asyncio.run(
@@ -395,7 +396,7 @@ async def test_managed_shell_returns_completed_output_without_open_session():
     )
 
     assert result["status"] == "completed"
-    assert result["stdout"] == "hello\n"
+    assert result["stdout"].splitlines() == ["hello"]
     assert result["exit_code"] == 0
     assert result["session_closed"] is True
     assert await shell.list_sessions(
@@ -419,7 +420,7 @@ async def test_managed_shell_allows_creator_and_conversation_admin():
 
     try:
         assert result["status"] == "running"
-        assert result["stdout"] == "ready\n"
+        assert result["stdout"].splitlines() == ["ready"]
         session_id = result["session_id"]
         assert (
             await shell.list_sessions(
@@ -594,7 +595,7 @@ async def test_managed_shell_accepts_stdin_and_polls_incremental_output():
             output += completed["stdout"]
 
         assert completed["status"] == "completed"
-        assert output == "got:hello\n"
+        assert output.splitlines() == ["got:hello"]
         assert completed["session_closed"] is True
     finally:
         await shell.shutdown_sessions()
@@ -656,7 +657,7 @@ async def test_managed_shell_keeps_completed_session_until_output_is_drained():
             )
             output += result["stdout"]
 
-        assert output == f"{'x' * 25000}\n"
+        assert output.splitlines() == ["x" * 25000]
         assert result["session_closed"] is True
         assert await shell.list_sessions(
             owner_id="owner-a",
