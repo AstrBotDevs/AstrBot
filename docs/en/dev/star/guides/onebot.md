@@ -25,7 +25,7 @@ async def delete_(self, event: AstrMessageEvent):
         return
     try:
         await client.messages.delete(message_id=onebot_event.message_id or "")
-    except (OneBotCapabilityUnavailable, OneBotActionTimeout):
+    except OneBotCapabilityUnavailable, OneBotActionTimeout:
         return
 ```
 
