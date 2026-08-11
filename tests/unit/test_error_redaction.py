@@ -22,3 +22,10 @@ def test_redact_sensitive_text_removes_credentials_urls_and_absolute_paths():
         "/srv/astrbot/data/config.json",
     ):
         assert sensitive_value not in redacted
+
+
+def test_redact_sensitive_text_does_not_corrupt_ascii_art():
+    logo_fragment = r" /  /_\  \       \   \       |  |     |  |"
+
+    assert redact_sensitive_text(logo_fragment) == logo_fragment
+    assert redact_sensitive_text("/__user/config.json") == "[REDACTED_PATH]"

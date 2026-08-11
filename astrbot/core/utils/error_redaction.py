@@ -25,7 +25,12 @@ _URL_PATTERN = re.compile(r"(?i)\b[a-z][a-z0-9+.-]*://[^\s'\"<>]+")
 _WINDOWS_ABSOLUTE_PATH_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_])(?:[A-Za-z]:[\\/]|\\\\)[^\s'\"<>]+"
 )
-_UNIX_ABSOLUTE_PATH_PATTERN = re.compile(r"(?<![A-Za-z0-9_])/[^\s'\"<>]+")
+_UNIX_ABSOLUTE_PATH_PATTERN = re.compile(
+    # Require at least one alphanumeric path component. This avoids treating
+    # slash-prefixed ASCII-art fragments such as ``/_\`` and ``/__/`` as paths
+    # while still redacting ordinary paths (including names beginning with `_`).
+    r"(?<![A-Za-z0-9_])/(?=[A-Za-z0-9._~/-]*[A-Za-z0-9])[^\s'\"<>]+"
+)
 
 
 def _redact_json_field(match: re.Match[str]) -> str:
