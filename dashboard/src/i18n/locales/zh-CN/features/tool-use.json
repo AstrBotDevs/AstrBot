@@ -4,7 +4,7 @@
   "tooltip": {
     "info": "函数调用和 MCP 是什么？",
     "marketplace": "浏览和安装来自社区的 MCP 服务器",
-    "serverConfig": "MCP 服务器(stdio)配置支持以下字段:\ncommand: 命令名称 (例如 python 或 uv)\nargs: 命令参数数组 (例如 [\"run\", \"server.py\"])\nenv: 环境变量对象 (例如 {\"api_key\": \"abc\"})\ncwd: 工作目录路径 (例如 /path/to/server)\nencoding: 输出编码 (默认 utf-8)\nencoding_error_handler: The text encoding error handler. Defaults to strict.\n其他字段请参考 MCP 文档\n⚠️ 如果您使用 Docker 部署 AstrBot, 请务必将 MCP 服务器装在 AstrBot 挂载好的 data 目录下"
+    "serverConfig": "MCP 服务器配置仅支持现代 stdio 或 Streamable HTTP 字段：transport、command/args/env、url/headers、超时、私网 opt-in、terminate_on_close 和 auth_ref。未知或旧字段会被拒绝。\n⚠️ 如果您使用 Docker 部署 AstrBot，请务必将 stdio MCP 服务器安装在 AstrBot 挂载好的 data 目录下"
   },
   "tabs": {
     "local": "本地服务器",
@@ -18,7 +18,8 @@
       "add": "新增服务器",
       "useTemplateStdio": "Stdio 模板",
       "useTemplateStreamableHttp": "Streamable HTTP 模板",
-      "useTemplateSse": "SSE 模板",
+      "catalog": "浏览资源和 Prompt",
+      "authorize": "OAuth 授权",
       "sync": "同步服务器"
     },
     "empty": "暂无 MCP 服务器，点击 新增服务器 添加",
@@ -26,7 +27,17 @@
       "noTools": "无可用工具",
       "availableTools": "可用工具",
       "configSummary": "配置: {keys}",
-      "noConfig": "未设置配置"
+      "noConfig": "未设置配置",
+      "runtime": "{status} · {resources} 个资源 · {prompts} 个 Prompt"
+    },
+    "catalog": {
+      "title": "MCP 目录：{name}",
+      "resources": "资源",
+      "prompts": "Prompt",
+      "untrusted": "MCP 内容不可信。请显式选择项目；它不会自动加入模型上下文。"
+    },
+    "auth": {
+      "pending": "OAuth 授权正在等待浏览器完成流程。"
     }
   },
   "functionTools": {
@@ -115,7 +126,7 @@
       },
       "tips": {
         "timeoutConfig": "工具调用的超时时间请前往配置页面单独配置",
-        "transportRecommendation": "建议优先使用 Streamable HTTP 或 SSE 模式。stdio 模式会在 AstrBot 主机上启动本地进程，仅适合可信 MCP 服务器。"
+        "transportRecommendation": "远程 MCP 请使用 Streamable HTTP。stdio 会在 AstrBot 主机上启动本地进程，仅适合可信 MCP 服务器。不支持 SSE 和旧 MCP 协议。"
       }
     },
     "serverDetail": {
@@ -165,6 +176,12 @@
       }
     }
   },
+  "interaction": {
+    "formAccept": "{server} 请求输入：{message}\\n\\n接受此表单请求吗？",
+    "openUrl": "{server} 请求外部授权：{message}\\n\\n打开 {url} 吗？",
+    "fieldPrompt": "请输入 {field}",
+    "invalidForm": "MCP 表单无效或未填写完整。"
+  },
   "messages": {
     "getServersError": "获取 MCP 服务器列表失败: {error}",
     "getToolsError": "获取函数工具列表失败: {error}",
@@ -189,6 +206,7 @@
     "updateToolPermissionFailed": "工具权限更新失败",
     "updateToolPermissionBuiltin": "内置工具不支持单独配置权限",
     "updateParallelExecutionFailed": "并行工具调用设置更新失败",
-    "testError": "测试连接失败: {error}"
+    "testError": "测试连接失败: {error}",
+    "catalogError": "MCP 目录操作失败: {error}"
   }
 }

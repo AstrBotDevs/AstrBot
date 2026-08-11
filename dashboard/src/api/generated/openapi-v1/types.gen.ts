@@ -516,18 +516,51 @@ export type CommandItemEnvelope = {
   [key: string]: unknown;
 };
 
-export type McpServerConfig = {
+export type McpServerConfig = (
+  | unknown
+  | {
+      transport: 'streamable_http';
+    }
+) & {
   name: string;
   active?: boolean;
-  transport?: 'stdio' | 'sse' | 'streamable_http';
+  transport?: 'stdio' | 'streamable_http';
   command?: string;
   args?: Array<string>;
   url?: string;
   headers?: {
     [key: string]: string;
   };
-  timeout?: number;
-  [key: string]: unknown;
+  env?: {
+    [key: string]: string;
+  };
+  allow_private_network?: boolean;
+  connect_timeout_seconds?: number;
+  read_timeout_seconds?: number;
+  terminate_on_close?: boolean;
+  auth_ref?: string;
+};
+
+export type McpResourceReadRequest = {
+  uri: string;
+};
+
+export type McpPromptGetRequest = {
+  arguments?: {
+    [key: string]: string;
+  };
+};
+
+export type McpCompletionRequest = {
+  reference: {
+    [key: string]: unknown;
+  };
+  argument: {
+    [key: string]: string;
+  };
+  context_arguments?: {
+    [key: string]: string;
+  };
 };
 
 export type ModelScopeSyncRequest = {
@@ -3858,11 +3891,7 @@ export type SetMcpServerEnabledResponse =
   SetMcpServerEnabledResponses[keyof SetMcpServerEnabledResponses];
 
 export type TestMcpServerData = {
-  body?: {
-    config?: {
-      [key: string]: unknown;
-    };
-  };
+  body?: McpServerConfig;
   path: {
     server_name: string;
   };
@@ -3879,6 +3908,204 @@ export type TestMcpServerResponses = {
 
 export type TestMcpServerResponse =
   TestMcpServerResponses[keyof TestMcpServerResponses];
+
+export type GetMcpCatalogData = {
+  body?: never;
+  path: {
+    server_name: string;
+  };
+  query?: never;
+  url: '/api/v1/mcp/servers/{server_name}/catalog';
+};
+
+export type GetMcpCatalogResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type GetMcpCatalogResponse =
+  GetMcpCatalogResponses[keyof GetMcpCatalogResponses];
+
+export type ListMcpResourcesData = {
+  body?: never;
+  path: {
+    server_name: string;
+  };
+  query?: never;
+  url: '/api/v1/mcp/servers/{server_name}/resources';
+};
+
+export type ListMcpResourcesResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type ListMcpResourcesResponse =
+  ListMcpResourcesResponses[keyof ListMcpResourcesResponses];
+
+export type ListMcpResourceTemplatesData = {
+  body?: never;
+  path: {
+    server_name: string;
+  };
+  query?: never;
+  url: '/api/v1/mcp/servers/{server_name}/resources/templates';
+};
+
+export type ListMcpResourceTemplatesResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type ListMcpResourceTemplatesResponse =
+  ListMcpResourceTemplatesResponses[keyof ListMcpResourceTemplatesResponses];
+
+export type ReadMcpResourceData = {
+  body: McpResourceReadRequest;
+  path: {
+    server_name: string;
+  };
+  query?: never;
+  url: '/api/v1/mcp/servers/{server_name}/resources/read';
+};
+
+export type ReadMcpResourceResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type ReadMcpResourceResponse =
+  ReadMcpResourceResponses[keyof ReadMcpResourceResponses];
+
+export type ListMcpPromptsData = {
+  body?: never;
+  path: {
+    server_name: string;
+  };
+  query?: never;
+  url: '/api/v1/mcp/servers/{server_name}/prompts';
+};
+
+export type ListMcpPromptsResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type ListMcpPromptsResponse =
+  ListMcpPromptsResponses[keyof ListMcpPromptsResponses];
+
+export type GetMcpPromptData = {
+  body?: McpPromptGetRequest;
+  path: {
+    server_name: string;
+    prompt_name: string;
+  };
+  query?: never;
+  url: '/api/v1/mcp/servers/{server_name}/prompts/{prompt_name}/get';
+};
+
+export type GetMcpPromptResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type GetMcpPromptResponse =
+  GetMcpPromptResponses[keyof GetMcpPromptResponses];
+
+export type CompleteMcpData = {
+  body: McpCompletionRequest;
+  path: {
+    server_name: string;
+  };
+  query?: never;
+  url: '/api/v1/mcp/servers/{server_name}/completion';
+};
+
+export type CompleteMcpResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type CompleteMcpResponse =
+  CompleteMcpResponses[keyof CompleteMcpResponses];
+
+export type GetMcpOAuthStatusData = {
+  body?: never;
+  path: {
+    server_name: string;
+  };
+  query?: never;
+  url: '/api/v1/mcp/servers/{server_name}/oauth/status';
+};
+
+export type GetMcpOAuthStatusResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type GetMcpOAuthStatusResponse =
+  GetMcpOAuthStatusResponses[keyof GetMcpOAuthStatusResponses];
+
+export type StartMcpOAuthData = {
+  body?: never;
+  path: {
+    server_name: string;
+  };
+  query?: never;
+  url: '/api/v1/mcp/servers/{server_name}/oauth/start';
+};
+
+export type StartMcpOAuthResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type StartMcpOAuthResponse =
+  StartMcpOAuthResponses[keyof StartMcpOAuthResponses];
+
+export type RevokeMcpOAuthData = {
+  body?: never;
+  path: {
+    server_name: string;
+  };
+  query?: never;
+  url: '/api/v1/mcp/servers/{server_name}/oauth';
+};
+
+export type RevokeMcpOAuthResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type RevokeMcpOAuthResponse =
+  RevokeMcpOAuthResponses[keyof RevokeMcpOAuthResponses];
+
+export type CompleteMcpOAuthCallbackData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/v1/mcp/oauth/callback';
+};
 
 export type SyncModelScopeMcpServersData = {
   body?: ModelScopeSyncRequest;

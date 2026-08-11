@@ -737,6 +737,65 @@ const {
       scrollToBottom();
     }
   },
+  onMcpInputRequest: (payload, respond) => {
+    const server = String(payload.server_name || 'MCP server');
+    const message = String(
+      payload.message || 'This MCP server requests input.',
+    );
+    if (payload.mode === 'url') {
+      const url = String(payload.url || '');
+      if (
+        window.confirm(
+          tm('interaction.openUrl', {
+            server,
+            message,
+            url: String(payload.url_display || url),
+          }),
+        )
+      ) {
+        window.open(url, '_blank', 'noopener,noreferrer');
+        respond({ action: 'accept' });
+      } else {
+        respond({ action: 'cancel' });
+      }
+      return;
+    }
+    const schema = payload.schema as {
+      properties?: Record<string, { type?: string; title?: string }>;
+      required?: string[];
+    };
+    if (!schema?.properties) {
+      respond({ action: 'cancel' });
+      return;
+    }
+    if (!window.confirm(tm('interaction.formAccept', { server, message }))) {
+      respond({ action: 'decline' });
+      return;
+    }
+    const content: Record<string, unknown> = {};
+    for (const [name, definition] of Object.entries(schema.properties)) {
+      const value = window.prompt(
+        tm('interaction.fieldPrompt', { field: definition.title || name }),
+        '',
+      );
+      if (value === null) {
+        respond({ action: 'cancel' });
+        return;
+      }
+      if (definition.type === 'integer')
+        content[name] = Number.parseInt(value, 10);
+      else if (definition.type === 'number') content[name] = Number(value);
+      else if (definition.type === 'boolean')
+        content[name] = value.toLowerCase() === 'true';
+      else content[name] = value;
+    }
+    if ((schema.required || []).some((name) => content[name] === '')) {
+      window.alert(tm('interaction.invalidForm'));
+      respond({ action: 'cancel' });
+      return;
+    }
+    respond({ action: 'accept', content });
+  },
 });
 
 const transportMode = ref<TransportMode>(

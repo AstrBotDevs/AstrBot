@@ -136,11 +136,13 @@ class FakeLlmTools:
             "mcpServers": {
                 "demo-server": {
                     "active": True,
-                    "url": "https://example.com/demo-server",
+                    "url": "https://93.184.216.34/demo-server",
+                    "transport": "streamable_http",
                 },
                 "modelscope/demo": {
                     "active": True,
-                    "url": "https://example.com/modelscope-demo",
+                    "url": "https://93.184.216.34/modelscope-demo",
+                    "transport": "streamable_http",
                 },
             }
         }
@@ -3006,6 +3008,24 @@ async def test_v1_mcp_enabled_patch_updates_stored_active_flag(
 
 
 @pytest.mark.asyncio
+async def test_v1_mcp_list_never_returns_configured_header_secrets(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    fake_tools = fake_core_lifecycle.provider_manager.tool_manager
+    fake_tools.config["mcpServers"]["demo-server"]["headers"] = {
+        "Authorization": "Bearer dashboard-must-not-see-this"
+    }
+
+    response = await asgi_client.get("/api/v1/mcp/servers", headers=_jwt_headers())
+
+    assert response.status_code == 200
+    server = next(item for item in response.json()["data"] if item["name"] == "demo-server")
+    assert "headers" not in server
+    assert server["headers_configured"] is True
+
+
+@pytest.mark.asyncio
 async def test_v1_safe_mcp_routes_accept_slash_server_names(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
@@ -3030,7 +3050,8 @@ async def test_v1_safe_mcp_routes_accept_slash_server_names(
     assert test_response.json()["data"] == ["demo_tool"]
     assert fake_tools.tested_configs[-1] == {
         "active": False,
-        "url": "https://example.com/modelscope-demo",
+        "url": "https://93.184.216.34/modelscope-demo",
+        "transport": "streamable_http",
     }
 
     delete_response = await asgi_client.delete(

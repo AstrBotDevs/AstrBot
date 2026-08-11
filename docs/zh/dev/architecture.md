@@ -78,7 +78,7 @@ outline: deep
 
 核心 Agent 运行时位于 `astrbot/core/agent/`，主 Agent 的请求组装位于 `astrbot/core/astr_main_agent.py`。Provider 抽象位于 `astrbot/core/provider/`；OpenAI、Anthropic、Gemini 等具体实现位于 `provider/sources/`，并通过 `provider_modules.py` 延迟注册。Dify、Coze、DashScope 和 DeerFlow 属于 `astrbot/core/agent/runners/` 下的外部 Agent Runner，不是普通模型 Provider。
 
-工具来源包括内置工具、插件工具和 MCP 工具。MCP 支持 stdio、SSE 与 Streamable HTTP；远程 HTTP 默认拒绝 localhost、私网、链路本地和保留地址，只有在可信配置中显式设置 `allow_private_network` 才会放开。
+工具来源包括内置工具、插件工具和 MCP 工具。MCP 仅支持 stdio 与 Streamable HTTP；远程 HTTP 默认拒绝 localhost、私网、链路本地和保留地址，只有在可信配置中显式设置 `allow_private_network` 才会放开。
 
 Skills 可来自 `data/skills`、插件 `skills/`、沙盒和当前会话 workspace。工作区 Skill 是请求级资源，默认路径为 `data/workspaces/{normalized_umo}/skills/`。
 

@@ -13,6 +13,7 @@ import jwt
 from starlette.websockets import WebSocketDisconnect
 
 from astrbot import logger
+from astrbot.core.agent.mcp_client import MCPInteractionCoordinator, MCPInteractionKey
 from astrbot.core.db.protocols import AttachmentStore
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
@@ -137,11 +138,13 @@ class LiveChatService:
         provider_manager: ProviderManager,
         platform_message_history_manager: PlatformMessageHistoryManager,
         webchat_run_coordinator: WebChatRunCoordinator,
+        mcp_interaction_coordinator: MCPInteractionCoordinator | None = None,
         token_validator: DashboardTokenValidator | None = None,
     ) -> None:
         self.db = db
         self.preferences = preferences
         self.webchat_run_coordinator = webchat_run_coordinator
+        self.mcp_interaction_coordinator = mcp_interaction_coordinator
         self.config = config
         self.provider_manager = provider_manager
         self.token_validator = token_validator or DashboardTokenValidator(
@@ -149,9 +152,21 @@ class LiveChatService:
         )
         self.platform_history_mgr = platform_message_history_manager
         self.sessions: dict[str, LiveChatSession] = {}
+        self._mcp_publishers: dict[str, tuple[LiveChatSession, SendJson]] = {}
         self.attachments_dir = os.path.join(get_astrbot_data_path(), "attachments")
         self.webchat_img_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
         os.makedirs(self.attachments_dir, exist_ok=True)
+        if self.mcp_interaction_coordinator is not None:
+            self.mcp_interaction_coordinator.set_publisher(self._publish_mcp_input)
+
+    async def _publish_mcp_input(self, payload: dict) -> None:
+        """Send elicitation to only the WebChat connection owning its UMO."""
+        umo = payload.get("unified_msg_origin")
+        target = self._mcp_publishers.get(str(umo))
+        if target is None:
+            return
+        session, send_json = target
+        await self.send_chat_payload(session, {"ct": "chat", **payload}, send_json)
 
     def authenticate_token(
         self,
@@ -194,6 +209,7 @@ class LiveChatService:
             return
 
         live_session = self.create_session(username)
+        self._mcp_publishers[live_session.session_id] = (live_session, send_json)
         logger.info(f"[Live Chat] WebSocket 连接建立: {username}")
 
         def finish_chat_request(completed: asyncio.Task, request_id: str) -> None:
@@ -266,6 +282,7 @@ class LiveChatService:
 
         finally:
             await self.cleanup_session(live_session)
+            self._mcp_publishers.pop(live_session.session_id, None)
             logger.info(f"[Live Chat] WebSocket 连接关闭: {username}")
 
     async def create_attachment_from_file(
@@ -805,6 +822,10 @@ class LiveChatService:
     ) -> bool:
         msg_type = message.get("t")
 
+        if msg_type == "mcp_input_response":
+            await self._handle_mcp_input_response(session, message, send_json)
+            return True
+
         if msg_type == "bind":
             chat_session_id = message.get("session_id")
             if not isinstance(chat_session_id, str) or not chat_session_id:
@@ -872,6 +893,48 @@ class LiveChatService:
             return True
 
         return False
+
+    async def _handle_mcp_input_response(
+        self,
+        session: LiveChatSession,
+        message: dict,
+        send_json: SendJson,
+    ) -> None:
+        """Route one elicitation response without entering follow-up capture."""
+        coordinator = self.mcp_interaction_coordinator
+        request_id = str(message.get("request_id") or message.get("message_id") or "")
+        run_id = str(message.get("run_id") or "")
+        server_name = str(message.get("server_name") or "")
+        origin = str(message.get("unified_msg_origin") or session.session_id)
+        action = message.get("action")
+        if (
+            coordinator is None
+            or not request_id
+            or not run_id
+            or not server_name
+            or origin != session.session_id
+        ):
+            accepted = False
+        else:
+            accepted = await coordinator.respond(
+                MCPInteractionKey(origin, run_id, request_id, server_name),
+                session.username,
+                str(action),
+                message.get("content")
+                if isinstance(message.get("content"), dict)
+                else None,
+            )
+        await self.send_chat_payload(
+            session,
+            {
+                "ct": "chat",
+                "type": "mcp_input_response",
+                "request_id": request_id,
+                "message_id": request_id,
+                "accepted": accepted,
+            },
+            send_json,
+        )
 
     async def build_chat_message_parts(self, message: list[dict]) -> list[dict]:
         return await build_webchat_message_parts(

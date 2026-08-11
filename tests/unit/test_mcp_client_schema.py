@@ -1,12 +1,17 @@
 import socket
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from mcp import Client
+from mcp.server.mcpserver import MCPServer
+from mcp.types import Tool
+from mcp.types.version import LATEST_PROTOCOL_VERSION
 
 from astrbot.core.agent import mcp_client as mcp_client_module
 from astrbot.core.agent.mcp_client import (
+    MCPClient,
     MCPTool,
     MCPToolNameAllocationError,
     MCPToolNameAllocator,
@@ -110,7 +115,7 @@ class TestNormalizeMcpInputSchema:
 
 class TestMCPToolSchemaNormalization:
     def test_mcp_tool_accepts_property_level_required_booleans(self):
-        mcp_tool = SimpleNamespace(
+        mcp_tool = Tool(
             name="quote_lookup",
             description="Lookup a quote",
             inputSchema={
@@ -128,8 +133,32 @@ class TestMCPToolSchemaNormalization:
         assert "required" not in tool.parameters["properties"]["stock_code"]
         assert "required" not in tool.parameters["properties"]["market"]
 
+    def test_mcp_tool_keeps_sdk2_metadata_separate_from_input_schema(self):
+        mcp_tool = Tool(
+            name="report",
+            title="Create report",
+            description="Create a report",
+            inputSchema={"type": "object", "properties": {}},
+            outputSchema={
+                "type": "object",
+                "properties": {"url": {"type": "string"}},
+            },
+            _meta={"source": "test"},
+        )
+
+        tool = MCPTool(mcp_tool, MagicMock(), "reports")
+
+        assert tool.title == "Create report"
+        assert tool.input_schema == {"type": "object", "properties": {}}
+        assert tool.output_schema == {
+            "type": "object",
+            "properties": {"url": {"type": "string"}},
+        }
+        assert tool.meta == {"source": "test"}
+        assert "url" not in tool.parameters["properties"]
+
     def test_mcp_tool_uses_a_safe_name_and_keeps_original_call_name(self):
-        mcp_tool = SimpleNamespace(
+        mcp_tool = Tool(
             name="t_drive.create/doc",
             description="Create a doc",
             inputSchema={"type": "object", "properties": {}},
@@ -139,33 +168,35 @@ class TestMCPToolSchemaNormalization:
 
         assert len(tool.name) <= 64
         assert tool.name
-        assert all(char.isascii() and (char.isalnum() or char in "_-") for char in tool.name)
+        assert all(
+            char.isascii() and (char.isalnum() or char in "_-") for char in tool.name
+        )
         assert tool.mcp_tool_name == "t_drive.create/doc"
         assert get_tool_id(tool) == "mcp:tencent-docs:t_drive.create/doc"
 
     @pytest.mark.asyncio
     async def test_mcp_tool_calls_the_original_name(self):
-        mcp_tool = SimpleNamespace(
+        mcp_tool = Tool(
             name="t_drive.create/doc",
             description="Create a doc",
             inputSchema={"type": "object", "properties": {}},
         )
-        client = MagicMock()
-        client.call_tool_with_reconnect = AsyncMock(return_value="ok")
+        client = SimpleNamespace(
+            _interaction_coordinator=None,
+            call_tool=AsyncMock(return_value="ok"),
+        )
         tool = MCPTool(mcp_tool, client, "tencent-docs")
 
         result = await tool.call(SimpleNamespace(tool_call_timeout=7), title="A")
 
         assert result == "ok"
-        client.call_tool_with_reconnect.assert_awaited_once_with(
-            tool_name="t_drive.create/doc",
-            arguments={"title": "A"},
-            read_timeout_seconds=7,
+        client.call_tool.assert_awaited_once_with(
+            "t_drive.create/doc", {"title": "A"}, 7
         )
 
 
 def _mcp_tool(name: str):
-    return SimpleNamespace(
+    return Tool(
         name=name,
         description="Test MCP tool",
         inputSchema={"type": "object", "properties": {}},
@@ -221,49 +252,27 @@ def test_mcp_tool_registration_is_stable_and_refuses_empty_names():
 
 
 @pytest.mark.asyncio
-async def test_streamable_http_connection_uses_native_http_client_path(monkeypatch):
+async def test_streamable_http_connection_uses_sdk2_client_without_initialize(
+    monkeypatch,
+):
     client = mcp_client_module.MCPClient()
-    session = MagicMock()
-    session.initialize = AsyncMock()
+    client._server_name = "demo"
+    calls: list[dict] = []
 
-    quick_test = AsyncMock(return_value=(True, ""))
-    monkeypatch.setattr(mcp_client_module, "_quick_test_mcp_connection", quick_test)
+    class FakeClient:
+        protocol_version = "2026-07-28"
+        server_capabilities = SimpleNamespace(model_dump=lambda **_kwargs: {})
 
-    transport_calls: list[dict] = []
+        def __init__(self, transport, **kwargs):
+            calls.append({"transport": transport, **kwargs})
 
-    @asynccontextmanager
-    async def fake_streamable_http_client(
-        url: str,
-        *,
-        http_client,
-        terminate_on_close: bool = True,
-    ):
-        transport_calls.append(
-            {
-                "url": url,
-                "http_client": http_client,
-                "terminate_on_close": terminate_on_close,
-            }
-        )
-        yield ("read-stream", "write-stream")
+        async def __aenter__(self):
+            return self
 
-    @asynccontextmanager
-    async def fake_client_session(*args, **kwargs):
-        assert args == ()
-        assert kwargs["read_stream"] == "read-stream"
-        assert kwargs["write_stream"] == "write-stream"
-        yield session
+        async def __aexit__(self, *_args):
+            return None
 
-    monkeypatch.setattr(
-        mcp_client_module,
-        "streamable_http_client",
-        fake_streamable_http_client,
-    )
-    monkeypatch.setattr(
-        mcp_client_module,
-        "mcp",
-        SimpleNamespace(ClientSession=fake_client_session),
-    )
+    monkeypatch.setattr(mcp_client_module, "Client", FakeClient)
     monkeypatch.setattr(
         mcp_client_module.socket,
         "getaddrinfo",
@@ -278,24 +287,72 @@ async def test_streamable_http_connection_uses_native_http_client_path(monkeypat
         ],
     )
 
-    await client.connect_to_server(
+    stack = AsyncExitStack()
+    opened = await client._open_client(
+        stack,
         {
             "url": "https://example.com/mcp",
             "transport": "streamable_http",
             "headers": {"X-Test": "1"},
-            "timeout": 12,
-            "sse_read_timeout": 34,
-            "session_read_timeout": 56,
+            "connect_timeout_seconds": 12,
+            "read_timeout_seconds": 56,
             "terminate_on_close": False,
         },
         "demo",
     )
 
-    assert quick_test.await_count == 1
-    assert len(transport_calls) == 1
-    assert transport_calls[0]["url"] == "https://example.com/mcp"
-    assert transport_calls[0]["terminate_on_close"] is False
-    assert transport_calls[0]["http_client"].headers["x-test"] == "1"
-    session.initialize.assert_awaited_once()
+    assert opened.protocol_version == "2026-07-28"
+    assert calls[0]["mode"] == "2026-07-28"
+    assert not hasattr(opened, "initialize")
+    await stack.aclose()
 
-    await client.cleanup()
+
+@pytest.mark.asyncio
+async def test_sdk2_in_memory_server_uses_modern_client_without_initialize():
+    server = MCPServer("modern-test")
+
+    @server.tool()
+    def echo(value: str) -> str:
+        return value
+
+    async with Client(server, mode=LATEST_PROTOCOL_VERSION) as sdk_client:
+        assert sdk_client.protocol_version == "2026-07-28"
+        assert [tool.name for tool in (await sdk_client.list_tools()).tools] == ["echo"]
+        result = await sdk_client.call_tool("echo", {"value": "hello"})
+
+    assert result.structured_content == {"result": "hello"}
+
+
+@pytest.mark.asyncio
+async def test_mcp_catalog_pagination_is_atomic_and_rejects_repeated_cursors():
+    class PagedClient:
+        def __init__(self):
+            self.cursors: list[str | None] = []
+
+        async def list_tools(self, *, cursor=None):
+            self.cursors.append(cursor)
+            if cursor is None:
+                return SimpleNamespace(
+                    tools=[Tool(name="one", inputSchema={})], next_cursor="next"
+                )
+            return SimpleNamespace(
+                tools=[Tool(name="two", inputSchema={})], next_cursor=None
+            )
+
+    client = MCPClient()
+    client.client = PagedClient()  # type: ignore[assignment]
+
+    assert [tool.name for tool in await client.list_tools_and_save()] == ["one", "two"]
+    assert client.client.cursors == [None, "next"]  # type: ignore[union-attr]
+
+    class RepeatingClient:
+        async def list_tools(self, *, cursor=None):
+            return SimpleNamespace(
+                tools=[Tool(name="bad", inputSchema={})], next_cursor="same"
+            )
+
+    old_tools = client.tools
+    client.client = RepeatingClient()  # type: ignore[assignment]
+    with pytest.raises(RuntimeError, match="repeated"):
+        await client.list_tools_and_save()
+    assert client.tools is old_tools

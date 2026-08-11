@@ -965,6 +965,12 @@
         "group_message_max_cnt": {
           "description": "Maximum Message Count"
         },
+        "group_message_history_enable": {
+          "description": "Persist Group Message History"
+        },
+        "group_message_history_max_cnt": {
+          "description": "Maximum Persisted Group Messages"
+        },
         "image_caption": {
           "description": "Auto-understand Images",
           "hint": "Requires setting a group chat image caption model."

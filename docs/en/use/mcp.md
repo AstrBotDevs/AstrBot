@@ -1,142 +1,60 @@
 # MCP
 
-MCP (Model Context Protocol) connects AstrBot Agents to independent tool servers. The current implementation supports stdio, SSE, and Streamable HTTP. Create, test, enable, and remove servers from **Plugins → MCP** in WebUI.
+AstrBot uses MCP Python SDK 2.x and the fixed MCP `2026-07-28` protocol to connect independent tool servers. Create, test, enable, inspect catalogs, and remove servers in **Plugins → MCP**.
 
-## Choose a Transport
+Only stdio and Streamable HTTP are supported. SSE, the `initialize`/session handshake, legacy protocol fallback, and their former timeout settings have been removed. A server that only supports an older protocol is explicitly rejected.
 
-| Transport       | Use case                                                       | Key fields                    |
-| --------------- | -------------------------------------------------------------- | ----------------------------- |
-| stdio           | AstrBot starts a child process on the host or in its container | `command`, `args`, `env`      |
-| Streamable HTTP | Current remote MCP HTTP transport                              | `transport`, `url`, `headers` |
-| SSE             | Remote servers that still expose the older SSE transport       | `transport`, `url`, `headers` |
+## Configuration
 
-Remote configurations must declare `transport`. A configuration without `url` is treated as stdio.
+Configuration is strict: unknown fields are rejected. Remote servers must declare `transport: "streamable_http"`, and exactly one of `url` and `command` is required.
 
-## Runtime Tools
-
-For source deployments, install the server's launcher in the same environment that runs AstrBot. The repository Dockerfile already includes Node.js 26, npm/npx, pnpm, and uv. Do not follow older instructions that reinstall Node inside an image built from this checkout.
-
-Install host-side server dependencies according to that MCP server's documentation. AstrBot does not interpret `command` through a shell, so do not use `bash -c`, `env ...`, pipes, or redirection.
-
-## stdio Configuration
-
-For example, start a Python MCP package with `uvx`:
+### stdio
 
 ```json
 {
+  "transport": "stdio",
   "command": "uvx",
   "args": ["arxiv-mcp-server", "--storage-path", "data/arxiv"],
-  "env": {
-    "ARXIV_API_TOKEN": "replace-with-secret"
-  }
+  "env": { "ARXIV_API_TOKEN": "replace-with-secret" },
+  "read_timeout_seconds": 60
 }
 ```
 
-`env` must be a JSON object whose keys and values are strings. Do not use `env` as the command:
+The default allowlist contains `python`, `python3`, `py`, Node/Bun/Deno launchers, and `uv`/`uvx`. Shells, PowerShell, downloaders, SSH, destructive commands, and inline Python/JavaScript are rejected. Set `ASTRBOT_MCP_STDIO_ALLOWED_COMMANDS` only when you fully trust another launcher; it is a complete replacement allowlist.
 
-```json
-{
-  "env": {
-    "RESOURCE_FROM": "local",
-    "API_URL": "https://api.example.com",
-    "API_TOKEN": "replace-with-secret"
-  }
-}
-```
-
-Do not expose tokens in screenshots, public issues, or plugin repositories. Reconnect or restart the MCP server after changing its environment.
-
-### stdio Security Rules
-
-The default launcher allowlist is:
-
-- `python`, `python3`, `py`
-- `node`, `npx`, `npm`, `pnpm`, `yarn`
-- `bun`, `bunx`, `deno`
-- `uv`, `uvx`
-
-Shells, PowerShell, `curl`, `wget`, SSH, destructive file commands, and shutdown commands are denied. `command` cannot contain line breaks or shell metacharacters. Python `-c` and JavaScript eval/print modes are also rejected.
-
-Only when you fully trust another launcher should you set `ASTRBOT_MCP_STDIO_ALLOWED_COMMANDS`. It is a comma-separated **replacement list**, not an addition to the defaults:
-
-::: code-group
-
-```bash [Linux / macOS]
-export ASTRBOT_MCP_STDIO_ALLOWED_COMMANDS='python,python3,node,npx,uv,uvx,my-launcher'
-```
-
-```powershell [Windows PowerShell]
-$env:ASTRBOT_MCP_STDIO_ALLOWED_COMMANDS = 'python,python3,node,npx,uv,uvx,my-launcher'
-```
-
-:::
-
-Expanding this list allows AstrBot to start more local programs and should be treated as a code-execution permission change.
-
-## Streamable HTTP
+### Streamable HTTP
 
 ```json
 {
   "transport": "streamable_http",
   "url": "https://mcp.example.com/mcp",
+  "headers": { "Authorization": "Bearer replace-with-secret" },
   "allow_private_network": false,
-  "headers": {
-    "Authorization": "Bearer replace-with-secret"
-  },
-  "timeout": 5,
-  "sse_read_timeout": 300,
-  "session_read_timeout": 60,
-  "terminate_on_close": true
+  "connect_timeout_seconds": 15,
+  "read_timeout_seconds": 60,
+  "terminate_on_close": true,
+  "auth_ref": "work-oauth"
 }
 ```
 
-- `timeout` covers connection and ordinary HTTP operations.
-- `sse_read_timeout` controls remote stream reads.
-- `session_read_timeout` controls MCP session reads.
-- `terminate_on_close` asks the remote server to terminate the session when closing.
+`headers` are write-only secrets: server-list responses never return their values. Editing without submitting headers preserves stored values; submit `{}` explicitly to clear them. Never expose tokens in screenshots, issues, or plugin repositories.
 
-## SSE
+Remote MCP performs DNS/IP checks for every new connection and request. It rejects localhost, loopback, private, link-local, multicast, reserved, and unspecified addresses by default, and never follows HTTP redirects. Set `allow_private_network: true` only for a fixed LAN endpoint you trust.
 
-```json
-{
-  "transport": "sse",
-  "url": "https://mcp.example.com/sse",
-  "allow_private_network": false,
-  "headers": {},
-  "timeout": 5,
-  "sse_read_timeout": 300,
-  "session_read_timeout": 60
-}
-```
+## Catalogs and calls
 
-Prefer Streamable HTTP for new services. Choose SSE only when the server explicitly exposes an SSE endpoint.
+AstrBot pages through tools, resources, resource templates, and prompts. A repeated cursor or excessive page count rejects that refresh and preserves the previous atomic catalog snapshot. `subscriptions/listen` catalog notifications fully refresh the relevant catalog while retaining each Dashboard tool enable/disable state.
 
-## Private-Network Protection
+Calls use a per-server concurrency limit and pass the configured read timeout to the SDK. If a connection is interrupted, AstrBot rebuilds the Client and refreshes catalogs, but **never automatically replays** a tool call that might already have run remotely.
 
-Remote MCP rejects localhost, loopback, private, link-local, multicast, reserved, and unspecified addresses by default. HTTP redirects are also rejected. These checks reduce SSRF and redirect-bypass risk.
+Resources and prompts are untrusted external content. They are read or fetched only after an explicit Dashboard action, are labeled with their MCP server source, and are never automatically injected into model context or auto-invoked by a model. Dashboard displays rich content as safe plain/structured data.
 
-To connect to a LAN or same-host server that you control, explicitly opt in:
+## User input and OAuth
 
-```json
-{
-  "transport": "streamable_http",
-  "url": "http://127.0.0.1:8000/mcp",
-  "allow_private_network": true
-}
-```
+An MCP server may request user input while running a tool, resource, or prompt operation. Form requests use a restricted flat JSON Schema and cannot collect passwords, tokens, API keys, or payment credentials. Replies are bound to the original message, run, request, and server, so another user cannot answer. URL requests show their scheme and host and open only after user confirmation; AstrBot never returns an external form secret to MCP.
 
-> [!WARNING]
-> `allow_private_network` bypasses the target-address restriction. Enable it only for a fixed, trusted endpoint. Do not let ordinary users control the URL, headers, or this flag.
+Protected Streamable HTTP servers can set `auth_ref`. AstrBot uses OAuth 2.1, PKCE, state, issuer/resource-metadata validation, and the SDK `OAuthClientProvider`. Tokens, refresh tokens, and client-registration data are stored with owner-only permissions in `data/mcp_auth.json`, never in `data/mcp_server.json`, and are never returned by APIs or logs. Dashboard exposes authorization start, safe status, and local revoke actions.
 
-Inside a container, `127.0.0.1` refers to the AstrBot container itself. Use a service name such as `http://mcp-server:8000/mcp` for another service on the same Compose network, and still make an explicit trust decision about private-network access.
+This MCP Core work does not implement Tasks, MCP Apps, or other protocol extensions.
 
-## Troubleshooting
-
-1. Use the WebUI test action first and inspect connection errors and server stderr.
-2. If stdio reports that a command is not allowed, use a supported launcher instead of a shell wrapper.
-3. If a command is missing, make sure it is on the AstrBot process's `PATH`; host and container installations are separate.
-4. If a remote address is rejected, check whether DNS resolves it to a private range. Enable `allow_private_network` only for a trusted service.
-5. 3xx responses are not followed; configure the final MCP endpoint directly.
-6. Retest and enable the server after editing it. ModelScope sync enables only successfully synchronized servers.
-
-Reference: [official MCP documentation](https://modelcontextprotocol.io/).
+Reference: [MCP 2026-07-28 specification](https://modelcontextprotocol.io/specification/2026-07-28).

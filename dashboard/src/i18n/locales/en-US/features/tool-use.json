@@ -4,7 +4,7 @@
   "tooltip": {
     "info": "What are Function Calling and MCP?",
     "marketplace": "Browse and install MCP servers from the community",
-    "serverConfig": "MCP server (stdio) configuration supports the following fields:\ncommand: Command name (e.g. python or uv)\nargs: Command arguments array (e.g. [\"run\", \"server.py\"])\nenv: Environment variables object (e.g. {\"api_key\": \"abc\"})\ncwd: Working directory path (e.g. /path/to/server)\nencoding: Output encoding (default utf-8)\nencoding_error_handler: The text encoding error handler. Defaults to strict.\nOther fields please refer to MCP documentation\n⚠️ If you deploy AstrBot using Docker, make sure to install MCP servers in the data directory mounted by AstrBot"
+    "serverConfig": "MCP server configuration supports modern stdio or Streamable HTTP fields: transport, command/args/env, url/headers, timeouts, private-network opt-in, terminate_on_close, and auth_ref. Unknown or legacy fields are rejected.\n⚠️ If you deploy AstrBot using Docker, make sure to install stdio MCP servers in the data directory mounted by AstrBot"
   },
   "tabs": {
     "local": "Local Servers",
@@ -18,7 +18,8 @@
       "add": "Add Server",
       "useTemplateStdio": "Stdio Template",
       "useTemplateStreamableHttp": "Streamable HTTP Template",
-      "useTemplateSse": "SSE Template",
+      "catalog": "Browse resources and prompts",
+      "authorize": "Authorize OAuth",
       "sync": "Sync MCP Servers"
     },
     "empty": "No MCP servers available, click Add Server to add one",
@@ -26,7 +27,17 @@
       "noTools": "No available tools",
       "availableTools": "Available tools",
       "configSummary": "Config: {keys}",
-      "noConfig": "No configuration set"
+      "noConfig": "No configuration set",
+      "runtime": "{status} · {resources} resources · {prompts} prompts"
+    },
+    "catalog": {
+      "title": "MCP catalog: {name}",
+      "resources": "Resources",
+      "prompts": "Prompts",
+      "untrusted": "MCP content is untrusted. Select an item explicitly; it is not added to model context automatically."
+    },
+    "auth": {
+      "pending": "OAuth authorization is waiting for the browser flow."
     }
   },
   "functionTools": {
@@ -115,7 +126,7 @@
       },
       "tips": {
         "timeoutConfig": "Please configure tool call timeout separately in the configuration page",
-        "transportRecommendation": "Prefer Streamable HTTP or SSE mode. Stdio mode starts a local process on the AstrBot host and should only be used for trusted MCP servers."
+        "transportRecommendation": "Use Streamable HTTP for remote MCP servers. Stdio starts a local process on the AstrBot host and should only be used for trusted MCP servers. SSE and legacy MCP protocols are not supported."
       }
     },
     "serverDetail": {
@@ -165,6 +176,12 @@
       "tokenHelp": "How to get a ModelScope access token? Click the button on the right for instructions"
     }
   },
+  "interaction": {
+    "formAccept": "{server} requests input: {message}\\n\\nAccept this form request?",
+    "openUrl": "{server} requests external authorization: {message}\\n\\nOpen {url}?",
+    "fieldPrompt": "Enter {field}",
+    "invalidForm": "The MCP form was invalid or incomplete."
+  },
   "messages": {
     "getServersError": "Failed to get MCP server list: {error}",
     "getToolsError": "Failed to get function tools list: {error}",
@@ -189,6 +206,7 @@
     "updateToolPermissionFailed": "Failed to update tool permission",
     "updateToolPermissionBuiltin": "Builtin tools do not support per-tool permission configuration.",
     "updateParallelExecutionFailed": "Failed to update parallel tool execution",
-    "testError": "Test connection failed: {error}"
+    "testError": "Test connection failed: {error}",
+    "catalogError": "MCP catalog operation failed: {error}"
   }
 }

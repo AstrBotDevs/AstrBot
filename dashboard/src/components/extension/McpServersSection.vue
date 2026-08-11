@@ -85,7 +85,48 @@
             </template>
           </div>
 
+          <div
+            v-if="server.connection_status"
+            class="text-caption text-medium-emphasis"
+          >
+            {{
+              tm('mcpServers.status.runtime', {
+                status: server.connection_status,
+                resources: server.resource_count || 0,
+                prompts: server.prompt_count || 0,
+              })
+            }}
+          </div>
+
           <template #actions>
+            <v-tooltip :text="tm('mcpServers.buttons.catalog')" location="top">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  icon="mdi-database-search-outline"
+                  variant="text"
+                  size="small"
+                  class="list-action-icon-btn"
+                  @click.stop="openCatalog(server)"
+                />
+              </template>
+            </v-tooltip>
+            <v-tooltip
+              v-if="server.auth_ref"
+              :text="tm('mcpServers.buttons.authorize')"
+              location="top"
+            >
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  icon="mdi-shield-key-outline"
+                  variant="text"
+                  size="small"
+                  class="list-action-icon-btn"
+                  @click.stop="startAuthorization(server)"
+                />
+              </template>
+            </v-tooltip>
             <v-tooltip :text="t('core.common.itemCard.delete')" location="top">
               <template #activator="{ props }">
                 <v-btn
@@ -213,15 +254,6 @@
               >
                 {{ tm('mcpServers.buttons.useTemplateStreamableHttp') }}
               </v-btn>
-              <v-btn
-                size="small"
-                color="primary"
-                variant="tonal"
-                class="me-1"
-                @click="setConfigTemplate('sse')"
-              >
-                {{ tm('mcpServers.buttons.useTemplateSse') }}
-              </v-btn>
             </div>
 
             <small style="color: grey"
@@ -284,6 +316,45 @@
             {{ tm('dialogs.addServer.buttons.save') }}
           </v-btn>
         </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="showMcpCatalogDialog" max-width="760px" scrollable>
+      <v-card class="mcp-dialog__card">
+        <v-card-title>{{
+          tm('mcpServers.catalog.title', { name: catalogServerName })
+        }}</v-card-title>
+        <v-card-text class="mcp-dialog__content">
+          <v-alert type="info" variant="tonal" density="compact" class="mb-3">
+            {{ tm('mcpServers.catalog.untrusted') }}
+          </v-alert>
+          <div class="text-subtitle-2">
+            {{ tm('mcpServers.catalog.resources') }}
+          </div>
+          <v-list density="compact">
+            <v-list-item
+              v-for="resource in catalogResources"
+              :key="String(resource.uri)"
+              :title="String(resource.name || resource.uri)"
+              :subtitle="String(resource.uri)"
+              @click="readCatalogResource(String(resource.uri))"
+            />
+          </v-list>
+          <div class="text-subtitle-2">
+            {{ tm('mcpServers.catalog.prompts') }}
+          </div>
+          <v-list density="compact">
+            <v-list-item
+              v-for="prompt in catalogPrompts"
+              :key="String(prompt.name)"
+              :title="String(prompt.title || prompt.name)"
+              @click="getCatalogPrompt(String(prompt.name))"
+            />
+          </v-list>
+          <pre v-if="catalogResult" class="mt-3 text-body-2">{{
+            catalogResult
+          }}</pre>
+        </v-card-text>
       </v-card>
     </v-dialog>
 
@@ -420,6 +491,11 @@ interface McpServerItem extends McpServerConfig {
   name: string;
   active: boolean;
   tools: string[];
+  connection_status?: string;
+  protocol_version?: string;
+  resource_count?: number;
+  prompt_count?: number;
+  auth_status?: string;
 }
 
 interface McpServerDraft {
@@ -433,6 +509,11 @@ const confirmDialog = useConfirmDialog();
 
 const mcpServers = ref<McpServerItem[]>([]);
 const showMcpServerDialog = ref(false);
+const showMcpCatalogDialog = ref(false);
+const catalogServerName = ref('');
+const catalogResources = ref<Record<string, unknown>[]>([]);
+const catalogPrompts = ref<Record<string, unknown>[]>([]);
+const catalogResult = ref('');
 const selectedMcpServerProvider = ref<McpServerProvider>('modelscope');
 const mcpServerProviderList: McpServerProvider[] = ['modelscope'];
 const mcpProviderToken = ref('');
@@ -531,16 +612,8 @@ function setConfigTemplate(
       url: 'your mcp server url',
       allow_private_network: false,
       headers: {},
-      timeout: 5,
-      sse_read_timeout: 300,
-    };
-  } else if (type === 'sse') {
-    template = {
-      transport: 'sse',
-      url: 'your mcp server url',
-      headers: {},
-      timeout: 5,
-      sse_read_timeout: 300,
+      connect_timeout_seconds: 15,
+      read_timeout_seconds: 60,
     };
   } else {
     template = {
@@ -565,6 +638,75 @@ function showSuccess(message: string) {
 
 function showError(message: string) {
   showMessage(message, 'error');
+}
+
+async function openCatalog(server: McpServerItem) {
+  try {
+    const response = await mcpApi.catalog(server.name);
+    const data = response.data.data;
+    if (!isRecord(data)) {
+      throw new Error('Invalid MCP catalog response');
+    }
+    catalogServerName.value = server.name;
+    catalogResources.value = Array.isArray(data.resources)
+      ? data.resources.filter(isRecord)
+      : [];
+    catalogPrompts.value = Array.isArray(data.prompts)
+      ? data.prompts.filter(isRecord)
+      : [];
+    catalogResult.value = '';
+    showMcpCatalogDialog.value = true;
+  } catch (error) {
+    showError(
+      tm('messages.catalogError', {
+        error: resolveErrorMessage(error, 'Unknown error'),
+      }),
+    );
+  }
+}
+
+async function readCatalogResource(uri: string) {
+  try {
+    const response = await mcpApi.readResource(catalogServerName.value, uri);
+    catalogResult.value = JSON.stringify(response.data.data, null, 2);
+  } catch (error) {
+    showError(
+      tm('messages.catalogError', {
+        error: resolveErrorMessage(error, 'Unknown error'),
+      }),
+    );
+  }
+}
+
+async function getCatalogPrompt(name: string) {
+  try {
+    const response = await mcpApi.getPrompt(catalogServerName.value, name);
+    catalogResult.value = JSON.stringify(response.data.data, null, 2);
+  } catch (error) {
+    showError(
+      tm('messages.catalogError', {
+        error: resolveErrorMessage(error, 'Unknown error'),
+      }),
+    );
+  }
+}
+
+async function startAuthorization(server: McpServerItem) {
+  try {
+    const response = await mcpApi.startOAuth(server.name);
+    const data = response.data.data;
+    if (isRecord(data) && typeof data.authorization_url === 'string') {
+      window.open(data.authorization_url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    showMessage(tm('mcpServers.auth.pending'), 'success');
+  } catch (error) {
+    showError(
+      tm('messages.catalogError', {
+        error: resolveErrorMessage(error, 'Unknown error'),
+      }),
+    );
+  }
 }
 
 async function getServers() {
@@ -609,7 +751,18 @@ function getServerConfigSummary(server: McpServerItem) {
   }
 
   const configKeys = Object.keys(server).filter(
-    (key) => !['name', 'active', 'tools'].includes(key),
+    (key) =>
+      ![
+        'name',
+        'active',
+        'tools',
+        'connection_status',
+        'protocol_version',
+        'resource_count',
+        'prompt_count',
+        'auth_status',
+        'headers_configured',
+      ].includes(key),
   );
   if (configKeys.length > 0) {
     return tm('mcpServers.status.configSummary', {
@@ -624,9 +777,6 @@ function getServerConfigIcon(server: McpServerItem) {
   const transport = String(server.transport || '').toLowerCase();
   if (transport === 'streamable_http') {
     return 'mdi-web';
-  }
-  if (transport === 'sse') {
-    return 'mdi-broadcast';
   }
   if (server.command) {
     return 'mdi-console-line';
@@ -704,8 +854,21 @@ function editServer(server: McpServerItem) {
     active,
     tools: _tools,
     errlogs: _errlogs,
+    connection_status: _connectionStatus,
+    protocol_version: _protocolVersion,
+    resource_count: _resourceCount,
+    resource_template_count: _resourceTemplateCount,
+    prompt_count: _promptCount,
+    tool_count: _toolCount,
+    headers_configured: _headersConfigured,
+    auth_status: _authStatus,
     ...configCopy
-  } = server as McpServerItem & { errlogs?: unknown };
+  } = server as McpServerItem & {
+    errlogs?: unknown;
+    resource_template_count?: unknown;
+    tool_count?: unknown;
+    headers_configured?: unknown;
+  };
   currentServer.value = {
     name,
     active,

@@ -10,6 +10,7 @@ import urllib.parse
 from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from importlib import import_module
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Protocol
 
@@ -17,7 +18,10 @@ import aiohttp
 
 from astrbot import logger
 from astrbot.core.agent.mcp_client import (
+    MCPAuthorizationCoordinator,
+    MCPAuthStore,
     MCPClient,
+    MCPInteractionCoordinator,
     MCPTool,
     MCPToolNameAllocationError,
     MCPToolNameAllocator,
@@ -31,6 +35,7 @@ from astrbot.core.tools.registry import (
     BuiltinToolDeclaration,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
@@ -142,70 +147,6 @@ PY_TO_JSON_TYPE = {
 }
 
 
-def _prepare_config(config: dict) -> dict:
-    """准备配置，处理嵌套格式"""
-    if config.get("mcpServers"):
-        first_key = next(iter(config["mcpServers"]))
-        config = config["mcpServers"][first_key]
-    config.pop("active", None)
-    return config
-
-
-async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
-    """快速测试 MCP 服务器可达性"""
-    import aiohttp
-
-    cfg = _prepare_config(config.copy())
-
-    url = cfg["url"]
-    headers = cfg.get("headers", {})
-    timeout = cfg.get("timeout", 10)
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            if cfg.get("transport") == "streamable_http":
-                test_payload = {
-                    "jsonrpc": "2.0",
-                    "method": "initialize",
-                    "id": 0,
-                    "params": {
-                        "protocolVersion": "2024-11-05",
-                        "capabilities": {},
-                        "clientInfo": {"name": "test-client", "version": "1.2.3"},
-                    },
-                }
-                async with session.post(
-                    url,
-                    headers={
-                        **headers,
-                        "Content-Type": "application/json",
-                        "Accept": "application/json, text/event-stream",
-                    },
-                    json=test_payload,
-                    timeout=aiohttp.ClientTimeout(total=timeout),
-                ) as response:
-                    if response.status == 200:
-                        return True, ""
-                    return False, f"HTTP {response.status}: {response.reason}"
-            else:
-                async with session.get(
-                    url,
-                    headers={
-                        **headers,
-                        "Accept": "application/json, text/event-stream",
-                    },
-                    timeout=aiohttp.ClientTimeout(total=timeout),
-                ) as response:
-                    if response.status == 200:
-                        return True, ""
-                    return False, f"HTTP {response.status}: {response.reason}"
-
-    except TimeoutError:
-        return False, f"连接超时: {timeout}秒"
-    except Exception as e:
-        return False, f"{e!s}"
-
-
 class _PermissionGuardedTool(FunctionTool):
     """Transparent proxy that checks per-tool permissions before delegating.
 
@@ -308,6 +249,14 @@ class FunctionToolManager:
         self._runtime_lock = asyncio.Lock()
         self._mcp_starting: set[str] = set()
         self._mcp_tool_name_allocator = MCPToolNameAllocator()
+        # These coordinators are runtime-owned by this manager. They are never
+        # process globals, so a shutdown clears user input and OAuth state for
+        # exactly the runtime that created the MCP clients.
+        self.mcp_interaction_coordinator = MCPInteractionCoordinator()
+        self.mcp_authorization_coordinator = MCPAuthorizationCoordinator()
+        self.mcp_auth_store = MCPAuthStore(
+            Path(get_astrbot_data_path()) / "mcp_auth.json"
+        )
         self._init_timeout_default = _resolve_timeout(
             timeout=None,
             env_name=MCP_INIT_TIMEOUT_ENV,
@@ -333,6 +282,11 @@ class FunctionToolManager:
 
     def _register_mcp_tools(self, name: str, mcp_client: MCPClient) -> list[MCPTool]:
         """Replace one server's tools using stable, unambiguous LLM names."""
+        previous_active = {
+            tool.mcp_tool_name: tool.active
+            for tool in self.func_list
+            if isinstance(tool, MCPTool) and tool.mcp_server_name == name
+        }
         self.func_list = [
             tool
             for tool in self.func_list
@@ -367,6 +321,7 @@ class FunctionToolManager:
                     mcp_server_name=name,
                     llm_tool_name=llm_tool_name,
                 )
+                function_tool.active = previous_active.get(original_name, True)
             except MCPToolNameAllocationError as exc:
                 logger.error(
                     "Refusing to register MCP tool for server %r: %s", name, exc
@@ -376,6 +331,13 @@ class FunctionToolManager:
 
         self.func_list.extend(registered)
         return registered
+
+    async def _on_mcp_catalog_changed(self, name: str, catalog: str) -> None:
+        """Install a complete tool snapshot after an SDK subscription cue."""
+        if catalog == "tools":
+            runtime = self._mcp_server_runtime.get(name)
+            if runtime is not None:
+                self._register_mcp_tools(name, runtime.client)
 
     def get_or_create_runtime_state(
         self,
@@ -810,7 +772,12 @@ class FunctionToolManager:
         if shutdown_event is None:
             shutdown_event = asyncio.Event()
 
-        mcp_client = MCPClient()
+        mcp_client = MCPClient(
+            interaction_coordinator=self.mcp_interaction_coordinator,
+            auth_store=self.mcp_auth_store,
+            auth_coordinator=self.mcp_authorization_coordinator,
+            on_catalog_changed=self._on_mcp_catalog_changed,
+        )
         mcp_client.name = name
 
         connect_done = asyncio.Event()
@@ -823,6 +790,15 @@ class FunctionToolManager:
             try:
                 await mcp_client.connect_to_server(cfg, name)
                 await mcp_client.list_tools_and_save()
+                # Connection, initial discovery and registration are one
+                # operation. Any registration error must resolve connect_done
+                # and remove the runtime instead of becoming a fake timeout.
+                self._register_mcp_tools(name, mcp_client)
+                logger.info(
+                    "Connected to MCP server %s, Tools: %s",
+                    name,
+                    [tool.name for tool in mcp_client.tools],
+                )
             except asyncio.CancelledError:
                 # cleanup on cancellation
                 try:
@@ -836,20 +812,10 @@ class FunctionToolManager:
                     await mcp_client.cleanup()
                 except Exception:
                     pass
-                connect_done.set()
                 return
-
-            # Register tools only through the runtime-owned allocator. It is
-            # independent of server connection order and never aliases a
-            # provider-facing name to the wrong MCP endpoint.
-            registered_tools = self._register_mcp_tools(name, mcp_client)
-
-            logger.info(
-                f"Connected to MCP server {name}, "
-                f"Tools: {[t.name for t in registered_tools]}"
-            )
-
-            connect_done.set()
+            finally:
+                # This signal is set for success and every failure path.
+                connect_done.set()
 
             try:
                 await shutdown_event.wait()
@@ -858,21 +824,7 @@ class FunctionToolManager:
                 logger.debug(f"MCP client {name} task was cancelled")
                 raise
             finally:
-                # Cleanup in the same task that entered the anyio contexts:
-                # asyncio.shield() would schedule the coroutine as a separate
-                # Task, and anyio cancel scopes cannot exit across tasks (#9068).
-                # Absorb late cancellations so a forced shutdown cannot abort
-                # the cleanup halfway.
-                task = asyncio.current_task()
-                while True:
-                    try:
-                        await self._terminate_mcp_client(name)
-                        break
-                    except asyncio.CancelledError:
-                        # Task.uncancel() is 3.11+; on 3.10 absorbing the
-                        # cancellation is sufficient.
-                        if task is not None and hasattr(task, "uncancel"):
-                            task.uncancel()
+                await self._terminate_mcp_client(name)
 
         lifecycle_task = asyncio.create_task(
             connect_and_lifecycle(), name=f"mcp-client:{name}"
@@ -951,7 +903,7 @@ class FunctionToolManager:
         else:
             for result in results:
                 if isinstance(result, asyncio.CancelledError):
-                    logger.debug("MCP lifecycle task was cancelled during shutdown.")
+                    raise result
                 elif isinstance(result, Exception):
                     logger.error(
                         "MCP lifecycle task failed during shutdown.",
@@ -976,17 +928,19 @@ class FunctionToolManager:
             runtime = self._mcp_server_runtime.get(name)
         if runtime:
             client = runtime.client
-            # 关闭MCP连接
-            await self._cleanup_mcp_client_safely(client, name)
-            # 移除关联的 FunctionTool
-            self.func_list = [
-                f
-                for f in self.func_list
-                if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
-            ]
-            async with self._runtime_lock:
-                self._mcp_server_runtime.pop(name, None)
-                self._mcp_starting.discard(name)
+            try:
+                await self._cleanup_mcp_client_safely(client, name)
+            finally:
+                # Manager state must not stay stale even when cancellation is
+                # propagated from cleanup.
+                self.func_list = [
+                    f
+                    for f in self.func_list
+                    if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
+                ]
+                async with self._runtime_lock:
+                    self._mcp_server_runtime.pop(name, None)
+                    self._mcp_starting.discard(name)
             logger.info(f"Disconnected from MCP server {name}")
             return
 
@@ -1001,17 +955,12 @@ class FunctionToolManager:
 
     @staticmethod
     async def test_mcp_server_connection(config: dict) -> list[str]:
-        if "url" in config:
-            success, error_msg = await _quick_test_mcp_connection(config)
-            if not success:
-                raise Exception(error_msg)
-
         mcp_client = MCPClient()
         try:
             logger.debug(f"testing MCP server connection with config: {config}")
             await mcp_client.connect_to_server(config, "test")
             tools_res = await mcp_client.list_tools_and_save()
-            tool_names = [tool.name for tool in tools_res.tools]
+            tool_names = [tool.name for tool in tools_res]
         finally:
             logger.debug("Cleaning up MCP client after testing connection.")
             await mcp_client.cleanup()
@@ -1106,6 +1055,8 @@ class FunctionToolManager:
             async with self._runtime_lock:
                 runtimes = list(self._mcp_server_runtime.values())
             await self._shutdown_runtimes(runtimes, timeout_value, strict=False)
+            await self.mcp_interaction_coordinator.close()
+            await self.mcp_authorization_coordinator.close()
 
     def _warn_on_timeout_mismatch(
         self,
@@ -1257,6 +1208,7 @@ class FunctionToolManager:
 
                         mcp_servers = local_mcp_config.setdefault("mcpServers", {})
                         synced_servers: list[tuple[str, dict]] = []
+                        unsupported_legacy = 0
                         for server in mcp_server_list:
                             server_name = server.get("name")
                             if not server_name:
@@ -1264,17 +1216,35 @@ class FunctionToolManager:
                             operational_urls = server.get("operational_urls", [])
                             if not operational_urls:
                                 continue
-                            url_info = operational_urls[0]
-                            server_url = url_info.get("url")
-                            if not server_url:
+                            url_info = next(
+                                (
+                                    item
+                                    for item in operational_urls
+                                    if isinstance(item, dict)
+                                    and item.get("transport") == "streamable_http"
+                                ),
+                                None,
+                            )
+                            if url_info is None:
+                                unsupported_legacy += 1
                                 continue
-                            # 添加到配置中(同名会覆盖)
+                            server_url = url_info.get("url")
+                            if not isinstance(server_url, str):
+                                continue
                             server_config = {
                                 "url": server_url,
-                                "transport": "sse",
+                                "transport": "streamable_http",
                                 "active": True,
-                                "provider": "modelscope",
                             }
+                            try:
+                                await self.test_mcp_server_connection(server_config)
+                            except Exception as exc:
+                                logger.warning(
+                                    "Skipping ModelScope MCP server %s: %s",
+                                    server_name,
+                                    safe_error("", exc),
+                                )
+                                continue
                             mcp_servers[server_name] = server_config
                             synced_servers.append((server_name, server_config))
 
@@ -1293,6 +1263,10 @@ class FunctionToolManager:
                                 f"从 ModelScope 同步了 {len(synced_servers)} 个 MCP 服务器",
                             )
                         else:
+                            if unsupported_legacy:
+                                raise Exception(
+                                    "ModelScope only returned legacy SSE endpoints, which this fork does not support."
+                                )
                             logger.warning("没有找到可用的 ModelScope MCP 服务器")
                     else:
                         raise Exception(

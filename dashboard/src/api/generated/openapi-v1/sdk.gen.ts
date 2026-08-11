@@ -35,6 +35,9 @@ import type {
   CleanupStorageResponses,
   CompleteBackupUploadData,
   CompleteBackupUploadResponses,
+  CompleteMcpData,
+  CompleteMcpOAuthCallbackData,
+  CompleteMcpResponses,
   CreateApiKeyData,
   CreateApiKeyResponses,
   CreateBackupData,
@@ -196,6 +199,12 @@ import type {
   GetKnowledgeTaskResponses,
   GetLogHistoryData,
   GetLogHistoryResponses,
+  GetMcpCatalogData,
+  GetMcpCatalogResponses,
+  GetMcpOAuthStatusData,
+  GetMcpOAuthStatusResponses,
+  GetMcpPromptData,
+  GetMcpPromptResponses,
   GetMemoryFactData,
   GetMemoryFactResponses,
   GetMemoryStatsData,
@@ -334,6 +343,12 @@ import type {
   ListKnowledgeChunksResponses,
   ListKnowledgeDocumentsData,
   ListKnowledgeDocumentsResponses,
+  ListMcpPromptsData,
+  ListMcpPromptsResponses,
+  ListMcpResourcesData,
+  ListMcpResourcesResponses,
+  ListMcpResourceTemplatesData,
+  ListMcpResourceTemplatesResponses,
   ListMcpServersData,
   ListMcpServersResponses,
   ListMemoryFactsData,
@@ -398,6 +413,8 @@ import type {
   OpenUnifiedChatWebSocketData,
   PromoteNeoSkillCandidateData,
   PromoteNeoSkillCandidateResponses,
+  ReadMcpResourceData,
+  ReadMcpResourceResponses,
   ReceivePlatformWebhookData,
   ReceivePlatformWebhookResponses,
   RecoverTotpData,
@@ -440,6 +457,8 @@ import type {
   RetrieveKnowledgeBaseResponses,
   RevokeApiKeyData,
   RevokeApiKeyResponses,
+  RevokeMcpOAuthData,
+  RevokeMcpOAuthResponses,
   RollbackNeoSkillReleaseData,
   RollbackNeoSkillReleaseResponses,
   RunCronJobData,
@@ -474,6 +493,8 @@ import type {
   SetupAuthResponses,
   SetupTotpData,
   SetupTotpResponses,
+  StartMcpOAuthData,
+  StartMcpOAuthResponses,
   StopChatSessionData,
   StopChatSessionResponses,
   StreamLiveLogsData,
@@ -3403,6 +3424,192 @@ export const testMcpServer = <ThrowOnError extends boolean = false>(
       'Content-Type': 'application/json',
       ...options.headers,
     },
+  });
+
+/**
+ * Get a connected MCP server catalog and status
+ */
+export const getMcpCatalog = <ThrowOnError extends boolean = false>(
+  options: Options<GetMcpCatalogData, ThrowOnError>,
+): RequestResult<GetMcpCatalogResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).get<GetMcpCatalogResponses, unknown, ThrowOnError>(
+    {
+      responseType: 'json',
+      security: [{ name: 'X-API-Key', type: 'apiKey' }],
+      url: '/api/v1/mcp/servers/{server_name}/catalog',
+      ...options,
+    },
+  );
+
+/**
+ * List explicitly browsable MCP resources
+ */
+export const listMcpResources = <ThrowOnError extends boolean = false>(
+  options: Options<ListMcpResourcesData, ThrowOnError>,
+): RequestResult<ListMcpResourcesResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).get<
+    ListMcpResourcesResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/mcp/servers/{server_name}/resources',
+    ...options,
+  });
+
+/**
+ * List MCP resource templates
+ */
+export const listMcpResourceTemplates = <ThrowOnError extends boolean = false>(
+  options: Options<ListMcpResourceTemplatesData, ThrowOnError>,
+): RequestResult<ListMcpResourceTemplatesResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).get<
+    ListMcpResourceTemplatesResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/mcp/servers/{server_name}/resources/templates',
+    ...options,
+  });
+
+/**
+ * Read an explicitly selected MCP resource
+ */
+export const readMcpResource = <ThrowOnError extends boolean = false>(
+  options: Options<ReadMcpResourceData, ThrowOnError>,
+): RequestResult<ReadMcpResourceResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<
+    ReadMcpResourceResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/mcp/servers/{server_name}/resources/read',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * List explicitly selectable MCP prompts
+ */
+export const listMcpPrompts = <ThrowOnError extends boolean = false>(
+  options: Options<ListMcpPromptsData, ThrowOnError>,
+): RequestResult<ListMcpPromptsResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).get<
+    ListMcpPromptsResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/mcp/servers/{server_name}/prompts',
+    ...options,
+  });
+
+/**
+ * Get an explicitly selected MCP prompt
+ */
+export const getMcpPrompt = <ThrowOnError extends boolean = false>(
+  options: Options<GetMcpPromptData, ThrowOnError>,
+): RequestResult<GetMcpPromptResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<GetMcpPromptResponses, unknown, ThrowOnError>(
+    {
+      responseType: 'json',
+      security: [{ name: 'X-API-Key', type: 'apiKey' }],
+      url: '/api/v1/mcp/servers/{server_name}/prompts/{prompt_name}/get',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    },
+  );
+
+/**
+ * Complete an MCP prompt or resource argument
+ */
+export const completeMcp = <ThrowOnError extends boolean = false>(
+  options: Options<CompleteMcpData, ThrowOnError>,
+): RequestResult<CompleteMcpResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<CompleteMcpResponses, unknown, ThrowOnError>({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/mcp/servers/{server_name}/completion',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Get safe MCP OAuth status
+ */
+export const getMcpOAuthStatus = <ThrowOnError extends boolean = false>(
+  options: Options<GetMcpOAuthStatusData, ThrowOnError>,
+): RequestResult<GetMcpOAuthStatusResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).get<
+    GetMcpOAuthStatusResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/mcp/servers/{server_name}/oauth/status',
+    ...options,
+  });
+
+/**
+ * Start MCP OAuth authorization with PKCE
+ */
+export const startMcpOAuth = <ThrowOnError extends boolean = false>(
+  options: Options<StartMcpOAuthData, ThrowOnError>,
+): RequestResult<StartMcpOAuthResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<
+    StartMcpOAuthResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/mcp/servers/{server_name}/oauth/start',
+    ...options,
+  });
+
+/**
+ * Revoke locally stored MCP OAuth credentials
+ */
+export const revokeMcpOAuth = <ThrowOnError extends boolean = false>(
+  options: Options<RevokeMcpOAuthData, ThrowOnError>,
+): RequestResult<RevokeMcpOAuthResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).delete<
+    RevokeMcpOAuthResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/mcp/servers/{server_name}/oauth',
+    ...options,
+  });
+
+/**
+ * Complete MCP OAuth callback
+ */
+export const completeMcpOAuthCallback = <ThrowOnError extends boolean = false>(
+  options?: Options<CompleteMcpOAuthCallbackData, ThrowOnError>,
+): RequestResult<unknown, unknown, ThrowOnError> =>
+  (options?.client ?? client).get<unknown, unknown, ThrowOnError>({
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/mcp/oauth/callback',
+    ...options,
   });
 
 /**

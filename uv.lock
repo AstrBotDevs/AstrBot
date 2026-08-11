@@ -316,7 +316,7 @@ requires-dist = [
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "markdown-it-py", specifier = ">=3.0.0" },
     { name = "markitdown-no-magika", extras = ["docx", "xls", "xlsx"], specifier = ">=0.1.2" },
-    { name = "mcp", specifier = ">=2.0.0" },
+    { name = "mcp", specifier = ">=2.0.0,<3" },
     { name = "mdit-py-plugins", specifier = ">=0.6.1" },
     { name = "openai", specifier = ">=2.53.0" },
     { name = "ormsgpack", specifier = ">=1.12.2" },

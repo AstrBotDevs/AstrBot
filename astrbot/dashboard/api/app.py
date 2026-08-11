@@ -168,6 +168,9 @@ def create_dashboard_asgi_app(
             provider_manager=runtime.provider_manager,
             platform_message_history_manager=runtime.platform_message_history_manager,
             webchat_run_coordinator=runtime.webchat_run_coordinator,
+            mcp_interaction_coordinator=getattr(
+                runtime.catalogs.tools, "mcp_interaction_coordinator", None
+            ),
             token_validator=dashboard_token_validator,
         ),
         logs=LogService(runtime.log_broker, runtime.astrbot_config),

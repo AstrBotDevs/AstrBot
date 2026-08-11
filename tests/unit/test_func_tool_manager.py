@@ -1,6 +1,7 @@
 import asyncio
 import json
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -451,8 +452,8 @@ async def test_mcp_shutdown_cleanup_runs_in_lifecycle_task(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_mcp_shutdown_cleanup_survives_late_cancellation(monkeypatch):
-    """A cancellation arriving mid-cleanup must not abort the cleanup."""
+async def test_mcp_shutdown_propagates_cancellation(monkeypatch):
+    """Cancellation is not swallowed while a client is being closed."""
     manager = FunctionToolManager()
     cleanup_calls = []
 
@@ -472,9 +473,10 @@ async def test_mcp_shutdown_cleanup_survives_late_cancellation(monkeypatch):
     monkeypatch.setattr(ftm.MCPClient, "cleanup", fake_cleanup)
 
     await manager.enable_mcp_server("dummy", {"command": "python"}, timeout=5)
-    await manager.disable_mcp_server("dummy", timeout=5)
+    with pytest.raises(asyncio.CancelledError):
+        await manager.disable_mcp_server("dummy", timeout=5)
 
-    assert len(cleanup_calls) == 2
+    assert len(cleanup_calls) == 1
     assert "dummy" not in manager.mcp_server_runtime_view
 
 
@@ -495,7 +497,12 @@ async def test_modelscope_sync_enables_only_synced_servers(monkeypatch):
                     "mcp_server_list": [
                         {
                             "name": "valid",
-                            "operational_urls": [{"url": "https://example.com/mcp"}],
+                            "operational_urls": [
+                                {
+                                    "url": "https://example.com/mcp",
+                                    "transport": "streamable_http",
+                                }
+                            ],
                         },
                         {"name": "missing-url", "operational_urls": []},
                         {"name": "empty-url", "operational_urls": [{}]},
@@ -526,6 +533,11 @@ async def test_modelscope_sync_enables_only_synced_servers(monkeypatch):
     monkeypatch.setattr(manager, "load_mcp_config", lambda: default_config)
     monkeypatch.setattr(manager, "save_mcp_config", saved_configs.append)
     monkeypatch.setattr(manager, "enable_mcp_server", fake_enable_mcp_server)
+    monkeypatch.setattr(
+        manager,
+        "test_mcp_server_connection",
+        AsyncMock(return_value=["demo"]),
+    )
 
     await manager.sync_modelscope_mcp_servers("token")
 
@@ -535,9 +547,8 @@ async def test_modelscope_sync_enables_only_synced_servers(monkeypatch):
             "mcpServers": {
                 "valid": {
                     "url": "https://example.com/mcp",
-                    "transport": "sse",
+                    "transport": "streamable_http",
                     "active": True,
-                    "provider": "modelscope",
                 }
             }
         }
@@ -547,9 +558,8 @@ async def test_modelscope_sync_enables_only_synced_servers(monkeypatch):
             "valid",
             {
                 "url": "https://example.com/mcp",
-                "transport": "sse",
+                "transport": "streamable_http",
                 "active": True,
-                "provider": "modelscope",
             },
         )
     ]

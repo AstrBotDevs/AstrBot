@@ -2882,14 +2882,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "config": {
-                    "type": "object",
-                    "additionalProperties": true
-                  }
-                },
-                "additionalProperties": false
+                "$ref": "#/components/schemas/McpServerConfig"
               }
             }
           }
@@ -2897,6 +2890,236 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/mcp/servers/{server_name}/catalog": {
+      "get": {
+        "tags": ["MCP"],
+        "summary": "Get a connected MCP server catalog and status",
+        "operationId": "getMcpCatalog",
+        "x-astrbot-scope": "mcp",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ServerName"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/mcp/servers/{server_name}/resources": {
+      "get": {
+        "tags": ["MCP"],
+        "summary": "List explicitly browsable MCP resources",
+        "operationId": "listMcpResources",
+        "x-astrbot-scope": "mcp",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ServerName"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/mcp/servers/{server_name}/resources/templates": {
+      "get": {
+        "tags": ["MCP"],
+        "summary": "List MCP resource templates",
+        "operationId": "listMcpResourceTemplates",
+        "x-astrbot-scope": "mcp",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ServerName"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/mcp/servers/{server_name}/resources/read": {
+      "post": {
+        "tags": ["MCP"],
+        "summary": "Read an explicitly selected MCP resource",
+        "operationId": "readMcpResource",
+        "x-astrbot-scope": "mcp",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ServerName"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpResourceReadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/mcp/servers/{server_name}/prompts": {
+      "get": {
+        "tags": ["MCP"],
+        "summary": "List explicitly selectable MCP prompts",
+        "operationId": "listMcpPrompts",
+        "x-astrbot-scope": "mcp",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ServerName"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/mcp/servers/{server_name}/prompts/{prompt_name}/get": {
+      "post": {
+        "tags": ["MCP"],
+        "summary": "Get an explicitly selected MCP prompt",
+        "operationId": "getMcpPrompt",
+        "x-astrbot-scope": "mcp",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ServerName"
+          },
+          {
+            "name": "prompt_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpPromptGetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/mcp/servers/{server_name}/completion": {
+      "post": {
+        "tags": ["MCP"],
+        "summary": "Complete an MCP prompt or resource argument",
+        "operationId": "completeMcp",
+        "x-astrbot-scope": "mcp",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ServerName"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpCompletionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/mcp/servers/{server_name}/oauth/status": {
+      "get": {
+        "tags": ["MCP"],
+        "summary": "Get safe MCP OAuth status",
+        "operationId": "getMcpOAuthStatus",
+        "x-astrbot-scope": "mcp",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ServerName"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/mcp/servers/{server_name}/oauth/start": {
+      "post": {
+        "tags": ["MCP"],
+        "summary": "Start MCP OAuth authorization with PKCE",
+        "operationId": "startMcpOAuth",
+        "x-astrbot-scope": "mcp",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ServerName"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/mcp/servers/{server_name}/oauth": {
+      "delete": {
+        "tags": ["MCP"],
+        "summary": "Revoke locally stored MCP OAuth credentials",
+        "operationId": "revokeMcpOAuth",
+        "x-astrbot-scope": "mcp",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ServerName"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/mcp/oauth/callback": {
+      "get": {
+        "tags": ["MCP"],
+        "summary": "Complete MCP OAuth callback",
+        "operationId": "completeMcpOAuthCallback",
+        "responses": {
+          "303": {
+            "description": "Browser redirect after a validated OAuth callback."
           }
         }
       }
@@ -5893,7 +6116,7 @@
           },
           "transport": {
             "type": "string",
-            "enum": ["stdio", "sse", "streamable_http"]
+            "enum": ["stdio", "streamable_http"]
           },
           "command": {
             "type": "string"
@@ -5905,7 +6128,8 @@
             }
           },
           "url": {
-            "type": "string"
+            "type": "string",
+            "format": "uri"
           },
           "headers": {
             "type": "object",
@@ -5913,11 +6137,98 @@
               "type": "string"
             }
           },
-          "timeout": {
-            "type": "integer"
+          "env": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "allow_private_network": {
+            "type": "boolean",
+            "default": false
+          },
+          "connect_timeout_seconds": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "read_timeout_seconds": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "terminate_on_close": {
+            "type": "boolean",
+            "default": true
+          },
+          "auth_ref": {
+            "type": "string"
           }
         },
-        "additionalProperties": true
+        "oneOf": [
+          {
+            "required": ["command"],
+            "not": {
+              "required": ["url"]
+            }
+          },
+          {
+            "required": ["url", "transport"],
+            "properties": {
+              "transport": {
+                "const": "streamable_http"
+              }
+            },
+            "not": {
+              "required": ["command"]
+            }
+          }
+        ],
+        "additionalProperties": false
+      },
+      "McpResourceReadRequest": {
+        "type": "object",
+        "required": ["uri"],
+        "properties": {
+          "uri": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "additionalProperties": false
+      },
+      "McpPromptGetRequest": {
+        "type": "object",
+        "properties": {
+          "arguments": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "McpCompletionRequest": {
+        "type": "object",
+        "required": ["reference", "argument"],
+        "properties": {
+          "reference": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "argument": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "context_arguments": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
       },
       "ModelScopeSyncRequest": {
         "type": "object",

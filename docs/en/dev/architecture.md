@@ -78,7 +78,7 @@ Core diagnostics retain only stable error codes, Unicode code-point spans, param
 
 The Agent runtime is under `astrbot/core/agent/`, with main-request assembly in `astrbot/core/astr_main_agent.py`. Provider abstractions live in `astrbot/core/provider/`; concrete OpenAI, Anthropic, Gemini, and similar sources live in `provider/sources/` and are lazily registered through `provider_modules.py`. Dify, Coze, DashScope, and DeerFlow are external Agent Runners under `astrbot/core/agent/runners/`, not ordinary model providers.
 
-Tools can come from the core, plugins, or MCP. MCP supports stdio, SSE, and Streamable HTTP. Remote HTTP connections reject localhost, private, link-local, and reserved addresses by default; a trusted configuration must explicitly set `allow_private_network` to opt in.
+Tools can come from the core, plugins, or MCP. MCP supports stdio and Streamable HTTP only. Remote HTTP connections reject localhost, private, link-local, and reserved addresses by default; a trusted configuration must explicitly set `allow_private_network` to opt in.
 
 Skills can come from `data/skills`, plugin `skills/` directories, the sandbox, or the current session workspace. Workspace Skills are request-scoped and normally live under `data/workspaces/{normalized_umo}/skills/`.
 

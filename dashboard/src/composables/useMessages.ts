@@ -73,6 +73,10 @@ interface UseMessagesOptions {
   currentSessionId: Ref<string>;
   onSessionsChanged?: () => Promise<void> | void;
   onStreamUpdate?: (sessionId: string) => void;
+  onMcpInputRequest?: (
+    payload: StreamPayload,
+    respond: (response: Record<string, unknown>) => void,
+  ) => void;
 }
 
 export function useMessages(options: UseMessagesOptions) {
@@ -857,6 +861,21 @@ export function useMessages(options: UseMessagesOptions) {
         connection = getWebSocketConnections(sessionId)[0];
       }
       if (connection?.transport !== 'websocket' || !connection.botRecord) {
+        return;
+      }
+      const messageType = payload?.type || payload?.t;
+      if (messageType === 'mcp_input_request') {
+        options.onMcpInputRequest?.(payload, (response) => {
+          sendWebSocketPayload(sessionId, connection.messageId, {
+            t: 'mcp_input_response',
+            ...response,
+            request_id: payload.request_id || payload.message_id,
+            message_id: payload.message_id,
+            run_id: payload.run_id,
+            server_name: payload.server_name,
+            unified_msg_origin: payload.unified_msg_origin,
+          });
+        });
         return;
       }
       processStreamPayload(

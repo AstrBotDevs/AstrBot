@@ -142,8 +142,82 @@ export const mcpApi = {
     return typed<OpenConfig>(
       openApiV1.testMcpServer({
         path: { server_name: serverName },
-        body: config ? { config } : undefined,
+        body: config ? { name: serverName, ...config } : undefined,
       }),
+    );
+  },
+  catalog(serverName: string) {
+    return typed<OpenConfig>(
+      openApiV1.getMcpCatalog({ path: { server_name: serverName } }),
+    );
+  },
+  resources(serverName: string) {
+    return typed<OpenConfig>(
+      openApiV1.listMcpResources({ path: { server_name: serverName } }),
+    );
+  },
+  resourceTemplates(serverName: string) {
+    return typed<OpenConfig>(
+      openApiV1.listMcpResourceTemplates({
+        path: { server_name: serverName },
+      }),
+    );
+  },
+  readResource(serverName: string, uri: string) {
+    return typed<OpenConfig>(
+      openApiV1.readMcpResource({
+        path: { server_name: serverName },
+        body: { uri },
+      }),
+    );
+  },
+  prompts(serverName: string) {
+    return typed<OpenConfig>(
+      openApiV1.listMcpPrompts({ path: { server_name: serverName } }),
+    );
+  },
+  getPrompt(
+    serverName: string,
+    promptName: string,
+    promptArguments?: Record<string, string>,
+  ) {
+    return typed<OpenConfig>(
+      openApiV1.getMcpPrompt({
+        path: { server_name: serverName, prompt_name: promptName },
+        body: promptArguments ? { arguments: promptArguments } : undefined,
+      }),
+    );
+  },
+  complete(
+    serverName: string,
+    reference: DynamicConfig,
+    argument: Record<string, string>,
+    contextArguments?: Record<string, string>,
+  ) {
+    return typed<OpenConfig>(
+      openApiV1.completeMcp({
+        path: { server_name: serverName },
+        body: {
+          reference,
+          argument,
+          context_arguments: contextArguments,
+        },
+      }),
+    );
+  },
+  oauthStatus(serverName: string) {
+    return typed<OpenConfig>(
+      openApiV1.getMcpOAuthStatus({ path: { server_name: serverName } }),
+    );
+  },
+  startOAuth(serverName: string) {
+    return typed<OpenConfig>(
+      openApiV1.startMcpOAuth({ path: { server_name: serverName } }),
+    );
+  },
+  revokeOAuth(serverName: string) {
+    return typed<OpenConfig>(
+      openApiV1.revokeMcpOAuth({ path: { server_name: serverName } }),
     );
   },
   syncModelScope(payload?: ModelScopeSyncRequest) {

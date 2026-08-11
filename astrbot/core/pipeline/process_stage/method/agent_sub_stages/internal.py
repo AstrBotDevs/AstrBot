@@ -259,6 +259,21 @@ class InternalAgentSubStage:
             if (enable_streaming := event.get_extra("enable_streaming")) is not None:
                 streaming_response = bool(enable_streaming)
 
+            provider_manager = getattr(
+                self.ctx.execution_context, "provider_manager", None
+            )
+            mcp_interactions = getattr(
+                getattr(provider_manager, "tool_manager", None),
+                "mcp_interaction_coordinator",
+                None,
+            )
+            if (
+                mcp_interactions is not None
+                and await mcp_interactions.respond_from_event(event)
+            ):
+                event.set_extra("_mcp_input_response", True)
+                return
+
             has_provider_request = event.get_extra("provider_request") is not None
             has_valid_message = bool(event.message_str and event.message_str.strip())
             has_media_content = any(

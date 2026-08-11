@@ -1,13 +1,22 @@
+import asyncio
+import copy
 import traceback
 from typing import Any
 
+from mcp.types import PromptReference, ResourceTemplateReference
+
 from astrbot import logger
-from astrbot.core.agent.mcp_client import MCPTool, validate_mcp_stdio_config
+from astrbot.core.agent.mcp_client import (
+    MCPClient,
+    MCPTool,
+    validate_mcp_server_config,
+)
 from astrbot.core.agent.tool import get_parallel_blocked_reason, get_tool_id
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.star.plugin_catalog import PluginCatalog
 from astrbot.core.star.star import PluginRegistry
 from astrbot.core.tools.function_tool_manager import FunctionToolManager
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
 
@@ -30,6 +39,7 @@ class ToolsService:
         self.preferences = preferences
         self.config_manager = config_manager
         self.plugin_catalog = plugin_catalog
+        self._oauth_probe_tasks: dict[str, asyncio.Task[None]] = {}
 
     def rollback_mcp_server(self, name: str) -> bool:
         try:
@@ -66,17 +76,25 @@ class ToolsService:
                     "active": server_config.get("active", True),
                 }
                 for key, value in server_config.items():
-                    if key != "active":
+                    if key not in {"active", "headers"}:
                         server_info[key] = value
+                # Headers are write-only. A Dashboard list response must never
+                # disclose an Authorization value or another deployment secret.
+                server_info["headers_configured"] = bool(server_config.get("headers"))
 
                 for name_key, runtime in self.tool_mgr.mcp_server_runtime_view.items():
                     if name_key == name:
                         mcp_client = runtime.client
                         server_info["tools"] = [tool.name for tool in mcp_client.tools]
                         server_info["errlogs"] = mcp_client.server_errlogs
+                        server_info.update(mcp_client.runtime_status())
+                        if server_config.get("auth_ref"):
+                            server_info["auth_status"] = "configured"
                         break
                 else:
                     server_info["tools"] = []
+                    server_info["connection_status"] = "disconnected"
+                    server_info["auth_status"] = "not_configured"
 
                 servers.append(server_info)
 
@@ -96,6 +114,182 @@ class ToolsService:
             return None
         return dict(server_config)
 
+    def _mcp_runtime(self, name: str):
+        runtime = self.tool_mgr.mcp_server_runtime_view.get(name)
+        if runtime is None or runtime.client.connection_status != "connected":
+            raise ToolsServiceError("MCP server is not connected.")
+        return runtime
+
+    @staticmethod
+    def _mcp_model(value: Any) -> Any:
+        if hasattr(value, "model_dump"):
+            return value.model_dump(mode="json")
+        if isinstance(value, list):
+            return [ToolsService._mcp_model(item) for item in value]
+        if isinstance(value, dict):
+            return {
+                str(key): ToolsService._mcp_model(item) for key, item in value.items()
+            }
+        return value
+
+    async def get_mcp_runtime_catalog(self, name: str) -> dict[str, Any]:
+        runtime = self._mcp_runtime(name)
+        client = runtime.client
+        return {
+            "status": client.runtime_status(),
+            "resources": self._mcp_model(client.resources),
+            "resource_templates": self._mcp_model(client.resource_templates),
+            "prompts": self._mcp_model(client.prompts),
+        }
+
+    async def list_mcp_resources(self, name: str) -> dict[str, Any]:
+        """List only the current, explicitly browsable resource catalog."""
+        client = self._mcp_runtime(name).client
+        await client.list_resources()
+        return {"source": name, "resources": self._mcp_model(client.resources)}
+
+    async def list_mcp_resource_templates(self, name: str) -> dict[str, Any]:
+        """List the current resource-template catalog without reading content."""
+        client = self._mcp_runtime(name).client
+        await client.list_resource_templates()
+        return {
+            "source": name,
+            "resource_templates": self._mcp_model(client.resource_templates),
+        }
+
+    async def list_mcp_prompts(self, name: str) -> dict[str, Any]:
+        """List the current prompt catalog without invoking a prompt."""
+        client = self._mcp_runtime(name).client
+        await client.list_prompts()
+        return {"source": name, "prompts": self._mcp_model(client.prompts)}
+
+    async def read_mcp_resource(self, name: str, uri: str) -> dict[str, Any]:
+        if not uri:
+            raise ToolsServiceError("Resource URI cannot be empty.")
+        result = await self._mcp_runtime(name).client.read_resource(uri)
+        # Resource data is untrusted external content. Dashboard clients render
+        # it as plain data, never as trusted HTML or an automatic LLM context.
+        return {"source": name, "resource": self._mcp_model(result)}
+
+    async def get_mcp_prompt(
+        self, name: str, prompt_name: str, arguments: dict[str, str] | None
+    ) -> dict[str, Any]:
+        if not prompt_name:
+            raise ToolsServiceError("Prompt name cannot be empty.")
+        result = await self._mcp_runtime(name).client.get_prompt(prompt_name, arguments)
+        return {"source": name, "prompt": self._mcp_model(result)}
+
+    async def complete_mcp(
+        self,
+        name: str,
+        reference: dict[str, Any],
+        argument: dict[str, str],
+        context_arguments: dict[str, str] | None,
+    ) -> dict[str, Any]:
+        try:
+            reference_type = reference.get("type")
+            if reference_type == "ref/resource":
+                resolved_reference = ResourceTemplateReference.model_validate(reference)
+            elif reference_type == "ref/prompt":
+                resolved_reference = PromptReference.model_validate(reference)
+            else:
+                raise ValueError("Unsupported completion reference.")
+        except (AttributeError, ValueError) as exc:
+            raise ToolsServiceError("Invalid completion reference.") from exc
+        result = await self._mcp_runtime(name).client.complete(
+            resolved_reference, argument, context_arguments
+        )
+        return {"source": name, "completion": self._mcp_model(result)}
+
+    async def get_mcp_auth_status(self, name: str) -> dict[str, Any]:
+        config = self.get_mcp_server_config(name)
+        if config is None:
+            raise ToolsServiceError("MCP server does not exist.")
+        auth_ref = config.get("auth_ref")
+        if not auth_ref:
+            return {"configured": False}
+        status = await self.tool_mgr.mcp_auth_store.status(f"{name}:{auth_ref}")
+        return {"configured": True, **status}
+
+    async def start_mcp_authorization(self, name: str) -> dict[str, Any]:
+        config = self.get_mcp_server_config(name)
+        if config is None or not config.get("auth_ref"):
+            raise ToolsServiceError("This MCP server has no OAuth configuration.")
+        identity = f"{name}:{config['auth_ref']}"
+        runtime = self.tool_mgr.mcp_server_runtime_view.get(name)
+        if runtime is not None and runtime.client.connection_status == "connected":
+            client = runtime.client
+            asyncio.create_task(client.list_tools_and_save(), name=f"mcp-oauth:{name}")
+        else:
+            # A protected endpoint may fail its first catalog request with 401,
+            # so it has no runtime entry yet. Keep an owner task alive while the
+            # SDK OAuth provider performs discovery, PKCE, and callback waiting.
+            existing = self._oauth_probe_tasks.get(identity)
+            if existing is None or existing.done():
+                client = MCPClient(
+                    interaction_coordinator=self.tool_mgr.mcp_interaction_coordinator,
+                    auth_store=self.tool_mgr.mcp_auth_store,
+                    auth_coordinator=self.tool_mgr.mcp_authorization_coordinator,
+                )
+
+                async def probe() -> None:
+                    authorized = False
+                    try:
+                        await client.connect_to_server(config, name)
+                        await client.list_tools_and_save()
+                        authorized = True
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as exc:
+                        logger.debug("MCP OAuth probe ended: %s", safe_error("", exc))
+                    finally:
+                        await client.cleanup()
+                        if authorized and config.get("active", True):
+                            try:
+                                await self.tool_mgr.enable_mcp_server(name, config)
+                            except Exception as exc:
+                                logger.warning(
+                                    "MCP server %s could not start after OAuth: %s",
+                                    name,
+                                    safe_error("", exc),
+                                )
+
+                self._oauth_probe_tasks[identity] = asyncio.create_task(
+                    probe(), name=f"mcp-oauth:{name}"
+                )
+        authorization_url = (
+            await self.tool_mgr.mcp_authorization_coordinator.wait_for_url(identity)
+        )
+        if authorization_url is None:
+            return {"status": "pending"}
+        return {
+            "status": "authorization_required",
+            "authorization_url": authorization_url,
+        }
+
+    async def complete_mcp_authorization(
+        self, name: str, code: str, state: str | None, issuer: str | None
+    ) -> bool:
+        config = self.get_mcp_server_config(name)
+        if config is None or not config.get("auth_ref"):
+            return False
+        return await self.tool_mgr.mcp_authorization_coordinator.complete_callback(
+            f"{name}:{config['auth_ref']}", code, state, issuer
+        )
+
+    async def revoke_mcp_authorization(self, name: str) -> None:
+        config = self.get_mcp_server_config(name)
+        if config is None or not config.get("auth_ref"):
+            raise ToolsServiceError("This MCP server has no OAuth configuration.")
+        identity = f"{name}:{config['auth_ref']}"
+        task = self._oauth_probe_tasks.pop(identity, None)
+        if task is not None and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        if name in self.tool_mgr.mcp_server_runtime_view:
+            await self.tool_mgr.disable_mcp_server(name)
+        await self.tool_mgr.mcp_auth_store.revoke(identity)
+
     async def add_mcp_server(self, server_data: Any) -> str:
         try:
             name = server_data.get("name", "")
@@ -112,15 +306,23 @@ class ToolsService:
             if name in config["mcpServers"]:
                 raise ToolsServiceError(f"Server {name} already exists")
 
-            try:
-                await self.tool_mgr.test_mcp_server_connection(server_config)
-            except Exception as exc:
-                logger.error(traceback.format_exc())
-                raise ToolsServiceError(f"MCP connection test failed: {exc!s}") from exc
+            if not server_config.get("auth_ref"):
+                try:
+                    await self.tool_mgr.test_mcp_server_connection(server_config)
+                except Exception as exc:
+                    logger.error(traceback.format_exc())
+                    logger.warning(
+                        "MCP connection test failed: %s", safe_error("", exc)
+                    )
+                    raise ToolsServiceError("MCP connection test failed.") from exc
 
             config["mcpServers"][name] = server_config
 
             if self.tool_mgr.save_mcp_config(config):
+                if server_config.get("auth_ref"):
+                    return (
+                        f"Added MCP server {name}. Authorize it before it is connected."
+                    )
                 await self._enable_added_server(name, server_config)
                 return f"Successfully added MCP server {name}"
             raise ToolsServiceError("Failed to save configuration")
@@ -434,16 +636,17 @@ class ToolsService:
 
     @staticmethod
     def _build_server_config(server_data: dict) -> tuple[bool, dict]:
-        has_valid_config = False
-        server_config = {"active": server_data.get("active", True)}
-
-        for key, value in server_data.items():
-            if key in ["name", "active", "tools", "errlogs"]:
-                continue
-            server_config[key] = value
-            has_valid_config = True
-
-        return has_valid_config, server_config
+        raw_config = server_data.get("config")
+        if isinstance(raw_config, dict):
+            server_config = dict(raw_config)
+        else:
+            server_config = {
+                key: value
+                for key, value in server_data.items()
+                if key not in {"name", "active", "tools", "errlogs", "config"}
+            }
+        server_config["active"] = server_data.get("active", True)
+        return any(key != "active" for key in server_config), server_config
 
     @staticmethod
     def _build_updated_server_config(
@@ -460,6 +663,16 @@ class ToolsService:
             server_config[key] = value
             only_update_active = False
 
+        # Header values are deliberately absent from the Dashboard GET result.
+        # Omission preserves the existing secret; an explicit empty object is
+        # the user's intentional request to remove headers.
+        if (
+            isinstance(old_config, dict)
+            and "headers" in old_config
+            and "headers" not in server_config
+        ):
+            server_config["headers"] = copy.deepcopy(old_config["headers"])
+
         if only_update_active and isinstance(old_config, dict):
             for key, value in old_config.items():
                 if key != "active":
@@ -470,7 +683,7 @@ class ToolsService:
     @staticmethod
     def _validate_server_config(server_config: dict) -> None:
         try:
-            validate_mcp_stdio_config(server_config)
+            validate_mcp_server_config(server_config)
         except ValueError as exc:
             raise ToolsServiceError(f"{exc!s}") from exc
 

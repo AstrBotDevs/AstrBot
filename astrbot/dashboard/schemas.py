@@ -358,22 +358,67 @@ class ToolPermissionRequest(BaseModel):
     permission: Literal["admin", "member"]
 
 
-class McpServerRequest(OpenModel):
+class McpServerRequest(BaseModel):
+    """The strict modern MCP server configuration accepted by Dashboard APIs."""
+
+    model_config = ConfigDict(extra="forbid")
+
     name: str | None = None
     active: bool | None = None
-    config: dict[str, Any] | None = None
+    transport: Literal["stdio", "streamable_http"] | None = None
+    command: str | None = None
+    args: list[str] | None = None
+    env: dict[str, str] | None = None
+    url: str | None = None
+    headers: dict[str, str] | None = None
+    allow_private_network: bool | None = None
+    connect_timeout_seconds: float | None = None
+    read_timeout_seconds: float | None = None
+    terminate_on_close: bool | None = None
+    auth_ref: str | None = None
 
     @model_validator(mode="before")
     @classmethod
     def reject_legacy_fields(cls, value: Any) -> Any:
         return _reject_legacy_mcp_request_fields(
             value,
-            forbidden=("enabled", "mcpServers", "mcp_server_config", "oldName"),
+            forbidden=(
+                "enabled",
+                "mcpServers",
+                "mcp_server_config",
+                "oldName",
+                "type",
+                "sse",
+                "sse_read_timeout",
+                "session_read_timeout",
+                "timeout",
+                "config",
+            ),
         )
 
 
 class ModelScopeSyncRequest(BaseModel):
     access_token: str | None = None
+
+
+class McpResourceReadRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    uri: str = Field(min_length=1, max_length=4096)
+
+
+class McpPromptGetRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    arguments: dict[str, str] | None = None
+
+
+class McpCompletionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reference: dict[str, Any]
+    argument: dict[str, str]
+    context_arguments: dict[str, str] | None = None
 
 
 class T2iTemplateRequest(BaseModel):
