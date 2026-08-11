@@ -375,6 +375,7 @@ def test_plugin_context_exposes_capabilities_not_core_managers():
     assert plugin_context.cron is not None
     assert plugin_context.knowledge is not None
     assert plugin_context.platform_actions is not None
+    assert plugin_context.onebot is not None
     assert plugin_context.dashboard_extensions is not None
     assert plugin_context.runtime_info is not None
     for forbidden in (

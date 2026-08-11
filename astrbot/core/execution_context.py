@@ -147,6 +147,16 @@ class PlatformManagerProtocol(Protocol):
         **kwargs,
     ) -> dict[str, object]: ...
 
+    async def invoke_capability(
+        self,
+        platform_id: str,
+        capability_name: str,
+        action_name: str,
+        **kwargs,
+    ) -> object: ...
+
+    def get_platform_capabilities(self, platform_id: str) -> tuple[object, ...]: ...
+
     async def refresh_registered_commands(self) -> None: ...
 
     async def send_to_session(
@@ -852,6 +862,25 @@ class CoreExecutionContext:
             action_name,
             **kwargs,
         )
+
+    async def invoke_platform_capability(
+        self,
+        platform_id: str,
+        capability_name: str,
+        action_name: str,
+        **kwargs: Any,
+    ) -> object:
+        """Invoke a versioned platform capability through its owner."""
+        return await self._platform_manager.invoke_capability(
+            platform_id,
+            capability_name,
+            action_name,
+            **kwargs,
+        )
+
+    def get_platform_capabilities(self, platform_id: str) -> tuple[object, ...]:
+        """Return the immutable capability snapshot for a platform instance."""
+        return self._platform_manager.get_platform_capabilities(platform_id)
 
     async def invoke_event_platform_action(
         self,

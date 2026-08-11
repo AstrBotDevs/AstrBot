@@ -21,6 +21,7 @@ from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent, MessageSession
+from astrbot.core.platform.onebot_capability import OneBotCapability
 from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.provider import (
@@ -940,6 +941,7 @@ class PluginContext:
         "cron",
         "knowledge",
         "platform_actions",
+        "onebot",
         "dashboard_extensions",
         "runtime_info",
         "rendering",
@@ -961,6 +963,7 @@ class PluginContext:
         cron: CronCapability,
         knowledge: KnowledgeCapability,
         platform_actions: PlatformActionsCapability,
+        onebot: OneBotCapability,
         dashboard_extensions: DashboardExtensionAccess,
         runtime_info: RuntimeInfoCapability,
         rendering: RenderingCapability,
@@ -978,6 +981,7 @@ class PluginContext:
         self.cron = cron
         self.knowledge = knowledge
         self.platform_actions = platform_actions
+        self.onebot = onebot
         self.dashboard_extensions = dashboard_extensions
         self.runtime_info = runtime_info
         self.rendering = rendering
@@ -1012,6 +1016,7 @@ class PluginContext:
             cron=CronCapability(execution.cron_manager),
             knowledge=KnowledgeCapability(execution.kb_manager),
             platform_actions=PlatformActionsCapability(execution),
+            onebot=OneBotCapability(execution),
             dashboard_extensions=execution.dashboard_extensions,
             runtime_info=RuntimeInfoCapability(
                 catalogs,
@@ -1050,6 +1055,7 @@ __all__ = [
     "ModelCapability",
     "PersonaCapability",
     "PlatformActionsCapability",
+    "OneBotCapability",
     "PluginCommandInfo",
     "PluginContext",
     "PluginInfo",

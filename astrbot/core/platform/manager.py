@@ -21,6 +21,13 @@ from astrbot.core.webchat.queue_manager import WebChatQueueManager
 
 from .astrbot_message import AstrBotMessage
 from .catalog import PlatformCatalog
+from .contracts.onebot import (
+    OneBotActionUnavailable,
+    OneBotActionValidationError,
+    OneBotCapabilityUnavailable,
+    PlatformCapabilityDescriptor,
+    get_capability_descriptor,
+)
 from .discovery import discover_platform_adapter
 from .message_session import MessageSession
 from .platform import Platform, PlatformStatus
@@ -537,6 +544,71 @@ class PlatformManager:
             platform_id,
             lambda: action_handler(**kwargs),
         )
+
+    async def invoke_capability(
+        self,
+        platform_id: str,
+        capability_name: str,
+        action_name: str,
+        **kwargs,
+    ) -> object:
+        """Invoke an explicitly registered, versioned adapter capability."""
+        descriptor: PlatformCapabilityDescriptor | None = get_capability_descriptor(
+            capability_name
+        )
+        if descriptor is None:
+            raise OneBotCapabilityUnavailable(
+                f"Capability is unavailable: {capability_name}",
+                action=action_name,
+            )
+        action = descriptor.action(action_name)
+        if action is None:
+            raise OneBotActionUnavailable(
+                f"Action is unavailable: {capability_name}.{action_name}",
+                action=action_name,
+            )
+        inst = self._find_inst_by_id(platform_id)
+        if inst is None:
+            raise OneBotCapabilityUnavailable(
+                "Platform adapter is unavailable",
+                action=action_name,
+            )
+        if isinstance(inst, Platform):
+            declared = next(
+                (item for item in inst.capabilities() if item.name == capability_name),
+                None,
+            )
+            if declared is None or declared.action(action_name) is None:
+                raise OneBotCapabilityUnavailable(
+                    f"Platform does not provide capability {capability_name}",
+                    action=action_name,
+                )
+        try:
+            validated_kwargs = action.input_model.validate(kwargs)
+        except OneBotActionValidationError as exc:
+            raise OneBotActionValidationError(exc.message, action=action_name) from exc
+        provider = getattr(inst, "invoke_capability", None)
+        if not callable(provider):
+            raise OneBotCapabilityUnavailable(
+                f"Platform does not provide capability {capability_name}",
+                action=action_name,
+            )
+        capability_provider = cast(Callable[..., Awaitable[object]], provider)
+        return await self.run_with_platform_limit(
+            platform_id,
+            lambda: capability_provider(
+                capability_name, action_name, **validated_kwargs
+            ),
+        )
+
+    def get_platform_capabilities(
+        self, platform_id: str
+    ) -> tuple[PlatformCapabilityDescriptor, ...]:
+        """Return a read-only capability snapshot for one loaded adapter."""
+        inst = self._find_inst_by_id(platform_id)
+        if inst is None:
+            return ()
+        return inst.capabilities()
 
     async def refresh_registered_commands(self) -> None:
         """Refresh native commands on every loaded platform adapter."""

@@ -7,7 +7,7 @@ from collections.abc import Coroutine
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.metrics import MetricsSink
@@ -15,6 +15,7 @@ from astrbot.core.utils.task_utils import cancel_tracked_tasks, create_tracked_t
 
 from .astr_message_event import AstrMessageEvent
 from .astrbot_message import AstrBotMessage
+from .contracts.onebot import PlatformCapabilityDescriptor
 from .message_session import MessageSession
 from .platform_metadata import PlatformMetadata
 from .route_identity import PlatformRouteIdentity
@@ -61,6 +62,10 @@ class PlatformError:
 
 
 class Platform(abc.ABC):
+    """Base platform adapter and its explicitly declared capabilities."""
+
+    PLATFORM_CAPABILITIES: ClassVar[tuple[PlatformCapabilityDescriptor, ...]] = ()
+
     @classmethod
     def declared_supported_actions(cls) -> list[str]:
         """Return proactive platform actions implemented by the adapter class."""
@@ -273,6 +278,19 @@ class Platform(abc.ABC):
     def supports_action(self, action_name: str) -> bool:
         """Whether this adapter overrides a named proactive platform action."""
         return action_name in type(self).declared_supported_actions()
+
+    @classmethod
+    def declared_capabilities(cls) -> tuple[PlatformCapabilityDescriptor, ...]:
+        """Return versioned capabilities explicitly provided by this adapter."""
+        return cls.PLATFORM_CAPABILITIES
+
+    def capabilities(self) -> tuple[PlatformCapabilityDescriptor, ...]:
+        return type(self).declared_capabilities()
+
+    async def invoke_capability(
+        self, capability_name: str, action_name: str, **kwargs: Any
+    ) -> object:
+        raise self._unsupported_action(f"{capability_name}.{action_name}")
 
     def commit_event(self, event: AstrMessageEvent) -> bool:
         """提交一个事件到事件队列。"""

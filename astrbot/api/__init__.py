@@ -1,11 +1,37 @@
 import logging
 import sys
+from importlib import import_module
+from typing import TYPE_CHECKING
 
-from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
-from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core.star.register import register_agent as agent
-from astrbot.core.star.register import register_llm_tool as llm_tool
+if TYPE_CHECKING:
+    from astrbot.core.agent.tool import FunctionTool, ToolSet
+    from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
+    from astrbot.core.config.astrbot_config import AstrBotConfig
+    from astrbot.core.star.register import register_agent as agent
+    from astrbot.core.star.register import register_llm_tool as llm_tool
+
+_EXPORTS = {
+    "FunctionTool": ("astrbot.core.agent.tool", "FunctionTool"),
+    "ToolSet": ("astrbot.core.agent.tool", "ToolSet"),
+    "BaseFunctionToolExecutor": (
+        "astrbot.core.agent.tool_executor",
+        "BaseFunctionToolExecutor",
+    ),
+    "AstrBotConfig": ("astrbot.core.config.astrbot_config", "AstrBotConfig"),
+    "agent": ("astrbot.core.star.register", "register_agent"),
+    "llm_tool": ("astrbot.core.star.register", "register_llm_tool"),
+}
+
+
+def __getattr__(name: str):
+    target = _EXPORTS.get(name)
+    if target is None:
+        raise AttributeError(name)
+    module = import_module(target[0])
+    value = getattr(module, target[1])
+    globals()[name] = value
+    return value
+
 
 _fallback_logger = logging.getLogger("astrbot")
 _PLUGIN_LOGGER_NAME_ATTR = "__astrbot_plugin_logger_name__"
