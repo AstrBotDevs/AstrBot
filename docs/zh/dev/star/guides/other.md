@@ -1,22 +1,23 @@
 # 杂项
 
-## 调用平台主动动作
+## 调用 OneBot 能力
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api.onebot import OneBotMessageEvent
 
 
 @filter.command("test")
 async def test_(self, event: AstrMessageEvent):
-    if event.get_platform_name() != "napcat":
+    onebot_event = self.context.onebot.event(event)
+    if not isinstance(onebot_event, OneBotMessageEvent):
         return
 
-    result = await self.context.platform_actions.invoke_for_event(
-        event,
-        "delete_msg",
-        message_id=event.message_obj.message_id,
-    )
-    logger.info(f"delete_msg: {result}")
+    client = self.context.onebot.for_event(event)
+    if client is not None and self.context.onebot.supports(
+        event, "onebot.v11", "delete"
+    ):
+        await client.messages.delete(message_id=onebot_event.message_id or "")
 ```
 
 插件不再暴露 `Platform` 实例或 `platform_manager`。常规平台 IO 请优先使用：
@@ -32,10 +33,10 @@ async def test_(self, event: AstrMessageEvent):
 
 插件侧不要再直接依赖 `event.bot`、`event.client` 或平台 SDK client。
 
-如果需要调用 AstrBot 已声明的平台主动动作，请优先通过
-`platform_actions.invoke_for_event(...)` 或 `platform_actions.invoke(...)` 进入平台边界；
-只有平台事件类本身已经提供的高层方法
-（例如某些事件类上的 `delete()`、`send_poke()` 等）才应直接调用。
+标准 OneBot v11 动作通过 `client.messages`、`client.directory`、`client.groups`、
+`client.requests` 和 `client.history` 分组访问。NapCat 专属动作位于
+`client.qq`，并应先用 `supports(event, "napcat.qq", action)` 检测。不要访问
+`event.bot`、`event.client`，也不要调用任意 raw action。
 
 关于 CQHTTP API，请参考如下文档：
 
@@ -56,8 +57,6 @@ plugins = self.context.runtime_info.plugins()  # 返回只读 PluginInfo
 如果插件需要对某个平台执行动作，应直接使用明确的平台 ID：
 
 ```py
-result = await self.context.platform_actions.invoke(
-    "napcat-main",
-    "get_status",
-)
+client = self.context.onebot.for_event(event)
+status = await client.directory.status() if client else None
 ```
