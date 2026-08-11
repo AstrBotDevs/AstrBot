@@ -510,6 +510,7 @@ class RespondStage(Stage):
             else:
                 receipt = await self._send_standard_result(event, result)
         self._store_delivery_receipt(event, receipt)
+        await self.ctx.execution_context.persist_accepted_group_response(event, receipt)
 
         if await call_event_hook(
             event,

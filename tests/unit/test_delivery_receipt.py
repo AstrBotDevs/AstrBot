@@ -78,6 +78,9 @@ def _stage() -> RespondStage:
             get_handlers_by_event_type=lambda *_args, **_kwargs: []
         ),
         plugins=SimpleNamespace(),
+        execution_context=SimpleNamespace(
+            persist_accepted_group_response=AsyncMock(),
+        ),
     )
     return stage
 
@@ -107,6 +110,20 @@ async def test_standard_receipt_uses_platform_acceptance_and_excludes_headers():
     assert receipt.status == "accepted"
     assert receipt.message_ids == ("platform-message-1",)
     assert receipt.history_text == "hello"
+
+
+@pytest.mark.asyncio
+async def test_standard_response_persists_after_platform_acceptance():
+    stage = _stage()
+    event = _Event(MessageEventResult(chain=[Plain("hello")]), [_success()])
+
+    await stage.process(event)
+
+    receipt = event.get_extra("delivery_receipt")
+    stage.ctx.execution_context.persist_accepted_group_response.assert_awaited_once_with(
+        event,
+        receipt,
+    )
 
 
 @pytest.mark.asyncio

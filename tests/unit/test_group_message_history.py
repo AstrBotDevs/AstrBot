@@ -1,10 +1,67 @@
+from types import SimpleNamespace
+
 import pytest
 
+from astrbot.core.execution_context import CoreExecutionContext
 from astrbot.core.message.components import File, Image, Plain
-from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
+from astrbot.core.pipeline.group_message_history.stage import GroupMessageHistoryStage
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.send_result import DeliveryAttempt, DeliveryReceipt
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.tools.message_tools import GetGroupMessageHistoryTool
+
+
+class _GroupHistoryEvent:
+    def __init__(
+        self, message_chain: list, *, result: MessageEventResult | None = None
+    ):
+        self._message_chain = message_chain
+        self._result = result
+        self._extras: dict[str, object] = {}
+        self.unified_msg_origin = "telegram:GroupMessage:group-1"
+
+    def get_message_type(self):
+        return MessageType.GROUP_MESSAGE
+
+    def get_platform_id(self):
+        return "telegram"
+
+    def get_platform_name(self):
+        return "telegram"
+
+    def get_messages(self):
+        return self._message_chain
+
+    def get_sender_id(self):
+        return "alice"
+
+    def get_sender_name(self):
+        return "Alice"
+
+    def get_self_id(self):
+        return "astrbot"
+
+    def get_result(self):
+        return self._result
+
+    def get_extra(self, key, default=None):
+        return self._extras.get(key, default)
+
+    def set_extra(self, key, value):
+        self._extras[key] = value
+
+
+def _history_context(manager: PlatformMessageHistoryManager) -> CoreExecutionContext:
+    context = CoreExecutionContext.__new__(CoreExecutionContext)
+    context.message_history_manager = manager
+    context.get_config = lambda *, umo=None: {
+        "provider_ltm_settings": {
+            "group_message_history_enable": True,
+            "group_message_history_max_cnt": 10,
+        }
+    }
+    return context
 
 
 @pytest.mark.asyncio
@@ -48,6 +105,48 @@ async def test_group_history_sanitizes_media_and_retains_only_group_scope(temp_d
     ]
     assert "secret.example" not in str(rows[0].content)
     assert "/home/alice" not in str(rows[0].content)
+
+
+@pytest.mark.asyncio
+async def test_group_history_stage_persists_inbound_message_before_plugins(temp_db):
+    manager = PlatformMessageHistoryManager(temp_db)
+    event = _GroupHistoryEvent([Plain("hello")])
+    stage = GroupMessageHistoryStage()
+    await stage.initialize(
+        SimpleNamespace(execution_context=_history_context(manager)),
+    )
+
+    await stage.process(event)
+
+    rows = await manager.get_group("telegram", event.unified_msg_origin)
+    assert [row.content["message"] for row in rows] == [
+        [{"type": "plain", "text": "hello"}],
+    ]
+    assert event.get_extra("_group_history_current_id") == rows[0].id
+
+
+@pytest.mark.asyncio
+async def test_group_history_persists_only_accepted_response_content(temp_db):
+    manager = PlatformMessageHistoryManager(temp_db)
+    event = _GroupHistoryEvent(
+        [],
+        result=MessageEventResult(chain=[Plain("first"), Plain("second")]),
+    )
+    receipt = DeliveryReceipt.aggregate(
+        [
+            DeliveryAttempt(status="accepted", semantic_text="first"),
+            DeliveryAttempt(status="failed", semantic_text="second"),
+        ],
+        platform_id="telegram",
+    )
+
+    await _history_context(manager).persist_accepted_group_response(event, receipt)
+
+    rows = await manager.get_group("telegram", event.unified_msg_origin)
+    assert [row.content["message"] for row in rows] == [
+        [{"type": "plain", "text": "first"}],
+    ]
+    assert event.get_extra("_group_history_assistant_persisted") is True
 
 
 @pytest.mark.asyncio

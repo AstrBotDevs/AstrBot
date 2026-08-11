@@ -17,6 +17,7 @@ from .stage_order import STAGES_ORDER
 
 if TYPE_CHECKING:
     from .content_safety_check.stage import ContentSafetyCheckStage
+    from .group_message_history.stage import GroupMessageHistoryStage
     from .preprocess_stage.stage import PreProcessStage
     from .process_stage.stage import ProcessStage
     from .rate_limit_check.stage import RateLimitStage
@@ -30,6 +31,10 @@ _LAZY_EXPORTS = {
     "ContentSafetyCheckStage": (
         "astrbot.core.pipeline.content_safety_check.stage",
         "ContentSafetyCheckStage",
+    ),
+    "GroupMessageHistoryStage": (
+        "astrbot.core.pipeline.group_message_history.stage",
+        "GroupMessageHistoryStage",
     ),
     "PreProcessStage": (
         "astrbot.core.pipeline.preprocess_stage.stage",
@@ -68,6 +73,7 @@ _LAZY_EXPORTS = {
 __all__ = [
     "ContentSafetyCheckStage",
     "EventResultType",
+    "GroupMessageHistoryStage",
     "MessageEventResult",
     "PreProcessStage",
     "ProcessStage",

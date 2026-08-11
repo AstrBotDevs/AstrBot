@@ -169,6 +169,7 @@ def test_builtin_pipeline_stage_order_is_a_fixed_tuple() -> None:
         "RateLimitStage",
         "ContentSafetyCheckStage",
         "PreProcessStage",
+        "GroupMessageHistoryStage",
         "ProcessStage",
         "ResultDecorateStage",
         "RespondStage",

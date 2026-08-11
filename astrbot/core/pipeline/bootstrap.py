@@ -15,6 +15,7 @@ def builtin_stage_classes() -> Sequence[type[Stage]]:
     than populating a process-global mutable registry.
     """
     from .content_safety_check.stage import ContentSafetyCheckStage
+    from .group_message_history.stage import GroupMessageHistoryStage
     from .preprocess_stage.stage import PreProcessStage
     from .process_stage.stage import ProcessStage
     from .rate_limit_check.stage import RateLimitStage
@@ -31,6 +32,7 @@ def builtin_stage_classes() -> Sequence[type[Stage]]:
         RateLimitStage,
         ContentSafetyCheckStage,
         PreProcessStage,
+        GroupMessageHistoryStage,
         ProcessStage,
         ResultDecorateStage,
         RespondStage,

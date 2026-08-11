@@ -9,8 +9,6 @@ from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import Image, Plain
 from astrbot.api.provider import ProviderRequest
-from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.platform.message_type import MessageType
 
 from .group_chat_context import GroupChatContext
 
@@ -133,44 +131,6 @@ class Main(star.Star):
             or group_context_settings["active_reply"]["enable"]
         )
 
-    @filter.platform_adapter_type(
-        filter.PlatformAdapterType.ALL,
-        priority=maxsize - 2,
-    )
-    async def persist_group_message(self, event: AstrMessageEvent) -> None:
-        """Persist an inbound group message at a fixed early pipeline hook."""
-        if (
-            event.get_message_type() != MessageType.GROUP_MESSAGE
-            or event.get_platform_name() == "webchat"
-        ):
-            return
-        settings = self.context.config.get(umo=event.unified_msg_origin).get(
-            "provider_ltm_settings", {}
-        )
-        if not settings.get("group_message_history_enable", False):
-            return
-        try:
-            max_messages = max(
-                1, int(settings.get("group_message_history_max_cnt", 700))
-            )
-        except TypeError, ValueError:
-            max_messages = 700
-        try:
-            record = await self.context.message_history_manager.insert_message_chain(
-                platform_id=event.get_platform_id(),
-                user_id=event.unified_msg_origin,
-                message_chain=MessageChain(chain=list(event.get_messages())),
-                role="user",
-                is_group=True,
-                sender_id=event.get_sender_id(),
-                sender_name=event.get_sender_name(),
-                max_messages=max_messages,
-            )
-            if record is not None and record.id is not None:
-                event.set_extra("_group_history_current_id", record.id)
-        except Exception:
-            logger.exception("Failed to persist inbound group message.")
-
     @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)
     async def on_message(self, event: AstrMessageEvent):
         """群聊上下文感知"""
@@ -262,40 +222,6 @@ class Main(star.Star):
     @filter.after_message_sent()
     async def after_message_sent(self, event: AstrMessageEvent) -> None:
         """消息发送后处理"""
-        if (
-            event.get_message_type() == MessageType.GROUP_MESSAGE
-            and event.get_platform_name() != "webchat"
-            and not event.get_extra("_group_history_assistant_persisted", False)
-        ):
-            receipt = event.get_extra("delivery_receipt")
-            accepted = bool(getattr(receipt, "accepted_attempts", ()))
-            settings = self.context.config.get(umo=event.unified_msg_origin).get(
-                "provider_ltm_settings", {}
-            )
-            if accepted and settings.get("group_message_history_enable", False):
-                result = event.get_result()
-                if result is not None and result.chain:
-                    try:
-                        max_messages = max(
-                            1,
-                            int(settings.get("group_message_history_max_cnt", 700)),
-                        )
-                    except TypeError, ValueError:
-                        max_messages = 700
-                    try:
-                        await self.context.message_history_manager.insert_message_chain(
-                            platform_id=event.get_platform_id(),
-                            user_id=event.unified_msg_origin,
-                            message_chain=MessageChain(chain=list(result.chain)),
-                            role="assistant",
-                            is_group=True,
-                            sender_id=event.get_self_id() or "assistant",
-                            sender_name="AstrBot",
-                            max_messages=max_messages,
-                        )
-                        event.set_extra("_group_history_assistant_persisted", True)
-                    except Exception:
-                        logger.exception("Failed to persist accepted group response.")
         if self.group_chat_context and self.group_context_enabled(event):
             try:
                 clean_session = event.get_extra("_clean_group_context_session", False)
