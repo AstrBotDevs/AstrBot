@@ -956,9 +956,7 @@ class MCPClient:
                 redact_sensitive_text(f"[{level.upper()}] {data}")
             )
 
-    async def _logging_callback(
-        self, params: LoggingMessageNotificationParams
-    ) -> None:
+    async def _logging_callback(self, params: LoggingMessageNotificationParams) -> None:
         self._record_server_error(str(params.level), params.data)
 
     def _stderr_logging_callback(self, line: str) -> None:
@@ -978,9 +976,7 @@ class MCPClient:
             client_name="AstrBot MCP",
             software_id="https://github.com/Xero-Team/AstrBot",
             software_version="2",
-            redirect_uris=[
-                AnyUrl("http://127.0.0.1:6185/api/v1/mcp/oauth/callback")
-            ],
+            redirect_uris=[AnyUrl("http://127.0.0.1:6185/api/v1/mcp/oauth/callback")],
         )
         return OAuthClientProvider(
             server_url=endpoint,
