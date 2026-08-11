@@ -4,6 +4,7 @@ param(
     [string]$CloneDir = "",
     [string]$OutputDir = "",
     [string]$TypeName = "OB11AllEvent",
+    [string]$Revision = "",
     [switch]$ForceClone
 )
 
@@ -88,7 +89,8 @@ function Ensure-NapCatRepo {
     param(
         [string]$RepoUrl,
         [string]$Path,
-        [bool]$ResetClone
+        [bool]$ResetClone,
+        [string]$PinnedRevision
     )
 
     if ($ResetClone -and (Test-Path -LiteralPath $Path)) {
@@ -105,12 +107,21 @@ function Ensure-NapCatRepo {
     if ($LASTEXITCODE -ne 0) {
         throw "git clone failed: $RepoUrl"
     }
+    git fetch --depth 1 origin $PinnedRevision
+    git checkout --detach $PinnedRevision
 }
 
 Require-Command -Name "git"
 Require-Command -Name "pnpm"
 
 $repoRoot = Get-RepoRoot
+$revisionFile = [System.IO.Path]::Combine($repoRoot, "scripts", "napcat", "napcat-revision.txt")
+if ([string]::IsNullOrWhiteSpace($Revision)) {
+    $Revision = (Get-Content -LiteralPath $revisionFile -Raw).Trim()
+}
+if ([string]::IsNullOrWhiteSpace($Revision)) {
+    throw "NapCat revision must not be empty."
+}
 if ([string]::IsNullOrWhiteSpace($CloneDir)) {
     $CloneDir = [System.IO.Path]::Combine($repoRoot, ".tmp", "NapCatQQ")
 }
@@ -121,7 +132,11 @@ if ([string]::IsNullOrWhiteSpace($OutputDir)) {
 $cloneDir = [System.IO.Path]::GetFullPath($CloneDir)
 $outputDir = [System.IO.Path]::GetFullPath($OutputDir)
 
-Ensure-NapCatRepo -RepoUrl $NapCatRepoUrl -Path $cloneDir -ResetClone:$ForceClone.IsPresent
+Ensure-NapCatRepo -RepoUrl $NapCatRepoUrl -Path $cloneDir -ResetClone:$ForceClone.IsPresent -PinnedRevision $Revision
+if ((git -C $cloneDir rev-parse HEAD).Trim() -ne $Revision) {
+    git -C $cloneDir fetch --depth 1 origin $Revision
+    git -C $cloneDir checkout --detach $Revision
+}
 Ensure-Directory -Path $outputDir
 
 $eventFile = [System.IO.Path]::Combine(

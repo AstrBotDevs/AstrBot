@@ -164,10 +164,13 @@ napcat-codegen: napcat-models-ob11-event-src
 napcat-test:
 	uv run pytest \
 		tests/unit/test_napcat_adapter.py \
+		tests/unit/test_onebot_contracts.py \
+		tests/unit/test_onebot_capability.py \
 		tests/unit/test_napcat_codegen_scripts.py \
 		tests/unit/test_napcat_codegen_powershell.py
 
 napcat-check: napcat-codegen napcat-test
+	git diff --exit-code -- astrbot/core/platform/sources/napcat/generated/ob11_events.py
 
 quality:
 	@$(MAKE) $(PARALLEL_SUBMAKE_FLAGS) quality-all

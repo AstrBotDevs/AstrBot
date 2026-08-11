@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -17,6 +19,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    if sys.version_info[:2] != (3, 14):
+        raise SystemExit("NapCat model generation requires Python 3.14.")
     args = parse_args()
     repo_root = Path(__file__).resolve().parents[2]
     schema_path = (
@@ -44,42 +48,50 @@ def main() -> None:
         ) from exc
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        [
-            "uvx",
-            "--python",
-            "3.14",
-            "--from",
-            "datamodel-code-generator",
-            "datamodel-codegen",
-            "--input",
-            str(schema_path),
-            "--input-file-type",
-            "jsonschema",
-            "--output",
-            str(output_path),
-            "--output-model-type",
-            "pydantic_v2.BaseModel",
-            "--target-python-version",
-            "3.14",
-            "--formatters",
-            "builtin",
-            "--disable-timestamp",
-            "--extra-fields",
-            "forbid",
-            "--use-schema-description",
-            "--field-constraints",
-            "--use-generic-base-class",
-        ],
-        check=True,
-        cwd=repo_root,
-    )
-    if not output_path.is_file():
-        raise SystemExit(f"Python models file was not created: {output_path}")
-    subprocess.run(
-        ["uv", "run", "ruff", "check", "--fix", str(output_path)], check=True
-    )
-    subprocess.run(["uv", "run", "ruff", "format", str(output_path)], check=True)
+    temporary_output = output_path.with_name(f".{output_path.name}.tmp.py")
+    try:
+        subprocess.run(
+            [
+                "uvx",
+                "--python",
+                "3.14",
+                "--from",
+                "datamodel-code-generator",
+                "datamodel-codegen",
+                "--input",
+                str(schema_path),
+                "--input-file-type",
+                "jsonschema",
+                "--output",
+                str(temporary_output),
+                "--output-model-type",
+                "pydantic_v2.BaseModel",
+                "--target-python-version",
+                "3.14",
+                "--formatters",
+                "builtin",
+                "--disable-timestamp",
+                "--extra-fields",
+                "forbid",
+                "--use-schema-description",
+                "--field-constraints",
+                "--use-generic-base-class",
+            ],
+            check=True,
+            cwd=repo_root,
+        )
+        if not temporary_output.is_file():
+            raise SystemExit(f"Python models file was not created: {temporary_output}")
+        subprocess.run(
+            ["uv", "run", "ruff", "check", "--fix", str(temporary_output)],
+            check=True,
+        )
+        subprocess.run(
+            ["uv", "run", "ruff", "format", str(temporary_output)], check=True
+        )
+        os.replace(temporary_output, output_path)
+    finally:
+        temporary_output.unlink(missing_ok=True)
     print(f"Generated Python models:\n  {output_path}")
 
 

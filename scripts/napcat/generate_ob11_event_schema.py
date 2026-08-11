@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -19,6 +20,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--type-name", default="OB11AllEvent")
     parser.add_argument("--force-clone", action="store_true")
+    parser.add_argument("--revision")
     return parser.parse_args()
 
 
@@ -29,6 +31,8 @@ def run(
 
 
 def main() -> None:
+    if sys.version_info[:2] != (3, 14):
+        raise SystemExit("NapCat schema generation requires Python 3.14.")
     args = parse_args()
     if not args.type_name.strip():
         raise SystemExit("TypeName must not be empty.")
@@ -38,6 +42,10 @@ def main() -> None:
             raise SystemExit(f"Required command not found: {command}")
 
     repo_root = Path(__file__).resolve().parents[2]
+    revision_path = Path(__file__).with_name("napcat-revision.txt")
+    revision = (args.revision or revision_path.read_text(encoding="utf-8")).strip()
+    if not revision:
+        raise SystemExit("NapCat revision must not be empty.")
     clone_dir = (args.clone_dir or repo_root / ".tmp" / "NapCatQQ").resolve()
     output_dir = (args.output_dir or repo_root / ".tmp" / "napcat-schema").resolve()
     if args.force_clone and clone_dir.exists():
@@ -57,6 +65,17 @@ def main() -> None:
         )
     else:
         print(f"Reusing NapCat repository at {clone_dir}")
+
+    current_revision = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=clone_dir,
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout.strip()
+    if current_revision != revision:
+        run(["git", "fetch", "--depth", "1", "origin", revision], cwd=clone_dir)
+        run(["git", "checkout", "--detach", revision], cwd=clone_dir)
 
     event_file = clone_dir / "packages/napcat-webui-frontend/src/types/onebot/event.ts"
     segment_file = (

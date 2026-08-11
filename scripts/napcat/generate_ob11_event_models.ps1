@@ -57,11 +57,12 @@ catch {
 }
 
 Ensure-Directory -Path (Split-Path -Parent $OutputPath)
+$temporaryOutputPath = "$OutputPath.tmp.py"
 
 & uvx --python 3.14 --from datamodel-code-generator datamodel-codegen `
     --input $SchemaPath `
     --input-file-type jsonschema `
-    --output $OutputPath `
+    --output $temporaryOutputPath `
     --output-model-type pydantic_v2.BaseModel `
     --target-python-version 3.14 `
     --formatters builtin `
@@ -74,8 +75,8 @@ if ($LASTEXITCODE -ne 0) {
     throw "datamodel-code-generator failed for $SchemaPath"
 }
 
-if (-not (Test-Path -LiteralPath $OutputPath)) {
-    throw "Python models file was not created: $OutputPath"
+if (-not (Test-Path -LiteralPath $temporaryOutputPath)) {
+    throw "Python models file was not created: $temporaryOutputPath"
 }
 
 try {
@@ -85,15 +86,17 @@ catch {
     throw "Generated Python models could not be read: $OutputPath"
 }
 
-& uv run ruff check --fix $OutputPath
+& uv run ruff check --fix $temporaryOutputPath
 if ($LASTEXITCODE -ne 0) {
-    throw "ruff check --fix failed for generated models: $OutputPath"
+    throw "ruff check --fix failed for generated models: $temporaryOutputPath"
 }
 
-& uv run ruff format $OutputPath
+& uv run ruff format $temporaryOutputPath
 if ($LASTEXITCODE -ne 0) {
-    throw "ruff format failed for generated models: $OutputPath"
+    throw "ruff format failed for generated models: $temporaryOutputPath"
 }
+
+Move-Item -LiteralPath $temporaryOutputPath -Destination $OutputPath -Force
 
 Write-Host "Generated Python models:"
 Write-Host "  $OutputPath"

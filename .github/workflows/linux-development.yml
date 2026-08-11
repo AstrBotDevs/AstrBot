@@ -52,5 +52,8 @@ jobs:
       - name: Run strict Linux checks
         run: make check
 
+      - name: Verify reproducible NapCat event models
+        run: make napcat-check
+
       - name: Run test suite
         run: make test
