@@ -2609,8 +2609,8 @@ CONFIG_METADATA_2 = {
                     },
                     "minimax-voice-design-voice-id": {
                         "type": "string",
-                        "description": "音色设计音色 ID",
-                        "hint": "为设计的音色指定的自定义 ID。留空则由 API 自动生成。",
+                        "description": "Voice design voice ID",
+                        "hint": "Required custom voice ID for the designed voice.",
                     },
                     "minimax-voice-design-prompt-audio": {
                         "type": "string",

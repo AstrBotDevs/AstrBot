@@ -131,6 +131,10 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
                 raise ValueError(
                     "MiniMax voice design requires 'minimax-voice-design-preview-text'.",
                 )
+            if not self.voice_design_voice_id:
+                raise ValueError(
+                    "MiniMax voice design requires 'minimax-voice-design-voice-id'.",
+                )
 
             if self.voice_design_prompt_audio:
                 audio_path = Path(self.voice_design_prompt_audio).expanduser()
@@ -206,9 +210,8 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
             design_body: dict[str, object] = {
                 "prompt": self.voice_design_prompt,
                 "preview_text": self.voice_design_preview_text,
+                "voice_id": self.voice_design_voice_id,
             }
-            if self.voice_design_voice_id:
-                design_body["voice_id"] = self.voice_design_voice_id
 
             try:
                 async with aiohttp.ClientSession() as session:
@@ -239,11 +242,7 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
                 )
 
             design_result = design_data.get("data") or {}
-            voice_id = (
-                design_data.get("voice_id")
-                or design_result.get("voice_id")
-                or self.voice_design_voice_id
-            )
+            voice_id = design_data.get("voice_id") or design_result.get("voice_id")
             if not voice_id:
                 raise RuntimeError(
                     "MiniMax voice design returned no voice_id.",

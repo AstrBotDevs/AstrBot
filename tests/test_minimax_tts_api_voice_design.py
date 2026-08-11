@@ -1,6 +1,5 @@
 import asyncio
 import json
-from pathlib import Path
 
 import pytest
 
@@ -153,16 +152,17 @@ async def test_design_voice_is_single_flight(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_design_voice_omits_voice_id_when_not_configured(monkeypatch):
+async def test_design_voice_requires_voice_id(monkeypatch):
     provider = _make_provider(**{"minimax-voice-design-voice-id": ""})
-    session = _FakeSession([_FakeResponse({"voice_id": "auto-voice"})])
+    session = _FakeSession([])
     monkeypatch.setattr(
         "astrbot.core.provider.sources.minimax_tts_api_source.aiohttp.ClientSession",
         lambda: session,
     )
 
-    assert await provider.design_voice() == "auto-voice"
-    assert "voice_id" not in session.posts[0][1]["json"]
+    with pytest.raises(ValueError, match="minimax-voice-design-voice-id"):
+        await provider.design_voice()
+    assert session.posts == []
 
 
 @pytest.mark.asyncio

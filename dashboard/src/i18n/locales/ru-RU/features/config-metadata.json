@@ -1570,8 +1570,8 @@
                 "hint": "Текст для генерации предпросмотра аудио при дизайне голоса. Обязателен для API Voice Design."
             },
             "minimax-voice-design-voice-id": {
-                "description": "ID голоса для дизайна",
-                "hint": "Пользовательский ID для создаваемого голоса. Оставьте пустым, чтобы API сгенерировал его автоматически."
+                "description": "Voice design voice ID",
+                "hint": "Required custom voice ID for the designed voice."
             },
             "minimax-voice-design-prompt-audio": {
                 "description": "Путь к аудио подсказки",

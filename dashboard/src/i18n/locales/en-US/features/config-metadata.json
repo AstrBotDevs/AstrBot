@@ -1574,7 +1574,7 @@
       },
       "minimax-voice-design-voice-id": {
         "description": "Voice design voice ID",
-        "hint": "Custom voice ID for the designed voice. Leave empty to let the API generate one."
+        "hint": "Required custom voice ID for the designed voice."
       },
       "minimax-voice-design-prompt-audio": {
         "description": "Voice design prompt audio path",
