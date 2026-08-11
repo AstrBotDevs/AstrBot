@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from collections.abc import Awaitable, Callable, Mapping
 from time import monotonic
@@ -314,6 +315,20 @@ async def dispatch_inbound_event(
             validation_elapsed,
         )
     logger.debug("[NapCat] Forward WebSocket validated event with %s", event_model_name)
+    # Keep the exact wire payload alongside the validated model.  Generated
+    # models intentionally ignore unknown fields; the plugin DTO must not.
+    try:
+        raw_payload = copy.deepcopy(payload)
+        object.__setattr__(event, "__astrbot_raw_payload__", raw_payload)
+        root = getattr(event, "root", None)
+        if root is not None:
+            object.__setattr__(
+                root, "__astrbot_raw_payload__", copy.deepcopy(raw_payload)
+            )
+    except Exception:
+        # A future generated model may disallow private attributes.  The
+        # adapter still receives the validated event and can use model_dump.
+        pass
     await on_event(event)
     elapsed = monotonic() - started_at
     if elapsed >= payload_handle_slow_log_threshold_s:

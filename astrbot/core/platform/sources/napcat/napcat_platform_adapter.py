@@ -6,7 +6,7 @@ import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from pathlib import PurePosixPath
 from time import monotonic
-from typing import cast
+from typing import Any, cast
 
 from astrbot import logger
 from astrbot.core.message.components import (
@@ -44,10 +44,25 @@ from astrbot.core.message.components import (
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.astrbot_message import AstrBotMessage, Group, MessageMember
+from astrbot.core.platform.contracts.onebot import (
+    ONEBOT_CAPABILITIES,
+    OneBotActionRejected,
+    OneBotActionResult,
+    OneBotActionTimeout,
+    OneBotActionValidationError,
+    OneBotFileResult,
+    OneBotGroupInfo,
+    OneBotHistoryPage,
+    OneBotMemberInfo,
+    OneBotMessageReceipt,
+    OneBotTransportError,
+    get_capability_descriptor,
+)
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform import Platform
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.platform.register import register_platform_adapter
+from astrbot.core.utils.error_redaction import safe_error
 
 from ..aiocqhttp.forward_node_splitter import split_long_text_node
 from .codec import (
@@ -131,6 +146,13 @@ from .generated.ob11_events import (
 )
 from .inbound_events import NapCatGenericEvent, NapCatInboundEvent
 from .message_event import NapCatMessageEvent
+from .types import (
+    NapCatFetchedMessage,
+    NapCatLoginInfo,
+    NapCatSendMessageResult,
+    NapCatStatus,
+    NapCatVersionInfo,
+)
 
 
 class NapCatOutboundProtocol:
@@ -414,6 +436,8 @@ NAPCAT_I18N_RESOURCES = {
     i18n_resources=NAPCAT_I18N_RESOURCES,
 )
 class NapCatPlatformAdapter(Platform):
+    PLATFORM_CAPABILITIES = ONEBOT_CAPABILITIES
+
     _MESSAGE_EVENT_HANDLE_SLOW_LOG_THRESHOLD_S = 0.2
     _MAX_INBOUND_COMPONENT_DEPTH = 8
 
@@ -613,6 +637,305 @@ class NapCatPlatformAdapter(Platform):
             user_id=user_id,
             target_id=target_id,
         )
+
+    async def invoke_capability(
+        self,
+        capability_name: str,
+        action_name: str,
+        **kwargs: Any,
+    ) -> object:
+        """Provide only explicitly registered OneBot/NapCat actions."""
+        if capability_name not in {"onebot.v11", "napcat.qq"}:
+            raise OneBotActionValidationError(
+                "Unsupported capability", action=action_name
+            )
+        descriptor = get_capability_descriptor(capability_name)
+        action = descriptor.action(action_name) if descriptor is not None else None
+        if action is None:
+            raise OneBotActionValidationError(
+                "Action is not registered", action=action_name
+            )
+        try:
+            validated_kwargs = action.input_model.validate(kwargs)
+        except OneBotActionValidationError as exc:
+            raise OneBotActionValidationError(exc.message, action=action_name) from exc
+        actions = {
+            "send": lambda: self.client.send_message(**validated_kwargs),
+            "send_private": lambda: self.client.send_private_message(
+                **validated_kwargs
+            ),
+            "send_group": lambda: self.client.send_group_message(**validated_kwargs),
+            "send_forward": lambda: (
+                self.client.send_private_forward_message(**validated_kwargs)
+                if validated_kwargs.get("user_id") is not None
+                else self.client.send_group_forward_message(**validated_kwargs)
+            ),
+            "delete": lambda: self.client.delete_message(
+                validated_kwargs["message_id"]
+            ),
+            "get_message": lambda: self.client.get_message(
+                validated_kwargs["message_id"]
+            ),
+            "get_forward_message": lambda: self.client.get_forward_message(
+                validated_kwargs["forward_id"]
+            ),
+            "get_login_info": self.client.get_login_info,
+            "get_status": self.client.get_status,
+            "get_version_info": self.client.get_version_info,
+            "get_group_info": lambda: self.client.get_group_info(
+                validated_kwargs["group_id"]
+            ),
+            "get_group_member_info": lambda: self.client.get_group_member_info(
+                validated_kwargs["group_id"],
+                validated_kwargs["user_id"],
+                no_cache=validated_kwargs.get("no_cache"),
+            ),
+            "get_group_member_list": lambda: self.client.get_group_member_list(
+                validated_kwargs["group_id"], no_cache=validated_kwargs.get("no_cache")
+            ),
+            "get_stranger_info": lambda: self.client.get_stranger_info(
+                validated_kwargs["user_id"],
+                no_cache=bool(validated_kwargs.get("no_cache", False)),
+            ),
+            "get_image": lambda: self.client.get_image(
+                file=validated_kwargs.get("file"),
+                file_id=validated_kwargs.get("file_id"),
+            ),
+            "get_file": lambda: self.client.get_file(
+                file=validated_kwargs.get("file"),
+                file_id=validated_kwargs.get("file_id"),
+            ),
+            "get_group_file_url": lambda: self.client.get_group_file_url(
+                group_id=validated_kwargs["group_id"],
+                file_id=validated_kwargs["file_id"],
+            ),
+            "get_private_file_url": lambda: self.client.get_private_file_url(
+                file_id=validated_kwargs["file_id"]
+            ),
+            "set_group_admin": lambda: self.client.set_group_admin(**validated_kwargs),
+            "set_group_ban": lambda: self.client.set_group_ban(**validated_kwargs),
+            "set_group_card": lambda: self.client.set_group_card(**validated_kwargs),
+            "kick_group_member": lambda: self.client.set_group_kick(**validated_kwargs),
+            "kick_group_members": lambda: self.client.set_group_kick_members(
+                **validated_kwargs
+            ),
+            "leave_group": lambda: self.client.set_group_leave(**validated_kwargs),
+            "set_group_whole_ban": lambda: self.client.set_group_whole_ban(
+                **validated_kwargs
+            ),
+            "set_essence_message": lambda: self.client.set_essence_message(
+                message_id=validated_kwargs["message_id"]
+            ),
+            "delete_essence_message": lambda: self.client.delete_essence_message(
+                **validated_kwargs
+            ),
+            "set_friend_add_request": lambda: self.client.set_friend_add_request(
+                **validated_kwargs
+            ),
+            "set_group_add_request": lambda: self.client.set_group_add_request(
+                **validated_kwargs
+            ),
+            "get_group_msg_history": lambda: self.client.get_group_msg_history(
+                **validated_kwargs
+            ),
+            "get_friend_msg_history": lambda: self.client.get_friend_msg_history(
+                **validated_kwargs
+            ),
+            "send_like": lambda: self.client.send_like(**validated_kwargs),
+            "friend_poke": lambda: self.client.friend_poke(**validated_kwargs),
+            "group_poke": lambda: self.client.group_poke(**validated_kwargs),
+            "send_group_notice": lambda: self.client.send_group_notice(
+                **validated_kwargs
+            ),
+            "set_input_status": lambda: self.client.set_input_status(
+                **validated_kwargs
+            ),
+            "get_online_file_messages": lambda: self.client.get_online_file_messages(
+                **validated_kwargs
+            ),
+            "create_flash_task": lambda: self.client.create_flash_task(
+                **validated_kwargs
+            ),
+            "get_flash_file_list": lambda: self.client.get_flash_file_list(
+                **validated_kwargs
+            ),
+            "get_flash_file_url": lambda: self.client.get_flash_file_url(
+                **validated_kwargs
+            ),
+            "receive_online_file": lambda: self.client.receive_online_file(
+                **validated_kwargs
+            ),
+            "refuse_online_file": lambda: self.client.refuse_online_file(
+                **validated_kwargs
+            ),
+            "cancel_online_file": lambda: self.client.cancel_online_file(
+                **validated_kwargs
+            ),
+            "send_online_file": lambda: self.client.send_online_file(
+                **validated_kwargs
+            ),
+            "send_online_folder": lambda: self.client.send_online_folder(
+                **validated_kwargs
+            ),
+            "send_flash_message": lambda: self.client.send_flash_message(
+                **validated_kwargs
+            ),
+            "fetch_custom_face": lambda: self.client.fetch_custom_face(
+                **validated_kwargs
+            ),
+            "get_ai_characters": lambda: self.client.get_ai_characters(
+                **validated_kwargs
+            ),
+            "send_group_ai_record": lambda: self.client.send_group_ai_record(
+                **validated_kwargs
+            ),
+        }
+        handler = actions.get(action_name)
+        if handler is None:
+            raise OneBotActionValidationError(
+                "Action is not registered", action=action_name
+            )
+        try:
+            result = await handler()
+        except asyncio.CancelledError:
+            raise
+        except (ValueError, TypeError, KeyError) as exc:
+            raise OneBotActionValidationError(
+                "Invalid OneBot action parameters", action=action_name
+            ) from exc
+        except NapCatApiError as exc:
+            raise OneBotActionRejected(
+                "OneBot action was rejected", action=action_name, code=exc.retcode
+            ) from exc
+        except NapCatTransportError as exc:
+            retryable = action.retryable and not action.destructive
+            if "timed out" in str(exc).lower():
+                raise OneBotActionTimeout(
+                    "OneBot action timed out", action=action_name, retryable=retryable
+                ) from exc
+            raise OneBotTransportError(
+                "OneBot transport is unavailable",
+                action=action_name,
+                retryable=retryable,
+            ) from exc
+        except Exception as exc:
+            logger.warning(
+                "[NapCat] OneBot capability action %s failed: %s",
+                action_name,
+                safe_error("", exc),
+            )
+            raise OneBotTransportError(
+                "OneBot action could not be completed",
+                action=action_name,
+                retryable=action.retryable and not action.destructive,
+            ) from exc
+        return self._to_onebot_result(action_name, result)
+
+    @staticmethod
+    def _to_onebot_result(action: str, result: Any) -> object:
+        if isinstance(result, NapCatSendMessageResult):
+            return OneBotMessageReceipt(
+                str(result.message_id), result.res_id, result.forward_id, result.extra
+            )
+        if isinstance(result, NapCatLoginInfo):
+            return OneBotActionResult(
+                action,
+                data=cast(
+                    Any,
+                    {
+                        "user_id": str(result.user_id),
+                        "nickname": result.nickname,
+                        **result.extra,
+                    },
+                ),
+                payload=result.extra,
+            )
+        if isinstance(result, NapCatStatus):
+            return OneBotActionResult(
+                action,
+                data=cast(
+                    Any,
+                    {
+                        "online": result.online,
+                        "good": result.good,
+                        "stat": result.stats,
+                        **result.extra,
+                    },
+                ),
+                payload=result.extra,
+            )
+        if isinstance(result, NapCatVersionInfo):
+            return OneBotActionResult(
+                action,
+                data={
+                    "app_name": result.app_name,
+                    "app_version": result.app_version,
+                    "protocol_version": result.protocol_version,
+                    **result.extra,
+                },
+                payload=result.extra,
+            )
+        if isinstance(result, NapCatFetchedMessage):
+            return OneBotActionResult(
+                action,
+                data=cast(
+                    Any,
+                    {
+                        "message_id": str(result.message_id),
+                        "user_id": str(result.sender_id)
+                        if result.sender_id is not None
+                        else None,
+                        "time": result.time,
+                        "raw_message": result.raw_message,
+                        "message": result.message_payload,
+                        **result.extra,
+                    },
+                ),
+                payload=result.extra,
+            )
+        if isinstance(result, dict):
+            if action == "get_group_info":
+                return OneBotGroupInfo.from_payload(result)
+            if action in {"get_group_member_info", "get_stranger_info"}:
+                return OneBotMemberInfo.from_payload(result)
+            if action in {
+                "get_image",
+                "get_file",
+                "get_group_file_url",
+                "get_private_file_url",
+            }:
+                return OneBotFileResult(
+                    file_id=result.get("file_id"),
+                    url=result.get("url"),
+                    file=result.get("file"),
+                    payload=result,
+                )
+            return OneBotActionResult(
+                action,
+                data=result.get("data"),
+                retcode=result.get("retcode"),
+                status=result.get("status"),
+                payload=result,
+            )
+        if isinstance(result, list):
+            if action == "get_group_member_list":
+                return tuple(
+                    OneBotMemberInfo.from_payload(item)
+                    for item in result
+                    if isinstance(item, Mapping)
+                )
+            if action in {"get_group_msg_history", "get_friend_msg_history"}:
+                items = tuple(item for item in result if isinstance(item, Mapping))
+                next_message_seq = str(items[-1].get("message_seq")) if items else None
+                return OneBotHistoryPage(
+                    items=items,
+                    next_message_seq=next_message_seq,
+                    payload=cast(Any, {"messages": result}),
+                )
+            return OneBotActionResult(
+                action, data=cast(Any, result), payload=cast(Any, {"data": result})
+            )
+        return OneBotActionResult(action, data=result)
 
     async def set_input_status(
         self,
@@ -1856,6 +2179,10 @@ class NapCatPlatformAdapter(Platform):
         event.set_extra("platform_event", "napcat")
 
         model_dump = getattr(raw_event, "model_dump", None)
+        raw_payload = getattr(raw_event, "__astrbot_raw_payload__", None)
+        if isinstance(raw_payload, Mapping):
+            event.set_extra("onebot_raw_payload", dict(raw_payload))
+            event.set_extra("napcat_raw_payload", dict(raw_payload))
         if callable(model_dump):
             try:
                 event.set_lazy_extra(

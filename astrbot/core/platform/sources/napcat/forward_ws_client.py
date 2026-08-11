@@ -379,6 +379,11 @@ class NapCatForwardWebSocketClient:
             async with self._send_lock:
                 await socket.send(json.dumps(payload, ensure_ascii=False))
             return await asyncio.wait_for(future, timeout=self.action_timeout_seconds)
+        except asyncio.CancelledError:
+            self._pending.pop(payload["echo"], None)
+            if not future.done():
+                future.cancel()
+            raise
         except TimeoutError as exc:
             self._pending.pop(payload["echo"], None)
             if not future.done():
@@ -1540,6 +1545,7 @@ class NapCatForwardWebSocketClient:
         self,
         *,
         flag: str,
+        sub_type: str = "add",
         approve: bool = True,
         reason: str | None = None,
         count: float | None = None,
@@ -1549,6 +1555,7 @@ class NapCatForwardWebSocketClient:
             await self.call_action(
                 "set_group_add_request",
                 flag=flag,
+                sub_type=sub_type,
                 approve=approve,
                 reason=reason,
                 count=float(count) if count is not None else None,
