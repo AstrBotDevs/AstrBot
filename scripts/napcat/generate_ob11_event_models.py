@@ -47,6 +47,8 @@ def main() -> None:
     subprocess.run(
         [
             "uvx",
+            "--python",
+            "3.14",
             "--from",
             "datamodel-code-generator",
             "datamodel-codegen",

@@ -58,7 +58,7 @@ catch {
 
 Ensure-Directory -Path (Split-Path -Parent $OutputPath)
 
-& uvx --from datamodel-code-generator datamodel-codegen `
+& uvx --python 3.14 --from datamodel-code-generator datamodel-codegen `
     --input $SchemaPath `
     --input-file-type jsonschema `
     --output $OutputPath `
