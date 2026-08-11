@@ -214,6 +214,10 @@ class Message(BaseModel):
 
     _no_save: bool = PrivateAttr(default=False)
     _checkpoint_after: CheckpointData | None = PrivateAttr(default=None)
+    _from_real_tool_call: bool = PrivateAttr(default=False)
+    """Whether this message was produced by real tool execution. Marked pairs
+    are never moved by the fake tool call reorder; plugin-injected raw dicts
+    never carry this flag."""
 
     @model_validator(mode="after")
     def check_content_required(self):
@@ -337,6 +341,8 @@ def bind_checkpoint_messages(history: list[dict]) -> list[Message]:
         message = Message.model_validate(item)
         if item.get("_no_save"):
             message._no_save = True
+        if item.get("_from_real_tool_call"):
+            message._from_real_tool_call = True
         messages.append(message)
 
     return messages
@@ -347,6 +353,8 @@ def dump_messages_with_checkpoints(messages: list[Message]) -> list[dict]:
     dumped: list[dict] = []
     for message in messages:
         message_data = message.model_dump()
+        if message._from_real_tool_call:
+            message_data["_from_real_tool_call"] = True
         if isinstance(message.content, list):
             message_data["content"] = [
                 part.model_dump()

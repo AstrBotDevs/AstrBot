@@ -11,9 +11,15 @@ from PIL import Image as PILImage
 
 import astrbot.core.provider.sources.openai_source as openai_source_module
 import astrbot.core.provider.sources.request_retry as request_retry
+from astrbot.core.agent.message import (
+    AssistantMessageSegment,
+    ToolCallMessageSegment,
+    bind_checkpoint_messages,
+    dump_messages_with_checkpoints,
+)
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider import reorder_tailing_tool_call_user
-from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.longcat_source import ProviderLongCat
 from astrbot.core.provider.sources.oai_aihubmix_source import ProviderAIHubMix
@@ -23,6 +29,7 @@ from astrbot.core.provider.sources.xai_source import ProviderXAI
 from astrbot.core.provider.sources.xiaomi_source import ProviderXiaomi
 from astrbot.core.provider.sources.zhipu_source import ProviderZhipu
 from astrbot.core.utils.media_utils import ResolvedMediaData, file_uri_to_path
+from tests.fixtures.fake_tool_call import make_fake_pair
 
 
 class _ErrorWithBody(Exception):
@@ -2319,26 +2326,17 @@ def test_reorder_multiple_fake_pairs():
     ]
 
 
-def test_reorder_noop_when_no_fake_pair():
-    """No fake pair: normal user message at tail, should be unchanged."""
-    payloads = {
-        "messages": [
+@pytest.mark.parametrize(
+    "messages",
+    [
+        # 无伪造对
+        [
             {"role": "user", "content": "hello"},
             {"role": "assistant", "content": "ok"},
             {"role": "user", "content": "next"},
-        ]
-    }
-    expected = payloads["messages"][:]
-
-    reorder_tailing_tool_call_user(payloads["messages"])
-
-    assert payloads["messages"] == expected
-
-
-def test_reorder_noop_when_tool_call_id_mismatch():
-    """tool_call_id does not match assistant's tool_calls — stop collecting."""
-    payloads = {
-        "messages": [
+        ],
+        # tool_call_id 与 assistant 不匹配
+        [
             {
                 "role": "assistant",
                 "content": None,
@@ -2352,49 +2350,42 @@ def test_reorder_noop_when_tool_call_id_mismatch():
             },
             {"role": "tool", "tool_call_id": "call_99", "content": "mismatched id"},
             {"role": "user", "content": "hello"},
-        ]
-    }
-    expected = payloads["messages"][:]
-
-    reorder_tailing_tool_call_user(payloads["messages"])
-
-    assert payloads["messages"] == expected
-
-
-def test_reorder_noop_when_assistant_has_no_tool_calls():
-    """Assistant has no tool_calls — stop collecting."""
-    payloads = {
-        "messages": [
+        ],
+        # assistant 无 tool_calls
+        [
             {"role": "assistant", "content": "some reply"},
             {"role": "user", "content": "hello"},
-        ]
-    }
-    expected = payloads["messages"][:]
-
-    reorder_tailing_tool_call_user(payloads["messages"])
-
-    assert payloads["messages"] == expected
-
-
-def test_reorder_noop_when_no_trailing_user():
-    """Tail message is not user — no-op."""
-    payloads = {
-        "messages": [
+        ],
+        # 尾部不是 user
+        [
             {"role": "user", "content": "hello"},
             {"role": "assistant", "content": "reply"},
-        ]
-    }
-    expected = payloads["messages"][:]
+        ],
+        # 空 / 过短列表
+        [],
+        [{"role": "user", "content": "hi"}],
+    ],
+    ids=[
+        "no_pair",
+        "id_mismatch",
+        "no_tool_calls",
+        "no_trailing_user",
+        "empty",
+        "short",
+    ],
+)
+def test_reorder_noop(messages):
+    """尾部不存在可重排的伪造对时，消息保持不变。"""
+    expected = messages[:]
 
-    reorder_tailing_tool_call_user(payloads["messages"])
+    reorder_tailing_tool_call_user(messages)
 
-    assert payloads["messages"] == expected
+    assert messages == expected
 
 
-def test_reorder_noop_on_empty_or_short_list():
-    """Empty or too-short messages list — no-op, no crash."""
-    for msgs in [None, [], [{"role": "user", "content": "hi"}]]:
-        reorder_tailing_tool_call_user(msgs)
+def test_reorder_noop_on_none():
+    """None 入参直接返回，不崩溃。"""
+    reorder_tailing_tool_call_user(None)
 
 
 def test_reorder_real_tool_call_not_affected():
@@ -2437,46 +2428,14 @@ def test_reorder_real_tool_call_not_affected():
         ProviderZhipu,
     ],
 )
-def test_reorder_applied_through_inherited_sanitize(provider_cls):
-    """All OpenAI-compatible subclasses inherit _sanitize_assistant_messages
-    which includes the reorder fix — verify it works on each."""
-    payloads = {
-        "messages": [
-            {"role": "user", "content": "hello"},
-            {
-                "role": "assistant",
-                "content": None,
-                "tool_calls": [
-                    {
-                        "id": "call_01",
-                        "type": "function",
-                        "function": {"name": "search", "arguments": "{}"},
-                    }
-                ],
-            },
-            {"role": "tool", "tool_call_id": "call_01", "content": "mem result"},
-            {"role": "user", "content": "帮我处理"},
-        ]
-    }
-
-    provider_cls._sanitize_assistant_messages(payloads)
-
-    assert payloads["messages"] == [
-        {"role": "user", "content": "hello"},
-        {"role": "user", "content": "帮我处理"},
-        {
-            "role": "assistant",
-            "content": None,
-            "tool_calls": [
-                {
-                    "id": "call_01",
-                    "type": "function",
-                    "function": {"name": "search", "arguments": "{}"},
-                }
-            ],
-        },
-        {"role": "tool", "tool_call_id": "call_01", "content": "mem result"},
-    ], f"{provider_cls.__name__} did not reorder fake tool call messages"
+def test_sanitize_reorder_inherited_by_subclasses(provider_cls):
+    """OpenAI 兼容子类都直接继承含重排修复的 _sanitize_assistant_messages，
+    行为由父类测试（test_sanitize_reorders_unmarked_fake_pair_without_marker_in_output）
+    覆盖。"""
+    assert (
+        provider_cls._sanitize_assistant_messages
+        is ProviderOpenAIOfficial._sanitize_assistant_messages
+    )
 
 
 def test_reorder_stops_at_first_non_pair():
@@ -2542,3 +2501,215 @@ def test_reorder_stops_at_first_non_pair():
         },
         {"role": "tool", "tool_call_id": "call_02", "content": "result_b"},
     ]
+
+
+@pytest.mark.parametrize(
+    "tail_user_content",
+    [
+        "请根据图片分析结果继续",  # cached_images 图片复核消息
+        "最多还能进行 2 步，请继续",  # max_steps 收尾提示
+        "下一个问题",  # 跨轮次历史后用户新消息
+    ],
+    ids=["cached_images", "max_steps", "cross_turn"],
+)
+def test_reorder_skips_marked_real_pair(tail_user_content):
+    """真实工具调用对带 `_from_real_tool_call` 标记时，重排必须停止。
+
+    三类误伤场景（图片复核 / max steps 收尾 / 跨轮次历史）尾部都是
+    ``[assistant(tc), tool, user]`` 形状，其中的 assistant/tool 是真实工具
+    执行产生的，不应被当作伪造对挪到 user 之后。
+    """
+    real_pair = make_fake_pair(
+        tool_call_id="real_call_01", content="real result", marked=True
+    )
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "帮我查一下"},
+            *real_pair,
+            {"role": "user", "content": tail_user_content},
+        ]
+    }
+    expected = payloads["messages"][:]
+
+    reorder_tailing_tool_call_user(payloads["messages"])
+
+    assert payloads["messages"] == expected
+
+
+@pytest.mark.parametrize(
+    "marked_side",
+    [
+        "assistant",
+        "tool",
+    ],
+)
+def test_reorder_stops_when_either_side_marked(marked_side):
+    """只要对中任意一侧带标记，即视为真实对并停止收集。"""
+    real_pair = make_fake_pair(
+        tool_call_id="real_call_01", content="real result", marked=True
+    )
+    if marked_side == "assistant":
+        real_pair[1].pop("_from_real_tool_call")
+    else:
+        real_pair[0].pop("_from_real_tool_call")
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "帮我查一下"},
+            *real_pair,
+            {"role": "user", "content": "继续"},
+        ]
+    }
+    expected = payloads["messages"][:]
+
+    reorder_tailing_tool_call_user(payloads["messages"])
+
+    assert payloads["messages"] == expected
+
+
+def test_reorder_fake_pair_reordered_while_marked_real_pair_stays():
+    """真实对（标记）与伪造对（无标记）并存：只重排尾部伪造对，真实对原地不动。"""
+    real_pair = make_fake_pair(
+        tool_call_id="real_call_01", content="real result", marked=True
+    )
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "开始"},
+            *real_pair,
+            {"role": "user", "content": "中间补充"},
+            *make_fake_pair(tool_call_id="fake_call_02", name="recall_memory"),
+            {"role": "user", "content": "尾部问题"},
+        ]
+    }
+
+    reorder_tailing_tool_call_user(payloads["messages"])
+
+    assert payloads["messages"] == [
+        {"role": "user", "content": "开始"},
+        *real_pair,
+        {"role": "user", "content": "中间补充"},
+        {"role": "user", "content": "尾部问题"},
+        *make_fake_pair(tool_call_id="fake_call_02", name="recall_memory"),
+    ]
+
+
+def test_tool_calls_result_marks_messages():
+    """ToolCallsResult 转换出的 dict / segment 都带真实工具调用标记。"""
+    tcr = ToolCallsResult(
+        tool_calls_info=AssistantMessageSegment(
+            content=None,
+            tool_calls=[
+                {
+                    "id": "real_call_01",
+                    "type": "function",
+                    "function": {"name": "search", "arguments": "{}"},
+                }
+            ],
+        ),
+        tool_calls_result=[
+            ToolCallMessageSegment(content="real result", tool_call_id="real_call_01")
+        ],
+    )
+
+    dicts = tcr.to_openai_messages()
+    assert dicts[0]["_from_real_tool_call"] is True
+    assert dicts[1]["_from_real_tool_call"] is True
+
+    # 幂等：重复调用不会影响
+    dicts_again = tcr.to_openai_messages()
+    assert dicts_again[0]["_from_real_tool_call"] is True
+
+    segments = tcr.to_openai_messages_model()
+    assert segments[0]._from_real_tool_call is True
+    assert segments[1]._from_real_tool_call is True
+
+
+def test_marker_survives_dump_and_bind_roundtrip():
+    """标记字段经 dump_messages_with_checkpoints / bind_checkpoint_messages 往返不丢失。"""
+    asst = AssistantMessageSegment(
+        content=None,
+        tool_calls=[
+            {
+                "id": "real_call_01",
+                "type": "function",
+                "function": {"name": "search", "arguments": "{}"},
+            }
+        ],
+    )
+    asst._from_real_tool_call = True
+    tool = ToolCallMessageSegment(content="real result", tool_call_id="real_call_01")
+    tool._from_real_tool_call = True
+
+    dumped = dump_messages_with_checkpoints([asst, tool])
+    assert dumped[0]["_from_real_tool_call"] is True
+    assert dumped[1]["_from_real_tool_call"] is True
+
+    rebound = bind_checkpoint_messages(dumped)
+    assert rebound[0]._from_real_tool_call is True
+    assert rebound[1]._from_real_tool_call is True
+
+
+def test_sanitize_reorders_unmarked_fake_pair_without_marker_in_output():
+    """无标记伪造对经 _sanitize_assistant_messages 重排，且输出不含内部标记键。"""
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "hello"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "fake_call_01",
+                        "type": "function",
+                        "function": {"name": "recall_memory", "arguments": "{}"},
+                    }
+                ],
+            },
+            {"role": "tool", "tool_call_id": "fake_call_01", "content": "mem result"},
+            {"role": "user", "content": "帮我处理"},
+        ]
+    }
+
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"] == [
+        {"role": "user", "content": "hello"},
+        {"role": "user", "content": "帮我处理"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "fake_call_01",
+                    "type": "function",
+                    "function": {"name": "recall_memory", "arguments": "{}"},
+                }
+            ],
+        },
+        {"role": "tool", "tool_call_id": "fake_call_01", "content": "mem result"},
+    ]
+    for msg in payloads["messages"]:
+        assert "_from_real_tool_call" not in msg
+
+
+def test_sanitize_keeps_marked_real_pair_untouched():
+    """真实对带标记时不重排，且 _sanitize_assistant_messages 剥离标记。"""
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "帮我查一下"},
+            *make_fake_pair(
+                tool_call_id="real_call_01", content="real result", marked=True
+            ),
+            {"role": "user", "content": "请根据图片分析结果继续"},
+        ]
+    }
+
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
+
+    assert [m["role"] for m in payloads["messages"]] == [
+        "user",
+        "assistant",
+        "tool",
+        "user",
+    ]
+    for msg in payloads["messages"]:
+        assert "_from_real_tool_call" not in msg

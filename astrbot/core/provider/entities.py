@@ -72,15 +72,18 @@ class ToolCallsResult:
     """函数调用的结果"""
 
     def to_openai_messages(self) -> list[dict]:
-        ret = [
-            self.tool_calls_info.model_dump(),
-            *[item.model_dump() for item in self.tool_calls_result],
-        ]
+        ret: list[dict] = []
+        for item in self.to_openai_messages_model():
+            data = item.model_dump()
+            data["_from_real_tool_call"] = True
+            ret.append(data)
         return ret
 
     def to_openai_messages_model(
         self,
     ) -> list[AssistantMessageSegment | ToolCallMessageSegment]:
+        for item in [self.tool_calls_info, *self.tool_calls_result]:
+            item._from_real_tool_call = True
         return [
             self.tool_calls_info,
             *self.tool_calls_result,

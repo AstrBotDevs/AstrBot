@@ -12,6 +12,7 @@ from astrbot.core.agent.message import ContentPart, Message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.provider import reorder_tailing_tool_call_user
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
 
 from ..register import register_provider_adapter
@@ -280,6 +281,8 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             else:
                 for result in tool_calls_result:
                     context_query.extend(result.to_openai_messages())
+
+        reorder_tailing_tool_call_user(context_query)
 
         if self._context_contains_image(context_query):
             context_query = await self._materialize_context_image_parts(context_query)

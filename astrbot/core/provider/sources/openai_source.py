@@ -531,6 +531,11 @@ class ProviderOpenAIOfficial(Provider):
 
         reorder_tailing_tool_call_user(payloads["messages"])
 
+        # _from_real_tool_call 是内部标记，剥离后不能出现在发往 API 的请求里
+        for msg in payloads["messages"]:
+            if isinstance(msg, dict):
+                msg.pop("_from_real_tool_call", None)
+
     async def _query(
         self,
         payloads: dict,

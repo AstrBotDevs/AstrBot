@@ -198,7 +198,10 @@ class Provider(AbstractProvider):
             if is_checkpoint_message(message):
                 continue
             if isinstance(message, Message):
-                dicts.append(message.model_dump())
+                data = message.model_dump()
+                if message._from_real_tool_call:
+                    data["_from_real_tool_call"] = True
+                dicts.append(data)
             else:
                 dicts.append(message)
 
@@ -222,9 +225,22 @@ def _is_valid_tool_pair(asst_msg: dict[str, Any], tool_msg: dict[str, Any]) -> b
     return tool_msg.get("tool_call_id") in tc_ids
 
 
+def _is_fake_tool_pair(asst_msg: dict[str, Any], tool_msg: dict[str, Any]) -> bool:
+    """判断一对 assistant(tool_calls) / tool 是否为需要重排的伪造对。
+
+    真实工具执行产生的消息带 ``_from_real_tool_call`` 标记（见 ``ToolCallsResult``
+    与 ``Message``），插件注入的伪造对是裸 dict，永远不会有该标记。
+    """
+    return _is_valid_tool_pair(asst_msg, tool_msg) and not bool(
+        asst_msg.get("_from_real_tool_call") or tool_msg.get("_from_real_tool_call")
+    )
+
+
 def reorder_tailing_tool_call_user(messages: list[dict[str, Any]]) -> None:
     """重排因伪造工具调用导致尾部 assistant(tc) → tool → user 乱序的消息。
 
+    真实工具执行产生的对带 ``_from_real_tool_call`` 标记，扫描遇到即停止，
+    避免误伤紧随其后的真实 user 消息（图片复核、max steps 收尾、跨轮次历史）。
     此为轻量妥协修复。未来若实现专用的上下文操作钩子或伪造工具调用钩子，
     可考虑移除此函数。
     """
@@ -235,12 +251,10 @@ def reorder_tailing_tool_call_user(messages: list[dict[str, Any]]) -> None:
     if last.get("role") != "user":
         return
 
-    # 从最后一个非 user 元素向前扫描 assistant(tool_calls) + tool 成对消息
+    # 从尾部向前收集连续的伪造对（内层优先），遇真实对即停止
     pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
     i = len(messages) - 2
-    while i >= 1:
-        if not _is_valid_tool_pair(messages[i - 1], messages[i]):
-            break
+    while i >= 1 and _is_fake_tool_pair(messages[i - 1], messages[i]):
         pairs.append((messages[i - 1], messages[i]))
         i -= 2
 
@@ -248,13 +262,7 @@ def reorder_tailing_tool_call_user(messages: list[dict[str, Any]]) -> None:
         return
 
     # 重排：user → assistant_1, tool_1 → ... → assistant_N, tool_N
-    # pairs 从内到外收集（N, N-1, ..., 1），反转后按 1..N 顺序回插
-    new_tail: list[dict[str, Any]] = [last]
-    for asst_msg, tool_msg in reversed(pairs):
-        new_tail.append(asst_msg)
-        new_tail.append(tool_msg)
-
-    messages[:] = messages[: i + 1] + new_tail
+    messages[i + 1 :] = [last] + [m for pair in reversed(pairs) for m in pair]
 
 
 class STTProvider(AbstractProvider):

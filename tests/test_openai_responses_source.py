@@ -8,6 +8,7 @@ from astrbot.core.config.default import CONFIG_METADATA_2
 from astrbot.core.provider.sources.openai_responses_source import (
     ProviderOpenAIResponses,
 )
+from tests.fixtures.fake_tool_call import make_fake_pair
 
 
 def _make_provider(overrides: dict | None = None) -> ProviderOpenAIResponses:
@@ -397,3 +398,144 @@ async def test_parse_failed_response_raises_provider_error():
 
     with pytest.raises(RuntimeError, match="server_error: failed"):
         await provider._parse_response(response, tools=None)
+
+
+@pytest.mark.asyncio
+async def test_responses_reorders_fake_pair_before_conversion():
+    """插件注入的伪造对在 Responses 路径同样需要前置到用户消息之后。
+
+    转换后的 input 应为 user → function_call → function_call_output，
+    与 OpenAI Chat Completions / Anthropic / Gemini 对齐。
+    """
+    provider = _make_provider()
+    payloads, context = await provider._prepare_chat_payload(
+        prompt="帮我处理",
+        contexts=[
+            {"role": "user", "content": "hello"},
+            *make_fake_pair(tool_call_id="fake_call_01"),
+        ],
+    )
+
+    assert [m["role"] for m in context] == ["user", "user", "assistant", "tool"]
+    assert [item["type"] for item in payloads["input"]] == [
+        "message",
+        "message",
+        "function_call",
+        "function_call_output",
+    ]
+    assert payloads["input"][2]["name"] == "recall_long_term_memory"
+    assert payloads["input"][3]["call_id"] == "fake_call_01"
+
+
+@pytest.mark.parametrize(
+    "tail_user_content",
+    [
+        "请根据图片分析结果继续",  # cached_images 图片复核消息
+        "Maximum tool call limit reached.",  # max_steps 收尾提示
+        "下一个问题",  # 跨轮次历史后用户新消息
+    ],
+    ids=["cached_images", "max_steps", "cross_turn"],
+)
+@pytest.mark.asyncio
+async def test_responses_reorder_skips_marked_real_pair(tail_user_content):
+    """带 _from_real_tool_call 标记的真实工具对在 Responses 路径不被重排。"""
+    provider = _make_provider()
+    payloads, context = await provider._prepare_chat_payload(
+        prompt=tail_user_content,
+        contexts=[
+            {"role": "user", "content": "帮我查一下"},
+            *make_fake_pair(
+                tool_call_id="real_call_01", content="real result", marked=True
+            ),
+        ],
+    )
+
+    assert [m["role"] for m in context] == ["user", "assistant", "tool", "user"]
+    assert [item["type"] for item in payloads["input"]] == [
+        "message",
+        "function_call",
+        "function_call_output",
+        "message",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_responses_real_tool_calls_result_not_reordered_and_no_marker_leak():
+    """经 ToolCallsResult 进入的真实工具结果带标记，不被重排，且标记不泄漏到 input。"""
+    from astrbot.core.agent.message import (
+        AssistantMessageSegment,
+        ToolCallMessageSegment,
+    )
+    from astrbot.core.provider.entities import ToolCallsResult
+
+    provider = _make_provider()
+    tcr = ToolCallsResult(
+        tool_calls_info=AssistantMessageSegment(
+            content=None,
+            tool_calls=[
+                {
+                    "id": "real_call_01",
+                    "type": "function",
+                    "function": {"name": "search_web", "arguments": "{}"},
+                }
+            ],
+        ),
+        tool_calls_result=[
+            ToolCallMessageSegment(content="real result", tool_call_id="real_call_01")
+        ],
+    )
+    payloads, context = await provider._prepare_chat_payload(
+        prompt="请根据图片分析结果继续",
+        contexts=[{"role": "user", "content": "帮我查一下"}],
+        tool_calls_result=tcr,
+    )
+
+    # tool_calls_result 追加在 prompt 之后，尾部是 tool 消息，重排天然 no-op
+    assert [m["role"] for m in context] == ["user", "user", "assistant", "tool"]
+    assert [item["type"] for item in payloads["input"]] == [
+        "message",
+        "message",
+        "function_call",
+        "function_call_output",
+    ]
+    for item in payloads["input"]:
+        assert "_from_real_tool_call" not in item
+
+
+@pytest.mark.asyncio
+async def test_responses_mixed_real_and_fake_only_fake_reordered():
+    """真实对（标记）与伪造对（无标记）并存时，只重排尾部伪造对。"""
+    provider = _make_provider()
+    payloads, context = await provider._prepare_chat_payload(
+        prompt="尾部问题",
+        contexts=[
+            {"role": "user", "content": "开始"},
+            *make_fake_pair(
+                tool_call_id="real_call_01", content="real result", marked=True
+            ),
+            {"role": "user", "content": "中间补充"},
+            *make_fake_pair(tool_call_id="fake_call_02"),
+        ],
+    )
+
+    assert [m["role"] for m in context] == [
+        "user",
+        "assistant",
+        "tool",
+        "user",
+        "user",
+        "assistant",
+        "tool",
+    ]
+    assert [item["type"] for item in payloads["input"]] == [
+        "message",
+        "function_call",
+        "function_call_output",
+        "message",
+        "message",
+        "function_call",
+        "function_call_output",
+    ]
+    # 真实对的 call_id 在重排后仍紧跟其 function_call
+    assert payloads["input"][1]["call_id"] == "real_call_01"
+    assert payloads["input"][2]["call_id"] == "real_call_01"

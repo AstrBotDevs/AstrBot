@@ -858,8 +858,7 @@ class ProviderGoogleGenAI(Provider):
                 for tcr in tool_calls_result:
                     context_query.extend(tcr.to_openai_messages())
 
-        # 伪造工具调用对需前置到用户消息之后，与真实工具调用时序对齐。
-        # Gemini API 要求 functionCall 回合必须紧跟 user 回合，否则返回 400。
+        # Gemini API 要求 functionCall 回合紧跟 user 回合，否则返回 400。
         reorder_tailing_tool_call_user(context_query)
 
         model = model or self.get_model()
@@ -929,8 +928,7 @@ class ProviderGoogleGenAI(Provider):
                 for tcr in tool_calls_result:
                     context_query.extend(tcr.to_openai_messages())
 
-        # 伪造工具调用对需前置到用户消息之后，与真实工具调用时序对齐。
-        # Gemini API 要求 functionCall 回合必须紧跟 user 回合，否则返回 400。
+        # Gemini API 要求 functionCall 回合紧跟 user 回合，否则返回 400。
         reorder_tailing_tool_call_user(context_query)
 
         model = model or self.get_model()

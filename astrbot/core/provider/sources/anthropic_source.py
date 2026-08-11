@@ -790,7 +790,6 @@ class ProviderAnthropic(Provider):
                 for tool_call_result in tool_calls_result:
                     context_query.extend(tool_call_result.to_openai_messages())
 
-        # 伪造工具调用对需前置到用户消息之后，与真实工具调用时序对齐
         reorder_tailing_tool_call_user(context_query)
         system_prompt, new_messages = self._prepare_payload(context_query)
 
@@ -864,7 +863,6 @@ class ProviderAnthropic(Provider):
                 for tool_call_result in tool_calls_result:
                     context_query.extend(tool_call_result.to_openai_messages())
 
-        # 伪造工具调用对需前置到用户消息之后，与真实工具调用时序对齐
         reorder_tailing_tool_call_user(context_query)
         system_prompt, new_messages = self._prepare_payload(context_query)
 
