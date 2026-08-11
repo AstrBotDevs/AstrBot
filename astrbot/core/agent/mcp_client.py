@@ -19,17 +19,28 @@ from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack, contextmanager
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
-from typing import Any
+from typing import Any, Literal, TextIO, cast
 from urllib.parse import parse_qs, urlparse
 
 import httpx2
 from mcp import Client
 from mcp.client.auth import AuthorizationCodeResult, OAuthClientProvider
+from mcp.client.session import ClientRequestContext
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.client.streamable_http import streamable_http_client
 from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
-from mcp.types import ElicitResult, ErrorData, InputRequiredResult
+from mcp.types import (
+    ElicitRequest,
+    ElicitRequestFormParams,
+    ElicitRequestParams,
+    ElicitRequestURLParams,
+    ElicitResult,
+    ErrorData,
+    InputRequiredResult,
+    LoggingMessageNotificationParams,
+)
 from mcp.types.version import LATEST_PROTOCOL_VERSION
+from pydantic import AnyUrl
 
 from astrbot import logger
 from astrbot.core.agent.run_context import ContextWrapper
@@ -458,9 +469,9 @@ def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
         properties = result.get("properties")
         if not isinstance(properties, dict):
             return result
-        original = (
-            node.get("properties") if isinstance(node.get("properties"), dict) else {}
-        )
+        original = node.get("properties")
+        if not isinstance(original, dict):
+            original = {}
         required = result.get("required")
         names = list(required) if isinstance(required, list) else []
         for name, property_schema in properties.items():
@@ -602,15 +613,18 @@ class MCPInteractionCoordinator:
         return accepted
 
     async def handle_elicitation(
-        self, _context: Any, params: Any
+        self,
+        context: ClientRequestContext | None,
+        params: ElicitRequestParams,
     ) -> ElicitResult | ErrorData:
+        del context
         bound = _mcp_interaction_context.get()
         if bound is None:
             return ErrorData(
                 code=-32000, message="No active AstrBot request for MCP elicitation."
             )
         key, sender_id, _event = bound
-        mode = getattr(params, "mode", None)
+        mode = params.mode
         payload: dict[str, Any] = {
             "type": "mcp_input_request",
             "message_id": key.request_id,
@@ -619,25 +633,20 @@ class MCPInteractionCoordinator:
             "run_id": key.run_id,
             "server_name": key.server_name,
             "mode": mode,
-            "message": str(getattr(params, "message", ""))[:2000],
+            "message": params.message[:2000],
         }
-        if mode == "form":
-            schema = getattr(params, "requested_schema", None)
+        if isinstance(params, ElicitRequestFormParams):
             try:
-                schema_data = (
-                    schema.model_dump(mode="json")
-                    if hasattr(schema, "model_dump")
-                    else schema
-                )
+                schema_data = params.requested_schema
                 self._validate_form_schema(schema_data)
             except ValueError as exc:
                 return ErrorData(code=-32602, message=str(exc))
             payload["schema"] = schema_data
-        elif mode == "url":
-            parsed = urlparse(str(getattr(params, "url", "")))
+        elif isinstance(params, ElicitRequestURLParams):
+            parsed = urlparse(params.url)
             if parsed.scheme not in {"https", "http"} or not parsed.hostname:
                 return ErrorData(code=-32602, message="MCP elicitation URL is invalid.")
-            payload["url"] = str(getattr(params, "url"))
+            payload["url"] = params.url
             payload["url_display"] = f"{parsed.scheme}://{parsed.hostname}"
         else:
             return ErrorData(code=-32602, message="Unsupported MCP elicitation mode.")
@@ -686,7 +695,7 @@ class MCPInteractionCoordinator:
                     return False
             pending.future.set_result(
                 ElicitResult(
-                    action=action,
+                    action=cast(Literal["accept", "decline", "cancel"], action),
                     content=content
                     if action == "accept" and pending.payload["mode"] == "form"
                     else None,
@@ -800,11 +809,11 @@ class _MCPAuthIdentityStore:
         token = data.get(self._identity, {}).get("token")
         return OAuthToken.model_validate(token) if token else None
 
-    async def set_tokens(self, token: OAuthToken) -> None:
+    async def set_tokens(self, tokens: OAuthToken) -> None:
         async with self._store._lock:
             data = await self._store._read()
             entry = data.setdefault(self._identity, {})
-            entry["token"] = token.model_dump(mode="json")
+            entry["token"] = tokens.model_dump(mode="json")
             await self._store._write(data)
 
     async def get_client_info(self) -> OAuthClientInformationFull | None:
@@ -935,8 +944,8 @@ class MCPClient:
             self._parallel_limit = normalized
             self._parallel_semaphore = asyncio.Semaphore(normalized)
 
-    def _logging_callback(self, message: Any) -> None:
-        if getattr(message, "level", "") in {
+    def _record_server_error(self, level: str, data: Any) -> None:
+        if level in {
             "warning",
             "error",
             "critical",
@@ -944,18 +953,24 @@ class MCPClient:
             "emergency",
         }:
             self.server_errlogs.append(
-                redact_sensitive_text(f"[{str(message.level).upper()}] {message.data}")
+                redact_sensitive_text(f"[{level.upper()}] {data}")
             )
+
+    async def _logging_callback(
+        self, params: LoggingMessageNotificationParams
+    ) -> None:
+        self._record_server_error(str(params.level), params.data)
+
+    def _stderr_logging_callback(self, line: str) -> None:
+        self.server_errlogs.append(redact_sensitive_text(line))
 
     def _oauth_provider(self, cfg: dict[str, Any]) -> OAuthClientProvider | None:
         auth_ref = cfg.get("auth_ref")
         if not auth_ref:
             return None
-        if (
-            self._auth_store is None
-            or self._auth_coordinator is None
-            or self._server_name is None
-        ):
+        auth_store = self._auth_store
+        auth_coordinator = self._auth_coordinator
+        if auth_store is None or auth_coordinator is None or self._server_name is None:
             raise RuntimeError("MCP OAuth is not available in this runtime.")
         identity = f"{self._server_name}:{auth_ref}"
         endpoint = str(cfg["url"])
@@ -963,16 +978,18 @@ class MCPClient:
             client_name="AstrBot MCP",
             software_id="https://github.com/Xero-Team/AstrBot",
             software_version="2",
-            redirect_uris=["http://127.0.0.1:6185/api/v1/mcp/oauth/callback"],
+            redirect_uris=[
+                AnyUrl("http://127.0.0.1:6185/api/v1/mcp/oauth/callback")
+            ],
         )
         return OAuthClientProvider(
             server_url=endpoint,
             client_metadata=metadata,
-            storage=self._auth_store.for_identity(identity),
+            storage=auth_store.for_identity(identity),
             redirect_handler=lambda authorization_url: (
-                self._auth_coordinator.redirect_handler(identity, authorization_url)
+                auth_coordinator.redirect_handler(identity, authorization_url)
             ),
-            callback_handler=lambda: self._auth_coordinator.callback_handler(identity),
+            callback_handler=lambda: auth_coordinator.callback_handler(identity),
             validate_resource_url=lambda requested, configured: (
                 self._validate_oauth_resource(requested, configured)
             ),
@@ -1021,11 +1038,14 @@ class MCPClient:
             )
             transport = stdio_client(
                 parameters,
-                errlog=LogPipe(
-                    level=logging.INFO,
-                    logger=logger,
-                    identifier=f"MCPServer-{name}",
-                    callback=self._logging_callback,
+                errlog=cast(
+                    TextIO,
+                    LogPipe(
+                        level=logging.INFO,
+                        logger=logger,
+                        identifier=f"MCPServer-{name}",
+                        callback=self._stderr_logging_callback,
+                    ),
                 ),
             )
         client = Client(
@@ -1275,9 +1295,12 @@ class MCPClient:
             )
         responses: dict[str, Any] = {}
         for request_id, request in requests.items():
-            params = getattr(request, "params", request)
+            if not isinstance(request, ElicitRequest):
+                raise RuntimeError(
+                    "MCP input request uses an unsupported interaction type."
+                )
             response = await self._interaction_coordinator.handle_elicitation(
-                None, params
+                None, request.params
             )
             if isinstance(response, ErrorData):
                 raise RuntimeError(response.message)
