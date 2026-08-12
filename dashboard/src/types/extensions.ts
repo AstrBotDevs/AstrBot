@@ -50,6 +50,7 @@ export interface PluginMarketItem {
   logo?: string;
   pinned?: boolean;
   stars?: number;
+  download_count?: number | string;
   updated_at?: string;
   download_url?: string;
   i18n?: Record<string, unknown>;
