@@ -37,11 +37,20 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y shellcheck
-          curl -fsSL "https://github.com/mvdan/sh/releases/download/v3.13.1/shfmt_v3.13.1_linux_amd64" \
-            -o /usr/local/bin/shfmt
-          curl -fsSL "https://github.com/hadolint/hadolint/releases/download/v2.14.0/hadolint-Linux-x86_64" \
-            -o /usr/local/bin/hadolint
-          sudo chmod +x /usr/local/bin/shfmt /usr/local/bin/hadolint
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+          curl --fail --location --proto '=https' --tlsv1.2 --http1.1 \
+            --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
+            "https://github.com/mvdan/sh/releases/download/v3.13.1/shfmt_v3.13.1_linux_amd64" \
+            -o "$tmpdir/shfmt"
+          curl --fail --location --proto '=https' --tlsv1.2 --http1.1 \
+            --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
+            "https://github.com/hadolint/hadolint/releases/download/v2.14.0/hadolint-Linux-x86_64" \
+            -o "$tmpdir/hadolint"
+          sudo install -m 0755 "$tmpdir/shfmt" /usr/local/bin/shfmt
+          sudo install -m 0755 "$tmpdir/hadolint" /usr/local/bin/hadolint
+          shfmt --version
+          hadolint --version
 
       - name: Install uv
         run: python -m pip install uv

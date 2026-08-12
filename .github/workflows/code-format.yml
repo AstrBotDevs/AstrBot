@@ -79,12 +79,18 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - name: Install shellcheck + shfmt
+        shell: bash
         run: |
           sudo apt-get update
           sudo apt-get install -y shellcheck
-          curl -fsSL "https://github.com/mvdan/sh/releases/download/v3.13.1/shfmt_v3.13.1_linux_amd64" \
-            -o /usr/local/bin/shfmt
-          sudo chmod +x /usr/local/bin/shfmt
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+          curl --fail --location --proto '=https' --tlsv1.2 --http1.1 \
+            --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
+            "https://github.com/mvdan/sh/releases/download/v3.13.1/shfmt_v3.13.1_linux_amd64" \
+            -o "$tmpdir/shfmt"
+          sudo install -m 0755 "$tmpdir/shfmt" /usr/local/bin/shfmt
+          shfmt --version
       - name: shfmt + shellcheck
         run: make check-shell
 
