@@ -154,6 +154,27 @@ async def test_send_message_defaults_to_current_session():
 
 
 @pytest.mark.asyncio
+async def test_send_message_returns_platform_error_to_tool_result():
+    """Platform send failures are returned to the agent as tool errors."""
+    tool = SendMessageToUserTool()
+    ctx = _make_context(current_session="qq_official:GroupMessage:group-1")
+    ctx.context.context.send_message.side_effect = RuntimeError(
+        "413 Request Entity Too Large"
+    )
+
+    result = await tool.call(
+        ctx,
+        messages=[{"type": "plain", "text": "hello"}],
+    )
+
+    assert result == (
+        "error: failed to send message to session "
+        "qq_official:GroupMessage:group-1: 413 Request Entity Too Large"
+    )
+    assert ctx.context.event._has_send_oper is False
+
+
+@pytest.mark.asyncio
 async def test_send_message_other_session_does_not_record_current_text():
     """Messages sent to another session do not affect current-session dedupe."""
     tool = SendMessageToUserTool()

@@ -627,8 +627,23 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         srv_send_msg: bool = False,
         file_name: str | None = None,
         **kwargs,
-    ) -> Media | None:
-        """上传媒体文件"""
+    ) -> Media:
+        """Upload media to a QQ group or C2C session.
+
+        Args:
+            file_source: Local file path or remote URL to upload.
+            file_type: QQ media type identifier.
+            srv_send_msg: Whether QQ should send the media immediately.
+            file_name: Optional display name for the uploaded file.
+            **kwargs: Recipient identifier as ``openid`` or ``group_openid``.
+
+        Returns:
+            Metadata for the uploaded media.
+
+        Raises:
+            ValueError: No supported recipient identifier was provided.
+            Exception: The upload request fails or returns an invalid response.
+        """
         # 构建基础payload
         payload: dict = {"file_type": file_type, "srv_send_msg": srv_send_msg}
         if file_name:
@@ -657,7 +672,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 group_openid=kwargs["group_openid"],
             )
         else:
-            return None
+            raise ValueError("Invalid upload parameters")
 
         @_qqofficial_retry()
         async def _do_upload():
@@ -669,25 +684,29 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         try:
             result = await _do_upload()
-
-            if result:
-                if not isinstance(result, dict):
-                    logger.error(f"上传文件响应格式错误: {result}")
-                    return None
-
-                return Media(
-                    file_uuid=result["file_uuid"],
-                    file_info=result["file_info"],
-                    ttl=result.get("ttl", 0),
-                )
         except APIReturnNoneError:
-            logger.warning(f"上传文件API返回None，共尝试5次后放弃: {file_source}")
+            logger.warning(
+                "Media upload API returned None after 5 attempts: %s",
+                file_source,
+            )
+            raise
         except (botpy.errors.ServerError, botpy.errors.SequenceNumberError):
-            logger.error(f"上传媒体文件失败，共尝试5次后放弃: {file_source}")
-        except Exception as e:
-            logger.error(f"上传请求错误: {e}")
+            logger.error("Media upload failed after 5 attempts: %s", file_source)
+            raise
+        except Exception as exc:
+            logger.error("Media upload request failed: %s", exc)
+            raise
 
-        return None
+        if not isinstance(result, dict):
+            raise RuntimeError(
+                f"Failed to upload media, response is not dict: {result}"
+            )
+
+        return Media(
+            file_uuid=result["file_uuid"],
+            file_info=result["file_info"],
+            ttl=result.get("ttl", 0),
+        )
 
     async def post_c2c_message(
         self,
