@@ -5,39 +5,26 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 30e20318cbaaa2e1ba57f3e0eee265d9ee98115c
-  synced_at_utc: 2026-08-09T22:45:08Z
+  commit: a9bb8a64ca69657e6262e3ca06541ecaf3a6d1ca
+  synced_at_utc: 2026-08-12T10:10:00Z
   sync_method: manual-adaptation
-  source_pr: '9587, 9534, 9518, 9596, 9597, 9599, 9602, 9465, 9432, 9470, 9471, 9501, 9165'
+  source_pr: '9618, 9610, 9620, 9619, 9621, 9627, 9607'
   note: >-
-    Reviewed the audited interval from 609e576b31eb5d7f4598eeeb4d23b67e34d0f1bf
-    through 30e20318cbaaa2e1ba57f3e0eee265d9ee98115c. No upstream commit was
-    merged or mechanically cherry-picked. Manually adapted chat project session
-    refresh ordering, collision-safe MCP tool naming, explicit WebUI directory
-    freshness warnings, runtime-catalog plugin Skill activation, per-call
-    agent_stats end times, plugin-only configuration default restore, and
-    immediate Agent stop handling. The adaptation deliberately did not import
-    ru-RU resources or obsolete upstream paths/architecture including
-    dashboard_assets, pipeline process-stage follow_up, global star_registry,
-    dashboard/src/api/v1.ts, or the removed PersonaCapabilitiesEditor.vue.
-    Current RuntimeCatalogs ownership, OpenAPI generation, Python 3.14+ policy,
-    Dashboard security boundary, and source-build deployment contract remain in
-    force. The fetched upstream/master head was
-    30e20318cbaaa2e1ba57f3e0eee265d9ee98115c. Historical replay is explicitly
-    authorized after the marker advanced; e80e01c77693355cf7ef42a607ea89e9093b9b2b
-    is manually adapted without regressing the shared marker. The replay also
-    includes 73ecc394deb2f6fc37fd41a82f5bb247e4781b13 for secure ChatUI project
-    workspace browsing and generated OpenAPI client updates.
-    d749d6fd41189ec002f3a24a61ea6fda479b582a is manually adapted as a
-    runtime-owned managed local shell session facility with owner isolation,
-    bounded output, process-group termination, and explicit shutdown cleanup.
-    809517311a63b38a9a5a4d6f299ae2139841442e is manually adapted to prefer
-    PowerShell 7 (pwsh), fall back to powershell.exe, and use exec semantics on
-    Windows while retaining the fork's process-group and admin controls.
-    49095d3ba3fca9272a67aa5eeab2f6c0719c5091 is manually adapted with an
-    explicit write_line session action that appends exactly one LF for
-    line-oriented programs.
-    5b29f6f730274713b91e0acf988cda4c57c617c9 is manually adapted into a
-    stable category/privacy/event metadata protocol, redacted structured log
-    broker entries, server-side category/privacy filters, consistent SSE
-    replay/live IDs, and a default-hidden user-chat console toggle.
+    Reviewed and manually adapted the audited interval from
+    30e20318cbaaa2e1ba57f3e0eee265d9ee98115c through
+    a9bb8a64ca69657e6262e3ca06541ecaf3a6d1ca. Applied knowledge-base score
+    calibration and exact-content deduplication, Telegram animated/video
+    sticker thumbnails, Telegram video-note conversion, empty plugin schema
+    handling, pipeline typing, and WebChat platform-session recreation.
+    GitHub Action version bumps were translated to verified immutable commit
+    SHAs and applied consistently across fork workflows. The final OpenAI test
+    stabilization commit was skipped because the fork has no corresponding
+    test module. No upstream release/version change was included; version files
+    remain at 4.27.2. The fork's Python 3.14+, security, source-build, and
+    current ownership boundaries remain in force. Focused tests passed:
+    185 tests across rank-fusion, Telegram adapter, ChatService, Dashboard
+    config, and core config suites.
+    Post-review hardening also restored CodeQL YAML validity and enforced
+    WebChat session/thread ownership with race-safe creation failure handling.
+    Integration commits were rebuilt as one commit per upstream object in
+    oldest-first order; the final OpenAI test commit remains explicitly skipped.
