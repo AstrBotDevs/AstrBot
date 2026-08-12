@@ -53,26 +53,19 @@ AstrBot 是一個開源的一站式 Agent 聊天機器人平台，可接入主�
 8. 🌈 Web ChatUI 支援，ChatUI 內置代理沙盒 (Agent Sandbox)、網頁搜尋等。
 9. 🌐 國際化（i18n）支援。
 
-<br>
-
-<table align="center">
-  <tr align="center">
-    <th>💙 角色扮演 & 情感陪伴</th>
-    <th>✨ 主動式 Agent</th>
-    <th>🚀 通用 Agentic 能力</th>
-    <th>🧩 1000+ 社區外掛程式</th>
-  </tr>
-  <tr>
-    <td align="center"><p align="center"><img width="984" height="1746" alt="99b587c5d35eea09d84f33e6cf6cfd4f" src="https://github.com/user-attachments/assets/89196061-3290-458d-b51f-afa178049f84" /></p></td>
-    <td align="center"><p align="center"><img width="976" height="1612" alt="c449acd838c41d0915cc08a3824025b1" src="https://github.com/user-attachments/assets/f75368b4-e022-41dc-a9e0-131c3e73e32e" /></p></td>
-    <td align="center"><p align="center"><img width="974" height="1732" alt="image" src="https://github.com/user-attachments/assets/e22a3968-87d7-4708-a7cd-e7f198c7c32e" /></p></td>
-    <td align="center"><p align="center"><img width="976" height="1734" alt="image" src="https://github.com/user-attachments/assets/0952b395-6b4a-432a-8a50-c294b7f89750" /></p></td>
-  </tr>
-</table>
-
 ## 快速開始
 
+### 雨雲一鍵雲端部署
+
+對於希望一鍵部署並讓 AstrBot 24 小時在線、且不想自行管理伺服器的使用者，我們推薦使用雨雲的一鍵雲端部署服務 ☁️：
+
+[![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
+
 ### 一鍵部署
+
+> [!NOTE]
+> 需要安裝 [uv](https://docs.astral.sh/uv/)。
+> 對於 macOS 使用者：由於 macOS 安全性檢查，首次執行 `astrbot` 指令可能需要較長時間（約 10-20 秒）。
 
 對於想快速體驗 AstrBot、且熟悉命令列並能自行安裝 `uv` 環境的使用者，我們推薦使用 `uv` 一鍵部署方式 ⚡️。
 
@@ -82,32 +75,17 @@ astrbot init # 僅首次執行此命令以初始化環境
 astrbot run
 ```
 
-> 需要安裝 [uv](https://docs.astral.sh/uv/)。
-> AstrBot 需要 Python 3.12 或更高版本。`--python 3.12` 會確保 `uv` 使用 Python 3.12 建立 tool 環境。
-
-> [!NOTE]
-> 對於 macOS 使用者：由於 macOS 安全性檢查，首次執行 `astrbot` 指令可能需要較長時間（約 10-20 秒）。
-
 更新 `astrbot`：
 
 ```bash
 uv tool upgrade astrbot --python 3.12
 ```
 
-> [!WARNING]
-> 透過 `uv` 部署的 AstrBot **不支援在 WebUI 中進行版本升級**。如需更新，請透過命令列執行上述命令。
-
 ### Docker 部署
 
 對於熟悉容器、希望獲得更穩定且更適合正式環境部署方式的使用者，我們推薦使用 Docker / Docker Compose 部署 AstrBot。
 
 請參考官方文件 [使用 Docker 部署 AstrBot](https://docs.astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot)。
-
-### 在雨雲上部署
-
-對於希望一鍵部署 AstrBot 且不想自行管理伺服器的使用者，我們推薦使用雨雲的一鍵雲端部署服務 ☁️：
-
-[![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
 ### 桌面客戶端部署
 
@@ -121,25 +99,19 @@ uv tool upgrade astrbot --python 3.12
 
 前往 [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) 下載並安裝。
 
-### 在 Replit 上部署
-
-Replit 部署由社群維護，適合線上示範與輕量試用情境。
-
-[![Run on Repl.it](https://repl.it/badge/github/AstrBotDevs/AstrBot)](https://repl.it/github/AstrBotDevs/AstrBot)
-
-### AUR
-
-AUR 方式面向 Arch Linux 使用者，適合希望透過系統套件管理器安裝 AstrBot 的場景。
-
-在終端執行下方命令安裝 `astrbot-git` 套件，安裝完成後即可啟動使用。
-
-```bash
-yay -S astrbot-git
-```
-
 **更多部署方式**
 
 若你需要面板化或更高自訂程度的部署，可參考 [寶塔面板](https://docs.astrbot.app/deploy/astrbot/btpanel.html)（BT Panel 應用商店安裝）、[1Panel](https://docs.astrbot.app/deploy/astrbot/1panel.html)（1Panel 應用商店安裝）、[CasaOS](https://docs.astrbot.app/deploy/astrbot/casaos.html)（NAS / 家用伺服器可視化部署）與 [手動部署](https://docs.astrbot.app/deploy/astrbot/cli.html)（基於原始碼與 `uv` 的完整自訂安裝）。
+
+## ❤️ 贊助商
+
+歡迎透過 [Afdian](https://afdian.com/a/astrbot_team) 或[電子郵件聯絡我們](mailto:community@astrbot.app)贊助。
+
+<p align="center">
+  <a target="_blank" href="https://astrbot.app/#/sponsors">
+    <img alt="sponsors" src="https://sponsors.astrbot.app/?v=1">
+  </a>
+</p>
 
 ## 支援的訊息平台
 
@@ -151,7 +123,7 @@ yay -S astrbot-git
 | OneBot v11 協議實作 | 官方維護 |
 | Telegram | 官方維護 |
 | 企微應用 & 企微智慧機器人 | 官方維護 |
-| 微信客服 & 微信公眾號 | 官方維護 |
+| 微信公眾號 | 官方維護 |
 | 飛書 | 官方維護 |
 | 釘釘 | 官方維護 |
 | Slack | 官方維護 |
@@ -226,19 +198,7 @@ pre-commit install
 
 ### QQ 群組
 
-- 12 群：916228568 (新)
-- 9 群：1076659624 (人滿)
-- 10 群：1078079676 (人滿)
-- 11 群：704659519 (人滿)
-- 1 群：322154837 (人滿)
-- 3 群：630166526 (人滿)
-- 4 群：1077826412 (人滿)
-- 5 群：822130018 (人滿)
-- 6 群：753075035 (人滿)
-- 7 群：743746109 (人滿)
-- 8 群：1030353265 (人滿)
-- 開發者群（闲聊吹水）：975206796
-- 開發者群（正式）：1039761811
+我們有 15 個以上的交流群，詳情請參閱[社群](https://docs.astrbot.app/community.html)。
 
 ### Discord 群組
 
@@ -252,9 +212,10 @@ pre-commit install
   <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=300&columns=15" />
 </a>
 
-此外，本專案的誕生離不開以下開源專案的幫助：
+開源夥伴 ❤️
 
-- [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ) - 偉大的貓貓框架
+- [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ) - 出色的貓貓框架
+- [Mai-with-u/MaiBot](https://github.com/Mai-with-u/MaiBot) - QQ 中強大的「數位生命」！
 
 ## ⭐ Star History
 
