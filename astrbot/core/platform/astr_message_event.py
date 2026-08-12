@@ -343,17 +343,13 @@ class AstrMessageEvent(abc.ABC):
     def stop_event(self) -> None:
         """终止事件传播。"""
         self._force_stopped = True
-        if self._result is None:
-            self.set_result(MessageEventResult().stop_event())
-        else:
+        if self._result is not None:
             self._result.stop_event()
 
     def continue_event(self) -> None:
         """继续事件传播。"""
         self._force_stopped = False
-        if self._result is None:
-            self.set_result(MessageEventResult().continue_event())
-        else:
+        if self._result is not None:
             self._result.continue_event()
 
     def is_stopped(self) -> bool:
