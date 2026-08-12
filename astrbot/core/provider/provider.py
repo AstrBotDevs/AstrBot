@@ -5,6 +5,7 @@ from collections.abc import AsyncGenerator
 from typing import Any, Literal, TypeAlias, Union
 
 from astrbot.core.agent.message import (
+    FROM_REAL_TOOL_CALL_KEY,
     ContentPart,
     Message,
     is_checkpoint_message,
@@ -216,8 +217,13 @@ class Provider(AbstractProvider):
         )
 
 
-def _is_valid_tool_pair(asst_msg: dict[str, Any], tool_msg: dict[str, Any]) -> bool:
-    """判断 assistant(tool_calls) 与 tool 是否为 tool_call_id 匹配的一对。"""
+def _is_fake_tool_pair(asst_msg: dict[str, Any], tool_msg: dict[str, Any]) -> bool:
+    """判断一对 assistant(tool_calls) / tool 是否为需要重排的伪造对。
+
+    先校验结构（角色与 ``tool_call_id`` 匹配，忽略缺失 ID），再排除真实工具执行
+    产生的对——真实对带 ``_from_real_tool_call`` 标记（见 ``ToolCallsResult`` 与
+    ``Message``），插件注入的伪造对是裸 dict，永远不会有该标记。
+    """
     if not isinstance(asst_msg, dict) or not isinstance(tool_msg, dict):
         return False
     if asst_msg.get("role") != "assistant" or tool_msg.get("role") != "tool":
@@ -231,18 +237,37 @@ def _is_valid_tool_pair(asst_msg: dict[str, Any], tool_msg: dict[str, Any]) -> b
         for tc in tool_calls
         if isinstance(tc, dict) and (tc_id := tc.get("id")) is not None
     }
-    return tool_msg.get("tool_call_id") in tc_ids
-
-
-def _is_fake_tool_pair(asst_msg: dict[str, Any], tool_msg: dict[str, Any]) -> bool:
-    """判断一对 assistant(tool_calls) / tool 是否为需要重排的伪造对。
-
-    真实工具执行产生的消息带 ``_from_real_tool_call`` 标记（见 ``ToolCallsResult``
-    与 ``Message``），插件注入的伪造对是裸 dict，永远不会有该标记。
-    """
-    return _is_valid_tool_pair(asst_msg, tool_msg) and not bool(
-        asst_msg.get("_from_real_tool_call") or tool_msg.get("_from_real_tool_call")
+    if tool_msg.get("tool_call_id") not in tc_ids:
+        return False
+    return not bool(
+        asst_msg.get(FROM_REAL_TOOL_CALL_KEY)
+        or tool_msg.get(FROM_REAL_TOOL_CALL_KEY)
     )
+
+
+def _collect_tailing_fake_pairs(
+    messages: list[dict[str, Any]],
+) -> tuple[int, list[tuple[dict[str, Any], dict[str, Any]]]]:
+    """返回尾部伪造对块的起始索引及按外层到内层顺序排列的对。
+
+    从尾部向前收集连续的伪造对（内层优先），遇非对或真实标记对即停止。
+    起始索引是重排前缀（不参与重排部分）的长度；无匹配时返回整个列表长度与空列表。
+    """
+    if not isinstance(messages, list) or len(messages) < 2:
+        # messages 可能为 None 等无长度对象；此时 pairs 必为空，起始索引无意义
+        return 0, []
+
+    last = messages[-1]
+    if not isinstance(last, dict) or last.get("role") != "user":
+        return len(messages), []
+
+    pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    i = len(messages) - 2
+    while i >= 1 and _is_fake_tool_pair(messages[i - 1], messages[i]):
+        pairs.append((messages[i - 1], messages[i]))
+        i -= 2
+
+    return i + 1, list(reversed(pairs))
 
 
 def reorder_tailing_tool_call_user(messages: list[dict[str, Any]]) -> None:
@@ -260,25 +285,14 @@ def reorder_tailing_tool_call_user(messages: list[dict[str, Any]]) -> None:
     - 仅当末尾消息为 ``user`` 时触发，且只收集尾部连续的最内层伪造对块；
       其余情况静默 no-op。
     """
-    if not isinstance(messages, list) or len(messages) < 2:
-        return
-
-    last = messages[-1]
-    if not isinstance(last, dict) or last.get("role") != "user":
-        return
-
-    # 从尾部向前收集连续的伪造对（内层优先），遇真实对即停止
-    pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
-    i = len(messages) - 2
-    while i >= 1 and _is_fake_tool_pair(messages[i - 1], messages[i]):
-        pairs.append((messages[i - 1], messages[i]))
-        i -= 2
-
+    start_idx, pairs = _collect_tailing_fake_pairs(messages)
     if not pairs:
         return
 
-    # 重排：user → assistant_1, tool_1 → ... → assistant_N, tool_N
-    messages[i + 1 :] = [last] + [m for pair in reversed(pairs) for m in pair]
+    last_user = messages[-1]
+    fake_block = [m for pair in pairs for m in pair]
+    # 重排：prefix → user → assistant_1, tool_1 → ... → assistant_N, tool_N
+    messages[:] = messages[:start_idx] + [last_user] + fake_block
 
 
 def strip_internal_markers(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -287,7 +301,7 @@ def strip_internal_markers(messages: list[dict[str, Any]]) -> list[dict[str, Any
     标记只在发送前对副本剥离，payload 中的标记保留供重试时重排继续做误伤防护。
     """
     return [
-        {k: v for k, v in msg.items() if k != "_from_real_tool_call"}
+        {k: v for k, v in msg.items() if k != FROM_REAL_TOOL_CALL_KEY}
         if isinstance(msg, dict)
         else msg
         for msg in messages

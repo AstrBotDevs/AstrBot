@@ -4,6 +4,8 @@
 assistant(tool_calls) + tool 消息对，避免场景漂移。
 """
 
+from astrbot.core.agent.message import FROM_REAL_TOOL_CALL_KEY
+
 FAKE_TOOL_CALL_CONTEXTS = [
     {
         "role": "assistant",
@@ -56,5 +58,5 @@ def make_fake_pair(
     ]
     if marked:
         for message in pair:
-            message["_from_real_tool_call"] = True
+            message[FROM_REAL_TOOL_CALL_KEY] = True
     return pair

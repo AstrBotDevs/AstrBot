@@ -81,6 +81,15 @@ class ToolCallsResult:
     def to_openai_messages_model(
         self,
     ) -> list[AssistantMessageSegment | ToolCallMessageSegment]:
+        """返回 assistant(tool_use) + tool_result 段，并就地打上真实工具调用标记。
+
+        Note:
+            就地打标（``_from_real_tool_call = True``）是有意为之：agent runner 会把
+            本方法返回的段对象直接并入对话历史（``run_context.messages``），标记须随
+            对象经 ``message_to_dict_with_marker`` 序列化持久化，跨轮次的伪造对重排
+            误伤防护才成立。不可改为克隆——克隆会使历史中的真实对失去标记，导致
+            后续回合被当作伪造对误重排。
+        """
         for item in [self.tool_calls_info, *self.tool_calls_result]:
             item._from_real_tool_call = True
         return [

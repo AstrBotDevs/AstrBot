@@ -341,11 +341,19 @@ def bind_checkpoint_messages(history: list[dict]) -> list[Message]:
         message = Message.model_validate(item)
         if item.get("_no_save"):
             message._no_save = True
-        if item.get("_from_real_tool_call"):
+        if item.get(FROM_REAL_TOOL_CALL_KEY):
             message._from_real_tool_call = True
         messages.append(message)
 
     return messages
+
+
+FROM_REAL_TOOL_CALL_KEY = "_from_real_tool_call"
+"""``Message → dict`` 序列化时携带真实工具调用标记的键名。
+
+与 ``Message._from_real_tool_call`` 属性对应；所有读/写该键的地方统一引用此常量，
+避免键名拼写漂移导致误伤防护静默失效。
+"""
 
 
 def message_to_dict_with_marker(message: Message) -> dict:
@@ -357,7 +365,7 @@ def message_to_dict_with_marker(message: Message) -> dict:
     """
     data = message.model_dump()
     if message._from_real_tool_call:
-        data["_from_real_tool_call"] = True
+        data[FROM_REAL_TOOL_CALL_KEY] = True
     return data
 
 

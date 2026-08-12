@@ -7,8 +7,9 @@ import pytest
 import astrbot.core.provider.sources.anthropic_source as anthropic_source
 import astrbot.core.provider.sources.kimi_code_source as kimi_code_source
 import astrbot.core.provider.sources.request_retry as request_retry
+from astrbot.core.agent.message import AssistantMessageSegment, ToolCallMessageSegment
 from astrbot.core.exceptions import EmptyModelOutputError
-from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
 from tests.fixtures.fake_tool_call import FAKE_TOOL_CALL_CONTEXTS
 
 
@@ -937,3 +938,102 @@ async def test_text_chat_stream_reorders_fake_tool_call_pair(monkeypatch):
         pass
 
     assert captured["messages"] == _EXPECTED_REORDERED_MESSAGES
+
+
+# ── 真实工具调用（tool_calls_result）时序与标记 ──────────────────────────────
+
+_REAL_TOOL_CALL_EXPECTED_MESSAGES = [
+    {"role": "user", "content": "请回忆 xyz 对应的内容？"},
+    {
+        "role": "assistant",
+        "content": [
+            {
+                "type": "tool_use",
+                "name": "recall",
+                "input": {"key": "abc"},
+                "id": "real_tool_use_1",
+            }
+        ],
+    },
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "tool_result",
+                "tool_use_id": "real_tool_use_1",
+                "content": "memory json",
+            }
+        ],
+    },
+]
+
+
+def _make_real_tool_calls_result(tool_call_id: str) -> ToolCallsResult:
+    """构造一个真实工具执行产生的 ToolCallsResult。"""
+    return ToolCallsResult(
+        tool_calls_info=AssistantMessageSegment(
+            content=None,
+            tool_calls=[
+                {
+                    "id": tool_call_id,
+                    "type": "function",
+                    "function": {"name": "recall", "arguments": '{"key": "abc"}'},
+                }
+            ],
+        ),
+        tool_calls_result=[
+            ToolCallMessageSegment(content="memory json", tool_call_id=tool_call_id)
+        ],
+    )
+
+
+def _assert_no_internal_marker_leak(messages: list[dict]) -> None:
+    """真实工具调用路径发往 Anthropic 的 payload 不应泄漏内部标记。"""
+    for msg in messages:
+        assert "_from_real_tool_call" not in msg
+        content = msg.get("content")
+        if isinstance(content, list):
+            for block in content:
+                assert "_from_real_tool_call" not in block
+
+
+@pytest.mark.asyncio
+async def test_text_chat_preserves_real_tool_call_order(monkeypatch):
+    """真实 tool_calls_result 保持 assistant(tool_use) → user(tool_result) 时序，
+    不被重排成 user 在前；内部标记不泄漏到 payload。"""
+    provider = _setup_provider_with_mock_client(monkeypatch)
+    tcr = _make_real_tool_calls_result("real_tool_use_1")
+
+    await provider.text_chat(
+        prompt="请回忆 xyz 对应的内容？",
+        tool_calls_result=tcr,
+    )
+
+    messages = _capture_payloads_create.last_kwargs["messages"]
+    assert messages == _REAL_TOOL_CALL_EXPECTED_MESSAGES
+    _assert_no_internal_marker_leak(messages)
+
+
+@pytest.mark.asyncio
+async def test_text_chat_stream_preserves_real_tool_call_order(monkeypatch):
+    """流式路径同样保持真实 tool_calls_result 的时序且无标记泄漏。"""
+    provider = _setup_provider_with_mock_client(monkeypatch)
+    tcr = _make_real_tool_calls_result("real_tool_use_1")
+
+    captured: dict[str, object] = {}
+
+    async def fake_query_stream(payloads, tools, *, request_max_retries=None):
+        captured["messages"] = payloads["messages"]
+        return
+        yield  # pragma: no cover  # 保持 async generator 形态
+
+    monkeypatch.setattr(provider, "_query_stream", fake_query_stream)
+
+    async for _ in provider.text_chat_stream(
+        prompt="请回忆 xyz 对应的内容？",
+        tool_calls_result=tcr,
+    ):
+        pass
+
+    assert captured["messages"] == _REAL_TOOL_CALL_EXPECTED_MESSAGES
+    _assert_no_internal_marker_leak(captured["messages"])
