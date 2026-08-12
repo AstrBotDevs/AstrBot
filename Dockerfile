@@ -11,10 +11,12 @@
 #   node  Node.js, npm, npx, and pnpm
 #   docker  Docker CLI and Compose plugin
 ARG ASTRBOT_FEATURES=full
+ARG GITHUB_RELEASE_BASES="https://github.com https://ghproxy.net/https://github.com https://gh-proxy.com/https://github.com https://ghfast.top/https://github.com"
 FROM python:3.14.6-slim@sha256:7bec7ddcddeff7975d6ba9b4be7dd6f6b2f55e7491539145e2978f7f97ce9144 AS builder
 WORKDIR /AstrBot
 
 ARG ASTRBOT_FEATURES
+ARG GITHUB_RELEASE_BASES
 
 # Enable pipefail so failures in install pipes abort the build.
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -180,6 +182,64 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && docker compose version \
     && rm -f /etc/apt/apt.conf.d/99astrbot
 
+# Try the official release host first, then configured mirrors. Mirrors are a
+# network fallback only; callers still validate every downloaded asset.
+RUN <<'EOF'
+cat > /usr/local/bin/download-github-release <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+
+path="$1"
+output="$2"
+kind="$3"
+bases="$4"
+tmp="${output}.part"
+
+validate() {
+    case "$1" in
+        elf)
+            file -b "$2" | grep -q 'ELF '
+            ;;
+        tar-gzip)
+            tar -tzf "$2" >/dev/null
+            ;;
+        tar-xz)
+            tar -tJf "$2" >/dev/null
+            ;;
+        deb)
+            dpkg-deb --info "$2" >/dev/null
+            ;;
+        *)
+            echo "Unsupported GitHub release asset type: $1" >&2
+            return 2
+            ;;
+    esac
+}
+
+for base in ${bases}; do
+    if [[ "$base" != https://* ]]; then
+        echo "Refusing non-HTTPS GitHub release base: $base" >&2
+        continue
+    fi
+    url="${base%/}/${path#/}"
+    if curl --proto '=https' --tlsv1.2 --http1.1 -fsSL \
+        --retry 5 --retry-all-errors --retry-delay 2 \
+        --connect-timeout 30 "$url" -o "$tmp" \
+        && test -s "$tmp" \
+        && validate "$kind" "$tmp"; then
+        mv "$tmp" "$output"
+        exit 0
+    fi
+    echo "GitHub release download failed or failed validation: $url" >&2
+    rm -f "$tmp"
+done
+
+echo "Unable to download a valid GitHub release asset: $path" >&2
+exit 1
+SCRIPT
+chmod 0755 /usr/local/bin/download-github-release
+EOF
+
 RUN touch "${BASH_ENV}" \
     && echo '. "${BASH_ENV}"' >> ~/.bashrc \
     && curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.5/install.sh | PROFILE="${BASH_ENV}" bash \
@@ -211,11 +271,9 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
         *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
     esac \
     && tmpdir="$(mktemp -d)" \
-    && curl -L --proto '=https' --tlsv1.2 -sSf \
-        --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
-        "https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-${cargo_binstall_arch}.tgz" \
-        -o "${tmpdir}/cargo-binstall.tgz" \
-    && tar -tzf "${tmpdir}/cargo-binstall.tgz" >/dev/null \
+    && download-github-release \
+        "cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-${cargo_binstall_arch}.tgz" \
+        "${tmpdir}/cargo-binstall.tgz" tar-gzip "${GITHUB_RELEASE_BASES}" \
     && tar -C "$tmpdir" -xzf "${tmpdir}/cargo-binstall.tgz" \
     && install -m 0755 "$tmpdir/cargo-binstall" /usr/local/cargo/bin/cargo-binstall \
     && rm -rf "$tmpdir" \
@@ -236,15 +294,13 @@ RUN arch="$(dpkg --print-architecture)" \
         *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
     esac \
     && tmpdir="$(mktemp -d)" \
-    && curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
-        "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/shfmt_v${SHFMT_VERSION}_${shfmt_arch}" \
-        -o "${tmpdir}/shfmt" \
-    && test -s "${tmpdir}/shfmt" \
+    && download-github-release \
+        "mvdan/sh/releases/download/v${SHFMT_VERSION}/shfmt_v${SHFMT_VERSION}_${shfmt_arch}" \
+        "${tmpdir}/shfmt" elf "${GITHUB_RELEASE_BASES}" \
     && install -m 0755 "${tmpdir}/shfmt" /usr/local/bin/shfmt \
-    && curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
-        "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-${hadolint_arch}" \
-        -o "${tmpdir}/hadolint" \
-    && test -s "${tmpdir}/hadolint" \
+    && download-github-release \
+        "hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-${hadolint_arch}" \
+        "${tmpdir}/hadolint" elf "${GITHUB_RELEASE_BASES}" \
     && install -m 0755 "${tmpdir}/hadolint" /usr/local/bin/hadolint \
     && rm -rf "${tmpdir}" \
     && shfmt --version \
@@ -257,10 +313,9 @@ RUN arch="$(dpkg --print-architecture)" \
         *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
     esac \
     && tmpdir="$(mktemp -d)" \
-    && curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
-        "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${yq_arch}" \
-        -o "${tmpdir}/yq" \
-    && test -s "${tmpdir}/yq" \
+    && download-github-release \
+        "mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${yq_arch}" \
+        "${tmpdir}/yq" elf "${GITHUB_RELEASE_BASES}" \
     && install -m 0755 "${tmpdir}/yq" /usr/local/bin/yq \
     && rm -rf "${tmpdir}" \
     && yq --version
@@ -273,9 +328,9 @@ RUN arch="$(dpkg --print-architecture)" \
         *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
     esac \
     && tmpdir="$(mktemp -d)" \
-    && curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
-        "https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/typst-${typst_arch}.tar.xz" \
-        -o "${tmpdir}/typst.tar.xz" \
+    && download-github-release \
+        "typst/typst/releases/download/v${TYPST_VERSION}/typst-${typst_arch}.tar.xz" \
+        "${tmpdir}/typst.tar.xz" tar-xz "${GITHUB_RELEASE_BASES}" \
     && tar -xJf "${tmpdir}/typst.tar.xz" -C "${tmpdir}" \
     && install -m 0755 \
         "$(find "${tmpdir}" -type f -name typst | head -n 1)" \
@@ -292,10 +347,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
     esac \
     && tmpdir="$(mktemp -d)" \
-    && curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
-        "https://github.com/quarto-dev/quarto-cli/releases/download/v${QUARTO_VERSION}/quarto-${QUARTO_VERSION}-linux-${quarto_arch}.deb" \
-        -o "${tmpdir}/quarto.deb" \
-    && test -s "${tmpdir}/quarto.deb" \
+    && download-github-release \
+        "quarto-dev/quarto-cli/releases/download/v${QUARTO_VERSION}/quarto-${QUARTO_VERSION}-linux-${quarto_arch}.deb" \
+        "${tmpdir}/quarto.deb" deb "${GITHUB_RELEASE_BASES}" \
     && apt-get update \
     && eatmydata apt-get install -y --no-install-recommends "${tmpdir}/quarto.deb" \
     && rm -rf "${tmpdir}" \
@@ -370,10 +424,9 @@ RUN arch="$(dpkg --print-architecture)" \
     esac \
     && mkdir -p /opt/microsoft/powershell/7 \
     && tmpdir="$(mktemp -d)" \
-    && curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
-        "https://github.com/PowerShell/PowerShell/releases/download/v7.6.3/powershell-7.6.3-linux-${powershell_arch}.tar.gz" \
-        -o "${tmpdir}/powershell.tar.gz" \
-    && tar -tzf "${tmpdir}/powershell.tar.gz" >/dev/null \
+    && download-github-release \
+        "PowerShell/PowerShell/releases/download/v7.6.3/powershell-7.6.3-linux-${powershell_arch}.tar.gz" \
+        "${tmpdir}/powershell.tar.gz" tar-gzip "${GITHUB_RELEASE_BASES}" \
     && tar -xzf "${tmpdir}/powershell.tar.gz" -C /opt/microsoft/powershell/7 \
     && rm -rf "${tmpdir}" \
     && chmod +x /opt/microsoft/powershell/7/pwsh \
