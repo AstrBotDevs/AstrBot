@@ -14,7 +14,6 @@ import {
 } from "@/utils/pluginSearch";
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { sortMarketPluginsByDownloads } from "./marketPluginSort.mjs";
 
 const buildFailedPluginItems = (raw) => {
   return Object.entries(raw || {}).map(([dirName, info]) => {
@@ -395,7 +394,13 @@ export const useExtensionPage = (initialTab = "installed") => {
       });
     } else if (sortBy.value === "downloads") {
       // 按下载量排序
-      plugins = sortMarketPluginsByDownloads(plugins, sortOrder.value);
+      plugins.sort((a, b) => {
+        const downloadsA = a.download_count ?? 0;
+        const downloadsB = b.download_count ?? 0;
+        return sortOrder.value === "desc"
+          ? downloadsB - downloadsA
+          : downloadsA - downloadsB;
+      });
     } else if (sortBy.value === "author") {
       // 按作者名字典序排序
       plugins.sort((a, b) => {
