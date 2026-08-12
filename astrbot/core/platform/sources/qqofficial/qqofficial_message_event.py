@@ -686,7 +686,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         ):
             openid = kwargs.get("openid")
             group_openid = None if openid else kwargs.get("group_openid")
-            if not openid and not group_openid:
+            if not openid and not isinstance(group_openid, str):
                 raise ValueError("Invalid upload parameters")
             uploader = QQOfficialChunkedUploader(self._bot.api._http)
             if openid:
@@ -697,6 +697,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     user_openid=openid,
                     srv_send_msg=srv_send_msg,
                 )
+            assert isinstance(group_openid, str)
             return await uploader.upload_group(
                 file_path=local_file,
                 file_type=file_type,

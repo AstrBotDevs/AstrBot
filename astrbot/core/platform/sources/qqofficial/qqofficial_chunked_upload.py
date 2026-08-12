@@ -7,7 +7,7 @@ import hashlib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import aiohttp
 from botpy.http import BotHttp, Route
@@ -120,6 +120,26 @@ def _read_file_part(file_path: Path, offset: int, length: int) -> bytes:
             f"{offset}, got {len(data)}"
         )
     return data
+
+
+def _coerce_int(value: object, *, default: int = 0) -> int:
+    """Convert an untyped API value to an integer with a safe default."""
+    if value is None:
+        return default
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def _coerce_float(value: object, *, default: float) -> float:
+    """Convert an untyped API value to a float with a safe default."""
+    if value is None:
+        return default
+    try:
+        return float(str(value))
+    except (TypeError, ValueError):
+        return default
 
 
 class QQOfficialChunkedUploader:
@@ -245,6 +265,7 @@ class QQOfficialChunkedUploader:
             file_type,
         )
 
+        prepare_response: dict[str, Any] | None = None
         for attempt in range(_UPLOAD_API_ATTEMPTS):
             try:
                 prepare_response = await self._request_json(
@@ -266,6 +287,9 @@ class QQOfficialChunkedUploader:
                     f"QQ upload_prepare failed: {exc}"
                 ) from exc
 
+        if prepare_response is None:
+            raise QQOfficialChunkedUploadError("QQ upload_prepare returned no response")
+
         prepare = prepare_response.get("data", prepare_response)
         if not isinstance(prepare, Mapping):
             raise QQOfficialChunkedUploadError(
@@ -273,10 +297,7 @@ class QQOfficialChunkedUploader:
             )
         upload_id = str(prepare.get("upload_id") or "")
         parts = prepare.get("parts")
-        try:
-            block_size = int(prepare.get("block_size") or 0)
-        except TypeError, ValueError:
-            block_size = 0
+        block_size = _coerce_int(prepare.get("block_size"))
         if not upload_id or block_size <= 0 or not isinstance(parts, list) or not parts:
             raise QQOfficialChunkedUploadError(
                 f"Incomplete upload_prepare response: {prepare_response!r}"
@@ -288,8 +309,11 @@ class QQOfficialChunkedUploader:
                 raise QQOfficialChunkedUploadError(f"Invalid upload part: {part!r}")
             raw_index = part.get("index") if "index" in part else part.get("part_index")
             try:
-                part_indexes.append(int(raw_index))
-            except (TypeError, ValueError) as exc:
+                part_index = _coerce_int(raw_index, default=-1)
+                if part_index < 0:
+                    raise ValueError
+                part_indexes.append(part_index)
+            except ValueError as exc:
                 raise QQOfficialChunkedUploadError(
                     f"Invalid upload part index: {part!r}"
                 ) from exc
@@ -305,23 +329,25 @@ class QQOfficialChunkedUploader:
         try:
             concurrency = max(
                 1,
-                min(int(upload_config.get("concurrency") or 1), _MAX_CONCURRENCY),
+                min(
+                    _coerce_int(upload_config.get("concurrency"), default=1),
+                    _MAX_CONCURRENCY,
+                ),
             )
             retry_timeout = min(
                 max(
-                    float(
-                        upload_config.get("retry_timeout")
-                        or _DEFAULT_RETRY_TIMEOUT_SECONDS
+                    _coerce_float(
+                        upload_config.get("retry_timeout"),
+                        default=_DEFAULT_RETRY_TIMEOUT_SECONDS,
                     ),
                     0.0,
                 ),
                 _MAX_RETRY_TIMEOUT_SECONDS,
             )
             retry_delay = max(
-                float(
-                    upload_config.get("retry_delay")
-                    if upload_config.get("retry_delay") is not None
-                    else _DEFAULT_RETRY_DELAY_SECONDS
+                _coerce_float(
+                    upload_config.get("retry_delay"),
+                    default=_DEFAULT_RETRY_DELAY_SECONDS,
                 ),
                 0.0,
             )
@@ -358,6 +384,7 @@ class QQOfficialChunkedUploader:
             "file_name": file_name,
             "upload_id": upload_id,
         }
+        merge_response: dict[str, Any] | None = None
         for attempt in range(_UPLOAD_API_ATTEMPTS):
             try:
                 merge_response = await self._request_json(
@@ -378,6 +405,9 @@ class QQOfficialChunkedUploader:
                 raise QQOfficialChunkedUploadError(
                     f"QQ file merge failed: {exc}"
                 ) from exc
+
+        if merge_response is None:
+            raise QQOfficialChunkedUploadError("QQ file merge returned no response")
 
         merge = merge_response.get("data", merge_response)
         if not isinstance(merge, Mapping):
@@ -412,9 +442,11 @@ class QQOfficialChunkedUploader:
         """
         raw_index = part.get("index") if "index" in part else part.get("part_index")
         try:
-            part_index = int(raw_index)
-            part_size = int(part.get("block_size") or session.block_size)
-        except (TypeError, ValueError) as exc:
+            part_index = _coerce_int(raw_index, default=-1)
+            part_size = _coerce_int(
+                part.get("block_size"), default=session.block_size
+            )
+        except ValueError as exc:
             raise QQOfficialChunkedUploadError(
                 f"Invalid upload part metadata: {part!r}"
             ) from exc
@@ -571,7 +603,7 @@ class QQOfficialChunkedUploader:
                 route = Route(
                     method,
                     path,
-                    is_sandbox=self._http.is_sandbox,
+                    is_sandbox=cast(Any, self._http.is_sandbox),
                 )
                 async with http_session.request(
                     method,

@@ -436,6 +436,144 @@ class TelegramPlatformAdapter(Platform):
         if abm:
             await self.handle_msg(abm)
 
+    @staticmethod
+    async def _resolve_telegram_attachment_file_path(attachment) -> str | None:
+        fetched = await attachment.get_file()
+        file_path = getattr(fetched, "file_path", None)
+        if not file_path:
+            logger.warning("Telegram attachment file_path is None.")
+            return None
+        return str(file_path)
+
+    @staticmethod
+    def _apply_telegram_caption(message: AstrBotMessage, telegram_message) -> None:
+        if telegram_message.caption:
+            message.message_str = telegram_message.caption
+            message.message.append(Comp.Plain(message.message_str))
+        if telegram_message.caption and telegram_message.caption_entities:
+            for entity in telegram_message.caption_entities:
+                if entity.type == "mention":
+                    name = telegram_message.caption[
+                        entity.offset + 1 : entity.offset + entity.length
+                    ]
+                    message.message.append(Comp.At(qq=name, name=name))
+
+    async def _populate_telegram_message_content(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        message: AstrBotMessage,
+    ) -> bool:
+        """Populate text or media components; return False for /start."""
+        telegram_message = update.message
+        if telegram_message is None:
+            return True
+
+        if telegram_message.text:
+            plain_text = telegram_message.text
+            raw_text = plain_text
+            for entity in telegram_message.entities or []:
+                if entity.type != "mention":
+                    continue
+                name = raw_text[entity.offset + 1 : entity.offset + entity.length]
+                message.message.append(Comp.At(qq=name, name=name))
+                if name.lower() == context.bot.username.lower():
+                    plain_text = (
+                        plain_text[: entity.offset]
+                        + plain_text[entity.offset + entity.length :]
+                    )
+
+            if (
+                message.type == MessageType.GROUP_MESSAGE
+                and telegram_message.reply_to_message
+                and telegram_message.reply_to_message.from_user
+                and telegram_message.reply_to_message.from_user.id == context.bot.id
+            ):
+                plain_text = f"/@{context.bot.username} " + plain_text
+
+            if plain_text.startswith("/"):
+                command_parts = plain_text.split(" ", 1)
+                if "@" in command_parts[0]:
+                    command, bot_name = command_parts[0].split("@")
+                    if bot_name == self.client.username:
+                        plain_text = command + (
+                            f" {command_parts[1]}" if len(command_parts) > 1 else ""
+                        )
+
+            if plain_text:
+                message.message.append(Comp.Plain(plain_text))
+            message.message_str = plain_text
+            if message.message_str.strip() == "/start":
+                await self.start(update, context)
+                return False
+            return True
+
+        if telegram_message.voice:
+            record = Comp.Record(file="")
+            record.set_source_resolver(
+                lambda voice=telegram_message.voice: (
+                    self._resolve_telegram_attachment_file_path(voice)
+                )
+            )
+            message.message.append(record)
+        elif telegram_message.photo:
+            photo = telegram_message.photo[-1]
+            image = Comp.Image(file="")
+            image.set_source_resolver(
+                lambda photo=photo: self._resolve_telegram_attachment_file_path(photo)
+            )
+            message.message.append(image)
+            self._apply_telegram_caption(message, telegram_message)
+        elif telegram_message.sticker:
+            sticker = telegram_message.sticker
+            sticker_attachment = sticker
+            if getattr(sticker, "is_animated", False) or getattr(
+                sticker, "is_video", False
+            ):
+                sticker_attachment = getattr(sticker, "thumbnail", None)
+            if sticker_attachment is not None:
+                image = Comp.Image(file="")
+                image.set_source_resolver(
+                    lambda sticker=sticker_attachment: (
+                        self._resolve_telegram_attachment_file_path(sticker)
+                    )
+                )
+                message.message.append(image)
+            if sticker.emoji:
+                sticker_text = f"Sticker: {sticker.emoji}"
+                message.message_str = sticker_text
+                message.message.append(Comp.Plain(sticker_text))
+        elif telegram_message.document:
+            file_name = telegram_message.document.file_name or uuid.uuid4().hex
+            file_component = Comp.File(name=file_name)
+            file_component.set_url_resolver(
+                lambda document=telegram_message.document, file_name=file_name: (
+                    self._resolve_telegram_document_url(document, file_name)
+                )
+            )
+            message.message.append(file_component)
+            self._apply_telegram_caption(message, telegram_message)
+        elif telegram_message.video:
+            file_name = telegram_message.video.file_name or uuid.uuid4().hex
+            video = Comp.Video(file="")
+            video.set_source_resolver(
+                lambda video=telegram_message.video: (
+                    self._resolve_telegram_attachment_file_path(video)
+                )
+            )
+            message.message.append(video)
+            self._apply_telegram_caption(message, telegram_message)
+        elif telegram_message.video_note:
+            video_note = telegram_message.video_note
+            video = Comp.Video(file="")
+            video.set_source_resolver(
+                lambda video_note=video_note: (
+                    self._resolve_telegram_attachment_file_path(video_note)
+                )
+            )
+            message.message.append(video)
+        return True
+
     async def convert_message(
         self,
         update: Update,
@@ -451,28 +589,6 @@ class TelegramPlatformAdapter(Platform):
         if not update.message:
             logger.warning("Received an update without a message.")
             return None
-
-        def _apply_caption() -> None:
-            if not update.message:
-                return
-            if update.message.caption:
-                message.message_str = update.message.caption
-                message.message.append(Comp.Plain(message.message_str))
-            if update.message.caption and update.message.caption_entities:
-                for entity in update.message.caption_entities:
-                    if entity.type == "mention":
-                        name = update.message.caption[
-                            entity.offset + 1 : entity.offset + entity.length
-                        ]
-                        message.message.append(Comp.At(qq=name, name=name))
-
-        async def _resolve_attachment_file_path(attachment) -> str | None:
-            fetched = await attachment.get_file()
-            file_path = getattr(fetched, "file_path", None)
-            if not file_path:
-                logger.warning("Telegram attachment file_path is None.")
-                return None
-            return str(file_path)
 
         message = AstrBotMessage()
         message.session_id = str(update.message.chat.id)
@@ -537,117 +653,8 @@ class TelegramPlatformAdapter(Platform):
                     ),
                 )
 
-        if update.message.text:
-            # 处理文本消息
-            plain_text = update.message.text
-            raw_text = plain_text
-
-            if update.message.entities:
-                for entity in update.message.entities:
-                    if entity.type == "mention":
-                        name = raw_text[
-                            entity.offset + 1 : entity.offset + entity.length
-                        ]
-                        message.message.append(Comp.At(qq=name, name=name))
-                        # 如果mention是当前bot则移除；否则保留
-                        if name.lower() == context.bot.username.lower():
-                            plain_text = (
-                                plain_text[: entity.offset]
-                                + plain_text[entity.offset + entity.length :]
-                            )
-
-            if (
-                message.type == MessageType.GROUP_MESSAGE
-                and update.message
-                and update.message.reply_to_message
-                and update.message.reply_to_message.from_user
-                and update.message.reply_to_message.from_user.id == context.bot.id
-            ):
-                plain_text = f"/@{context.bot.username} " + plain_text
-
-            # 群聊场景命令特殊处理
-            if plain_text.startswith("/"):
-                command_parts = plain_text.split(" ", 1)
-                if "@" in command_parts[0]:
-                    command, bot_name = command_parts[0].split("@")
-                    if bot_name == self.client.username:
-                        plain_text = command + (
-                            f" {command_parts[1]}" if len(command_parts) > 1 else ""
-                        )
-
-            if plain_text:
-                message.message.append(Comp.Plain(plain_text))
-            message.message_str = plain_text
-
-            if message.message_str.strip() == "/start":
-                await self.start(update, context)
-                return None
-
-        elif update.message.voice:
-            record = Comp.Record(file="")
-            record.set_source_resolver(
-                lambda voice=update.message.voice: _resolve_attachment_file_path(voice)
-            )
-            message.message.append(record)
-
-        elif update.message.photo:
-            photo = update.message.photo[-1]  # get the largest photo
-            image = Comp.Image(file="")
-            image.set_source_resolver(
-                lambda photo=photo: _resolve_attachment_file_path(photo)
-            )
-            message.message.append(image)
-            _apply_caption()
-
-        elif update.message.sticker:
-            # 将sticker当作图片处理
-            sticker = update.message.sticker
-            sticker_attachment = sticker
-            if getattr(sticker, "is_animated", False) or getattr(
-                sticker, "is_video", False
-            ):
-                sticker_attachment = getattr(sticker, "thumbnail", None)
-            if sticker_attachment is not None:
-                image = Comp.Image(file="")
-                image.set_source_resolver(
-                    lambda sticker=sticker_attachment: _resolve_attachment_file_path(
-                        sticker
-                    )
-                )
-                message.message.append(image)
-            if sticker.emoji:
-                sticker_text = f"Sticker: {sticker.emoji}"
-                message.message_str = sticker_text
-                message.message.append(Comp.Plain(sticker_text))
-
-        elif update.message.document:
-            file_name = update.message.document.file_name or uuid.uuid4().hex
-            file_component = Comp.File(name=file_name)
-            file_component.set_url_resolver(
-                lambda document=update.message.document, file_name=file_name: (
-                    self._resolve_telegram_document_url(document, file_name)
-                )
-            )
-            message.message.append(file_component)
-            _apply_caption()
-
-        elif update.message.video:
-            file_name = update.message.video.file_name or uuid.uuid4().hex
-            video = Comp.Video(file="")
-            video.set_source_resolver(
-                lambda video=update.message.video: _resolve_attachment_file_path(video)
-            )
-            message.message.append(video)
-            _apply_caption()
-
-        elif update.message.video_note:
-            # Video notes carry no file_name and cannot have a caption.
-            video_note = update.message.video_note
-            video = Comp.Video(file="")
-            video.set_source_resolver(
-                lambda video_note=video_note: _resolve_attachment_file_path(video_note)
-            )
-            message.message.append(video)
+        if not await self._populate_telegram_message_content(update, context, message):
+            return None
 
         return message
 
