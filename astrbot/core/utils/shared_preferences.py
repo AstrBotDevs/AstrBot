@@ -43,6 +43,8 @@ class SharedPreferences:
         # immediate read-after-write visibility, and also serves async point reads.
         # Unlike temporary_cache, it is preloaded at startup, persisted to the
         # database, and never periodically cleared by the scheduler.
+        # See https://github.com/AstrBotDevs/AstrBot/pull/9649 for the deadlock
+        # scenario and design rationale.
         self._cache: dict[tuple[str, str, str], Any] = {}
         self._cache_lock = threading.RLock()
         self._cache_initialized = False
