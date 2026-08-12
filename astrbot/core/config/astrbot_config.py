@@ -116,7 +116,7 @@ class AstrBotConfig(dict):
     def _resolve_default_config(
         self, default_config: dict, schema: dict | None
     ) -> dict:
-        if schema:
+        if schema is not None:
             return self._config_schema_to_default_config(schema)
         return default_config
 
