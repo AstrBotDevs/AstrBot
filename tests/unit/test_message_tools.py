@@ -145,7 +145,9 @@ def _make_respond_stage() -> RespondStage:
     stage.ctx = SimpleNamespace(
         astrbot_config={},
         file_token_service=MagicMock(),
-        handlers=SimpleNamespace(get_handlers_by_event_type=lambda *_args, **_kwargs: []),
+        handlers=SimpleNamespace(
+            get_handlers_by_event_type=lambda *_args, **_kwargs: []
+        ),
         plugins=SimpleNamespace(),
         execution_context=SimpleNamespace(
             persist_accepted_group_response=AsyncMock(),
