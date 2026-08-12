@@ -5,22 +5,14 @@ upstream:
   branch: master
 
 last_synced:
-  commit: e9ae69f93a72448c70ef1ead039ff78479c8c8f3
-  synced_at_utc: 2026-08-12T17:20:18Z
+  commit: 19c029e36da451e4bef15a1adecba89dcef5e008
+  synced_at_utc: 2026-08-12T18:35:00Z
   sync_method: manual-adaptation
-  source_pr: '9622, 9570, 9643, 9644, 9646, 9636, 9649'
+  source_pr: '9650'
   note: >-
-    Reviewed the interval from a9bb8a64ca69657e6262e3ca06541ecaf3a6d1ca
-    through e9ae69f93a72448c70ef1ead039ff78479c8c8f3. Skipped fc353ab342
-    (README) because it advertises upstream PyPI artifacts, deployment links,
-    and repository ownership that do not apply to this source-build fork.
-    Adapted and integrated PowerShell 7 detection into the fork's stricter
-    managed shell runtime; marketplace download sorting into the current
-    TypeScript Dashboard with supported English and Chinese locales; dark-theme
-    contrast; QQ Official media failure propagation with redacted logs; QQ
-    Official chunked uploads; knowledge-base UUID lookup; and the shared
-    preference cache/write queue without restoring deleted synchronous APIs.
-    Existing async provider, tool, and plugin-context ownership paths were
-    retained. Focused validation passed: 303 Python tests, 139 Dashboard
-    Vitest tests, and 18 Dashboard Node tests. No upstream release or version
-    change was included; version files remain at 4.27.2.
+    Reviewed the interval from e9ae69f93a72448c70ef1ead039ff78479c8c8f3
+    through 19c029e36da451e4bef15a1adecba89dcef5e008. Skipped the sole
+    upstream commit (chore: bump version to 4.27.3, #9650) because it is a
+    release/version bump with an upstream-only changelog and would incorrectly
+    claim upstream artifacts for this source-build fork. No runtime changes
+    were pending; fork version files remain at 4.27.2.
