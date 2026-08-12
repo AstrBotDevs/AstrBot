@@ -38,6 +38,9 @@ class SharedPreferences:
         self.temporary_cache: dict[str, dict[str, Any]] = defaultdict(dict)
         """automatically clear per 24 hours. Might be helpful in some cases XD"""
 
+        # Persistent preference snapshot mirrored to the database. Unlike
+        # temporary_cache, it is preloaded at startup and is never periodically
+        # cleared by the scheduler.
         self._cache: dict[tuple[str, str, str], Any] = {}
         self._cache_lock = threading.RLock()
         self._cache_initialized = False
