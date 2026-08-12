@@ -28,19 +28,29 @@ class RankFusion:
 
     职责:
     - 融合稠密检索和稀疏检索的结果
-    - 使用 Reciprocal Rank Fusion (RRF) 算法
+    - 全局归一化稠密分数，并在每个知识库内归一化稀疏分数
+    - 使用 RRF 作为确定性的同分排序依据
     """
 
-    def __init__(self, kb_db: KBSQLiteDatabase, k: int = 60) -> None:
+    def __init__(
+        self,
+        kb_db: KBSQLiteDatabase,
+        k: int = 60,
+        dense_weight: float = 0.9,
+    ) -> None:
         """初始化结果融合器
 
         Args:
             kb_db: 知识库数据库实例
             k: RRF 参数,用于平滑排名
+            dense_weight: 相对分数融合中的稠密检索权重
 
         """
+        if not 0 <= dense_weight <= 1:
+            raise ValueError("dense_weight must be between 0 and 1")
         self.kb_db = kb_db
         self.k = k
+        self.dense_weight = dense_weight
 
     @staticmethod
     def _build_dense_lookup(dense_results: list[Result]) -> dict[str, Result]:
@@ -107,10 +117,11 @@ class RankFusion:
         sparse_results: list[SparseResult],
         top_k: int = 20,
     ) -> list[FusedResult]:
-        """融合稠密和稀疏检索结果
+        """融合稠密和稀疏检索结果。
 
-        RRF 公式:
-        score(doc) = sum(1 / (k + rank_i))
+        在所有候选中对稠密相似度做 min-max 归一化，BM25 分数则在
+        每个独立知识库内归一化，再按权重合并。最终结果只去除完全
+        相同的文本块，不按来源文档去重。
 
         Args:
             dense_results: 稠密检索结果
@@ -124,14 +135,48 @@ class RankFusion:
         if top_k <= 0:
             return []
 
-        dense_lookup = self._build_dense_lookup(dense_results)
-        sparse_lookup = self._build_sparse_lookup(sparse_results)
-        dense_ranks = self._build_rank_map(list(dense_lookup))
+        dense_ranks = {
+            result.data["doc_id"]: index + 1
+            for index, result in enumerate(dense_results)
+        }
         sparse_ranks = {
             result.chunk_id: result.rank if result.rank is not None else index + 1
             for index, result in enumerate(sparse_results)
         }
+
+        dense_lookup = self._build_dense_lookup(dense_results)
+        sparse_lookup = self._build_sparse_lookup(sparse_results)
         all_chunk_ids = set(dense_lookup) | set(sparse_lookup)
+        normalized_dense: dict[str, float] = {}
+        if dense_lookup:
+            scores = [result.similarity for result in dense_lookup.values()]
+            minimum = min(scores)
+            score_range = max(scores) - minimum
+            for identifier, result in dense_lookup.items():
+                normalized_dense[identifier] = (
+                    (result.similarity - minimum) / score_range if score_range else 1.0
+                )
+
+        sparse_groups: dict[str, list[tuple[str, float]]] = {}
+        for identifier, result in sparse_lookup.items():
+            sparse_groups.setdefault(result.kb_id, []).append(
+                (identifier, result.score)
+            )
+        normalized_sparse: dict[str, float] = {}
+        for group in sparse_groups.values():
+            scores = [score for _, score in group]
+            minimum = min(scores)
+            score_range = max(scores) - minimum
+            for identifier, score in group:
+                normalized_sparse[identifier] = (
+                    (score - minimum) / score_range if score_range else 1.0
+                )
+
+        fusion_scores = {
+            identifier: self.dense_weight * normalized_dense.get(identifier, 0.0)
+            + (1 - self.dense_weight) * normalized_sparse.get(identifier, 0.0)
+            for identifier in all_chunk_ids
+        }
         rrf_scores = {
             identifier: self._score_identifier(
                 identifier,
@@ -141,32 +186,34 @@ class RankFusion:
             for identifier in all_chunk_ids
         }
         sorted_ids = sorted(
-            rrf_scores,
+            fusion_scores,
             key=lambda identifier: (
+                -fusion_scores[identifier],
                 -rrf_scores[identifier],
                 dense_ranks.get(identifier, float("inf")),
                 sparse_ranks.get(identifier, float("inf")),
                 identifier,
             ),
-        )[:top_k]
+        )
 
         fused_results: list[FusedResult] = []
+        seen_contents: set[str] = set()
         for identifier in sorted_ids:
             if identifier in sparse_lookup:
-                fused_results.append(
-                    self._build_sparse_fused_result(
-                        sparse_lookup[identifier],
-                        rrf_scores[identifier],
-                    )
+                result = self._build_sparse_fused_result(
+                    sparse_lookup[identifier], fusion_scores[identifier]
                 )
+            elif identifier in dense_lookup:
+                result = self._build_dense_fused_result(
+                    identifier, dense_lookup[identifier], fusion_scores[identifier]
+                )
+            else:
                 continue
-            if identifier in dense_lookup:
-                fused_results.append(
-                    self._build_dense_fused_result(
-                        identifier,
-                        dense_lookup[identifier],
-                        rrf_scores[identifier],
-                    )
-                )
+            if result.content in seen_contents:
+                continue
+            seen_contents.add(result.content)
+            fused_results.append(result)
+            if len(fused_results) >= top_k:
+                break
 
         return fused_results

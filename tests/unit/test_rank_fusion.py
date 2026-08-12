@@ -15,6 +15,25 @@ def _dense_result(chunk_id: str, similarity: float) -> Result:
     )
 
 
+def _dense_result_with_metadata(
+    chunk_id: str,
+    similarity: float,
+    kb_id: str,
+    doc_id: str,
+    content: str,
+) -> Result:
+    return Result(
+        similarity=similarity,
+        data={
+            "doc_id": chunk_id,
+            "text": content,
+            "metadata": json.dumps(
+                {"chunk_index": 0, "kb_doc_id": doc_id, "kb_id": kb_id}
+            ),
+        },
+    )
+
+
 def _sparse_result(
     chunk_id: str,
     kb_id: str,
@@ -103,25 +122,15 @@ async def test_rank_fusion_uses_dense_metadata_when_sparse_result_missing():
 @pytest.mark.asyncio
 async def test_rank_fusion_uses_source_rank_for_independent_sparse_indexes():
     """RRF must use rank inside each independent sparse index, not score order."""
-    dense_results = [
-        _dense_result("small-exact", 0.99),
-        _dense_result("large-1", 0.95),
-        _dense_result("large-2", 0.90),
-    ]
     sparse_results = [
-        _sparse_result("large-1", "kb-large", 12.0, 1),
-        _sparse_result("large-2", "kb-large", 10.0, 2),
+        _sparse_result("large-1", "kb-large", 12.0, 2),
         _sparse_result("small-exact", "kb-small", 0.01, 1),
     ]
 
-    results = await RankFusion(kb_db=None).fuse(dense_results, sparse_results)
+    results = await RankFusion(kb_db=None, dense_weight=0).fuse([], sparse_results)
 
-    assert [result.chunk_id for result in results] == [
-        "small-exact",
-        "large-1",
-        "large-2",
-    ]
-    assert results[0].score == pytest.approx(2 / 61)
+    assert [result.chunk_id for result in results] == ["small-exact", "large-1"]
+    assert results[0].score == pytest.approx(results[1].score)
 
 
 @pytest.mark.asyncio
@@ -155,3 +164,37 @@ async def test_rank_fusion_returns_no_results_for_non_positive_top_k(top_k: int)
     )
 
     assert results == []
+
+
+@pytest.mark.asyncio
+async def test_rank_fusion_keeps_distinct_chunks_from_same_document():
+    dense_results = [
+        _dense_result_with_metadata("chunk-a1", 0.99, "kb", "doc-a", "first"),
+        _dense_result_with_metadata("chunk-a2", 0.98, "kb", "doc-a", "second"),
+    ]
+    sparse_results = [
+        SparseResult(0, "chunk-a1", "doc-a", "kb", "first", 10.0, 1),
+        SparseResult(1, "chunk-a2", "doc-a", "kb", "second", 9.0, 2),
+    ]
+
+    results = await RankFusion(kb_db=None).fuse(dense_results, sparse_results)
+
+    assert [result.chunk_id for result in results] == ["chunk-a1", "chunk-a2"]
+
+
+@pytest.mark.asyncio
+async def test_rank_fusion_calibrates_dense_scores_across_knowledge_bases():
+    dense_results = [
+        _dense_result_with_metadata("strong", 0.99, "large", "doc-1", "strong"),
+        _dense_result_with_metadata("moderate", 0.80, "large", "doc-2", "moderate"),
+        _dense_result_with_metadata("weak", 0.10, "small", "doc-3", "weak"),
+    ]
+    sparse_results = [
+        SparseResult(0, "strong", "large", "large", "strong", 10.0, 1),
+        SparseResult(1, "moderate", "large", "large", "moderate", 5.0, 2),
+        SparseResult(0, "weak", "small", "small", "weak", 0.01, 1),
+    ]
+
+    results = await RankFusion(kb_db=None).fuse(dense_results, sparse_results)
+
+    assert [result.chunk_id for result in results] == ["strong", "moderate", "weak"]
