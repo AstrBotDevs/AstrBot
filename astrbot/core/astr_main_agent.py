@@ -29,6 +29,7 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
+from astrbot.core.computer.booters.local import resolve_windows_shell
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.db import BaseDatabase
 from astrbot.core.message.components import File, Image, Record, Reply, Video
@@ -79,7 +80,6 @@ from astrbot.core.tools.computer_tools import (
     ShellSessionTool,
     SyncSkillReleaseTool,
 )
-from astrbot.core.computer.booters.local import resolve_windows_shell
 from astrbot.core.tools.cron_tools import FutureTaskTool
 from astrbot.core.tools.knowledge_base_tools import (
     KnowledgeBaseQueryTool,
@@ -443,9 +443,7 @@ def _apply_local_env_tools(
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
-    req.system_prompt = (
-        f"{req.system_prompt or ''}\n{_build_local_mode_prompt()}\n"
-    )
+    req.system_prompt = f"{req.system_prompt or ''}\n{_build_local_mode_prompt()}\n"
 
 
 def _build_local_mode_prompt() -> str:
