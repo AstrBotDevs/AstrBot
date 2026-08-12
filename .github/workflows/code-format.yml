@@ -35,7 +35,7 @@ jobs:
           node-version: '26.5.0'
           package-manager-cache: false
       - name: Setup pnpm
-        uses: pnpm/action-setup@008330803749db0355799c700092d9a85fd074e9 # v6.0.9
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           version: 11.15.1
       - name: Install root toolchain
