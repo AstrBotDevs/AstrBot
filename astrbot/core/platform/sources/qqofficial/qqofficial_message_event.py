@@ -4,6 +4,7 @@ import copy
 import logging
 import os
 import random
+from pathlib import Path
 from typing import cast
 
 import aiofiles
@@ -28,6 +29,10 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import File, Image, Plain, Record, Video
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
+from astrbot.core.platform.sources.qqofficial.qqofficial_chunked_upload import (
+    QQOFFICIAL_CHUNKED_UPLOAD_THRESHOLD,
+    QQOfficialChunkedUploader,
+)
 from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path, is_file_uri
 
 
@@ -644,6 +649,32 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             ValueError: No supported recipient identifier was provided.
             Exception: The upload request fails or returns an invalid response.
         """
+        local_file = Path(file_source)
+        if (
+            local_file.is_file()
+            and local_file.stat().st_size > QQOFFICIAL_CHUNKED_UPLOAD_THRESHOLD
+        ):
+            openid = kwargs.get("openid")
+            group_openid = None if openid else kwargs.get("group_openid")
+            if not openid and not group_openid:
+                raise ValueError("Invalid upload parameters")
+            uploader = QQOfficialChunkedUploader(self.bot.api._http)
+            if openid:
+                return await uploader.upload_c2c(
+                    file_path=local_file,
+                    file_type=file_type,
+                    file_name=file_name or local_file.name,
+                    user_openid=openid,
+                    srv_send_msg=srv_send_msg,
+                )
+            return await uploader.upload_group(
+                file_path=local_file,
+                file_type=file_type,
+                file_name=file_name or local_file.name,
+                group_openid=group_openid,
+                srv_send_msg=srv_send_msg,
+            )
+
         # 构建基础payload
         payload: dict = {"file_type": file_type, "srv_send_msg": srv_send_msg}
         if file_name:
