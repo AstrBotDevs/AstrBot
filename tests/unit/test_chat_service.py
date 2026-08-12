@@ -27,6 +27,10 @@ from astrbot.dashboard.services.chat_service import (
 def _service() -> ChatService:
     service = ChatService.__new__(ChatService)
     service.db = MagicMock()
+    service.db.get_platform_session_by_id = AsyncMock(
+        return_value=SimpleNamespace(creator="alice", platform_id="webchat")
+    )
+    service.db.create_platform_session = AsyncMock()
     service.conv_mgr = MagicMock()
     service.platform_history_mgr = MagicMock()
     service.chat_run_states = {}

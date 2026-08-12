@@ -25,8 +25,13 @@ def chat_service_instance(monkeypatch, tmp_path):
             created_at=datetime.now(UTC),
         )
     )
+    db = Mock()
+    db.get_platform_session_by_id = AsyncMock(
+        return_value=SimpleNamespace(creator="alice", platform_id="webchat")
+    )
+    db.create_platform_session = AsyncMock()
     service = ChatService(
-        Mock(),
+        db,
         preferences=SimpleNamespace(temporary_cache={}),
         conversation_manager=Mock(),
         platform_message_history_manager=platform_history_mgr,
@@ -44,6 +49,93 @@ def chat_service_instance(monkeypatch, tmp_path):
         )
     )
     return service
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_creates_missing_webchat_platform_session(
+    chat_service_instance,
+):
+    service = chat_service_instance
+    session_id = "missing-platform-session"
+    service.db.get_platform_session_by_id.return_value = None
+
+    stream = await service.build_chat_stream(
+        "alice",
+        {"message": "hello", "session_id": session_id},
+    )
+    run = next(iter(service.chat_run_states.values()))
+
+    try:
+        service.db.get_platform_session_by_id.assert_awaited_once_with(session_id)
+        service.db.create_platform_session.assert_awaited_once_with(
+            creator="alice",
+            platform_id="webchat",
+            session_id=session_id,
+            is_group=0,
+        )
+    finally:
+        await stream.aclose()
+        if run.run.task and not run.run.task.done():
+            run.run.task.cancel()
+            await asyncio.gather(run.run.task, return_exceptions=True)
+        service.webchat_run_coordinator.queue_manager.remove_queues(session_id)
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_rejects_foreign_webchat_platform_session(
+    chat_service_instance,
+):
+    service = chat_service_instance
+    service.db.get_platform_session_by_id.return_value = SimpleNamespace(
+        creator="bob", platform_id="webchat"
+    )
+
+    with pytest.raises(ChatServiceError, match="Permission denied"):
+        await service.build_chat_stream(
+            "alice",
+            {"message": "hello", "session_id": "bob-session"},
+        )
+
+    service.platform_history_mgr.insert.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_allows_same_owner_after_create_race(chat_service_instance):
+    service = chat_service_instance
+    service.db.get_platform_session_by_id.side_effect = [
+        None,
+        SimpleNamespace(creator="alice", platform_id="webchat"),
+    ]
+    service.db.create_platform_session.side_effect = RuntimeError("duplicate")
+
+    stream = await service.build_chat_stream(
+        "alice",
+        {"message": "hello", "session_id": "raced-session"},
+    )
+    try:
+        assert stream is not None
+    finally:
+        await stream.aclose()
+        for run in list(service.chat_run_states.values()):
+            if run.run.task and not run.run.task.done():
+                run.run.task.cancel()
+                await asyncio.gather(run.run.task, return_exceptions=True)
+        service.webchat_run_coordinator.queue_manager.remove_queues("raced-session")
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_fails_when_session_creation_is_unavailable(
+    chat_service_instance,
+):
+    service = chat_service_instance
+    service.db.get_platform_session_by_id.side_effect = [None, None]
+    service.db.create_platform_session.side_effect = RuntimeError("database down")
+
+    with pytest.raises(ChatServiceError, match="Failed to create chat session"):
+        await service.build_chat_stream(
+            "alice",
+            {"message": "hello", "session_id": "unavailable-session"},
+        )
 
 
 def _decode_sse_event(event: str) -> dict:
