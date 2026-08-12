@@ -209,7 +209,7 @@ export const useExtensionPage = (initialTab = "installed") => {
   const marketSearch = ref("");
   const debouncedMarketSearch = ref("");
   const refreshingMarket = ref(false);
-  const sortBy = ref("default"); // default, stars, author, updated
+  const sortBy = ref("default"); // default, stars, downloads, author, updated
   const sortOrder = ref("desc"); // desc (降序) or asc (升序)
   const randomPluginNames = ref([]);
   const marketCategoryFilter = ref("all");
@@ -391,6 +391,15 @@ export const useExtensionPage = (initialTab = "installed") => {
         const starsA = a.stars ?? 0;
         const starsB = b.stars ?? 0;
         return sortOrder.value === "desc" ? starsB - starsA : starsA - starsB;
+      });
+    } else if (sortBy.value === "downloads") {
+      // 按下载量排序
+      plugins.sort((a, b) => {
+        const downloadsA = a.download_count ?? 0;
+        const downloadsB = b.download_count ?? 0;
+        return sortOrder.value === "desc"
+          ? downloadsB - downloadsA
+          : downloadsA - downloadsB;
       });
     } else if (sortBy.value === "author") {
       // 按作者名字典序排序

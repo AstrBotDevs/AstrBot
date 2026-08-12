@@ -162,6 +162,7 @@ const currentSourceName = computed(() => {
 const marketSortItems = computed(() => [
   { title: tm("sort.default"), value: "default" },
   { title: tm("sort.stars"), value: "stars" },
+  { title: tm("sort.downloads"), value: "downloads" },
   { title: tm("sort.author"), value: "author" },
   { title: tm("sort.updated"), value: "updated" },
 ]);

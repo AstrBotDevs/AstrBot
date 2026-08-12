@@ -185,6 +185,7 @@
     "installTime": "Last Modified",
     "name": "Name",
     "stars": "Stars",
+    "downloads": "Downloads",
     "author": "Author",
     "updated": "Last Updated",
     "updateStatus": "Update Status",
