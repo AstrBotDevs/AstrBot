@@ -132,6 +132,7 @@ export default defineConfig({
                 items: [
                   { text: "NewAPI", link: "/newapi" },
                   { text: "AIHubMix", link: "/aihubmix" },
+                  { text: "OrcaRouter", link: "/orcarouter" },
                   { text: "PPIO 派欧云", link: "/ppio" },
                   { text: "硅基流动", link: "/siliconflow" },
                   { text: "小马算力", link: "/tokenpony" },
@@ -391,6 +392,7 @@ export default defineConfig({
                 items: [
                   { text: "NewAPI", link: "/newapi" },
                   { text: "AIHubMix", link: "/aihubmix" },
+                  { text: "OrcaRouter", link: "/orcarouter" },
                   { text: "PPIO Cloud", link: "/ppio" },
                   { text: "SiliconFlow", link: "/siliconflow" },
                   { text: "TokenPony", link: "/tokenpony" },

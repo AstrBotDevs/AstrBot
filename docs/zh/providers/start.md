@@ -21,6 +21,7 @@ AstrBot 适配了 OpenAI、Google GenAI、Anthropic 三种原生 API 格式。�
 - Anthropic 官方提供的模型服务（[Anthropic 官方网站](https://www.anthropic.com/)）
 - Google 提供的 Gemini 模型服务（[Google Cloud 官方网站](https://cloud.google.com/)）
 - OpenRouter 提供的模型服务（[OpenRouter 官方网站](https://openrouter.ai/)）
+- OrcaRouter 提供的模型服务（[OrcaRouter 官方网站](https://www.orcarouter.ai/)）
 
 ## 以 DeepSeek 为例的接入步骤
 
