@@ -8,6 +8,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 from .bootstrap import builtin_stage_classes
 from .context import PipelineContext
+from .stage import Stage
 
 
 class _EmptyCompletionEvent(Protocol):
@@ -24,7 +25,7 @@ class PipelineScheduler:
     def __init__(self, context: PipelineContext) -> None:
         self.ctx = context  # 上下文对象
         self.stage_classes = builtin_stage_classes()
-        self.stages = []  # 存储阶段实例
+        self.stages: list[Stage] = []  # 存储阶段实例
 
     async def initialize(self) -> None:
         """初始化管道调度器时, 初始化所有阶段"""
@@ -50,7 +51,8 @@ class PipelineScheduler:
 
             if isinstance(coroutine, AsyncGenerator):
                 # 如果返回的是异步生成器, 实现洋葱模型的核心
-                async for _ in coroutine:
+                agen = cast(AsyncGenerator[None], coroutine)
+                async for _ in agen:
                     # 此处是前置处理完成后的暂停点(yield), 下面开始执行后续阶段
                     if event.is_stopped():
                         logger.debug(
