@@ -507,6 +507,60 @@ class TestComputerClient:
         # Reset for other tests
         computer_client.local_booter = None
 
+    @pytest.mark.parametrize("shell_executable", ["pwsh.exe", "powershell.exe"])
+    def test_get_local_booter_logs_windows_shell_once(
+        self,
+        monkeypatch,
+        shell_executable,
+    ):
+        """Test Windows effective shell is logged once per local booter."""
+        from astrbot.core.computer import computer_client
+
+        mock_logger = MagicMock()
+        mock_resolver = MagicMock(return_value=shell_executable)
+        monkeypatch.setattr(computer_client, "local_booter", None)
+        monkeypatch.setattr(computer_client.sys, "platform", "win32")
+        monkeypatch.setattr(computer_client, "logger", mock_logger)
+        monkeypatch.setattr(
+            computer_client,
+            "resolve_windows_shell",
+            mock_resolver,
+        )
+
+        booter1 = computer_client.get_local_booter()
+        booter2 = computer_client.get_local_booter()
+
+        assert booter1 is booter2
+        mock_resolver.assert_called_once_with()
+        mock_logger.info.assert_called_once_with(
+            "[Computer] Windows local runtime shell: %s",
+            shell_executable,
+        )
+
+    def test_get_local_booter_skips_windows_shell_log_outside_windows(
+        self,
+        monkeypatch,
+    ):
+        """Test non-Windows local booters skip Windows shell resolution logs."""
+        from astrbot.core.computer import computer_client
+
+        mock_logger = MagicMock()
+        mock_resolver = MagicMock()
+        monkeypatch.setattr(computer_client, "local_booter", None)
+        monkeypatch.setattr(computer_client.sys, "platform", "linux")
+        monkeypatch.setattr(computer_client, "logger", mock_logger)
+        monkeypatch.setattr(
+            computer_client,
+            "resolve_windows_shell",
+            mock_resolver,
+        )
+
+        booter = computer_client.get_local_booter()
+
+        assert isinstance(booter, LocalBooter)
+        mock_resolver.assert_not_called()
+        mock_logger.info.assert_not_called()
+
     @pytest.mark.asyncio
     async def test_shutdown_local_booter_clears_singleton(self):
         """Test local managed resources are released during lifecycle shutdown."""
