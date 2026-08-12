@@ -4,6 +4,7 @@ import copy
 import logging
 import os
 import random
+import time
 from typing import cast
 
 import aiofiles
@@ -29,6 +30,12 @@ from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import File, Image, Plain, Record, Video
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path, is_file_uri
+
+# QQ official passive reply msg_id is only valid for 5 minutes
+# (see botpy post_group_message docs). Long-running tasks should switch to
+# proactive sending (without msg_id) before the window expires.
+_QQOFFICIAL_PASSIVE_REPLY_SECONDS = 300
+_QQOFFICIAL_PROACTIVE_MARGIN_SECONDS = 60
 
 
 class APIReturnNoneError(Exception):
@@ -102,6 +109,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
         self.send_buffer = None
+        # monotonic clock for the passive-reply window check, immune to wall-clock changes
+        self.created_at_monotonic = time.monotonic()
 
     async def send(self, message: MessageChain) -> None:
         self.send_buffer = message
@@ -317,20 +326,26 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         ):
             plain_text = plain_text + "\n"
 
-        # 根据消息链的 use_markdown_ 标记决定发送模式
+        # 根据消息链的 use_markdown_ 标记决定发送模式。
+        # QQ 官方被动回复 msg_id 有效期 5 分钟；长任务处理超过该窗口后直接走主动发送
+        # （不带 msg_id），避免先被动发送失败再兜底，减少一次无效请求。
+        force_proactive = isinstance(source, botpy.message.GroupMessage) and (
+            time.monotonic() - self.created_at_monotonic
+            >= _QQOFFICIAL_PASSIVE_REPLY_SECONDS - _QQOFFICIAL_PROACTIVE_MARGIN_SECONDS
+        )
         use_md = getattr(self.send_buffer, "use_markdown_", None)
         if use_md is False:
             payload: dict = {
                 "content": plain_text,
                 "msg_type": 0,
-                "msg_id": self.message_obj.message_id,
             }
         else:
             payload = {
                 "markdown": MarkdownPayload(content=plain_text) if plain_text else None,
                 "msg_type": 2,
-                "msg_id": self.message_obj.message_id,
             }
+        if not force_proactive:
+            payload["msg_id"] = self.message_obj.message_id
 
         if not isinstance(source, botpy.message.Message | botpy.message.DirectMessage):
             payload["msg_seq"] = random.randint(1, 10000)
