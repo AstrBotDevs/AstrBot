@@ -225,7 +225,12 @@ def _is_valid_tool_pair(asst_msg: dict[str, Any], tool_msg: dict[str, Any]) -> b
     tool_calls = asst_msg.get("tool_calls")
     if not tool_calls:
         return False
-    tc_ids = {tc.get("id") for tc in tool_calls if isinstance(tc, dict)}
+    # 仅收集非 None 的 tool_call_id，避免缺失 ID 被误判为有效匹配
+    tc_ids = {
+        tc_id
+        for tc in tool_calls
+        if isinstance(tc, dict) and (tc_id := tc.get("id")) is not None
+    }
     return tool_msg.get("tool_call_id") in tc_ids
 
 

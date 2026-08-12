@@ -2355,6 +2355,21 @@ def test_reorder_multiple_fake_pairs():
             {"role": "tool", "tool_call_id": "call_99", "content": "mismatched id"},
             {"role": "user", "content": "hello"},
         ],
+        # 双方 ID 均缺失：残缺对不应被当作有效匹配重排
+        [
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {"name": "search", "arguments": "{}"},
+                    }
+                ],
+            },
+            {"role": "tool", "content": "missing ids"},
+            {"role": "user", "content": "hello"},
+        ],
         # assistant 无 tool_calls
         [
             {"role": "assistant", "content": "some reply"},
@@ -2372,6 +2387,7 @@ def test_reorder_multiple_fake_pairs():
     ids=[
         "no_pair",
         "id_mismatch",
+        "missing_id_both_sides",
         "no_tool_calls",
         "no_trailing_user",
         "empty",
