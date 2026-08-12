@@ -57,7 +57,8 @@ class AstrBotConfig(dict):
         object.__setattr__(self, "_save_revision", 0)
         object.__setattr__(self, "_save_committed_revision", 0)
 
-        if schema:
+        # An empty schema ({}) is falsy but valid: zero config items, not the global defaults.
+        if schema is not None:
             default_config = self._config_schema_to_default_config(schema)
 
         if not self.check_exist():
