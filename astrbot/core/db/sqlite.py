@@ -2155,14 +2155,16 @@ class SQLiteDatabase(BaseDatabase):
 
     async def get_preferences(
         self,
-        scope: str,
+        scope: str | None = None,
         scope_id: str | None = None,
         key: str | None = None,
     ) -> list[Preference]:
-        """Get all preferences for a specific scope ID or key."""
+        """Get preferences, optionally filtered by scope, scope ID, or key."""
         async with self.get_db() as session:
             session: AsyncSession
-            query = select(Preference).where(Preference.scope == scope)
+            query = select(Preference)
+            if scope is not None:
+                query = query.where(Preference.scope == scope)
             if scope_id is not None:
                 query = query.where(Preference.scope_id == scope_id)
             if key is not None:

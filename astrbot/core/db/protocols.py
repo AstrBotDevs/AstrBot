@@ -669,7 +669,7 @@ class PreferenceStore(Protocol):
 
     async def get_preferences(
         self,
-        scope: str,
+        scope: str | None = None,
         scope_id: str | None = None,
         key: str | None = None,
     ) -> list[Preference]: ...
