@@ -62,6 +62,16 @@ def _make_groq_provider(overrides: dict | None = None) -> ProviderGroq:
 
 def test_create_http_client_uses_openai_httpx_module(monkeypatch):
     captured: dict[str, object] = {}
+    fake_httpx_module = object()
+
+    from openai import _base_client as openai_base_client
+
+    monkeypatch.setattr(
+        openai_base_client,
+        "httpx",
+        fake_httpx_module,
+        raising=False,
+    )
 
     def fake_create_proxy_client(
         provider_label: str,
@@ -82,9 +92,7 @@ def test_create_http_client_uses_openai_httpx_module(monkeypatch):
     provider = ProviderOpenAIOfficial.__new__(ProviderOpenAIOfficial)
     provider._create_http_client({"proxy": ""})
 
-    from openai import _base_client as openai_base_client
-
-    assert captured["httpx_module"] is openai_base_client.httpx
+    assert captured["httpx_module"] is fake_httpx_module
 
 
 def test_create_http_client_falls_back_to_global_httpx_module(monkeypatch):
