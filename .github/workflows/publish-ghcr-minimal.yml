@@ -1,0 +1,87 @@
+name: Publish minimal image to GHCR
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing v* tag to publish
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/xero-team/astrbot
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release tag
+        id: release
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        shell: bash
+        run: |
+          case "$RELEASE_TAG" in
+            v[0-9]*) ;;
+            *)
+              echo "Expected a v* tag, got: $RELEASE_TAG" >&2
+              exit 1
+              ;;
+          esac
+
+          git rev-parse --verify "refs/tags/${RELEASE_TAG}^{commit}" >/dev/null
+          git checkout --detach "refs/tags/${RELEASE_TAG}"
+
+          {
+            echo "tags<<EOF"
+            echo "${IMAGE_NAME}:${RELEASE_TAG}"
+            if [[ "$RELEASE_TAG" != *-* ]]; then
+              echo "${IMAGE_NAME}:latest"
+            fi
+            echo "EOF"
+            echo "version=${RELEASE_TAG}"
+            echo "revision=$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push minimal runtime image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          target: runtime
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            ASTRBOT_FEATURES=minimal
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          push: true
+          tags: ${{ steps.release.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.release.outputs.version }}
+            org.opencontainers.image.revision=${{ steps.release.outputs.revision }}
