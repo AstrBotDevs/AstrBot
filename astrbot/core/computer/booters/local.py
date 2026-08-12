@@ -48,8 +48,8 @@ def _is_safe_command(command: str) -> bool:
     )
 
 
-def _windows_shell_executable() -> str:
-    """Choose PowerShell 7 when available, with the inbox fallback."""
+def resolve_windows_shell() -> str:
+    """Resolve PowerShell 7 when available, with the inbox fallback."""
     for candidate in ("pwsh", "powershell.exe"):
         try:
             resolved = shutil.which(candidate)
@@ -132,7 +132,7 @@ class LocalShellComponent(ShellComponent):
             popen_shell = shell
             if sys.platform == "win32" and shell:
                 popen_command = [
-                    _windows_shell_executable(),
+                    resolve_windows_shell(),
                     "-NoLogo",
                     "-NoProfile",
                     "-NonInteractive",
@@ -281,7 +281,7 @@ class LocalShellComponent(ShellComponent):
         try:
             if sys.platform == "win32":
                 process = await asyncio.create_subprocess_exec(
-                    _windows_shell_executable(),
+                    resolve_windows_shell(),
                     "-NoLogo",
                     "-NoProfile",
                     "-NonInteractive",

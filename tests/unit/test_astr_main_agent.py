@@ -319,6 +319,45 @@ def test_current_datetime_scope_only_marks_datetime_temp(mock_event):
     assert parts[1].is_temp is True
 
 
+def test_local_mode_prompt_uses_windows_powershell_51():
+    with (
+        patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"),
+        patch(
+            "astrbot.core.astr_main_agent.resolve_windows_shell",
+            return_value="powershell.exe",
+        ),
+    ):
+        prompt = ama._build_local_mode_prompt()
+
+    assert "Windows PowerShell 5.1 (powershell.exe)" in prompt
+    assert "PowerShell 7-only syntax" in prompt
+    assert "cmd.exe" not in prompt
+
+
+def test_local_mode_prompt_hints_pwsh_when_resolved():
+    with (
+        patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"),
+        patch(
+            "astrbot.core.astr_main_agent.resolve_windows_shell",
+            return_value="C:/Program Files/PowerShell/7/pwsh.exe",
+        ),
+    ):
+        prompt = ama._build_local_mode_prompt()
+
+    assert "PowerShell 7 (pwsh.exe)" in prompt
+    assert "Windows PowerShell 5.1" not in prompt
+    assert "Unix-like" not in prompt
+
+
+def test_local_mode_prompt_ignores_windows_shell_on_non_windows():
+    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Linux"):
+        prompt = ama._build_local_mode_prompt()
+
+    assert "Unix-like" in prompt
+    assert "POSIX-compatible" in prompt
+    assert "PowerShell" not in prompt
+
+
 class TestMainAgentBuildConfig:
     """Tests for MainAgentBuildConfig dataclass."""
 

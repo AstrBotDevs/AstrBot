@@ -33,6 +33,7 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
+from astrbot.core.computer.booters.local import resolve_windows_shell
 from astrbot.core.conversation_mgr import Conversation, load_sanitized_history
 from astrbot.core.db.po import Personality
 from astrbot.core.db.protocols import PlatformSessionStore
@@ -445,12 +446,22 @@ def _apply_local_env_tools(
 
 def _build_local_mode_prompt() -> str:
     system_name = platform.system() or "Unknown"
-    shell_hint = (
-        "The runtime shell is Windows Command Prompt (cmd.exe). "
-        "Use cmd-compatible commands and do not assume Unix commands like cat/ls/grep are available."
-        if system_name.lower() == "windows"
-        else "The runtime shell is Unix-like. Use POSIX-compatible shell commands."
-    )
+    if system_name.lower() != "windows":
+        shell_hint = (
+            "The runtime shell is Unix-like. Use POSIX-compatible shell commands."
+        )
+    elif Path(resolve_windows_shell()).name.lower().startswith("pwsh"):
+        shell_hint = (
+            "The runtime shell is PowerShell 7 (pwsh.exe). "
+            "Use PowerShell 7-compatible syntax and cmdlets, and do not "
+            "assume a full Unix userland or GNU utilities are available."
+        )
+    else:
+        shell_hint = (
+            "The runtime shell is Windows PowerShell 5.1 (powershell.exe). "
+            "Use Windows PowerShell 5.1-compatible syntax and cmdlets; do not use "
+            "PowerShell 7-only syntax or assume Unix commands like cat/ls/grep are available."
+        )
     return (
         "You have access to the host local environment and can execute shell commands and Python code. "
         f"Current operating system: {system_name}. "
