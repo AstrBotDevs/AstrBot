@@ -5,26 +5,22 @@ upstream:
   branch: master
 
 last_synced:
-  commit: a9bb8a64ca69657e6262e3ca06541ecaf3a6d1ca
-  synced_at_utc: 2026-08-12T10:10:00Z
+  commit: e9ae69f93a72448c70ef1ead039ff78479c8c8f3
+  synced_at_utc: 2026-08-12T17:20:18Z
   sync_method: manual-adaptation
-  source_pr: '9618, 9610, 9620, 9619, 9621, 9627, 9607'
+  source_pr: '9622, 9570, 9643, 9644, 9646, 9636, 9649'
   note: >-
-    Reviewed and manually adapted the audited interval from
-    30e20318cbaaa2e1ba57f3e0eee265d9ee98115c through
-    a9bb8a64ca69657e6262e3ca06541ecaf3a6d1ca. Applied knowledge-base score
-    calibration and exact-content deduplication, Telegram animated/video
-    sticker thumbnails, Telegram video-note conversion, empty plugin schema
-    handling, pipeline typing, and WebChat platform-session recreation.
-    GitHub Action version bumps were translated to verified immutable commit
-    SHAs and applied consistently across fork workflows. The final OpenAI test
-    stabilization commit was skipped because the fork has no corresponding
-    test module. No upstream release/version change was included; version files
-    remain at 4.27.2. The fork's Python 3.14+, security, source-build, and
-    current ownership boundaries remain in force. Focused tests passed:
-    185 tests across rank-fusion, Telegram adapter, ChatService, Dashboard
-    config, and core config suites.
-    Post-review hardening also restored CodeQL YAML validity and enforced
-    WebChat session/thread ownership with race-safe creation failure handling.
-    Integration commits were rebuilt as one commit per upstream object in
-    oldest-first order; the final OpenAI test commit remains explicitly skipped.
+    Reviewed the interval from a9bb8a64ca69657e6262e3ca06541ecaf3a6d1ca
+    through e9ae69f93a72448c70ef1ead039ff78479c8c8f3. Skipped fc353ab342
+    (README) because it advertises upstream PyPI artifacts, deployment links,
+    and repository ownership that do not apply to this source-build fork.
+    Adapted and integrated PowerShell 7 detection into the fork's stricter
+    managed shell runtime; marketplace download sorting into the current
+    TypeScript Dashboard with supported English and Chinese locales; dark-theme
+    contrast; QQ Official media failure propagation with redacted logs; QQ
+    Official chunked uploads; knowledge-base UUID lookup; and the shared
+    preference cache/write queue without restoring deleted synchronous APIs.
+    Existing async provider, tool, and plugin-context ownership paths were
+    retained. Focused validation passed: 303 Python tests, 139 Dashboard
+    Vitest tests, and 18 Dashboard Node tests. No upstream release or version
+    change was included; version files remain at 4.27.2.
