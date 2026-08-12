@@ -161,7 +161,7 @@ async function validate(
   .setup-hint {
     display: block;
     margin-top: 8px;
-    color: grey;
+    color: rgba(var(--v-theme-on-surface), 0.62);
   }
 
   .setup-btn {

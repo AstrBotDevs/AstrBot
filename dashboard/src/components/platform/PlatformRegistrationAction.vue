@@ -435,7 +435,7 @@ onBeforeUnmount(() => {
   font-size: 14px;
   font-weight: 600;
   text-align: left;
-  color: rgba(0, 0, 0, 0.78);
+  color: rgba(var(--v-theme-on-surface), 0.88);
 }
 
 .registration-scan-content {
@@ -477,7 +477,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   border-radius: 8px;
 }
 
@@ -505,7 +505,7 @@ onBeforeUnmount(() => {
   width: 190px;
   text-align: center;
   font-size: 13px;
-  color: rgba(0, 0, 0, 0.72);
+  color: rgba(var(--v-theme-on-surface), 0.72);
   word-break: break-word;
 }
 </style>

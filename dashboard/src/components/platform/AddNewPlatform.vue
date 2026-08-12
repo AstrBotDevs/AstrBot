@@ -2179,7 +2179,7 @@ function scrollDialogToBottom() {
 .creation-mode-title {
   font-size: 14px;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.78);
+  color: rgba(var(--v-theme-on-surface), 0.88);
 }
 
 .route-source-cell {
