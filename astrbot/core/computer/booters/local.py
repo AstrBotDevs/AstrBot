@@ -174,8 +174,9 @@ class LocalShellComponent(ShellComponent):
                     stderr=subprocess.DEVNULL,
                 )
                 return {"pid": proc.pid, "stdout": "", "stderr": "", "exit_code": None}
-            # Shell commands use the configured PowerShell on Windows and the
-            # platform shell elsewhere. Safety relies on `_is_safe_command()`.
+            # Shell commands use PowerShell 7 if available, else Windows
+            # PowerShell 5.1, on Windows and the platform shell elsewhere.
+            # Safety relies on `_is_safe_command()`.
             proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                 popen_command,
                 shell=popen_shell,
