@@ -53,6 +53,11 @@ def _is_safe_command(command: str) -> bool:
     return not any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS)
 
 
+def resolve_windows_shell() -> str:
+    """Prefer PowerShell 7 (pwsh.exe) when on PATH, else Windows PowerShell 5.1."""
+    return "pwsh.exe" if shutil.which("pwsh") else "powershell.exe"
+
+
 def _decode_bytes_with_fallback(
     output: bytes | None,
     *,
@@ -134,7 +139,6 @@ class LocalShellComponent(ShellComponent):
         timeout: int | None = 300,
         shell: bool = True,
         background: bool = False,
-        windows_shell: str | None = None,
     ) -> dict[str, Any]:
         if not _is_safe_command(command):
             raise PermissionError("Blocked unsafe shell command.")
@@ -147,13 +151,7 @@ class LocalShellComponent(ShellComponent):
             popen_command: str | list[str] = command
             popen_shell = shell
             if sys.platform == "win32" and shell:
-                shell_executable = windows_shell or "powershell.exe"
-                if os.name == "nt" and shutil.which(shell_executable) is None:
-                    raise RuntimeError(
-                        f"The Windows PowerShell executable '{shell_executable}' "
-                        "was not found on PATH. Install it or reset the "
-                        "'Windows PowerShell version' setting."
-                    )
+                shell_executable = resolve_windows_shell()
                 popen_command = [
                     shell_executable,
                     "-NoLogo",
@@ -164,8 +162,9 @@ class LocalShellComponent(ShellComponent):
                 ]
                 popen_shell = False
             if background:
-                # Shell commands use the configured PowerShell on Windows and the
-                # platform shell elsewhere. Safety relies on `_is_safe_command()`.
+                # Shell commands use PowerShell 7 if available, else Windows
+                # PowerShell 5.1, on Windows and the platform shell elsewhere.
+                # Safety relies on `_is_safe_command()`.
                 proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                     popen_command,
                     shell=popen_shell,
@@ -231,7 +230,6 @@ class LocalShellComponent(ShellComponent):
         timeout: int | None = None,
         yield_time_ms: int = 10_000,
         max_output_chars: int = 10_000,
-        windows_shell: str | None = None,
     ) -> dict[str, Any]:
         """Start a locally managed shell process and briefly wait for it.
 
@@ -287,13 +285,7 @@ class LocalShellComponent(ShellComponent):
         try:
             if sys.platform == "win32":
                 process_factory = asyncio.create_subprocess_exec
-                shell_executable = windows_shell or "powershell.exe"
-                if os.name == "nt" and shutil.which(shell_executable) is None:
-                    raise RuntimeError(
-                        f"The Windows PowerShell executable '{shell_executable}' "
-                        "was not found on PATH. Install it or reset the "
-                        "'Windows PowerShell version' setting."
-                    )
+                shell_executable = resolve_windows_shell()
                 process_args = (
                     shell_executable,
                     "-NoLogo",

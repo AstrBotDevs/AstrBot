@@ -171,7 +171,6 @@ DEFAULT_CONFIG = {
             "add_cron_tools": True,
         },
         "computer_use_runtime": "none",
-        "windows_shell": "powershell.exe",
         "computer_use_require_admin": True,
         "sandbox": {
             "booter": "shipyard_neo",
@@ -3465,16 +3464,6 @@ CONFIG_METADATA_3 = {
                         "options": ["none", "local", "sandbox"],
                         "labels": ["无", "本地", "沙箱"],
                         "hint": "选择 Computer Use 运行环境。",
-                    },
-                    "provider_settings.windows_shell": {
-                        "description": "Windows PowerShell 版本",
-                        "type": "string",
-                        "options": ["powershell.exe", "pwsh.exe"],
-                        "labels": ["Windows PowerShell 5.1", "PowerShell 7"],
-                        "hint": "Windows 下本地运行时使用的 Shell。PowerShell 7 需自行安装。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "local",
-                        },
                     },
                     "provider_settings.computer_use_require_admin": {
                         "description": "需要 AstrBot 管理员权限",

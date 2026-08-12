@@ -79,6 +79,7 @@ from astrbot.core.tools.computer_tools import (
     ShellSessionTool,
     SyncSkillReleaseTool,
 )
+from astrbot.core.computer.booters.local import resolve_windows_shell
 from astrbot.core.tools.cron_tools import FutureTaskTool
 from astrbot.core.tools.knowledge_base_tools import (
     KnowledgeBaseQueryTool,
@@ -431,7 +432,6 @@ async def _apply_workspace_extra_prompt(
 def _apply_local_env_tools(
     req: ProviderRequest,
     plugin_context: Context,
-    windows_shell: str | None = None,
 ) -> None:
     if req.func_tool is None:
         req.func_tool = ToolSet()
@@ -444,17 +444,17 @@ def _apply_local_env_tools(
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
     req.system_prompt = (
-        f"{req.system_prompt or ''}\n{_build_local_mode_prompt(windows_shell)}\n"
+        f"{req.system_prompt or ''}\n{_build_local_mode_prompt()}\n"
     )
 
 
-def _build_local_mode_prompt(windows_shell: str | None = None) -> str:
+def _build_local_mode_prompt() -> str:
     system_name = platform.system() or "Unknown"
     if system_name.lower() != "windows":
         shell_hint = (
             "The runtime shell is Unix-like. Use POSIX-compatible shell commands."
         )
-    elif windows_shell and "pwsh" in windows_shell.lower():
+    elif resolve_windows_shell() == "pwsh.exe":
         shell_hint = (
             "The runtime shell is PowerShell 7 (pwsh.exe). "
             "Use PowerShell 7-compatible syntax and cmdlets; do not "
@@ -1599,11 +1599,7 @@ async def build_main_agent(
     if config.computer_use_runtime == "sandbox":
         _apply_sandbox_tools(config, req, req.session_id)
     elif config.computer_use_runtime == "local":
-        _apply_local_env_tools(
-            req,
-            plugin_context,
-            config.provider_settings.get("windows_shell"),
-        )
+        _apply_local_env_tools(req, plugin_context)
 
     agent_runner = AgentRunner()
     astr_agent_ctx = AstrAgentContext(

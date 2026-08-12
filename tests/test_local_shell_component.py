@@ -60,6 +60,7 @@ def test_local_shell_component_uses_windows_powershell(monkeypatch):
 
     monkeypatch.setattr(subprocess, "Popen", fake_run)
     monkeypatch.setattr(local_booter.sys, "platform", "win32")
+    monkeypatch.setattr(local_booter.shutil, "which", lambda _cmd: None)
 
     result = asyncio.run(LocalShellComponent().exec("Get-ChildItem"))
 
@@ -75,7 +76,7 @@ def test_local_shell_component_uses_windows_powershell(monkeypatch):
     assert calls[0][1]["shell"] is False
 
 
-def test_local_shell_component_uses_pwsh_when_configured(monkeypatch):
+def test_local_shell_component_prefers_pwsh_when_available(monkeypatch):
     calls = []
 
     def fake_run(*args, **kwargs):
@@ -84,10 +85,13 @@ def test_local_shell_component_uses_pwsh_when_configured(monkeypatch):
 
     monkeypatch.setattr(subprocess, "Popen", fake_run)
     monkeypatch.setattr(local_booter.sys, "platform", "win32")
-
-    result = asyncio.run(
-        LocalShellComponent().exec("Get-ChildItem", windows_shell="pwsh.exe")
+    monkeypatch.setattr(
+        local_booter.shutil,
+        "which",
+        lambda cmd: "/opt/pwsh" if cmd == "pwsh" else None,
     )
+
+    result = asyncio.run(LocalShellComponent().exec("Get-ChildItem"))
 
     assert result["exit_code"] == 0
     assert calls[0][0][0] == [
@@ -101,45 +105,29 @@ def test_local_shell_component_uses_pwsh_when_configured(monkeypatch):
     assert calls[0][1]["shell"] is False
 
 
-def test_exec_raises_when_windows_shell_missing(monkeypatch):
-    monkeypatch.setattr(local_booter.sys, "platform", "win32")
-    monkeypatch.setattr(local_booter.os, "name", "nt")
-    monkeypatch.setattr(local_booter.shutil, "which", lambda _cmd: None)
-
-    with pytest.raises(RuntimeError, match="pwsh.exe"):
-        asyncio.run(
-            LocalShellComponent().exec("Get-ChildItem", windows_shell="pwsh.exe")
-        )
-
-
-def test_exec_skips_windows_shell_check_outside_windows(monkeypatch):
+def test_exec_falls_back_to_powershell_when_pwsh_missing(monkeypatch):
     calls = []
 
     def fake_run(*args, **kwargs):
         calls.append((args, kwargs))
         return _FakePopen(stdout=b"")
 
-    def fail_if_called(_cmd):
-        raise AssertionError("shutil.which must not be called outside Windows")
-
     monkeypatch.setattr(subprocess, "Popen", fake_run)
     monkeypatch.setattr(local_booter.sys, "platform", "win32")
-    monkeypatch.setattr(local_booter.os, "name", "posix")
-    monkeypatch.setattr(local_booter.shutil, "which", fail_if_called)
+    monkeypatch.setattr(local_booter.shutil, "which", lambda _cmd: None)
 
-    result = asyncio.run(
-        LocalShellComponent().exec("Get-ChildItem", windows_shell="pwsh.exe")
-    )
+    result = asyncio.run(LocalShellComponent().exec("Get-ChildItem"))
 
     assert result["exit_code"] == 0
     assert calls[0][0][0] == [
-        "pwsh.exe",
+        "powershell.exe",
         "-NoLogo",
         "-NoProfile",
         "-NonInteractive",
         "-Command",
         "Get-ChildItem",
     ]
+    assert calls[0][1]["shell"] is False
 
 
 def test_local_shell_component_keeps_platform_shell_outside_windows(monkeypatch):
@@ -189,6 +177,7 @@ async def test_managed_shell_uses_windows_powershell(monkeypatch, tmp_path):
         raise AssertionError("Windows managed commands must not use cmd.exe.")
 
     monkeypatch.setattr(local_booter.sys, "platform", "win32")
+    monkeypatch.setattr(local_booter.shutil, "which", lambda _cmd: None)
     monkeypatch.setattr(
         local_booter.asyncio,
         "create_subprocess_exec",
@@ -224,7 +213,7 @@ async def test_managed_shell_uses_windows_powershell(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_managed_shell_uses_pwsh_when_configured(monkeypatch, tmp_path):
+async def test_managed_shell_prefers_pwsh_when_available(monkeypatch, tmp_path):
     calls = []
 
     class FakeStdout:
@@ -254,6 +243,11 @@ async def test_managed_shell_uses_pwsh_when_configured(monkeypatch, tmp_path):
 
     monkeypatch.setattr(local_booter.sys, "platform", "win32")
     monkeypatch.setattr(
+        local_booter.shutil,
+        "which",
+        lambda cmd: "/opt/pwsh" if cmd == "pwsh" else None,
+    )
+    monkeypatch.setattr(
         local_booter.asyncio,
         "create_subprocess_exec",
         fake_create_subprocess_exec,
@@ -272,7 +266,6 @@ async def test_managed_shell_uses_pwsh_when_configured(monkeypatch, tmp_path):
         sandboxed=False,
         cwd=str(tmp_path),
         yield_time_ms=5_000,
-        windows_shell="pwsh.exe",
     )
 
     assert result["status"] == "completed"
@@ -374,6 +367,7 @@ def test_local_shell_component_falls_back_when_windows_taskkill_fails(monkeypatc
         lambda *_args, **_kwargs: _FakeTaskkillResult(returncode=1),
     )
     monkeypatch.setattr(local_booter.sys, "platform", "win32")
+    monkeypatch.setattr(local_booter.shutil, "which", lambda _cmd: None)
 
     with pytest.raises(subprocess.TimeoutExpired):
         asyncio.run(LocalShellComponent().exec("dummy", timeout=1))

@@ -171,7 +171,10 @@ def test_append_system_reminders_includes_weekday(mock_event):
 
 
 def test_local_mode_prompt_uses_windows_powershell_51():
-    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"):
+    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"), patch(
+        "astrbot.core.astr_main_agent.resolve_windows_shell",
+        return_value="powershell.exe",
+    ):
         prompt = ama._build_local_mode_prompt()
 
     assert "Windows PowerShell 5.1 (powershell.exe)" in prompt
@@ -179,9 +182,12 @@ def test_local_mode_prompt_uses_windows_powershell_51():
     assert "cmd.exe" not in prompt
 
 
-def test_local_mode_prompt_uses_pwsh_when_configured():
-    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"):
-        prompt = ama._build_local_mode_prompt("pwsh.exe")
+def test_local_mode_prompt_hints_pwsh_when_resolved():
+    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"), patch(
+        "astrbot.core.astr_main_agent.resolve_windows_shell",
+        return_value="pwsh.exe",
+    ):
+        prompt = ama._build_local_mode_prompt()
 
     assert "PowerShell 7 (pwsh.exe)" in prompt
     assert "Windows PowerShell 5.1" not in prompt
@@ -189,8 +195,11 @@ def test_local_mode_prompt_uses_pwsh_when_configured():
 
 
 def test_local_mode_prompt_ignores_pwsh_on_non_windows():
-    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Linux"):
-        prompt = ama._build_local_mode_prompt("pwsh.exe")
+    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Linux"), patch(
+        "astrbot.core.astr_main_agent.resolve_windows_shell",
+        return_value="pwsh.exe",
+    ):
+        prompt = ama._build_local_mode_prompt()
 
     assert "Unix-like" in prompt
     assert "POSIX-compatible" in prompt
