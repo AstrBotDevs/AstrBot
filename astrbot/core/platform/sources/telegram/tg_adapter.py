@@ -601,15 +601,22 @@ class TelegramPlatformAdapter(Platform):
 
         elif update.message.sticker:
             # 将sticker当作图片处理
-            image = Comp.Image(file="")
-            image.set_source_resolver(
-                lambda sticker=update.message.sticker: _resolve_attachment_file_path(
-                    sticker
+            sticker = update.message.sticker
+            sticker_attachment = sticker
+            if getattr(sticker, "is_animated", False) or getattr(
+                sticker, "is_video", False
+            ):
+                sticker_attachment = getattr(sticker, "thumbnail", None)
+            if sticker_attachment is not None:
+                image = Comp.Image(file="")
+                image.set_source_resolver(
+                    lambda sticker=sticker_attachment: _resolve_attachment_file_path(
+                        sticker
+                    )
                 )
-            )
-            message.message.append(image)
-            if update.message.sticker.emoji:
-                sticker_text = f"Sticker: {update.message.sticker.emoji}"
+                message.message.append(image)
+            if sticker.emoji:
+                sticker_text = f"Sticker: {sticker.emoji}"
                 message.message_str = sticker_text
                 message.message.append(Comp.Plain(sticker_text))
 
