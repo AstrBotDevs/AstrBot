@@ -6,13 +6,14 @@ upstream:
 
 last_synced:
   commit: 19c029e36da451e4bef15a1adecba89dcef5e008
-  synced_at_utc: 2026-08-12T18:35:00Z
+  synced_at_utc: 2026-08-12T19:17:14Z
   sync_method: manual-adaptation
   source_pr: '9650'
   note: >-
     Reviewed the interval from e9ae69f93a72448c70ef1ead039ff78479c8c8f3
-    through 19c029e36da451e4bef15a1adecba89dcef5e008. Skipped the sole
-    upstream commit (chore: bump version to 4.27.3, #9650) because it is a
-    release/version bump with an upstream-only changelog and would incorrectly
-    claim upstream artifacts for this source-build fork. No runtime changes
-    were pending; fork version files remain at 4.27.2.
+    through 19c029e36da451e4bef15a1adecba89dcef5e008. Included the upstream
+    4.27.3 release metadata and version bump after confirming that the runtime
+    changes in the release interval were already adapted in this fork. The
+    release changelog's desktop-only passwordless session feature (#9585) is
+    not present in this fork's desktop/auth surface. The fork changelog records
+    the included adaptations and its own deviations.
