@@ -240,8 +240,7 @@ def _is_fake_tool_pair(asst_msg: dict[str, Any], tool_msg: dict[str, Any]) -> bo
     if tool_msg.get("tool_call_id") not in tc_ids:
         return False
     return not bool(
-        asst_msg.get(FROM_REAL_TOOL_CALL_KEY)
-        or tool_msg.get(FROM_REAL_TOOL_CALL_KEY)
+        asst_msg.get(FROM_REAL_TOOL_CALL_KEY) or tool_msg.get(FROM_REAL_TOOL_CALL_KEY)
     )
 
 
