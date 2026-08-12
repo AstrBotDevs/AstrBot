@@ -1,7 +1,7 @@
 interface:
   display_name: 'Sync AstrBot Upstream'
-  short_description: 'Review and record upstream sync decisions'
-  default_prompt: 'Use $sync-upstream to inspect upstream/master and maintain fork integration decisions.'
+  short_description: 'Review upstream changes and preserve per-commit provenance'
+  default_prompt: 'Use $sync-upstream to inspect upstream/master, classify each commit, and apply provenance-preserving per-commit integrations.'
 
 policy:
   allow_implicit_invocation: false

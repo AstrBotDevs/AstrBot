@@ -1,6 +1,6 @@
 ---
 name: sync-upstream
-description: Review and integrate AstrBot upstream/master changes into the Xero-Team/AstrBot fork while maintaining a searchable decision ledger. Use for upstream synchronization, cherry-pick planning, manual adaptation, skipped-commit review, conflict handling, or updates to upstream-sync.yaml.
+description: Review and integrate AstrBot upstream/master changes into the Xero-Team/AstrBot fork while maintaining a searchable decision ledger and provenance-preserving per-commit history. Use for upstream synchronization, cherry-pick planning, manual adaptation, skipped-commit review, conflict handling, sync commit author/message policy, or updates to upstream-sync.yaml.
 ---
 
 # Sync AstrBot upstream
@@ -66,6 +66,114 @@ topological order:
 Use reason codes such as `security`, `fork-architecture`, `no-legacy`,
 `python-314`, `toolchain`, `source-build`, `openapi`, `generated-model`,
 `docs-scope`, and `release-policy` so future searches remain cheap.
+
+## Integration commit strategy
+
+In apply mode, create at most one implementation commit for each upstream
+commit with disposition `cherry-pick`, `adapt`, or `replay`. Process them in
+oldest-first topological order. Do not combine several upstream feature or fix
+commits into one implementation commit. Commits with disposition `skip` or
+`revisit` produce no implementation commit.
+
+Preserve the upstream subject verbatim whenever possible, including its
+Conventional Commit type, scope, description, and existing `(#number)` PR
+suffix. If the upstream subject has no PR suffix, do not invent one. Change a
+subject only when the fork's user-visible semantics materially differ, and
+explain that change in the commit body.
+
+Use the following method for each disposition:
+
+- `cherry-pick`: use `git cherry-pick -x <full-upstream-sha>`. This preserves
+  the upstream author and records Git's standard `(cherry picked from commit
+  ...)` provenance line. Do not duplicate that line with another
+  `Upstream-Commit` trailer unless a conflict or message rewrite removes it.
+- `adapt`: apply the behavior manually against the current fork boundaries,
+  then commit with `git commit --author="<upstream author>"`. Preserve the
+  upstream subject and add the trailers below.
+- `replay`: use only when the ledger explicitly authorizes replay. Treat it as
+  a manual adaptation for author and provenance purposes, and cite the
+  authorizing historical record in the body or trailers.
+
+For adapted, replayed, or conflict-rewritten commits, use standard Git
+trailers with hyphenated tokens:
+
+```text
+Upstream-Commit: <full upstream SHA>
+Upstream-Author: <name> <email>
+Upstream-PR: AstrBotDevs#<number>
+Sync-Disposition: adapt
+Fork-Adaptation: <concise explanation of the fork-specific implementation>
+Tested: <focused validation command>
+```
+
+Omit a trailer when its value is unavailable; never use non-standard tokens
+with spaces such as `Source PR`. Keep `Signed-off-by` separate from sync
+provenance and do not add it unless repository policy or the user explicitly
+requires a developer certificate.
+
+Recommended adapted-commit shape:
+
+```text
+<upstream subject>
+
+<optional fork-specific explanation>
+
+Upstream-Commit: <full upstream SHA>
+Upstream-Author: <name> <email>
+Upstream-PR: AstrBotDevs#<number>
+Sync-Disposition: adapt
+Fork-Adaptation: <what changed for this fork>
+Tested: <command>
+```
+
+The final cursor update is a separate metadata-only commit with subject
+`chore(sync): record upstream integration`. Do not hide implementation changes
+inside this cursor commit. A release/version bump that is intentionally skipped
+still advances the cursor only after its `skip` decision is recorded and the
+skip rationale is written to `upstream-sync.yaml`.
+
+After each implementation commit, verify the mapping before moving on:
+
+```bash
+git show -s --format='%H%n%an <%ae>%n%cn <%ce>%n%s%n%B' HEAD
+git show --stat --oneline HEAD
+```
+
+The integration commit must be attributable to exactly one upstream SHA, and
+its author must be the upstream author for `cherry-pick`, `adapt`, and
+`replay` unless the user explicitly directs otherwise. The fork maintainer is
+normally the committer.
+
+## Conflict and duplicate handling
+
+Never resolve a conflict by blindly choosing ours or theirs. Pause the
+sequence, inspect the conflicting path and the missing context, and identify
+possible prerequisite commits before editing:
+
+```bash
+git log HEAD..<upstream_sha>^ -- <conflicted-path>
+git log -G'<relevant-symbol-or-string>' HEAD..<upstream_sha>^ -- <conflicted-path>
+```
+
+If the conflict is a mechanical context adjustment and preserves upstream
+behavior, continue the `cherry-pick`; inspect the final message and add an
+`Upstream-Commit` trailer if Git did not retain `-x` provenance. If the
+resolution changes behavior to fit fork architecture, classify the result as
+`adapt`, preserve the upstream author with `--author`, and record the reason in
+`Fork-Adaptation`. If the prerequisite or intended behavior cannot be
+established, run `git cherry-pick --abort` and use `revisit` rather than
+guessing.
+
+Before creating a new implementation commit, check whether the change was
+already integrated under a different fork commit:
+
+```bash
+git cherry upstream/master
+git log --all --grep='Upstream-Commit: <full-upstream-sha>' --format='%H %s'
+```
+
+An already-equivalent patch needs an explicit ledger decision and provenance;
+do not create a duplicate implementation commit merely because the SHA differs.
 
 ## Fork-specific gates
 
