@@ -226,22 +226,31 @@ def _is_fake_tool_pair(asst_msg: dict[str, Any], tool_msg: dict[str, Any]) -> bo
     """
     if not isinstance(asst_msg, dict) or not isinstance(tool_msg, dict):
         return False
+
     if asst_msg.get("role") != "assistant" or tool_msg.get("role") != "tool":
         return False
+
     tool_calls = asst_msg.get("tool_calls")
     if not tool_calls:
         return False
+
     # 仅收集非 None 的 tool_call_id，避免缺失 ID 被误判为有效匹配
-    tc_ids = {
-        tc_id
-        for tc in tool_calls
-        if isinstance(tc, dict) and (tc_id := tc.get("id")) is not None
-    }
+    tc_ids: set[str] = set()
+    for tc in tool_calls:
+        if not isinstance(tc, dict):
+            continue
+        tc_id = tc.get("id")
+        if tc_id is not None:
+            tc_ids.add(tc_id)
+
     if tool_msg.get("tool_call_id") not in tc_ids:
         return False
-    return not bool(
-        asst_msg.get(FROM_REAL_TOOL_CALL_KEY) or tool_msg.get(FROM_REAL_TOOL_CALL_KEY)
-    )
+
+    # 排除真实工具执行产生的对
+    if asst_msg.get(FROM_REAL_TOOL_CALL_KEY) or tool_msg.get(FROM_REAL_TOOL_CALL_KEY):
+        return False
+
+    return True
 
 
 def _collect_tailing_fake_pairs(
