@@ -983,6 +983,7 @@ class FunctionToolManager:
         toolset = ToolSet(tools)
         return toolset.google_schema()
 
+    @deprecated(reason="Use deactivate_llm_tool_async() instead.")
     def deactivate_llm_tool(self, name: str) -> bool:
         """停用一个已经注册的函数调用工具。
 
@@ -1012,7 +1013,39 @@ class FunctionToolManager:
             return True
         return False
 
+    async def deactivate_llm_tool_async(self, name: str) -> bool:
+        """Asynchronously deactivate a registered function-calling tool.
+
+        Args:
+            name: Tool name.
+
+        Returns:
+            True when the tool was deactivated, or False when it was not found.
+        """
+        func_tool = self.get_func(name)
+        if func_tool is not None:
+            func_tool.active = False
+
+            inactivated_llm_tools: list = await sp.get_async(
+                "global",
+                "global",
+                "inactivated_llm_tools",
+                [],
+            )
+            if name not in inactivated_llm_tools:
+                inactivated_llm_tools.append(name)
+                await sp.put_async(
+                    "global",
+                    "global",
+                    "inactivated_llm_tools",
+                    inactivated_llm_tools,
+                )
+
+            return True
+        return False
+
     # 因为不想解决循环引用，所以这里直接传入 star_map 先了...
+    @deprecated(reason="Use activate_llm_tool_async() instead.")
     def activate_llm_tool(self, name: str, star_map: dict) -> bool:
         func_tool = self.get_func(name)
         if func_tool is not None:
@@ -1037,6 +1070,47 @@ class FunctionToolManager:
                     inactivated_llm_tools,
                     scope="global",
                     scope_id="global",
+                )
+
+            return True
+        return False
+
+    async def activate_llm_tool_async(self, name: str, star_map: dict) -> bool:
+        """Asynchronously activate a registered function-calling tool.
+
+        Args:
+            name: Tool name.
+            star_map: Loaded plugins indexed by module path.
+
+        Returns:
+            True when the tool was activated, or False when it was not found.
+
+        Raises:
+            ValueError: If the plugin that owns the tool is disabled.
+        """
+        func_tool = self.get_func(name)
+        if func_tool is not None:
+            if func_tool.handler_module_path in star_map:
+                if not star_map[func_tool.handler_module_path].activated:
+                    raise ValueError(
+                        f"此函数调用工具所属的插件 {star_map[func_tool.handler_module_path].name} 已被禁用，请先在管理面板启用再激活此工具。",
+                    )
+
+            func_tool.active = True
+
+            inactivated_llm_tools: list = await sp.get_async(
+                "global",
+                "global",
+                "inactivated_llm_tools",
+                [],
+            )
+            if name in inactivated_llm_tools:
+                inactivated_llm_tools.remove(name)
+                await sp.put_async(
+                    "global",
+                    "global",
+                    "inactivated_llm_tools",
+                    inactivated_llm_tools,
                 )
 
             return True

@@ -305,6 +305,12 @@ async def mock_context(
 
     provider_manager = MagicMock()
     provider_manager.get_using_provider = MagicMock(return_value=mock_provider)
+    provider_manager.get_using_provider_async = AsyncMock(
+        side_effect=lambda *args, **kwargs: provider_manager.get_using_provider(
+            *args,
+            **kwargs,
+        )
+    )
     provider_manager.get_provider_by_id = MagicMock(return_value=mock_provider)
 
     platform_manager = MagicMock()

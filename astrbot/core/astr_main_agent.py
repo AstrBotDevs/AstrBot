@@ -227,10 +227,18 @@ def _set_llm_error_message(event: AstrMessageEvent, message: str) -> None:
     event.set_extra(LLM_ERROR_MESSAGE_EXTRA_KEY, message)
 
 
-def _select_provider(
+async def _select_provider(
     event: AstrMessageEvent, plugin_context: Context
 ) -> Provider | None:
-    """Select chat provider for the event."""
+    """Select the chat provider for an event.
+
+    Args:
+        event: Message event that may contain an explicit provider selection.
+        plugin_context: Plugin context used to resolve configured providers.
+
+    Returns:
+        Selected chat provider, or None if selection fails.
+    """
     sel_provider = event.get_extra("selected_provider")
     if sel_provider and isinstance(sel_provider, str):
         provider = plugin_context.get_provider_by_id(sel_provider)
@@ -252,7 +260,9 @@ def _select_provider(
             return None
         return provider
     try:
-        return plugin_context.get_using_provider(umo=event.unified_msg_origin)
+        return await plugin_context.get_using_provider_async(
+            umo=event.unified_msg_origin
+        )
     except ValueError as exc:
         logger.error("Error occurred while selecting provider: %s", exc)
         _set_llm_error_message(event, f"LLM 请求失败：{exc}")
@@ -916,7 +926,9 @@ async def _process_quote_message(
                 compress_path = None
                 prov = plugin_context.get_provider_by_id(img_cap_prov_id)
                 if prov is None:
-                    prov = plugin_context.get_using_provider(event.unified_msg_origin)
+                    prov = await plugin_context.get_using_provider_async(
+                        event.unified_msg_origin
+                    )
 
                 if prov and isinstance(prov, Provider):
                     path = await image_seg.convert_to_file_path()
@@ -1292,11 +1304,21 @@ def _apply_web_search_citation_prompt(
     req.system_prompt = f"{system_prompt}\n{WEB_SEARCH_CITATION_PROMPT}\n"
 
 
-def _get_compress_provider(
+async def _get_compress_provider(
     config: MainAgentBuildConfig,
     plugin_context: Context,
     event: AstrMessageEvent | None = None,
 ) -> Provider | None:
+    """Resolve the provider used for context compression.
+
+    Args:
+        config: Main agent build configuration.
+        plugin_context: Plugin context used to resolve providers.
+        event: Optional event used for session-specific fallback selection.
+
+    Returns:
+        Compression provider, or None if compression is disabled or unavailable.
+    """
     if config.context_limit_reached_strategy != "llm_compress":
         return None
     if config.llm_compress_provider_id:
@@ -1310,7 +1332,9 @@ def _get_compress_provider(
     # fallback: use current chat provider for this session
     if event:
         try:
-            return plugin_context.get_using_provider(umo=event.unified_msg_origin)
+            return await plugin_context.get_using_provider_async(
+                umo=event.unified_msg_origin
+            )
         except ValueError:
             pass
     return None
@@ -1398,7 +1422,7 @@ async def build_main_agent(
 
     If apply_reset is False, will not call reset on the agent runner.
     """
-    provider = provider or _select_provider(event, plugin_context)
+    provider = provider or await _select_provider(event, plugin_context)
     if provider is None:
         logger.info("未找到任何对话模型（提供商），跳过 LLM 请求处理。")
         if not event.get_extra(LLM_ERROR_MESSAGE_EXTRA_KEY):
@@ -1699,7 +1723,11 @@ async def build_main_agent(
         streaming=config.streaming_response,
         llm_compress_instruction=config.llm_compress_instruction,
         llm_compress_keep_recent_ratio=config.llm_compress_keep_recent_ratio,
-        llm_compress_provider=_get_compress_provider(config, plugin_context, event),
+        llm_compress_provider=await _get_compress_provider(
+            config,
+            plugin_context,
+            event,
+        ),
         truncate_turns=config.dequeue_context_length,
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,

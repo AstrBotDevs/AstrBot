@@ -172,6 +172,8 @@ class AstrBotCoreLifecycle:
             LogManager.configure_trace_logger(self.astrbot_config)
 
         await self.db.initialize()
+        if sp.db_helper is self.db:
+            await sp.initialize()
 
         await html_renderer.initialize()
 
@@ -404,6 +406,8 @@ class AstrBotCoreLifecycle:
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()
+        if sp.db_helper is self.db:
+            await sp.close()
         self.dashboard_shutdown_event.set()
 
         # 再次遍历curr_tasks等待每个任务真正结束
@@ -427,6 +431,8 @@ class AstrBotCoreLifecycle:
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()
+        if sp.db_helper is self.db:
+            await sp.close()
         self.dashboard_shutdown_event.set()
         threading.Thread(
             target=restart_process,

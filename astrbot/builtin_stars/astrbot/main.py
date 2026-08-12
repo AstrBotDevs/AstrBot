@@ -227,7 +227,9 @@ class Main(star.Star):
                         logger.error(e)
 
             if need_active:
-                provider = self.context.get_using_provider(event.unified_msg_origin)
+                provider = await self.context.get_using_provider_async(
+                    event.unified_msg_origin
+                )
                 if not provider:
                     logger.error("未找到任何 LLM 提供商。请先配置。无法主动回复")
                     return

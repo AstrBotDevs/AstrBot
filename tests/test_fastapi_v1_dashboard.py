@@ -165,7 +165,13 @@ class FakeLlmTools:
     def activate_llm_tool(self, _tool_name: str, *, star_map) -> bool:
         return True
 
+    async def activate_llm_tool_async(self, _tool_name: str, *, star_map) -> bool:
+        return True
+
     def deactivate_llm_tool(self, _tool_name: str) -> bool:
+        return True
+
+    async def deactivate_llm_tool_async(self, _tool_name: str) -> bool:
         return True
 
 
