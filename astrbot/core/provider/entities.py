@@ -19,6 +19,7 @@ from astrbot.core.agent.message import (
     ToolCall,
     ToolCallMessageSegment,
     is_checkpoint_message,
+    message_to_dict_with_marker,
 )
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
@@ -72,12 +73,10 @@ class ToolCallsResult:
     """函数调用的结果"""
 
     def to_openai_messages(self) -> list[dict]:
-        ret: list[dict] = []
-        for item in self.to_openai_messages_model():
-            data = item.model_dump()
-            data["_from_real_tool_call"] = True
-            ret.append(data)
-        return ret
+        return [
+            message_to_dict_with_marker(item)
+            for item in self.to_openai_messages_model()
+        ]
 
     def to_openai_messages_model(
         self,

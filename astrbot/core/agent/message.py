@@ -348,13 +348,24 @@ def bind_checkpoint_messages(history: list[dict]) -> list[Message]:
     return messages
 
 
+def message_to_dict_with_marker(message: Message) -> dict:
+    """Serialize a Message to dict, carrying the real-tool-call marker.
+
+    ``_from_real_tool_call`` is a ``PrivateAttr`` so it never appears in
+    ``model_dump()`` output; this helper re-injects it so the fake tool call
+    reorder's misfire protection survives every serialization path.
+    """
+    data = message.model_dump()
+    if message._from_real_tool_call:
+        data["_from_real_tool_call"] = True
+    return data
+
+
 def dump_messages_with_checkpoints(messages: list[Message]) -> list[dict]:
     """Dump runtime messages and reinsert bound checkpoint segments."""
     dumped: list[dict] = []
     for message in messages:
-        message_data = message.model_dump()
-        if message._from_real_tool_call:
-            message_data["_from_real_tool_call"] = True
+        message_data = message_to_dict_with_marker(message)
         if isinstance(message.content, list):
             message_data["content"] = [
                 part.model_dump()

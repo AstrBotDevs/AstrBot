@@ -2775,14 +2775,27 @@ def test_modalities_sanitize_preserves_marker():
     assert sanitized[1]["_from_real_tool_call"] is True
 
 
-def test_reorder_non_dict_entry_does_not_crash():
+@pytest.mark.parametrize(
+    "messages",
+    [
+        # 中部非 dict 条目
+        [
+            {"role": "user", "content": "hello"},
+            "garbage-not-a-dict",
+            {"role": "tool", "tool_call_id": "x", "content": "r"},
+            {"role": "user", "content": "next"},
+        ],
+        # 尾部非 dict 条目（last.get 无 isinstance 防护时会 AttributeError）
+        [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "ok"},
+            "garbage-at-tail",
+        ],
+    ],
+    ids=["middle_non_dict", "tail_non_dict"],
+)
+def test_reorder_non_dict_entry_does_not_crash(messages):
     """contexts 中出现非 dict 条目时重排不崩溃（此前会 AttributeError）。"""
-    messages = [
-        {"role": "user", "content": "hello"},
-        "garbage-not-a-dict",
-        {"role": "tool", "tool_call_id": "x", "content": "r"},
-        {"role": "user", "content": "next"},
-    ]
     expected = messages[:]
 
     reorder_tailing_tool_call_user(messages)

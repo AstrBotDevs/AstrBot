@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from astrbot import logger
-from astrbot.core.agent.message import Message
+from astrbot.core.agent.message import Message, message_to_dict_with_marker
 
 
 @dataclass(slots=True)
@@ -28,10 +28,7 @@ class ContextSanitizeStats:
 
 def _message_to_dict(message: dict[str, Any] | Message) -> dict[str, Any] | None:
     if isinstance(message, Message):
-        data = dict(message.model_dump())
-        if message._from_real_tool_call:
-            data["_from_real_tool_call"] = True
-        return data
+        return message_to_dict_with_marker(message)
     if isinstance(message, dict):
         return dict(copy.deepcopy(message))
     return None

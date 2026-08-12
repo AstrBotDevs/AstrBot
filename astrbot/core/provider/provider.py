@@ -4,7 +4,12 @@ import os
 from collections.abc import AsyncGenerator
 from typing import Any, Literal, TypeAlias, Union
 
-from astrbot.core.agent.message import ContentPart, Message, is_checkpoint_message
+from astrbot.core.agent.message import (
+    ContentPart,
+    Message,
+    is_checkpoint_message,
+    message_to_dict_with_marker,
+)
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.provider.entities import (
     LLMResponse,
@@ -198,10 +203,7 @@ class Provider(AbstractProvider):
             if is_checkpoint_message(message):
                 continue
             if isinstance(message, Message):
-                data = message.model_dump()
-                if message._from_real_tool_call:
-                    data["_from_real_tool_call"] = True
-                dicts.append(data)
+                dicts.append(message_to_dict_with_marker(message))
             else:
                 dicts.append(message)
 
@@ -245,12 +247,19 @@ def reorder_tailing_tool_call_user(messages: list[dict[str, Any]]) -> None:
     避免误伤紧随其后的真实 user 消息（图片复核、max steps 收尾、跨轮次历史）。
     此为轻量妥协修复。未来若实现专用的上下文操作钩子或伪造工具调用钩子，
     可考虑移除此函数。
+
+    Constraints:
+    - ``messages`` 必须为 OpenAI 风格 dict 列表（``role`` / ``content`` /
+      ``tool_calls`` / ``tool_call_id`` 字段）；非 dict 条目安全跳过。
+    - 就地修改 ``messages``，返回 ``None``。
+    - 仅当末尾消息为 ``user`` 时触发，且只收集尾部连续的最内层伪造对块；
+      其余情况静默 no-op。
     """
     if not isinstance(messages, list) or len(messages) < 2:
         return
 
     last = messages[-1]
-    if last.get("role") != "user":
+    if not isinstance(last, dict) or last.get("role") != "user":
         return
 
     # 从尾部向前收集连续的伪造对（内层优先），遇真实对即停止
