@@ -455,8 +455,8 @@ def _build_local_mode_prompt() -> str:
     elif resolve_windows_shell() == "pwsh.exe":
         shell_hint = (
             "The runtime shell is PowerShell 7 (pwsh.exe). "
-            "Use PowerShell 7-compatible syntax and cmdlets; do not "
-            "assume Unix commands like cat/ls/grep are available."
+            "Use PowerShell 7-compatible syntax and cmdlets, and do not "
+            "assume a full Unix userland or GNU utilities are available."
         )
     else:
         shell_hint = (
