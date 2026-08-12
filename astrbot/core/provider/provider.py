@@ -289,7 +289,10 @@ def reorder_tailing_tool_call_user(messages: list[dict[str, Any]]) -> None:
     Constraints:
     - ``messages`` 必须为 OpenAI 风格 dict 列表（``role`` / ``content`` /
       ``tool_calls`` / ``tool_call_id`` 字段）；非 dict 条目安全跳过。
-    - 就地修改 ``messages``，返回 ``None``。
+    - **就地修改** ``messages``，返回 ``None``：调用方须使用重排后的列表，
+      不得假定原顺序保留。就地是刻意的——各 provider 在重排点之后立即读取
+      同一列表做格式转换（Anthropic / Gemini / Responses 的转换函数），OpenAI
+      路径也依赖 payload 中的保序标记消息供重试时重复 sanitize 不误伤。
     - 仅当末尾消息为 ``user`` 时触发，且只收集尾部连续的最内层伪造对块；
       其余情况静默 no-op。
     """
@@ -303,10 +306,12 @@ def reorder_tailing_tool_call_user(messages: list[dict[str, Any]]) -> None:
     messages[:] = messages[:start_idx] + [last_user] + fake_block
 
 
-def strip_internal_markers(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def strip_internal_markers(messages: list[Any]) -> list[Any]:
     """返回剥离 ``_from_real_tool_call`` 标记的消息副本，不改动原列表。
 
-    标记只在发送前对副本剥离，payload 中的标记保留供重试时重排继续做误伤防护。
+    仅对 dict 消息剥离标记，非 dict 元素原样保留——返回值可能混合多种元素类型，
+    故类型标注为 ``Any``。标记只在发送前对副本剥离，payload 中的标记保留供
+    重试时重排继续做误伤防护。
     """
     return [
         {k: v for k, v in msg.items() if k != FROM_REAL_TOOL_CALL_KEY}
