@@ -1,10 +1,10 @@
 import asyncio
 import os
 import sys
+from collections.abc import AsyncGenerator
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
-from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock
 
 import pytest
@@ -91,9 +91,7 @@ class MockToolExecutor:
         # 模拟工具返回结果,使用正确的类型
         from mcp.types import CallToolResult, TextContent
 
-        result = CallToolResult(
-            content=[TextContent(type="text", text="工具执行结果")]
-        )
+        result = CallToolResult(content=[TextContent(type="text", text="工具执行结果")])
         yield result
 
 
@@ -242,6 +240,33 @@ class MockAbortableStreamProvider(MockProvider):
             completion_text="partial final",
             is_chunk=False,
         )
+
+
+class MockBlockingProvider(MockProvider):
+    """Provider that records cancellation while waiting for its first response."""
+
+    def __init__(self):
+        super().__init__()
+        self.started = asyncio.Event()
+        self.cancelled = asyncio.Event()
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.started.set()
+        try:
+            await asyncio.Future()
+        except asyncio.CancelledError:
+            self.cancelled.set()
+            raise
+
+    async def text_chat_stream(self, **kwargs):
+        self.started.set()
+        try:
+            await asyncio.Future()
+        except asyncio.CancelledError:
+            self.cancelled.set()
+            raise
+        if False:
+            yield LLMResponse(role="assistant")
 
 
 class MockToolCallProvider(MockProvider):
@@ -1277,7 +1302,7 @@ async def test_empty_output_retries_exhausted_then_uses_fallback_provider(
 
 
 @pytest.mark.asyncio
-async def test_stop_signal_returns_aborted_and_persists_partial_message(
+async def test_stop_signal_returns_aborted_and_discards_partial_message(
     runner, provider_request, mock_tool_executor, mock_hooks
 ):
     provider = MockAbortableStreamProvider()
@@ -1307,9 +1332,70 @@ async def test_stop_signal_returns_aborted_and_persists_partial_message(
     final_resp = runner.get_final_llm_resp()
     assert final_resp is not None
     assert final_resp.role == "assistant"
-    # When interrupted, the runner replaces completion_text with a system message
-    assert "interrupted" in final_resp.completion_text.lower()
-    assert runner.run_context.messages[-1].role == "assistant"
+    assert final_resp.completion_text == runner.USER_INTERRUPTION_MESSAGE
+    assert [message.role for message in runner.run_context.messages[-2:]] == [
+        "user",
+        "assistant",
+    ]
+    assert runner.run_context.messages[-2].content == [
+        TextPart(text=runner.USER_INTERRUPTION_REQUEST)
+    ]
+    assert runner.run_context.messages[-1].content == [
+        TextPart(text=runner.USER_INTERRUPTION_MESSAGE)
+    ]
+    assert all(
+        message.content != [TextPart(text="partial ")]
+        for message in runner.run_context.messages
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_stop_cancels_provider_before_first_response(
+    streaming,
+    runner,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+):
+    """Stop must cancel blocked streaming and non-streaming Provider requests."""
+    provider = MockBlockingProvider()
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=streaming,
+    )
+
+    step_iter = runner.step()
+    pending_response = asyncio.create_task(anext(step_iter))
+    await asyncio.wait_for(provider.started.wait(), timeout=1)
+
+    runner.request_stop()
+
+    response = await asyncio.wait_for(pending_response, timeout=1)
+    assert response.type == "aborted"
+    await asyncio.wait_for(provider.cancelled.wait(), timeout=1)
+    assert runner.was_aborted() is True
+    assert runner.done() is True
+    final_resp = runner.get_final_llm_resp()
+    assert final_resp is not None
+    assert final_resp.completion_text == runner.USER_INTERRUPTION_MESSAGE
+    assert [message.role for message in runner.run_context.messages[-2:]] == [
+        "user",
+        "assistant",
+    ]
+    assert runner.run_context.messages[-2].content == [
+        TextPart(text=runner.USER_INTERRUPTION_REQUEST)
+    ]
+    assert runner.run_context.messages[-1].content == [
+        TextPart(text=runner.USER_INTERRUPTION_MESSAGE)
+    ]
+
+    with pytest.raises(StopAsyncIteration):
+        await step_iter.__anext__()
 
 
 @pytest.mark.asyncio
@@ -1357,6 +1443,13 @@ async def test_stop_interrupts_pending_subagent_handoff(mock_hooks):
     assert aborted_resp.type == "aborted"
     assert runner.was_aborted() is True
     assert subagent_context.cancelled is True
+    final_resp = runner.get_final_llm_resp()
+    assert final_resp is not None
+    assert final_resp.completion_text == runner.USER_INTERRUPTION_MESSAGE
+    assert [message.role for message in runner.run_context.messages[-2:]] == [
+        "user",
+        "assistant",
+    ]
 
     with pytest.raises(StopAsyncIteration):
         await step_iter.__anext__()
@@ -1409,6 +1502,13 @@ async def test_stop_interrupts_pending_regular_tool(mock_hooks):
     assert aborted_resp.type == "aborted"
     assert runner.was_aborted() is True
     assert tool_state.cancelled is True
+    final_resp = runner.get_final_llm_resp()
+    assert final_resp is not None
+    assert final_resp.completion_text == runner.USER_INTERRUPTION_MESSAGE
+    assert [message.role for message in runner.run_context.messages[-2:]] == [
+        "user",
+        "assistant",
+    ]
 
     with pytest.raises(StopAsyncIteration):
         await step_iter.__anext__()
@@ -1862,6 +1962,13 @@ async def test_follow_up_rejected_and_runner_stops_without_execution(
     # Verify runner stopped gracefully
     assert runner.done()
     assert runner.was_aborted()
+    final_resp = runner.get_final_llm_resp()
+    assert final_resp is not None
+    assert final_resp.completion_text == runner.USER_INTERRUPTION_MESSAGE
+    assert [message.role for message in runner.run_context.messages[-2:]] == [
+        "user",
+        "assistant",
+    ]
 
     # No tool execution should have occurred
     assert provider_request.tool_calls_result is None

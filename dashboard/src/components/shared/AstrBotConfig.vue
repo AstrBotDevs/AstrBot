@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import { computed, ref } from "vue";
+import { providerApi } from "@/api/v1";
 import { useConfigTextResolver } from "@/composables/useConfigTextResolver";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
-import axios from "@/utils/request";
 import { useToast } from "@/utils/toast";
+import ConfigDefaultReset from "./ConfigDefaultReset.vue";
 import ConfigItemRenderer from "./ConfigItemRenderer.vue";
 import TemplateListEditor from "./TemplateListEditor.vue";
 
@@ -34,6 +35,10 @@ const props = defineProps({
     default: "",
   },
   isEditing: {
+    type: Boolean,
+    default: false,
+  },
+  enableDefaultReset: {
     type: Boolean,
     default: false,
   },
@@ -108,9 +113,12 @@ async function getEmbeddingDimensions(providerConfig) {
 
   loadingEmbeddingDim.value = true;
   try {
-    const response = await axios.post("/api/config/provider/get_embedding_dim", {
-      provider_config: providerConfig,
-    });
+    const providerId = String(providerConfig?.id || "");
+    if (!providerId) {
+      useToast().error("缺少提供商 ID");
+      return;
+    }
+    const response = await providerApi.embeddingDimension(providerId, providerConfig);
 
     if (response.data.status !== "error" && response.data.data?.embedding_dimensions) {
       console.info(response.data.data.embedding_dimensions);
@@ -244,6 +252,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
                 :plugin-name="pluginName"
                 :plugin-i18n="pluginI18n"
                 :path-prefix="getItemPath(key)"
+                :enable-default-reset="enableDefaultReset"
               />
             </v-expand-transition>
           </div>
@@ -281,16 +290,23 @@ function hasVisibleItemsAfter(items, currentIndex) {
                 {{ resolveConfigText(getItemPath(key), 'hint', metadata[metadataKey].items[key]?.hint) }}
               </v-list-item-subtitle>
             </div>
-            <!-- eslint-disable-next-line vue/no-mutating-props -->
-            <TemplateListEditor
+            <ConfigDefaultReset
               :model-value="iterable[key]"
-              :templates="metadata[metadataKey].items[key]?.templates || {}"
-              :plugin-name="pluginName"
-              :plugin-i18n="pluginI18n"
-              :config-path="getItemPath(key)"
-              class="config-field"
-              @update:model-value="setIterableValue(key, $event)"
-            />
+              :item-meta="metadata[metadataKey].items[key]"
+              :enabled="enableDefaultReset"
+              @reset="setIterableValue(key, $event)"
+            >
+              <!-- eslint-disable-next-line vue/no-mutating-props -->
+              <TemplateListEditor
+                :model-value="iterable[key]"
+                :templates="metadata[metadataKey].items[key]?.templates || {}"
+                :plugin-name="pluginName"
+                :plugin-i18n="pluginI18n"
+                :config-path="getItemPath(key)"
+                class="config-field"
+                @update:model-value="setIterableValue(key, $event)"
+              />
+            </ConfigDefaultReset>
           </div>
         </div>
 
@@ -328,28 +344,35 @@ function hasVisibleItemsAfter(items, currentIndex) {
             </v-col>
 
             <v-col cols="12" sm="6" class="config-input">
-              <!-- eslint-disable-next-line vue/no-mutating-props -->
-              <ConfigItemRenderer
+              <ConfigDefaultReset
                 :model-value="iterable[key]"
-                :item-meta="metadata[metadataKey].items[key] || null"
-                :plugin-name="pluginName"
-                :plugin-i18n="pluginI18n"
-                :config-key="getItemPath(key)"
-                :loading="loadingEmbeddingDim"
-                :show-fullscreen-btn="
-                  !!metadata[metadataKey].items[key]?.editor_mode
-                "
-                @update:model-value="setIterableValue(key, $event)"
-                @get-embedding-dim="getEmbeddingDimensions(iterable)"
-                @open-fullscreen="
-                  openEditorDialog(
-                    key,
-                    iterable,
-                    metadata[metadataKey].items[key]?.editor_theme,
-                    metadata[metadataKey].items[key]?.editor_language,
-                  )
-                "
-              />
+                :item-meta="metadata[metadataKey].items[key]"
+                :enabled="enableDefaultReset"
+                @reset="setIterableValue(key, $event)"
+              >
+                <!-- eslint-disable-next-line vue/no-mutating-props -->
+                <ConfigItemRenderer
+                  :model-value="iterable[key]"
+                  :item-meta="metadata[metadataKey].items[key] || null"
+                  :plugin-name="pluginName"
+                  :plugin-i18n="pluginI18n"
+                  :config-key="getItemPath(key)"
+                  :loading="loadingEmbeddingDim"
+                  :show-fullscreen-btn="
+                    !!metadata[metadataKey].items[key]?.editor_mode
+                  "
+                  @update:model-value="setIterableValue(key, $event)"
+                  @get-embedding-dim="getEmbeddingDimensions(iterable)"
+                  @open-fullscreen="
+                    openEditorDialog(
+                      key,
+                      iterable,
+                      metadata[metadataKey].items[key]?.editor_theme,
+                      metadata[metadataKey].items[key]?.editor_language,
+                    )
+                  "
+                />
+              </ConfigDefaultReset>
             </v-col>
           </v-row>
 
@@ -390,30 +413,34 @@ function hasVisibleItemsAfter(items, currentIndex) {
         </v-col>
 
         <v-col cols="12" sm="5" class="config-input">
-          <!-- eslint-disable-next-line vue/no-mutating-props -->
-          <TemplateListEditor
-            v-if="
-              metadata[metadataKey]?.type === 'template_list' &&
-              !metadata[metadataKey]?.invisible
-            "
-            :model-value="iterable[metadataKey]"
-            :templates="metadata[metadataKey]?.templates || {}"
-            :plugin-name="pluginName"
-            :plugin-i18n="pluginI18n"
-            :config-path="getItemPath(metadataKey)"
-            class="config-field"
-            @update:model-value="setIterableValue(metadataKey, $event)"
-          />
-          <!-- eslint-disable-next-line vue/no-mutating-props -->
-          <ConfigItemRenderer
-            v-else
+          <ConfigDefaultReset
             :model-value="iterable[metadataKey]"
             :item-meta="metadata[metadataKey]"
-            :plugin-name="pluginName"
-            :plugin-i18n="pluginI18n"
-            :config-key="getItemPath(metadataKey)"
-            @update:model-value="setIterableValue(metadataKey, $event)"
-          />
+            :enabled="enableDefaultReset"
+            @reset="setIterableValue(metadataKey, $event)"
+          >
+            <!-- eslint-disable-next-line vue/no-mutating-props -->
+            <TemplateListEditor
+              v-if="metadata[metadataKey]?.type === 'template_list' && !metadata[metadataKey]?.invisible"
+              :model-value="iterable[metadataKey]"
+              :templates="metadata[metadataKey]?.templates || {}"
+              :plugin-name="pluginName"
+              :plugin-i18n="pluginI18n"
+              :config-path="getItemPath(metadataKey)"
+              class="config-field"
+              @update:model-value="setIterableValue(metadataKey, $event)"
+            />
+            <!-- eslint-disable-next-line vue/no-mutating-props -->
+            <ConfigItemRenderer
+              v-else
+              :model-value="iterable[metadataKey]"
+              :item-meta="metadata[metadataKey]"
+              :plugin-name="pluginName"
+              :plugin-i18n="pluginI18n"
+              :config-key="getItemPath(metadataKey)"
+              @update:model-value="setIterableValue(metadataKey, $event)"
+            />
+          </ConfigDefaultReset>
         </v-col>
       </v-row>
 
