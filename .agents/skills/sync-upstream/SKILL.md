@@ -85,7 +85,7 @@ Use the following method for each disposition:
 
 - `cherry-pick`: use `git cherry-pick -x <full-upstream-sha>`. This preserves
   the upstream author and records Git's standard `(cherry picked from commit
-  ...)` provenance line. Do not duplicate that line with another
+...)` provenance line. Do not duplicate that line with another
   `Upstream-Commit` trailer unless a conflict or message rewrite removes it.
 - `adapt`: apply the behavior manually against the current fork boundaries,
   then commit with `git commit --author="<upstream author>"`. Preserve the
