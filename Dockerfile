@@ -199,7 +199,9 @@ RUN touch "${BASH_ENV}" \
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    curl --proto '=https' --tlsv1.2 -sSf \
+    --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
+    https://sh.rustup.rs | \
     sh -s -- -y --profile minimal --default-toolchain stable \
     && cargo --version \
     && arch="$(dpkg --print-architecture)" \
@@ -210,8 +212,11 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     esac \
     && tmpdir="$(mktemp -d)" \
     && curl -L --proto '=https' --tlsv1.2 -sSf \
+        --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
         "https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-${cargo_binstall_arch}.tgz" \
-        | tar -C "$tmpdir" -xzf - \
+        -o "${tmpdir}/cargo-binstall.tgz" \
+    && tar -tzf "${tmpdir}/cargo-binstall.tgz" >/dev/null \
+    && tar -C "$tmpdir" -xzf "${tmpdir}/cargo-binstall.tgz" \
     && install -m 0755 "$tmpdir/cargo-binstall" /usr/local/cargo/bin/cargo-binstall \
     && rm -rf "$tmpdir" \
     && cargo binstall --no-confirm \
