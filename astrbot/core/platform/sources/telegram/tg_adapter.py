@@ -640,6 +640,15 @@ class TelegramPlatformAdapter(Platform):
             message.message.append(video)
             _apply_caption()
 
+        elif update.message.video_note:
+            # Video notes carry no file_name and cannot have a caption.
+            video_note = update.message.video_note
+            video = Comp.Video(file="")
+            video.set_source_resolver(
+                lambda video_note=video_note: _resolve_attachment_file_path(video_note)
+            )
+            message.message.append(video)
+
         return message
 
     @staticmethod
