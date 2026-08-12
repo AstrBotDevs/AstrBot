@@ -38,11 +38,10 @@ jobs:
       - name: Inject Commit SHA
         id: get_sha
         run: |
-          echo "COMMIT_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
+          commit_sha=$(git rev-parse HEAD)
+          echo "COMMIT_SHA=$commit_sha" >> "$GITHUB_ENV"
           mkdir -p dashboard/dist/assets
-          echo $COMMIT_SHA > dashboard/dist/assets/version
-          cd dashboard
-          zip -r dist.zip dist
+          echo "$commit_sha" > dashboard/dist/assets/version
 
       - name: Archive production artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -51,14 +50,3 @@ jobs:
           path: |
             dashboard/dist
             !dist/**/*.md
-
-      - name: Create GitHub Release
-        if: github.repository == 'AstrBotDevs/AstrBot' && github.event_name == 'push'
-        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1.21.0
-        with:
-          tag: release-${{ github.sha }}
-          owner: AstrBotDevs
-          repo: astrbot-release-harbour
-          body: 'Automated release from commit ${{ github.sha }}'
-          token: ${{ secrets.ASTRBOT_HARBOUR_TOKEN }}
-          artifacts: 'dashboard/dist.zip'

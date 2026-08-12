@@ -1,35 +1,7 @@
 # Deploy AstrBot with Docker
 
-Each `v*` tag pushed to this repository publishes a minimal runtime image to
-GHCR: `ghcr.io/xero-team/astrbot:<tag>`. Stable releases (tags without `-`)
-also update `ghcr.io/xero-team/astrbot:latest`. Images support both
-`linux/amd64` and `linux/arm64`.
-
-## Use the Published Minimal Image
-
-`minimal` keeps AstrBot, the WebUI, and core shell utilities. It omits optional
-browser, document-processing, media, OCR, runtime-font, Node.js, and Docker
-CLI features. Build locally with the feature groups below when you need them,
-and use a version tag rather than `latest` for a reproducible deployment.
-
-After making the published GHCR package public, run a pinned version directly:
-
-```bash
-docker run -d --init --name astrbot \\
-  -p 127.0.0.1:6185:6185 \\
-  -e ASTRBOT_DASHBOARD_HOST=0.0.0.0 \\
-  -v astrbot-data:/AstrBot/data \\
-  ghcr.io/xero-team/astrbot:v4.27.2
-```
-
-The first run writes a random initial password to the logs; use
-`docker logs astrbot` to view it. For a private package, first log in to
-`ghcr.io` with a token that has `read:packages` permission.
-
-> [!CAUTION]
-> The example publishes the admin panel only on the local loopback interface.
-> Do not expose it directly to the public internet. For remote access, use a
-> firewall, an HTTPS reverse proxy, a strong password, and TOTP.
+This fork does not publish a prebuilt container image. Build the image from the
+current checkout so the backend and Dashboard stay version-matched.
 
 ## Build from Source
 

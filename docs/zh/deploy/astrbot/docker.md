@@ -1,32 +1,7 @@
 # 使用 Docker 部署 AstrBot
 
-每个推送到仓库的 `v*` 标签都会发布一个最小运行时镜像到 GHCR：
-`ghcr.io/xero-team/astrbot:<tag>`。正式版本（不含 `-` 的标签）还会更新
-`ghcr.io/xero-team/astrbot:latest`。镜像同时提供 `linux/amd64` 和
-`linux/arm64`。
-
-## 使用已发布的最小镜像
-
-`minimal` 保留 AstrBot、WebUI 和核心 Shell 工具，但不包含浏览器、文档处理、
-媒体、OCR、运行时字体、Node.js 或 Docker CLI 等可选功能。需要这些功能时，请按照
-下面的本地构建方式选择功能组；不要把 `latest` 用作可复现部署的版本标识。
-
-将发布的 GHCR package 设为 Public 后，可直接运行指定版本：
-
-```bash
-docker run -d --init --name astrbot \\
-  -p 127.0.0.1:6185:6185 \\
-  -e ASTRBOT_DASHBOARD_HOST=0.0.0.0 \\
-  -v astrbot-data:/AstrBot/data \\
-  ghcr.io/xero-team/astrbot:v4.27.2
-```
-
-首次运行会在日志中写入随机初始密码。使用 `docker logs astrbot` 查看它。对于私有
-package，先使用有 `read:packages` 权限的令牌登录 `ghcr.io`。
-
-> [!CAUTION]
-> 示例只把管理面板发布到本机回环地址。不要将其直接暴露到公网；如需远程访问，请配置
-> 防火墙、HTTPS 反向代理、强密码和 TOTP。
+当前 fork 不发布预构建容器镜像。请从当前 checkout 构建，确保后端与 Dashboard
+版本匹配。
 
 ## 从源码构建
 

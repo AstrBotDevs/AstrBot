@@ -47,8 +47,14 @@ jobs:
           export ZHIPU_API_KEY=${{ secrets.OPENAI_API_KEY }}
           uv run pytest --cov=astrbot -v -o log_cli=true -o log_level=DEBUG
 
+      - name: Check Codecov configuration
+        id: codecov
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        run: echo "enabled=$([[ -n \"$CODECOV_TOKEN\" ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
       - name: Upload results to Codecov
-        if: github.repository == 'AstrBotDevs/AstrBot'
+        if: steps.codecov.outputs.enabled == 'true'
         uses: codecov/codecov-action@a99c28d3f0da835de33ff2feb2e15691c7b9641f # v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

@@ -455,14 +455,10 @@ head.
 ## Releases
 
 Release preparation is a source-management workflow, not proof that assets will
-be published. The jobs in `.github/workflows/release.yml` and the release-image
-jobs in `docker-image.yml` are currently guarded by
-`github.repository == 'AstrBotDevs/AstrBot'`; they do not publish GitHub assets,
-PyPI packages, or images for `Xero-Team/AstrBot`.
-
-`build-docs.yml` also listens for `v*` tags and is not repository-guarded.
-Before pushing a fork tag, verify that its deployment target and secrets are
-explicitly authorized, or adapt/disable that workflow for the fork.
+be published. This fork's `.github` workflows do not publish GitHub assets, PyPI
+packages, or container images. The documentation workflow only builds and uploads
+a short-lived CI artifact; it has no deployment credentials or external publish
+step.
 
 `scripts/prepare_release.py` uses the latest tag reachable from the selected
 base branch as its changelog lower bound. This fork currently has no
@@ -509,6 +505,6 @@ The generated changelog is only a draft of raw commit subjects. Before the PR:
 - add compare/release links only when both referenced fork tags really exist.
 
 After review, open the release branch PR to `master`. A post-merge tag does not
-by itself publish fork-owned PyPI, GitHub Release, or container artifacts, but
-it is not side-effect free: the current unguarded docs workflow may still
-deploy on a `v*` tag. Verify or disable that path before pushing.
+publish fork-owned PyPI, GitHub Release, or container artifacts; create a separate,
+explicitly authorized publication workflow only when the fork establishes those
+release targets and credentials.

@@ -1,9 +1,15 @@
-name: Build and Deploy AstrBot Docs
+name: Build AstrBot Docs
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [master]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/build-docs.yml'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - '.github/workflows/build-docs.yml'
   workflow_dispatch:
 
 permissions:
@@ -11,7 +17,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest # 运行环境
+    runs-on: ubuntu-latest
     steps:
       - name: checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -31,22 +37,8 @@ jobs:
       - name: Build docs
         run: pnpm run docs:build
         working-directory: './docs'
-      - name: scp
-        uses: appleboy/scp-action@ff85246acaad7bdce478db94a363cd2bf7c90345 # v1.0.0
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          host: ${{ secrets.HOST_NEKO }}
-          username: ${{ secrets.USERNAME }}
-          password: ${{ secrets.PASSWORDNEKO }}
-          source: 'docs/.vitepress/dist/*'
-          target: '/tmp/'
-      - name: script
-        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
-        with:
-          host: ${{ secrets.HOST_NEKO }}
-          username: ${{ secrets.USERNAME }}
-          password: ${{ secrets.PASSWORDNEKO }}
-          script: |
-            mkdir -p /root/docker_data/caddy/caddy_data/static_site/abv4/
-            rm -rf /root/docker_data/caddy/caddy_data/static_site/abv4/*
-            mv /tmp/docs/.vitepress/dist/* /root/docker_data/caddy/caddy_data/static_site/abv4/
-            rm -rf /tmp/docs/
+          name: docs-dist-${{ github.sha }}
+          path: docs/.vitepress/dist
