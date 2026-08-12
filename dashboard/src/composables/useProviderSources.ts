@@ -1,6 +1,6 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { providerApi } from '@/api/v1'
-import { getProviderIcon } from '@/utils/providerUtils'
+import { getProviderIcon, isMonochromeProviderIcon } from '@/utils/providerUtils'
 import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from '@/utils/confirmDialog'
 import { normalizeTextInput } from '@/utils/inputValue'
 
@@ -84,13 +84,14 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       return []
     }
 
-    const types: Array<{ value: string; label: string; icon: string }> = []
+    const types: Array<{ value: string; label: string; icon: string; isMonochrome: boolean }> = []
     for (const [templateName, template] of Object.entries(providerTemplates.value)) {
       if (template.provider_type === selectedProviderType.value) {
         types.push({
           value: templateName,
           label: templateName,
-          icon: getProviderIcon(template.provider)
+          icon: getProviderIcon(template.provider),
+          isMonochrome: isMonochromeProviderIcon(template.provider)
         })
       }
     }
@@ -294,6 +295,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   function resolveSourceIcon(source: any) {
     if (!source) return ''
     return getProviderIcon(source.provider) || ''
+  }
+
+  function isMonochromeSourceIcon(source: any) {
+    return Boolean(source && isMonochromeProviderIcon(source.provider))
   }
 
   function getSourceDisplayName(source: any) {
@@ -767,6 +772,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
     // helpers
     resolveSourceIcon,
+    isMonochromeSourceIcon,
     getSourceDisplayName,
     getModelMetadata,
     supportsImageInput,
