@@ -235,14 +235,18 @@ RUN arch="$(dpkg --print-architecture)" \
         arm64) shfmt_arch="linux_arm64"; hadolint_arch="Linux-arm64" ;; \
         *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
     esac \
-    && curl -fsSL \
+    && tmpdir="$(mktemp -d)" \
+    && curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
         "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/shfmt_v${SHFMT_VERSION}_${shfmt_arch}" \
-        -o /usr/local/bin/shfmt \
-    && chmod +x /usr/local/bin/shfmt \
-    && curl -fsSL \
+        -o "${tmpdir}/shfmt" \
+    && test -s "${tmpdir}/shfmt" \
+    && install -m 0755 "${tmpdir}/shfmt" /usr/local/bin/shfmt \
+    && curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
         "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-${hadolint_arch}" \
-        -o /usr/local/bin/hadolint \
-    && chmod +x /usr/local/bin/hadolint \
+        -o "${tmpdir}/hadolint" \
+    && test -s "${tmpdir}/hadolint" \
+    && install -m 0755 "${tmpdir}/hadolint" /usr/local/bin/hadolint \
+    && rm -rf "${tmpdir}" \
     && shfmt --version \
     && hadolint --version
 
@@ -252,10 +256,13 @@ RUN arch="$(dpkg --print-architecture)" \
         arm64) yq_arch="arm64" ;; \
         *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
     esac \
-    && curl -fsSL \
+    && tmpdir="$(mktemp -d)" \
+    && curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
         "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${yq_arch}" \
-        -o /usr/local/bin/yq \
-    && chmod +x /usr/local/bin/yq \
+        -o "${tmpdir}/yq" \
+    && test -s "${tmpdir}/yq" \
+    && install -m 0755 "${tmpdir}/yq" /usr/local/bin/yq \
+    && rm -rf "${tmpdir}" \
     && yq --version
 
 # GitHub release downloads can occasionally terminate TLS connections early.
@@ -285,9 +292,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
     esac \
     && tmpdir="$(mktemp -d)" \
-    && curl -fsSL \
+    && curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
         "https://github.com/quarto-dev/quarto-cli/releases/download/v${QUARTO_VERSION}/quarto-${QUARTO_VERSION}-linux-${quarto_arch}.deb" \
         -o "${tmpdir}/quarto.deb" \
+    && test -s "${tmpdir}/quarto.deb" \
     && apt-get update \
     && eatmydata apt-get install -y --no-install-recommends "${tmpdir}/quarto.deb" \
     && rm -rf "${tmpdir}" \
@@ -361,9 +369,13 @@ RUN arch="$(dpkg --print-architecture)" \
         *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
     esac \
     && mkdir -p /opt/microsoft/powershell/7 \
-    && curl -fsSL \
+    && tmpdir="$(mktemp -d)" \
+    && curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
         "https://github.com/PowerShell/PowerShell/releases/download/v7.6.3/powershell-7.6.3-linux-${powershell_arch}.tar.gz" \
-        | tar -xz -C /opt/microsoft/powershell/7 \
+        -o "${tmpdir}/powershell.tar.gz" \
+    && tar -tzf "${tmpdir}/powershell.tar.gz" >/dev/null \
+    && tar -xzf "${tmpdir}/powershell.tar.gz" -C /opt/microsoft/powershell/7 \
+    && rm -rf "${tmpdir}" \
     && chmod +x /opt/microsoft/powershell/7/pwsh \
     && ln -sf /opt/microsoft/powershell/7/pwsh /usr/local/bin/pwsh \
     && ln -sf /opt/microsoft/powershell/7/pwsh /usr/local/bin/powershell \
