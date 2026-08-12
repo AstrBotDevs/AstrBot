@@ -39,13 +39,5 @@
     "computerAccessAllowed": "Agent is now allowed to access and use the computer",
     "computerAccessDenied": "Agent is no longer allowed to access and use the computer",
     "step3HelpItem3": "For more detailed control, configure the Computer Access options under Settings -> General -> Computer Access."
-  },
-  "resources": {
-    "title": "Resources",
-    "githubDesc": "Give us a Star!",
-    "docsTitle": "Documentation",
-    "docsDesc": "Read the official AstrBot documentation.",
-    "afdianTitle": "Afdian",
-    "afdianDesc": "Support the AstrBot team on Afdian."
   }
 }

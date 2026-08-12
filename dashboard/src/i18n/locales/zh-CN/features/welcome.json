@@ -39,13 +39,5 @@
     "computerAccessAllowed": "已允许 Agent 访问和使用电脑",
     "computerAccessDenied": "已禁止 Agent 访问和使用电脑",
     "step3HelpItem3": "如需更多细化权限与能力配置，可前往 配置文件 -> 普通配置 -> 使用电脑能力 继续设置。"
-  },
-  "resources": {
-    "title": "相关资源",
-    "githubDesc": "给 AstrBot 点个 Star 吧！",
-    "docsTitle": "文档",
-    "docsDesc": "查阅 AstrBot 的官方文档。",
-    "afdianTitle": "爱发电",
-    "afdianDesc": "通过爱发电支持 AstrBot 团队。"
   }
 }
