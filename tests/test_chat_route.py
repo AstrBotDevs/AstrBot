@@ -27,7 +27,12 @@ def chat_service_instance(monkeypatch, tmp_path):
         platform_message_history_manager=platform_history_mgr,
         umop_config_router=Mock(),
     )
-    service = ChatService(Mock(), core_lifecycle)
+    db = Mock()
+    db.get_platform_session_by_id = AsyncMock(
+        return_value=SimpleNamespace(session_id="existing-session")
+    )
+    db.create_platform_session = AsyncMock()
+    service = ChatService(db, core_lifecycle)
     service.build_user_message_parts = AsyncMock(
         return_value=[{"type": "plain", "text": "hello"}]
     )
@@ -38,6 +43,36 @@ def chat_service_instance(monkeypatch, tmp_path):
         )
     )
     return service
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_creates_missing_webchat_platform_session(
+    chat_service_instance,
+):
+    service = chat_service_instance
+    session_id = "missing-platform-session"
+    service.db.get_platform_session_by_id.return_value = None
+
+    stream = await service.build_chat_stream(
+        "alice",
+        {"message": "hello", "session_id": session_id},
+    )
+    run = next(iter(service.chat_runs.values()))
+
+    try:
+        service.db.get_platform_session_by_id.assert_awaited_once_with(session_id)
+        service.db.create_platform_session.assert_awaited_once_with(
+            creator="alice",
+            platform_id="webchat",
+            session_id=session_id,
+            is_group=0,
+        )
+    finally:
+        await stream.aclose()
+        if run.task and not run.task.done():
+            run.task.cancel()
+            await asyncio.gather(run.task, return_exceptions=True)
+        chat_service.webchat_queue_mgr.remove_queues(session_id)
 
 
 def _decode_sse_event(event: str) -> dict:

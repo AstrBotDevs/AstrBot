@@ -1115,6 +1115,25 @@ class ChatService:
                 "Message content is empty (reply only is not allowed)"
             )
 
+        if platform_history_id == "webchat":
+            try:
+                platform_session = await self.db.get_platform_session_by_id(
+                    webchat_conv_id
+                )
+                if platform_session is None:
+                    await self.db.create_platform_session(
+                        creator=username,
+                        platform_id="webchat",
+                        session_id=webchat_conv_id,
+                        is_group=0,
+                    )
+            except Exception as exc:
+                logger.warning(
+                    "Failed to ensure WebChat platform session %s: %s",
+                    webchat_conv_id,
+                    exc,
+                )
+
         message_id = str(uuid.uuid4())
         llm_checkpoint_id = post_data.get("_llm_checkpoint_id") or str(uuid.uuid4())
         skip_user_history = bool(post_data.get("_skip_user_history"))

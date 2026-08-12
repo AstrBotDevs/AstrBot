@@ -12,7 +12,7 @@ Changes:
 from sqlalchemy import func, select
 from sqlmodel import col
 
-from astrbot.api import logger, sp
+from astrbot.api import logger
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import ConversationV2, PlatformMessageHistory, PlatformSession
 
@@ -23,13 +23,6 @@ async def migrate_webchat_session(db_helper: BaseDatabase) -> None:
     This migration extracts all unique user_ids from platform_message_history
     where platform_id='webchat' and creates corresponding PlatformSession records.
     """
-    # 检查是否已经完成迁移
-    migration_done = await db_helper.get_preference(
-        "global", "global", "migration_done_webchat_session_1"
-    )
-    if migration_done:
-        return
-
     logger.info("开始执行数据库迁移（WebChat 会话迁移）...")
 
     try:
@@ -52,9 +45,6 @@ async def migrate_webchat_session(db_helper: BaseDatabase) -> None:
 
             if not webchat_users:
                 logger.info("没有找到需要迁移的 WebChat 数据")
-                await sp.put_async(
-                    "global", "global", "migration_done_webchat_session_1", True
-                )
                 return
 
             logger.info(f"找到 {len(webchat_users)} 个 WebChat 会话需要迁移")
@@ -122,9 +112,6 @@ async def migrate_webchat_session(db_helper: BaseDatabase) -> None:
                 )
             else:
                 logger.info("没有新会话需要迁移")
-
-        # 标记迁移完成
-        await sp.put_async("global", "global", "migration_done_webchat_session_1", True)
 
     except Exception as e:
         logger.error(f"迁移过程中发生错误: {e}", exc_info=True)
