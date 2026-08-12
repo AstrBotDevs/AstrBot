@@ -233,10 +233,6 @@ export default {
     object-fit: contain;
 }
 
-:global(.v-theme--PurpleThemeDark .provider-icon--monochrome) {
-    filter: brightness(0) invert(1);
-}
-
 .provider-logo-fallback {
     width: 50px;
     height: 50px;

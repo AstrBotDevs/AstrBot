@@ -346,10 +346,6 @@ const selectSourceByValue = (value) => {
   background: transparent !important;
 }
 
-:global(.v-theme--PurpleThemeDark .provider-icon--monochrome) {
-  filter: brightness(0) invert(1);
-}
-
 .provider-source-item__content {
   min-width: 0;
   flex: 1;

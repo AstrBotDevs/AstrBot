@@ -176,7 +176,4 @@ export default {
   background-color: #4caf50;
 }
 
-:global(.v-theme--PurpleThemeDark .provider-icon--monochrome) {
-  filter: brightness(0) invert(1);
-}
 </style>
