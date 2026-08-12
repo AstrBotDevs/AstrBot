@@ -5,6 +5,8 @@ from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
 
 from ..register import register_provider_adapter
 
+_MINIMAX_TOKEN_PLAN_FALLBACK_MODELS = ("MiniMax-M3", "MiniMax-M2.7")
+
 
 @register_provider_adapter(
     "minimax_token_plan",
@@ -16,6 +18,7 @@ class ProviderMiniMaxTokenPlan(ProviderAnthropic):
     The model list is fetched dynamically from the MiniMax API's /v1/models
     endpoint, so newly released models are automatically discovered without
     a code change. The default model is MiniMax-M3, the current flagship.
+    Current models remain available when dynamic discovery is unavailable.
     """
 
     def __init__(
@@ -41,11 +44,16 @@ class ProviderMiniMaxTokenPlan(ProviderAnthropic):
         self.set_model(configured_model)
 
     async def get_models(self) -> list[str]:
-        """Dynamically fetch available models from the MiniMax API."""
+        """Fetch available models from the MiniMax API.
+
+        Returns:
+            The dynamically discovered models, or the current fallback models
+            when discovery is unavailable.
+        """
         key = self.chosen_api_key
         if not key:
             logger.warning("No API key configured for MiniMax Token Plan.")
-            return []
+            return list(_MINIMAX_TOKEN_PLAN_FALLBACK_MODELS)
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.get(
@@ -55,7 +63,17 @@ class ProviderMiniMaxTokenPlan(ProviderAnthropic):
                 )
                 resp.raise_for_status()
                 data = resp.json()
-                return [m["id"] for m in data.get("data", [])]
-        except Exception as e:
+                items = data.get("data", []) if isinstance(data, dict) else []
+                if not isinstance(items, list):
+                    items = []
+                models = [
+                    model["id"]
+                    for model in items
+                    if isinstance(model, dict) and isinstance(model.get("id"), str)
+                ]
+                if models:
+                    return models
+                logger.warning("MiniMax model discovery returned no models.")
+        except (httpx.HTTPError, ValueError) as e:
             logger.error(f"Failed to fetch MiniMax model list: {e}")
-            return []
+        return list(_MINIMAX_TOKEN_PLAN_FALLBACK_MODELS)
