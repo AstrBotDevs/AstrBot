@@ -128,7 +128,7 @@ def _coerce_int(value: object, *, default: int = 0) -> int:
         return default
     try:
         return int(str(value))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return default
 
 
@@ -138,7 +138,7 @@ def _coerce_float(value: object, *, default: float) -> float:
         return default
     try:
         return float(str(value))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return default
 
 
@@ -443,9 +443,7 @@ class QQOfficialChunkedUploader:
         raw_index = part.get("index") if "index" in part else part.get("part_index")
         try:
             part_index = _coerce_int(raw_index, default=-1)
-            part_size = _coerce_int(
-                part.get("block_size"), default=session.block_size
-            )
+            part_size = _coerce_int(part.get("block_size"), default=session.block_size)
         except ValueError as exc:
             raise QQOfficialChunkedUploadError(
                 f"Invalid upload part metadata: {part!r}"
