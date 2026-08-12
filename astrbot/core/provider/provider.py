@@ -216,6 +216,8 @@ class Provider(AbstractProvider):
 
 def _is_valid_tool_pair(asst_msg: dict[str, Any], tool_msg: dict[str, Any]) -> bool:
     """判断 assistant(tool_calls) 与 tool 是否为 tool_call_id 匹配的一对。"""
+    if not isinstance(asst_msg, dict) or not isinstance(tool_msg, dict):
+        return False
     if asst_msg.get("role") != "assistant" or tool_msg.get("role") != "tool":
         return False
     tool_calls = asst_msg.get("tool_calls")
@@ -263,6 +265,19 @@ def reorder_tailing_tool_call_user(messages: list[dict[str, Any]]) -> None:
 
     # 重排：user → assistant_1, tool_1 → ... → assistant_N, tool_N
     messages[i + 1 :] = [last] + [m for pair in reversed(pairs) for m in pair]
+
+
+def strip_internal_markers(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """返回剥离 ``_from_real_tool_call`` 标记的消息副本，不改动原列表。
+
+    标记只在发送前对副本剥离，payload 中的标记保留供重试时重排继续做误伤防护。
+    """
+    return [
+        {k: v for k, v in msg.items() if k != "_from_real_tool_call"}
+        if isinstance(msg, dict)
+        else msg
+        for msg in messages
+    ]
 
 
 class STTProvider(AbstractProvider):

@@ -28,7 +28,7 @@ from astrbot.core.agent.message import (
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.provider import reorder_tailing_tool_call_user
+from astrbot.core.provider import reorder_tailing_tool_call_user, strip_internal_markers
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
@@ -531,11 +531,6 @@ class ProviderOpenAIOfficial(Provider):
 
         reorder_tailing_tool_call_user(payloads["messages"])
 
-        # _from_real_tool_call 是内部标记，剥离后不能出现在发往 API 的请求里
-        for msg in payloads["messages"]:
-            if isinstance(msg, dict):
-                msg.pop("_from_real_tool_call", None)
-
     async def _query(
         self,
         payloads: dict,
@@ -573,10 +568,14 @@ class ProviderOpenAIOfficial(Provider):
 
         self._sanitize_assistant_messages(payloads)
 
+        send_payloads = {
+            **payloads,
+            "messages": strip_internal_markers(payloads["messages"]),
+        }
         completion = await retry_provider_request(
             "OpenAI",
             lambda: self.client.chat.completions.create(
-                **payloads,
+                **send_payloads,
                 stream=False,
                 extra_body=extra_body,
             ),
@@ -631,10 +630,14 @@ class ProviderOpenAIOfficial(Provider):
 
         self._sanitize_assistant_messages(payloads)
 
+        send_payloads = {
+            **payloads,
+            "messages": strip_internal_markers(payloads["messages"]),
+        }
         stream = await retry_provider_request(
             "OpenAI",
             lambda: self.client.chat.completions.create(
-                **payloads,
+                **send_payloads,
                 stream=True,
                 extra_body=extra_body,
                 stream_options={"include_usage": True},

@@ -28,7 +28,10 @@ class ContextSanitizeStats:
 
 def _message_to_dict(message: dict[str, Any] | Message) -> dict[str, Any] | None:
     if isinstance(message, Message):
-        return dict(message.model_dump())
+        data = dict(message.model_dump())
+        if message._from_real_tool_call:
+            data["_from_real_tool_call"] = True
+        return data
     if isinstance(message, dict):
         return dict(copy.deepcopy(message))
     return None

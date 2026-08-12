@@ -18,8 +18,12 @@ from astrbot.core.agent.message import (
     dump_messages_with_checkpoints,
 )
 from astrbot.core.exceptions import EmptyModelOutputError
-from astrbot.core.provider import reorder_tailing_tool_call_user
+from astrbot.core.provider import (
+    reorder_tailing_tool_call_user,
+    strip_internal_markers,
+)
 from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
+from astrbot.core.provider.modalities import sanitize_contexts_by_modalities
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.longcat_source import ProviderLongCat
 from astrbot.core.provider.sources.oai_aihubmix_source import ProviderAIHubMix
@@ -2692,7 +2696,7 @@ def test_sanitize_reorders_unmarked_fake_pair_without_marker_in_output():
 
 
 def test_sanitize_keeps_marked_real_pair_untouched():
-    """真实对带标记时不重排，且 _sanitize_assistant_messages 剥离标记。"""
+    """真实对带标记时不重排，标记保留到发送边界才在副本上剥离。"""
     payloads = {
         "messages": [
             {"role": "user", "content": "帮我查一下"},
@@ -2711,5 +2715,76 @@ def test_sanitize_keeps_marked_real_pair_untouched():
         "tool",
         "user",
     ]
-    for msg in payloads["messages"]:
+    # 标记保留在 payload 中供重试保护
+    assert payloads["messages"][1]["_from_real_tool_call"] is True
+    assert payloads["messages"][2]["_from_real_tool_call"] is True
+    # 发送边界剥离标记（副本，不改动 payload）
+    stripped = strip_internal_markers(payloads["messages"])
+    for msg in stripped:
         assert "_from_real_tool_call" not in msg
+    assert payloads["messages"][1]["_from_real_tool_call"] is True
+
+
+def test_sanitize_repeat_calls_do_not_reorder_marked_pair():
+    """标记保留在 payload 中，重试时重复 sanitize 不会误伤真实对。"""
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "帮我查一下"},
+            *make_fake_pair(
+                tool_call_id="real_call_01", content="real result", marked=True
+            ),
+            {"role": "user", "content": "请根据图片分析结果继续"},
+        ]
+    }
+
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
+    # 模拟 429 / 工具不支持等重试路径复用同一 payloads
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
+
+    assert [m["role"] for m in payloads["messages"]] == [
+        "user",
+        "assistant",
+        "tool",
+        "user",
+    ]
+
+
+def test_modalities_sanitize_preserves_marker():
+    """配置了 modalities 的 runner 路径经 sanitize_contexts_by_modalities 转换后
+    真实对标记不丢失，误伤防护在 agent runner 路径同样生效。"""
+    asst = AssistantMessageSegment(
+        content=None,
+        tool_calls=[
+            {
+                "id": "real_call_01",
+                "type": "function",
+                "function": {"name": "search", "arguments": "{}"},
+            }
+        ],
+    )
+    asst._from_real_tool_call = True
+    tool = ToolCallMessageSegment(content="real result", tool_call_id="real_call_01")
+    tool._from_real_tool_call = True
+
+    sanitized, _ = sanitize_contexts_by_modalities(
+        [asst, tool],
+        ["text", "tool_use"],
+    )
+
+    assert sanitized[0]["_from_real_tool_call"] is True
+    assert sanitized[1]["_from_real_tool_call"] is True
+
+
+def test_reorder_non_dict_entry_does_not_crash():
+    """contexts 中出现非 dict 条目时重排不崩溃（此前会 AttributeError）。"""
+    messages = [
+        {"role": "user", "content": "hello"},
+        "garbage-not-a-dict",
+        {"role": "tool", "tool_call_id": "x", "content": "r"},
+        {"role": "user", "content": "next"},
+    ]
+    expected = messages[:]
+
+    reorder_tailing_tool_call_user(messages)
+
+    assert messages == expected
