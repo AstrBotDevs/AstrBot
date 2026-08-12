@@ -416,7 +416,9 @@ async def test_result_decorate_segments_qqofficial_ws_plain_result():
         "ctx",
         SimpleNamespace(
             plugin_manager=SimpleNamespace(
-                context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+                context=SimpleNamespace(
+                    get_using_tts_provider_async=AsyncMock(return_value=None)
+                )
             ),
             astrbot_config={
                 "provider_tts_settings": {

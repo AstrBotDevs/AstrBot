@@ -577,11 +577,11 @@ class BaseDatabase(abc.ABC):
     @abc.abstractmethod
     async def get_preferences(
         self,
-        scope: str,
+        scope: str | None = None,
         scope_id: str | None = None,
         key: str | None = None,
     ) -> list[Preference]:
-        """Get all preferences for a specific scope ID or key."""
+        """Get preferences, optionally filtered by scope, scope ID, or key."""
         ...
 
     @abc.abstractmethod
