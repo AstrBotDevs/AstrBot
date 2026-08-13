@@ -414,6 +414,91 @@ async def test_media_resolver_cleans_materialized_file_when_audio_conversion_fai
 
 
 @pytest.mark.asyncio
+async def test_convert_audio_format_transcodes_amr_bytes_misnamed_as_wav(
+    tmp_path, monkeypatch
+):
+    source_path = tmp_path / "voice.wav"
+    source_path.write_bytes(b"#!AMR\n" + b"\x00" * 32)
+    converted_path = tmp_path / "converted.wav"
+    calls = []
+
+    class FakeProcess:
+        returncode = 0
+
+        async def communicate(self):
+            converted_path.write_bytes(b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 16)
+            return b"", b""
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        calls.append((args, kwargs))
+        return FakeProcess()
+
+    monkeypatch.setattr(
+        media_utils.asyncio,
+        "create_subprocess_exec",
+        fake_create_subprocess_exec,
+    )
+
+    result = await media_utils.convert_audio_format(
+        str(source_path),
+        output_format="wav",
+        output_path=str(converted_path),
+    )
+
+    assert result == str(converted_path)
+    assert calls
+    assert calls[0][0][:4] == ("ffmpeg", "-y", "-i", str(source_path))
+
+
+@pytest.mark.asyncio
+async def test_convert_audio_format_rewrites_misnamed_target_format(
+    tmp_path, monkeypatch
+):
+    source_path = tmp_path / "voice.wav"
+    source_path.write_bytes(b"#!AMR\n" + b"\x00" * 32)
+    converted_path = tmp_path / "converted.amr"
+    calls = []
+
+    class FakeProcess:
+        returncode = 0
+
+        async def communicate(self):
+            converted_path.write_bytes(b"#!AMR\n" + b"\x00" * 32)
+            return b"", b""
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        calls.append((args, kwargs))
+        return FakeProcess()
+
+    monkeypatch.setattr(
+        media_utils.asyncio,
+        "create_subprocess_exec",
+        fake_create_subprocess_exec,
+    )
+
+    result = await media_utils.convert_audio_format(
+        str(source_path),
+        output_format="amr",
+        output_path=str(converted_path),
+    )
+
+    assert result == str(converted_path)
+    assert calls
+
+
+@pytest.mark.asyncio
+async def test_convert_audio_format_keeps_missing_target_path():
+    missing_path = "missing.wav"
+
+    result = await media_utils.convert_audio_format(
+        missing_path,
+        output_format="wav",
+    )
+
+    assert result == missing_path
+
+
+@pytest.mark.asyncio
 async def test_media_resolver_cleans_http_target_when_download_fails(
     tmp_path, monkeypatch
 ):
