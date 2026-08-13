@@ -889,11 +889,36 @@ def _make_wav_bytes() -> bytes:
 class _FakeFFmpegProcess:
     """Minimal async subprocess mock for ffmpeg."""
 
-    def __init__(self, returncode: int = 0, stderr: bytes = b"") -> None:
+    def __init__(self, returncode: int = 0) -> None:
         self.returncode = returncode
 
     async def communicate(self) -> tuple[bytes, bytes]:
         return (b"", b"")
+
+
+def _patch_ffmpeg(monkeypatch, tmp_path, *, output_content: bytes = b""):
+    """Monkeypatch ``asyncio.create_subprocess_exec`` to simulate ffmpeg.
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture.
+        tmp_path: pytest tmp_path fixture (used for temp dir patching).
+        output_content: Bytes written to the output path so
+            ``convert_audio_format`` can return it.
+
+    Returns:
+        A mutable list whose first element tracks whether ffmpeg was called.
+    """
+    called = [False]
+
+    async def fake_exec(*args, **kwargs):
+        called[0] = True
+        output_path = args[-1]
+        Path(output_path).write_bytes(output_content)
+        return _FakeFFmpegProcess()
+
+    monkeypatch.setattr(media_utils.asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    return called
 
 
 @pytest.mark.asyncio
@@ -901,29 +926,14 @@ async def test_convert_audio_format_amr_with_wav_extension_does_not_short_circui
     tmp_path, monkeypatch
 ):
     """AMR content saved with a .wav extension must still be converted (#9594)."""
-    # NapCat saves AMR-encoded QQ voice with a .wav extension.
     audio_file = tmp_path / "voice.wav"
     audio_file.write_bytes(_AMR_HEADER + b"\x00" * 50)
 
-    # Intercept ffmpeg subprocess so the test never depends on a real binary.
-    ffmpeg_called = False
-
-    async def fake_exec(*args, **kwargs):
-        nonlocal ffmpeg_called
-        ffmpeg_called = True
-        # Write a dummy output file so convert_audio_format can return it.
-        output_path = args[-1]
-        Path(output_path).write_bytes(_make_wav_bytes())
-        return _FakeFFmpegProcess()
-
-    monkeypatch.setattr(media_utils.asyncio, "create_subprocess_exec", fake_exec)
-    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    called = _patch_ffmpeg(monkeypatch, tmp_path, output_content=_make_wav_bytes())
 
     result = await media_utils.convert_audio_format(str(audio_file), "wav")
 
-    assert ffmpeg_called, (
-        "ffmpeg should have been invoked because content is AMR, not WAV"
-    )
+    assert called[0], "ffmpeg should have been invoked because content is AMR, not WAV"
     assert result != str(audio_file)
 
 
@@ -986,21 +996,9 @@ async def test_convert_audio_format_wav_with_ogg_extension_does_not_short_circui
     audio_file = tmp_path / "voice.ogg"
     audio_file.write_bytes(_make_wav_bytes())
 
-    ffmpeg_called = False
-
-    async def fake_exec(*args, **kwargs):
-        nonlocal ffmpeg_called
-        ffmpeg_called = True
-        output_path = args[-1]
-        Path(output_path).write_bytes(b"OggS" + b"\x00" * 60)
-        return _FakeFFmpegProcess()
-
-    monkeypatch.setattr(media_utils.asyncio, "create_subprocess_exec", fake_exec)
-    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    called = _patch_ffmpeg(monkeypatch, tmp_path, output_content=b"OggS" + b"\x00" * 60)
 
     result = await media_utils.convert_audio_format(str(audio_file), "ogg")
 
-    assert ffmpeg_called, (
-        "ffmpeg should have been invoked because content is WAV, not OGG"
-    )
+    assert called[0], "ffmpeg should have been invoked because content is WAV, not OGG"
     assert result != str(audio_file)
