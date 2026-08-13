@@ -299,6 +299,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   function getSourceDisplayName(source: any) {
     if (!source) return ''
     if (source.isPlaceholder) return source.templateKey || source.id || ''
+    if (source.id === 'ssycloud') return 'ssycloud(胜算云)'
     return source.id
   }
 

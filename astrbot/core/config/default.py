@@ -1377,6 +1377,18 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
+                    "SSYCloud(胜算云)": {
+                        "id": "ssycloud",
+                        "provider": "ssycloud",
+                        "type": "ssycloud_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "timeout": 120,
+                        "api_base": "https://router.shengsuanyun.com/api/v1",
+                        "proxy": "",
+                        "custom_headers": {"X-Title": "AstrBot"},
+                    },
                     "NVIDIA": {
                         "id": "nvidia",
                         "provider": "nvidia",
