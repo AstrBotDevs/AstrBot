@@ -96,7 +96,6 @@ const enabledConfigTags = (tool: ToolItem): BuiltinToolConfigTag[] => {
   if (tool.origin !== 'builtin') return [];
   return (tool.builtin_config_tags || []).filter((tag) => tag.enabled);
 };
-
 </script>
 
 <template>

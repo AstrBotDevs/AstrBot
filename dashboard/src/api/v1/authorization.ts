@@ -19,9 +19,11 @@ export const authorizationApi = {
     httpClient.get('/api/v1/authorization/audit'),
   grant: (payload: Record<string, unknown>) =>
     httpClient.post('/api/v1/authorization/role-bindings', payload),
-  revoke: (bindingId: string) =>
+  revoke: (bindingId: string, stepUp?: string) =>
     httpClient.post(
       `/api/v1/authorization/role-bindings/${encodeURIComponent(bindingId)}/revoke`,
+      undefined,
+      { headers: stepUp ? { 'X-AstrBot-Step-Up': stepUp } : undefined },
     ),
   stepUp: (payload: Record<string, unknown>) =>
     httpClient.post('/api/v1/authorization/step-up', payload),
@@ -39,14 +41,6 @@ export const authorizationApi = {
     httpClient.patch(
       `/api/v1/authorization/accounts/${encodeURIComponent(accountId)}`,
       payload,
-      { headers: stepUp ? { 'X-AstrBot-Step-Up': stepUp } : undefined },
-    ),
-  requestElevation: (payload: Record<string, unknown>) =>
-    httpClient.post('/api/v1/authorization/elevation-requests', payload),
-  approveElevation: (requestId: string, nonce: string, stepUp?: string) =>
-    httpClient.post(
-      `/api/v1/authorization/elevation-requests/${encodeURIComponent(requestId)}/approve`,
-      { nonce },
       { headers: stepUp ? { 'X-AstrBot-Step-Up': stepUp } : undefined },
     ),
 };

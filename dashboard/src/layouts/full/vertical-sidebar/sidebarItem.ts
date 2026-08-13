@@ -103,7 +103,7 @@ const sidebarItem: menu[] = [
         to: '/session-management',
       },
       {
-        title: 'Authorization',
+        title: 'core.navigation.authorization',
         icon: 'mdi-shield-account-outline',
         to: '/authorization',
       },

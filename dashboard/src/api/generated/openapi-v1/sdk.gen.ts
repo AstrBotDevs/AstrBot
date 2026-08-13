@@ -15,8 +15,6 @@ import type {
   AbortBackupUploadResponses,
   AddChatProjectSessionData,
   AddChatProjectSessionResponses,
-  ApproveAuthorizationElevationRequestData,
-  ApproveAuthorizationElevationRequestResponses,
   BatchDeleteChatSessionsData,
   BatchDeleteChatSessionsResponses,
   BatchDeleteConversationsData,
@@ -44,8 +42,6 @@ import type {
   CreateApiKeyResponses,
   CreateAuthorizationAccountData,
   CreateAuthorizationAccountResponses,
-  CreateAuthorizationElevationRequestData,
-  CreateAuthorizationElevationRequestResponses,
   CreateBackupData,
   CreateBackupResponses,
   CreateBotData,
@@ -900,60 +896,6 @@ export const issueAuthorizationStepUp = <ThrowOnError extends boolean = false>(
     responseType: 'json',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/authorization/step-up',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-
-/**
- * Create a short-lived elevation request
- */
-export const createAuthorizationElevationRequest = <
-  ThrowOnError extends boolean = false,
->(
-  options: Options<CreateAuthorizationElevationRequestData, ThrowOnError>,
-): RequestResult<
-  CreateAuthorizationElevationRequestResponses,
-  unknown,
-  ThrowOnError
-> =>
-  (options.client ?? client).post<
-    CreateAuthorizationElevationRequestResponses,
-    unknown,
-    ThrowOnError
-  >({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/authorization/elevation-requests',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-
-/**
- * Approve an elevation request
- */
-export const approveAuthorizationElevationRequest = <
-  ThrowOnError extends boolean = false,
->(
-  options: Options<ApproveAuthorizationElevationRequestData, ThrowOnError>,
-): RequestResult<
-  ApproveAuthorizationElevationRequestResponses,
-  unknown,
-  ThrowOnError
-> =>
-  (options.client ?? client).post<
-    ApproveAuthorizationElevationRequestResponses,
-    unknown,
-    ThrowOnError
-  >({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/authorization/elevation-requests/{request_id}/approve',
     ...options,
     headers: {
       'Content-Type': 'application/json',

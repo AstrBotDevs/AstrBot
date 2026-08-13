@@ -4,7 +4,7 @@
 
 **审计基线**：2026-08-13，基于当前 `Xero-Team/AstrBot` 工作树
 
-**目标版本**：当前分支已完成本文列出的全部阶段；固定角色、显式 action/resource/context、step-up/elevation、审计和 Dashboard 控制面均已启用。
+**目标版本**：当前分支已完成 v1 阶段；固定角色、显式 action/resource/context、Dashboard step-up、审计和控制面均已启用。跨平台 IM elevation 明确不属于 v1。
 
 实现说明：旧版 `admins_id`、`PermissionTypeFilter`、`tool_permissions` 与
 `computer_use_require_admin` 仅作为一次性迁移输入或声明适配，不再参与长期运行时授权。
@@ -14,7 +14,7 @@ WebChat/Open API 的 `username` 字段继续兼容，但它是 caller-declared �
 
 AstrBot 当前的权限判断主要是 `ADMIN` / `MEMBER` 二元模型。它能覆盖简单的“管理员指令”，但无法表达“某个用户只管理某个群”“Dashboard 控制面身份”“普通用户可以使用模型但不能修改模型凭据”等实际需求。更严重的是，平台适配器和管道都可能写入 `event.role`，而 `AstrMessageEvent.is_admin()` 又把 `role == "admin"` 当成 AstrBot 管理员，存在平台角色与 AstrBot 身份混用的风险。
 
-本文是当前实现和迁移契约。跨平台一次性 elevation、多 Dashboard 账户、API Key principal、插件命名空间和异步审计均已纳入同一运行时授权入口。任何迁移都不得扩大现有主体的权限范围，也不得破坏现有 WebChat/Open API 的兼容契约。
+本文是当前实现和迁移契约。Dashboard step-up、多 Dashboard 账户、API Key principal、插件命名空间和异步审计均已纳入同一运行时授权入口；跨平台一次性 elevation 保留为后续设计，不提供运行时通道。任何迁移都不得扩大现有主体的权限范围，也不得破坏现有 WebChat/Open API 的兼容契约。
 
 本计划将权限收敛到一个平台无关的授权服务：
 
@@ -28,7 +28,7 @@ authorize(subject, action, resource, context) -> decision
 - **action** 是稳定的能力标识，例如 `provider.manage`；
 - **resource** 是受保护资源，例如 `session:<config-id>/<umo>` 或 `provider:<config-id>/<id>`；
 - **context** 保存当前消息、平台角色、认证方式、配置档和提权信息；
-- **decision** 至少包含 `allow`、`deny`、`reason`、`required_elevation` 和审计关联 ID。
+- **decision** 至少包含 `allow`、`deny`、`reason`、`requires_step_up` 和审计关联 ID。
 
 角色只表达“主体是谁”，作用域决定“主体在哪些资源上有权”。全局身份和会话身份必须分开：
 
@@ -39,7 +39,7 @@ session_owner/session_admin/member    session:<config-id>/<umo> 作用域
 guest                                 未认证或受限作用域
 ```
 
-第一版固定内置角色，不提供任意角色继承和角色定义 CRUD；只提供主体角色绑定的增删改查、过期和审计。第一阶段优先支持现有单 Dashboard 账户和配置档级管理员，不承诺多账户 root/operator 管理。这样可以先解决权限边界和平台归一化问题，再根据真实使用情况扩展控制面身份。
+第一版固定内置角色，不提供任意角色继承和角色定义 CRUD；提供主体角色绑定的增删改查、过期和审计，并已提供受 root 保护的 Dashboard 账户 CRUD。跨账户的 root/operator 绑定策略仍受固定角色和最后一个 root 保护约束。
 
 ## 2. 当前实现审计
 
@@ -53,7 +53,7 @@ guest                                 未认证或受限作用域
 | `builtin_stars/builtin_commands/main.py`                          | Provider、Model、Chat、Persona、Plugin、Admin 等大量命令要求 `ADMIN`       | 管理能力过粗，无法区分当前会话与全局配置                                        | 按能力域映射到 `session.*`、`provider.*` 等动作                                             |
 | `astrbot/core/tools/function_tool_manager.py`                     | 非内置工具默认要求 admin，可由 `tool_permissions` 降为 member              | 配置粒度和统一授权服务不一致                                                    | 工具声明所需动作并统一调用授权服务                                                          |
 | `astrbot/core/tools/computer_tools/*`                             | `computer_use_require_admin` 控制 Computer Use                             | 只支持全局 admin，无法绑定会话/操作者                                           | 映射到 `tool.local_exec` 等高风险动作                                                       |
-| `astrbot/dashboard/api/auth.py`                                   | Dashboard JWT、Cookie、TOTP、限流和 API Key scope 已存在；当前是单账户模型 | 尚无账户表、稳定 account_id 或显式 root 字段                                    | 第一阶段使用稳定的 Dashboard 账户指纹/会话主体；多账户与 root/operator CRUD 单独立项        |
+| `astrbot/dashboard/api/auth.py`                                   | Dashboard JWT、Cookie、账户级 TOTP、限流和 API Key scope                   | 兼容旧配置凭据仍需迁移；高风险操作必须绑定账户和 step-up                        | 使用稳定 `account_id` 与 Dashboard session 主体；账户和 root/operator 绑定由授权 API 管理   |
 | `astrbot/dashboard/services/api_key_scopes.py`                    | API Key 使用 `provider`、`config`、`chat:admin` 等 scope                   | scope 是接口访问能力，不应直接当作角色                                          | 建立 scope 到 action 的显式映射，禁止隐式扩权                                               |
 | `astrbot/core/platform/sources/webchat/webchat_adapter.py`        | WebChat `username` 作为 sender 和 session owner；Open API 也公开接受该字段 | 这是现有公开契约，直接禁止会造成破坏性变更；管理员 impersonation 依赖受控 scope | 保留旧接口并显式审计 impersonation；新增接口再使用不可伪造的认证主体                        |
 | Persona/子 Agent 工具选择                                         | 部分路径可能绕过非内置工具权限包装                                         | 模型或插件可能间接获得高风险工具                                                | 所有工具执行前再次经过核心授权检查                                                          |
@@ -98,7 +98,7 @@ system:<component>
 实现要求：
 
 - IM 主体由适配器提供平台、机器人账户/配置档和 sender ID，经核心规范化后使用。
-- Dashboard 主体来自已验证 JWT session。当前版本没有多账户表和稳定 `account_id`，因此第一阶段使用 `dashboard-session:<sid>`，并通过配置中受保护的 Dashboard 账户身份决定其控制面角色；不得凭用户名推断 root。
+- Dashboard 请求同时携带已验证的 JWT session 和稳定的 `dashboard-account:<account_id>` 主体；不得凭用户名推断 root。旧的无账户 claim token 只作迁移期兼容，不能获得新的账户管理权限。
 - API Key 主体使用数据库中的 `key_id`，不能使用原始密钥或调用方自报名称。
 - `plugin:*` 和 `agent:*` 只能代表执行组件，不能因为组件身份自动获得 root；其最终权限仍受发起请求的用户和工具策略约束。
 - 主体显示名、平台昵称和 sender ID 只能用于展示和审计，不能作为唯一授权键。
@@ -137,13 +137,12 @@ resource
 action
 config_id
 platform
-platform_member_role       # owner/admin/member/unknown，仅当前会话声明
-message_type               # private/group/webchat/dashboard/api
-authenticated              # 是否经过可信认证
-source                     # im/dashboard/api_key/plugin/system
+platform_member_role  # owner/admin/member/unknown，仅当前会话声明
+message_type  # private/group/webchat/dashboard/api
+authenticated  # 是否经过可信认证
+source  # im/dashboard/api_key/plugin/system
 request_id
-step_up_id                 # 第一阶段可选；与 Dashboard session 绑定
-elevation_id               # 后续跨平台审批可选
+step_up_id  # 第一阶段可选；与 Dashboard session 绑定
 ```
 
 平台角色必须标注来源和可信度。它是会话内的事实输入，不是全局 AstrBot 角色。
@@ -159,7 +158,6 @@ class Decision(NamedTuple):
     effective_role: str | None
     reason: str
     requires_step_up: bool = False
-    requires_elevation: bool = False  # 后续跨平台审批；第一阶段始终为 False
     audit_id: str | None = None
 ```
 
@@ -169,15 +167,15 @@ class Decision(NamedTuple):
 
 ### 5.1 角色定义
 
-| 角色                | 作用域                      | 语义                                              | 默认可做的事                                             | 明确不能做的事                                 |
-| ------------------- | --------------------------- | ------------------------------------------------- | -------------------------------------------------------- | ---------------------------------------------- |
-| `root`              | 全局（预留）                | 显式配置的控制面最高身份；第一阶段不提供账户 CRUD | 仅在显式配置和 step-up 后执行最高风险动作                | 仍受 OS、平台 Bot Token 和外部服务限制         |
-| `operator`          | 全局（预留）                | 多 Dashboard 账户模型的全局运维管理员             | 全局配置、Provider/平台/插件/数据/系统运维               | 第一阶段不可由 `admins_id` 自动生成            |
-| `instance_operator` | `instance:<config-id>`      | 现有配置档 `admins_id` 的迁移目标                 | 对应配置档的管理动作                                     | 不能管理其他配置档或全局身份                   |
-| `session_owner`     | `session:<config-id>/<umo>` | 当前群的群主、会话所有者或显式绑定的会话负责人    | 当前会话管理、会话内 Provider/模型选择、会话成员角色管理 | 不能修改全局 Provider 凭据、系统升级或全局身份 |
-| `session_admin`     | `session:<config-id>/<umo>` | 当前群的平台群管理员或显式绑定的会话管理员        | 当前会话的有限管理、任务控制、策略允许的提权请求         | 不能默认管理其他会话或授予 operator            |
-| `member`            | `session:<config-id>/<umo>` | 普通已识别用户                                    | 普通对话、本人会话数据和被允许的插件动作                 | 不能执行管理动作或发起高风险提权               |
-| `guest`             | 会话或无资源                | 未认证、匿名 WebChat、无法验证平台身份的主体      | 仅公开/匿名允许的能力                                    | 默认不能写入配置、读取他人数据或提权           |
+| 角色                | 作用域                      | 语义                                                       | 默认可做的事                                             | 明确不能做的事                                 |
+| ------------------- | --------------------------- | ---------------------------------------------------------- | -------------------------------------------------------- | ---------------------------------------------- |
+| `root`              | 全局                        | 显式绑定的控制面最高身份；账户 CRUD 受 root + step-up 保护 | 仅在显式配置和 step-up 后执行最高风险动作                | 仍受 OS、平台 Bot Token 和外部服务限制         |
+| `operator`          | 全局                        | Dashboard 账户模型的全局运维管理员                         | 全局配置、Provider/平台/插件/数据/系统运维               | 不可由 `admins_id` 自动生成                    |
+| `instance_operator` | `instance:<config-id>`      | 现有配置档 `admins_id` 的迁移目标                          | 对应配置档的管理动作                                     | 不能管理其他配置档或全局身份                   |
+| `session_owner`     | `session:<config-id>/<umo>` | 当前群的群主、会话所有者或显式绑定的会话负责人             | 当前会话管理、会话内 Provider/模型选择、会话成员角色管理 | 不能修改全局 Provider 凭据、系统升级或全局身份 |
+| `session_admin`     | `session:<config-id>/<umo>` | 当前群的平台群管理员或显式绑定的会话管理员                 | 当前会话的有限管理、任务控制、策略允许的提权请求         | 不能默认管理其他会话或授予 operator            |
+| `member`            | `session:<config-id>/<umo>` | 普通已识别用户                                             | 普通对话、本人会话数据和被允许的插件动作                 | 不能执行管理动作或发起高风险提权               |
+| `guest`             | 会话或无资源                | 未认证、匿名 WebChat、无法验证平台身份的主体               | 仅公开/匿名允许的能力                                    | 默认不能写入配置、读取他人数据或提权           |
 
 角色优先级只用于展示，不作为跨作用域授权判断。授权必须同时匹配动作、资源和绑定作用域：
 
@@ -185,13 +183,13 @@ class Decision(NamedTuple):
 root > operator > instance_operator > session_owner > session_admin > member > guest
 ```
 
-不能只取“用户最高角色”后忽略资源。第一阶段不引入全局 `operator` 的隐式会话继承；配置档管理员只在对应 `instance:<config_id>` 作用域生效。一个群主在自己的 `(config_id, UMO)` 是 `session_owner`，在另一个群仍按该资源重新解析。
+不能只取“用户最高角色”后忽略资源。全局 `operator` 不会隐式继承到 IM 会话；配置档管理员只在对应 `instance:<config_id>` 作用域生效。一个群主在自己的 `(config_id, UMO)` 是 `session_owner`，在另一个群仍按该资源重新解析。
 
 ### 5.2 角色来源
 
 角色绑定来源按可信度排序：
 
-1. 后续 root/operator 在 Dashboard 中创建的显式绑定；第一阶段使用受保护的单账户控制面映射；
+1. root/operator 在 Dashboard 中创建的显式绑定；账户管理和绑定变更受 root + step-up 保护；
 2. 配置档迁移生成的 `admins_id -> instance_operator` 绑定；
 3. 平台适配器在当前群消息中提供的 owner/admin 声明；
 4. 会话创建者或平台无法确认时的默认 `member`/`guest`。
@@ -238,23 +236,23 @@ chat.impersonate_admin
 
 内置命令迁移时不再直接使用 `PermissionType.ADMIN`，而是为 handler 声明稳定能力。建议映射如下：
 
-| 现有命令/命令组                                   | 新动作                                        | 默认范围                                                                      |
-| ------------------------------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------- |
-| `/session info`                                   | `session.read`                                | 当前 `(config_id, UMO)`                                                       |
-| `/session name`                                   | `session.manage`                              | 当前 `(config_id, UMO)`；session_admin+                                       |
-| `/conversation reset/create/switch/rename/delete` | `session.manage`                              | 当前用户拥有或当前 `(config_id, UMO)`；删除他人会话需更高角色                 |
-| `/conversation create-for`                        | `session.assign` + `session.manage`           | 目标 `(config_id, UMO)`；instance_operator 或明确的 session_owner             |
-| `/task stop`                                      | `session.manage`                              | 当前 `(config_id, UMO)`；默认允许发起者停止自己的任务                         |
-| `/provider list`、`/model list`                   | `provider.use` 或 `provider.read`             | 当前配置档；凭据永不返回                                                      |
-| `/provider set ...`、`/model set`                 | `provider.use`；跨会话时追加 `session.assign` | 当前 `(config_id, UMO)`                                                       |
-| `/chat status/enable/disable`                     | `session.manage`                              | 当前 `(config_id, UMO)`                                                       |
-| `/admin list`                                     | `identity.manage`（只读）                     | 当前配置档身份列表；instance_operator 可读，写操作另行限制                    |
-| `/admin grant/revoke`                             | `identity.manage`                             | 迁移期仅管理当前配置档的 session 绑定；root/operator 绑定管理留待后续账户模型 |
-| `/persona *`                                      | `agent.manage`                                | 当前 `(config_id, UMO)` 或显式 Persona 资源                                   |
-| `/plugin list/show`                               | `extension.manage`（只读）或 `extension.read` | 可按安装信息脱敏开放                                                          |
-| `/plugin enable/disable`                          | `extension.manage`                            | 配置档插件或显式插件资源                                                      |
-| `/plugin install`                                 | `extension.plugin_install`                    | instance_operator 或控制面身份 + Dashboard step-up                            |
-| `/variable set/unset`                             | `session.manage`                              | 当前 `(config_id, UMO)`                                                       |
+| 现有命令/命令组                                   | 新动作                                        | 默认范围                                                                  |
+| ------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------- |
+| `/session info`                                   | `session.read`                                | 当前 `(config_id, UMO)`                                                   |
+| `/session name`                                   | `session.manage`                              | 当前 `(config_id, UMO)`；session_admin+                                   |
+| `/conversation reset/create/switch/rename/delete` | `session.manage`                              | 当前用户拥有或当前 `(config_id, UMO)`；删除他人会话需更高角色             |
+| `/conversation create-for`                        | `session.assign` + `session.manage`           | 目标 `(config_id, UMO)`；instance_operator 或明确的 session_owner         |
+| `/task stop`                                      | `session.manage`                              | 当前 `(config_id, UMO)`；默认允许发起者停止自己的任务                     |
+| `/provider list`、`/model list`                   | `provider.use` 或 `provider.read`             | 当前配置档；凭据永不返回                                                  |
+| `/provider set ...`、`/model set`                 | `provider.use`；跨会话时追加 `session.assign` | 当前 `(config_id, UMO)`                                                   |
+| `/chat status/enable/disable`                     | `session.manage`                              | 当前 `(config_id, UMO)`                                                   |
+| `/admin list`                                     | `identity.manage`（只读）                     | 当前配置档身份列表；instance_operator 可读，写操作另行限制                |
+| `/admin grant/revoke`                             | `identity.manage`                             | 管理当前配置档的 session 绑定；root/operator 绑定只能由受保护的控制面管理 |
+| `/persona *`                                      | `agent.manage`                                | 当前 `(config_id, UMO)` 或显式 Persona 资源                               |
+| `/plugin list/show`                               | `extension.manage`（只读）或 `extension.read` | 可按安装信息脱敏开放                                                      |
+| `/plugin enable/disable`                          | `extension.manage`                            | 配置档插件或显式插件资源                                                  |
+| `/plugin install`                                 | `extension.plugin_install`                    | instance_operator 或控制面身份 + Dashboard step-up                        |
+| `/variable set/unset`                             | `session.manage`                              | 当前 `(config_id, UMO)`                                                   |
 
 命令权限配置数据库可以继续作为“命令到动作”的来源，但最终执行必须调用授权服务。迁移完成后，命令配置不应再产生一个绕过资源检查的全局 `admin` 分支。
 
@@ -262,8 +260,8 @@ chat.impersonate_admin
 
 ### 8.1 Dashboard 登录
 
-- Dashboard JWT session 第一阶段解析为 `DashboardPrincipal(username, sid, jti, auth_strength, issued_at)`；当前没有 `account_id`、多账户表或 `is_root` 持久化字段，不能在业务代码中凭 `username == "astrbot"` 推断 root。
-- Dashboard 控制面身份必须来自受保护的配置/账户映射；多账户 root/operator 和账户 CRUD 单独立项。
+- Dashboard JWT session 解析为 `DashboardPrincipal(username, sid, jti, account_id, auth_strength, issued_at)`；业务代码不能凭 `username == "astrbot"` 推断 root。
+- Dashboard 控制面身份来自受保护的账户表和角色绑定；账户 CRUD 由 root 权限和 step-up 保护。
 - Dashboard 驱动的 WebChat 请求保留控制面认证主体与 caller-declared username 两个字段，不能把后者当成普通 IM 身份或授权依据。
 - 需要 step-up 的操作要求最近一次 TOTP/密码重新验证，不能只依赖仍未过期的长时 JWT。
 
@@ -271,7 +269,7 @@ chat.impersonate_admin
 
 - WebChat 继续使用现有 `webchat!<username>!<conversation-id>` 会话编码；授权资源另行包装为 `(config_id, umo)`，不直接修改历史和路由数据。
 - 现有 WebChat/Open API 的 `username` 请求字段在兼容版本中继续存在，但必须标记为 caller-declared identity，并受 session owner 校验和 `chat:admin` impersonation scope 约束；不能把它当作 JWT/API Key 的认证主体。新版本接口可改为从认证主体派生 username。
-- 当前 Dashboard 是单账户模型，不能在未建立账户表前声称存在任意 root/operator 多账户。匿名 WebChat 为 `guest`；已认证 Dashboard 会话使用 `dashboard-session:<sid>`。
+- Dashboard 支持多个账户；匿名 WebChat 为 `guest`，已认证请求同时保留 `dashboard-session:<sid>` 和 `dashboard-account:<account_id>` 两个主体层次。
 - WebChat 内的提权批准应在同一已认证 Dashboard 会话或专用私聊会话完成，不能通过公开群消息确认。
 - 项目、会话、文件等现有 owner 校验保留，但改为授权服务的资源检查，避免“项目 owner 校验”和“系统权限校验”产生冲突。
 
@@ -279,16 +277,16 @@ chat.impersonate_admin
 
 现有 API Key scope 继续作为调用面能力，但必须显式映射到动作：
 
-| 现有 scope                     | 新动作映射（示例）                                                                            |
-| ------------------------------ | --------------------------------------------------------------------------------------------- |
-| `provider`                     | `provider.use`、有限 `provider.read`                                                          |
-| `config`                       | `platform.manage`、`provider.manage` 的非凭据读取部分                                         |
-| `config:edit_admin`            | `identity.operator.write` 的受限接口；始终 step-up 并审计                                     |
-| `chat`                         | `session.read`、`session.manage` 的 API 允许部分                                              |
-| `chat:admin`                   | `chat.impersonate_admin`；不等于 root，必须显式授权、记录被模拟主体，并保留现有 Open API 契约 |
-| `persona`                      | `agent.manage` 的 Persona 子集                                                                |
-| `plugin`、`mcp`、`skill`       | `extension.manage` 对应子集                                                                   |
-| `kb`、`memory`、`data`、`file` | `data.manage` 对应资源范围                                                                    |
+| 现有 scope                     | 新动作映射（示例）                                                                                            |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `provider`                     | `provider.use`、有限 `provider.read`                                                                          |
+| `config`                       | `platform.manage`、`provider.manage` 的非凭据读取部分                                                         |
+| `config:edit_admin`            | 仅用于兼容配置档 `admins_id` 编辑的受限 scope；不等价于 `identity.operator.write`，仍需核心资源授权和 step-up |
+| `chat`                         | `session.read`、`session.manage` 的 API 允许部分                                                              |
+| `chat:admin`                   | `chat.impersonate_admin`；不等于 root，必须显式授权、记录被模拟主体，并保留现有 Open API 契约                 |
+| `persona`                      | `agent.manage` 的 Persona 子集                                                                                |
+| `plugin`、`mcp`、`skill`       | `extension.manage` 对应子集                                                                                   |
+| `kb`、`memory`、`data`、`file` | `data.manage` 对应资源范围                                                                                    |
 
 旧 scope 不应直接转换为 `operator` 角色。API Key 的资源范围、来源账户和过期时间必须进入 `AuthContext`；历史 `NULL` scope 按当前已有语义导入，但新增敏感动作不能因为历史 key 而自动获得。旧 Open API 的 `username` 仍是受控 impersonation 输入，不应被误标为 API Key 的认证主体。
 
@@ -300,7 +298,7 @@ chat.impersonate_admin
 event.subject
 event.resource
 event.platform_member_role  # owner/admin/member/unknown，仅当前消息事实
-event.platform_role_source   # adapter/api/cache/none
+event.platform_role_source  # adapter/api/cache/none
 event.platform_role_expires_at
 ```
 
@@ -315,9 +313,9 @@ event.platform_role_expires_at
 
 ## 10. Step-up 与后续提权协议
 
-第一阶段只实现 Dashboard 控制面的短时 step-up（重新验证密码/TOTP）和高风险动作拒绝审计，不实现跨平台 IM 审批。IM 私聊审批、控制面通知和一次性 nonce 属于后续阶段，必须在现有授权模型稳定且有明确审批 UI 后单独立项。第一阶段的 `requires_step_up` 表示“需要 Dashboard step-up”；`requires_elevation` 在第一阶段始终为 `False`，不生成 IM 可执行凭证。
+v1 只实现 Dashboard 控制面的短时 step-up（重新验证密码/TOTP）和高风险动作拒绝审计，不实现跨平台 IM 审批。IM 私聊审批、控制面通知和一次性 nonce 属于后续设计，当前运行时不生成或接受 elevation 凭证。`requires_step_up` 表示“需要 Dashboard step-up”。
 
-第一阶段的 step-up 是一次性、短时、绑定 Dashboard session、动作、资源和上下文摘要的操作凭证，不是把用户永久加入管理员列表。第一阶段记录 `step-up_id`、新鲜度、验证方式和消费状态。以下 elevation 请求字段只适用于后续跨平台审批：
+第一阶段的 step-up 是一次性、短时、绑定 Dashboard session、动作、资源和上下文摘要的操作凭证，不是把用户永久加入管理员列表。第一阶段记录 `step-up_id`、新鲜度、验证方式和消费状态。以下字段仅作为后续设计记录，不属于 v1 持久化模型：
 
 ```text
 request_id
@@ -329,7 +327,6 @@ approval_channel
 nonce_hash
 created_at / expires_at
 status: pending/approved/denied/expired/consumed/cancelled
-approver_subject_id
 approved_at / consumed_at
 request_context_digest
 ```
@@ -348,15 +345,15 @@ request_context_digest
 ### 10.2 第一阶段 step-up 流程
 
 1. 第一阶段仅允许 Dashboard 控制面提交需要 step-up 的动作；IM、插件和 Agent 遇到高风险动作直接拒绝并审计。
-2. Dashboard step-up 返回短 TTL（建议 5 分钟）的、绑定 session/action/resource/context digest 的一次性凭证；第一阶段不生成 IM 可执行 nonce。后续跨平台审批才保存 nonce 哈希。
+2. Dashboard step-up 返回短 TTL（建议 5 分钟）的、绑定 session/action/resource/context digest 的一次性凭证；v1 不生成 IM 可执行 nonce。
 3. 服务端重新验证密码或 TOTP，并检查最近验证时间、Dashboard session、动作、资源和上下文摘要。
 4. step-up 凭证只能消费一次；动作、资源、session 或上下文变化均拒绝并审计。
 
-### 10.3 后续跨平台 elevation 流程
+### 10.3 后续跨平台 elevation 流程（未实现）
 
 后续阶段才发送通知卡片、批准请求、原子消费 nonce 并执行跨平台 elevation。该流程必须满足本节末尾的私聊能力约束，不能在第一阶段实现半套 IM 审批。
 
-### 10.4 不支持私聊的平台
+### 10.4 不支持私聊的平台（后续设计）
 
 平台无关设计不能假设每个平台都有机器人私聊能力：
 
@@ -388,8 +385,9 @@ decision = await context.authz.authorize(
     context=event.auth_context,
 )
 if not decision.allowed:
-    if decision.requires_elevation:
-        await context.authz.request_elevation(decision)
+    if decision.requires_step_up:
+        # Dashboard routes must complete the step-up flow before retrying.
+        return
     return
 ```
 
@@ -438,7 +436,7 @@ platform_role, source, observed_at, expires_at, metadata_json
 
 过期事实不得参与授权，也不得自动写入 global 或 instance role binding。
 
-### 12.3 `auth_elevation_requests`（后续阶段）
+### 12.3 `auth_elevation_requests`（历史兼容表；v1 运行时不创建请求）
 
 保存上一节的请求字段和 nonce 哈希。对 `(status, expires_at)`、`subject_id`、`resource_id` 建索引；批准和消费使用事务和条件更新，防止并发重放。
 
@@ -449,7 +447,7 @@ platform_role, source, observed_at, expires_at, metadata_json
 ```text
 audit_id, timestamp, request_id, subject_id, effective_role,
 source, platform, config_id, action, resource_id,
-decision, reason, step_up_id, elevation_id, approver_subject_id,
+decision, reason, step_up_id,
 outcome, latency_ms, metadata_json
 ```
 
@@ -476,20 +474,17 @@ root/operator/session_owner/session_admin/member/guest
 - 按主体、平台、UMO、角色和状态过滤；
 - 批量撤销必须二次确认并要求 step-up；
 - instance_operator 只能管理其配置档内允许的 `session_owner`、`session_admin`、`member`，不能写 global/root/operator；
-- root/operator 的账户和绑定管理第一阶段不开放；多账户控制面建立后，才由 root 管理 operator，并保留最后一个 root 保护；
+- root/operator 的绑定仍不能由 instance_operator 修改；Dashboard 账户创建、停用和绑定管理由 root 权限与 step-up 保护，并保留最后一个 root 保护；
 - 平台自动角色显示为只读事实，不允许 Dashboard 直接修改其来源。
 
-第一版不提供“创建角色”“编辑角色继承”“自定义拒绝规则”，也不提供多 Dashboard 账户 CRUD。后续若需要自定义角色或多账户控制面，应先补齐策略验证、冲突解析、迁移和离线审计，再单独立项。
+第一版不提供“创建角色”“编辑角色继承”或“自定义拒绝规则”；账户 CRUD 不是角色定义 CRUD，已作为受 root 保护的控制面能力提供。后续若需要自定义角色或更复杂的多账户策略，应先补齐策略验证、冲突解析、迁移和离线审计，再单独立项。
 
 ### 13.2 页面和 API
 
 新增 Dashboard 页面/接口建议按领域划分：
 
 ```text
-/api/v1/authorization/subjects
 /api/v1/authorization/role-bindings
-/api/v1/authorization/capabilities
-/api/v1/authorization/elevation-requests
 /api/v1/authorization/audit
 ```
 
@@ -501,7 +496,7 @@ root/operator/session_owner/session_admin/member/guest
 
 1. 新增授权模型、主体/资源规范化和审计表。
 2. 启动时把每个配置档的 `admins_id` 转为对应 `instance:<config_id>` 作用域的 `instance_operator` 绑定，记录 `source=migrated` 和原配置摘要；不得转换为全局 `operator`。
-3. 当前单一 Dashboard 账户只建立受保护的控制面 principal 映射，不根据用户名猜测 root。显式 root 标记和多账户绑定留待账户模型建立后迁移。
+3. 为 Dashboard 账户建立受保护的控制面 principal 映射，不根据用户名猜测 root；旧单账户凭据仅在首次登录时迁移到稳定 `account_id`。
 4. 读取旧 `event.role` 时同时记录冲突诊断，NapCat 等适配器改为填充 `platform_member_role` 和 `auth_platform_membership_facts`；平台事实不写入 role binding。
 5. 授权服务以 observe-only 模式计算新决策并与旧 `is_admin()` 结果对比，发现放行差异时写审计和告警。
 
@@ -525,7 +520,7 @@ root/operator/session_owner/session_admin/member/guest
 1. 将 JWT session、API Key 和 WebChat 请求统一解析为 `AuthContext`。
 2. 建立旧 API scope 到新动作的显式映射，并为敏感 scope 保留 parent scope 校验。
 3. 兼容接口继续接受请求体 `username`，但将其标为 caller-declared identity；`chat:admin` 仅允许受控 impersonation，必须审计和 step-up。新接口从认证主体派生 username。
-4. 先实现单 Dashboard 账户可见的角色绑定（以 instance/session 为主）和高风险审计页面/API；多账户 root/operator 管理和跨平台提权不属于本阶段。
+4. 实现 Dashboard 账户可见的角色绑定（以 instance/session 为主）、账户管理和高风险审计页面/API；跨平台提权不属于本阶段。
 
 ### 阶段 E：提权和强制执行
 
@@ -541,7 +536,7 @@ root/operator/session_owner/session_admin/member/guest
 - 主体和 `(config_id, UMO)` 规范化：跨平台同 ID 不冲突，空值和伪造资源拒绝，现有 UMO 编码保持兼容。
 - 角色解析：instance 与会话作用域隔离，过期绑定/平台事实降级，平台 owner/admin 不生成 instance_operator 或 global operator。
 - 动作策略：provider.use/provider.manage、session.assign 和 identity.manage 的边界。
-- 角色变更：instance_operator 不能写 global/root/operator；多账户 root 保护在后续账户模型测试中覆盖。
+- 角色变更：instance_operator 不能写 global/root/operator；账户停用和 root 绑定变更必须保留最后一个可用 root。
 - step-up：密码/TOTP 新鲜度、动作/资源绑定、过期和重复使用。
 - 审计：拒绝、高风险动作、异常和静默失败生成脱敏记录；低风险 allow 不要求同步落库。
 
@@ -554,7 +549,7 @@ root/operator/session_owner/session_admin/member/guest
 
 ### 15.3 Dashboard 和 WebChat 测试
 
-- 单 Dashboard 控制面按显式配置和 step-up 执行高风险动作；instance_operator 受配置档作用域限制。多账户 root/operator 测试属于后续阶段。
+- Dashboard 控制面按显式账户绑定和 step-up 执行高风险动作；instance_operator 受配置档作用域限制。
 - JWT、Cookie、TOTP、API Key scope 与 action 映射正确；无 scope 不因历史 key 获得新敏感能力。
 - 兼容 WebChat/Open API 的 `username` 只能作为 caller-declared identity，并受 owner/impersonation 规则限制；新接口主体来自认证会话。
 - 角色绑定和审计 API 使用标准 response envelope，未授权返回 401/403 且不泄露策略细节。
@@ -574,16 +569,16 @@ root/operator/session_owner/session_admin/member/guest
 
 ## 16. 风险、兼容性和回滚
 
-| 风险                                                | 缓解措施                                                                                                        |
-| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| 平台角色与 AstrBot 角色再次混用                     | 类型和字段分离；适配器契约测试；禁止 `event.role` 写全局角色                                                    |
-| UMO 不稳定或跨配置档串用                            | 保留现有 UMO；授权资源使用 `(config_id, umo)` 和版本化 canonicalizer；拒绝未解析目标                            |
-| instance_operator 或兼容 `username` 自助提权为 root | 第一阶段不开放 root/operator CRUD；目标角色写入策略硬编码；impersonation 必须显式 scope、step-up 和审计         |
-| 后续提权消息被转发/重放                             | nonce 只存哈希；短 TTL；绑定 subject/action/resource/context digest；原子消费。第一阶段只使用 Dashboard step-up |
-| 插件或 Agent 绕过授权                               | SDK 入口和工具执行入口双重检查；插件不能访问内部表                                                              |
-| 旧命令/配置行为变化                                 | 先 observe-only 对比；迁移报告；按阶段启用；保留可导出的旧配置快照                                              |
-| API Key 历史 scope 意外扩权                         | scope 到 action 显式映射；新增敏感动作默认不继承历史 wildcard                                                   |
-| 授权服务故障导致误放行或审计阻塞                    | 写操作 fail closed；低风险 allow 不同步落库；拒绝和高风险事件进入有界异步队列，队列满时使用受限安全日志         |
+| 风险                                                | 缓解措施                                                                                                              |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| 平台角色与 AstrBot 角色再次混用                     | 类型和字段分离；适配器契约测试；禁止 `event.role` 写全局角色                                                          |
+| UMO 不稳定或跨配置档串用                            | 保留现有 UMO；授权资源使用 `(config_id, umo)` 和版本化 canonicalizer；拒绝未解析目标                                  |
+| instance_operator 或兼容 `username` 自助提权为 root | 只有现有 root 可在 step-up 后管理 root/operator；目标角色写入策略硬编码；impersonation 必须显式 scope、step-up 和审计 |
+| 后续提权消息被转发/重放                             | nonce 只存哈希；短 TTL；绑定 subject/action/resource/context digest；原子消费。第一阶段只使用 Dashboard step-up       |
+| 插件或 Agent 绕过授权                               | SDK 入口和工具执行入口双重检查；插件不能访问内部表                                                                    |
+| 旧命令/配置行为变化                                 | 先 observe-only 对比；迁移报告；按阶段启用；保留可导出的旧配置快照                                                    |
+| API Key 历史 scope 意外扩权                         | scope 到 action 显式映射；新增敏感动作默认不继承历史 wildcard                                                         |
+| 授权服务故障导致误放行或审计阻塞                    | 写操作 fail closed；低风险 allow 不同步落库；拒绝和高风险事件进入有界异步队列，队列满时使用受限安全日志               |
 
 数据库迁移采用新增表和可回滚索引，旧配置在迁移窗口内保留只读快照。回滚应用版本时使用快照恢复 `admins_id`，但不能回滚到会把平台群管理员写入全局 `event.role` 的代码。提权和审计表即使应用回滚也应保留，避免失去安全事件记录。
 
@@ -609,9 +604,9 @@ root/operator/session_owner/session_admin/member/guest
 3. 数据库迁移：角色绑定、平台事实和高风险审计表及索引；按 `instance:<config_id>` 导入 `admins_id`。
 4. 管道和命令：动作过滤器、builtin command 映射、Admin 命令迁移；旧过滤器仅保留适配层。
 5. 工具和 Agent：统一执行前检查，补齐 Computer Use、MCP、Persona/子 Agent 路径。
-6. 单 Dashboard/API Key/WebChat：principal 统一、scope 映射、兼容 username 的 impersonation 审计、instance/session 管理接口和页面。
+6. Dashboard/API Key/WebChat：principal 统一、scope 映射、兼容 username 的 impersonation 审计、instance/session 管理接口和页面。
 7. 插件 SDK：动作声明、`context.authz` 和迁移诊断；插件不能伪造认证主体。
 8. Dashboard step-up：密码/TOTP 新鲜度、一次性操作上下文和高风险审计。
-9. 后续单独立项：多 Dashboard 账户/root/operator CRUD、跨平台提权通道和任意策略扩展。
+9. 后续单独立项：跨平台提权通道和任意策略扩展。
 
 每个任务都必须同时提交对应的单元/集成测试；涉及 Dashboard 路由时同步更新 `openspec/openapi-v1.yaml`、生成客户端和公开 OpenAPI 文档。

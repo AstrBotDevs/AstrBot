@@ -478,18 +478,6 @@ export type AuthorizationStepUpRequest = {
   config_id?: string;
 };
 
-export type AuthorizationElevationRequest = {
-  action: string;
-  resource_type: string;
-  resource_id: string;
-  config_id?: string;
-  approval_channel?: 'private' | 'dashboard' | 'webchat';
-};
-
-export type AuthorizationElevationApprovalRequest = {
-  nonce: string;
-};
-
 export type DashboardAccountCreateRequest = {
   username: string;
   role?: 'operator' | 'root';
@@ -1249,42 +1237,6 @@ export type IssueAuthorizationStepUpResponses = {
 
 export type IssueAuthorizationStepUpResponse =
   IssueAuthorizationStepUpResponses[keyof IssueAuthorizationStepUpResponses];
-
-export type CreateAuthorizationElevationRequestData = {
-  body: AuthorizationElevationRequest;
-  path?: never;
-  query?: never;
-  url: '/api/v1/authorization/elevation-requests';
-};
-
-export type CreateAuthorizationElevationRequestResponses = {
-  /**
-   * Standard AstrBot success response
-   */
-  200: SuccessEnvelope;
-};
-
-export type CreateAuthorizationElevationRequestResponse =
-  CreateAuthorizationElevationRequestResponses[keyof CreateAuthorizationElevationRequestResponses];
-
-export type ApproveAuthorizationElevationRequestData = {
-  body: AuthorizationElevationApprovalRequest;
-  path: {
-    request_id: string;
-  };
-  query?: never;
-  url: '/api/v1/authorization/elevation-requests/{request_id}/approve';
-};
-
-export type ApproveAuthorizationElevationRequestResponses = {
-  /**
-   * Standard AstrBot success response
-   */
-  200: SuccessEnvelope;
-};
-
-export type ApproveAuthorizationElevationRequestResponse =
-  ApproveAuthorizationElevationRequestResponses[keyof ApproveAuthorizationElevationRequestResponses];
 
 export type ListAuthorizationAuditData = {
   body?: never;
