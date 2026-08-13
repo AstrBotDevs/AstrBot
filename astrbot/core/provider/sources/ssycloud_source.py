@@ -42,6 +42,7 @@ class ProviderSSYCloud(ProviderOpenAIOfficial):
             response = await retry_provider_request(
                 "SSYCloud",
                 lambda: self.client.models.list(),
+                provider_id=str(self.provider_config.get("id", "")),
             )
             model_ids: list[str] = []
             for model in response.data:

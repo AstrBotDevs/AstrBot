@@ -353,6 +353,8 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 extra_body=extra_body,
             ),
             max_attempts=request_max_retries,
+            provider_id=str(self.provider_config.get("id", "")),
+            model=payloads.get("model", ""),
         )
         if not isinstance(response, Response):
             raise TypeError(
@@ -422,6 +424,8 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 extra_body=extra_body,
             ),
             max_attempts=request_max_retries,
+            provider_id=str(self.provider_config.get("id", "")),
+            model=payloads.get("model", ""),
         )
 
         response_id: str | None = None

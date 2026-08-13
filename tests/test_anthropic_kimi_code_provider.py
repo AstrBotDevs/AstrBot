@@ -198,6 +198,7 @@ async def test_anthropic_get_models_retries_transient_request_error(monkeypatch)
     provider = anthropic_source.ProviderAnthropic.__new__(
         anthropic_source.ProviderAnthropic
     )
+    provider.provider_config = {"id": "test-anthropic-provider"}
     provider.client = SimpleNamespace(models=models)
 
     assert await provider.get_models() == ["claude-a", "claude-b"]
