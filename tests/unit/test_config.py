@@ -322,9 +322,7 @@ class TestAstrBotConfigLoad:
             is True
         )
 
-    def test_password_change_required_is_stable_across_reloads(
-        self, temp_config_path
-    ):
+    def test_password_change_required_is_stable_across_reloads(self, temp_config_path):
         """Repeated constructions must not rotate a pending generated password (issue #9662)."""
         default_config = {
             "dashboard": {
