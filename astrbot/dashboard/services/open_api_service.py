@@ -192,7 +192,9 @@ class OpenApiService:
         reserved = any(
             isinstance(profile, dict)
             and isinstance(profile.get("admins_id", []), list)
-            and any(str(admin_id) == effective_username for admin_id in profile["admins_id"])
+            and any(
+                str(admin_id) == effective_username for admin_id in profile["admins_id"]
+            )
             for profile in profiles.values()
         )
         if reserved:

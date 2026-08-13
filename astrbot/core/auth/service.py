@@ -1,4 +1,4 @@
-"""Runtime-owned authorization, audit, step-up, and elevation service."""
+"""Runtime-owned authorization, audit, and Dashboard step-up service."""
 
 from __future__ import annotations
 
@@ -26,12 +26,10 @@ from astrbot.core.auth.models import (
     Role,
     Subject,
     canonical_session_resource,
-    parse_canonical_session_resource,
     utc_now,
 )
 from astrbot.core.db.po import (
     AuthAuditLog,
-    AuthElevationRequest,
     AuthPlatformMembershipFact,
     AuthPolicyOverride,
     AuthRoleBinding,
@@ -42,7 +40,6 @@ from astrbot.core.utils.error_redaction import redact_sensitive_text
 
 _AUDIT_QUEUE_SIZE = 2048
 _STEP_UP_TTL_SECONDS = 300
-_ELEVATION_TTL_SECONDS = 300
 _SENSITIVE_KEYS = frozenset(
     {
         "jwt",
@@ -102,6 +99,16 @@ _ACTION_ROLES: dict[str, frozenset[Role]] = {
             Role.ROOT,
         }
     ),
+    "platform.read": frozenset(
+        {
+            Role.MEMBER,
+            Role.SESSION_ADMIN,
+            Role.SESSION_OWNER,
+            Role.INSTANCE_OPERATOR,
+            Role.OPERATOR,
+            Role.ROOT,
+        }
+    ),
     "provider.manage": frozenset({Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}),
     "provider.credentials.write": frozenset(
         {Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}
@@ -145,27 +152,6 @@ _ACTION_ROLES: dict[str, frozenset[Role]] = {
     "identity.root.write": frozenset({Role.ROOT}),
     "chat.impersonate_admin": frozenset(
         {Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}
-    ),
-    "elevation.request": frozenset(
-        {
-            Role.SESSION_ADMIN,
-            Role.SESSION_OWNER,
-            Role.INSTANCE_OPERATOR,
-            Role.OPERATOR,
-            Role.ROOT,
-        }
-    ),
-    "elevation.approve": frozenset(
-        {Role.SESSION_OWNER, Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}
-    ),
-    "elevation.execute": frozenset(
-        {
-            Role.SESSION_ADMIN,
-            Role.SESSION_OWNER,
-            Role.INSTANCE_OPERATOR,
-            Role.OPERATOR,
-            Role.ROOT,
-        }
     ),
     "tool.local_exec": frozenset({Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}),
     "tool.python_exec": frozenset({Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}),
@@ -214,7 +200,6 @@ _API_SCOPE_ACTIONS: dict[str, frozenset[str]] = {
     # provider definition or its credentials.
     "provider": frozenset({"provider.read", "provider.use"}),
     "config": frozenset({"platform.manage", "provider.manage"}),
-    "config:edit_admin": frozenset({"identity.manage"}),
     "chat": frozenset({"session.read", "session.manage", "provider.use"}),
     "chat:admin": frozenset({"chat.impersonate_admin"}),
     "persona": frozenset({"agent.manage"}),
@@ -226,24 +211,26 @@ _API_SCOPE_ACTIONS: dict[str, frozenset[str]] = {
     "data": frozenset({"data.manage", "data.export_all"}),
     "file": frozenset({"data.manage", "tool.file_read", "tool.file_write"}),
     "im": frozenset({"session.manage"}),
-    "bot": frozenset({"platform.manage"}),
+    "bot": frozenset({"platform.read"}),
 }
 
 
 def api_key_scopes_allow_action(scopes: Iterable[str], action: str) -> bool:
     """Map scopes to action capability without creating an operator role."""
 
-    if action in HIGH_RISK_ACTIONS and action != "chat.impersonate_admin":
+    if action == "chat.impersonate_admin":
+        selected = set(scopes)
+        return "chat" in selected and "chat:admin" in selected
+    if action in HIGH_RISK_ACTIONS:
         return False
     return any(action in _API_SCOPE_ACTIONS.get(scope, ()) for scope in set(scopes))
 
 
 def _requires_step_up(action: str, context: AuthContext) -> bool:
-    """Return whether this exact Dashboard request needs fresh proof."""
+    """Return whether a fixed high-risk capability needs fresh proof."""
 
-    return action in HIGH_RISK_ACTIONS or (
-        context.source == "dashboard" and bool(context.metadata.get("dashboard_write"))
-    )
+    del context
+    return action in HIGH_RISK_ACTIONS and action != "chat.impersonate_admin"
 
 
 def _sanitize_metadata(value: Any) -> Any:
@@ -332,8 +319,6 @@ class AuthorizationService:
         reason: str,
         effective_role: Role | None = None,
         step_up_id: str | None = None,
-        elevation_id: str | None = None,
-        approver_subject_id: str | None = None,
         metadata: Mapping[str, Any] | None = None,
     ) -> None:
         record = AuthAuditLog(
@@ -349,8 +334,6 @@ class AuthorizationService:
             decision=decision,
             reason=reason,
             step_up_id=step_up_id,
-            elevation_id=elevation_id,
-            approver_subject_id=approver_subject_id,
             outcome=decision,
             metadata_json=_sanitize_metadata({**context.metadata, **(metadata or {})}),
         )
@@ -585,17 +568,13 @@ class AuthorizationService:
                     resource=Resource.named(
                         "identity",
                         subject_id,
-                        config_id=(
-                            None if config_id == GLOBAL_SCOPE_ID else config_id
-                        ),
+                        config_id=(None if config_id == GLOBAL_SCOPE_ID else config_id),
                     ),
                     context=AuthContext(
                         subject=actor,
                         source="system",
                         authenticated=True,
-                        config_id=(
-                            None if config_id == GLOBAL_SCOPE_ID else config_id
-                        ),
+                        config_id=(None if config_id == GLOBAL_SCOPE_ID else config_id),
                     ),
                     decision="allow",
                     reason="binding_granted",
@@ -932,15 +911,14 @@ class AuthorizationService:
                         requires_step_up=True,
                         audit_id=audit_id,
                     )
-            elif not await self._consume_elevation(subject, action, resource, context):
+            else:
                 return Decision(
                     False,
                     subject,
                     action,
                     resource,
                     role,
-                    "elevation_required",
-                    requires_elevation=True,
+                    "high_risk_dashboard_only",
                     audit_id=audit_id,
                 )
         return Decision(
@@ -1139,124 +1117,3 @@ class AuthorizationService:
                     .values(consumed_at=now)
                 )
                 return bool(result.rowcount)
-
-    async def request_elevation(
-        self, decision: Decision, context: AuthContext, *, approval_channel: str
-    ) -> tuple[str, str]:
-        """Create one private/dashboard/WebChat elevation request without retaining its nonce."""
-
-        if not decision.requires_elevation or decision.effective_role not in {
-            Role.SESSION_ADMIN,
-            Role.SESSION_OWNER,
-            Role.INSTANCE_OPERATOR,
-            Role.OPERATOR,
-            Role.ROOT,
-        }:
-            raise PermissionError("Elevation unavailable")
-        if approval_channel not in {"private", "dashboard", "webchat"}:
-            raise AuthorizationValueError("Unsafe elevation channel")
-        request_id, nonce = str(uuid.uuid4()), secrets.token_urlsafe(32)
-        record = AuthElevationRequest(
-            request_id=request_id,
-            subject_id=decision.subject.id,
-            requested_action=decision.action,
-            resource_id=decision.resource.id,
-            config_id=decision.resource.config_id,
-            requested_from=context.source,
-            approval_channel=approval_channel,
-            nonce_hash=hashlib.sha256(nonce.encode()).hexdigest(),
-            request_context_digest=context.digest_for(
-                decision.action, decision.resource
-            ),
-            expires_at=utc_now() + timedelta(seconds=_ELEVATION_TTL_SECONDS),
-        )
-        async with self._db.get_db() as session:
-            async with session.begin():
-                session.add(record)
-        return request_id, nonce
-
-    async def approve_elevation(
-        self, *, request_id: str, nonce: str, approver: Subject, context: AuthContext
-    ) -> bool:
-        """Approve a request with a conditional update to prevent racing approvals."""
-
-        now = utc_now()
-        # Resolve and authorize outside the write transaction. _authorize()
-        # owns its own short-lived DB session, and nesting it here can lock
-        # SQLite while a long-running transaction is open.
-        async with self._db.get_db() as session:
-            request = (
-                await session.execute(
-                    select(AuthElevationRequest).where(
-                        col(AuthElevationRequest.request_id) == request_id
-                    )
-                )
-            ).scalar_one_or_none()
-        if (
-            request is None
-            or request.status != "pending"
-            or request.expires_at <= now
-            or request.subject_id == approver.id
-            or request.nonce_hash != hashlib.sha256(nonce.encode()).hexdigest()
-        ):
-            return False
-        resource = self._resource_from_id(request.resource_id, request.config_id)
-        decision = await self._authorize(
-            approver, request.requested_action, resource, context, str(uuid.uuid4())
-        )
-        if not decision.allowed and decision.reason not in {
-            "step_up_required",
-            "elevation_required",
-        }:
-            return False
-        async with self._db.get_db() as session:
-            async with session.begin():
-                result = await session.execute(
-                    update(AuthElevationRequest)
-                    .where(
-                        col(AuthElevationRequest.request_id) == request_id,
-                        col(AuthElevationRequest.status) == "pending",
-                        col(AuthElevationRequest.expires_at) > now,
-                    )
-                    .values(
-                        status="approved",
-                        approver_subject_id=approver.id,
-                        approved_at=now,
-                    )
-                )
-                return bool(result.rowcount)
-
-    async def _consume_elevation(
-        self, subject: Subject, action: str, resource: Resource, context: AuthContext
-    ) -> bool:
-        token = context.elevation_token
-        if not isinstance(token, str) or "." not in token:
-            return False
-        request_id, nonce = token.split(".", 1)
-        now = utc_now()
-        async with self._db.get_db() as session:
-            async with session.begin():
-                result = await session.execute(
-                    update(AuthElevationRequest)
-                    .where(
-                        col(AuthElevationRequest.request_id) == request_id,
-                        col(AuthElevationRequest.subject_id) == subject.id,
-                        col(AuthElevationRequest.requested_action) == action,
-                        col(AuthElevationRequest.resource_id) == resource.id,
-                        col(AuthElevationRequest.request_context_digest)
-                        == context.digest_for(action, resource),
-                        col(AuthElevationRequest.nonce_hash)
-                        == hashlib.sha256(nonce.encode()).hexdigest(),
-                        col(AuthElevationRequest.status) == "approved",
-                        col(AuthElevationRequest.expires_at) > now,
-                    )
-                    .values(status="consumed", consumed_at=now)
-                )
-                return bool(result.rowcount)
-
-    @staticmethod
-    def _resource_from_id(resource_id: str, config_id: str | None) -> Resource:
-        if resource_id.startswith("session:v1:"):
-            parsed_config_id, umo = parse_canonical_session_resource(resource_id)
-            return Resource.session(parsed_config_id, umo)
-        return Resource(type="resource", id=resource_id, config_id=config_id)

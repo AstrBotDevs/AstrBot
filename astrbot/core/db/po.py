@@ -811,7 +811,12 @@ class AuthStepUpCredential(SQLModel, table=True):
 
 
 class AuthElevationRequest(SQLModel, table=True):
-    """A transactionally approved and consumed cross-channel elevation."""
+    """Historical elevation-request rows retained for non-destructive migration.
+
+    v1 no longer creates or consumes elevation requests.  The model remains so
+    existing SQLite installations keep their schema and can be inspected or
+    migrated without a destructive drop.
+    """
 
     __tablename__ = "auth_elevation_requests"  # type: ignore
 
@@ -855,6 +860,8 @@ class AuthAuditLog(SQLModel, table=True):
     decision: str = Field(nullable=False, index=True, max_length=32)
     reason: str = Field(nullable=False, max_length=128)
     step_up_id: str | None = Field(default=None, index=True, max_length=64)
+    # Historical columns retained for schema compatibility.  v1 never writes
+    # or reads cross-channel elevation state.
     elevation_id: str | None = Field(default=None, index=True, max_length=64)
     approver_subject_id: str | None = Field(default=None, max_length=512)
     outcome: str | None = Field(default=None, max_length=64)

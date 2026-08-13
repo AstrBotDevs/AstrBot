@@ -295,42 +295,6 @@ paths:
         '200':
           $ref: '#/components/responses/Ok'
 
-  /api/v1/authorization/elevation-requests:
-    post:
-      tags: [Authorization]
-      summary: Create a short-lived elevation request
-      operationId: createAuthorizationElevationRequest
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AuthorizationElevationRequest'
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/authorization/elevation-requests/{request_id}/approve:
-    post:
-      tags: [Authorization]
-      summary: Approve an elevation request
-      operationId: approveAuthorizationElevationRequest
-      parameters:
-        - name: request_id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AuthorizationElevationApprovalRequest'
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
   /api/v1/authorization/audit:
     get:
       tags: [Authorization]
@@ -6055,33 +6019,6 @@ components:
           type: string
           writeOnly: true
           nullable: true
-
-    AuthorizationElevationRequest:
-      type: object
-      additionalProperties: false
-      required: [action, resource_type, resource_id]
-      properties:
-        action:
-          type: string
-        resource_type:
-          type: string
-        resource_id:
-          type: string
-        config_id:
-          type: string
-          nullable: true
-        approval_channel:
-          type: string
-          enum: [private, dashboard, webchat]
-
-    AuthorizationElevationApprovalRequest:
-      type: object
-      additionalProperties: false
-      required: [nonce]
-      properties:
-        nonce:
-          type: string
-          writeOnly: true
 
     DashboardAccountCreateRequest:
       type: object

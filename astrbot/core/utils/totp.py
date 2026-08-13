@@ -330,7 +330,7 @@ def verify_recovery_code_hash(recovery_code_hash: str, code: str) -> bool:
         iterations = int(parts[1])
         salt = parts[2]
         expected_digest = parts[3]
-    except (ValueError, IndexError):
+    except ValueError, IndexError:
         return False
 
     try:
@@ -446,6 +446,7 @@ async def is_totp_trusted_device_valid(
         result = await session.execute(
             select(DashboardTrustedDevice).where(
                 col(DashboardTrustedDevice.token_hash) == token_hash,
+                col(DashboardTrustedDevice.account_id) == "__legacy__",
                 col(DashboardTrustedDevice.totp_secret_hash) == totp_secret_hash,
                 col(DashboardTrustedDevice.expires_at)
                 > datetime.datetime.now(datetime.UTC),
@@ -478,6 +479,7 @@ async def issue_totp_trusted_device(
             trusted_device = DashboardTrustedDevice.model_validate(
                 {
                     "token_hash": token_hash,
+                    "account_id": "__legacy__",
                     "totp_secret_hash": totp_secret_hash,
                     "expires_at": expires_at,
                 }

@@ -47,6 +47,7 @@ ACTIONS = frozenset(
         "session.assign",
         "provider.read",
         "provider.use",
+        "platform.read",
         "provider.manage",
         "provider.credentials.write",
         "platform.manage",
@@ -65,9 +66,6 @@ ACTIONS = frozenset(
         "identity.operator.write",
         "identity.root.write",
         "chat.impersonate_admin",
-        "elevation.request",
-        "elevation.approve",
-        "elevation.execute",
         "tool.local_exec",
         "tool.python_exec",
         "tool.file_read",
@@ -371,7 +369,6 @@ class AuthContext:
     auth_strength: str = "none"
     authenticated_at: datetime | None = None
     step_up_token: str | None = None
-    elevation_token: str | None = None
     caller_declared_username: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -387,6 +384,12 @@ class AuthContext:
             raise AuthorizationValueError("Invalid authentication strength")
 
     def digest_for(self, action: str, resource: Resource) -> str:
+        """Return policy facts that bind a Dashboard step-up credential.
+
+        Transport-only request metadata cannot participate: issuing and using a
+        credential are different HTTP requests and must bind to the same
+        authorization tuple.
+        """
         return context_digest(
             subject_id=self.subject.id,
             action=action,
@@ -396,9 +399,10 @@ class AuthContext:
                 "config_id": self.config_id,
                 "platform": self.platform,
                 "message_type": self.message_type,
+                "platform_member_role": self.platform_member_role,
+                "platform_role_source": self.platform_role_source,
                 "principal_subject_id": self.principal_subject_id,
                 "caller_declared_username": self.caller_declared_username,
-                **self.metadata,
             },
         )
 
@@ -414,9 +418,7 @@ class Decision:
     effective_role: Role | None
     reason: str
     requires_step_up: bool = False
-    requires_elevation: bool = False
     audit_id: str | None = None
-    elevation_request_id: str | None = None
 
 
 def utc_now() -> datetime:

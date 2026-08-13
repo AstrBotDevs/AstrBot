@@ -2,6 +2,7 @@ import asyncio
 import copy
 import io
 import uuid
+from http.cookies import SimpleCookie
 from unittest.mock import AsyncMock
 
 import pytest
@@ -19,6 +20,7 @@ from astrbot.dashboard.api import open_api as open_api_routes
 from astrbot.dashboard.responses import ok
 from astrbot.dashboard.server import AstrBotDashboard
 from astrbot.dashboard.services.api_key_service import ApiKeyService
+from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 from tests.fixtures.helpers import create_isolated_runtime_services
 from tests.helpers.dashboard_test_adapter import DashboardTestClient
 
@@ -28,14 +30,28 @@ _TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
 async def _create_api_key(
     test_client: DashboardTestClient,
     authenticated_header: dict,
+    dashboard_password: str,
     *,
     scopes: list[str],
     name_prefix: str = "openapi-test",
 ) -> tuple[str, str]:
+    step_up_res = await test_client.post(
+        "/api/v1/authorization/step-up",
+        json={
+            "action": "identity.manage",
+            "resource_type": "api-key",
+            "resource_id": "collection",
+            "password": dashboard_password,
+        },
+        headers=authenticated_header,
+    )
+    assert step_up_res.status_code == 200
+    step_up_data = await step_up_res.get_json()
+    step_up_token = step_up_data["data"]["token"]
     create_res = await test_client.post(
         "/api/v1/api-keys",
         json={"name": f"{name_prefix}-{uuid.uuid4().hex[:8]}", "scopes": scopes},
-        headers=authenticated_header,
+        headers={**authenticated_header, "X-AstrBot-Step-Up": step_up_token},
     )
     assert create_res.status_code == 200
     create_data = await create_res.get_json()
@@ -117,10 +133,12 @@ def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
 
 
 @pytest_asyncio.fixture(scope="module")
-async def authenticated_header(app: FastAPI, core_lifecycle_td: AstrBotCoreLifecycle):
-    test_client = DashboardTestClient(app)
+async def authenticated_header(
+    app: FastAPI, core_lifecycle_td: AstrBotCoreLifecycle
+):
+    client = DashboardTestClient(app)
     try:
-        response = await test_client.post(
+        response = await client.post(
             "/api/v1/auth/login",
             json={
                 "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
@@ -128,10 +146,26 @@ async def authenticated_header(app: FastAPI, core_lifecycle_td: AstrBotCoreLifec
             },
         )
         data = await response.get_json()
-        token = data["data"]["token"]
+        cookies = SimpleCookie()
+        for value in response.headers.getlist("set-cookie"):
+            cookies.load(value)
+        dashboard_cookie = cookies.get(DASHBOARD_JWT_COOKIE_NAME)
+        if dashboard_cookie is None or not dashboard_cookie.value:
+            dashboard_cookie_value = data["data"]["token"]
+        else:
+            dashboard_cookie_value = dashboard_cookie.value
+        return {
+            "Authorization": f"Bearer {data['data']['token']}",
+            "Cookie": f"{DASHBOARD_JWT_COOKIE_NAME}={dashboard_cookie_value}",
+            "Origin": "http://testserver",
+        }
     finally:
-        await test_client.aclose()
-    return {"Authorization": f"Bearer {token}"}
+        await client.aclose()
+
+
+@pytest.fixture(scope="module")
+def dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
+    return _resolve_dashboard_password(core_lifecycle_td)
 
 
 @pytest.mark.asyncio
@@ -139,11 +173,13 @@ async def test_api_key_scope_and_revoke(
     app: FastAPI,
     test_client: DashboardTestClient,
     authenticated_header: dict,
+    dashboard_password: str,
 ):
 
     raw_key, key_id = await _create_api_key(
         test_client,
         authenticated_header,
+        dashboard_password,
         scopes=["im"],
         name_prefix="im-scope-key",
     )
@@ -184,7 +220,23 @@ async def test_api_key_scope_and_revoke(
 
     revoke_res = await test_client.post(
         f"/api/v1/api-keys/{key_id}/revoke",
-        headers=authenticated_header,
+        headers={
+            **authenticated_header,
+            "X-AstrBot-Step-Up": (
+                await (
+                    await test_client.post(
+                        "/api/v1/authorization/step-up",
+                        json={
+                            "action": "identity.manage",
+                            "resource_type": "api-key",
+                            "resource_id": "collection",
+                            "password": dashboard_password,
+                        },
+                        headers=authenticated_header,
+                    )
+                ).get_json()
+            )["data"]["token"],
+        },
     )
     assert revoke_res.status_code == 200
     revoke_data = await revoke_res.get_json()
@@ -202,11 +254,13 @@ async def test_open_send_message_with_api_key(
     app: FastAPI,
     test_client: DashboardTestClient,
     authenticated_header: dict,
+    dashboard_password: str,
 ):
 
     raw_key, _ = await _create_api_key(
         test_client,
         authenticated_header,
+        dashboard_password,
         scopes=["im"],
         name_prefix="send-message-key",
     )
@@ -229,12 +283,14 @@ async def test_open_chat_send_auto_session_id_and_username(
     app: FastAPI,
     test_client: DashboardTestClient,
     authenticated_header: dict,
+    dashboard_password: str,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
 
     raw_key, _ = await _create_api_key(
         test_client,
         authenticated_header,
+        dashboard_password,
         scopes=["chat"],
         name_prefix="chat-send-key",
     )
@@ -322,17 +378,20 @@ async def test_open_chat_admin_identity_requires_explicit_sensitive_scope(
     app: FastAPI,
     test_client: DashboardTestClient,
     authenticated_header: dict,
+    dashboard_password: str,
     monkeypatch: pytest.MonkeyPatch,
 ):
     basic_key, _ = await _create_api_key(
         test_client,
         authenticated_header,
+        dashboard_password,
         scopes=["chat"],
         name_prefix="chat-basic-admin-boundary",
     )
     admin_key, _ = await _create_api_key(
         test_client,
         authenticated_header,
+        dashboard_password,
         scopes=["chat", "chat:admin"],
         name_prefix="chat-admin-boundary",
     )
@@ -343,9 +402,12 @@ async def test_open_chat_admin_identity_requires_explicit_sensitive_scope(
         username: str,
         post_data: dict,
         *,
-        api_key_allow_admin_role: bool | None = None,
+        api_key_principal: dict | None = None,
     ):
-        calls.append((username, api_key_allow_admin_role))
+        scopes = api_key_principal.get("scopes", ()) if api_key_principal else ()
+        calls.append(
+            (username, None if api_key_principal is None else "chat:admin" in scopes)
+        )
         return ok({"session_id": post_data["session_id"], "creator": username})
 
     monkeypatch.setattr(
@@ -392,6 +454,8 @@ async def test_open_chat_admin_identity_requires_explicit_sensitive_scope(
         headers={"X-API-Key": admin_key},
     )
     assert allowed.status_code == 200
+    allowed_data = await allowed.get_json()
+    assert allowed_data["status"] == "ok"
     assert calls[-1] == ("fixture-api-admin", True)
 
     dashboard = await test_client.post(
@@ -407,10 +471,12 @@ async def test_open_chat_admin_identity_requires_explicit_sensitive_scope(
 async def test_api_key_admin_configuration_requires_explicit_scope(
     test_client: DashboardTestClient,
     authenticated_header: dict,
+    dashboard_password: str,
 ):
     config_key, _ = await _create_api_key(
         test_client,
         authenticated_header,
+        dashboard_password,
         scopes=["config"],
         name_prefix="config-admin-boundary",
     )
@@ -457,6 +523,7 @@ async def test_api_key_admin_configuration_requires_explicit_scope(
     sensitive_key, _ = await _create_api_key(
         test_client,
         authenticated_header,
+        dashboard_password,
         scopes=["config", "config:edit_admin"],
         name_prefix="config-sensitive-admin-boundary",
     )
@@ -476,11 +543,27 @@ async def test_sensitive_scopes_require_parents_and_null_is_not_a_wildcard(
     app: FastAPI,
     test_client: DashboardTestClient,
     authenticated_header: dict,
+    dashboard_password: str,
 ):
+    step_up_res = await test_client.post(
+        "/api/v1/authorization/step-up",
+        json={
+            "action": "identity.manage",
+            "resource_type": "api-key",
+            "resource_id": "collection",
+            "password": dashboard_password,
+        },
+        headers=authenticated_header,
+    )
+    assert step_up_res.status_code == 200
+    management_headers = {
+        **authenticated_header,
+        "X-AstrBot-Step-Up": (await step_up_res.get_json())["data"]["token"],
+    }
     child_only = await test_client.post(
         "/api/v1/api-keys",
         json={"name": "invalid-child", "scopes": ["chat:admin"]},
-        headers=authenticated_header,
+        headers=management_headers,
     )
     assert child_only.status_code == 400
 
@@ -505,7 +588,21 @@ async def test_sensitive_scopes_require_parents_and_null_is_not_a_wildcard(
     assert data["status"] == "error"
     assert data["message"] == "username is reserved for an AstrBot administrator"
 
-    listed = await test_client.get("/api/v1/api-keys", headers=authenticated_header)
+    list_step_up = await test_client.post(
+        "/api/v1/authorization/step-up",
+        json={
+            "action": "identity.manage",
+            "resource_type": "api-key",
+            "resource_id": "collection",
+            "password": dashboard_password,
+        },
+        headers=authenticated_header,
+    )
+    list_headers = {
+        **authenticated_header,
+        "X-AstrBot-Step-Up": (await list_step_up.get_json())["data"]["token"],
+    }
+    listed = await test_client.get("/api/v1/api-keys", headers=list_headers)
     null_scope_key = next(
         item
         for item in (await listed.get_json())["data"]
@@ -520,12 +617,14 @@ async def test_open_chat_sessions_pagination(
     app: FastAPI,
     test_client: DashboardTestClient,
     authenticated_header: dict,
+    dashboard_password: str,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
 
     raw_key, _ = await _create_api_key(
         test_client,
         authenticated_header,
+        dashboard_password,
         scopes=["chat"],
         name_prefix="chat-scope-key",
     )
@@ -585,11 +684,13 @@ async def test_open_chat_configs_list(
     app: FastAPI,
     test_client: DashboardTestClient,
     authenticated_header: dict,
+    dashboard_password: str,
 ):
 
     raw_key, _ = await _create_api_key(
         test_client,
         authenticated_header,
+        dashboard_password,
         scopes=["config"],
         name_prefix="chat-config-key",
     )
@@ -615,6 +716,7 @@ async def test_open_api_auth_validation_and_key_carriers(
     app: FastAPI,
     test_client: DashboardTestClient,
     authenticated_header: dict,
+    dashboard_password: str,
 ):
 
     missing_key_res = await test_client.get("/api/v1/im/bots")
@@ -635,6 +737,7 @@ async def test_open_api_auth_validation_and_key_carriers(
     raw_key, _ = await _create_api_key(
         test_client,
         authenticated_header,
+        dashboard_password,
         scopes=["im"],
         name_prefix="auth-carrier-key",
     )
@@ -659,12 +762,14 @@ async def test_open_chat_rejects_blank_username_and_uses_session_id(
     app: FastAPI,
     test_client: DashboardTestClient,
     authenticated_header: dict,
+    dashboard_password: str,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
 ):
     raw_key, _ = await _create_api_key(
         test_client,
         authenticated_header,
+        dashboard_password,
         scopes=["chat"],
         name_prefix="chat-conversation-key",
     )
@@ -723,11 +828,13 @@ async def test_open_chat_send_config_resolution(
     app: FastAPI,
     test_client: DashboardTestClient,
     authenticated_header: dict,
+    dashboard_password: str,
     monkeypatch: pytest.MonkeyPatch,
 ):
     raw_key, _ = await _create_api_key(
         test_client,
         authenticated_header,
+        dashboard_password,
         scopes=["chat"],
         name_prefix="chat-config-resolution-key",
     )
@@ -867,11 +974,13 @@ async def test_open_chat_sessions_input_validation_and_filtering(
     app: FastAPI,
     test_client: DashboardTestClient,
     authenticated_header: dict,
+    dashboard_password: str,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
     raw_key, _ = await _create_api_key(
         test_client,
         authenticated_header,
+        dashboard_password,
         scopes=["chat"],
         name_prefix="chat-sessions-bounds-key",
     )
@@ -944,10 +1053,12 @@ async def test_open_send_message_error_paths(
     app: FastAPI,
     test_client: DashboardTestClient,
     authenticated_header: dict,
+    dashboard_password: str,
 ):
     raw_key, _ = await _create_api_key(
         test_client,
         authenticated_header,
+        dashboard_password,
         scopes=["im"],
         name_prefix="im-errors-key",
     )
@@ -1002,29 +1113,26 @@ async def test_open_api_key_scope_normalization(
     app: FastAPI,
     test_client: DashboardTestClient,
     authenticated_header: dict,
+    dashboard_password: str,
 ):
-
-    config_res = await test_client.post(
-        "/api/v1/api-keys",
-        json={"name": "config-contained-scopes-key", "scopes": ["config"]},
-        headers=authenticated_header,
+    _, config_key_id = await _create_api_key(
+        test_client,
+        authenticated_header,
+        dashboard_password,
+        scopes=["config"],
+        name_prefix="config-contained-scopes",
     )
-    config_data = await config_res.get_json()
-
-    assert config_res.status_code == 200
-    assert config_data["status"] == "ok"
-    assert set(config_data["data"]["scopes"]) == {"config", "bot", "provider"}
-
-    extra_scope_res = await test_client.post(
-        "/api/v1/api-keys",
-        json={"name": "mcp-skill-scope-key", "scopes": ["mcp", "skill"]},
-        headers=authenticated_header,
+    _, extra_key_id = await _create_api_key(
+        test_client,
+        authenticated_header,
+        dashboard_password,
+        scopes=["mcp", "skill"],
+        name_prefix="mcp-skill-scope",
     )
-    extra_scope_data = await extra_scope_res.get_json()
-
-    assert extra_scope_res.status_code == 200
-    assert extra_scope_data["status"] == "ok"
-    assert set(extra_scope_data["data"]["scopes"]) == {"mcp", "skill"}
+    keys = await app.state.db.list_api_keys()
+    scopes_by_id = {key.key_id: key.scopes for key in keys}
+    assert set(scopes_by_id[config_key_id]) == {"config", "bot", "provider"}
+    assert set(scopes_by_id[extra_key_id]) == {"mcp", "skill"}
 
 
 @pytest.mark.asyncio
@@ -1032,17 +1140,15 @@ async def test_file_scope_is_available_for_developer_api_key(
     app: FastAPI,
     test_client: DashboardTestClient,
     authenticated_header: dict,
+    dashboard_password: str,
 ):
-    create_res = await test_client.post(
-        "/api/v1/api-keys",
-        json={"name": "file-scope-key", "scopes": ["file"]},
-        headers=authenticated_header,
+    raw_key, _ = await _create_api_key(
+        test_client,
+        authenticated_header,
+        dashboard_password,
+        scopes=["file"],
+        name_prefix="file-scope",
     )
-    create_data = await create_res.get_json()
-
-    assert create_res.status_code == 200
-    assert create_data["status"] == "ok"
-    assert set(create_data["data"]["scopes"]) == {"file"}
 
     upload_res = await test_client.post(
         "/api/v1/file",
@@ -1053,7 +1159,7 @@ async def test_file_scope_is_available_for_developer_api_key(
                 content_type="text/plain",
             ),
         },
-        headers={"X-API-Key": create_data["data"]["api_key"]},
+        headers={"X-API-Key": raw_key},
     )
     upload_data = await upload_res.get_json()
 

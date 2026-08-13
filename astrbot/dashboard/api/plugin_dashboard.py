@@ -28,7 +28,7 @@ from astrbot.dashboard.services.plugin_dashboard_service import (
 )
 from astrbot.dashboard.services.static_file_service import StaticFileService
 
-from .auth import require_dashboard_session_principal, use_secure_dashboard_cookie
+from .auth import require_dashboard_control_plane_principal, use_secure_dashboard_cookie
 
 router = APIRouter(tags=["Plugin Dashboard"])
 _DASHBOARD_SESSION_SECURITY = [{"DashboardBearerAuth": [], "DashboardCookieAuth": []}]
@@ -105,7 +105,9 @@ def _require_json_content_length(request: Request) -> None:
 async def get_plugin_dashboard_catalog(
     extension_id: str,
     request: Request,
-    principal: DashboardSessionPrincipal = Depends(require_dashboard_session_principal),
+    principal: DashboardSessionPrincipal = Depends(
+        require_dashboard_control_plane_principal
+    ),
     service: PluginDashboardService = Depends(get_service),
 ):
     require_plugin_ui_protocol(request)
@@ -122,7 +124,9 @@ async def create_plugin_page_session(
     page_id: str,
     payload: PluginDashboardSessionRequest,
     request: Request,
-    principal: DashboardSessionPrincipal = Depends(require_dashboard_session_principal),
+    principal: DashboardSessionPrincipal = Depends(
+        require_dashboard_control_plane_principal
+    ),
     service: PluginDashboardService = Depends(get_service),
 ):
     require_plugin_ui_protocol(request)
@@ -159,7 +163,9 @@ async def invoke_plugin_dashboard_action(
     action_id: str,
     payload: PluginDashboardActionRequest,
     request: Request,
-    principal: DashboardSessionPrincipal = Depends(require_dashboard_session_principal),
+    principal: DashboardSessionPrincipal = Depends(
+        require_dashboard_control_plane_principal
+    ),
     service: PluginDashboardService = Depends(get_service),
 ):
     require_plugin_ui_protocol(request)
@@ -257,7 +263,9 @@ async def invoke_plugin_dashboard_upload(
     extension_id: str,
     action_id: str,
     request: Request,
-    principal: DashboardSessionPrincipal = Depends(require_dashboard_session_principal),
+    principal: DashboardSessionPrincipal = Depends(
+        require_dashboard_control_plane_principal
+    ),
     service: PluginDashboardService = Depends(get_service),
 ):
     require_plugin_ui_protocol(request)
@@ -288,7 +296,9 @@ async def invoke_plugin_dashboard_file(
     action_id: str,
     payload: PluginDashboardFileRequest,
     request: Request,
-    principal: DashboardSessionPrincipal = Depends(require_dashboard_session_principal),
+    principal: DashboardSessionPrincipal = Depends(
+        require_dashboard_control_plane_principal
+    ),
     service: PluginDashboardService = Depends(get_service),
 ):
     require_plugin_ui_protocol(request)

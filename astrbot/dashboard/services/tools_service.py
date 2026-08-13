@@ -437,7 +437,7 @@ class ToolsService:
             tools_dict = []
             for tool in tools:
                 tools_dict.append(
-                    self._serialize_tool(
+                    await self._serialize_tool(
                         tool,
                         config_entries,
                         defaults={},
@@ -531,13 +531,29 @@ class ToolsService:
         return f"Tool '{tool.name}' parallel execution {'enabled' if enabled else 'disabled'}."
 
     async def update_tool_permission(self, data: Any) -> str:
-        """Reject legacy per-tool role writes after authorization migration."""
-
-        del data
-        raise ToolsServiceError(
-            "Per-tool admin/member permissions were removed. "
-            "Use role bindings and the tool action policy instead."
-        )
+        """Persist a migration-only display preference, never runtime policy."""
+        if not isinstance(data, dict):
+            raise ToolsServiceError("Invalid tool permission payload")
+        name, permission = data.get("name"), data.get("permission")
+        if not isinstance(name, str) or not name:
+            raise ToolsServiceError("Tool not found")
+        if self.tool_mgr.is_builtin_tool(name):
+            raise ToolsServiceError("Builtin tools are read-only")
+        if not isinstance(permission, str) or permission not in {"admin", "member"}:
+            raise ToolsServiceError("permission must be admin or member")
+        tools = {tool.name for tool in self.tool_mgr.func_list}
+        if name not in tools:
+            raise ToolsServiceError(f"Tool {name} not found")
+        raw = await self.preferences.global_get("tool_permissions", {})
+        if not isinstance(raw, dict):
+            raw = {}
+        default = raw.setdefault("_default", {})
+        if not isinstance(default, dict):
+            default = {}
+            raw["_default"] = default
+        default[name] = permission
+        await self.preferences.global_put("tool_permissions", raw)
+        return f"Tool {name} permission updated"
 
     async def toggle_tool(self, data: Any) -> str:
         try:
@@ -742,7 +758,7 @@ class ToolsService:
             )
         return config_entries
 
-    def _serialize_tool(
+    async def _serialize_tool(
         self,
         tool,
         config_entries: list[dict],
@@ -786,6 +802,17 @@ class ToolsService:
             "builtin_config_statuses": builtin_config_statuses,
             "builtin_config_tags": builtin_config_tags,
         }
+        if not readonly:
+            # Compatibility display only; this value is never consulted by
+            # the runtime authorization service.
+            tool_info["permission"] = "admin"
+            raw_permissions = await self.preferences.global_get("tool_permissions", {})
+            configured = (
+                isinstance(raw_permissions, dict)
+                and isinstance(raw_permissions.get("_default"), dict)
+                and tool.name in raw_permissions["_default"]
+            )
+            tool_info["permission_configured"] = configured
         settings = parallel_settings or {
             "enabled": False,
             "allowed_tool_ids": [],

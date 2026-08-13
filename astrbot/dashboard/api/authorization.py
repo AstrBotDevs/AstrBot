@@ -1,4 +1,4 @@
-"""Dashboard authorization bindings, step-up, elevation, and audit APIs."""
+"""Dashboard authorization bindings, step-up, and audit APIs."""
 
 from datetime import datetime
 
@@ -8,8 +8,6 @@ from astrbot.core.auth.models import AuthContext, Resource, Role, Subject
 from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import (
     AuthorizationBindingRequest,
-    AuthorizationElevationApprovalRequest,
-    AuthorizationElevationRequest,
     AuthorizationStepUpRequest,
     DashboardAccountCreateRequest,
     DashboardAccountUpdateRequest,
@@ -140,8 +138,9 @@ async def revoke_role_binding(
     actor, context = _principal_context(request, principal)
     try:
         revoked = await _service(request).revoke_binding(
-            actor=actor, binding_id=binding_id
-            , context=_step_up_context(context, request.headers.get("X-AstrBot-Step-Up"))
+            actor=actor,
+            binding_id=binding_id,
+            context=_step_up_context(context, request.headers.get("X-AstrBot-Step-Up")),
         )
     except (ValueError, PermissionError) as exc:
         raise ApiError("Authorization denied", status_code=403) from exc
@@ -161,7 +160,7 @@ async def issue_step_up(
     decision = await _service(request).authorize(
         subject, payload.action, resource, context
     )
-    if decision.reason not in {"step_up_required", "elevation_required"}:
+    if decision.reason != "step_up_required":
         raise ApiError("Step-up is not required for this action", status_code=400)
     method = await _auth_service(request).verify_step_up_factor(
         account_id=principal.account_id or "",
@@ -234,7 +233,9 @@ async def create_dashboard_account(
     principal=Depends(require_dashboard_session_principal),
 ):
     subject, context = _principal_context(request, principal)
-    action = "identity.root.write" if payload.role == "root" else "identity.operator.write"
+    action = (
+        "identity.root.write" if payload.role == "root" else "identity.operator.write"
+    )
     action_context = _step_up_context(context, request.headers.get("X-AstrBot-Step-Up"))
     await _require(
         request,
@@ -244,7 +245,9 @@ async def create_dashboard_account(
         resource=Resource.named("dashboard-account", payload.username),
     )
     try:
-        account, binding = await _auth_service(request).create_dashboard_account_with_role(
+        account, binding = await _auth_service(
+            request
+        ).create_dashboard_account_with_role(
             username=payload.username,
             password=payload.password,
             created_by=subject.id,
@@ -295,41 +298,3 @@ async def update_dashboard_account(
             "is_active": account.is_active,
         }
     )
-
-
-@router.post("/elevation-requests")
-async def request_elevation(
-    payload: AuthorizationElevationRequest,
-    request: Request,
-    principal=Depends(require_dashboard_session_principal),
-):
-    subject, context = _principal_context(request, principal)
-    resource = _resource(payload)
-    decision = await _service(request).authorize(
-        subject, payload.action, resource, context
-    )
-    if not decision.requires_elevation:
-        raise ApiError("Elevation is not required or available", status_code=403)
-    request_id, nonce = await _service(request).request_elevation(
-        decision, context, approval_channel=payload.approval_channel
-    )
-    return ok({"request_id": request_id, "nonce": nonce})
-
-
-@router.post("/elevation-requests/{request_id}/approve")
-async def approve_elevation(
-    request_id: str,
-    payload: AuthorizationElevationApprovalRequest,
-    request: Request,
-    principal=Depends(require_dashboard_session_principal),
-):
-    approver, context = _principal_context(request, principal)
-    approved = await _service(request).approve_elevation(
-        request_id=request_id,
-        nonce=payload.nonce,
-        approver=approver,
-        context=context,
-    )
-    if not approved:
-        raise ApiError("Elevation approval denied", status_code=403)
-    return ok()

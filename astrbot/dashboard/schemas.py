@@ -136,18 +136,6 @@ class AuthorizationStepUpRequest(BaseModel):
     code: str | None = None
 
 
-class AuthorizationElevationRequest(BaseModel):
-    action: str
-    resource_type: str
-    resource_id: str
-    config_id: str | None = None
-    approval_channel: Literal["private", "dashboard", "webchat"] = "dashboard"
-
-
-class AuthorizationElevationApprovalRequest(BaseModel):
-    nonce: str
-
-
 class BackupUploadInitRequest(OpenModel):
     filename: str | None = None
     total_size: int | None = None
