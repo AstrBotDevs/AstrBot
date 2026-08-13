@@ -250,7 +250,9 @@ def _decode_escaped_text(value: str) -> str:
     )
 
 
-@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG, required_actions=("tool.file_read",))
+@builtin_tool(
+    config=_COMPUTER_RUNTIME_TOOL_CONFIG, required_actions=("tool.file_read",)
+)
 @dataclass
 class FileReadTool(FunctionTool):
     name: str = "astrbot_file_read_tool"
@@ -340,7 +342,9 @@ class FileReadTool(FunctionTool):
             return f"Error reading file: {exc}"
 
 
-@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG, required_actions=("tool.file_write",))
+@builtin_tool(
+    config=_COMPUTER_RUNTIME_TOOL_CONFIG, required_actions=("tool.file_write",)
+)
 @dataclass
 class FileWriteTool(FunctionTool):
     name: str = "astrbot_file_write_tool"
@@ -408,7 +412,9 @@ class FileWriteTool(FunctionTool):
             return f"Error writing file: {exc}"
 
 
-@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG, required_actions=("tool.file_write",))
+@builtin_tool(
+    config=_COMPUTER_RUNTIME_TOOL_CONFIG, required_actions=("tool.file_write",)
+)
 @dataclass
 class FileEditTool(FunctionTool):
     name: str = "astrbot_file_edit_tool"
@@ -495,7 +501,9 @@ class FileEditTool(FunctionTool):
             return f"Error editing file: {exc}"
 
 
-@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG, required_actions=("tool.file_read",))
+@builtin_tool(
+    config=_COMPUTER_RUNTIME_TOOL_CONFIG, required_actions=("tool.file_read",)
+)
 @dataclass
 class GrepTool(FunctionTool):
     name: str = "astrbot_grep_tool"
@@ -709,7 +717,9 @@ class GrepTool(FunctionTool):
             return f"Error searching files: {exc}"
 
 
-@builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG, required_actions=("tool.file_write",))
+@builtin_tool(
+    config=_SANDBOX_RUNTIME_TOOL_CONFIG, required_actions=("tool.file_write",)
+)
 @dataclass
 class FileUploadTool(FunctionTool):
     name: str = "astrbot_upload_file"
@@ -777,7 +787,9 @@ class FileUploadTool(FunctionTool):
             return f"Error uploading file: {str(e)}"
 
 
-@builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG, required_actions=("tool.file_write",))
+@builtin_tool(
+    config=_SANDBOX_RUNTIME_TOOL_CONFIG, required_actions=("tool.file_write",)
+)
 @dataclass
 class FileDownloadTool(FunctionTool):
     name: str = "astrbot_download_file"

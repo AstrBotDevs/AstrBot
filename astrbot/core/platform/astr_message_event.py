@@ -108,7 +108,9 @@ class AstrMessageEvent(abc.ABC):
         """消息对象, AstrBotMessage。带有完整的消息结构。"""
         self.platform_meta = platform_meta
         """消息平台的信息, 其中 name 是平台的类型，如 aiocqhttp"""
-        self.platform_member_role = "unknown"
+        # Unknown adapter facts are represented separately; the compatibility
+        # role view defaults to the least-privileged identified member.
+        self.platform_member_role = "member"
         """Current-session platform fact: owner/admin/member/unknown only."""
         self.platform_role_source = "none"
         self.platform_role_expires_at: datetime | None = None
@@ -446,7 +448,7 @@ class AstrMessageEvent(abc.ABC):
         ``event.auth_context`` and ``context.authz.authorize`` instead.
         """
 
-        return False
+        return self.platform_member_role == "admin"
 
     @property
     def role(self) -> str:

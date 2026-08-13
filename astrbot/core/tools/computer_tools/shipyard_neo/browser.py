@@ -32,7 +32,9 @@ async def _get_browser_component(context: ContextWrapper[AstrAgentContext]) -> A
     return browser
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG, required_actions=("tool.browser_control",))
+@builtin_tool(
+    config=_SHIPYARD_NEO_TOOL_CONFIG, required_actions=("tool.browser_control",)
+)
 @dataclass
 class BrowserExecTool(FunctionTool):
     name: str = "astrbot_execute_browser"
@@ -90,7 +92,9 @@ class BrowserExecTool(FunctionTool):
             return f"Error executing browser command: {str(e)}"
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG, required_actions=("tool.browser_control",))
+@builtin_tool(
+    config=_SHIPYARD_NEO_TOOL_CONFIG, required_actions=("tool.browser_control",)
+)
 @dataclass
 class BrowserBatchExecTool(FunctionTool):
     name: str = "astrbot_execute_browser_batch"
@@ -155,7 +159,9 @@ class BrowserBatchExecTool(FunctionTool):
             return f"Error executing browser batch command: {str(e)}"
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG, required_actions=("tool.browser_control",))
+@builtin_tool(
+    config=_SHIPYARD_NEO_TOOL_CONFIG, required_actions=("tool.browser_control",)
+)
 @dataclass
 class RunBrowserSkillTool(FunctionTool):
     name: str = "astrbot_run_browser_skill"

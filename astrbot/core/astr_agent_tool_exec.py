@@ -99,8 +99,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if "history" in name or name.startswith("get_"):
             return ("session.read",)
         declared = getattr(tool, "required_actions", ())
-        if isinstance(declared, tuple) and declared and all(
-            isinstance(action, str) and action for action in declared
+        if (
+            isinstance(declared, tuple)
+            and declared
+            and all(isinstance(action, str) and action for action in declared)
         ):
             return declared
         return ("session.manage",)
@@ -121,10 +123,17 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             # service. Production events always carry the structured context;
             # keep this adapter fail-closed for real execution while allowing
             # pure tool behavior tests to exercise non-security logic.
-            if runtime is None:
+            # Standalone tool tests and third-party callers may provide only a
+            # lightweight context with no authorization capability at all.
+            # Once a runtime exposes that capability, missing event facts fail
+            # closed instead of falling back to legacy role checks.
+            if runtime is None or not hasattr(runtime, "authorization"):
                 return None
             return "error: Permission denied. Authorization context is unavailable."
-        if getattr(event, "resource", None) is None or getattr(event, "auth_context", None) is None:
+        if (
+            getattr(event, "resource", None) is None
+            or getattr(event, "auth_context", None) is None
+        ):
             return "error: Permission denied. Authorization context is unavailable."
         resource = Resource.named(
             "tool",
@@ -650,12 +659,16 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             extras=extras,
             message_type=session.message_type,
         )
-        cron_event.platform_member_role = getattr(event, "platform_member_role", "unknown")
-        cron_event.platform_role_source = event.platform_role_source
-        cron_event.platform_role_expires_at = event.platform_role_expires_at
-        cron_event.subject = event.subject
-        cron_event.resource = event.resource
-        cron_event.auth_context = event.auth_context
+        cron_event.platform_member_role = getattr(
+            event, "platform_member_role", "unknown"
+        )
+        cron_event.platform_role_source = getattr(event, "platform_role_source", "none")
+        cron_event.platform_role_expires_at = getattr(
+            event, "platform_role_expires_at", None
+        )
+        cron_event.subject = getattr(event, "subject", None)
+        cron_event.resource = getattr(event, "resource", None)
+        cron_event.auth_context = getattr(event, "auth_context", None)
         cfg = ctx.get_config(umo=event.unified_msg_origin) or {}
         provider_settings = cfg.get("provider_settings") or {}
         config = MainAgentBuildConfig(

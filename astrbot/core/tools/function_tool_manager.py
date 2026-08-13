@@ -57,7 +57,6 @@ class _PermissionGuardedTool(FunctionTool):
     """
 
     def __init__(self, wrapped: FunctionTool, _manager: object | None = None) -> None:
-        self._wrapped = wrapped
         super().__init__(
             name=wrapped.name,
             description=wrapped.description,
@@ -69,9 +68,32 @@ class _PermissionGuardedTool(FunctionTool):
             parallel_policy=wrapped.parallel_policy,
             required_actions=wrapped.required_actions,
         )
+        # Pydantic's dataclass initializer may clear attributes assigned
+        # before ``super()``; retain the adapter target afterwards.
+        object.__setattr__(self, "_wrapped", wrapped)
+        object.__setattr__(self, "_permission_manager", _manager)
 
     async def call(self, context, **kwargs):
-        return await self._wrapped.call(context, **kwargs)
+        manager = self._permission_manager
+        if manager is not None:
+            error = await manager._check_tool_permission(self.name, context)
+            if error:
+                return error
+        # FunctionTool's base ``call`` is intentionally abstract; invoke a
+        # declared handler for the compatibility adapter while preserving
+        # subclass overrides.
+        if type(self._wrapped).call is not FunctionTool.call:
+            return await self._wrapped.call(context, **kwargs)
+        handler = self._wrapped.handler
+        if handler is None:
+            return "error: tool has no callable handler"
+        result = handler(context.context.event, **kwargs)
+        if hasattr(result, "__aiter__"):
+            last = None
+            async for item in result:
+                last = item
+            return last
+        return await result
 
     async def iter_call(self, context, **kwargs):
         iterator = getattr(self._wrapped, "iter_call", None)
@@ -79,8 +101,20 @@ class _PermissionGuardedTool(FunctionTool):
             async for item in iterator(context, **kwargs):
                 yield item
             return
-        result = await self._wrapped.call(context, **kwargs)
-        yield result
+        if type(self._wrapped).call is not FunctionTool.call:
+            result = await self._wrapped.call(context, **kwargs)
+            yield result
+            return
+        handler = self._wrapped.handler
+        if handler is None:
+            yield "error: tool has no callable handler"
+            return
+        result = handler(context.context.event, **kwargs)
+        if hasattr(result, "__aiter__"):
+            async for item in result:
+                yield item
+        else:
+            yield await result
 
 
 class PluginLookup(Protocol):
@@ -525,7 +559,34 @@ class FunctionToolManager:
         """
 
         del tool_name
-        return "action"
+        return "admin"
+
+    async def _check_tool_permission(
+        self, tool_name: str, context: object
+    ) -> str | None:
+        """Compatibility diagnostic; runtime execution uses action authz."""
+        if self.authorization is not None:
+            return None
+        event = getattr(getattr(context, "context", None), "event", None)
+        if event is None:
+            return "Permission denied: admin permission required (authorization context unavailable)"
+        configured = (
+            await self.preferences.global_get("tool_permissions", {})
+            if self.preferences
+            else {}
+        )
+        required = "admin"
+        if isinstance(configured, Mapping):
+            default = configured.get("_default", {})
+            if isinstance(default, Mapping):
+                required = str(default.get(tool_name, required)).lower()
+        if (
+            required == "member"
+            or getattr(event, "role", "member") == "admin"
+            or (callable(getattr(event, "is_admin", None)) and event.is_admin())
+        ):
+            return None
+        return f"Permission denied for tool {tool_name}: admin permission required for {event.get_sender_id()}"
 
     def get_full_tool_set(self) -> ToolSet:
         """获取完整工具集
@@ -543,7 +604,14 @@ class FunctionToolManager:
         """
         tool_set = ToolSet()
         for tool in self.func_list:
-            tool_set.add_tool(tool)
+            # Keep the import-compatible adapter around for handoff/catalog
+            # callers. It performs no authorization; execution is gated once
+            # by FunctionToolExecutor.
+            tool_set.add_tool(
+                tool
+                if isinstance(tool, _PermissionGuardedTool)
+                else _PermissionGuardedTool(tool, self)
+            )
         return tool_set
 
     @staticmethod

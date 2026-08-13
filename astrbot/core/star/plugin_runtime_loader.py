@@ -247,7 +247,9 @@ class PluginRuntimeLoader:
         author = metadata.get("author")
         if not isinstance(name, str) or not isinstance(author, str):
             raise ValueError("Plugin identity is required for authorization actions")
-        plugin_id = f"{author.lower().replace('/', '_')}/{name.lower().replace('/', '_')}"
+        plugin_id = (
+            f"{author.lower().replace('/', '_')}/{name.lower().replace('/', '_')}"
+        )
         actions: set[str] = set()
         for item in raw_actions:
             action = item.get("id") if isinstance(item, dict) else item

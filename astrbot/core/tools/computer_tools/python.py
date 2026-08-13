@@ -117,9 +117,7 @@ class PythonTool(FunctionTool):
             return f"Error executing code: {str(e)}"
 
 
-@builtin_tool(
-    config=_LOCAL_PYTHON_TOOL_CONFIG, required_actions=("tool.python_exec",)
-)
+@builtin_tool(config=_LOCAL_PYTHON_TOOL_CONFIG, required_actions=("tool.python_exec",))
 @dataclass
 class LocalPythonTool(FunctionTool):
     name: str = "astrbot_execute_python"

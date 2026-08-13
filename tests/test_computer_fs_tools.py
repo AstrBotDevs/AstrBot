@@ -412,7 +412,7 @@ async def test_restricted_member_can_read_global_and_builtin_skills_but_not_writ
 
 
 @pytest.mark.asyncio
-async def test_admin_can_write_global_skill_catalog(
+async def test_local_file_tool_cannot_write_global_skill_catalog(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ):
@@ -441,8 +441,8 @@ async def test_admin_can_write_global_skill_catalog(
         path=str(global_skill),
         content="# Updated\n",
     )
-    assert "File written successfully" in result
-    assert writes
+    assert "Write access is restricted" in result
+    assert writes == []
 
 
 @pytest.mark.asyncio

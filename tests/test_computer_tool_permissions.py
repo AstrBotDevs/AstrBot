@@ -50,7 +50,7 @@ def _make_run_context(
 
 
 @pytest.mark.asyncio
-async def test_browser_tool_allows_non_admin_when_admin_requirement_disabled(
+async def test_browser_tool_direct_component_call_is_not_gated_by_legacy_config(
     monkeypatch,
 ):
     async def _fake_get_booter(_ctx, _session_id):
@@ -68,7 +68,7 @@ async def test_browser_tool_allows_non_admin_when_admin_requirement_disabled(
 
 
 @pytest.mark.asyncio
-async def test_neo_skill_tool_allows_non_admin_when_admin_requirement_disabled(
+async def test_neo_skill_tool_direct_component_call_is_not_gated_by_legacy_config(
     monkeypatch,
 ):
     async def _fake_get_booter(_ctx, _session_id):
@@ -91,12 +91,10 @@ async def test_neo_skill_tool_allows_non_admin_when_admin_requirement_disabled(
 
 
 @pytest.mark.asyncio
-async def test_browser_tool_still_denies_non_admin_when_admin_requirement_enabled():
+async def test_browser_tool_without_runtime_context_is_not_gated_by_legacy_config():
     result = await BrowserExecTool().call(
         _make_run_context(require_admin=True),
         cmd="open https://example.com",
     )
 
-    assert "Permission denied" in result
-    assert "Using browser tools is only allowed for admin users" in result
-    assert "User's ID is: user-1" in result
+    assert "Error executing browser command" in result

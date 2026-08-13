@@ -74,7 +74,13 @@ class CuaScreenshotTool(FunctionTool):
         send_to_user: bool = True,
         return_image_to_llm: bool = True,
     ) -> ToolExecResult:
-        if err := await check_admin_permission(context, "Taking CUA screenshots"):
+        permission_result = check_admin_permission(context, "Taking CUA screenshots")
+        err = (
+            await permission_result
+            if hasattr(permission_result, "__await__")
+            else permission_result
+        )
+        if err:
             return err
         try:
             gui = await _get_gui_component(context)
@@ -129,7 +135,13 @@ class CuaMouseClickTool(FunctionTool):
         y: int,
         button: str = "left",
     ) -> ToolExecResult:
-        if err := await check_admin_permission(context, "Using CUA mouse"):
+        permission_result = check_admin_permission(context, "Using CUA mouse")
+        err = (
+            await permission_result
+            if hasattr(permission_result, "__await__")
+            else permission_result
+        )
+        if err:
             return err
         try:
             gui = await _get_gui_component(context)
@@ -158,7 +170,13 @@ class CuaKeyboardTypeTool(FunctionTool):
         context: ContextWrapper[AstrAgentContext],
         text: str,
     ) -> ToolExecResult:
-        if err := await check_admin_permission(context, "Using CUA keyboard"):
+        permission_result = check_admin_permission(context, "Using CUA keyboard")
+        err = (
+            await permission_result
+            if hasattr(permission_result, "__await__")
+            else permission_result
+        )
+        if err:
             return err
         try:
             gui = await _get_gui_component(context)

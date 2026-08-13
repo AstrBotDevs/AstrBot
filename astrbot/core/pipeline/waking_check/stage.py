@@ -204,14 +204,18 @@ class WakingCheckStage(Stage):
         else:
             platform_instance = getattr(event, "get_platform_id", None)
             platform_instance = (
-                platform_instance() if callable(platform_instance) else event.get_platform_name()
+                platform_instance()
+                if callable(platform_instance)
+                else event.get_platform_name()
             )
             subject = Subject.im(
                 platform_instance=platform_instance,
                 bot_account_id=event.get_self_id() or "default",
                 sender_id=event.get_sender_id() or "unknown",
                 display_name=(
-                    event.get_sender_name() if hasattr(event, "get_sender_name") else None
+                    event.get_sender_name()
+                    if hasattr(event, "get_sender_name")
+                    else None
                 )
                 or None,
             )
@@ -282,7 +286,9 @@ class WakingCheckStage(Stage):
                 await authorization.record_platform_membership(
                     subject=subject,
                     resource=resource,
-                    platform_instance=getattr(event, "get_platform_id", event.get_platform_name)(),
+                    platform_instance=getattr(
+                        event, "get_platform_id", event.get_platform_name
+                    )(),
                     platform_role=platform_member_role,
                     source=getattr(event, "platform_role_source", "none"),
                     metadata={

@@ -21,20 +21,26 @@ class AdminCommands:
         """Grant a session-scoped administrator binding."""
         try:
             await self.context.authz.grant_session_admin(event, str(admin_id))
-        except (PermissionError, ValueError):
+        except PermissionError, ValueError:
             event.set_result(MessageEventResult().message("❌ Authorization denied."))
             return
-        event.set_result(MessageEventResult().message("✅ Session administrator granted."))
+        event.set_result(
+            MessageEventResult().message("✅ Session administrator granted.")
+        )
 
     async def revoke(self, event: AstrMessageEvent, admin_id: str) -> None:
         """Revoke a session-scoped administrator binding."""
         try:
-            revoked = await self.context.authz.revoke_session_admin(event, str(admin_id))
-        except (PermissionError, ValueError):
+            revoked = await self.context.authz.revoke_session_admin(
+                event, str(admin_id)
+            )
+        except PermissionError, ValueError:
             event.set_result(MessageEventResult().message("❌ Authorization denied."))
             return
         event.set_result(
             MessageEventResult().message(
-                "✅ Session administrator revoked." if revoked else "❌ Binding not found."
+                "✅ Session administrator revoked."
+                if revoked
+                else "❌ Binding not found."
             )
         )

@@ -180,9 +180,7 @@ class ExecuteShellTool(FunctionTool):
             return f"Error executing command: {detail}"
 
 
-@builtin_tool(
-    config=_LOCAL_RUNTIME_TOOL_CONFIG, required_actions=("tool.local_exec",)
-)
+@builtin_tool(config=_LOCAL_RUNTIME_TOOL_CONFIG, required_actions=("tool.local_exec",))
 @dataclass
 class ShellSessionTool(FunctionTool):
     """Manage sessions created by the local shell execution tool."""

@@ -1160,7 +1160,7 @@ class PluginContext:
             rendering=RenderingCapability(execution.html_renderer),
             files=FileCapability(execution.file_token_service),
             sessions=SessionCapability(execution.database),
-            authz=AuthorizationCapability(execution.authorization),
+            authz=AuthorizationCapability(getattr(execution, "authorization", None)),
         )
 
     def _bind_plugin_lifecycle_control(self, control: PluginLifecycleControl) -> None:
