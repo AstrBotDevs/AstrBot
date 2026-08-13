@@ -83,7 +83,7 @@ async def test_select_parser_keeps_markup_formats_on_markitdown(ext):
 
 @pytest.mark.asyncio
 async def test_text_parser_decodes_plain_text_file():
-    result = await TextParser().parse("你好 world\nsecond line".encode("utf-8"), "note.txt")
+    result = await TextParser().parse("你好 world\nsecond line".encode(), "note.txt")
     assert result.media == []
     assert result.text == "你好 world\nsecond line"
 
