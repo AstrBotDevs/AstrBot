@@ -105,7 +105,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             and all(isinstance(action, str) and action for action in declared)
         ):
             return declared
-        return ("session.manage",)
+        return ("tool.function",)
 
     @classmethod
     async def _authorize_execution(
@@ -119,16 +119,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if event is None:
             return "error: Permission denied. Authorization context is unavailable."
         if authorization is None or getattr(event, "subject", None) is None:
-            # Isolated tool/unit callers do not own a runtime authorization
-            # service. Production events always carry the structured context;
-            # keep this adapter fail-closed for real execution while allowing
-            # pure tool behavior tests to exercise non-security logic.
-            # Standalone tool tests and third-party callers may provide only a
-            # lightweight context with no authorization capability at all.
-            # Once a runtime exposes that capability, missing event facts fail
-            # closed instead of falling back to legacy role checks.
-            if runtime is None or not hasattr(runtime, "authorization"):
-                return None
             return "error: Permission denied. Authorization context is unavailable."
         if (
             getattr(event, "resource", None) is None

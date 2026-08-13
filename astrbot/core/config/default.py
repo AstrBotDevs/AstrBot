@@ -243,7 +243,6 @@ DEFAULT_CONFIG = {
         "internal_keywords": {"enable": True, "extra_keywords": []},
         "baidu_aip": {"enable": False, "app_id": "", "api_key": "", "secret_key": ""},
     },
-    "admins_id": ["astrbot"],
     "t2i": False,
     "t2i_word_threshold": 150,
     "t2i_use_file_service": False,
@@ -3094,10 +3093,6 @@ CONFIG_METADATA_2 = {
             "t2i_word_threshold": {
                 "type": "int",
             },
-            "admins_id": {
-                "type": "list",
-                "items": {"type": "string"},
-            },
             "http_proxy": {
                 "type": "string",
             },
@@ -3922,11 +3917,6 @@ CONFIG_METADATA_3 = {
                 "description": "基本",
                 "type": "object",
                 "items": {
-                    "admins_id": {
-                        "description": "管理员 ID",
-                        "type": "list",
-                        "items": {"type": "string"},
-                    },
                     "platform_settings.unique_session": {
                         "description": "隔离会话",
                         "type": "bool",

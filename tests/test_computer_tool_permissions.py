@@ -8,6 +8,7 @@ from astrbot.core.tools.computer_tools.shipyard_neo.browser import BrowserExecTo
 from astrbot.core.tools.computer_tools.shipyard_neo.neo_skills import (
     GetExecutionHistoryTool,
 )
+from tests.fixtures.auth import attach_authorized_tool_context
 
 
 class _FakeBrowser:
@@ -36,14 +37,19 @@ def _make_run_context(
             "provider_settings": {
                 "computer_use_require_admin": require_admin,
             }
-        }
-        ,
+        },
         computer_runtime=computer_runtime,
     )
     event = SimpleNamespace(
         role=role,
         unified_msg_origin="qq_official:friend:user-1",
         get_sender_id=lambda: "user-1",
+    )
+    attach_authorized_tool_context(
+        event,
+        config_holder,
+        "tool.browser_control",
+        "extension.manage",
     )
     astr_ctx = SimpleNamespace(context=config_holder, event=event)
     return ContextWrapper(context=astr_ctx)

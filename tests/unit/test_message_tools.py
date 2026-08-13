@@ -33,6 +33,9 @@ def _make_context(
     event = SimpleNamespace(
         unified_msg_origin=current_session,
         role=role,
+        subject=SimpleNamespace(id="im:test:bot:user", authenticated=True),
+        resource=SimpleNamespace(config_id="default"),
+        auth_context=SimpleNamespace(),
         _has_send_oper=False,
         get_sender_id=lambda: "user-1",
         get_self_id=lambda: "bot-1",
@@ -47,6 +50,11 @@ def _make_context(
             context=SimpleNamespace(
                 get_config=lambda umo: cfg,
                 computer_runtime=computer_runtime,
+                authorization=SimpleNamespace(
+                    authorize=AsyncMock(
+                        return_value=SimpleNamespace(allowed=role == "admin")
+                    )
+                ),
                 send_message=AsyncMock(
                     return_value=PlatformSendResult(
                         platform_id="feishu",

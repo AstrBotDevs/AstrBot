@@ -184,7 +184,6 @@ uv run astrbot run --reset-password
 
 ## 系统、日志与输出装饰
 
-- `admins_id`：AstrBot 管理员 ID 列表；使用 `/session info` 查看平台 ID。
 - `t2i`、`t2i_word_threshold`：将超过阈值的**输出结果**渲染为图片；`t2i_active_template` 由模板管理页面维护。
 - `t2i_use_file_service`：用文件 token URL 暴露渲染结果，需要正确设置 `callback_api_base`。
 - `http_proxy` / `no_proxy`：为出站 HTTP 设置代理和直连范围。

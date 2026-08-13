@@ -12,8 +12,6 @@ from astrbot.core.agent.runners.deerflow.constants import (
 from astrbot.core.agent.runners.deerflow.deerflow_api_client import DeerFlowAPIClient
 from astrbot.core.platform.message_session import MessageSession
 
-from .utils.reset_scene import ResetScene
-
 THIRD_PARTY_AGENT_RUNNER_KEY = {
     "dify": "dify_conversation_id",
     "coze": "coze_conversation_id",
@@ -119,28 +117,6 @@ class ConversationCommands:
         """重置 LLM 会话"""
         umo = message.unified_msg_origin
         cfg = self.context.config.get(umo=message.unified_msg_origin)
-        is_unique_session = cfg["platform_settings"]["unique_session"]
-        is_group = bool(message.get_group_id())
-
-        scene = ResetScene.get_scene(is_group, is_unique_session)
-
-        alter_cmd_cfg = await self.context.preferences.global_get("alter_cmd", {})
-        plugin_config = alter_cmd_cfg.get("astrbot", {})
-        reset_cfg = plugin_config.get("reset", {})
-
-        required_perm = reset_cfg.get(
-            scene.key,
-            "admin" if is_group and not is_unique_session else "member",
-        )
-
-        if required_perm == "admin" and message.role != "admin":
-            message.set_result(
-                MessageEventResult().message(
-                    f"Reset command requires admin permission in {scene.name} scenario, "
-                    f"you (ID {message.get_sender_id()}) are not admin, cannot perform this action.",
-                ),
-            )
-            return
 
         agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
@@ -490,15 +466,6 @@ class ConversationCommands:
         """Delete the current conversation."""
         umo = message.unified_msg_origin
         cfg = self.context.config.get(umo=umo)
-        is_unique_session = cfg["platform_settings"]["unique_session"]
-
-        if message.get_group_id() and not is_unique_session and message.role != "admin":
-            message.set_result(
-                MessageEventResult().message(
-                    f"Deleting the current group conversation requires admin permission. Sender {message.get_sender_id()} is not an admin.",
-                ),
-            )
-            return
 
         agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:

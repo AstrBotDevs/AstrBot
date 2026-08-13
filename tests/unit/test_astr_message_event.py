@@ -574,10 +574,10 @@ class TestIsAdmin:
         """Test is_admin returns False by default."""
         assert astr_message_event.is_admin() is False
 
-    def test_is_admin_when_admin(self, astr_message_event):
-        """Test is_admin returns True when role is admin."""
+    def test_is_admin_does_not_promote_platform_role(self, astr_message_event):
+        """Platform admin facts never become AstrBot administrator status."""
         astr_message_event.role = "admin"
-        assert astr_message_event.is_admin() is True
+        assert astr_message_event.is_admin() is False
 
 
 class TestProcessBuffer:

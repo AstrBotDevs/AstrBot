@@ -33,36 +33,25 @@ async def check_admin_permission(
     """Run the final action check immediately before a sensitive operation."""
 
     event = context.context.event
-    action = {
-        "Shell execution": "tool.local_exec",
-        "Python execution": "tool.python_exec",
-        "File upload/download": "tool.file_write",
-        "Taking CUA screenshots": "tool.computer_use",
-        "Using CUA mouse": "tool.computer_use",
-        "Using CUA keyboard": "tool.computer_use",
-        "Using browser tools": "tool.browser_control",
-        "Using skill lifecycle tools": "extension.manage",
-        "Send a poke to another user": "agent.manage",
-    }.get(operation_name, "tool.local_exec")
+    action, resource_id = {
+        "Shell execution": ("tool.local_exec", "shell-execution"),
+        "Python execution": ("tool.python_exec", "python-execution"),
+        "File upload/download": ("tool.file_write", "file-transfer"),
+        "Taking CUA screenshots": ("tool.computer_use", "cua-screenshot"),
+        "Using CUA mouse": ("tool.computer_use", "cua-mouse"),
+        "Using CUA keyboard": ("tool.computer_use", "cua-keyboard"),
+        "Using browser tools": ("tool.browser_control", "browser"),
+        "Using skill lifecycle tools": ("extension.manage", "skill-lifecycle"),
+        "Send a poke to another user": ("agent.manage", "send-poke"),
+        "Send message to another session": ("agent.manage", "send-message"),
+    }.get(operation_name, ("tool.local_exec", "sensitive-operation"))
     authorization = getattr(context.context.context, "authorization", None)
     if authorization is None or getattr(event, "subject", None) is None:
-        # Direct tool calls without a runtime execution context are used by
-        # component tests and do not cross the agent executor's authorization
-        # boundary. Runtime-owned contexts always expose ``authorization`` and
-        # structured event facts, so they remain fail-closed above.
-        if not hasattr(context.context.context, "authorization"):
-            if operation_name == "Send a poke to another user":
-                return (
-                    None
-                    if getattr(event, "role", "member") == "admin"
-                    else f"error: Permission denied. {operation_name} requires an authorized action."
-                )
-            return None
         return "error: Permission denied. Authorization context is unavailable."
     decision = await authorization.authorize(
         event.subject,
         action,
-        Resource.named("tool", operation_name, config_id=event.resource.config_id),
+        Resource.named("tool", resource_id, config_id=event.resource.config_id),
         event.auth_context,
     )
     if not decision.allowed:

@@ -10,7 +10,6 @@
 """
 
 import asyncio
-import inspect
 import os
 import threading
 import time
@@ -390,13 +389,6 @@ class AstrBotCoreLifecycle:
         )
         self.astrbot_config_mgr = config_manager
         await config_manager.initialize()
-        if isinstance(self.db, SQLiteDatabase):
-            await authorization.migrate_legacy_admins(config_manager.confs)
-        preferences = self.services.preferences
-        if inspect.iscoroutinefunction(getattr(preferences, "global_get", None)):
-            result = authorization.migrate_legacy_tool_permissions(preferences)
-            if inspect.isawaitable(result):
-                await result
         self.temp_dir_cleaner = TempDirCleaner(
             max_size_getter=lambda: config_manager.default_conf.get(
                 TempDirCleaner.CONFIG_KEY,

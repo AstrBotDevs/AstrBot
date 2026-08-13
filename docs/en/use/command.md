@@ -45,7 +45,7 @@ Declared options can appear before or after positional arguments and support `--
 - `/session name`: Show the current auto name and saved alias; admin permission is required.
 - `/session name <name>`: Set the current UMO display alias; admin permission is required. `GreedyStr` allows spaces.
 
-The user ID from `/session info` can be added under `Config -> Other Config -> Admin ID`. With group `unique_session` enabled, the command also reports the group ID used for allowlists.
+The user ID from `/session info` can be granted a session-scoped administrator binding with `/admin grant`. With group `unique_session` enabled, the command also reports the group ID used for allowlists.
 
 ### Conversations
 

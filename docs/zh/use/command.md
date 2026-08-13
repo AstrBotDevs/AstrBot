@@ -45,7 +45,7 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 - `/session name`：显示当前自动名称和已保存别名，需要管理员权限。
 - `/session name <名称>`：设置当前 UMO 的展示别名，需要管理员权限。名称由 `GreedyStr` 接收，可以包含空格。
 
-使用 `/session info` 得到的用户 ID 可以添加到 WebUI 的 `配置 -> 其他配置 -> 管理员 ID`。群聊开启 `unique_session` 时，该指令也会显示可用于白名单的群 ID。
+使用 `/session info` 得到的用户 ID 可以通过 `/admin grant` 授予当前会话范围的管理员绑定。群聊开启 `unique_session` 时，该指令也会显示可用于白名单的群 ID。
 
 ### 对话
 

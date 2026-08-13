@@ -106,7 +106,7 @@ To avoid flooding group chats, the default behavior requires mentioning the bot 
 
 ### An administrator command says permission denied
 
-Use `/session info` to inspect the current user ID, then add it to the administrator-ID list in the active profile. Profiles can be bound separately to platforms, groups, or direct messages, so editing the default profile may not affect the current session.
+Use `/session info` to inspect the current user ID, then grant it a session-scoped administrator binding through the Dashboard authorization page or `/admin grant`. Profiles can be bound separately to platforms, groups, or direct messages, so editing the default profile may not affect the current session.
 
 ### How do I enable Computer Use?
 

@@ -13,6 +13,7 @@ from astrbot.core.tools.web_search_tools import (
     FirecrawlExtractWebPageTool,
     FirecrawlWebSearchTool,
 )
+from tests.fixtures.auth import attach_authorized_tool_context
 
 
 class _MemoryPreferences:
@@ -127,6 +128,11 @@ async def test_execute_shell_defaults_to_foreground(monkeypatch):
         return FakeBooter()
 
     FakeConfig.computer_runtime = SimpleNamespace(get_booter=fake_get_booter)
+    attach_authorized_tool_context(
+        FakeAstrContext.event,
+        FakeAstrContext.context,
+        "tool.local_exec",
+    )
 
     result = await ExecuteShellTool().call(
         FakeWrapper(), command="chromium https://example.com"
@@ -170,6 +176,11 @@ async def test_execute_shell_uses_fresh_default_env_per_call(monkeypatch):
         return FakeBooter()
 
     FakeConfig.computer_runtime = SimpleNamespace(get_booter=fake_get_booter)
+    attach_authorized_tool_context(
+        FakeAstrContext.event,
+        FakeAstrContext.context,
+        "tool.local_exec",
+    )
     tool = ExecuteShellTool()
 
     await tool.call(FakeWrapper(), command="first")
@@ -214,6 +225,11 @@ async def test_execute_shell_copies_user_env_before_execution(monkeypatch):
         return FakeBooter()
 
     FakeConfig.computer_runtime = SimpleNamespace(get_booter=fake_get_booter)
+    attach_authorized_tool_context(
+        FakeAstrContext.event,
+        FakeAstrContext.context,
+        "tool.local_exec",
+    )
     original_env = {"FOO": "bar"}
 
     await ExecuteShellTool().call(FakeWrapper(), command="first", env=original_env)
@@ -255,6 +271,11 @@ async def test_execute_shell_accepts_timeout_alias(monkeypatch):
         return FakeBooter()
 
     FakeConfig.computer_runtime = SimpleNamespace(get_booter=fake_get_booter)
+    attach_authorized_tool_context(
+        FakeAstrContext.event,
+        FakeAstrContext.context,
+        "tool.local_exec",
+    )
 
     await ExecuteShellTool().call(FakeWrapper(), command="echo hi", timeout=12)
 
@@ -296,6 +317,11 @@ async def test_execute_shell_avoids_double_background_for_detached_commands(
         return FakeBooter()
 
     FakeConfig.computer_runtime = SimpleNamespace(get_booter=fake_get_booter)
+    attach_authorized_tool_context(
+        FakeAstrContext.event,
+        FakeAstrContext.context,
+        "tool.local_exec",
+    )
 
     command = "nohup firefox >/tmp/astrbot-firefox.log 2>&1 &"
     result = await ExecuteShellTool().call(
@@ -339,6 +365,11 @@ async def test_execute_shell_recognizes_commented_background_command(monkeypatch
         return FakeBooter()
 
     FakeConfig.computer_runtime = SimpleNamespace(get_booter=fake_get_booter)
+    attach_authorized_tool_context(
+        FakeAstrContext.event,
+        FakeAstrContext.context,
+        "tool.local_exec",
+    )
 
     command = "firefox & # already detached"
     result = await ExecuteShellTool().call(
@@ -401,6 +432,11 @@ async def test_execute_shell_reports_blank_exception_type(monkeypatch):
         return FakeBooter()
 
     FakeConfig.computer_runtime = SimpleNamespace(get_booter=fake_get_booter)
+    attach_authorized_tool_context(
+        FakeAstrContext.event,
+        FakeAstrContext.context,
+        "tool.local_exec",
+    )
 
     result = await ExecuteShellTool().call(FakeWrapper(), command="firefox")
 

@@ -13,6 +13,7 @@ from astrbot.core.computer.booters.cua import CuaShellComponent
 from astrbot.core.computer.computer_client import ComputerRuntime
 from astrbot.core.config.default import CONFIG_METADATA_3
 from astrbot.core.tools.function_tool_manager import FunctionToolManager
+from tests.fixtures.auth import attach_authorized_tool_context
 
 
 class FakeContext:
@@ -1649,6 +1650,11 @@ async def test_screenshot_tool_returns_image_and_sends_file(monkeypatch, tmp_pat
     FakeAstrContext.context.computer_runtime = SimpleNamespace(
         get_booter=fake_get_booter
     )
+    attach_authorized_tool_context(
+        FakeAstrContext.event,
+        FakeAstrContext.context,
+        "tool.computer_use",
+    )
     monkeypatch.setattr(cua_tools, "get_astrbot_temp_path", lambda: str(tmp_path))
 
     result = await CuaScreenshotTool().call(FakeWrapper(), send_to_user=True)
@@ -1733,6 +1739,11 @@ async def test_screenshot_tool_normalizes_supported_screenshot_shapes(
     FakeAstrContext.context.computer_runtime = SimpleNamespace(
         get_booter=fake_get_booter
     )
+    attach_authorized_tool_context(
+        FakeAstrContext.event,
+        FakeAstrContext.context,
+        "tool.computer_use",
+    )
     monkeypatch.setattr(cua_tools, "get_astrbot_temp_path", lambda: str(tmp_path))
 
     result = await CuaScreenshotTool().call(FakeWrapper(), send_to_user=True)
@@ -1788,6 +1799,11 @@ async def test_screenshot_tool_can_opt_in_to_llm_image_content(monkeypatch, tmp_
     FakeAstrContext.context.computer_runtime = SimpleNamespace(
         get_booter=fake_get_booter
     )
+    attach_authorized_tool_context(
+        FakeAstrContext.event,
+        FakeAstrContext.context,
+        "tool.computer_use",
+    )
     monkeypatch.setattr(cua_tools, "get_astrbot_temp_path", lambda: str(tmp_path))
 
     result = await CuaScreenshotTool().call(
@@ -1840,6 +1856,11 @@ async def test_screenshot_tool_can_opt_out_of_llm_image_content(monkeypatch, tmp
 
     FakeAstrContext.context.computer_runtime = SimpleNamespace(
         get_booter=fake_get_booter
+    )
+    attach_authorized_tool_context(
+        FakeAstrContext.event,
+        FakeAstrContext.context,
+        "tool.computer_use",
     )
     monkeypatch.setattr(cua_tools, "get_astrbot_temp_path", lambda: str(tmp_path))
 
@@ -1913,6 +1934,12 @@ async def test_cua_tools_include_exception_type_for_blank_error(monkeypatch):
     class FakeWrapper:
         context = FakeAstrContext()
 
+    attach_authorized_tool_context(
+        FakeAstrContext.event,
+        FakeAstrContext.context,
+        "tool.computer_use",
+    )
+
     async def fail_gui_lookup(context):
         raise BlankError()
 
@@ -1942,6 +1969,12 @@ async def test_cua_mouse_click_tool_happy_path_forwards_args_and_serializes_json
 
     class FakeWrapper:
         context = FakeAstrContext()
+
+    attach_authorized_tool_context(
+        FakeAstrContext.event,
+        FakeAstrContext.context,
+        "tool.computer_use",
+    )
 
     class FakeGui:
         def __init__(self):
@@ -1993,6 +2026,12 @@ async def test_cua_keyboard_type_tool_happy_path_forwards_args_and_serializes_js
 
     class FakeWrapper:
         context = FakeAstrContext()
+
+    attach_authorized_tool_context(
+        FakeAstrContext.event,
+        FakeAstrContext.context,
+        "tool.computer_use",
+    )
 
     class FakeGui:
         def __init__(self):

@@ -417,35 +417,16 @@
                       :value="scope.value"
                       :color="
                         newApiKeyScopes.includes(scope.value)
-                          ? scope.sensitive
-                            ? 'error'
-                            : 'primary'
+                          ? 'primary'
                           : undefined
                       "
                       :variant="
                         newApiKeyScopes.includes(scope.value) ? 'flat' : 'tonal'
                       "
                     >
-                      {{ scope.label
-                      }}<span v-if="scope.sensitive" class="ml-1"
-                        >· {{ tm('apiKey.sensitiveScope') }}</span
-                      >
+                      {{ scope.label }}
                     </v-chip>
                   </v-chip-group>
-
-                  <v-alert
-                    v-if="
-                      newApiKeyScopes.some((scope) =>
-                        sensitiveScopes.has(scope),
-                      )
-                    "
-                    type="warning"
-                    variant="tonal"
-                    density="comfortable"
-                    class="mb-3"
-                  >
-                    {{ tm('apiKey.sensitiveScopeWarning') }}
-                  </v-alert>
 
                   <v-alert
                     v-if="createdApiKeyPlaintext"
@@ -688,9 +669,7 @@ const availableScopes = [
   { value: 'persona', label: 'persona' },
   { value: 'im', label: 'im' },
   { value: 'config', label: 'config' },
-  { value: 'config:edit_admin', label: 'config:edit_admin', sensitive: true },
   { value: 'chat', label: 'chat' },
-  { value: 'chat:admin', label: 'chat:admin', sensitive: true },
   { value: 'kb', label: 'kb' },
   { value: 'memory', label: 'memory' },
   { value: 'data', label: 'data' },
@@ -730,11 +709,6 @@ const settingsNavItems = computed(() => [
 ]);
 
 const configIncludedScopes = ['bot', 'provider'];
-const scopeDependencies = {
-  'config:edit_admin': 'config',
-  'chat:admin': 'chat',
-};
-const sensitiveScopes = new Set(Object.keys(scopeDependencies));
 const previousApiKeyScopes = ref([...newApiKeyScopes.value]);
 
 const systemConfigHasChanges = computed(
@@ -886,16 +860,6 @@ watch(
     const selectedScopes = new Set(scopes);
     const previousScopes = new Set(previousApiKeyScopes.value);
 
-    for (const [child, parent] of Object.entries(scopeDependencies)) {
-      if (selectedScopes.has(child)) {
-        if (previousScopes.has(parent) && !scopes.includes(parent)) {
-          selectedScopes.delete(child);
-        } else {
-          selectedScopes.add(parent);
-        }
-      }
-    }
-
     if (selectedScopes.has('config')) {
       const includedScopeRemoved = configIncludedScopes.some(
         (scope) => previousScopes.has(scope) && !selectedScopes.has(scope),
@@ -908,13 +872,6 @@ watch(
           selectedScopes.add(scope);
         }
       }
-    }
-
-    if (!selectedScopes.has('config')) {
-      selectedScopes.delete('config:edit_admin');
-    }
-    if (!selectedScopes.has('chat')) {
-      selectedScopes.delete('chat:admin');
     }
 
     const nextScopes = availableScopes
@@ -1165,11 +1122,6 @@ const createApiKey = async () => {
   if (selectedScopeSet.has('config')) {
     for (const scope of configIncludedScopes) {
       selectedScopeSet.add(scope);
-    }
-  }
-  for (const [child, parent] of Object.entries(scopeDependencies)) {
-    if (selectedScopeSet.has(child)) {
-      selectedScopeSet.add(parent);
     }
   }
   const selectedScopes = availableScopes

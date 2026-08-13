@@ -448,7 +448,7 @@ class AstrMessageEvent(abc.ABC):
         ``event.auth_context`` and ``context.authz.authorize`` instead.
         """
 
-        return self.platform_member_role == "admin"
+        return False
 
     @property
     def role(self) -> str:

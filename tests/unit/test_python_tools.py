@@ -6,6 +6,7 @@ import pytest
 
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.tools.computer_tools.python import LocalPythonTool, PythonTool
+from tests.fixtures.auth import attach_authorized_tool_context
 
 
 def test_python_tool_description_contains_os():
@@ -42,20 +43,19 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
         role="admin",
         get_platform_name=lambda: "onebot",
     )
-    context = ContextWrapper(
-        context=SimpleNamespace(
-            event=event,
-            context=SimpleNamespace(
-                get_config=lambda **_kwargs: {
-                    "provider_settings": {"computer_use_require_admin": True}
-                },
-                computer_runtime=SimpleNamespace(
-                    get_local_booter=lambda: SimpleNamespace(
-                        python=SimpleNamespace(exec=python_exec)
-                    )
-                ),
-            ),
+    runtime = SimpleNamespace(
+        get_config=lambda **_kwargs: {
+            "provider_settings": {"computer_use_require_admin": True}
+        },
+        computer_runtime=SimpleNamespace(
+            get_local_booter=lambda: SimpleNamespace(
+                python=SimpleNamespace(exec=python_exec)
+            )
         ),
+    )
+    attach_authorized_tool_context(event, runtime, "tool.python_exec")
+    context = ContextWrapper(
+        context=SimpleNamespace(event=event, context=runtime),
         tool_call_timeout=60,
     )
 
@@ -87,20 +87,19 @@ async def test_local_python_tool_accepts_timeout_alias(tmp_path, monkeypatch):
         role="admin",
         get_platform_name=lambda: "onebot",
     )
-    context = ContextWrapper(
-        context=SimpleNamespace(
-            event=event,
-            context=SimpleNamespace(
-                get_config=lambda **_kwargs: {
-                    "provider_settings": {"computer_use_require_admin": True}
-                },
-                computer_runtime=SimpleNamespace(
-                    get_local_booter=lambda: SimpleNamespace(
-                        python=SimpleNamespace(exec=python_exec)
-                    )
-                ),
-            ),
+    runtime = SimpleNamespace(
+        get_config=lambda **_kwargs: {
+            "provider_settings": {"computer_use_require_admin": True}
+        },
+        computer_runtime=SimpleNamespace(
+            get_local_booter=lambda: SimpleNamespace(
+                python=SimpleNamespace(exec=python_exec)
+            )
         ),
+    )
+    attach_authorized_tool_context(event, runtime, "tool.python_exec")
+    context = ContextWrapper(
+        context=SimpleNamespace(event=event, context=runtime),
         tool_call_timeout=60,
     )
 

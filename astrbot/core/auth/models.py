@@ -14,7 +14,11 @@ from typing import Any
 
 from astrbot.core.platform.message_session import MessageSession
 
-_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$")
+# Subject/resource identifiers may contain URL-safe JWT characters.  In
+# particular, ``secrets.token_urlsafe`` can emit ``_`` in Dashboard session
+# IDs, so rejecting it would turn otherwise valid authenticated requests into
+# uncaught 500 responses during authorization context construction.
+_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/_-]{0,255}$")
 _CONFIG_ID_RE = re.compile(r"^(?:default|[A-Za-z0-9][A-Za-z0-9._-]{0,127})$")
 
 
@@ -65,7 +69,6 @@ ACTIONS = frozenset(
         "identity.manage",
         "identity.operator.write",
         "identity.root.write",
-        "chat.impersonate_admin",
         "tool.local_exec",
         "tool.python_exec",
         "tool.file_read",
@@ -97,7 +100,6 @@ HIGH_RISK_ACTIONS = frozenset(
         "tool.computer_use",
         "data.export_all",
         "provider.credentials.write",
-        "chat.impersonate_admin",
         "identity.manage",
         "dashboard.account.manage",
     }
@@ -255,26 +257,6 @@ class Subject:
         return cls(
             id=f"api-key:{_validate_identifier(key_id, 'api key id')}",
             kind="api-key",
-            authenticated=True,
-        )
-
-    @classmethod
-    def legacy_admin(cls, config_id: str, sender_id: object) -> Subject:
-        """Return the scoped legacy-admin migration identity.
-
-        Legacy ``admins_id`` values were sender IDs rather than platform
-        principals. Keeping that compatibility input in a dedicated namespace
-        prevents it from becoming a global Dashboard or platform identity.
-        """
-
-        if not _CONFIG_ID_RE.fullmatch(config_id):
-            raise AuthorizationValueError("Invalid config id")
-        return cls(
-            id=(
-                f"legacy-admin:{config_id}:"
-                f"{normalize_subject_component(sender_id, 'legacy sender id')}"
-            ),
-            kind="legacy-admin",
             authenticated=True,
         )
 

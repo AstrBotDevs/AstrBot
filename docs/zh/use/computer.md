@@ -86,11 +86,7 @@ data/workspaces/{normalized_umo}/notes/todo.txt
 
 关闭“需要 AstrBot 管理员权限”后，普通用户在电脑能力工具上的行为会接近管理员。除非你非常清楚风险，否则不建议关闭。
 
-管理员 ID 可在：
-
-- `配置 -> 其他配置 -> 管理员 ID`
-
-中配置。用户可通过 `/session info` 获取自己的 ID。
+请通过 Dashboard 权限页面或 `/admin grant` 授予当前会话范围的管理员绑定。用户可通过 `/session info` 获取自己的 ID。
 
 ## Sandbox 模式
 

@@ -34,6 +34,7 @@ from astrbot.core.db.po import (
     AuthPolicyOverride,
     AuthRoleBinding,
     AuthStepUpCredential,
+    DashboardAccount,
 )
 from astrbot.core.db.protocols import DatabaseSessionStore
 from astrbot.core.utils.error_redaction import redact_sensitive_text
@@ -150,9 +151,6 @@ _ACTION_ROLES: dict[str, frozenset[Role]] = {
     "identity.manage": frozenset({Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}),
     "identity.operator.write": frozenset({Role.ROOT}),
     "identity.root.write": frozenset({Role.ROOT}),
-    "chat.impersonate_admin": frozenset(
-        {Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}
-    ),
     "tool.local_exec": frozenset({Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}),
     "tool.python_exec": frozenset({Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}),
     "tool.file_read": frozenset(
@@ -199,16 +197,17 @@ _API_SCOPE_ACTIONS: dict[str, frozenset[str]] = {
     # historical provider scope can use configured models but cannot alter a
     # provider definition or its credentials.
     "provider": frozenset({"provider.read", "provider.use"}),
-    "config": frozenset({"platform.manage", "provider.manage"}),
+    "config": frozenset(
+        {"platform.read", "platform.manage", "provider.read", "provider.manage"}
+    ),
     "chat": frozenset({"session.read", "session.manage", "provider.use"}),
-    "chat:admin": frozenset({"chat.impersonate_admin"}),
     "persona": frozenset({"agent.manage"}),
     "plugin": frozenset({"extension.read", "extension.manage"}),
-    "mcp": frozenset({"extension.manage", "tool.mcp_read", "tool.mcp_write"}),
+    "mcp": frozenset({"tool.mcp_read", "tool.mcp_write"}),
     "skill": frozenset({"extension.manage"}),
     "kb": frozenset({"data.manage"}),
     "memory": frozenset({"data.manage"}),
-    "data": frozenset({"data.manage", "data.export_all"}),
+    "data": frozenset({"data.manage"}),
     "file": frozenset({"data.manage", "tool.file_read", "tool.file_write"}),
     "im": frozenset({"session.manage"}),
     "bot": frozenset({"platform.read"}),
@@ -218,9 +217,6 @@ _API_SCOPE_ACTIONS: dict[str, frozenset[str]] = {
 def api_key_scopes_allow_action(scopes: Iterable[str], action: str) -> bool:
     """Map scopes to action capability without creating an operator role."""
 
-    if action == "chat.impersonate_admin":
-        selected = set(scopes)
-        return "chat" in selected and "chat:admin" in selected
     if action in HIGH_RISK_ACTIONS:
         return False
     return any(action in _API_SCOPE_ACTIONS.get(scope, ()) for scope in set(scopes))
@@ -230,7 +226,7 @@ def _requires_step_up(action: str, context: AuthContext) -> bool:
     """Return whether a fixed high-risk capability needs fresh proof."""
 
     del context
-    return action in HIGH_RISK_ACTIONS and action != "chat.impersonate_admin"
+    return action in HIGH_RISK_ACTIONS
 
 
 def _sanitize_metadata(value: Any) -> Any:
@@ -342,113 +338,6 @@ class AuthorizationService:
         except asyncio.QueueFull:
             logger.error("Authorization audit queue full; event id=%s", audit_id)
 
-    async def migrate_legacy_admins(
-        self, configs: Mapping[str, Mapping[str, Any]]
-    ) -> int:
-        """Import ``admins_id`` only as scoped instance_operator bindings."""
-
-        created = 0
-        migration_actor = Subject(
-            id="system:migration", kind="system", authenticated=True
-        )
-        for config_id, config in configs.items():
-            admins = config.get("admins_id", []) if isinstance(config, Mapping) else []
-            if not isinstance(admins, list):
-                continue
-            for value in (str(item).strip() for item in admins):
-                if not value:
-                    continue
-                binding = await self.grant_binding(
-                    actor=migration_actor,
-                    subject_id=Subject.legacy_admin(config_id, value).id,
-                    role=Role.INSTANCE_OPERATOR,
-                    scope_type="instance",
-                    scope_id=config_id,
-                    config_id=config_id,
-                    source="migrated",
-                    metadata={
-                        "migration": "admins_id-v1",
-                        "legacy_id_hash": hashlib.sha256(value.encode()).hexdigest()[
-                            :16
-                        ],
-                    },
-                    enforce_actor=False,
-                )
-                if binding.created_at == binding.updated_at:
-                    created += 1
-        return created
-
-    async def migrate_legacy_tool_permissions(self, preferences: Any) -> int:
-        """Import legacy tool permission preferences into narrow policy rows once.
-
-        The historical map is treated solely as migration input.  Runtime
-        authorization evaluates ``AuthPolicyOverride`` and tool action
-        declarations; the preference is never consulted after the marker is
-        written.
-        """
-
-        marker_key = "auth_tool_permissions_migrated_v1"
-        if await preferences.global_get(marker_key, False):
-            return 0
-        raw = await preferences.global_get("tool_permissions", {})
-        if not isinstance(raw, Mapping):
-            await preferences.global_put(marker_key, True)
-            return 0
-        actor = Subject(id="system:migration", kind="system", authenticated=True)
-        created = 0
-        async with self._db.get_db() as session:
-            async with session.begin():
-                for scope_map in raw.values():
-                    if not isinstance(scope_map, Mapping):
-                        continue
-                    for tool_name, legacy_role in scope_map.items():
-                        if not isinstance(tool_name, str) or not tool_name:
-                            continue
-                        role = str(legacy_role).lower()
-                        if role not in {"member", "admin"}:
-                            continue
-                        allowed_role = (
-                            Role.MEMBER.value
-                            if role == "member"
-                            else Role.INSTANCE_OPERATOR.value
-                        )
-                        existing_rows = (
-                            await session.execute(
-                                select(AuthPolicyOverride).where(
-                                    col(AuthPolicyOverride.action) == "tool.function",
-                                    col(AuthPolicyOverride.resource_type) == "tool",
-                                    col(AuthPolicyOverride.resource_id) == tool_name,
-                                )
-                            )
-                        ).scalars()
-                        exists = next(
-                            (
-                                row
-                                for row in existing_rows
-                                if (row.metadata_json or {}).get("migration")
-                                == "tool_permissions-v1"
-                            ),
-                            None,
-                        )
-                        if exists is not None:
-                            continue
-                        session.add(
-                            AuthPolicyOverride(
-                                action="tool.function",
-                                resource_type="tool",
-                                resource_id=tool_name,
-                                allowed_roles=[allowed_role],
-                                created_by=actor.id,
-                                metadata_json={
-                                    "migration": "tool_permissions-v1",
-                                    "legacy_role": role,
-                                },
-                            )
-                        )
-                        created += 1
-        await preferences.global_put(marker_key, True)
-        return created
-
     async def record_platform_membership(
         self,
         *,
@@ -519,6 +408,14 @@ class AuthorizationService:
 
         if scope_type not in {"global", "instance", "session", "resource"}:
             raise AuthorizationValueError("Invalid binding scope")
+        valid_scope_roles = {
+            "global": {Role.ROOT, Role.OPERATOR},
+            "instance": {Role.INSTANCE_OPERATOR},
+            "session": {Role.SESSION_OWNER, Role.SESSION_ADMIN, Role.MEMBER},
+            "resource": {Role.MEMBER},
+        }
+        if role not in valid_scope_roles[scope_type]:
+            raise AuthorizationValueError("Role is not valid for binding scope")
         if scope_type == "global" and scope_id != "global":
             raise AuthorizationValueError("Invalid global binding scope")
         if scope_type == "global":
@@ -527,12 +424,28 @@ class AuthorizationService:
             raise AuthorizationValueError("Invalid instance binding scope")
         if scope_type == "session":
             canonical_session_resource(config_id or "", scope_id)
+        if role in {Role.ROOT, Role.OPERATOR}:
+            await self._require_active_dashboard_account(subject_id)
         if enforce_actor:
             await self._assert_binding_management_allowed(
                 actor, role, scope_type, scope_id, config_id, context=context
             )
         async with self._db.get_db() as session:
             async with session.begin():
+                if role in {Role.ROOT, Role.OPERATOR}:
+                    account_id = subject_id.removeprefix("dashboard-account:")
+                    account = (
+                        await session.execute(
+                            select(DashboardAccount).where(
+                                col(DashboardAccount.account_id) == account_id,
+                                col(DashboardAccount.is_active).is_(True),
+                            )
+                        )
+                    ).scalar_one_or_none()
+                    if account is None:
+                        raise AuthorizationValueError(
+                            "Global control-plane roles require an active Dashboard account"
+                        )
                 query = select(AuthRoleBinding).where(
                     col(AuthRoleBinding.subject_id) == subject_id,
                     col(AuthRoleBinding.role) == role.value,
@@ -587,6 +500,30 @@ class AuthorizationService:
                 )
                 return binding
 
+    async def _require_active_dashboard_account(self, subject_id: str) -> None:
+        """Limit global control-plane roles to active Dashboard identities."""
+
+        prefix = "dashboard-account:"
+        if not subject_id.startswith(prefix):
+            raise AuthorizationValueError(
+                "Global control-plane roles require a Dashboard account"
+            )
+        account_id = subject_id.removeprefix(prefix)
+        Subject.dashboard_account(account_id)
+        async with self._db.get_db() as session:
+            account = (
+                await session.execute(
+                    select(DashboardAccount).where(
+                        col(DashboardAccount.account_id) == account_id,
+                        col(DashboardAccount.is_active).is_(True),
+                    )
+                )
+            ).scalar_one_or_none()
+        if account is None:
+            raise AuthorizationValueError(
+                "Global control-plane roles require an active Dashboard account"
+            )
+
     async def _assert_binding_management_allowed(
         self,
         actor: Subject,
@@ -636,14 +573,31 @@ class AuthorizationService:
             raise PermissionError("Authorization denied")
 
     async def _has_global_root(self, subject_id: str) -> bool:
+        now = utc_now()
         async with self._db.get_db() as session:
             query = select(AuthRoleBinding).where(
                 col(AuthRoleBinding.subject_id) == subject_id,
                 col(AuthRoleBinding.role) == Role.ROOT.value,
                 col(AuthRoleBinding.scope_type) == "global",
+                col(AuthRoleBinding.scope_id) == "global",
+                col(AuthRoleBinding.config_id) == GLOBAL_SCOPE_ID,
                 col(AuthRoleBinding.revoked_at).is_(None),
+                (col(AuthRoleBinding.expires_at).is_(None))
+                | (col(AuthRoleBinding.expires_at) > now),
             )
-            return (await session.execute(query)).scalar_one_or_none() is not None
+            binding = (await session.execute(query)).scalar_one_or_none()
+            if binding is None or not subject_id.startswith("dashboard-account:"):
+                return False
+            account_id = subject_id.removeprefix("dashboard-account:")
+            account = (
+                await session.execute(
+                    select(DashboardAccount.account_id).where(
+                        col(DashboardAccount.account_id) == account_id,
+                        col(DashboardAccount.is_active).is_(True),
+                    )
+                )
+            ).scalar_one_or_none()
+            return account is not None
 
     async def revoke_binding(
         self,
@@ -680,14 +634,44 @@ class AuthorizationService:
             async with self._db.get_db() as session:
                 async with session.begin():
                     if binding.role == Role.ROOT.value:
+                        now = utc_now()
                         roots = await session.execute(
                             select(AuthRoleBinding.binding_id).where(
                                 col(AuthRoleBinding.role) == Role.ROOT.value,
                                 col(AuthRoleBinding.scope_type) == "global",
+                                col(AuthRoleBinding.scope_id) == "global",
+                                col(AuthRoleBinding.config_id) == GLOBAL_SCOPE_ID,
                                 col(AuthRoleBinding.revoked_at).is_(None),
+                                (col(AuthRoleBinding.expires_at).is_(None))
+                                | (col(AuthRoleBinding.expires_at) > now),
                             )
                         )
-                        if len(list(roots.scalars())) <= 1:
+                        root_ids = list(roots.scalars())
+                        active_accounts = set(
+                            (
+                                await session.execute(
+                                    select(DashboardAccount.account_id).where(
+                                        col(DashboardAccount.is_active).is_(True)
+                                    )
+                                )
+                            ).scalars()
+                        )
+                        active_root_count = sum(
+                            binding_subject.removeprefix("dashboard-account:")
+                            in active_accounts
+                            for binding_subject in (
+                                (
+                                    await session.execute(
+                                        select(AuthRoleBinding.subject_id).where(
+                                            col(AuthRoleBinding.binding_id).in_(
+                                                root_ids
+                                            )
+                                        )
+                                    )
+                                ).scalars()
+                            )
+                        )
+                        if active_root_count <= 1:
                             raise ValueError("Cannot revoke the last root binding")
                     result = await session.execute(
                         update(AuthRoleBinding)
@@ -960,20 +944,6 @@ class AuthorizationService:
             and context.principal_subject_id not in candidates
         ):
             candidates.append(context.principal_subject_id)
-        # ``admins_id`` was historically a raw adapter sender ID. It cannot be
-        # reconstructed by parsing a normalized principal because platform
-        # identifiers may contain separators. The adapter-provided value is
-        # retained only in trusted event metadata for this migration lookup.
-        legacy_sender_id = context.metadata.get("legacy_sender_id")
-        if (
-            subject.kind == "im"
-            and resource.config_id
-            and isinstance(legacy_sender_id, str)
-            and legacy_sender_id
-        ):
-            candidates.append(
-                Subject.legacy_admin(resource.config_id, legacy_sender_id).id
-            )
         roles = [Role.MEMBER if subject.authenticated else Role.GUEST]
         now = utc_now()
         async with self._db.get_db() as session:
@@ -985,6 +955,30 @@ class AuthorizationService:
             )
             for binding in bindings.scalars():
                 if binding.expires_at is None or binding.expires_at > now:
+                    if binding.scope_type == "global" and binding.role in {
+                        Role.ROOT.value,
+                        Role.OPERATOR.value,
+                    }:
+                        # Global control-plane roles are tied to the current
+                        # Dashboard account state. This check also closes the
+                        # race between account deactivation and a concurrent
+                        # binding write, and ignores stale rows from older
+                        # databases without reviving their authority.
+                        account_id = binding.subject_id.removeprefix(
+                            "dashboard-account:"
+                        )
+                        if account_id == binding.subject_id:
+                            continue
+                        account = (
+                            await session.execute(
+                                select(DashboardAccount).where(
+                                    col(DashboardAccount.account_id) == account_id,
+                                    col(DashboardAccount.is_active).is_(True),
+                                )
+                            )
+                        ).scalar_one_or_none()
+                        if account is None:
+                            continue
                     if self._binding_matches_resource(binding, resource):
                         roles.append(Role(binding.role))
             if resource.type == "session" and resource.umo and resource.config_id:
@@ -1025,7 +1019,11 @@ class AuthorizationService:
     @staticmethod
     def _binding_matches_resource(binding: AuthRoleBinding, resource: Resource) -> bool:
         if binding.scope_type == "global":
-            return binding.role in {Role.ROOT.value, Role.OPERATOR.value}
+            return (
+                binding.role in {Role.ROOT.value, Role.OPERATOR.value}
+                and binding.scope_id == "global"
+                and binding.config_id == GLOBAL_SCOPE_ID
+            )
         if binding.scope_type == "instance":
             return resource.config_id == binding.config_id == binding.scope_id
         if binding.scope_type == "session":

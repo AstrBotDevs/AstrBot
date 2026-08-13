@@ -61,6 +61,7 @@ class Main(star.Star):
     def conversation(self) -> None:
         """Manage conversations"""
 
+    @filter.permission("session.manage")
     @conversation.command("reset")
     async def reset(self, message: AstrMessageEvent) -> None:
         """Reset conversation history"""
@@ -123,6 +124,7 @@ class Main(star.Star):
         """Rename the current conversation"""
         await self.conversation_c.rename(event, title)
 
+    @filter.permission("session.manage")
     @conversation.command("delete")
     async def delete(self, event: AstrMessageEvent) -> None:
         """Delete the current conversation"""

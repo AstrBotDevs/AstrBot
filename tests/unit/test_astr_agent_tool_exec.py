@@ -13,7 +13,6 @@ from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.message.components import Image
 from astrbot.core.tools.function_tool_manager import (
     FunctionToolManager,
-    _PermissionGuardedTool,
 )
 
 
@@ -35,7 +34,13 @@ class _DummyTool:
 
 def _build_run_context(message_components: list[object] | None = None):
     event = _DummyEvent(message_components=message_components)
-    ctx = SimpleNamespace(event=event, context=SimpleNamespace())
+    event.subject = SimpleNamespace(id="im:test:bot:user", authenticated=True)
+    event.resource = SimpleNamespace(config_id="default")
+    event.auth_context = SimpleNamespace()
+    authorization = SimpleNamespace(
+        authorize=AsyncMock(return_value=SimpleNamespace(allowed=True))
+    )
+    ctx = SimpleNamespace(event=event, context=SimpleNamespace(authorization=authorization))
     return ContextWrapper(context=ctx)
 
 
@@ -87,10 +92,21 @@ async def test_background_tool_tasks_are_owned_by_the_execution_context(
 
     async def schedule(tasks: set[asyncio.Task]) -> None:
         execution_context = SimpleNamespace(background_tasks=tasks)
+        event = _DummyEvent()
+        event.subject = SimpleNamespace(id="im:test:bot:user", authenticated=True)
+        event.resource = SimpleNamespace(config_id="default")
+        event.auth_context = SimpleNamespace()
         run_context = ContextWrapper(
             context=SimpleNamespace(
-                event=_DummyEvent(),
-                context=execution_context,
+                event=event,
+                context=SimpleNamespace(
+                    **vars(execution_context),
+                    authorization=SimpleNamespace(
+                        authorize=AsyncMock(
+                            return_value=SimpleNamespace(allowed=True)
+                        )
+                    ),
+                ),
             )
         )
         async for _ in FunctionToolExecutor.execute(tool, run_context):
@@ -113,7 +129,7 @@ async def test_background_tool_tasks_are_owned_by_the_execution_context(
     assert second_tasks == set()
 
 
-def test_build_handoff_toolset_keeps_permission_guards_for_default_tools():
+def test_build_handoff_toolset_keeps_declared_tools():
     mgr = FunctionToolManager()
     plugin_tool = FunctionTool(
         name="admin_only_mcp",
@@ -135,7 +151,7 @@ def test_build_handoff_toolset_keeps_permission_guards_for_default_tools():
     toolset = FunctionToolExecutor._build_handoff_toolset(run_context, tools=None)
 
     assert toolset is not None
-    assert isinstance(toolset.get_tool("admin_only_mcp"), _PermissionGuardedTool)
+    assert toolset.get_tool("admin_only_mcp") is plugin_tool
     assert toolset.get_tool("transfer_to_child") is None
 
 

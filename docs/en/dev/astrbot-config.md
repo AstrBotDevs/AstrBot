@@ -182,7 +182,6 @@ The source entry point also accepts `uv run main.py --reset-password`. Startup l
 
 ## System, logging, and response decoration
 
-- `admins_id` lists AstrBot administrator IDs; use `/session info` to inspect a platform ID.
 - `t2i` and `t2i_word_threshold` render long **output results** as images. `t2i_active_template` is maintained by the template manager.
 - `t2i_use_file_service` publishes rendered output through a file-token URL and requires a correct `callback_api_base`.
 - `http_proxy` / `no_proxy` configure outbound HTTP proxying and bypasses.

@@ -178,20 +178,17 @@ class TestFunctionToolManagerGetFullToolSet:
         assert web_search is not None
         assert web_search.active is True
 
-    def test_wrapping_preserves_tool_name_and_description(self):
-        """_PermissionGuardedTool wrapping should preserve name and description."""
-        from astrbot.core.tools.function_tool_manager import _PermissionGuardedTool
-
+    def test_toolset_preserves_tool_name_and_description(self):
         manager = FunctionToolManager()
         tool = make_tool("web_search")
         manager.func_list = [tool]
 
         toolset = manager.get_full_tool_set()
 
-        wrapped = toolset.tools[0]
-        assert wrapped.name == "web_search"
-        assert wrapped.description == "Test tool web_search"
-        assert isinstance(wrapped, _PermissionGuardedTool)
+        selected = toolset.tools[0]
+        assert selected is tool
+        assert selected.name == "web_search"
+        assert selected.description == "Test tool web_search"
 
     def test_mcp_tool_overrides_disabled_builtin(self):
         """

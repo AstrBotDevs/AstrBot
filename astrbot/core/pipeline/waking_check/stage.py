@@ -76,7 +76,7 @@ class WakingCheckStage(Stage):
     2. 机器人的消息被提到了
     3. 以 wake_prefix 前缀开头，并且消息没有以 At 消息段开头
     4. 插件（Star）的 handler filter 通过
-    5. 私聊情况下，位于 admins_id 列表中的管理员的消息（在白名单阶段中）
+    5. 私聊消息的唤醒由当前平台和会话策略决定，不读取旧管理员配置
     """
 
     async def initialize(self, ctx: PipelineContext) -> None:
@@ -244,11 +244,7 @@ class WakingCheckStage(Stage):
             ),
             api_scopes=tuple(scopes) if isinstance(scopes, (list, tuple)) else (),
             principal_subject_id=(subject.id if source == "api_key" else None),
-            metadata=(
-                {"legacy_sender_id": event.get_sender_id()}
-                if source == "im" and event.get_sender_id()
-                else {}
-            ),
+            metadata={},
         )
         attach_authorization = getattr(event, "attach_authorization", None)
         if callable(attach_authorization):

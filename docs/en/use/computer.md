@@ -88,11 +88,7 @@ Allowed directories for non-admin users in `local` mode include:
 
 If `Require AstrBot admin permission` is disabled, regular users behave much closer to admins for Computer Use tools. Do not disable it unless you understand the risk.
 
-Admin IDs can be configured in:
-
-- `Config -> Other Config -> Admin ID`
-
-Users can get their own ID with `/session info`.
+Use the Dashboard authorization page or `/admin grant` to grant a session-scoped administrator binding. Users can get their own ID with `/session info`.
 
 ## Sandbox Mode
 

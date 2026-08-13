@@ -23,6 +23,7 @@ from astrbot.core.agent.tool_image_cache import ToolImageCache
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.provider import Provider
+from tests.fixtures.auth import attach_authorized_tool_context
 
 
 class MockProvider(Provider):
@@ -1386,6 +1387,7 @@ async def test_stop_closes_a_cancellation_defiant_provider_stream(
 async def test_stop_interrupts_pending_subagent_handoff(mock_hooks, tmp_path):
     subagent_context = BlockingSubagentContext()
     event = MockEvent("webchat:FriendMessage:webchat!user!session", "user")
+    attach_authorized_tool_context(event, subagent_context, "agent.manage")
     handoff_tool = HandoffTool(
         Agent(name="subagent", instructions="subagent-instructions", tools=[]),
         tool_description="Delegate tasks to the subagent.",
@@ -1436,6 +1438,8 @@ async def test_stop_interrupts_pending_subagent_handoff(mock_hooks, tmp_path):
 async def test_stop_interrupts_pending_regular_tool(mock_hooks, tmp_path):
     tool_state = BlockingToolState()
     event = MockEvent("webchat:FriendMessage:webchat!user!session", "user")
+    runtime = SimpleNamespace()
+    attach_authorized_tool_context(event, runtime, "tool.function")
     tool = FunctionTool(
         name="long_tool",
         description="A long-running test tool",
@@ -1454,7 +1458,7 @@ async def test_stop_interrupts_pending_regular_tool(mock_hooks, tmp_path):
         provider=provider,
         request=request,
         run_context=ContextWrapper(
-            context=SimpleNamespace(event=event, context=SimpleNamespace())
+            context=SimpleNamespace(event=event, context=runtime)
         ),
         tool_executor=FunctionToolExecutor(),
         agent_hooks=mock_hooks,

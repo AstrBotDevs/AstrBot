@@ -16,6 +16,7 @@ from astrbot.core.computer import file_read_utils
 from astrbot.core.computer.computer_client import ComputerRuntime
 from astrbot.core.tools.computer_tools import fs as fs_tools
 from astrbot.core.tools.computer_tools import util as computer_util
+from tests.fixtures.auth import attach_authorized_tool_context
 
 
 def _make_context(
@@ -32,8 +33,7 @@ def _make_context(
                 "computer_use_require_admin": require_admin,
                 "computer_use_runtime": runtime,
             }
-        }
-        ,
+        },
         computer_runtime=computer_runtime or ComputerRuntime(),
     )
     event = SimpleNamespace(
@@ -57,8 +57,7 @@ def _make_sandbox_context(
                 "computer_use_require_admin": True,
                 "computer_use_runtime": "sandbox",
             }
-        }
-        ,
+        },
         computer_runtime=computer_runtime or ComputerRuntime(),
     )
     event = SimpleNamespace(
@@ -66,6 +65,7 @@ def _make_sandbox_context(
         unified_msg_origin=umo,
         send=AsyncMock(),
     )
+    attach_authorized_tool_context(event, config_holder, "tool.file_write")
     astr_ctx = SimpleNamespace(context=config_holder, event=event)
     return ContextWrapper(context=astr_ctx)
 
@@ -361,12 +361,18 @@ async def test_restricted_member_can_read_global_and_builtin_skills_but_not_writ
         lambda: (builtin_skill.parent.resolve(),),
     )
 
-    assert await fs_tools.FileReadTool().call(
-        _make_context(role="member"), path=str(global_skill)
-    ) == "# Global\n"
-    assert await fs_tools.FileReadTool().call(
-        _make_context(role="member"), path=str(builtin_skill)
-    ) == "# Builtin\n"
+    assert (
+        await fs_tools.FileReadTool().call(
+            _make_context(role="member"), path=str(global_skill)
+        )
+        == "# Global\n"
+    )
+    assert (
+        await fs_tools.FileReadTool().call(
+            _make_context(role="member"), path=str(builtin_skill)
+        )
+        == "# Builtin\n"
+    )
 
     global_write = await fs_tools.FileWriteTool().call(
         _make_context(role="member"),

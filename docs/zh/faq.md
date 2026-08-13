@@ -106,7 +106,7 @@ uv run python scripts/sync_dashboard_dist.py
 
 ### 管理员指令提示无权限
 
-使用 `/session info` 查看当前用户 ID，然后在当前配置档的管理员 ID 列表中添加。配置档可能按平台、群或私聊分别绑定，修改默认配置档不一定影响当前会话。
+使用 `/session info` 查看当前用户 ID，然后通过 Dashboard 权限页面或 `/admin grant` 授予当前会话范围的管理员绑定。配置档可能按平台、群或私聊分别绑定，修改默认配置档不一定影响当前会话。
 
 ### 如何使用电脑能力
 

@@ -1,13 +1,17 @@
 """Security-contract coverage for the unified authorization service."""
 
 import asyncio
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
 
 from astrbot.core.auth.models import AuthContext, Resource, Role, Subject
 from astrbot.core.auth.service import AuthorizationService, api_key_scopes_allow_action
+from astrbot.core.db.po import AuthRoleBinding, DashboardAccount
 from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.utils.totp import TotpRuntimeState
+from astrbot.dashboard.services.auth_service import AuthService
 
 
 @pytest_asyncio.fixture
@@ -133,7 +137,132 @@ def test_api_key_scopes_are_capabilities_not_roles():
     assert api_key_scopes_allow_action(["provider"], "provider.use")
     assert not api_key_scopes_allow_action(["provider"], "provider.manage")
     assert not api_key_scopes_allow_action(["config"], "provider.credentials.write")
-    assert api_key_scopes_allow_action(["chat", "chat:admin"], "chat.impersonate_admin")
+    assert not api_key_scopes_allow_action(["chat", "chat:admin"], "chat.impersonate_admin")
+
+
+@pytest.mark.asyncio
+async def test_global_roles_require_an_active_dashboard_account(authorization):
+    with pytest.raises(ValueError, match="Dashboard account"):
+        await authorization.grant_binding(
+            actor=Subject.system("test"),
+            subject_id=Subject.im(
+                platform_instance="onebot", bot_account_id="bot", sender_id="42"
+            ).id,
+            role=Role.ROOT,
+            scope_type="global",
+            scope_id="global",
+            config_id=None,
+            enforce_actor=False,
+        )
+
+    async with authorization._db.get_db() as session:
+        async with session.begin():
+            session.add(
+                DashboardAccount(
+                    account_id="active-account",
+                    username="active-account",
+                    password_hash="hash",
+                )
+            )
+
+    binding = await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=Subject.dashboard_account("active-account").id,
+        role=Role.ROOT,
+        scope_type="global",
+        scope_id="global",
+        config_id=None,
+        enforce_actor=False,
+    )
+    assert binding.role == Role.ROOT
+
+
+@pytest.mark.asyncio
+async def test_disabling_dashboard_account_revokes_its_authority(authorization):
+    config = {"dashboard": {"jwt_secret": "test-secret"}}
+    auth_service = AuthService(
+        authorization._db,
+        config,
+        demo_mode=False,
+        totp_runtime_state=TotpRuntimeState(),
+    )
+    account = await auth_service.create_dashboard_account(
+        username="root-account",
+        password="AstrbotSecure123!",
+        created_by="test",
+    )
+    subject = Subject.dashboard_account(account.account_id)
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=subject.id,
+        role=Role.OPERATOR,
+        scope_type="global",
+        scope_id="global",
+        config_id=None,
+        enforce_actor=False,
+    )
+    context = AuthContext(subject=subject, source="dashboard", authenticated=True)
+    assert (
+        await authorization.authorize(
+            subject, "identity.read", Resource.named("identity", "accounts"), context
+        )
+    ).allowed
+
+    await auth_service.update_dashboard_account(account_id=account.account_id, is_active=False)
+
+    assert not (
+        await authorization.authorize(
+            subject, "identity.read", Resource.named("identity", "accounts"), context
+        )
+    ).allowed
+
+
+@pytest.mark.asyncio
+async def test_revoking_last_active_root_ignores_disabled_root_bindings(authorization):
+    async with authorization._db.get_db() as session:
+        async with session.begin():
+            active = DashboardAccount(
+                account_id="active-root",
+                username="active-root",
+                password_hash="hash",
+                is_active=True,
+            )
+            disabled = DashboardAccount(
+                account_id="disabled-root",
+                username="disabled-root",
+                password_hash="hash",
+                is_active=False,
+            )
+            session.add_all(
+                [
+                    active,
+                    disabled,
+                    AuthRoleBinding(
+                        subject_id="dashboard-account:active-root",
+                        role=Role.ROOT.value,
+                        scope_type="global",
+                        scope_id="global",
+                        config_id="__global__",
+                    ),
+                    AuthRoleBinding(
+                        subject_id="dashboard-account:disabled-root",
+                        role=Role.ROOT.value,
+                        scope_type="global",
+                        scope_id="global",
+                        config_id="__global__",
+                    ),
+                ]
+            )
+
+    bindings = await authorization.list_bindings(
+        subject_id="dashboard-account:active-root"
+    )
+    authorization._assert_binding_management_allowed = AsyncMock()
+    with pytest.raises(ValueError, match="last root"):
+        await authorization.revoke_binding(
+            actor=Subject.system("test"),
+            binding_id=bindings[0].binding_id,
+        )
 
 
 @pytest.mark.asyncio
@@ -156,27 +285,6 @@ async def test_audit_redacts_secrets(authorization):
     assert records
     assert "token" not in records[0].metadata_json
     assert "message" not in records[0].metadata_json
-
-
-@pytest.mark.asyncio
-async def test_legacy_tool_permission_migration_is_idempotent(authorization):
-    class Preferences:
-        def __init__(self):
-            self.values = {
-                "tool_permissions": {
-                    "_default": {"safe_tool": "member", "danger_tool": "admin"}
-                }
-            }
-
-        async def global_get(self, key, default=None):
-            return self.values.get(key, default)
-
-        async def global_put(self, key, value):
-            self.values[key] = value
-
-    preferences = Preferences()
-    assert await authorization.migrate_legacy_tool_permissions(preferences) == 2
-    assert await authorization.migrate_legacy_tool_permissions(preferences) == 0
 
 
 @pytest.mark.asyncio

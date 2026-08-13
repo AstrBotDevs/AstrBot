@@ -5,7 +5,6 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from astrbot.dashboard.responses import ApiError, error, ok
 from astrbot.dashboard.schemas import ImMessageRequest, OpenApiChatRequest
-from astrbot.dashboard.services.api_key_scopes import api_key_has_scope
 from astrbot.dashboard.services.chat_service import (
     ChatService,
     ChatServiceError,
@@ -109,7 +108,6 @@ async def _open_api_chat_response(
         )
 
     api_key_principal = {"key_id": auth.api_key_id, "scopes": auth.scopes}
-    allow_admin_username = api_key_has_scope(auth.scopes, "chat:admin")
     try:
         (
             effective_username,
@@ -118,8 +116,6 @@ async def _open_api_chat_response(
         ) = await open_api_service.prepare_chat_send(
             post_data,
             _get_chat_config_list(open_api_service),
-            allow_admin_username=allow_admin_username,
-            api_key_principal={"key_id": auth.api_key_id, "scopes": auth.scopes},
         )
     except OpenApiServiceError as exc:
         return _open_api_error(str(exc))
@@ -200,7 +196,6 @@ def _extract_ws_api_key(websocket: WebSocket) -> str | None:
 @router.post(
     "/chat",
     responses=_SSE_RESPONSE,
-    openapi_extra={"x-astrbot-sensitive-scopes": ["chat:admin"]},
 )
 async def chat(
     payload: OpenApiChatRequest,

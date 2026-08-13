@@ -4,7 +4,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from astrbot.builtin_stars.builtin_commands.commands.session import SessionCommands
-from astrbot.core.star.filter.permission import PermissionType, PermissionTypeFilter
+from astrbot.core.star.filter.permission import (
+    ActionPermissionFilter,
+    PermissionType,
+    PermissionTypeFilter,
+)
 from astrbot.core.star.register.star_handler import get_handler_declaration
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.umo_alias import (
@@ -121,6 +125,22 @@ def test_session_name_requires_admin_permission():
     assert any(
         isinstance(filter_, PermissionTypeFilter)
         and filter_.permission_type == PermissionType.ADMIN
+        for filter_ in declaration.event_filters
+    )
+
+
+@pytest.mark.parametrize("handler_name", ["reset", "delete"])
+def test_conversation_mutations_require_session_manage_action(handler_name: str):
+    from astrbot.builtin_stars.builtin_commands.main import Main
+
+    declaration = get_handler_declaration(
+        getattr(Main, handler_name),
+        EventType.AdapterMessageEvent,
+    )
+
+    assert any(
+        isinstance(filter_, ActionPermissionFilter)
+        and filter_.action == "session.manage"
         for filter_ in declaration.event_filters
     )
 

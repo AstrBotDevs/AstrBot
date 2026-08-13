@@ -6,6 +6,7 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.tools.computer_tools.shipyard_neo.neo_skills import (
     PromoteSkillCandidateTool,
 )
+from tests.fixtures.auth import attach_authorized_tool_context
 
 
 class _FakeSkills:
@@ -59,21 +60,19 @@ def test_promote_stable_sync_failure_auto_rolls_back(monkeypatch):
         unified_msg_origin="session-1",
         get_sender_id=lambda: "admin-user",
     )
-    astr_ctx = SimpleNamespace(
-        context=SimpleNamespace(
-            get_config=lambda umo: {  # noqa: ARG005
-                "provider_settings": {
-                    "computer_use_require_admin": True,
-                }
+    runtime = SimpleNamespace(
+        get_config=lambda umo: {  # noqa: ARG005
+            "provider_settings": {
+                "computer_use_require_admin": True,
             }
-            ,
-            computer_runtime=SimpleNamespace(
-                get_booter=_fake_get_booter,
-                sync_skills_to_active_sandboxes=_fake_sync_active_sandboxes,
-            ),
+        },
+        computer_runtime=SimpleNamespace(
+            get_booter=_fake_get_booter,
+            sync_skills_to_active_sandboxes=_fake_sync_active_sandboxes,
         ),
-        event=event,
     )
+    attach_authorized_tool_context(event, runtime, "extension.manage")
+    astr_ctx = SimpleNamespace(context=runtime, event=event)
     run_ctx = ContextWrapper(context=astr_ctx)
 
     tool = PromoteSkillCandidateTool()
