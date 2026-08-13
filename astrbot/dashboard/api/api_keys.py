@@ -31,7 +31,12 @@ async def require_api_key_access(request: Request, *, action: str) -> AuthContex
         step_up_token=request.headers.get("X-AstrBot-Step-Up"),
         metadata={"dashboard_session_id": principal.sid},
     )
-    decision = await request.app.state.runtime.services.authorization.authorize(
+    runtime = getattr(request.app.state, "runtime", None)
+    services = getattr(runtime, "services", None)
+    authorization = getattr(services, "authorization", None)
+    if authorization is None:
+        raise ApiError("Authorization unavailable", status_code=503)
+    decision = await authorization.authorize(
         subject,
         action,
         Resource.named("api-key", "collection"),

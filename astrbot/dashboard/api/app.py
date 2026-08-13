@@ -136,7 +136,6 @@ def create_dashboard_asgi_app(
             db,
             runtime.astrbot_config,
             runtime.knowledge_base_manager,
-            token_validator=dashboard_token_validator,
         ),
         chat=ChatService(
             db,

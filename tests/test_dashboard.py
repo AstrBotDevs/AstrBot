@@ -216,6 +216,33 @@ def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
     return password
 
 
+async def _high_risk_headers(
+    test_client: DashboardTestClient,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    *,
+    action: str,
+    resource_id: str,
+) -> dict:
+    """Issue the one-time step-up required for a system operation."""
+
+    response = await test_client.post(
+        "/api/v1/authorization/step-up",
+        json={
+            "action": action,
+            "resource_type": "system",
+            "resource_id": resource_id,
+            "password": _resolve_dashboard_password(core_lifecycle_td),
+        },
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    return {
+        **authenticated_header,
+        "X-AstrBot-Step-Up": (await response.get_json())["data"]["token"],
+    }
+
+
 def test_dashboard_uses_bundled_dist_when_data_dist_is_stale(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
@@ -2159,6 +2186,23 @@ async def test_plugins(
     """Tests plugin API endpoints with mocked install and update paths."""
     test_client = DashboardTestClient(app)
 
+    async def plugin_deploy_headers() -> dict[str, str]:
+        step_up = await test_client.post(
+            "/api/v1/authorization/step-up",
+            json={
+                "action": "extension.plugin_install",
+                "resource_type": "dashboard-api",
+                "resource_id": "post-plugin",
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+            },
+            headers=authenticated_header,
+        )
+        assert step_up.status_code == 200
+        return {
+            **authenticated_header,
+            "X-AstrBot-Step-Up": (await step_up.get_json())["data"]["token"],
+        }
+
     async def mock_get_online_plugins(_service, *, custom_registry, force_refresh):
         del _service, custom_registry, force_refresh
         return [], None
@@ -2213,7 +2257,7 @@ async def test_plugins(
         response = await test_client.post(
             "/api/v1/plugins/install/github",
             json={"repository": test_repo_url},
-            headers=authenticated_header,
+            headers=await plugin_deploy_headers(),
         )
         assert response.status_code == 200
         data = await response.get_json()
@@ -2263,7 +2307,7 @@ async def test_plugins(
         response = await test_client.post(
             f"/api/v1/plugins/{test_plugin_name}/update",
             json={},
-            headers=authenticated_header,
+            headers=await plugin_deploy_headers(),
         )
         assert response.status_code == 200
         data = await response.get_json()
@@ -2607,7 +2651,13 @@ async def test_restart_core_rejects_desktop_managed_backend(
 
     response = await test_client.post(
         "/api/v1/system/restart",
-        headers=authenticated_header,
+        headers=await _high_risk_headers(
+            test_client,
+            authenticated_header,
+            core_lifecycle_td,
+            action="system.restart",
+            resource_id="restart",
+        ),
     )
 
     assert response.status_code == 400
@@ -2666,7 +2716,13 @@ async def test_do_update(
 
     response = await test_client.post(
         "/api/v1/updates/core",
-        headers=authenticated_header,
+        headers=await _high_risk_headers(
+            test_client,
+            authenticated_header,
+            core_lifecycle_td,
+            action="system.update",
+            resource_id="core-update",
+        ),
         json={"version": "v3.4.0", "reboot": False, "progress_id": "test-progress"},
     )
     assert response.status_code == 200
@@ -2718,7 +2774,13 @@ async def test_do_update_does_not_apply_files_when_core_download_fails(
     )
     response = await test_client.post(
         "/api/v1/updates/core",
-        headers=authenticated_header,
+        headers=await _high_risk_headers(
+            test_client,
+            authenticated_header,
+            core_lifecycle_td,
+            action="system.update",
+            resource_id="core-update",
+        ),
         json={"version": "v3.4.0", "reboot": False, "progress_id": "atomic-fail"},
     )
     data = await response.get_json()
@@ -2761,7 +2823,13 @@ async def test_do_update_rejects_desktop_managed_backend(
 
     response = await test_client.post(
         "/api/v1/updates/core",
-        headers=authenticated_header,
+        headers=await _high_risk_headers(
+            test_client,
+            authenticated_header,
+            core_lifecycle_td,
+            action="system.update",
+            resource_id="core-update",
+        ),
         json={"version": "v3.4.0", "reboot": False, "progress_id": "desktop-progress"},
     )
 
@@ -2805,7 +2873,13 @@ async def test_do_update_does_not_apply_files_when_package_verification_fails(
     )
     response = await test_client.post(
         "/api/v1/updates/core",
-        headers=authenticated_header,
+        headers=await _high_risk_headers(
+            test_client,
+            authenticated_header,
+            core_lifecycle_td,
+            action="system.update",
+            resource_id="core-update",
+        ),
         json={"version": "v3.4.0", "reboot": False, "progress_id": "invalid-zip"},
     )
     data = await response.get_json()
@@ -2825,6 +2899,7 @@ async def test_do_update_does_not_apply_files_when_package_verification_fails(
 async def test_do_update_hides_internal_error_message_in_response_and_progress(
     app: FastAPI,
     authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
     test_client = DashboardTestClient(app)
@@ -2841,7 +2916,13 @@ async def test_do_update_hides_internal_error_message_in_response_and_progress(
 
     response = await test_client.post(
         "/api/v1/updates/core",
-        headers=authenticated_header,
+        headers=await _high_risk_headers(
+            test_client,
+            authenticated_header,
+            core_lifecycle_td,
+            action="system.update",
+            resource_id="core-update",
+        ),
         json={"version": "v3.4.0", "reboot": False, "progress_id": "failed-progress"},
     )
     data = await response.get_json()
@@ -2866,6 +2947,7 @@ async def test_do_update_hides_internal_error_message_in_response_and_progress(
 async def test_install_pip_package_returns_generic_error_message(
     app: FastAPI,
     authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
     test_client = DashboardTestClient(app)
@@ -2878,7 +2960,13 @@ async def test_install_pip_package_returns_generic_error_message(
 
     response = await test_client.post(
         "/api/v1/pip/install",
-        headers=authenticated_header,
+        headers=await _high_risk_headers(
+            test_client,
+            authenticated_header,
+            core_lifecycle_td,
+            action="system.pip_install",
+            resource_id="pip-install",
+        ),
         json={"package": "demo-package"},
     )
 

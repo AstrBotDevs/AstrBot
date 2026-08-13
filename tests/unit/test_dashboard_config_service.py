@@ -85,6 +85,66 @@ def test_ensure_dashboard_platform_metadata_loaded_skips_import_when_registered(
     config_service._ensure_dashboard_platform_metadata_loaded(catalog)
 
 
+def test_sensitive_config_changed_ignores_redacted_placeholders() -> None:
+    current = {
+        "provider": [{"id": "demo", "api_key": "secret"}],
+        "plain": "before",
+    }
+    posted = {
+        "provider": [
+            {"id": "demo", "api_key": config_service.REDACTED_SECRET_PLACEHOLDER}
+        ],
+        "plain": "after",
+    }
+
+    assert not config_service.sensitive_config_changed(
+        current, posted, missing_is_change=False
+    )
+    posted["provider"][0]["api_key"] = "new-secret"
+    assert config_service.sensitive_config_changed(
+        current, posted, missing_is_change=False
+    )
+
+    list_current = {"key": ["secret-1", "secret-2"]}
+    list_redacted = {
+        "key": [
+            config_service.REDACTED_SECRET_PLACEHOLDER,
+            config_service.REDACTED_SECRET_PLACEHOLDER,
+        ]
+    }
+    assert not config_service.sensitive_config_changed(
+        list_current, list_redacted, missing_is_change=False
+    )
+    list_redacted["key"][1] = "new-secret"
+    assert config_service.sensitive_config_changed(
+        list_current, list_redacted, missing_is_change=False
+    )
+
+
+def test_profile_and_system_config_responses_redact_secrets() -> None:
+    current = {
+        "dashboard": {"jwt_secret": "jwt-secret"},
+        "provider": [{"id": "demo", "api_key": "provider-secret"}],
+        "provider_sources": [],
+        "platform": [],
+    }
+    service = config_service.ConfigProfileService(
+        SimpleNamespace(confs={"default": current}),
+        SimpleNamespace(),
+        SimpleNamespace(),
+        SimpleNamespace(),
+    )
+
+    assert (
+        service.get_profile("default")["config"]["provider"][0]["api_key"]
+        == config_service.REDACTED_SECRET_PLACEHOLDER
+    )
+    assert (
+        service.get_system_config()["config"]["dashboard"]["jwt_secret"]
+        == config_service.REDACTED_SECRET_PLACEHOLDER
+    )
+
+
 def test_provider_source_response_strips_removed_responses_web_search_fields():
     runtime = _runtime(config={})
     service = config_service.ProviderConfigService(

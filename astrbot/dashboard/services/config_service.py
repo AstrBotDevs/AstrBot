@@ -208,6 +208,85 @@ def _restore_redacted_sensitive_config(
     return posted_value
 
 
+def sensitive_config_changed(
+    current_value: Any,
+    posted_value: Any,
+    *,
+    missing_is_change: bool = True,
+    ignored_paths: tuple[tuple[str, ...], ...] = (),
+) -> bool:
+    """Return whether a submitted config changes any credential-like value.
+
+    Dashboard responses replace secrets with ``REDACTED_SECRET_PLACEHOLDER``.
+    Those placeholders are intentionally treated as unchanged so a normal
+    read-edit-save cycle does not require a credential-management capability.
+    """
+
+    ignored = frozenset(ignored_paths)
+
+    def changed(
+        current: Any,
+        posted: Any,
+        *,
+        key_name: str | None = None,
+        path: tuple[str, ...] = (),
+    ) -> bool:
+        if path in ignored:
+            return False
+        if key_name and _is_sensitive_config_key(key_name):
+            if isinstance(posted, list) and isinstance(current, list):
+                restored = _restore_redacted_sensitive_config(
+                    copy.deepcopy(posted), current, key_name=key_name
+                )
+                return restored != current
+            return posted != REDACTED_SECRET_PLACEHOLDER and posted != current
+        if isinstance(posted, dict):
+            current_map = current if isinstance(current, dict) else {}
+            if any(
+                changed(
+                    current_map.get(key),
+                    value,
+                    key_name=str(key),
+                    path=(*path, str(key)),
+                )
+                for key, value in posted.items()
+            ):
+                return True
+            if missing_is_change and any(
+                _is_sensitive_config_key(str(key))
+                and value not in (None, "", [], {})
+                and (*path, str(key)) not in ignored
+                for key, value in current_map.items()
+                if key not in posted
+            ):
+                return True
+            return False
+        if isinstance(posted, list):
+            current_list = current if isinstance(current, list) else []
+            if any(
+                changed(
+                    current_list[index] if index < len(current_list) else None,
+                    value,
+                    key_name=key_name,
+                    path=path,
+                )
+                for index, value in enumerate(posted)
+            ):
+                return True
+            return bool(
+                missing_is_change
+                and key_name
+                and _is_sensitive_config_key(key_name)
+                and any(
+                    item not in (None, "", [], {})
+                    for item in current_list[len(posted) :]
+                )
+            )
+        return False
+
+    return changed(current_value, posted_value)
+
+
 def _validate_template_list(value, meta, path_key, errors, validate_fn) -> None:
     if not _expect_type(value, list, path_key, errors, "list"):
         return
@@ -631,7 +710,9 @@ class ConfigProfileService:
 
     def get_system_schema(self) -> dict:
         return {
-            "config": self.acm.confs["default"],
+            "config": _redact_sensitive_config(
+                copy.deepcopy(dict(self.acm.confs["default"]))
+            ),
             "metadata": ConfigMetadataI18n.convert_to_i18n_keys(
                 CONFIG_METADATA_3_SYSTEM
             ),
@@ -666,18 +747,7 @@ class ConfigProfileService:
         self,
         name: str | None,
         config: dict | None,
-        *,
-        allow_admin_id_change: bool = True,
     ) -> dict:
-        if (
-            not allow_admin_id_change
-            and isinstance(config, dict)
-            and "admins_id" in config
-        ):
-            raise ApiError(
-                "config:edit_admin scope is required to set admins_id",
-                status_code=403,
-            )
         conf_id = await self.acm.create_conf(name=name, config=config or DEFAULT_CONFIG)
         await self.core_control.reload_pipeline_scheduler(conf_id)
         return {"conf_id": conf_id}
@@ -686,7 +756,9 @@ class ConfigProfileService:
         if config_id not in self.acm.confs:
             raise DashboardValidationError(f"Config file {config_id} does not exist")
         return {
-            "config": self.acm.confs[config_id],
+            "config": _redact_sensitive_config(
+                copy.deepcopy(dict(self.acm.confs[config_id]))
+            ),
             "metadata": ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3),
         }
 
@@ -697,7 +769,6 @@ class ConfigProfileService:
         *,
         subject: str,
         two_factor_code: str | None = None,
-        allow_admin_id_change: bool = True,
     ) -> str | None:
         if config_id not in self.acm.confs:
             raise DashboardValidationError(f"Config file {config_id} does not exist")
@@ -708,15 +779,6 @@ class ConfigProfileService:
                 config[key] = default_conf.get(key, [])
 
         current_config = self.acm.confs[config_id]
-        if (
-            not allow_admin_id_change
-            and "admins_id" in config
-            and config.get("admins_id") != current_config.get("admins_id")
-        ):
-            raise ApiError(
-                "config:edit_admin scope is required to change admins_id",
-                status_code=403,
-            )
         protected_2fa_changed = _protected_2fa_config_changed(current_config, config)
         if (
             is_totp_enabled(current_config)
@@ -1391,7 +1453,9 @@ class ProviderConfigService:
         return config
 
     def _build_provider_source_response(self, source: dict) -> dict:
-        return self._ensure_provider_type(copy.deepcopy(source))
+        return _redact_sensitive_config(
+            self._ensure_provider_type(copy.deepcopy(source))
+        )
 
     def _attach_model_metadata(self, provider: dict) -> dict:
         model_id = provider.get("model")
@@ -1407,11 +1471,11 @@ class ProviderConfigService:
         else:
             normalized = copy.deepcopy(provider)
         normalized = self._ensure_provider_type(normalized)
-        return self._attach_model_metadata(normalized)
+        return _redact_sensitive_config(self._attach_model_metadata(normalized))
 
     def _build_raw_provider_response(self, provider: dict) -> dict:
         normalized = self._ensure_provider_type(copy.deepcopy(provider))
-        return self._attach_model_metadata(normalized)
+        return _redact_sensitive_config(self._attach_model_metadata(normalized))
 
     def get_provider_schema(self) -> dict:
         provider_metadata = ConfigMetadataI18n.convert_to_i18n_keys(
@@ -1461,14 +1525,22 @@ class ProviderConfigService:
             ]
         }
 
-    def get_provider_source(self, source_id: str) -> dict:
+    def get_provider_source(self, source_id: str, *, redact: bool = True) -> dict:
         source = self._find_provider_source(source_id)
         if source is None:
             raise DashboardValidationError(f"Provider source {source_id} not found")
-        return {"provider_source": self._build_provider_source_response(source)}
+        provider_source = (
+            self._build_provider_source_response(source)
+            if redact
+            else self._ensure_provider_type(copy.deepcopy(source))
+        )
+        return {"provider_source": provider_source}
 
     async def upsert_provider_source(self, source_id: str, config: dict) -> None:
         config = self._ensure_provider_type(copy.deepcopy(config))
+        current_source = self._find_provider_source(source_id)
+        if isinstance(current_source, dict):
+            _restore_redacted_sensitive_config(config, current_source)
         next_source_id = str(config.get("id") or source_id).strip()
         if not next_source_id:
             raise DashboardValidationError(
@@ -1672,7 +1744,9 @@ class ProviderConfigService:
             raise DashboardValidationError("缺少参数 provider_type")
         return self.list_providers(provider_type=provider_type)["providers"]
 
-    def get_provider(self, provider_id: str, *, merged: bool = False) -> dict:
+    def get_provider(
+        self, provider_id: str, *, merged: bool = False, redact: bool = True
+    ) -> dict:
         provider = self.provider_manager.get_provider_config_by_id(
             provider_id,
             merged=merged,
@@ -1684,6 +1758,13 @@ class ProviderConfigService:
             if merged
             else self._build_raw_provider_response(provider)
         )
+        if not redact:
+            provider_response = self._ensure_provider_type(copy.deepcopy(provider))
+            if merged:
+                provider_response = self.provider_manager.get_merged_provider_config(
+                    provider
+                )
+                provider_response = self._ensure_provider_type(provider_response)
         model_id = provider_response.get("model")
         model_metadata = {}
         if isinstance(model_id, str) and "model_metadata" in provider_response:
@@ -1700,6 +1781,11 @@ class ProviderConfigService:
 
     async def update_provider(self, provider_id: str, config: dict) -> None:
         config = copy.deepcopy(config)
+        current_provider = self.provider_manager.get_provider_config_by_id(
+            provider_id, merged=True
+        )
+        if isinstance(current_provider, dict):
+            _restore_redacted_sensitive_config(config, current_provider)
         if not config.get("id"):
             config["id"] = provider_id
         if not config.get("provider_source_id"):

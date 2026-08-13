@@ -2,18 +2,32 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Request
 
+from astrbot.core.auth.models import Resource
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import GhProxyTestRequest, StorageCleanupRequest
 from astrbot.dashboard.services.stat_service import StatService, StatServiceError
 
-from .auth import AuthContext, require_scope
+from .auth import AuthContext, require_resource_action, require_scope
 
 router = APIRouter(tags=["System Stats"])
 
 
 async def require_system_scope(request: Request) -> AuthContext:
     return await require_scope(request, "system")
+
+
+async def require_system_restart_scope(request: Request) -> AuthContext:
+    """Require the specific, reauthenticated capability to restart AstrBot."""
+
+    auth = await require_scope(request, "system", authorize_action=False)
+    await require_resource_action(
+        request,
+        auth,
+        action="system.restart",
+        resource=Resource.named("system", "restart"),
+    )
+    return auth
 
 
 def get_service(request: Request) -> StatService:
@@ -150,7 +164,7 @@ async def cleanup_storage(
 
 @router.post("/system/restart")
 async def restart_system(
-    _auth: AuthContext = Depends(require_system_scope),
+    _auth: AuthContext = Depends(require_system_restart_scope),
     service: StatService = Depends(get_service),
 ):
     return await _run(service.restart_core())

@@ -34,29 +34,27 @@ X-API-Key: abk_xxx
 
 创建 API Key 时可配置 `scopes`。每个 scope 控制可访问的接口范围：
 
-| Scope               | 作用                                                                      | 代表性接口                                                                                                                      |
-| ------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `bot`               | 管理机器人/平台配置                                                       | `GET/POST /api/v1/bots`、`PATCH /api/v1/bots/{bot_id}/enabled`                                                                  |
-| `provider`          | 管理模型和 Provider 来源                                                  | `GET/POST /api/v1/providers`、`GET/PUT/DELETE /api/v1/provider-sources/{source_id}`                                             |
-| `persona`           | 管理 Persona 和 Persona 文件夹                                            | `GET/POST /api/v1/personas`、`GET/POST /api/v1/persona-folders`                                                                 |
-| `im`                | 主动发 IM 消息、查询 bot/platform 列表                                    | `POST /api/v1/im/messages`、`GET /api/v1/im/bots`                                                                               |
-| `config`            | 管理配置档和系统配置（不含 `admins_id`）；同时包含 `bot` 和 `provider`    | `GET/PUT /api/v1/system-config`、`GET/POST /api/v1/config-profiles`、`GET /api/v1/subagents/config`                             |
-| `config:edit_admin` | 可显式授予的高风险权限，用于设置或修改 `admins_id`；要求 `config`         | `POST /api/v1/config-profiles`、`PUT /api/v1/config-profiles/{config_id}`、`PUT /api/v1/system-config`                          |
-| `chat`              | 调用对话能力、查询和维护 WebChat 会话                                     | `POST /api/v1/chat`、`GET /api/v1/chat/sessions`、`GET /api/v1/chat/configs`                                                    |
-| `chat:admin`        | 可显式授予的高风险权限，用于以已配置管理员 ID 作为对话发送者；要求 `chat` | `POST /api/v1/chat`、`GET /api/v1/chat/ws`                                                                                      |
-| `kb`                | 管理知识库、文档、分块和检索                                              | `GET/POST /api/v1/knowledge-bases`、`POST /api/v1/knowledge-bases/{kb_id}/retrieve`                                             |
-| `memory`            | 审计和维护长期记忆事实、画像及操作记录                                    | `GET/POST /api/v1/memory/facts`、`POST /api/v1/memory/facts/{fact_id}/delete`、`GET /api/v1/memory/operations`                  |
-| `data`              | 管理会话状态、会话分组、会话规则和已保存对话                              | `GET/POST /api/v1/sessions`、`GET/POST /api/v1/session-groups`、`GET/POST /api/v1/conversations`                                |
-| `file`              | 上传和下载对话附件                                                        | `POST/GET /api/v1/file`、`POST /api/v1/files`                                                                                   |
-| `plugin`            | 管理插件、插件配置、插件源和市场                                          | `GET /api/v1/plugins`、`GET/PUT /api/v1/plugins/{plugin_id}/config`、`POST /api/v1/plugins/install/url`                         |
-| `mcp`               | 管理 MCP 服务器配置和服务端同步                                           | `GET/POST /api/v1/mcp/servers`、`PATCH /api/v1/mcp/servers/{server_name}/enabled`、`POST /api/v1/mcp/providers/modelscope/sync` |
-| `skill`             | 管理 Skills、压缩包、文件和 Shipyard Neo 流程                             | `GET/POST /api/v1/skills`、`PUT /api/v1/skills/{skill_name}/files/{file_path}`、`POST /api/v1/skills/neo/sync`                  |
+| Scope      | 作用                                               | 代表性接口                                                                                                                      |
+| ---------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `bot`      | 管理机器人/平台配置                                | `GET/POST /api/v1/bots`、`PATCH /api/v1/bots/{bot_id}/enabled`                                                                  |
+| `provider` | 管理模型和 Provider 来源                           | `GET/POST /api/v1/providers`、`GET/PUT/DELETE /api/v1/provider-sources/{source_id}`                                             |
+| `persona`  | 管理 Persona 和 Persona 文件夹                     | `GET/POST /api/v1/personas`、`GET/POST /api/v1/persona-folders`                                                                 |
+| `im`       | 主动发 IM 消息、查询 bot/platform 列表             | `POST /api/v1/im/messages`、`GET /api/v1/im/bots`                                                                               |
+| `config`   | 管理配置档和系统配置，同时包含 `bot` 和 `provider` | `GET/PUT /api/v1/system-config`、`GET/POST /api/v1/config-profiles`、`GET /api/v1/subagents/config`                             |
+| `chat`     | 调用对话能力、查询和维护 WebChat 会话              | `POST /api/v1/chat`、`GET /api/v1/chat/sessions`、`GET /api/v1/chat/configs`                                                    |
+| `kb`       | 管理知识库、文档、分块和检索                       | `GET/POST /api/v1/knowledge-bases`、`POST /api/v1/knowledge-bases/{kb_id}/retrieve`                                             |
+| `memory`   | 审计和维护长期记忆事实、画像及操作记录             | `GET/POST /api/v1/memory/facts`、`POST /api/v1/memory/facts/{fact_id}/delete`、`GET /api/v1/memory/operations`                  |
+| `data`     | 管理会话状态、会话分组、会话规则和已保存对话       | `GET/POST /api/v1/sessions`、`GET/POST /api/v1/session-groups`、`GET/POST /api/v1/conversations`                                |
+| `file`     | 上传和下载对话附件                                 | `POST/GET /api/v1/file`、`POST /api/v1/files`                                                                                   |
+| `plugin`   | 管理插件、插件配置、插件源和市场                   | `GET /api/v1/plugins`、`GET/PUT /api/v1/plugins/{plugin_id}/config`、`POST /api/v1/plugins/install/url`                         |
+| `mcp`      | 管理 MCP 服务器配置和服务端同步                    | `GET/POST /api/v1/mcp/servers`、`PATCH /api/v1/mcp/servers/{server_name}/enabled`、`POST /api/v1/mcp/providers/modelscope/sync` |
+| `skill`    | 管理 Skills、压缩包、文件和 Shipyard Neo 流程      | `GET/POST /api/v1/skills`、`PUT /api/v1/skills/{skill_name}/files/{file_path}`、`POST /api/v1/skills/neo/sync`                  |
 
 如果 API Key 未包含目标接口所需 scope，请求会返回 `403 Insufficient API key scope`。
 
 `config` 是较大的管理 scope。创建 API Key 时如果包含 `config`，AstrBot 会同时授予该 Key `config`、`bot` 和 `provider` 访问权限。WebUI 的勾选逻辑也会体现这个依赖关系：选中 `config` 会同时选中 `bot` 和 `provider`；取消选中 `bot` 或 `provider` 时，会同步取消 `config`。
 
-当前开发者 API Key 支持 13 个基础 scope 和以上两个敏感 scope。`/api/v1/skills/*` 接口使用单数 `skill` scope，不使用复数 `skills`。Settings 默认不会选中敏感 scope；选中时会自动选中其父 scope，取消父 scope 会同时取消敏感子 scope。
+当前开发者 API Key 支持 13 个基础 scope。`/api/v1/skills/*` 接口使用单数 `skill` scope，不使用复数 `skills`。
 
 在显式 scope 存储出现前，数据库中的 `NULL` 表示固定的基础 scope 集，不是通配符，且不会获得敏感 scope。数据库中显式存储的 `*` 仍保留历史通配符语义。
 
@@ -145,7 +143,7 @@ X-API-Key: abk_xxx
 
 `POST /api/v1/chat` 额外需要 `username`，可选 `session_id`（不传会自动创建 UUID）。
 
-`username` 是调用方声明的 WebChat 用户标识，会作为本次消息的 sender 和会话 owner 进入消息管道，并参与基于 sender ID 的指令权限判断。只有同时显式拥有 `chat` 和 `chat:admin` 的 Key 才能使用任一已配置 profile 的管理员 ID；仅有 `chat` 的 Key 不允许。若需要面向终端用户开放，请在自己的服务端将外部用户映射到受控的 `username`。
+`username` 是调用方声明的 WebChat 用户标识，仅用于兼容现有接口，不会因此获得 Dashboard 或管理员权限。若需要面向终端用户开放，请在自己的服务端将外部用户映射到受控的 `username`。
 
 ```json
 {

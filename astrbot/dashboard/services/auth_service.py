@@ -10,6 +10,7 @@ from typing import Any
 
 import jwt
 import pyotp
+from sqlalchemy import update
 from sqlmodel import col, select
 
 from astrbot import logger
@@ -164,8 +165,11 @@ class DashboardTokenValidator:
             "iss": self.issuer,
             "sub": username,
             "username": username,
-            "sid": secrets.token_urlsafe(32),
-            "jti": secrets.token_urlsafe(32),
+            # Dashboard session IDs become authorization subject components;
+            # use hex tokens so they satisfy the canonical identifier grammar
+            # (URL-safe base64 may contain ``_``).
+            "sid": secrets.token_hex(32),
+            "jti": secrets.token_hex(32),
             "account_id": account_id,
             "auth_strength": auth_strength,
             "iat": now,
@@ -244,7 +248,7 @@ class AuthService:
     async def _ensure_dashboard_account(
         self, username: str, password_hash: str, *, sync_password: bool = False
     ) -> DashboardAccount:
-        """Materialize the legacy single account and its first root binding."""
+        """Create the first stable Dashboard account and root binding."""
 
         async with self.db.get_db() as session:
             async with session.begin():
@@ -255,18 +259,10 @@ class AuthService:
                         )
                     )
                 ).scalar_one_or_none()
-                legacy_totp = self.config.get("dashboard", {}).get("totp", {})
-                if not isinstance(legacy_totp, dict):
-                    legacy_totp = {}
                 if account is None:
                     account = DashboardAccount(
                         username=username,
                         password_hash=password_hash,
-                        totp_enabled=bool(legacy_totp.get("enable", False)),
-                        totp_secret=str(legacy_totp.get("secret", "") or ""),
-                        totp_recovery_code_hash=str(
-                            legacy_totp.get("recovery_code_hash", "") or ""
-                        ),
                         totp_migrated=True,
                     )
                     session.add(account)
@@ -276,7 +272,14 @@ class AuthService:
                             select(AuthRoleBinding).where(
                                 col(AuthRoleBinding.role) == Role.ROOT.value,
                                 col(AuthRoleBinding.scope_type) == "global",
+                                col(AuthRoleBinding.scope_id) == "global",
+                                col(AuthRoleBinding.config_id) == GLOBAL_SCOPE_ID,
                                 col(AuthRoleBinding.revoked_at).is_(None),
+                                (col(AuthRoleBinding.expires_at).is_(None))
+                                | (
+                                    col(AuthRoleBinding.expires_at)
+                                    > datetime.datetime.now(datetime.UTC)
+                                ),
                             )
                         )
                     ).scalar_one_or_none()
@@ -288,9 +291,9 @@ class AuthService:
                                 scope_type="global",
                                 scope_id="global",
                                 config_id=GLOBAL_SCOPE_ID,
-                                source="migrated",
+                                source="bootstrap",
                                 created_by="system:bootstrap",
-                                metadata_json={"migration": "dashboard-account-v1"},
+                                metadata_json={"bootstrap": True},
                             )
                         )
                 else:
@@ -298,13 +301,6 @@ class AuthService:
                     # Syncing is only used by the explicit first-account setup.
                     if sync_password:
                         account.password_hash = password_hash
-                    if not account.totp_migrated:
-                        account.totp_enabled = bool(legacy_totp.get("enable", False))
-                        account.totp_secret = str(legacy_totp.get("secret", "") or "")
-                        account.totp_recovery_code_hash = str(
-                            legacy_totp.get("recovery_code_hash", "") or ""
-                        )
-                        account.totp_migrated = True
                     account.last_login_at = datetime.datetime.now(datetime.UTC)
                 await session.flush()
                 return account
@@ -356,7 +352,7 @@ class AuthService:
             )
 
     async def has_dashboard_accounts(self) -> bool:
-        """Return whether the legacy Dashboard credential has been migrated."""
+        """Return whether a stable Dashboard account has been created."""
 
         async with self.db.get_db() as session:
             return (
@@ -456,7 +452,7 @@ class AuthService:
         password: str | None = None,
         is_active: bool | None = None,
     ) -> DashboardAccount | None:
-        """Update one stable account; root-retention belongs to authz bindings."""
+        """Update one stable account and revoke its bindings when disabled."""
 
         if username is not None and len(username.strip()) < 3:
             raise ValueError("Username must be at least 3 characters")
@@ -475,13 +471,19 @@ class AuthService:
                     if account is None:
                         return None
                     if is_active is False and account.is_active:
+                        now = datetime.datetime.now(datetime.UTC)
                         root_subjects = set(
                             (
                                 await session.execute(
                                     select(AuthRoleBinding.subject_id).where(
                                         col(AuthRoleBinding.role) == Role.ROOT.value,
                                         col(AuthRoleBinding.scope_type) == "global",
+                                        col(AuthRoleBinding.scope_id) == "global",
+                                        col(AuthRoleBinding.config_id)
+                                        == GLOBAL_SCOPE_ID,
                                         col(AuthRoleBinding.revoked_at).is_(None),
+                                        (col(AuthRoleBinding.expires_at).is_(None))
+                                        | (col(AuthRoleBinding.expires_at) > now),
                                     )
                                 )
                             ).scalars()
@@ -520,6 +522,20 @@ class AuthService:
                         account.password_hash = hash_dashboard_password(password)
                     if is_active is not None:
                         account.is_active = is_active
+                        if not is_active:
+                            await session.execute(
+                                update(AuthRoleBinding)
+                                .where(
+                                    col(AuthRoleBinding.subject_id)
+                                    == Subject.dashboard_account(
+                                        account.account_id, account.username
+                                    ).id,
+                                    col(AuthRoleBinding.revoked_at).is_(None),
+                                )
+                                .values(
+                                    revoked_at=now, revoked_by="system:account-disable"
+                                )
+                            )
                     return account
 
     async def setup_status(self) -> AuthServiceResult:
@@ -819,7 +835,14 @@ class AuthService:
                             select(AuthRoleBinding.subject_id).where(
                                 col(AuthRoleBinding.role) == Role.ROOT.value,
                                 col(AuthRoleBinding.scope_type) == "global",
+                                col(AuthRoleBinding.scope_id) == "global",
+                                col(AuthRoleBinding.config_id) == GLOBAL_SCOPE_ID,
                                 col(AuthRoleBinding.revoked_at).is_(None),
+                                (col(AuthRoleBinding.expires_at).is_(None))
+                                | (
+                                    col(AuthRoleBinding.expires_at)
+                                    > datetime.datetime.now(datetime.UTC)
+                                ),
                             )
                         )
                     ).scalars()

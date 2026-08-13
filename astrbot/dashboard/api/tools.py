@@ -29,7 +29,11 @@ async def require_tool_scope(request: Request) -> AuthContext:
 
 
 async def require_mcp_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "mcp")
+    return await require_scope(request, "mcp", action_override="tool.mcp_read")
+
+
+async def require_mcp_write_scope(request: Request) -> AuthContext:
+    return await require_scope(request, "mcp", action_override="tool.mcp_write")
 
 
 def _model_dict(payload: McpServerRequest) -> dict[str, Any]:
@@ -217,7 +221,7 @@ async def list_mcp_servers(
 @router.post("/mcp/servers")
 async def create_mcp_server(
     payload: McpServerRequest,
-    _auth: AuthContext = Depends(require_mcp_scope),
+    _auth: AuthContext = Depends(require_mcp_write_scope),
     service: ToolsService = Depends(get_service),
 ):
     return await _create_mcp_server(_model_dict(payload), service)
@@ -227,7 +231,7 @@ async def create_mcp_server(
 async def set_mcp_server_enabled(
     server_name: str,
     payload: ToolEnabledRequest,
-    _auth: AuthContext = Depends(require_mcp_scope),
+    _auth: AuthContext = Depends(require_mcp_write_scope),
     service: ToolsService = Depends(get_service),
 ):
     return await _run(
@@ -340,7 +344,7 @@ async def get_mcp_oauth_status(
 @router.post("/mcp/servers/{server_name:path}/oauth/start")
 async def start_mcp_oauth(
     server_name: str,
-    _auth: AuthContext = Depends(require_mcp_scope),
+    _auth: AuthContext = Depends(require_mcp_write_scope),
     service: ToolsService = Depends(get_service),
 ):
     return await _run(lambda: service.start_mcp_authorization(server_name))
@@ -349,7 +353,7 @@ async def start_mcp_oauth(
 @router.delete("/mcp/servers/{server_name:path}/oauth")
 async def revoke_mcp_oauth(
     server_name: str,
-    _auth: AuthContext = Depends(require_mcp_scope),
+    _auth: AuthContext = Depends(require_mcp_write_scope),
     service: ToolsService = Depends(get_service),
 ):
     return await _run(lambda: service.revoke_mcp_authorization(server_name))
@@ -377,7 +381,7 @@ async def complete_mcp_oauth_callback(
 async def update_mcp_server(
     server_name: str,
     payload: McpServerRequest,
-    _auth: AuthContext = Depends(require_mcp_scope),
+    _auth: AuthContext = Depends(require_mcp_write_scope),
     service: ToolsService = Depends(get_service),
 ):
     body = _model_dict(payload)
@@ -387,7 +391,7 @@ async def update_mcp_server(
 @router.delete("/mcp/servers/{server_name:path}")
 async def delete_mcp_server(
     server_name: str,
-    _auth: AuthContext = Depends(require_mcp_scope),
+    _auth: AuthContext = Depends(require_mcp_write_scope),
     service: ToolsService = Depends(get_service),
 ):
     return await _delete_mcp_server(server_name, service)
@@ -396,7 +400,7 @@ async def delete_mcp_server(
 @router.post("/mcp/providers/modelscope/sync")
 async def sync_modelscope_mcp_servers(
     payload: ModelScopeSyncRequest | None = None,
-    _auth: AuthContext = Depends(require_mcp_scope),
+    _auth: AuthContext = Depends(require_mcp_write_scope),
     service: ToolsService = Depends(get_service),
 ):
     access_token = payload.access_token if payload is not None else ""

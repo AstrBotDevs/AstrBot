@@ -39,6 +39,14 @@ async def require_plugin_scope(request: Request) -> AuthContext:
     return await require_scope(request, "plugin")
 
 
+async def require_plugin_install_scope(request: Request) -> AuthContext:
+    return await require_scope(
+        request,
+        "plugin",
+        action_override="extension.plugin_install",
+    )
+
+
 def get_service(request: Request) -> PluginService:
     return request.app.state.services.plugins
 
@@ -128,7 +136,7 @@ async def list_failed_plugins(
 @router.post("/plugins/update")
 async def update_plugins(
     payload: PluginBatchUpdateRequest,
-    _auth: AuthContext = Depends(require_plugin_scope),
+    _auth: AuthContext = Depends(require_plugin_install_scope),
     service: PluginService = Depends(get_service),
 ):
     return await _run_service(
@@ -140,7 +148,7 @@ async def update_plugins(
 @router.post("/plugins/install/github")
 async def install_plugin_from_github(
     payload: PluginGithubInstallRequest,
-    _auth: AuthContext = Depends(require_plugin_scope),
+    _auth: AuthContext = Depends(require_plugin_install_scope),
     service: PluginService = Depends(get_service),
 ):
     body = payload.model_dump(exclude_none=True)
@@ -170,7 +178,7 @@ async def install_plugin_from_github(
 @router.post("/plugins/install/url")
 async def install_plugin_from_url(
     payload: PluginUrlInstallRequest,
-    _auth: AuthContext = Depends(require_plugin_scope),
+    _auth: AuthContext = Depends(require_plugin_install_scope),
     service: PluginService = Depends(get_service),
 ):
     body = payload.model_dump(exclude_none=True)
@@ -202,7 +210,7 @@ async def install_plugin_from_url(
 async def install_plugin_from_upload(
     file: UploadFile = File(...),
     ignore_version_check: bool = Form(False),
-    _auth: AuthContext = Depends(require_plugin_scope),
+    _auth: AuthContext = Depends(require_plugin_install_scope),
     service: PluginService = Depends(get_service),
 ):
     return await _run_service(
@@ -503,7 +511,7 @@ async def set_plugin_enabled(
 async def update_plugin(
     plugin_id: str,
     payload: PluginUpdateRequest | None = None,
-    _auth: AuthContext = Depends(require_plugin_id_scope),
+    _auth: AuthContext = Depends(require_plugin_install_scope),
     service: PluginService = Depends(get_service),
 ):
     body = _model_dict(payload)

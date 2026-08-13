@@ -3,7 +3,7 @@
   "info": {
     "title": "AstrBot OpenAPI v1",
     "version": "0.1.0",
-    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, persona, im, config, chat, kb, memory, data, file, plugin, mcp, skill, plus the explicitly granted sensitive scopes config:edit_admin and chat:admin. The config scope also grants bot and provider access, but it never grants a sensitive scope.\n"
+    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, persona, im, config, chat, kb, memory, data, file, plugin, mcp, and skill. The config scope also grants bot and provider access.\n"
   },
   "x-astrbot-scope-definitions": {
     "bot": {
@@ -23,25 +23,13 @@
       "description_zh": "主动发送 IM 消息，并查询机器人或平台标识。"
     },
     "config": {
-      "description": "Manage configuration profiles and system configuration, excluding admins_id changes.",
-      "description_zh": "管理配置文件和系统配置，但不包含修改 admins_id 的能力。",
+      "description": "Manage configuration profiles and system configuration.",
+      "description_zh": "管理配置文件和系统配置。",
       "includes": ["bot", "provider"]
-    },
-    "config:edit_admin": {
-      "description": "Allow an explicitly trusted config key to change admins_id.",
-      "description_zh": "允许明确授权的 config Key 修改 admins_id。",
-      "parent": "config",
-      "sensitive": true
     },
     "chat": {
       "description": "Use chat capabilities and manage ChatUI sessions and projects.",
       "description_zh": "调用对话能力，并管理 ChatUI 会话和项目。"
-    },
-    "chat:admin": {
-      "description": "Allow an explicitly trusted chat key to use a configured administrator ID as its sender.",
-      "description_zh": "允许明确授权的 chat Key 使用已配置管理员 ID 作为发送者。",
-      "parent": "chat",
-      "sensitive": true
     },
     "kb": {
       "description": "Manage knowledge bases.",
@@ -179,7 +167,6 @@
         "summary": "Replace the system configuration",
         "operationId": "updateSystemConfig",
         "x-astrbot-scope": "config",
-        "x-astrbot-sensitive-scopes": ["config:edit_admin"],
         "requestBody": {
           "required": true,
           "content": {
@@ -240,7 +227,6 @@
         "summary": "Create a configuration profile",
         "operationId": "createConfigProfile",
         "x-astrbot-scope": "config",
-        "x-astrbot-sensitive-scopes": ["config:edit_admin"],
         "requestBody": {
           "required": true,
           "content": {
@@ -280,7 +266,6 @@
         "summary": "Replace a configuration profile",
         "operationId": "updateConfigProfileContent",
         "x-astrbot-scope": "config",
-        "x-astrbot-sensitive-scopes": ["config:edit_admin"],
         "parameters": [
           {
             "$ref": "#/components/parameters/ConfigId"
@@ -1057,7 +1042,6 @@
         "summary": "Send a webchat message",
         "operationId": "sendChatMessage",
         "x-astrbot-scope": "chat",
-        "x-astrbot-sensitive-scopes": ["chat:admin"],
         "requestBody": {
           "required": true,
           "content": {
@@ -1089,7 +1073,6 @@
         "operationId": "openChatWebSocket",
         "x-websocket": true,
         "x-astrbot-scope": "chat",
-        "x-astrbot-sensitive-scopes": ["chat:admin"],
         "parameters": [
           {
             "name": "api_key",
@@ -2426,6 +2409,8 @@
         "summary": "Update a plugin",
         "operationId": "updatePlugin",
         "x-astrbot-scope": "plugin",
+        "x-astrbot-action": "extension.plugin_install",
+        "x-astrbot-step-up": "required",
         "parameters": [
           {
             "$ref": "#/components/parameters/PluginId"
@@ -2454,6 +2439,8 @@
         "summary": "Update multiple plugins",
         "operationId": "updatePlugins",
         "x-astrbot-scope": "plugin",
+        "x-astrbot-action": "extension.plugin_install",
+        "x-astrbot-step-up": "required",
         "requestBody": {
           "required": true,
           "content": {
@@ -2545,6 +2532,8 @@
         "summary": "Install a plugin from GitHub",
         "operationId": "installPluginFromGithub",
         "x-astrbot-scope": "plugin",
+        "x-astrbot-action": "extension.plugin_install",
+        "x-astrbot-step-up": "required",
         "requestBody": {
           "required": true,
           "content": {
@@ -2568,6 +2557,8 @@
         "summary": "Install a plugin from a downloadable ZIP URL",
         "operationId": "installPluginFromUrl",
         "x-astrbot-scope": "plugin",
+        "x-astrbot-action": "extension.plugin_install",
+        "x-astrbot-step-up": "required",
         "requestBody": {
           "required": true,
           "content": {
@@ -2591,6 +2582,8 @@
         "summary": "Install a plugin from an uploaded ZIP file",
         "operationId": "installPluginFromUpload",
         "x-astrbot-scope": "plugin",
+        "x-astrbot-action": "extension.plugin_install",
+        "x-astrbot-step-up": "required",
         "requestBody": {
           "required": true,
           "content": {
@@ -5008,6 +5001,8 @@
         "summary": "Export conversations",
         "operationId": "exportConversations",
         "x-astrbot-scope": "data",
+        "x-astrbot-action": "data.export_all",
+        "x-astrbot-step-up": "required",
         "requestBody": {
           "required": true,
           "content": {
@@ -5243,11 +5238,6 @@
         "type": "apiKey",
         "in": "cookie",
         "name": "astrbot_dashboard_jwt"
-      },
-      "BackupDownloadToken": {
-        "type": "apiKey",
-        "in": "query",
-        "name": "token"
       }
     },
     "responses": {
@@ -5719,7 +5709,7 @@
         "properties": {
           "username": {
             "type": "string",
-            "description": "Caller-declared WebChat sender/session owner. A configured AstrBot administrator ID requires the explicitly granted chat:admin API-key scope."
+            "description": "Caller-declared WebChat sender/session owner."
           },
           "session_id": {
             "type": "string"

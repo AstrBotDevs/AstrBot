@@ -76,30 +76,10 @@ def _download_response(download) -> FileResponse:
     )
 
 
-def _dashboard_bearer_token(request: Request) -> str | None:
-    """Return a Dashboard bearer token without accepting API-key schemes."""
-    authorization = request.headers.get("Authorization", "").strip()
-    scheme, separator, credentials = authorization.partition(" ")
-    if not separator or scheme.lower() != "bearer":
-        return None
-    token = credentials.strip()
-    return token or None
-
-
-def _download_backup(
-    *,
-    filename: str | None,
-    token: str | None,
-    service: BackupService,
-):
+def _download_backup(*, filename: str | None, service: BackupService):
     try:
         filename = _safe_backup_filename(filename)
-        return _download_response(
-            service.prepare_download(
-                filename=filename,
-                token=token,
-            )
-        )
+        return _download_response(service.prepare_download(filename=filename))
     except BackupServiceError as exc:
         return JSONResponse(error(str(exc)), status_code=exc.status_code)
     except Exception as exc:
@@ -202,23 +182,13 @@ async def get_backup_progress(
 @router.get(
     "/backups/{filename:path}",
     responses=_ARCHIVE_RESPONSE,
-    openapi_extra={
-        "security": [
-            {"DashboardBearerAuth": []},
-            {"BackupDownloadToken": []},
-        ]
-    },
 )
 async def download_backup(
-    request: Request,
     filename: str,
-    token: str | None = Query(default=None),
+    _auth: AuthContext = Depends(require_system_scope),
     service: BackupService = Depends(get_service),
 ):
-    effective_token = token.strip() if token and token.strip() else None
-    if effective_token is None:
-        effective_token = _dashboard_bearer_token(request)
-    return _download_backup(filename=filename, token=effective_token, service=service)
+    return _download_backup(filename=filename, service=service)
 
 
 @router.patch("/backups/{filename:path}")

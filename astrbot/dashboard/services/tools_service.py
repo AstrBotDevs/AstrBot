@@ -530,31 +530,6 @@ class ToolsService:
         await self.preferences.global_put(self.PARALLEL_PREFERENCE_KEY, settings)
         return f"Tool '{tool.name}' parallel execution {'enabled' if enabled else 'disabled'}."
 
-    async def update_tool_permission(self, data: Any) -> str:
-        """Persist a migration-only display preference, never runtime policy."""
-        if not isinstance(data, dict):
-            raise ToolsServiceError("Invalid tool permission payload")
-        name, permission = data.get("name"), data.get("permission")
-        if not isinstance(name, str) or not name:
-            raise ToolsServiceError("Tool not found")
-        if self.tool_mgr.is_builtin_tool(name):
-            raise ToolsServiceError("Builtin tools are read-only")
-        if not isinstance(permission, str) or permission not in {"admin", "member"}:
-            raise ToolsServiceError("permission must be admin or member")
-        tools = {tool.name for tool in self.tool_mgr.func_list}
-        if name not in tools:
-            raise ToolsServiceError(f"Tool {name} not found")
-        raw = await self.preferences.global_get("tool_permissions", {})
-        if not isinstance(raw, dict):
-            raw = {}
-        default = raw.setdefault("_default", {})
-        if not isinstance(default, dict):
-            default = {}
-            raw["_default"] = default
-        default[name] = permission
-        await self.preferences.global_put("tool_permissions", raw)
-        return f"Tool {name} permission updated"
-
     async def toggle_tool(self, data: Any) -> str:
         try:
             tool_name = data.get("name")
@@ -802,17 +777,6 @@ class ToolsService:
             "builtin_config_statuses": builtin_config_statuses,
             "builtin_config_tags": builtin_config_tags,
         }
-        if not readonly:
-            # Compatibility display only; this value is never consulted by
-            # the runtime authorization service.
-            tool_info["permission"] = "admin"
-            raw_permissions = await self.preferences.global_get("tool_permissions", {})
-            configured = (
-                isinstance(raw_permissions, dict)
-                and isinstance(raw_permissions.get("_default"), dict)
-                and tool.name in raw_permissions["_default"]
-            )
-            tool_info["permission_configured"] = configured
         settings = parallel_settings or {
             "enabled": False,
             "allowed_tool_ids": [],

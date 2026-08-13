@@ -74,6 +74,21 @@ class FileRequest(BaseModel):
     name: str
 
 
+class _AuthorizationServiceStub:
+    """Explicit trusted authorization double for extension dispatcher tests."""
+
+    def __init__(self) -> None:
+        self.actions: list[str] = []
+        self.allowed = True
+
+    async def authorize(self, _subject, action, _resource, _context):
+        self.actions.append(action)
+        return SimpleNamespace(
+            allowed=self.allowed,
+            requires_step_up=False,
+        )
+
+
 def _write_asset(root: Path, relative: str, content: bytes) -> dict:
     path = root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -211,6 +226,7 @@ async def plugin_api(tmp_path: Path):
     file_tickets = PluginFileTicketService(registry, JWT_SECRET)
     dashboard = PluginDashboardService(registry, page_sessions, file_tickets)
     auth = SimpleNamespace(discard_totp_rotation=AsyncMock())
+    authorization = _AuthorizationServiceStub()
     app = FastAPI()
     app.state.dashboard_token_validator = validator
     app.state.dashboard_config = {}
@@ -220,6 +236,9 @@ async def plugin_api(tmp_path: Path):
         plugin_page_sessions=page_sessions,
         plugin_file_tickets=file_tickets,
         auth=auth,
+    )
+    app.state.runtime = SimpleNamespace(
+        services=SimpleNamespace(authorization=authorization),
     )
 
     @app.exception_handler(ApiError)
@@ -264,6 +283,7 @@ async def plugin_api(tmp_path: Path):
         page_sessions=page_sessions,
         file_tickets=file_tickets,
         auth=auth,
+        authorization=authorization,
     )
     await client.aclose()
     await page_sessions.shutdown()
@@ -312,6 +332,60 @@ async def test_control_plane_requires_matching_bearer_and_cookie(plugin_api):
         headers={"Authorization": "ApiKey secret"},
     )
     assert api_key.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_control_plane_uses_runtime_authorization_service(plugin_api):
+    catalog_path = f"/api/v1/plugins/{EXTENSION_ID}/dashboard"
+    catalog = await plugin_api.client.get(
+        catalog_path,
+        headers=_headers(plugin_api.token),
+    )
+    assert catalog.status_code == 200
+    assert plugin_api.authorization.actions == ["extension.read"]
+
+    session = await _create_session(plugin_api)
+    action = await plugin_api.client.post(
+        f"/api/v1/plugins/{EXTENSION_ID}/dashboard/actions/config.read",
+        json={
+            "protocol_version": 1,
+            "instance_id": session["instance_id"],
+            "expected_generation": plugin_api.snapshot.generation,
+            "payload": {"key": "theme"},
+        },
+        headers=_headers(plugin_api.token),
+    )
+    assert action.status_code == 200
+    assert plugin_api.authorization.actions[-2:] == [
+        "extension.read",
+        "extension.manage",
+    ]
+
+    plugin_api.authorization.allowed = False
+    denied = await plugin_api.client.post(
+        f"/api/v1/plugins/{EXTENSION_ID}/dashboard/actions/config.read",
+        json={
+            "protocol_version": 1,
+            "instance_id": session["instance_id"],
+            "expected_generation": plugin_api.snapshot.generation,
+            "payload": {"key": "theme"},
+        },
+        headers=_headers(plugin_api.token),
+    )
+    assert denied.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_control_plane_fails_closed_without_authorization_service(plugin_api):
+    plugin_api.app.state.runtime.services.authorization = None
+
+    response = await plugin_api.client.get(
+        f"/api/v1/plugins/{EXTENSION_ID}/dashboard",
+        headers=_headers(plugin_api.token),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["message"] == "Authorization unavailable"
 
 
 @pytest.mark.asyncio

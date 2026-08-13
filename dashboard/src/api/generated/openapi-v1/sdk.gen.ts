@@ -5599,8 +5599,8 @@ export const downloadBackup = <ThrowOnError extends boolean = false>(
         type: 'http',
       },
       {
-        in: 'query',
-        name: 'token',
+        in: 'cookie',
+        name: 'astrbot_dashboard_jwt',
         type: 'apiKey',
       },
     ],

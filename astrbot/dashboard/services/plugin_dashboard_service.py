@@ -235,6 +235,20 @@ class PluginDashboardService:
             ],
         }
 
+    def action_required_scope(self, extension_id: str, action_id: str) -> str:
+        """Return one registered Action's declared authorization scope.
+
+        This lookup happens before request-body processing, so a Dashboard
+        principal is authorized before it can invoke a plugin handler. The
+        invocation path validates the page capability and Action kind again.
+        """
+
+        snapshot = self._snapshot(extension_id)
+        action = snapshot.actions.get(action_id)
+        if action is None:
+            raise ApiError("Not found", status_code=404)
+        return action.spec.required_scope
+
     async def create_page_session(
         self,
         extension_id: str,

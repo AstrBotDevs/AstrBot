@@ -636,6 +636,13 @@ class FakeAstrBotConfig(dict):
         return True
 
 
+class FakeAuthorizationService:
+    """Allow-all authorization double for route-focused Dashboard tests."""
+
+    async def authorize(self, *_args, **_kwargs):
+        return SimpleNamespace(allowed=True, requires_step_up=False)
+
+
 def _build_fake_config() -> dict:
     return FakeAstrBotConfig(
         {
@@ -798,6 +805,7 @@ def fake_core_lifecycle():
         log_broker=LogBroker(),
         services=SimpleNamespace(
             demo_mode=False,
+            authorization=FakeAuthorizationService(),
             preferences=FakePreferences(),
             file_token_service=FileTokenService(),
             pip_installer=SimpleNamespace(install=lambda *_args, **_kwargs: None),
@@ -1301,7 +1309,7 @@ async def test_dashboard_static_dist_files_are_served(
 async def test_v1_backup_path_rejects_traversal(asgi_client: httpx.AsyncClient):
     download_response = await asgi_client.get(
         "/api/v1/backups/%2E%2E/secret.zip",
-        params={"token": "demo"},
+        headers=_jwt_headers(),
     )
     delete_response = await asgi_client.delete(
         "/api/v1/backups/%2E%2E/secret.zip",
@@ -1317,7 +1325,7 @@ async def test_v1_backup_path_rejects_traversal(asgi_client: httpx.AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_v1_backup_download_accepts_dashboard_bearer_or_query_token(
+async def test_v1_backup_download_requires_authorized_dashboard_bearer(
     asgi_app: FastAPI,
     asgi_client: httpx.AsyncClient,
     tmp_path: Path,
@@ -1331,20 +1339,14 @@ async def test_v1_backup_download_accepts_dashboard_bearer_or_query_token(
         "/api/v1/backups/backup.zip",
         headers={"Authorization": f"bEaReR    {valid_token}"},
     )
-    empty_query_uses_bearer = await asgi_client.get(
-        "/api/v1/backups/backup.zip",
-        params={"token": ""},
-        headers={"Authorization": f"Bearer {valid_token}"},
-    )
-    query = await asgi_client.get(
+    query_token = await asgi_client.get(
         "/api/v1/backups/backup.zip",
         params={"token": valid_token},
     )
 
     assert bearer.status_code == 200
     assert bearer.content == b"backup"
-    assert empty_query_uses_bearer.status_code == 200
-    assert query.status_code == 200
+    assert query_token.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -1361,11 +1363,6 @@ async def test_v1_backup_download_rejects_non_dashboard_credentials(
     expired_payload["exp"] = 0
     expired_token = jwt.encode(expired_payload, JWT_SECRET, algorithm="HS256")
 
-    wrong_query = await asgi_client.get(
-        "/api/v1/backups/backup.zip",
-        params={"token": "not-a-dashboard-token"},
-        headers={"Authorization": f"Bearer {valid_token}"},
-    )
     empty_credentials = await asgi_client.get(
         "/api/v1/backups/backup.zip",
         headers={"Authorization": "Bearer    "},
@@ -1383,8 +1380,35 @@ async def test_v1_backup_download_rejects_non_dashboard_credentials(
         headers={"Authorization": f"Bearer {valid_token}forged"},
     )
 
-    for response in (wrong_query, empty_credentials, wrong_scheme, expired, forged):
-        assert response.status_code == 401
+    assert empty_credentials.status_code == 401
+    assert expired.status_code == 401
+    # A malformed Dashboard bearer is checked as a legacy raw API-key input
+    # only after JWT validation fails. Neither it nor an explicit API Key can
+    # carry the Dashboard-only `system` capability.
+    assert forged.status_code == 403
+    assert wrong_scheme.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_v1_backup_download_rejects_missing_authorization_service(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    tmp_path: Path,
+):
+    """Backup archives cannot bypass an unavailable authorization runtime."""
+
+    service = asgi_app.state.services.backups
+    service.backup_dir = str(tmp_path)
+    (tmp_path / "backup.zip").write_bytes(b"backup")
+    asgi_app.state.runtime.services.authorization = None
+
+    response = await asgi_client.get(
+        "/api/v1/backups/backup.zip",
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["message"] == "Authorization unavailable"
 
 
 @pytest.mark.asyncio
@@ -1482,6 +1506,25 @@ async def test_v1_conversation_detail_requires_user_id(
     )
 
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_conversation_export_rejects_missing_authorization_service(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+):
+    """A valid Dashboard JWT must not bypass unavailable authorization."""
+
+    asgi_app.state.runtime.services.authorization = None
+
+    response = await asgi_client.post(
+        "/api/v1/conversations/export",
+        json={"conversations": []},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["message"] == "Authorization unavailable"
 
 
 @pytest.mark.asyncio
@@ -3020,7 +3063,9 @@ async def test_v1_mcp_list_never_returns_configured_header_secrets(
     response = await asgi_client.get("/api/v1/mcp/servers", headers=_jwt_headers())
 
     assert response.status_code == 200
-    server = next(item for item in response.json()["data"] if item["name"] == "demo-server")
+    server = next(
+        item for item in response.json()["data"] if item["name"] == "demo-server"
+    )
     assert "headers" not in server
     assert server["headers_configured"] is True
 

@@ -57,10 +57,6 @@ class OpenApiKeyAuthContext:
     key_id: str
     scopes: tuple[str, ...]
 
-    @property
-    def can_impersonate_admin(self) -> bool:
-        return api_key_has_scope(self.scopes, "chat:admin")
-
 
 @dataclass
 class OpenApiWebSocketChatBridge:
@@ -160,9 +156,6 @@ class OpenApiService:
         self,
         post_data: dict,
         conf_list: list[dict],
-        *,
-        allow_admin_username: bool = False,
-        api_key_principal: dict[str, object] | None = None,
     ) -> tuple[str, str, str | None]:
         effective_username, username_err = self.resolve_open_username(
             post_data.get("username")
@@ -187,55 +180,6 @@ class OpenApiService:
         config_id, resolve_err = self.resolve_chat_config_id(post_data, conf_list)
         if resolve_err:
             raise OpenApiServiceError(resolve_err)
-
-        profiles = getattr(self.astrbot_config_mgr, "confs", {})
-        reserved = any(
-            isinstance(profile, dict)
-            and isinstance(profile.get("admins_id", []), list)
-            and any(
-                str(admin_id) == effective_username for admin_id in profile["admins_id"]
-            )
-            for profile in profiles.values()
-        )
-        if reserved:
-            # ``allow_admin_username`` remains an internal migration adapter
-            # for callers that already authenticated the request elsewhere.
-            # Public HTTP/WebSocket routes always pass the structured API-key
-            # principal and invoke the core impersonation action below.
-            if not allow_admin_username:
-                raise OpenApiServiceError(
-                    "username is reserved for an AstrBot administrator"
-                )
-            if api_key_principal is None:
-                return effective_username, session_id, config_id
-            key_id = api_key_principal.get("key_id")
-            scopes = api_key_principal.get("scopes", ())
-            if (
-                self.authorization is None
-                or not isinstance(key_id, str)
-                or not isinstance(scopes, (list, tuple))
-            ):
-                raise OpenApiServiceError("chat impersonation is not authorized")
-            principal = Subject.api_key(key_id)
-            decision = await self.authorization.authorize(
-                principal,
-                "chat.impersonate_admin",
-                Resource.session(
-                    config_id or "default",
-                    f"webchat:FriendMessage:webchat!{effective_username}!{session_id}",
-                ),
-                AuthContext(
-                    subject=principal,
-                    source="api_key",
-                    config_id=config_id or "default",
-                    authenticated=True,
-                    api_scopes=tuple(str(scope) for scope in scopes),
-                    caller_declared_username=effective_username,
-                    metadata={"impersonation": True},
-                ),
-            )
-            if not decision.allowed:
-                raise OpenApiServiceError("chat impersonation is not authorized")
 
         return effective_username, session_id, config_id
 
@@ -329,27 +273,32 @@ class OpenApiService:
         # Authenticate the socket itself before accepting any caller-declared
         # username/session payload. API-key scope is a capability check, never
         # an implicit dashboard role.
-        if self.authorization is not None:
-            principal = Subject.api_key(auth.key_id)
-            socket_context = AuthContext(
-                subject=principal,
-                source="api_key",
-                authenticated=True,
-                api_scopes=auth.scopes,
-                metadata={"transport": "websocket"},
+        if self.authorization is None:
+            await self.send_chat_ws_error(
+                send_json, "Authorization unavailable", "PROCESSING_ERROR"
             )
-            decision = await self.authorization.authorize(
-                principal,
-                "session.read",
-                Resource.named("webchat", "socket"),
-                socket_context,
+            await close(1011, "Authorization unavailable")
+            return
+        principal = Subject.api_key(auth.key_id)
+        socket_context = AuthContext(
+            subject=principal,
+            source="api_key",
+            authenticated=True,
+            api_scopes=auth.scopes,
+            metadata={"transport": "websocket"},
+        )
+        decision = await self.authorization.authorize(
+            principal,
+            "session.read",
+            Resource.named("webchat", "socket"),
+            socket_context,
+        )
+        if not decision.allowed:
+            await self.send_chat_ws_error(
+                send_json, "Insufficient API key scope", "FORBIDDEN"
             )
-            if not decision.allowed:
-                await self.send_chat_ws_error(
-                    send_json, "Insufficient API key scope", "FORBIDDEN"
-                )
-                await close(1008, "Insufficient API key scope")
-                return
+            await close(1008, "Insufficient API key scope")
+            return
 
         async def send_error(message: str, code: str) -> None:
             await self.send_chat_ws_error(send_json, message, code)
@@ -461,13 +410,6 @@ class OpenApiService:
             ) = await self.prepare_chat_send(
                 post_data,
                 conf_list,
-                allow_admin_username=bool(
-                    api_key_principal
-                    and api_key_has_scope(
-                        api_key_principal.get("scopes", ()), "chat:admin"
-                    )
-                ),
-                api_key_principal=api_key_principal,
             )
         except OpenApiServiceError as exc:
             message = str(exc)
@@ -513,14 +455,6 @@ class OpenApiService:
                     "selected_model": selected_model,
                     "enable_streaming": enable_streaming,
                     "_api_key_principal": api_key_principal,
-                    # Compatibility metadata only; the executor and waking
-                    # stage use the structured principal/action check above.
-                    "_api_key_allow_admin_role": bool(
-                        api_key_principal
-                        and api_key_has_scope(
-                            api_key_principal.get("scopes", ()), "chat:admin"
-                        )
-                    ),
                 },
             )
 

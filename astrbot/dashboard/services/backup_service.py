@@ -12,8 +12,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import jwt
-
 from astrbot import logger
 from astrbot.core.backup.exporter import AstrBotExporter
 from astrbot.core.backup.importer import AstrBotImporter
@@ -26,7 +24,6 @@ from astrbot.core.utils.astrbot_path import (
 )
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.task_utils import create_tracked_task
-from astrbot.dashboard.services.auth_service import DashboardTokenValidator
 
 CHUNK_SIZE = 1024 * 1024
 UPLOAD_EXPIRE_SECONDS = 3600
@@ -68,15 +65,10 @@ class BackupService:
         db: DatabaseSessionStore,
         config: AstrBotConfig,
         knowledge_base_manager: KnowledgeBaseManager,
-        *,
-        token_validator: DashboardTokenValidator | None = None,
     ) -> None:
         self.db = db
         self.config = config
         self.knowledge_base_manager = knowledge_base_manager
-        self.token_validator = token_validator or DashboardTokenValidator(
-            self.config["dashboard"].get("jwt_secret", "")
-        )
         self.backup_dir = get_astrbot_backups_path()
         self.data_dir = get_astrbot_data_path()
         self.chunks_dir = os.path.join(self.backup_dir, ".chunks")
@@ -617,17 +609,9 @@ class BackupService:
         self,
         *,
         filename: str | None,
-        token: str | None,
     ) -> BackupDownload:
         if not filename:
             raise BackupServiceError("缺少参数 filename")
-        if not token:
-            raise BackupServiceError("缺少参数 token", status_code=401)
-
-        try:
-            self.token_validator.validate(token)
-        except jwt.InvalidTokenError as exc:
-            raise BackupServiceError("Token 无效", status_code=401) from exc
 
         filename = self._validate_backup_filename(filename, missing="缺少参数 filename")
         file_path = os.path.join(self.backup_dir, filename)

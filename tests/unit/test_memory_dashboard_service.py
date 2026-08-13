@@ -13,6 +13,7 @@ from astrbot.dashboard.responses import ApiError, error
 from astrbot.dashboard.schemas import MemoryProfileRefreshRequest
 from astrbot.dashboard.services.auth_service import DashboardTokenValidator
 from astrbot.dashboard.services.memory_service import MemoryService
+from tests.fixtures.auth import TestAuthorizationService
 
 JWT_SECRET = "memory-dashboard-service-test-secret"
 
@@ -28,6 +29,11 @@ def _memory_app(service: MemoryService, db) -> FastAPI:
     app.state.dashboard_token_validator = DashboardTokenValidator(JWT_SECRET)
     app.state.db = db
     app.state.services = SimpleNamespace(memory=service)
+    app.state.runtime = SimpleNamespace(
+        services=SimpleNamespace(
+            authorization=TestAuthorizationService("data.manage"),
+        )
+    )
 
     @app.exception_handler(ApiError)
     async def api_error_handler(_request, exc: ApiError):
@@ -244,3 +250,26 @@ async def test_memory_api_routes_use_real_http_and_sqlite(temp_db):
     assert stats.json()["data"]["facts"] == 1
     assert refresh_without_body.status_code == 200
     assert refresh_without_body.json()["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_memory_api_returns_503_when_authorization_service_is_unavailable(
+    temp_db,
+):
+    await temp_db.initialize()
+    service = MemoryService(temp_db, MemoryManager(temp_db))
+    app = _memory_app(service, temp_db)
+    del app.state.runtime
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        unauthenticated = await client.get("/api/v1/memory/facts")
+        unavailable = await client.get(
+            "/api/v1/memory/facts",
+            headers=_memory_headers(),
+        )
+
+    assert unauthenticated.status_code == 401
+    assert unavailable.status_code == 503

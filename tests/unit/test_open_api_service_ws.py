@@ -37,6 +37,9 @@ def _assert_no_sensitive_fragments(*texts: str) -> None:
 
 
 def _service() -> OpenApiService:
+    authorization = SimpleNamespace(
+        authorize=AsyncMock(return_value=SimpleNamespace(allowed=True))
+    )
     return OpenApiService(
         SimpleNamespace(
             get_attachment_by_id=lambda _attachment_id: None,
@@ -47,6 +50,7 @@ def _service() -> OpenApiService:
         astrbot_config={"platform": []},
         platform_message_history_manager=SimpleNamespace(),
         webchat_run_coordinator=WebChatRunCoordinator(WebChatQueueManager()),
+        authorization=authorization,
     )
 
 
@@ -105,6 +109,45 @@ async def test_run_chat_websocket_closes_when_api_key_is_invalid(monkeypatch):
         {"type": "error", "code": "UNAUTHORIZED", "data": "Invalid API key"}
     ]
     assert closed == [(1008, "Invalid API key")]
+
+
+@pytest.mark.asyncio
+async def test_run_chat_websocket_fails_closed_without_authorization_service(
+    monkeypatch,
+):
+    service = _service()
+    service.authorization = None
+    sent: list[dict] = []
+    closed: list[tuple[int, str]] = []
+
+    async def authenticate_api_key(_raw_key):
+        return OpenApiKeyAuthContext("test-key", ("chat",)), None
+
+    monkeypatch.setattr(service, "authenticate_api_key", authenticate_api_key)
+
+    async def send_json(payload: dict) -> None:
+        sent.append(payload)
+
+    async def close(code: int, reason: str) -> None:
+        closed.append((code, reason))
+
+    await service.run_chat_websocket(
+        raw_api_key="good",
+        receive_json=AsyncMock(),
+        send_json=send_json,
+        close=close,
+        conf_list=[],
+        chat_bridge=_bridge(),
+    )
+
+    assert sent == [
+        {
+            "type": "error",
+            "code": "PROCESSING_ERROR",
+            "data": "Authorization unavailable",
+        }
+    ]
+    assert closed == [(1011, "Authorization unavailable")]
 
 
 @pytest.mark.asyncio
@@ -318,7 +361,6 @@ async def test_handle_chat_ws_send_reduces_queue_results_and_persists_native_ref
         post_data={
             "message": "question",
             "message_id": "message-1",
-            "_api_key_allow_admin_role": True,
         },
         conf_list=[],
         chat_bridge=bridge,
@@ -335,15 +377,13 @@ async def test_handle_chat_ws_send_reduces_queue_results_and_persists_native_ref
     ]
     assert agent_stats == {"latency": 3}
     assert refs == {"used": [{"url": "https://example.com", "title": "Tool source"}]}
-    assert (
-        chat_queue.put.await_args.args[0][2]["_api_key_allow_admin_role"] is False
-    )
+    assert "_api_key_allow_admin_role" not in chat_queue.put.await_args.args[0][2]
     assert not any(item.get("data") == "ignored" for item in sent)
     assert any(item.get("type") == "refs" for item in sent)
 
 
 @pytest.mark.asyncio
-async def test_prepare_chat_send_checks_every_loaded_profile_admin_id():
+async def test_prepare_chat_send_treats_username_as_caller_declared_data():
     service = _service()
     service.astrbot_config_mgr = SimpleNamespace(
         get_conf_list=lambda: [],
@@ -354,19 +394,9 @@ async def test_prepare_chat_send_checks_every_loaded_profile_admin_id():
     )
     service.ensure_chat_session = AsyncMock(return_value=None)
 
-    with pytest.raises(
-        OpenApiServiceError,
-        match="username is reserved for an AstrBot administrator",
-    ):
-        await service.prepare_chat_send(
-            {"username": "42", "session_id": "profile-admin-session"},
-            [],
-        )
-
     username, session_id, config_id = await service.prepare_chat_send(
         {"username": "42", "session_id": "profile-admin-session"},
         [],
-        allow_admin_username=True,
     )
     assert (username, session_id, config_id) == ("42", "profile-admin-session", None)
 

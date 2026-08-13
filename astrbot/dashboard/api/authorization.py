@@ -4,7 +4,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, Request
 
-from astrbot.core.auth.models import AuthContext, Resource, Role, Subject
+from astrbot.core.auth.models import AuthContext, Decision, Resource, Role, Subject
 from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import (
     AuthorizationBindingRequest,
@@ -19,7 +19,12 @@ router = APIRouter(prefix="/authorization", tags=["Authorization"])
 
 
 def _service(request: Request):
-    return request.app.state.runtime.services.authorization
+    runtime = getattr(request.app.state, "runtime", None)
+    services = getattr(runtime, "services", None)
+    authorization = getattr(services, "authorization", None)
+    if authorization is None:
+        raise ApiError("Authorization unavailable", status_code=503)
+    return authorization
 
 
 def _auth_service(request: Request):
@@ -68,10 +73,11 @@ async def _require(
     context: AuthContext,
     action: str,
     resource: Resource,
-) -> None:
+) -> Decision:
     decision = await _service(request).authorize(subject, action, resource, context)
     if not decision.allowed:
         raise ApiError("Authorization denied", status_code=403)
+    return decision
 
 
 def _resource(payload) -> Resource:
@@ -92,14 +98,29 @@ async def list_role_bindings(
     principal=Depends(require_dashboard_session_principal),
 ):
     subject, context = _principal_context(request, principal)
-    await _require(
+    decision = await _require(
         request,
         subject=subject,
         context=context,
         action="identity.read",
         resource=Resource.named("identity", "bindings"),
     )
-    return ok([item.model_dump() for item in await _service(request).list_bindings()])
+    bindings = await _service(request).list_bindings()
+    if decision.effective_role is Role.INSTANCE_OPERATOR:
+        own_bindings = await _service(request).list_bindings(subject_id=subject.id)
+        config_ids = {
+            item.config_id
+            for item in own_bindings
+            if item.role == Role.INSTANCE_OPERATOR.value
+            and item.scope_type == "instance"
+            and item.config_id
+        }
+        bindings = [
+            item
+            for item in bindings
+            if item.config_id in config_ids and item.scope_type != "global"
+        ]
+    return ok([item.model_dump() for item in bindings])
 
 
 @router.post("/role-bindings")
@@ -186,7 +207,7 @@ async def list_authorization_audit(
     principal=Depends(require_dashboard_session_principal),
 ):
     subject, context = _principal_context(request, principal)
-    await _require(
+    decision = await _require(
         request,
         subject=subject,
         context=context,
@@ -194,6 +215,16 @@ async def list_authorization_audit(
         resource=Resource.named("identity", "audit"),
     )
     records = await _service(request).list_audit()
+    if decision.effective_role is Role.INSTANCE_OPERATOR:
+        own_bindings = await _service(request).list_bindings(subject_id=subject.id)
+        config_ids = {
+            item.config_id
+            for item in own_bindings
+            if item.role == Role.INSTANCE_OPERATOR.value
+            and item.scope_type == "instance"
+            and item.config_id
+        }
+        records = [item for item in records if item.config_id in config_ids]
     return ok([item.model_dump() for item in records])
 
 
@@ -203,13 +234,15 @@ async def list_dashboard_accounts(
     principal=Depends(require_dashboard_session_principal),
 ):
     subject, context = _principal_context(request, principal)
-    await _require(
+    decision = await _require(
         request,
         subject=subject,
         context=context,
         action="identity.read",
         resource=Resource.named("dashboard-account", "accounts"),
     )
+    if decision.effective_role not in {Role.OPERATOR, Role.ROOT}:
+        raise ApiError("Authorization denied", status_code=403)
     accounts = await _auth_service(request).list_dashboard_accounts()
     return ok(
         [

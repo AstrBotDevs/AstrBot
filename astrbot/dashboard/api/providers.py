@@ -8,7 +8,11 @@ from astrbot.dashboard.schemas import (
     ProviderEmbeddingDimensionRequest,
     ProviderSourceRequest,
 )
-from astrbot.dashboard.services.config_service import ProviderConfigService
+from astrbot.dashboard.services.config_service import (
+    REDACTED_SECRET_PLACEHOLDER,
+    ProviderConfigService,
+    sensitive_config_changed,
+)
 
 from .auth import AuthContext, require_resource_action, require_scope
 
@@ -46,7 +50,7 @@ def _provider_config_for_dimension(
     provider_id: str,
     body: dict,
 ) -> dict:
-    provider = service.get_provider(provider_id, merged=True)
+    provider = service.get_provider(provider_id, merged=True, redact=False)
     base_config = provider.get("provider") if isinstance(provider, dict) else {}
     if not isinstance(base_config, dict):
         base_config = {}
@@ -67,6 +71,8 @@ def _contains_provider_credentials(value: object) -> bool:
         "client_secret",
         "credential",
         "credentials",
+        "key",
+        "access_key",
         "password",
         "refresh_token",
         "secret",
@@ -75,14 +81,23 @@ def _contains_provider_credentials(value: object) -> bool:
         "token",
     }
     if isinstance(value, dict):
-        return any(
-            str(key).lower() in sensitive_names
-            or str(key).lower().endswith(("_token", "_secret", "_password", "_api_key"))
-            or _contains_provider_credentials(item)
-            for key, item in value.items()
-        )
+        for key, item in value.items():
+            normalized_key = str(key).lower()
+            key_is_sensitive = (
+                normalized_key in sensitive_names
+                or normalized_key.endswith(
+                    ("_token", "_secret", "_password", "_api_key")
+                )
+            )
+            if key_is_sensitive and item != REDACTED_SECRET_PLACEHOLDER:
+                return True
+            if _contains_provider_credentials(item):
+                return True
+        return False
     if isinstance(value, list | tuple):
         return any(_contains_provider_credentials(item) for item in value)
+    if value == REDACTED_SECRET_PLACEHOLDER:
+        return False
     return False
 
 
@@ -95,14 +110,31 @@ async def _authorize_provider_resource(
     config: dict | None = None,
     write: bool = False,
 ) -> None:
+    service = request.app.state.services.providers
     config_id = (
         request.query_params.get("config_id")
         or request.headers.get("X-AstrBot-Config-Id")
         or "default"
     )
+    credentials_changed = write and _contains_provider_credentials(config or {})
+    if write and isinstance(config, dict) and not credentials_changed:
+        # A full provider/source replacement can delete an existing credential
+        # simply by omitting its field. Treat that as a credential write too.
+        try:
+            current = (
+                service.get_provider(resource_id, redact=False)["provider"]
+                if resource_type == "provider"
+                else service.get_provider_source(resource_id, redact=False)[
+                    "provider_source"
+                ]
+            )
+        except Exception:
+            current = None
+        if isinstance(current, dict):
+            credentials_changed = sensitive_config_changed(current, config)
     action = (
         "provider.credentials.write"
-        if write and _contains_provider_credentials(config or {})
+        if credentials_changed
         else "provider.manage"
         if write
         else "provider.read"

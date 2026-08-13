@@ -56,7 +56,6 @@ _SCOPE_ACTIONS = {
     "im": "session.manage",
     "config": "platform.manage",
     "chat": "session.manage",
-    "chat:admin": "chat.impersonate_admin",
     "kb": "data.manage",
     "memory": "data.manage",
     "data": "data.manage",
@@ -91,7 +90,23 @@ def _scope_action(request: Request, auth: AuthContext, scope: str) -> str | None
             else "platform.manage"
         )
     if scope == "config":
-        return "platform.manage"
+        return (
+            "platform.read"
+            if request.method.upper() in _SAFE_HTTP_METHODS
+            else "platform.manage"
+        )
+    if scope in {"plugin", "skill", "tool"}:
+        return (
+            "extension.read"
+            if request.method.upper() in _SAFE_HTTP_METHODS
+            else "extension.manage"
+        )
+    if scope == "mcp":
+        return (
+            "tool.mcp_read"
+            if request.method.upper() in _SAFE_HTTP_METHODS
+            else "tool.mcp_write"
+        )
     if scope == "data":
         return "data.manage"
     return _SCOPE_ACTIONS.get(scope)
@@ -110,14 +125,15 @@ async def _authorize_scope_action(
     request: Request,
     auth: AuthContext,
     scope: str,
+    action_override: str | None = None,
 ) -> None:
     """Apply the single authorization service to Dashboard/API principals."""
 
-    action = _scope_action(request, auth, scope)
+    action = action_override or _scope_action(request, auth, scope)
     runtime = getattr(request.app.state, "runtime", None)
     services = getattr(runtime, "services", None)
     if services is None or not hasattr(services, "authorization"):
-        return
+        raise ApiError("Authorization unavailable", status_code=503)
     authorization = services.authorization
     if action is None:
         raise ApiError("Authorization denied", status_code=403)
@@ -223,7 +239,7 @@ async def require_resource_action(
     runtime = getattr(request.app.state, "runtime", None)
     services = getattr(runtime, "services", None)
     if services is None or not hasattr(services, "authorization"):
-        return
+        raise ApiError("Authorization unavailable", status_code=503)
     authorization = services.authorization
     if authorization is None:
         raise ApiError("Authorization unavailable", status_code=503)
@@ -259,10 +275,11 @@ async def require_resource_action(
 
 def _extract_raw_api_key(request: Request) -> str | None:
     auth_header = request.headers.get("Authorization", "").strip()
-    if auth_header.startswith("Bearer "):
+    scheme, separator, credentials = auth_header.partition(" ")
+    if separator and scheme.lower() == "bearer":
         return None
-    if auth_header.startswith("ApiKey "):
-        return auth_header.removeprefix("ApiKey ").strip()
+    if separator and scheme.lower() == "apikey":
+        return credentials.strip()
     if key := request.query_params.get("api_key"):
         return key.strip()
     if key := request.query_params.get("key"):
@@ -289,8 +306,9 @@ def _extract_dashboard_jwt_with_source(
     request: Request,
 ) -> tuple[str | None, str | None]:
     auth_header = request.headers.get("Authorization", "").strip()
-    if auth_header.startswith("Bearer "):
-        token = auth_header.removeprefix("Bearer ").strip()
+    scheme, separator, credentials = auth_header.partition(" ")
+    if separator and scheme.lower() == "bearer":
+        token = credentials.strip()
         if token:
             return token, "bearer"
 
@@ -447,10 +465,9 @@ async def require_dashboard_session_principal(
     security attributes, never the CSRF policy.
     """
     auth_header = request.headers.get("Authorization", "").strip()
+    scheme, separator, credentials = auth_header.partition(" ")
     bearer_token = (
-        auth_header.removeprefix("Bearer ").strip()
-        if auth_header.startswith("Bearer ")
-        else ""
+        credentials.strip() if separator and scheme.lower() == "bearer" else ""
     )
     cookie_token = request.cookies.get(DASHBOARD_JWT_COOKIE_NAME, "").strip()
     if not bearer_token and not cookie_token:
@@ -501,7 +518,8 @@ async def require_dashboard_control_plane_principal(
     """Require matching bearer/cookie authentication for iframe control planes."""
 
     auth_header = request.headers.get("Authorization", "").strip()
-    if auth_header and not auth_header.startswith("Bearer "):
+    scheme, separator, _credentials = auth_header.partition(" ")
+    if auth_header and (not separator or scheme.lower() != "bearer"):
         raise ApiError("Unauthorized", status_code=401)
     if not request.cookies.get(DASHBOARD_JWT_COOKIE_NAME, "").strip():
         raise ApiError("Unauthorized", status_code=401)
@@ -537,13 +555,17 @@ async def _require_api_key_scope(
 
 
 async def require_scope(
-    request: Request, scope: str, *, authorize_action: bool = True
+    request: Request,
+    scope: str,
+    *,
+    authorize_action: bool = True,
+    action_override: str | None = None,
 ) -> AuthContext:
     raw_key = _extract_raw_api_key(request)
     if raw_key:
         auth = await _require_api_key_scope(request, raw_key, scope)
         if authorize_action:
-            await _authorize_scope_action(request, auth, scope)
+            await _authorize_scope_action(request, auth, scope, action_override)
         return auth
 
     token, source = _extract_dashboard_jwt_with_source(request)
@@ -555,7 +577,8 @@ async def require_scope(
         raise ApiError("Token expired", status_code=401) from exc
     except jwt.InvalidTokenError as exc:
         auth_header = request.headers.get("Authorization", "").strip()
-        if auth_header.startswith("Bearer "):
+        scheme, separator, _credentials = auth_header.partition(" ")
+        if separator and scheme.lower() == "bearer":
             try:
                 return await _require_api_key_scope(request, token, scope)
             except ApiError as api_key_exc:
@@ -588,7 +611,7 @@ async def require_scope(
         via="jwt",
     )
     if authorize_action:
-        await _authorize_scope_action(request, auth, scope)
+        await _authorize_scope_action(request, auth, scope, action_override)
     return auth
 
 
@@ -693,9 +716,10 @@ def _auth_service_response(
 
 
 def _has_auth_credentials(request: Request) -> bool:
-    auth_header = request.headers.get("Authorization", "")
+    auth_header = request.headers.get("Authorization", "").strip()
+    scheme, separator, _credentials = auth_header.partition(" ")
     return bool(
-        auth_header.startswith(("Bearer ", "ApiKey "))
+        (separator and scheme.lower() in {"bearer", "apikey"})
         or request.query_params.get("api_key")
         or request.query_params.get("key")
         or request.headers.get("X-API-Key")

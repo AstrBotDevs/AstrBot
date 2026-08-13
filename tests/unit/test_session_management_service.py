@@ -22,6 +22,7 @@ from astrbot.dashboard.services.session_management_service import (
     SessionManagementService,
     SessionManagementServiceError,
 )
+from tests.fixtures.auth import TestAuthorizationService
 
 
 class _Preferences:
@@ -534,6 +535,11 @@ def _session_app(service: SessionManagementService) -> tuple[FastAPI, dict[str, 
     app = FastAPI()
     app.state.dashboard_token_validator = validator
     app.state.services = SimpleNamespace(sessions=service)
+    app.state.runtime = SimpleNamespace(
+        services=SimpleNamespace(
+            authorization=TestAuthorizationService("data.manage"),
+        )
+    )
 
     @app.exception_handler(ApiError)
     async def _api_error_handler(_request, exc: ApiError):

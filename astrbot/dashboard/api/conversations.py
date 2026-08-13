@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 
+from astrbot.core.auth.models import Resource
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import (
@@ -17,7 +18,7 @@ from astrbot.dashboard.services.conversation_service import (
     ConversationServiceError,
 )
 
-from .auth import AuthContext, require_scope
+from .auth import AuthContext, require_resource_action, require_scope
 
 router = APIRouter(tags=["Conversations"])
 _EXPORT_RESPONSE: dict[int | str, dict[str, Any]] = {
@@ -129,9 +130,19 @@ async def list_conversations(
 @router.post("/conversations/export", responses=_EXPORT_RESPONSE)
 async def export_conversations(
     payload: ConversationExportRequest,
-    _auth: AuthContext = Depends(require_data_scope),
+    request: Request,
+    auth: AuthContext = Depends(require_data_scope),
     service: ConversationService = Depends(get_service),
 ):
+    # Exporting arbitrary users' conversations is a separate high-risk
+    # capability.  Keep the normal ``data`` scope for discovery and edits,
+    # but require an explicit control-plane authorization for this endpoint.
+    await require_resource_action(
+        request,
+        auth,
+        action="data.export_all",
+        resource=Resource.named("conversation", "export"),
+    )
     return await _export_conversations(_model_dict(payload), service)
 
 
