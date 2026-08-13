@@ -1,10 +1,12 @@
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.api.message_components import Plain
+from astrbot.api.message_components import Json, Plain
 from astrbot.api.provider import LLMResponse
+from astrbot.builtin_stars.astrbot.group_chat_context import GroupChatContext
 from astrbot.builtin_stars.astrbot.main import Main
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_type import MessageType
@@ -150,6 +152,30 @@ async def test_on_message_does_not_clear_group_context_on_first_enabled_message(
 
 
 @pytest.mark.asyncio
+async def test_on_message_records_json_card_and_checks_active_reply():
+    main = Main.__new__(Main)
+    main.context = MagicMock()
+    main.context.get_config.return_value = {
+        "provider_ltm_settings": {
+            "group_icl_enable": True,
+            "active_reply": {"enable": False},
+        },
+    }
+    main.group_chat_context = SimpleNamespace(
+        need_active_reply=AsyncMock(return_value=False),
+        handle_message=AsyncMock(),
+    )
+    event = make_event()
+    event.message_obj.message = [Json(data={"meta": {"news": {"title": "News"}}})]
+
+    async for _ in main.on_message(event):
+        pass
+
+    main.group_chat_context.need_active_reply.assert_awaited_once_with(event)
+    main.group_chat_context.handle_message.assert_awaited_once_with(event)
+
+
+@pytest.mark.asyncio
 async def test_on_message_skips_recording_when_command_handler_matched():
     """A slash-command message (handlers_parsed_params non-empty) must not be
     recorded into the group context buffer."""
@@ -210,3 +236,67 @@ async def test_llm_response_persists_final_complete_chain():
         sender_name="bot",
         max_messages=700,
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("card_data", "expected"),
+    [
+        (
+            {
+                "meta": {
+                    "detail_1": {
+                        "title": "WeChat AI models",
+                        "desc": "AI learning\nwith examples",
+                        "qqdocurl": "https://example.com/detail",
+                    }
+                }
+            },
+            " [Shared Card: Title: WeChat AI models; Description: AI learning "
+            "with examples; URL: https://example.com/detail]",
+        ),
+        (
+            {
+                "data": json.dumps(
+                    {
+                        "meta": {
+                            "news": {
+                                "title": "Wrapped card",
+                                "jumpUrl": "https://example.com/news",
+                            }
+                        }
+                    }
+                )
+            },
+            " [Shared Card: Title: Wrapped card; URL: https://example.com/news]",
+        ),
+        ({"app": "com.example.unknown"}, " [Shared Card]"),
+    ],
+)
+async def test_format_message_summarizes_json_card(card_data, expected):
+    context = GroupChatContext(MagicMock(), MagicMock())
+    event = MagicMock()
+    event.message_obj = SimpleNamespace(sender=SimpleNamespace(nickname="Alice"))
+    event.get_messages.return_value = [Json(data=card_data)]
+
+    formatted = await context._format_message(event, {})
+
+    assert formatted.endswith(expected)
+
+
+@pytest.mark.asyncio
+async def test_format_message_truncates_long_json_card_fields():
+    context = GroupChatContext(MagicMock(), MagicMock())
+    event = MagicMock()
+    event.message_obj = SimpleNamespace(sender=SimpleNamespace(nickname="Alice"))
+    event.get_messages.return_value = [
+        Json(
+            data={
+                "meta": {"news": {"desc": "a" * 201}},
+            }
+        )
+    ]
+
+    formatted = await context._format_message(event, {})
+
+    assert f"Description: {'a' * 200}...]" in formatted
