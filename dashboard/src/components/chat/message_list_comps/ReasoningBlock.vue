@@ -87,9 +87,7 @@ const activityCounts = computed(() =>
 );
 
 const reasoningTitle = computed(() =>
-  props.reasoningStatus === "error"
-    ? tm("reasoning.retry")
-    : reasoningActivityTitle(activityCounts.value, tm),
+  reasoningActivityTitle(activityCounts.value, tm),
 );
 
 const thinkingText = computed(() =>

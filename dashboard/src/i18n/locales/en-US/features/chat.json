@@ -120,8 +120,7 @@
     "thinkSummary": "Thought {count} times",
     "toolSummary": "used {count} tools",
     "think": "Thinking",
-    "toolUsed": "Using Tool",
-    "retry": "Retry loading reasoning"
+    "toolUsed": "Using Tool"
   },
   "history": {
     "loadEarlier": "Load earlier messages"
