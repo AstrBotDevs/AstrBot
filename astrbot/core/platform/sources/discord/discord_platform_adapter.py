@@ -562,7 +562,38 @@ class DiscordPlatformAdapter(Platform):
         Returns:
             Whether the name can be registered with Discord.
         """
-        return name == name.lower() and bool(re.match(r"^[-_'\w]{1,32}$", name))
+        return name == name.lower() and bool(re.match(r"^[-_\w]{1,32}$", name))
+
+    @staticmethod
+    def _format_command_path(*parts: str) -> str:
+        """Join command path components for callbacks and diagnostics."""
+        return " ".join(parts)
+
+    def _can_add_group_option(
+        self,
+        group: discord.SlashCommandGroup,
+        path: str,
+    ) -> bool:
+        """Return whether a Discord group can accept another option."""
+        if len(group.subcommands) >= _DISCORD_MAX_OPTIONS:
+            logger.warning(
+                f"[Discord] Command group '{path}' exceeds "
+                f"{_DISCORD_MAX_OPTIONS} options; remaining entries were skipped."
+            )
+            return False
+        return True
+
+    def _is_valid_unique_slash_name(
+        self,
+        name: str,
+        used_names: set[str],
+        path: str,
+    ) -> bool:
+        """Validate one Discord option name and reject sibling duplicates."""
+        if not self._is_valid_slash_command_name(name) or name in used_names:
+            logger.warning(f"[Discord] Skipping invalid or duplicate entry '{path}'.")
+            return False
+        return True
 
     @staticmethod
     def _normalize_slash_description(description: str, fallback: str) -> str:
@@ -657,11 +688,7 @@ class DiscordPlatformAdapter(Platform):
         root_names: set[str] = set()
 
         for child_filter in group_filter.sub_command_filters:
-            if len(root_group.subcommands) >= _DISCORD_MAX_OPTIONS:
-                logger.warning(
-                    f"[Discord] Command group '{root_name}' exceeds "
-                    f"{_DISCORD_MAX_OPTIONS} options; remaining entries were skipped."
-                )
+            if not self._can_add_group_option(root_group, root_name):
                 break
 
             child_name = (
@@ -669,20 +696,18 @@ class DiscordPlatformAdapter(Platform):
                 if isinstance(child_filter, CommandFilter)
                 else child_filter.group_name
             )
-            if (
-                not self._is_valid_slash_command_name(child_name)
-                or child_name in root_names
+            child_path = self._format_command_path(root_name, child_name)
+            if not self._is_valid_unique_slash_name(
+                child_name,
+                root_names,
+                child_path,
             ):
-                logger.warning(
-                    f"[Discord] Skipping invalid or duplicate entry "
-                    f"'{root_name} {child_name}'."
-                )
                 continue
 
             if isinstance(child_filter, CommandFilter):
                 slash_command = self._create_slash_subcommand(
                     child_filter,
-                    f"{root_name} {child_name}",
+                    child_path,
                     root_group,
                 )
                 if slash_command is None:
@@ -695,7 +720,7 @@ class DiscordPlatformAdapter(Platform):
                 name=child_name,
                 description=self._normalize_slash_description(
                     "",
-                    f"Command group: {root_name} {child_name}",
+                    f"Command group: {child_path}",
                 ),
                 parent=root_group,
             )
@@ -703,33 +728,35 @@ class DiscordPlatformAdapter(Platform):
 
             for leaf_filter in child_filter.sub_command_filters:
                 if isinstance(leaf_filter, CommandGroupFilter):
+                    leaf_path = self._format_command_path(
+                        root_name,
+                        child_name,
+                        leaf_filter.group_name,
+                    )
                     logger.warning(
                         f"[Discord] Skipping command group deeper than one level: "
-                        f"'{root_name} {child_name} {leaf_filter.group_name}'."
+                        f"'{leaf_path}'."
                     )
                     continue
-                if len(subgroup.subcommands) >= _DISCORD_MAX_OPTIONS:
-                    logger.warning(
-                        f"[Discord] Command subgroup '{root_name} {child_name}' "
-                        f"exceeds {_DISCORD_MAX_OPTIONS} options; remaining entries "
-                        "were skipped."
-                    )
+                if not self._can_add_group_option(subgroup, child_path):
                     break
 
                 leaf_name = leaf_filter.command_name
-                if (
-                    not self._is_valid_slash_command_name(leaf_name)
-                    or leaf_name in subgroup_names
+                leaf_path = self._format_command_path(
+                    root_name,
+                    child_name,
+                    leaf_name,
+                )
+                if not self._is_valid_unique_slash_name(
+                    leaf_name,
+                    subgroup_names,
+                    leaf_path,
                 ):
-                    logger.warning(
-                        f"[Discord] Skipping invalid or duplicate entry "
-                        f"'{root_name} {child_name} {leaf_name}'."
-                    )
                     continue
 
                 slash_command = self._create_slash_subcommand(
                     leaf_filter,
-                    f"{root_name} {child_name} {leaf_name}",
+                    leaf_path,
                     subgroup,
                 )
                 if slash_command is None:

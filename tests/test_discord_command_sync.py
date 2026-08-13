@@ -89,6 +89,15 @@ def _patch_slash_command_types(monkeypatch):
     )
 
 
+def test_discord_slash_name_validation_rejects_apostrophes(monkeypatch):
+    adapter = _build_adapter(monkeypatch)
+
+    assert adapter._is_valid_slash_command_name("pixiv-search") is True
+    assert adapter._is_valid_slash_command_name("pixiv_search") is True
+    assert adapter._is_valid_slash_command_name("搜索") is True
+    assert adapter._is_valid_slash_command_name("pixiv'search") is False
+
+
 @pytest.mark.asyncio
 async def test_discord_command_sync_ignores_daily_quota(monkeypatch):
     from astrbot.core.platform.sources.discord import discord_platform_adapter
