@@ -433,10 +433,6 @@ class ToolsService:
                     tools.append(tool)
 
             config_entries = self._get_config_entries()
-            perms_store = await self.preferences.global_get("tool_permissions", {})
-            defaults = (
-                perms_store.get("_default", {}) if isinstance(perms_store, dict) else {}
-            )
             parallel_settings = await self.get_parallel_settings()
             tools_dict = []
             for tool in tools:
@@ -444,7 +440,7 @@ class ToolsService:
                     self._serialize_tool(
                         tool,
                         config_entries,
-                        defaults=defaults,
+                        defaults={},
                         parallel_settings=parallel_settings,
                     )
                 )
@@ -535,53 +531,13 @@ class ToolsService:
         return f"Tool '{tool.name}' parallel execution {'enabled' if enabled else 'disabled'}."
 
     async def update_tool_permission(self, data: Any) -> str:
-        """Set a tool permission level.
+        """Reject legacy per-tool role writes after authorization migration."""
 
-        Args:
-            data: Legacy dashboard payload with ``name`` and ``permission``.
-
-        Returns:
-            A success message for the response body.
-
-        Raises:
-            ToolsServiceError: If the payload is invalid, the tool is unknown,
-                or permission storage cannot be updated.
-        """
-        try:
-            tool_name = data.get("name") if isinstance(data, dict) else None
-            permission = data.get("permission") if isinstance(data, dict) else None
-
-            if not tool_name or permission not in ("admin", "member"):
-                raise ToolsServiceError(
-                    "name and permission (admin or member) are required"
-                )
-
-            if self.tool_mgr.is_builtin_tool(tool_name):
-                raise ToolsServiceError(
-                    "Builtin tools do not support per-tool permission configuration."
-                )
-
-            if not any(t.name == tool_name for t in self.tool_mgr.func_list):
-                raise ToolsServiceError(f"Tool '{tool_name}' not found")
-
-            perms_store = await self.preferences.global_get("tool_permissions", {})
-            if not isinstance(perms_store, dict):
-                perms_store = {}
-            defaults = perms_store.get("_default", {})
-            if not isinstance(defaults, dict):
-                defaults = {}
-            defaults[tool_name] = permission
-            perms_store["_default"] = defaults
-            await self.preferences.global_put("tool_permissions", perms_store)
-
-            return f"Tool '{tool_name}' permission set to {permission}"
-        except ToolsServiceError:
-            raise
-        except Exception as exc:
-            logger.error(traceback.format_exc())
-            raise ToolsServiceError(
-                f"Failed to update tool permission: {exc!s}"
-            ) from exc
+        del data
+        raise ToolsServiceError(
+            "Per-tool admin/member permissions were removed. "
+            "Use role bindings and the tool action policy instead."
+        )
 
     async def toggle_tool(self, data: Any) -> str:
         try:
@@ -849,15 +805,7 @@ class ToolsService:
                 "parallel_mcp_max_concurrency": settings["mcp_max_concurrency"],
             }
         )
-        if not readonly:
-            configured = tool.name in defaults
-            permission = (
-                defaults[tool.name]
-                if configured
-                else self.tool_mgr._default_permission(tool.name)
-            )
-            tool_info["permission"] = permission
-            tool_info["permission_configured"] = configured
+        del defaults
         return tool_info
 
     def _resolve_plugin_owner(self, tool: Any) -> Any | None:

@@ -6,6 +6,20 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from . import HandlerFilter
 
 
+class ActionPermissionFilter(HandlerFilter):
+    """Declarative command action gate resolved asynchronously by the pipeline."""
+
+    def __init__(self, action: str, raise_error: bool = True) -> None:
+        self.action = action
+        self.raise_error = raise_error
+
+    def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
+        """Synchronous callers must fail closed; pipeline resolves this filter."""
+
+        del event, cfg
+        return False
+
+
 class PermissionType(enum.Flag):
     """权限类型。当选择 MEMBER，ADMIN 也可以通过。"""
 
@@ -14,6 +28,7 @@ class PermissionType(enum.Flag):
 
 
 class PermissionTypeFilter(HandlerFilter):
+    """Deprecated declaration adapter for plugins not yet action-migrated."""
     def __init__(
         self, permission_type: PermissionType, raise_error: bool = True
     ) -> None:
@@ -21,11 +36,13 @@ class PermissionTypeFilter(HandlerFilter):
         self.raise_error = raise_error
 
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
-        """过滤器"""
-        if self.permission_type == PermissionType.ADMIN:
-            if not event.is_admin():
-                # event.stop_event()
-                # raise ValueError(f"您 (ID: {event.get_sender_id()}) 没有权限操作管理员指令。")
-                return False
+        """Fail closed outside the action-aware pipeline."""
 
-        return True
+        del event, cfg
+        return self.permission_type == PermissionType.MEMBER
+
+    @property
+    def action(self) -> str:
+        """Map legacy plugin ADMIN input to a scoped session capability."""
+
+        return "session.manage" if self.permission_type == PermissionType.ADMIN else "session.read"

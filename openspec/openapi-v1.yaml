@@ -74,6 +74,7 @@ tags:
   - name: Open API
   - name: Auth
   - name: API Keys
+  - name: Authorization
   - name: System Config
   - name: Config Profiles
   - name: Bot Config Routes
@@ -238,6 +239,146 @@ paths:
       operationId: deleteApiKey
       parameters:
         - $ref: '#/components/parameters/KeyId'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/authorization/role-bindings:
+    get:
+      tags: [Authorization]
+      summary: List role bindings
+      operationId: listAuthorizationRoleBindings
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+    post:
+      tags: [Authorization]
+      summary: Grant a scoped role binding
+      operationId: grantAuthorizationRoleBinding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorizationBindingRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/authorization/role-bindings/{binding_id}/revoke:
+    post:
+      tags: [Authorization]
+      summary: Revoke a scoped role binding
+      operationId: revokeAuthorizationRoleBinding
+      parameters:
+        - name: binding_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/authorization/step-up:
+    post:
+      tags: [Authorization]
+      summary: Reauthenticate and issue a one-time step-up credential
+      operationId: issueAuthorizationStepUp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorizationStepUpRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/authorization/elevation-requests:
+    post:
+      tags: [Authorization]
+      summary: Create a short-lived elevation request
+      operationId: createAuthorizationElevationRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorizationElevationRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/authorization/elevation-requests/{request_id}/approve:
+    post:
+      tags: [Authorization]
+      summary: Approve an elevation request
+      operationId: approveAuthorizationElevationRequest
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorizationElevationApprovalRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/authorization/audit:
+    get:
+      tags: [Authorization]
+      summary: List redacted authorization audit records
+      operationId: listAuthorizationAudit
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/authorization/accounts:
+    get:
+      tags: [Authorization]
+      summary: List stable Dashboard accounts
+      operationId: listAuthorizationAccounts
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+    post:
+      tags: [Authorization]
+      summary: Create a Dashboard account and global role binding
+      operationId: createAuthorizationAccount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DashboardAccountCreateRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/authorization/accounts/{account_id}:
+    patch:
+      tags: [Authorization]
+      summary: Update or disable a Dashboard account
+      operationId: updateAuthorizationAccount
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DashboardAccountUpdateRequest'
       responses:
         '200':
           $ref: '#/components/responses/Ok'
@@ -2446,24 +2587,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/EnabledPatch'
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/tools/{tool_id}/permission:
-    patch:
-      tags: [Tools]
-      summary: Update an LLM tool permission
-      operationId: setToolPermission
-      x-astrbot-scope: tool
-      parameters:
-        - $ref: '#/components/parameters/ToolId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ToolPermissionPatch'
       responses:
         '200':
           $ref: '#/components/responses/Ok'
@@ -5500,15 +5623,6 @@ components:
           type: boolean
       additionalProperties: false
 
-    ToolPermissionPatch:
-      type: object
-      required: [permission]
-      properties:
-        permission:
-          type: string
-          enum: [admin, member]
-      additionalProperties: false
-
     ProviderSourceConfigRequest:
       type: object
       required: [config]
@@ -5886,6 +6000,118 @@ components:
         permission_group:
           type: string
       additionalProperties: false
+
+    AuthorizationBindingRequest:
+      type: object
+      additionalProperties: false
+      required: [subject_id, role, scope_type, scope_id]
+      properties:
+        subject_id:
+          type: string
+        role:
+          type: string
+          enum:
+            [
+              root,
+              operator,
+              instance_operator,
+              session_owner,
+              session_admin,
+              member,
+              guest,
+            ]
+        scope_type:
+          type: string
+          enum: [global, instance, session, resource]
+        scope_id:
+          type: string
+        config_id:
+          type: string
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    AuthorizationStepUpRequest:
+      type: object
+      additionalProperties: false
+      required: [action, resource_type, resource_id]
+      properties:
+        action:
+          type: string
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+        config_id:
+          type: string
+          nullable: true
+        password:
+          type: string
+          writeOnly: true
+          nullable: true
+        code:
+          type: string
+          writeOnly: true
+          nullable: true
+
+    AuthorizationElevationRequest:
+      type: object
+      additionalProperties: false
+      required: [action, resource_type, resource_id]
+      properties:
+        action:
+          type: string
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+        config_id:
+          type: string
+          nullable: true
+        approval_channel:
+          type: string
+          enum: [private, dashboard, webchat]
+
+    AuthorizationElevationApprovalRequest:
+      type: object
+      additionalProperties: false
+      required: [nonce]
+      properties:
+        nonce:
+          type: string
+          writeOnly: true
+
+    DashboardAccountCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 3
+        password:
+          type: string
+          minLength: 8
+          writeOnly: true
+        role:
+          type: string
+          enum: [operator, root]
+
+    DashboardAccountUpdateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        username:
+          type: string
+          minLength: 3
+        password:
+          type: string
+          minLength: 8
+          writeOnly: true
+        is_active:
+          type: boolean
 
     BuiltinCommandBulkToggleRequest:
       type: object

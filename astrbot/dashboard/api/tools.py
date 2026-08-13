@@ -12,7 +12,6 @@ from astrbot.dashboard.schemas import (
     McpServerRequest,
     ModelScopeSyncRequest,
     ToolEnabledRequest,
-    ToolPermissionRequest,
 )
 from astrbot.dashboard.services.tools_service import ToolsService, ToolsServiceError
 
@@ -202,21 +201,6 @@ async def set_tool_parallel(
     return await _run(
         lambda: service.toggle_tool_parallel(
             {"tool_id": tool_id, "enabled": payload.enabled}
-        ),
-        result_as_message=True,
-    )
-
-
-@router.patch("/tools/{tool_id:path}/permission")
-async def set_tool_permission(
-    tool_id: str,
-    payload: ToolPermissionRequest,
-    _auth: AuthContext = Depends(require_tool_scope),
-    service: ToolsService = Depends(get_service),
-):
-    return await _run(
-        lambda: service.update_tool_permission(
-            {"name": tool_id, "permission": payload.permission}
         ),
         result_as_message=True,
     )

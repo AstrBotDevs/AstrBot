@@ -87,6 +87,7 @@ def create_dashboard_asgi_app(
         redoc_url=f"{API_V1_PREFIX}/redoc",
     )
     app.state.astrbot_config = runtime.astrbot_config
+    app.state.runtime = runtime
     app.state.db = db
     app.state.jwt_secret = jwt_secret
     dashboard_token_validator = DashboardTokenValidator(jwt_secret)
@@ -144,6 +145,7 @@ def create_dashboard_asgi_app(
             platform_message_history_manager=runtime.platform_message_history_manager,
             umop_config_router=runtime.umop_config_router,
             webchat_run_coordinator=runtime.webchat_run_coordinator,
+            authorization=runtime.services.authorization,
             active_event_control=runtime.execution_context.active_event_registry,
         ),
         chat_projects=ChatUIProjectService(db),
@@ -203,15 +205,16 @@ def create_dashboard_asgi_app(
             runtime.services.computer_runtime,
             demo_mode=runtime.services.demo_mode,
         ),
-        open_api=OpenApiService(
+            open_api=OpenApiService(
             db,
             platform_manager=runtime.platform_manager,
             astrbot_config_mgr=runtime.astrbot_config_mgr,
             umop_config_router=runtime.umop_config_router,
             astrbot_config=runtime.astrbot_config,
             platform_message_history_manager=runtime.platform_message_history_manager,
-            webchat_run_coordinator=runtime.webchat_run_coordinator,
-        ),
+                webchat_run_coordinator=runtime.webchat_run_coordinator,
+                authorization=runtime.services.authorization,
+            ),
         sessions=SessionManagementService(
             db,
             runtime.services.preferences,

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from astrbot.core.agent.follow_up import FollowUpCoordinator
 from astrbot.core.agent.tool_image_cache import ToolImageCache
+from astrbot.core.auth.service import AuthorizationService
 from astrbot.core.computer.computer_client import ComputerRuntime
 from astrbot.core.config import AstrBotConfig
 from astrbot.core.config.default import DB_PATH
@@ -48,6 +49,7 @@ class RuntimeServices:
     tool_image_cache: ToolImageCache
     totp_runtime_state: TotpRuntimeState
     demo_mode: bool
+    authorization: AuthorizationService | None = None
 
 
 def create_runtime_services() -> RuntimeServices:
@@ -58,6 +60,7 @@ def create_runtime_services() -> RuntimeServices:
     LogManager.configure_logger(runtime_logger, config)
     LogManager.configure_trace_logger(config)
     db = SQLiteDatabase(DB_PATH)
+    authorization = AuthorizationService(db)
     webchat_queue_manager = WebChatQueueManager()
     computer_runtime = ComputerRuntime()
     tool_image_cache = ToolImageCache(
@@ -84,6 +87,7 @@ def create_runtime_services() -> RuntimeServices:
         config=config,
         catalogs=catalogs,
         db=db,
+        authorization=authorization,
         preferences=preferences,
         html_renderer=html_renderer,
         file_token_service=file_token_service,

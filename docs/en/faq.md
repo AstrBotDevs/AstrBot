@@ -116,7 +116,7 @@ Under **Config → Agent Computer Use**, select:
 - `sandbox` to use the configured Shipyard Neo or CUA sandbox;
 - `none` to disable it, which is the default.
 
-`computer_use_require_admin` defaults to `true` for both local and sandbox runtimes. A sandbox provides runtime isolation but does not remove the user authorization gate. See [Computer Use](./use/computer) and [Agent Sandbox](./use/astrbot-agent-sandbox).
+Computer capabilities are now checked through the unified action-based authorization service (for example `tool.computer_use`, `tool.local_exec`, and `tool.file_write`), with fresh step-up/elevation required for high-risk actions. Sandboxing isolates execution but does not change authorization. See [Computer Use](./use/computer) and [Agent Sandbox](./use/astrbot-agent-sandbox).
 
 ### CJK text is garbled in T2I output
 

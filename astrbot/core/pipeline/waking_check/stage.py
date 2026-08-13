@@ -1,8 +1,10 @@
+import hashlib
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from enum import Enum
 
 from astrbot import logger
+from astrbot.core.auth.models import AuthContext, Resource, Subject
 from astrbot.core.command import (
     CommandEngine,
     CommandError,
@@ -16,7 +18,10 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
-from astrbot.core.star.filter.permission import PermissionTypeFilter
+from astrbot.core.star.filter.permission import (
+    ActionPermissionFilter,
+    PermissionTypeFilter,
+)
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.star.star_handler import (
     EventType,
@@ -121,12 +126,12 @@ class WakingCheckStage(Stage):
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None]:
         self._apply_unique_session(event)
+        await self._attach_authorization(event)
         if self._is_bot_self_message(event):
             event.stop_event()
             return
 
         event.message_str = event.message_str.strip(" \t")
-        self._assign_admin_role(event)
         wake_decision = await self._detect_wake(event)
         event.set_extra(
             "wake_reasons", {reason.value for reason in wake_decision.reasons}
@@ -165,14 +170,134 @@ class WakingCheckStage(Stage):
             event.get_self_id() == event.get_sender_id()
         )
 
-    def _assign_admin_role(self, event: AstrMessageEvent) -> None:
-        api_key_allow_admin_role = event.get_extra("_api_key_allow_admin_role")
-        for admin_id in self.ctx.astrbot_config["admins_id"]:
-            if api_key_allow_admin_role is not False and str(
-                event.get_sender_id()
-            ) == str(admin_id):
-                event.role = "admin"
-                break
+    async def _attach_authorization(self, event: AstrMessageEvent) -> None:
+        """Normalize the inbound actor and explicit config-scoped resource."""
+
+        config_id = self.ctx.astrbot_config_id
+        scopes: tuple[str, ...] = ()
+        api_key_principal = event.get_extra("_api_key_principal")
+        if event.get_platform_name() == "webchat" and isinstance(
+            api_key_principal, dict
+        ):
+            key_id = api_key_principal.get("key_id")
+            scopes = api_key_principal.get("scopes", ())
+            if isinstance(key_id, str) and isinstance(scopes, list | tuple):
+                subject = Subject.api_key(key_id)
+                authenticated = True
+                source = "api_key"
+            else:
+                subject = Subject.guest(
+                    f"webchat-{hashlib.sha256(event.get_sender_id().encode()).hexdigest()[:24]}"
+                )
+                authenticated = False
+                source = "webchat"
+                scopes = ()
+        elif event.get_platform_name() == "webchat":
+            # WebChat's username is caller-declared compatibility data, not a
+            # principal. A trusted Dashboard/API principal is attached later.
+            subject = Subject.guest(
+                f"webchat-{hashlib.sha256(event.get_sender_id().encode()).hexdigest()[:24]}"
+            )
+            authenticated = False
+            source = "webchat"
+            scopes = ()
+        else:
+            platform_instance = getattr(event, "get_platform_id", None)
+            platform_instance = (
+                platform_instance() if callable(platform_instance) else event.get_platform_name()
+            )
+            subject = Subject.im(
+                platform_instance=platform_instance,
+                bot_account_id=event.get_self_id() or "default",
+                sender_id=event.get_sender_id() or "unknown",
+                display_name=(
+                    event.get_sender_name() if hasattr(event, "get_sender_name") else None
+                )
+                or None,
+            )
+            authenticated = True
+            source = "im"
+        umo = getattr(event, "unified_msg_origin", None)
+        if not isinstance(umo, str) or not umo:
+            umo = str(getattr(event, "get_session_id", lambda: "unknown")())
+            if ":" not in umo:
+                umo = f"{event.get_platform_name()}:FriendMessage:{umo or 'unknown'}"
+        resource = Resource.session(config_id, umo)
+        message_type = getattr(event, "get_message_type", None)
+        message_type = message_type().value if callable(message_type) else "friend"
+        context = AuthContext(
+            subject=subject,
+            source=source,
+            config_id=config_id,
+            platform=event.get_platform_name(),
+            message_type=message_type,
+            platform_member_role=getattr(event, "platform_member_role", "unknown"),
+            platform_role_source=getattr(event, "platform_role_source", "none"),
+            platform_role_expires_at=getattr(event, "platform_role_expires_at", None),
+            authenticated=authenticated,
+            caller_declared_username=(
+                event.get_sender_id() if source == "webchat" else None
+            ),
+            api_scopes=tuple(scopes) if isinstance(scopes, (list, tuple)) else (),
+            principal_subject_id=(subject.id if source == "api_key" else None),
+            metadata=(
+                {"legacy_sender_id": event.get_sender_id()}
+                if source == "im" and event.get_sender_id()
+                else {}
+            ),
+        )
+        attach_authorization = getattr(event, "attach_authorization", None)
+        if callable(attach_authorization):
+            attach_authorization(subject=subject, resource=resource, context=context)
+        else:
+            # Lightweight test/adaptor events may not expose the full event API;
+            # retain the normalized values as extras without restoring legacy
+            # role-based authorization semantics.
+            event.set_extra("auth_subject", subject)
+            event.set_extra("auth_resource", resource)
+            event.set_extra("auth_context", context)
+        event.set_extra("config_id", config_id)
+        authorization = getattr(self.ctx, "authorization", None)
+        if authorization is not None:
+            for action in (
+                "tool.local_exec",
+                "tool.python_exec",
+                "tool.file_read",
+                "tool.file_write",
+                "tool.browser_control",
+                "tool.mcp_write",
+                "tool.computer_use",
+            ):
+                decision = await authorization.authorize(
+                    subject, action, resource, context
+                )
+                event.set_extra(f"authz:{action}", decision.allowed)
+        platform_member_role = getattr(event, "platform_member_role", "unknown")
+        if authorization is not None and platform_member_role in {
+            "owner",
+            "admin",
+            "member",
+        }:
+            try:
+                await authorization.record_platform_membership(
+                    subject=subject,
+                    resource=resource,
+                    platform_instance=getattr(event, "get_platform_id", event.get_platform_name)(),
+                    platform_role=platform_member_role,
+                    source=getattr(event, "platform_role_source", "none"),
+                    metadata={
+                        "message_type": (
+                            event.get_message_type().value
+                            if callable(getattr(event, "get_message_type", None))
+                            else "friend"
+                        )
+                    },
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Platform membership fact was not persisted: %s",
+                    safe_error("", exc),
+                )
 
     async def _detect_wake(self, event: AstrMessageEvent) -> WakeDecision:
         if event.is_wake:
@@ -388,8 +513,10 @@ class WakingCheckStage(Stage):
                             entries_by_filter[id(filter)], resolved_command
                         )
                         bound_params = dict(bound.values)
-                    elif isinstance(filter, PermissionTypeFilter):
-                        if not filter.filter(event, self.ctx.astrbot_config):
+                    elif isinstance(
+                        filter, (ActionPermissionFilter, PermissionTypeFilter)
+                    ):
+                        if not await self._permission_filter_allowed(event, filter):
                             permission_not_pass = True
                             permission_filter_raise_error = filter.raise_error
                     elif not filter.filter(event, self.ctx.astrbot_config):
@@ -540,8 +667,10 @@ class WakingCheckStage(Stage):
                 for filter_ref in handler.event_filters:
                     if isinstance(filter_ref, CommandGroupFilter):
                         continue
-                    if isinstance(filter_ref, PermissionTypeFilter):
-                        if not filter_ref.filter(event, self.ctx.astrbot_config):
+                    if isinstance(
+                        filter_ref, (ActionPermissionFilter, PermissionTypeFilter)
+                    ):
+                        if not await self._permission_filter_allowed(event, filter_ref):
                             permission_not_pass = True
                             permission_filter_raise_error = filter_ref.raise_error
                     elif not filter_ref.filter(event, self.ctx.astrbot_config):
@@ -562,6 +691,28 @@ class WakingCheckStage(Stage):
 
         cache[id(group_filter)] = (True, False)
         return True, False
+
+    async def _permission_filter_allowed(
+        self,
+        event: AstrMessageEvent,
+        filter_ref: ActionPermissionFilter | PermissionTypeFilter,
+    ) -> bool:
+        authorization = getattr(self.ctx, "authorization", None)
+        if (
+            authorization is None
+            or event.subject is None
+            or event.resource is None
+            or event.auth_context is None
+        ):
+            return False
+        return (
+            await authorization.authorize(
+                event.subject,
+                filter_ref.action,
+                event.resource,
+                event.auth_context,
+            )
+        ).allowed
 
     async def _send_permission_denied(
         self,

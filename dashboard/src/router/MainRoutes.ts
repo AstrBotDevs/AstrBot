@@ -80,6 +80,11 @@ const MainRoutes = {
       component: () => import('@/views/SessionManagementPage.vue'),
     },
     {
+      name: 'Authorization',
+      path: '/authorization',
+      component: () => import('@/views/AuthorizationPage.vue'),
+    },
+    {
       name: 'Persona',
       path: '/persona',
       component: () => import('@/views/PersonaPage.vue'),

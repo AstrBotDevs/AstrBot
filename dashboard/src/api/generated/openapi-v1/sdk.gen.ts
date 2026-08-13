@@ -15,6 +15,8 @@ import type {
   AbortBackupUploadResponses,
   AddChatProjectSessionData,
   AddChatProjectSessionResponses,
+  ApproveAuthorizationElevationRequestData,
+  ApproveAuthorizationElevationRequestResponses,
   BatchDeleteChatSessionsData,
   BatchDeleteChatSessionsResponses,
   BatchDeleteConversationsData,
@@ -40,6 +42,10 @@ import type {
   CompleteMcpResponses,
   CreateApiKeyData,
   CreateApiKeyResponses,
+  CreateAuthorizationAccountData,
+  CreateAuthorizationAccountResponses,
+  CreateAuthorizationElevationRequestData,
+  CreateAuthorizationElevationRequestResponses,
   CreateBackupData,
   CreateBackupResponses,
   CreateBotData,
@@ -268,6 +274,8 @@ import type {
   GetUpdateProgressResponses,
   GetVersionData,
   GetVersionResponses,
+  GrantAuthorizationRoleBindingData,
+  GrantAuthorizationRoleBindingResponses,
   ImportBackupData,
   ImportBackupResponses,
   ImportKnowledgeDocumentFromUrlData,
@@ -295,12 +303,20 @@ import type {
   InvokePluginDashboardUploadData,
   InvokePluginDashboardUploadErrors,
   InvokePluginDashboardUploadResponses,
+  IssueAuthorizationStepUpData,
+  IssueAuthorizationStepUpResponses,
   ListActiveUmosData,
   ListActiveUmosResponses,
   ListApiKeysData,
   ListApiKeysResponses,
   ListAppearanceWallpapersData,
   ListAppearanceWallpapersResponses,
+  ListAuthorizationAccountsData,
+  ListAuthorizationAccountsResponses,
+  ListAuthorizationAuditData,
+  ListAuthorizationAuditResponses,
+  ListAuthorizationRoleBindingsData,
+  ListAuthorizationRoleBindingsResponses,
   ListBackupsData,
   ListBackupsResponses,
   ListBotsData,
@@ -457,6 +473,8 @@ import type {
   RetrieveKnowledgeBaseResponses,
   RevokeApiKeyData,
   RevokeApiKeyResponses,
+  RevokeAuthorizationRoleBindingData,
+  RevokeAuthorizationRoleBindingResponses,
   RevokeMcpOAuthData,
   RevokeMcpOAuthResponses,
   RollbackNeoSkillReleaseData,
@@ -487,8 +505,6 @@ import type {
   SetToolEnabledResponses,
   SetToolParallelData,
   SetToolParallelResponses,
-  SetToolPermissionData,
-  SetToolPermissionResponses,
   SetupAuthData,
   SetupAuthResponses,
   SetupTotpData,
@@ -518,6 +534,8 @@ import type {
   UninstallPluginResponses,
   UpdateAuthAccountData,
   UpdateAuthAccountResponses,
+  UpdateAuthorizationAccountData,
+  UpdateAuthorizationAccountResponses,
   UpdateBotData,
   UpdateBotResponses,
   UpdateChatMessageData,
@@ -793,6 +811,234 @@ export const deleteApiKey = <ThrowOnError extends boolean = false>(
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/api-keys/{key_id}',
     ...options,
+  });
+
+/**
+ * List role bindings
+ */
+export const listAuthorizationRoleBindings = <
+  ThrowOnError extends boolean = false,
+>(
+  options?: Options<ListAuthorizationRoleBindingsData, ThrowOnError>,
+): RequestResult<
+  ListAuthorizationRoleBindingsResponses,
+  unknown,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    ListAuthorizationRoleBindingsResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/authorization/role-bindings',
+    ...options,
+  });
+
+/**
+ * Grant a scoped role binding
+ */
+export const grantAuthorizationRoleBinding = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<GrantAuthorizationRoleBindingData, ThrowOnError>,
+): RequestResult<
+  GrantAuthorizationRoleBindingResponses,
+  unknown,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    GrantAuthorizationRoleBindingResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/authorization/role-bindings',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Revoke a scoped role binding
+ */
+export const revokeAuthorizationRoleBinding = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<RevokeAuthorizationRoleBindingData, ThrowOnError>,
+): RequestResult<
+  RevokeAuthorizationRoleBindingResponses,
+  unknown,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    RevokeAuthorizationRoleBindingResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/authorization/role-bindings/{binding_id}/revoke',
+    ...options,
+  });
+
+/**
+ * Reauthenticate and issue a one-time step-up credential
+ */
+export const issueAuthorizationStepUp = <ThrowOnError extends boolean = false>(
+  options: Options<IssueAuthorizationStepUpData, ThrowOnError>,
+): RequestResult<IssueAuthorizationStepUpResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<
+    IssueAuthorizationStepUpResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/authorization/step-up',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Create a short-lived elevation request
+ */
+export const createAuthorizationElevationRequest = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<CreateAuthorizationElevationRequestData, ThrowOnError>,
+): RequestResult<
+  CreateAuthorizationElevationRequestResponses,
+  unknown,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    CreateAuthorizationElevationRequestResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/authorization/elevation-requests',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Approve an elevation request
+ */
+export const approveAuthorizationElevationRequest = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<ApproveAuthorizationElevationRequestData, ThrowOnError>,
+): RequestResult<
+  ApproveAuthorizationElevationRequestResponses,
+  unknown,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ApproveAuthorizationElevationRequestResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/authorization/elevation-requests/{request_id}/approve',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * List redacted authorization audit records
+ */
+export const listAuthorizationAudit = <ThrowOnError extends boolean = false>(
+  options?: Options<ListAuthorizationAuditData, ThrowOnError>,
+): RequestResult<ListAuthorizationAuditResponses, unknown, ThrowOnError> =>
+  (options?.client ?? client).get<
+    ListAuthorizationAuditResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/authorization/audit',
+    ...options,
+  });
+
+/**
+ * List stable Dashboard accounts
+ */
+export const listAuthorizationAccounts = <ThrowOnError extends boolean = false>(
+  options?: Options<ListAuthorizationAccountsData, ThrowOnError>,
+): RequestResult<ListAuthorizationAccountsResponses, unknown, ThrowOnError> =>
+  (options?.client ?? client).get<
+    ListAuthorizationAccountsResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/authorization/accounts',
+    ...options,
+  });
+
+/**
+ * Create a Dashboard account and global role binding
+ */
+export const createAuthorizationAccount = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<CreateAuthorizationAccountData, ThrowOnError>,
+): RequestResult<CreateAuthorizationAccountResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<
+    CreateAuthorizationAccountResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/authorization/accounts',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Update or disable a Dashboard account
+ */
+export const updateAuthorizationAccount = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<UpdateAuthorizationAccountData, ThrowOnError>,
+): RequestResult<UpdateAuthorizationAccountResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).patch<
+    UpdateAuthorizationAccountResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/authorization/accounts/{account_id}',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
   });
 
 /**
@@ -3280,27 +3526,6 @@ export const setToolParallel = <ThrowOnError extends boolean = false>(
     responseType: 'json',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/tools/{tool_id}/parallel',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-
-/**
- * Update an LLM tool permission
- */
-export const setToolPermission = <ThrowOnError extends boolean = false>(
-  options: Options<SetToolPermissionData, ThrowOnError>,
-): RequestResult<SetToolPermissionResponses, unknown, ThrowOnError> =>
-  (options.client ?? client).patch<
-    SetToolPermissionResponses,
-    unknown,
-    ThrowOnError
-  >({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/tools/{tool_id}/permission',
     ...options,
     headers: {
       'Content-Type': 'application/json',

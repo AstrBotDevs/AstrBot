@@ -51,7 +51,9 @@ def _redirect_background_stdout_command(
     return f"({command}) > {_quote_redirect_path(output_path, local_runtime=local_runtime)} 2>&1"
 
 
-@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
+@builtin_tool(
+    config=_COMPUTER_RUNTIME_TOOL_CONFIG, required_actions=("tool.local_exec",)
+)
 @dataclass
 class ExecuteShellTool(FunctionTool):
     name: str = "astrbot_execute_shell"
@@ -102,7 +104,7 @@ class ExecuteShellTool(FunctionTool):
         yield_time_ms: int = 10_000,
         **kwargs: Any,
     ) -> ToolExecResult:
-        if permission_error := check_admin_permission(context, "Shell execution"):
+        if permission_error := await check_admin_permission(context, "Shell execution"):
             return permission_error
 
         sb = await context.context.context.computer_runtime.get_booter(
@@ -178,7 +180,9 @@ class ExecuteShellTool(FunctionTool):
             return f"Error executing command: {detail}"
 
 
-@builtin_tool(config=_LOCAL_RUNTIME_TOOL_CONFIG)
+@builtin_tool(
+    config=_LOCAL_RUNTIME_TOOL_CONFIG, required_actions=("tool.local_exec",)
+)
 @dataclass
 class ShellSessionTool(FunctionTool):
     """Manage sessions created by the local shell execution tool."""
@@ -235,7 +239,7 @@ class ShellSessionTool(FunctionTool):
         max_output_chars: int = 10_000,
         **_: Any,
     ) -> ToolExecResult:
-        if permission_error := check_admin_permission(
+        if permission_error := await check_admin_permission(
             context, "Shell session management"
         ):
             return permission_error

@@ -1376,7 +1376,9 @@ class NapCatPlatformAdapter(Platform):
         sender = getattr(raw_event, "sender", None)
         role = getattr(sender, "role", None)
         if role is not None:
-            event.role = str(getattr(role, "value", role))
+            event.set_platform_member_role(
+                str(getattr(role, "value", role)), source="adapter"
+            )
         self._populate_event_extras(event, raw_event)
         return event
 

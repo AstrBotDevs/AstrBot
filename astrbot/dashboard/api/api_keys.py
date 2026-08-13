@@ -12,8 +12,8 @@ from .auth import AuthContext, require_scope
 router = APIRouter(tags=["API Keys"])
 
 
-async def require_system_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "system")
+async def require_identity_scope(request: Request) -> AuthContext:
+    return await require_scope(request, "config:edit_admin")
 
 
 def get_service(request: Request) -> ApiKeyService:
@@ -72,7 +72,7 @@ async def _delete_api_key(key_id: str, service: ApiKeyService):
 
 @router.get("/api-keys")
 async def list_api_keys(
-    _auth: AuthContext = Depends(require_system_scope),
+    _auth: AuthContext = Depends(require_identity_scope),
     service: ApiKeyService = Depends(get_service),
 ):
     return await _list_api_keys(service)
@@ -81,7 +81,7 @@ async def list_api_keys(
 @router.post("/api-keys")
 async def create_api_key(
     payload: ApiKeyCreateRequest,
-    auth: AuthContext = Depends(require_system_scope),
+    auth: AuthContext = Depends(require_identity_scope),
     service: ApiKeyService = Depends(get_service),
 ):
     return await _create_api_key(payload, created_by=auth.username, service=service)
@@ -90,7 +90,7 @@ async def create_api_key(
 @router.post("/api-keys/{key_id}/revoke")
 async def revoke_api_key(
     key_id: str,
-    _auth: AuthContext = Depends(require_system_scope),
+    _auth: AuthContext = Depends(require_identity_scope),
     service: ApiKeyService = Depends(get_service),
 ):
     return await _revoke_api_key(key_id, service)
@@ -99,7 +99,7 @@ async def revoke_api_key(
 @router.delete("/api-keys/{key_id}")
 async def delete_api_key(
     key_id: str,
-    _auth: AuthContext = Depends(require_system_scope),
+    _auth: AuthContext = Depends(require_identity_scope),
     service: ApiKeyService = Depends(get_service),
 ):
     return await _delete_api_key(key_id, service)

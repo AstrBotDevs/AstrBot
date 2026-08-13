@@ -76,6 +76,7 @@ class BuiltinToolDeclaration:
 
     name: str
     config_rule: BuiltinToolConfigRule | None = None
+    required_actions: tuple[str, ...] = ("session.manage",)
 
 
 def _get_config_value(config: dict[str, Any], key_path: str) -> Any:
@@ -222,6 +223,7 @@ def builtin_tool(
     tool_cls: None = None,
     *,
     config: dict[str, Any] | None = None,
+    required_actions: tuple[str, ...] = ("session.manage",),
 ) -> Callable[[TFunctionTool], TFunctionTool]: ...
 
 
@@ -230,6 +232,7 @@ def builtin_tool[TFunctionTool: type[FunctionTool]](
     tool_cls: TFunctionTool,
     *,
     config: dict[str, Any] | None = None,
+    required_actions: tuple[str, ...] = ("session.manage",),
 ) -> TFunctionTool: ...
 
 
@@ -237,14 +240,20 @@ def builtin_tool[TFunctionTool: type[FunctionTool]](
     tool_cls: TFunctionTool | None = None,
     *,
     config: dict[str, Any] | None = None,
+    required_actions: tuple[str, ...] = ("session.manage",),
 ) -> TFunctionTool | Callable[[TFunctionTool], TFunctionTool]:
     def _declare(cls: TFunctionTool) -> TFunctionTool:
         tool_name = _resolve_builtin_tool_name(cls)
+        if not required_actions or not all(
+            isinstance(action, str) and action for action in required_actions
+        ):
+            raise ValueError("Builtin tool actions must be non-empty strings.")
         declaration = BuiltinToolDeclaration(
             name=tool_name,
             config_rule=(
                 _build_rule_from_config_map(config) if config is not None else None
             ),
+            required_actions=required_actions,
         )
         existing = cls.__dict__.get(BUILTIN_TOOL_DECLARATION_ATTR)
         if existing is not None and existing != declaration:

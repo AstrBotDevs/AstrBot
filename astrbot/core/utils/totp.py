@@ -113,6 +113,48 @@ class TotpRuntimeState:
         secret = _get_totp_config(config).get("secret", "")
         return await self.consume_totp_code(secret, code)
 
+    async def verify_rotation_secret(
+        self, subject: str, current_secret: str, code: str
+    ) -> bool:
+        """Authorize a subject to rotate its own account-scoped TOTP secret."""
+
+        subject = self._subject_key(subject)
+        if not await self.consume_totp_code(current_secret, code):
+            return False
+        async with self._rotation_lock:
+            self._cleanup_expired_rotations()
+            self._rotation_verified_subjects.add(subject)
+            self._pending_secrets.pop(subject, None)
+            self._touch_rotation(subject)
+        return True
+
+    async def stage_account_totp_secret(
+        self,
+        subject: str,
+        *,
+        current_enabled: bool,
+        secret: str,
+        code: str,
+    ) -> bool:
+        """Verify and stage an account TOTP secret without using config state."""
+
+        subject = self._subject_key(subject)
+        if current_enabled:
+            async with self._rotation_lock:
+                self._cleanup_expired_rotations()
+                if subject not in self._rotation_verified_subjects:
+                    return False
+        if not await self.consume_totp_code(secret, code):
+            return False
+        async with self._rotation_lock:
+            self._cleanup_expired_rotations()
+            if current_enabled and subject not in self._rotation_verified_subjects:
+                return False
+            self._rotation_verified_subjects.discard(subject)
+            self._pending_secrets[subject] = secret
+            self._touch_rotation(subject)
+        return True
+
     async def verify_configured_2fa_code(
         self,
         config,
@@ -261,6 +303,132 @@ def _hash_totp_secret(config) -> str:
     return hashlib.sha256(secret.strip().encode("utf-8")).hexdigest()
 
 
+def account_totp_enabled(account) -> bool:
+    """Return whether a stable Dashboard account has a complete second factor."""
+
+    return bool(
+        getattr(account, "totp_enabled", False)
+        and isinstance(getattr(account, "totp_secret", None), str)
+        and getattr(account, "totp_secret", "").strip()
+        and isinstance(getattr(account, "totp_recovery_code_hash", None), str)
+        and getattr(account, "totp_recovery_code_hash", "").strip()
+    )
+
+
+def verify_recovery_code_hash(recovery_code_hash: str, code: str) -> bool:
+    """Verify one recovery code against a stored PBKDF2 hash."""
+
+    cleaned = "".join(char for char in code.upper() if char.isalnum())
+    if len(cleaned) != RECOVERY_CODE_LENGTH:
+        return False
+    if not isinstance(recovery_code_hash, str) or not recovery_code_hash:
+        return False
+    parts = recovery_code_hash.split("$")
+    if len(parts) != 4 or parts[0] != _RECOVERY_CODE_KDF_ALGORITHM:
+        return False
+    try:
+        iterations = int(parts[1])
+        salt = parts[2]
+        expected_digest = parts[3]
+    except (ValueError, IndexError):
+        return False
+
+    try:
+        candidate = hashlib.pbkdf2_hmac(
+            "sha256",
+            cleaned.encode("utf-8"),
+            bytes.fromhex(salt),
+            iterations,
+        ).hex()
+    except ValueError:
+        return False
+    return hmac.compare_digest(candidate, expected_digest)
+
+
+def _hash_account_totp_secret(secret: str) -> str:
+    return hashlib.sha256(secret.strip().encode("utf-8")).hexdigest()
+
+
+async def is_account_totp_trusted_device_valid(
+    config,
+    db: DatabaseSessionStore,
+    *,
+    account_id: str,
+    totp_secret: str,
+    cookie_token: str,
+) -> bool:
+    """Validate a trusted device bound to one account and its current secret."""
+
+    if not account_id or not totp_secret.strip() or not cookie_token:
+        return False
+    token_hash = _hash_totp_trusted_device_token(config, cookie_token)
+    if not token_hash:
+        return False
+    await _cleanup_expired_totp_trusted_devices(db)
+    async with db.get_db() as session:
+        result = await session.execute(
+            select(DashboardTrustedDevice).where(
+                col(DashboardTrustedDevice.token_hash) == token_hash,
+                col(DashboardTrustedDevice.account_id) == account_id,
+                col(DashboardTrustedDevice.totp_secret_hash)
+                == _hash_account_totp_secret(totp_secret),
+                col(DashboardTrustedDevice.expires_at)
+                > datetime.datetime.now(datetime.UTC),
+            )
+        )
+        return result.scalar_one_or_none() is not None
+
+
+async def issue_account_totp_trusted_device(
+    config,
+    db: DatabaseSessionStore,
+    *,
+    account_id: str,
+    totp_secret: str,
+) -> str | None:
+    """Issue a trusted-device token bound to one account-scoped second factor."""
+
+    if not account_id or not totp_secret.strip():
+        return None
+    raw_token = secrets.token_urlsafe(48)
+    token_hash = _hash_totp_trusted_device_token(config, raw_token)
+    if not token_hash:
+        return None
+    expires_at = datetime.datetime.now(datetime.UTC) + datetime.timedelta(
+        seconds=TOTP_TRUSTED_DEVICE_MAX_AGE
+    )
+    async with db.get_db() as session:
+        async with session.begin():
+            await session.execute(
+                delete(DashboardTrustedDevice).where(
+                    col(DashboardTrustedDevice.token_hash) == token_hash
+                )
+            )
+            session.add(
+                DashboardTrustedDevice(
+                    token_hash=token_hash,
+                    account_id=account_id,
+                    totp_secret_hash=_hash_account_totp_secret(totp_secret),
+                    expires_at=expires_at,
+                )
+            )
+    return raw_token
+
+
+async def revoke_account_totp_trusted_devices(
+    db: DatabaseSessionStore, account_id: str
+) -> None:
+    """Revoke only the trusted devices owned by the supplied account."""
+
+    async with db.get_db() as session:
+        async with session.begin():
+            await session.execute(
+                delete(DashboardTrustedDevice).where(
+                    col(DashboardTrustedDevice.account_id) == account_id
+                )
+            )
+
+
 async def is_totp_trusted_device_valid(
     config,
     db: DatabaseSessionStore,
@@ -355,28 +523,7 @@ def generate_recovery_code() -> tuple[str, str]:
 
 def verify_recovery_code(config, code: str) -> bool:
     """Verify a recovery code against configured recovery_code_hash (PBKDF2)."""
-    cleaned = "".join(char for char in code.upper() if char.isalnum())
-    if len(cleaned) != RECOVERY_CODE_LENGTH:
-        return False
     totp_config = _get_totp_config(config)
-    stored_hash = totp_config.get("recovery_code_hash", "")
-    if not isinstance(stored_hash, str) or not stored_hash:
-        return False
-
-    parts = stored_hash.split("$")
-    if len(parts) != 4 or parts[0] != _RECOVERY_CODE_KDF_ALGORITHM:
-        return False
-    try:
-        iterations = int(parts[1])
-        salt = parts[2]
-        expected_digest = parts[3]
-    except ValueError, IndexError:
-        return False
-
-    candidate = hashlib.pbkdf2_hmac(
-        "sha256",
-        cleaned.encode("utf-8"),
-        bytes.fromhex(salt),
-        iterations,
-    ).hex()
-    return hmac.compare_digest(candidate, expected_digest)
+    return verify_recovery_code_hash(
+        str(totp_config.get("recovery_code_hash", "")), code
+    )

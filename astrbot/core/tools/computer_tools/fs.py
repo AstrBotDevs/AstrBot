@@ -153,12 +153,7 @@ def _write_allowed_roots(umo: str) -> tuple[Path, ...]:
 def _is_restricted_env(context: ContextWrapper[AstrAgentContext]) -> bool:
     if not is_local_runtime(context):
         return False
-    cfg = context.context.context.get_config(
-        umo=context.context.event.unified_msg_origin
-    )
-    provider_settings = cfg.get("provider_settings", {})
-    require_admin = provider_settings.get("computer_use_require_admin", True)
-    return require_admin and context.context.event.role != "admin"
+    return True
 
 
 def _resolve_tool_path(path: str, *, local_env: bool, umo: str) -> str:
@@ -255,7 +250,7 @@ def _decode_escaped_text(value: str) -> str:
     )
 
 
-@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
+@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG, required_actions=("tool.file_read",))
 @dataclass
 class FileReadTool(FunctionTool):
     name: str = "astrbot_file_read_tool"
@@ -345,7 +340,7 @@ class FileReadTool(FunctionTool):
             return f"Error reading file: {exc}"
 
 
-@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
+@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG, required_actions=("tool.file_write",))
 @dataclass
 class FileWriteTool(FunctionTool):
     name: str = "astrbot_file_write_tool"
@@ -413,7 +408,7 @@ class FileWriteTool(FunctionTool):
             return f"Error writing file: {exc}"
 
 
-@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
+@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG, required_actions=("tool.file_write",))
 @dataclass
 class FileEditTool(FunctionTool):
     name: str = "astrbot_file_edit_tool"
@@ -500,7 +495,7 @@ class FileEditTool(FunctionTool):
             return f"Error editing file: {exc}"
 
 
-@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
+@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG, required_actions=("tool.file_read",))
 @dataclass
 class GrepTool(FunctionTool):
     name: str = "astrbot_grep_tool"
@@ -714,7 +709,7 @@ class GrepTool(FunctionTool):
             return f"Error searching files: {exc}"
 
 
-@builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)
+@builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG, required_actions=("tool.file_write",))
 @dataclass
 class FileUploadTool(FunctionTool):
     name: str = "astrbot_upload_file"
@@ -746,7 +741,9 @@ class FileUploadTool(FunctionTool):
         context: ContextWrapper[AstrAgentContext],
         local_path: str,
     ) -> str | None:
-        if permission_error := check_admin_permission(context, "File upload/download"):
+        if permission_error := await check_admin_permission(
+            context, "File upload/download"
+        ):
             return permission_error
         sb = await context.context.context.computer_runtime.get_booter(
             context.context.context,
@@ -780,7 +777,7 @@ class FileUploadTool(FunctionTool):
             return f"Error uploading file: {str(e)}"
 
 
-@builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)
+@builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG, required_actions=("tool.file_write",))
 @dataclass
 class FileDownloadTool(FunctionTool):
     name: str = "astrbot_download_file"
@@ -812,7 +809,9 @@ class FileDownloadTool(FunctionTool):
         remote_path: str,
         also_send_to_user: bool = True,
     ) -> ToolExecResult:
-        if permission_error := check_admin_permission(context, "File upload/download"):
+        if permission_error := await check_admin_permission(
+            context, "File upload/download"
+        ):
             return permission_error
         sb = await context.context.context.computer_runtime.get_booter(
             context.context.context,

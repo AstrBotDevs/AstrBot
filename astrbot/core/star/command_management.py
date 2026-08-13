@@ -7,7 +7,11 @@ from astrbot.core.db.po import CommandConfig
 from astrbot.core.db.protocols import CommandStore
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
-from astrbot.core.star.filter.permission import PermissionType, PermissionTypeFilter
+from astrbot.core.star.filter.permission import (
+    ActionPermissionFilter,
+    PermissionType,
+    PermissionTypeFilter,
+)
 from astrbot.core.star.star_handler import HandlerRegistry, StarHandlerMetadata
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
@@ -197,8 +201,11 @@ async def update_command_permission(
     if not descriptor:
         raise ValueError("指定的处理函数不存在或不是指令。")
 
-    if permission_type not in ["admin", "member"]:
-        raise ValueError("权限类型必须为 admin 或 member。")
+    action = {"admin": "session.manage", "member": "session.read"}.get(
+        permission_type, permission_type
+    )
+    if not action or "." not in action:
+        raise ValueError("Permission must be a stable authorization action.")
 
     handler = descriptor.handler
     found_plugin = handler_registry.plugins.get_by_module(handler.handler_module_path)
@@ -209,7 +216,8 @@ async def update_command_permission(
     alter_cmd_cfg = await preferences.global_get("alter_cmd", {})
     plugin_ = alter_cmd_cfg.get(found_plugin.name, {})
     cfg = plugin_.get(handler.handler_name, {})
-    cfg["permission"] = permission_type
+    cfg["permission_action"] = action
+    cfg.pop("permission", None)
     plugin_[handler.handler_name] = cfg
     alter_cmd_cfg[found_plugin.name] = plugin_
 
@@ -217,18 +225,19 @@ async def update_command_permission(
 
     # 2. Update Runtime Filter
     found_permission_filter = False
-    target_perm_type = (
-        PermissionType.ADMIN if permission_type == "admin" else PermissionType.MEMBER
-    )
-
     for filter_ in handler.event_filters:
-        if isinstance(filter_, PermissionTypeFilter):
-            filter_.permission_type = target_perm_type
+        if isinstance(filter_, ActionPermissionFilter):
+            filter_.action = action
             found_permission_filter = True
             break
 
     if not found_permission_filter:
-        handler.event_filters.insert(0, PermissionTypeFilter(target_perm_type))
+        handler.event_filters = [
+            filter_
+            for filter_ in handler.event_filters
+            if not isinstance(filter_, PermissionTypeFilter)
+        ]
+        handler.event_filters.insert(0, ActionPermissionFilter(action))
 
     # Re-build descriptor to reflect changes
     return _build_descriptor(handler_registry, handler) or descriptor
@@ -438,11 +447,13 @@ def _locate_primary_filter(
 
 def _determine_permission(handler: StarHandlerMetadata) -> str:
     for filter_ref in handler.event_filters:
+        if isinstance(filter_ref, ActionPermissionFilter):
+            return filter_ref.action
         if isinstance(filter_ref, PermissionTypeFilter):
             return (
-                "admin"
+                "session.manage"
                 if filter_ref.permission_type == PermissionType.ADMIN
-                else "member"
+                else "session.read"
             )
     return "everyone"
 

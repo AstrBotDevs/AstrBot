@@ -16,11 +16,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'toggle-tool', tool: ToolItem): void;
-  (
-    e: 'update-permission',
-    tool: ToolItem,
-    permission: 'admin' | 'member',
-  ): void;
   (e: 'toggle-parallel', tool: ToolItem, enabled: boolean): void;
 }>();
 
@@ -38,12 +33,6 @@ const toolHeaders = computed(() => [
     key: 'origin_name',
     sortable: false,
     width: '140px',
-  },
-  {
-    title: tmTool('functionTools.table.permission'),
-    key: 'permission',
-    sortable: false,
-    width: '110px',
   },
   {
     title: tmTool('functionTools.table.parallel'),
@@ -108,25 +97,6 @@ const enabledConfigTags = (tool: ToolItem): BuiltinToolConfigTag[] => {
   return (tool.builtin_config_tags || []).filter((tag) => tag.enabled);
 };
 
-const getPermissionColor = (permission?: string): string => {
-  switch (permission) {
-    case 'admin':
-      return 'error';
-    case undefined:
-    default:
-      return 'success';
-  }
-};
-
-const getPermissionLabel = (permission?: string): string => {
-  switch (permission) {
-    case 'admin':
-      return tmTool('functionTools.table.permissionAdmin');
-    case undefined:
-    default:
-      return tmTool('functionTools.table.permissionEveryone');
-  }
-};
 </script>
 
 <template>
@@ -223,53 +193,6 @@ const getPermissionLabel = (permission?: string): string => {
         >
           {{ item.origin_name || '-' }}
         </div>
-      </template>
-
-      <template #item.permission="{ item }">
-        <!-- Builtin tools: non-clickable badge -->
-        <v-chip
-          v-if="item.origin === 'builtin'"
-          size="small"
-          variant="tonal"
-          class="font-weight-medium text-medium-emphasis"
-        >
-          {{ tmTool('functionTools.table.permissionBuiltin') }}
-        </v-chip>
-        <!-- Other tools: clickable dropdown -->
-        <v-menu v-else location="bottom">
-          <template #activator="{ props: menuProps }">
-            <v-chip
-              v-bind="menuProps"
-              :color="getPermissionColor(item.permission)"
-              size="small"
-              class="font-weight-medium cursor-pointer"
-              link
-            >
-              {{ getPermissionLabel(item.permission) }}
-              <v-icon end size="14">mdi-chevron-down</v-icon>
-            </v-chip>
-          </template>
-          <v-list density="compact">
-            <v-list-item
-              :value="'member'"
-              :active="item.permission !== 'admin'"
-              @click="emit('update-permission', item, 'member')"
-            >
-              <v-list-item-title>{{
-                tmTool('functionTools.table.permissionEveryone')
-              }}</v-list-item-title>
-            </v-list-item>
-            <v-list-item
-              :value="'admin'"
-              :active="item.permission === 'admin'"
-              @click="emit('update-permission', item, 'admin')"
-            >
-              <v-list-item-title>{{
-                tmTool('functionTools.table.permissionAdmin')
-              }}</v-list-item-title>
-            </v-list-item>
-          </v-list>
-        </v-menu>
       </template>
 
       <template #item.parallel="{ item }">

@@ -17,7 +17,11 @@ from ..filter.command import CommandFilter
 from ..filter.command_group import CommandGroupFilter
 from ..filter.custom_filter import CustomFilterAnd, CustomFilterOr
 from ..filter.event_message_type import EventMessageType, EventMessageTypeFilter
-from ..filter.permission import PermissionType, PermissionTypeFilter
+from ..filter.permission import (
+    ActionPermissionFilter,
+    PermissionType,
+    PermissionTypeFilter,
+)
 from ..filter.platform_adapter_type import (
     PlatformAdapterType,
     PlatformAdapterTypeFilter,
@@ -331,6 +335,21 @@ def register_permission_type(
         handler_md.event_filters.append(
             PermissionTypeFilter(permission_type, raise_error),
         )
+        return awaitable
+
+    return decorator
+
+
+def register_permission(action: str, raise_error: bool = True, **kwargs):
+    """Declare the stable action required by a command or event handler."""
+
+    def decorator(awaitable):
+        handler_md = get_handler_declaration(
+            awaitable,
+            EventType.AdapterMessageEvent,
+            **kwargs,
+        )
+        handler_md.event_filters.append(ActionPermissionFilter(action, raise_error))
         return awaitable
 
     return decorator

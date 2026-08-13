@@ -174,10 +174,6 @@
           "description": "Computer Use Runtime",
           "hint": "Environment allowed for Agent usage. `local` means the local machine environment, `sandbox` means the sandbox environment, and `none` means no environment is allowed."
         },
-        "computer_use_require_admin": {
-          "description": "Require AstrBot Admin Permission",
-          "hint": "When enabled, AstrBot admin permission is required to use computer capabilities. Admins can be added in Platform Config. Use /session info to view admin IDs."
-        },
         "sandbox": {
           "booter": {
             "description": "Sandbox Environment Driver"

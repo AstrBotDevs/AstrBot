@@ -5,12 +5,14 @@ import os
 import re
 import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
+from datetime import UTC, datetime, timedelta
 from time import time
 from typing import Any
 
 from astrbot import logger
 from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.tool import ToolSet
+from astrbot.core.auth.models import AuthContext, Resource, Subject
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.components import (
     RPS,
@@ -106,8 +108,13 @@ class AstrMessageEvent(abc.ABC):
         """消息对象, AstrBotMessage。带有完整的消息结构。"""
         self.platform_meta = platform_meta
         """消息平台的信息, 其中 name 是平台的类型，如 aiocqhttp"""
-        self.role = "member"
-        """用户是否是管理员。如果是管理员，这里是 admin"""
+        self.platform_member_role = "unknown"
+        """Current-session platform fact: owner/admin/member/unknown only."""
+        self.platform_role_source = "none"
+        self.platform_role_expires_at: datetime | None = None
+        self.subject: Subject | None = None
+        self.resource: Resource | None = None
+        self.auth_context: AuthContext | None = None
         self.is_wake = False
         """是否唤醒(是否通过 WakingStage)"""
         self.is_at_or_wake_command = False
@@ -432,8 +439,61 @@ class AstrMessageEvent(abc.ABC):
         return self.is_wake
 
     def is_admin(self) -> bool:
-        """是否是管理员。"""
-        return self.role == "admin"
+        """Return false: authorization now requires an async action decision.
+
+        This compatibility method intentionally cannot turn a platform field
+        into an AstrBot control-plane privilege. Plugins should use
+        ``event.auth_context`` and ``context.authz.authorize`` instead.
+        """
+
+        return False
+
+    @property
+    def role(self) -> str:
+        """Deprecated platform-role compatibility view, not an auth decision."""
+
+        return self.platform_member_role
+
+    @role.setter
+    def role(self, value: object) -> None:
+        self.set_platform_member_role(str(value), source="legacy")
+
+    def set_platform_member_role(
+        self,
+        role: str,
+        *,
+        source: str,
+        ttl_seconds: int = 300,
+    ) -> None:
+        """Attach a normalized, expiring platform membership fact."""
+
+        normalized = role.strip().lower()
+        normalized = {
+            "owner": "owner",
+            "group_owner": "owner",
+            "creator": "owner",
+            "admin": "admin",
+            "administrator": "admin",
+            "member": "member",
+        }.get(normalized, "unknown")
+        self.platform_member_role = normalized
+        self.platform_role_source = source if source else "none"
+        self.platform_role_expires_at = datetime.now(UTC) + timedelta(
+            seconds=max(1, min(ttl_seconds, 3600))
+        )
+
+    def attach_authorization(
+        self,
+        *,
+        subject: Subject,
+        resource: Resource,
+        context: AuthContext,
+    ) -> None:
+        """Install the pipeline-owned authorization values for this event."""
+
+        self.subject = subject
+        self.resource = resource
+        self.auth_context = context
 
     def _success_send_result(
         self,

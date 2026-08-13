@@ -90,7 +90,6 @@ const {
   toolSummary,
   parallelExecutionEnabled,
   toggleTool,
-  updateToolPermission,
   toggleToolParallel,
   toggleParallelExecution,
 } = useToolActions(tools, toast);
@@ -122,19 +121,6 @@ const handleToggleTool = async (tool: ToolItem) => {
     tmTool('messages.toggleToolReadonly'),
     tmTool('messages.toggleToolSuccess'),
     tmTool('messages.toggleToolError', { error: '' }),
-  );
-};
-
-const handleUpdateToolPermission = async (
-  tool: ToolItem,
-  permission: 'admin' | 'member',
-) => {
-  await updateToolPermission(
-    tool,
-    permission,
-    tmTool('messages.updateToolPermissionSuccess', { name: tool.name }),
-    tmTool('messages.updateToolPermissionBuiltin'),
-    tmTool('messages.updateToolPermissionFailed'),
   );
 };
 
@@ -388,7 +374,6 @@ watch(viewMode, async (mode) => {
               :loading="toolsLoading"
               @toggle-tool="handleToggleTool"
               @toggle-parallel="handleToggleToolParallel"
-              @update-permission="handleUpdateToolPermission"
             />
           </div>
         </v-card-text>

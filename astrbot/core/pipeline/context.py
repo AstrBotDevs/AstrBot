@@ -6,6 +6,7 @@ from astrbot.core.config import AstrBotConfig
 from .context_utils import call_event_hook, call_handler
 
 if TYPE_CHECKING:
+    from astrbot.core.auth.service import AuthorizationService
     from astrbot.core.execution_context import CoreExecutionContext
     from astrbot.core.file_token_service import FileTokenService
     from astrbot.core.star.plugin_catalog import PluginCatalog
@@ -28,5 +29,6 @@ class PipelineContext:
     html_renderer: HtmlRenderer
     file_token_service: FileTokenService
     preferences: SharedPreferences | None = None
+    authorization: AuthorizationService | None = None
     call_handler = call_handler
     call_event_hook = call_event_hook

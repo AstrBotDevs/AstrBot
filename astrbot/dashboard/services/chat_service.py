@@ -354,11 +354,13 @@ class ChatService:
         umop_config_router: UmopConfigRouter,
         webchat_run_coordinator: WebChatRunCoordinator,
         active_event_control: ActiveEventControl,
+        authorization: object | None = None,
     ) -> None:
         self.db = db
         self.preferences = preferences
         self.webchat_run_coordinator = webchat_run_coordinator
         self.active_event_control = active_event_control
+        self.authorization = authorization
         self.attachments_dir = os.path.join(get_astrbot_data_path(), "attachments")
         self.webchat_img_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
         os.makedirs(self.attachments_dir, exist_ok=True)
@@ -958,7 +960,7 @@ class ChatService:
         username: str,
         post_data: dict,
         *,
-        api_key_allow_admin_role: bool | None = None,
+        api_key_principal: dict[str, object] | None = None,
     ) -> AsyncIterator[str]:
         if "message" not in post_data and "files" not in post_data:
             raise ChatServiceError("Missing key: message or files")
@@ -1035,8 +1037,8 @@ class ChatService:
                 "llm_checkpoint_id": llm_checkpoint_id,
                 "thread_selected_text": thread_selected_text,
             }
-            if isinstance(api_key_allow_admin_role, bool):
-                queue_payload["_api_key_allow_admin_role"] = api_key_allow_admin_role
+            if isinstance(api_key_principal, dict):
+                queue_payload["_api_key_principal"] = dict(api_key_principal)
             await self.webchat_run_coordinator.dispatch(
                 webchat_run,
                 queue_payload,

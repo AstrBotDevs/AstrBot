@@ -102,6 +102,52 @@ class AccountUpdateRequest(OpenModel):
     new_username: str | None = None
 
 
+class DashboardAccountCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    username: str = Field(min_length=3, max_length=255)
+    password: str = Field(min_length=8, max_length=1024)
+    role: Literal["operator", "root"] = "operator"
+
+
+class DashboardAccountUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    username: str | None = Field(default=None, min_length=3, max_length=255)
+    password: str | None = Field(default=None, min_length=8, max_length=1024)
+    is_active: bool | None = None
+
+
+class AuthorizationBindingRequest(BaseModel):
+    subject_id: str
+    role: str
+    scope_type: str
+    scope_id: str
+    config_id: str | None = None
+    expires_at: str | None = None
+
+
+class AuthorizationStepUpRequest(BaseModel):
+    action: str
+    resource_type: str
+    resource_id: str
+    config_id: str | None = None
+    password: str | None = None
+    code: str | None = None
+
+
+class AuthorizationElevationRequest(BaseModel):
+    action: str
+    resource_type: str
+    resource_id: str
+    config_id: str | None = None
+    approval_channel: Literal["private", "dashboard", "webchat"] = "dashboard"
+
+
+class AuthorizationElevationApprovalRequest(BaseModel):
+    nonce: str
+
+
 class BackupUploadInitRequest(OpenModel):
     filename: str | None = None
     total_size: int | None = None
@@ -352,10 +398,6 @@ class MemoryProfileRefreshRequest(OpenModel):
 
 class ToolEnabledRequest(BaseModel):
     enabled: bool
-
-
-class ToolPermissionRequest(BaseModel):
-    permission: Literal["admin", "member"]
 
 
 class McpServerRequest(BaseModel):

@@ -32,7 +32,7 @@ async def _get_browser_component(context: ContextWrapper[AstrAgentContext]) -> A
     return browser
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG, required_actions=("tool.browser_control",))
 @dataclass
 class BrowserExecTool(FunctionTool):
     name: str = "astrbot_execute_browser"
@@ -73,7 +73,7 @@ class BrowserExecTool(FunctionTool):
         learn: bool = False,
         include_trace: bool = False,
     ) -> ToolExecResult:
-        if err := check_admin_permission(context, "Using browser tools"):
+        if err := await check_admin_permission(context, "Using browser tools"):
             return err
         try:
             browser = await _get_browser_component(context)
@@ -90,7 +90,7 @@ class BrowserExecTool(FunctionTool):
             return f"Error executing browser command: {str(e)}"
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG, required_actions=("tool.browser_control",))
 @dataclass
 class BrowserBatchExecTool(FunctionTool):
     name: str = "astrbot_execute_browser_batch"
@@ -137,7 +137,7 @@ class BrowserBatchExecTool(FunctionTool):
         learn: bool = False,
         include_trace: bool = False,
     ) -> ToolExecResult:
-        if err := check_admin_permission(context, "Using browser tools"):
+        if err := await check_admin_permission(context, "Using browser tools"):
             return err
         try:
             browser = await _get_browser_component(context)
@@ -155,7 +155,7 @@ class BrowserBatchExecTool(FunctionTool):
             return f"Error executing browser batch command: {str(e)}"
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG, required_actions=("tool.browser_control",))
 @dataclass
 class RunBrowserSkillTool(FunctionTool):
     name: str = "astrbot_run_browser_skill"
@@ -185,7 +185,7 @@ class RunBrowserSkillTool(FunctionTool):
         description: str | None = None,
         tags: str | None = None,
     ) -> ToolExecResult:
-        if err := check_admin_permission(context, "Using browser tools"):
+        if err := await check_admin_permission(context, "Using browser tools"):
             return err
         try:
             browser = await _get_browser_component(context)

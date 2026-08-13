@@ -33,8 +33,6 @@ export interface ToolItem {
   origin_name?: string;
   builtin_config_statuses?: BuiltinToolConfigTag[];
   builtin_config_tags?: BuiltinToolConfigTag[];
-  permission?: 'admin' | 'member';
-  permission_configured?: boolean;
   tool_id?: string;
   parallel_policy?: 'unknown' | 'safe' | 'serial' | 'blocked';
   parallel_eligible?: boolean;

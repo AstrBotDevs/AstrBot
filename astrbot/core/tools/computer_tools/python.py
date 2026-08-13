@@ -73,7 +73,9 @@ async def handle_result(result: dict, event: AstrMessageEvent) -> ToolExecResult
     return resp
 
 
-@builtin_tool(config=_SANDBOX_PYTHON_TOOL_CONFIG)
+@builtin_tool(
+    config=_SANDBOX_PYTHON_TOOL_CONFIG, required_actions=("tool.python_exec",)
+)
 @dataclass
 class PythonTool(FunctionTool):
     name: str = "astrbot_execute_ipython"
@@ -88,7 +90,9 @@ class PythonTool(FunctionTool):
         timeout_seconds: int = 30,
         **kwargs: Any,
     ) -> ToolExecResult:
-        if permission_error := check_admin_permission(context, "Python execution"):
+        if permission_error := await check_admin_permission(
+            context, "Python execution"
+        ):
             return permission_error
         sb = await context.context.context.computer_runtime.get_booter(
             context.context.context,
@@ -113,7 +117,9 @@ class PythonTool(FunctionTool):
             return f"Error executing code: {str(e)}"
 
 
-@builtin_tool(config=_LOCAL_PYTHON_TOOL_CONFIG)
+@builtin_tool(
+    config=_LOCAL_PYTHON_TOOL_CONFIG, required_actions=("tool.python_exec",)
+)
 @dataclass
 class LocalPythonTool(FunctionTool):
     name: str = "astrbot_execute_python"
@@ -132,7 +138,9 @@ class LocalPythonTool(FunctionTool):
         timeout_seconds: int = 30,
         **kwargs: Any,
     ) -> ToolExecResult:
-        if permission_error := check_admin_permission(context, "Python execution"):
+        if permission_error := await check_admin_permission(
+            context, "Python execution"
+        ):
             return permission_error
         sb = context.context.context.computer_runtime.get_local_booter()
         requested_timeout = kwargs.get("timeout")

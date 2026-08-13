@@ -245,7 +245,8 @@ async def test_process_applies_admin_self_message_and_unique_session_rules(monke
 
     admin_event = FakeEvent([Plain("/hello")], message_text="/hello", sender_id="admin")
     await stage.process(admin_event)
-    assert admin_event.role == "admin"
+    assert admin_event.role == "member"
+    assert admin_event.get_extra("auth_context").subject.kind == "im"
     assert admin_event.session_id == "admin_group"
 
     notice_event = FakeEvent(
@@ -256,23 +257,12 @@ async def test_process_applies_admin_self_message_and_unique_session_rules(monke
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("api_key_allow_admin_role", "expected_role"),
-    [(False, "member"), (True, "admin"), (None, "admin")],
-)
-async def test_api_key_admin_capability_is_only_denied_by_explicit_false(
-    api_key_allow_admin_role,
-    expected_role,
-):
+async def test_platform_sender_never_becomes_global_admin_role():
     stage = await make_stage()
-    extras = {}
-    if api_key_allow_admin_role is not None:
-        extras["_api_key_allow_admin_role"] = api_key_allow_admin_role
-    event = FakeEvent([Plain("hello")], sender_id="admin", extras=extras)
-
-    stage._assign_admin_role(event)
-
-    assert event.role == expected_role
+    event = FakeEvent([Plain("hello")], sender_id="admin")
+    await stage.process(event)
+    assert event.role == "member"
+    assert event.get_extra("auth_context").subject.kind == "im"
 
 
 @pytest.mark.asyncio

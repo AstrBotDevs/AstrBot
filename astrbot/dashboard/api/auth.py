@@ -5,6 +5,8 @@ import jwt
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
+from astrbot.core.auth.models import AuthContext as CoreAuthContext
+from astrbot.core.auth.models import Resource, Subject
 from astrbot.dashboard.responses import ApiError
 from astrbot.dashboard.schemas import (
     AccountUpdateRequest,
@@ -39,7 +41,126 @@ class AuthContext:
     scopes: list[str]
     subject: str
     api_key_id: str | None = None
+    account_id: str | None = None
+    sid: str | None = None
+    auth_strength: str = "none"
+    issued_at: object | None = None
     via: str = "jwt"
+
+
+_SCOPE_ACTIONS = {
+    "bot": "platform.manage",
+    "provider": "provider.manage",
+    "persona": "agent.manage",
+    "im": "session.manage",
+    "config": "platform.manage",
+    "config:edit_admin": "identity.manage",
+    "chat": "session.manage",
+    "chat:admin": "chat.impersonate_admin",
+    "kb": "data.manage",
+    "memory": "data.manage",
+    "data": "data.manage",
+    "file": "data.manage",
+    "plugin": "extension.manage",
+    "mcp": "extension.manage",
+    "skill": "extension.manage",
+    "tool": "extension.manage",
+    "system": "system.manage",
+}
+
+
+def _scope_action(request: Request, auth: AuthContext, scope: str) -> str | None:
+    """Resolve an endpoint scope to the narrowest core capability."""
+
+    if scope == "provider":
+        if auth.via == "api_key":
+            return "provider.read" if request.method.upper() in _SAFE_HTTP_METHODS else None
+        return "provider.read" if request.method.upper() in _SAFE_HTTP_METHODS else "provider.manage"
+    if scope == "config":
+        return "platform.manage"
+    if scope == "data":
+        return "data.manage"
+    return _SCOPE_ACTIONS.get(scope)
+
+
+def _request_config_id(request: Request) -> str | None:
+    """Read an explicit config scope without parsing endpoint-specific bodies."""
+
+    value = request.query_params.get("config_id") or request.headers.get(
+        "X-AstrBot-Config-Id"
+    )
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+async def _authorize_scope_action(
+    request: Request,
+    auth: AuthContext,
+    scope: str,
+) -> None:
+    """Apply the single authorization service to Dashboard/API principals."""
+
+    action = _scope_action(request, auth, scope)
+    authorization = getattr(request.app.state.runtime.services, "authorization", None)
+    if action is None or authorization is None:
+        raise ApiError("Authorization denied", status_code=403)
+    if auth.via == "api_key":
+        subject = Subject.api_key(auth.api_key_id or "unknown")
+        source = "api_key"
+        api_scopes = tuple(auth.scopes)
+        session_id = None
+    elif auth.account_id:
+        subject = Subject.dashboard_account(auth.account_id, auth.username)
+        source = "dashboard"
+        api_scopes = ()
+        session_id = auth.sid
+    else:
+        # Existing signed JWTs remain valid for their normal lifetime, but are
+        # never treated as a root/operator account in new authorization code.
+        subject = Subject.dashboard_session(auth.sid or "legacy", auth.username)
+        source = "dashboard"
+        api_scopes = ()
+        session_id = auth.sid
+    config_id = _request_config_id(request)
+    resource = Resource.named(
+        "dashboard-api",
+        f"{request.method.lower()}-{scope}",
+        config_id=config_id,
+    )
+    core_context = CoreAuthContext(
+        subject=subject,
+        source=source,
+        config_id=config_id,
+        authenticated=True,
+        principal_subject_id=(
+            Subject.dashboard_account(auth.account_id, auth.username).id
+            if auth.account_id
+            else None
+        ),
+        api_scopes=api_scopes,
+        auth_strength=auth.auth_strength,
+        authenticated_at=auth.issued_at,
+        step_up_token=request.headers.get("X-AstrBot-Step-Up"),
+        metadata={
+            "dashboard_session_id": session_id,
+            "dashboard_write": request.method.upper() not in _SAFE_HTTP_METHODS,
+            "path": request.url.path,
+        },
+    )
+    decision = await authorization.authorize(subject, action, resource, core_context)
+    if not decision.allowed:
+        raise ApiError(
+            "Authorization denied",
+            data={
+                "reason": decision.reason,
+                "requires_step_up": decision.requires_step_up,
+                "requires_elevation": decision.requires_elevation,
+                "action": action,
+                "resource_type": resource.type,
+                "resource_id": resource.id,
+                "config_id": config_id,
+            },
+            status_code=403,
+        )
 
 
 def _extract_raw_api_key(request: Request) -> str | None:
@@ -207,6 +328,8 @@ async def require_dashboard_user(request: Request) -> str:
         raise ApiError("Token 过期", status_code=401) from exc
     except jwt.InvalidTokenError as exc:
         raise ApiError("Token 无效", status_code=401) from exc
+    if not await request.app.state.services.auth.validate_dashboard_principal(principal):
+        raise ApiError("Token 无效", status_code=401)
     if source == "cookie":
         _require_cookie_mutation_origin(request)
     return principal.username
@@ -234,6 +357,11 @@ async def require_dashboard_session_principal(
     if (
         bearer_principal.sid != cookie_principal.sid
         or bearer_principal.username != cookie_principal.username
+        or bearer_principal.account_id != cookie_principal.account_id
+    ):
+        raise ApiError("Unauthorized", status_code=401)
+    if not await request.app.state.services.auth.validate_dashboard_principal(
+        bearer_principal
     ):
         raise ApiError("Unauthorized", status_code=401)
     _require_cookie_mutation_origin(request)
@@ -268,7 +396,9 @@ async def _require_api_key_scope(
 async def require_scope(request: Request, scope: str) -> AuthContext:
     raw_key = _extract_raw_api_key(request)
     if raw_key:
-        return await _require_api_key_scope(request, raw_key, scope)
+        auth = await _require_api_key_scope(request, raw_key, scope)
+        await _authorize_scope_action(request, auth, scope)
+        return auth
 
     token, source = _extract_dashboard_jwt_with_source(request)
     if not token:
@@ -286,14 +416,27 @@ async def require_scope(request: Request, scope: str) -> AuthContext:
                 raise api_key_exc from exc
         raise ApiError("Invalid token", status_code=401) from exc
 
+    if not await request.app.state.services.auth.validate_dashboard_principal(principal):
+        raise ApiError("Invalid token", status_code=401)
+
     if source == "cookie":
         _require_cookie_mutation_origin(request)
-    return AuthContext(
+    auth = AuthContext(
         username=principal.username,
         scopes=["*"],
-        subject=f"dashboard-session:{principal.sid}",
+        subject=(
+            f"dashboard-account:{principal.account_id}"
+            if principal.account_id
+            else f"dashboard-session:{principal.sid}"
+        ),
+        account_id=principal.account_id,
+        sid=principal.sid,
+        auth_strength=principal.auth_strength,
+        issued_at=principal.issued_at,
         via="jwt",
     )
+    await _authorize_scope_action(request, auth, scope)
+    return auth
 
 
 def get_auth_service(request: Request) -> AuthService:
@@ -464,30 +607,40 @@ async def _setup(
 async def _totp_setup(
     request: Request,
     payload: TotpSetupRequest | None,
-    auth: AuthContext,
+    principal: DashboardSessionPrincipal,
     service: AuthService,
 ):
     return _auth_service_response(
         request,
-        await service.totp_setup(_payload(payload), subject=auth.subject),
+        await service.totp_setup(
+            _payload(payload),
+            subject=f"dashboard-account:{principal.account_id}",
+            account_id=principal.account_id or "",
+        ),
     )
 
 
 async def _totp_recovery(
     request: Request,
+    principal: DashboardSessionPrincipal,
     service: AuthService,
 ):
-    return _auth_service_response(request, await service.totp_recovery())
+    return _auth_service_response(
+        request, await service.totp_recovery(account_id=principal.account_id or "")
+    )
 
 
 async def _update_account(
     request: Request,
     payload: AccountUpdateRequest,
+    principal: DashboardSessionPrincipal,
     service: AuthService,
 ):
     return _auth_service_response(
         request,
-        await service.edit_account(_payload(payload)),
+        await service.edit_account(
+            _payload(payload), account_id=principal.account_id or ""
+        ),
     )
 
 
@@ -508,7 +661,7 @@ async def logout(request: Request):
         await services.plugin_page_sessions.revoke_by_auth_session_id(principal.sid)
         await services.plugin_file_tickets.revoke_by_auth_session_id(principal.sid)
         await services.auth.discard_totp_rotation(
-            f"dashboard-session:{principal.sid}",
+            f"dashboard-account:{principal.account_id}",
         )
     response = JSONResponse(
         {"status": "ok", "message": "已退出登录", "data": {}},
@@ -539,26 +692,26 @@ async def setup(
 async def totp_setup(
     request: Request,
     payload: TotpSetupRequest | None = None,
-    auth: AuthContext = Depends(require_system_scope),
+    principal: DashboardSessionPrincipal = Depends(require_dashboard_session_principal),
     service: AuthService = Depends(get_auth_service),
 ):
-    return await _totp_setup(request, payload, auth, service)
+    return await _totp_setup(request, payload, principal, service)
 
 
 @router.post("/auth/totp/recovery")
 async def totp_recovery(
     request: Request,
-    _auth: AuthContext = Depends(require_system_scope),
+    principal: DashboardSessionPrincipal = Depends(require_dashboard_session_principal),
     service: AuthService = Depends(get_auth_service),
 ):
-    return await _totp_recovery(request, service)
+    return await _totp_recovery(request, principal, service)
 
 
 @router.patch("/auth/account")
 async def update_account(
     request: Request,
     payload: AccountUpdateRequest,
-    _auth: AuthContext = Depends(require_system_scope),
+    principal: DashboardSessionPrincipal = Depends(require_dashboard_session_principal),
     service: AuthService = Depends(get_auth_service),
 ):
-    return await _update_account(request, payload, service)
+    return await _update_account(request, payload, principal, service)

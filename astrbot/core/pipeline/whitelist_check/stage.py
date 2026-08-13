@@ -12,6 +12,7 @@ class WhitelistCheckStage(Stage):
     """检查是否在群聊/私聊白名单"""
 
     async def initialize(self, ctx: PipelineContext) -> None:
+        self.ctx = ctx
         self.enable_whitelist_check = ctx.astrbot_config["platform_settings"][
             "enable_id_white_list"
         ]
@@ -44,17 +45,11 @@ class WhitelistCheckStage(Stage):
             return
 
         # 检查是否在白名单
-        if self.wl_ignore_admin_on_group:
-            if (
-                event.role == "admin"
-                and event.get_message_type() == MessageType.GROUP_MESSAGE
-            ):
+        if event.get_message_type() == MessageType.GROUP_MESSAGE:
+            if self.wl_ignore_admin_on_group and await self._can_bypass(event):
                 return
-        if self.wl_ignore_admin_on_friend:
-            if (
-                event.role == "admin"
-                and event.get_message_type() == MessageType.FRIEND_MESSAGE
-            ):
+        elif event.get_message_type() == MessageType.FRIEND_MESSAGE:
+            if self.wl_ignore_admin_on_friend and await self._can_bypass(event):
                 return
         if (
             event.unified_msg_origin not in self.whitelist
@@ -65,3 +60,20 @@ class WhitelistCheckStage(Stage):
                     f"会话 ID {event.unified_msg_origin} 不在会话白名单中，已终止事件传播。请在配置文件中添加该会话 ID 到白名单。",
                 )
             event.stop_event()
+
+    async def _can_bypass(self, event: AstrMessageEvent) -> bool:
+        if (
+            self.ctx.authorization is None
+            or event.subject is None
+            or event.resource is None
+            or event.auth_context is None
+        ):
+            return False
+        return (
+            await self.ctx.authorization.authorize(
+                event.subject,
+                "provider.manage",
+                event.resource,
+                event.auth_context,
+            )
+        ).allowed

@@ -13,6 +13,7 @@ from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import ToolImageCache
 from astrbot.core.assistant_history import AssistantHistoryCommitter
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.auth.service import AuthorizationService
 from astrbot.core.computer.computer_client import ComputerRuntime
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
@@ -197,6 +198,7 @@ class CoreExecutionContext:
         session_waiter_registry: SessionWaiterRegistry | None = None,
         follow_up_coordinator: FollowUpCoordinator | None = None,
         llm_metadata_catalog: LLMMetadataCatalog | None = None,
+        authorization: AuthorizationService | None = None,
     ) -> None:
         self._event_queue = event_queue
         """事件队列。消息平台通过事件队列传递消息事件。"""
@@ -228,6 +230,8 @@ class CoreExecutionContext:
         """Temporary file publication capability available to plugins."""
         self.catalogs = catalogs
         """Runtime-owned plugin, handler, and function-tool catalogs."""
+        self.authorization = authorization
+        """Runtime-owned action/resource authorization service."""
         self.llm_metadata_catalog = llm_metadata_catalog or LLMMetadataCatalog()
         """Runtime-owned model metadata used by Agent and Dashboard paths."""
         self.metrics = metrics

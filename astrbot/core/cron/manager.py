@@ -422,16 +422,8 @@ class CronJobManager:
             message_type=session.message_type,
         )
 
-        # judge user's role
         umo = cron_event.unified_msg_origin
         cfg = self.ctx.get_config(umo=umo)
-        cron_payload = extras.get("cron_payload", {}) if extras else {}
-        sender_id = cron_payload.get("sender_id")
-        admin_ids = cfg.get("admins_id", [])
-        if admin_ids:
-            cron_event.role = "admin" if sender_id in admin_ids else "member"
-        if cron_payload.get("origin", "tool") == "api":
-            cron_event.role = "admin"
 
         provider_settings = cfg.get("provider_settings", {})
         tool_call_timeout = provider_settings.get("tool_call_timeout", 120)

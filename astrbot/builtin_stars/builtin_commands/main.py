@@ -49,7 +49,7 @@ class Main(star.Star):
         """Show IDs and metadata for the current session"""
         await self.session_c.info(event)
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.permission("session.manage")
     @session.command("name")
     async def name(
         self, event: AstrMessageEvent, alias: GreedyStr = GreedyStr("")
@@ -103,7 +103,7 @@ class Main(star.Star):
         """List conversations"""
         await self.conversation_c.list_conversations(event, page)
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.permission("session.assign")
     @conversation.command("create-for")
     async def groupnew(self, event: AstrMessageEvent, session_id: str) -> None:
         """Create a conversation for a target group session"""
@@ -132,7 +132,7 @@ class Main(star.Star):
     def provider(self) -> None:
         """Manage providers"""
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.permission("provider.read")
     @provider.command("list")
     async def provider_list(self, event: AstrMessageEvent) -> None:
         """List configured providers"""
@@ -142,19 +142,19 @@ class Main(star.Star):
     def provider_set(self) -> None:
         """Select a provider by capability"""
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.permission("provider.use")
     @provider_set.command("llm")
     async def provider_llm(self, event: AstrMessageEvent, index: int) -> None:
         """Switch the LLM provider"""
         await self.provider_c.set_llm_provider(event, index)
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.permission("provider.use")
     @provider_set.command("tts")
     async def provider_tts(self, event: AstrMessageEvent, index: int) -> None:
         """Switch the TTS provider"""
         await self.provider_c.set_tts_provider(event, index)
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.permission("provider.use")
     @provider_set.command("stt")
     async def provider_stt(self, event: AstrMessageEvent, index: int) -> None:
         """Switch the STT provider"""
@@ -164,13 +164,13 @@ class Main(star.Star):
     def model(self) -> None:
         """Manage models"""
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.permission("provider.read")
     @model.command("list")
     async def model_list(self, event: AstrMessageEvent) -> None:
         """List models for the current provider"""
         await self.provider_c.list_models(event)
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.permission("provider.use")
     @model.command("set")
     async def model_set(
         self, event: AstrMessageEvent, model_or_index: GreedyStr
@@ -196,19 +196,19 @@ class Main(star.Star):
     def chat(self) -> None:
         """Manage LLM chat for the current session"""
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.permission("session.manage")
     @chat.command("status")
     async def chat_status(self, event: AstrMessageEvent) -> None:
         """Show whether LLM chat is enabled"""
         await self.chat_c.status(event)
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.permission("session.manage")
     @chat.command("enable")
     async def chat_enable(self, event: AstrMessageEvent) -> None:
         """Enable LLM chat for the current session"""
         await self.chat_c.set_enabled(event, True)
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.permission("session.manage")
     @chat.command("disable")
     async def chat_disable(self, event: AstrMessageEvent) -> None:
         """Disable LLM chat for the current session"""
@@ -218,19 +218,19 @@ class Main(star.Star):
     def admin(self) -> None:
         """Manage administrators"""
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.permission("identity.manage")
     @admin.command("list")
     async def admin_list(self, event: AstrMessageEvent) -> None:
         """List administrator IDs"""
         await self.admin_c.list_admins(event)
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.permission("identity.manage")
     @admin.command("grant")
     async def op(self, event: AstrMessageEvent, user_id: str) -> None:
         """Grant administrator permission"""
         await self.admin_c.grant(event, user_id)
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.permission("identity.manage")
     @admin.command("revoke")
     async def deop(self, event: AstrMessageEvent, user_id: str) -> None:
         """Revoke administrator permission"""
@@ -240,25 +240,25 @@ class Main(star.Star):
     def persona(self) -> None:
         """Manage personas"""
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.permission("agent.manage")
     @persona.command("status")
     async def persona_status(self, event: AstrMessageEvent) -> None:
         """Show the current persona"""
         await self.persona_c.status(event)
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.permission("agent.manage")
     @persona.command("list")
     async def persona_list(self, event: AstrMessageEvent) -> None:
         """List personas"""
         await self.persona_c.list_personas(event)
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.permission("agent.manage")
     @persona.command("set")
     async def persona_set(self, event: AstrMessageEvent, persona_id: GreedyStr) -> None:
         """Set the current conversation persona"""
         await self.persona_c.set_persona(event, persona_id)
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.permission("agent.manage")
     @persona.command("show")
     async def persona_view(
         self, event: AstrMessageEvent, persona_id: GreedyStr
@@ -266,7 +266,7 @@ class Main(star.Star):
         """View persona details"""
         await self.persona_c.show(event, persona_id)
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.permission("agent.manage")
     @persona.command("unset")
     async def persona_unset(self, event: AstrMessageEvent) -> None:
         """Unset the current conversation persona"""
@@ -281,19 +281,19 @@ class Main(star.Star):
         """List loaded plugins"""
         await self.plugin_c.list_plugins(event)
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.permission("extension.manage")
     @plugin.command("disable")
     async def plugin_off(self, event: AstrMessageEvent, plugin_name: str) -> None:
         """Disable a plugin"""
         await self.plugin_c.disable(event, plugin_name)
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.permission("extension.manage")
     @plugin.command("enable")
     async def plugin_on(self, event: AstrMessageEvent, plugin_name: str) -> None:
         """Enable a plugin"""
         await self.plugin_c.enable(event, plugin_name)
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.permission("extension.plugin_install")
     @plugin.command("install")
     async def plugin_get(self, event: AstrMessageEvent, repository_url: str) -> None:
         """Install a plugin"""

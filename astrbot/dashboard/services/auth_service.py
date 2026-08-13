@@ -10,11 +10,15 @@ from typing import Any
 
 import jwt
 import pyotp
+from sqlmodel import col, select
 
 from astrbot import logger
+from astrbot.core.auth.models import GLOBAL_SCOPE_ID, Role, Subject
 from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.db.po import AuthRoleBinding, DashboardAccount
 from astrbot.core.db.protocols import DatabaseSessionStore
 from astrbot.core.utils.auth_password import (
+    hash_dashboard_password,
     is_default_dashboard_password,
     is_md5_dashboard_password,
     validate_dashboard_password,
@@ -29,11 +33,19 @@ from astrbot.core.utils.totp import (
 from astrbot.core.utils.totp import (
     TotpRuntimeState,
     TwoFactorCodeType,
+    account_totp_enabled,
     generate_recovery_code,
-    is_totp_enabled,
-    is_totp_trusted_device_valid,
-    issue_totp_trusted_device,
-    revoke_user_trusted_devices,
+    is_account_totp_trusted_device_valid,
+    issue_account_totp_trusted_device,
+    revoke_account_totp_trusted_devices,
+    verify_recovery_code_hash,
+)
+
+# Compatibility names for migration tools; live authentication uses only the
+# account-scoped helpers above.
+from astrbot.core.utils.totp import is_totp_trusted_device_valid as _legacy_totp_valid
+from astrbot.core.utils.totp import (
+    revoke_user_trusted_devices as _legacy_revoke_devices,
 )
 from astrbot.dashboard.password_state import (
     get_dashboard_password_hash,
@@ -42,6 +54,9 @@ from astrbot.dashboard.password_state import (
     set_dashboard_password_hashes,
     set_dashboard_password_security_state,
 )
+
+is_totp_trusted_device_valid = _legacy_totp_valid
+revoke_user_trusted_devices = _legacy_revoke_devices
 
 DASHBOARD_JWT_COOKIE_NAME = "astrbot_dashboard_jwt"
 DASHBOARD_JWT_COOKIE_MAX_AGE = 7 * 24 * 60 * 60
@@ -86,6 +101,21 @@ class DashboardSessionPrincipal:
     username: str
     sid: str
     jti: str
+    account_id: str | None = None
+    auth_strength: str = "password"
+    issued_at: datetime.datetime | None = None
+
+    @property
+    def subject(self) -> Subject:
+        return Subject.dashboard_session(self.sid, self.username)
+
+    @property
+    def account_subject(self) -> Subject | None:
+        return (
+            Subject.dashboard_account(self.account_id, self.username)
+            if self.account_id
+            else None
+        )
 
 
 def derive_dashboard_secret(jwt_secret: str, purpose: bytes) -> bytes:
@@ -120,7 +150,13 @@ class DashboardTokenValidator:
         ).hex()
         self.issuer = f"urn:astrbot:dashboard:{issuer_digest}"
 
-    def issue(self, username: str) -> str:
+    def issue(
+        self,
+        username: str,
+        *,
+        account_id: str | None = None,
+        auth_strength: str = "password",
+    ) -> str:
         now = datetime.datetime.now(datetime.UTC)
         payload: dict[str, Any] = {
             "token_type": DASHBOARD_SESSION_TOKEN_TYPE,
@@ -130,6 +166,8 @@ class DashboardTokenValidator:
             "username": username,
             "sid": secrets.token_urlsafe(32),
             "jti": secrets.token_urlsafe(32),
+            "account_id": account_id,
+            "auth_strength": auth_strength,
             "iat": now,
             "exp": now + datetime.timedelta(seconds=DASHBOARD_JWT_COOKIE_MAX_AGE),
         }
@@ -161,7 +199,27 @@ class DashboardTokenValidator:
             or not jti
         ):
             raise jwt.InvalidTokenError("Invalid Dashboard token claims")
-        return DashboardSessionPrincipal(username=username, sid=sid, jti=jti)
+        account_id = payload.get("account_id")
+        auth_strength = payload.get("auth_strength", "password")
+        if account_id is not None and (
+            not isinstance(account_id, str) or not account_id
+        ):
+            raise jwt.InvalidTokenError("Invalid Dashboard account claim")
+        if auth_strength not in {"password", "totp", "step_up"}:
+            raise jwt.InvalidTokenError("Invalid Dashboard auth strength")
+        issued = (
+            datetime.datetime.fromtimestamp(float(payload["iat"]), datetime.UTC)
+            if isinstance(payload.get("iat"), int | float)
+            else None
+        )
+        return DashboardSessionPrincipal(
+            username=username,
+            sid=sid,
+            jti=jti,
+            account_id=account_id,
+            auth_strength=auth_strength,
+            issued_at=issued,
+        )
 
 
 class AuthService:
@@ -178,9 +236,291 @@ class AuthService:
         self.config = config
         self.demo_mode = demo_mode
         self.totp_runtime_state = totp_runtime_state
+        self._account_mutation_lock = asyncio.Lock()
         self.token_validator = token_validator or DashboardTokenValidator(
             self.config["dashboard"].get("jwt_secret", "")
         )
+
+    async def _ensure_dashboard_account(
+        self, username: str, password_hash: str, *, sync_password: bool = False
+    ) -> DashboardAccount:
+        """Materialize the legacy single account and its first root binding."""
+
+        async with self.db.get_db() as session:
+            async with session.begin():
+                account = (
+                    await session.execute(
+                        select(DashboardAccount).where(
+                            col(DashboardAccount.username) == username
+                        )
+                    )
+                ).scalar_one_or_none()
+                legacy_totp = self.config.get("dashboard", {}).get("totp", {})
+                if not isinstance(legacy_totp, dict):
+                    legacy_totp = {}
+                if account is None:
+                    account = DashboardAccount(
+                        username=username,
+                        password_hash=password_hash,
+                        totp_enabled=bool(legacy_totp.get("enable", False)),
+                        totp_secret=str(legacy_totp.get("secret", "") or ""),
+                        totp_recovery_code_hash=str(
+                            legacy_totp.get("recovery_code_hash", "") or ""
+                        ),
+                        totp_migrated=True,
+                    )
+                    session.add(account)
+                    await session.flush()
+                    root = (
+                        await session.execute(
+                            select(AuthRoleBinding).where(
+                                col(AuthRoleBinding.role) == Role.ROOT.value,
+                                col(AuthRoleBinding.scope_type) == "global",
+                                col(AuthRoleBinding.revoked_at).is_(None),
+                            )
+                        )
+                    ).scalar_one_or_none()
+                    if root is None:
+                        session.add(
+                            AuthRoleBinding(
+                                subject_id=f"dashboard-account:{account.account_id}",
+                                role=Role.ROOT.value,
+                                scope_type="global",
+                                scope_id="global",
+                                config_id=GLOBAL_SCOPE_ID,
+                                source="migrated",
+                                created_by="system:bootstrap",
+                                metadata_json={"migration": "dashboard-account-v1"},
+                            )
+                        )
+                else:
+                    # A per-account password is authoritative after migration.
+                    # Syncing is only used by the explicit first-account setup.
+                    if sync_password:
+                        account.password_hash = password_hash
+                    if not account.totp_migrated:
+                        account.totp_enabled = bool(legacy_totp.get("enable", False))
+                        account.totp_secret = str(legacy_totp.get("secret", "") or "")
+                        account.totp_recovery_code_hash = str(
+                            legacy_totp.get("recovery_code_hash", "") or ""
+                        )
+                        account.totp_migrated = True
+                    account.last_login_at = datetime.datetime.now(datetime.UTC)
+                await session.flush()
+                return account
+
+    async def _find_dashboard_account(self, username: str) -> DashboardAccount | None:
+        """Return the active stable account for a Dashboard username."""
+
+        async with self.db.get_db() as session:
+            return (
+                await session.execute(
+                    select(DashboardAccount).where(
+                        col(DashboardAccount.username) == username,
+                        col(DashboardAccount.is_active).is_(True),
+                    )
+                )
+            ).scalar_one_or_none()
+
+    async def validate_dashboard_principal(
+        self, principal: DashboardSessionPrincipal
+    ) -> bool:
+        """Reject stale, renamed, disabled, or pre-migration Dashboard tokens."""
+
+        if not principal.account_id:
+            return False
+        async with self.db.get_db() as session:
+            account = (
+                await session.execute(
+                    select(DashboardAccount).where(
+                        col(DashboardAccount.account_id) == principal.account_id,
+                        col(DashboardAccount.username) == principal.username,
+                        col(DashboardAccount.is_active).is_(True),
+                    )
+                )
+            ).scalar_one_or_none()
+            return account is not None
+
+    async def list_dashboard_accounts(self) -> list[DashboardAccount]:
+        """List stable control-plane accounts without exposing password hashes."""
+
+        async with self.db.get_db() as session:
+            return list(
+                (
+                    await session.execute(
+                        select(DashboardAccount).order_by(
+                            col(DashboardAccount.created_at).asc()
+                        )
+                    )
+                ).scalars()
+            )
+
+    async def has_dashboard_accounts(self) -> bool:
+        """Return whether the legacy Dashboard credential has been migrated."""
+
+        async with self.db.get_db() as session:
+            return (
+                await session.execute(select(DashboardAccount.account_id).limit(1))
+            ).scalar_one_or_none() is not None
+
+    async def create_dashboard_account(
+        self,
+        *,
+        username: str,
+        password: str,
+        created_by: str,
+    ) -> DashboardAccount:
+        """Create an independently authenticated Dashboard account."""
+
+        normalized_username = username.strip()
+        if len(normalized_username) < 3:
+            raise ValueError("Username must be at least 3 characters")
+        validate_dashboard_password(password)
+        async with self.db.get_db() as session:
+            async with session.begin():
+                existing = (
+                    await session.execute(
+                        select(DashboardAccount).where(
+                            col(DashboardAccount.username) == normalized_username
+                        )
+                    )
+                ).scalar_one_or_none()
+                if existing is not None:
+                    raise ValueError("Dashboard username already exists")
+                account = DashboardAccount(
+                    username=normalized_username,
+                    password_hash=hash_dashboard_password(password),
+                    created_by=created_by,
+                )
+                session.add(account)
+                await session.flush()
+                return account
+
+    async def create_dashboard_account_with_role(
+        self,
+        *,
+        username: str,
+        password: str,
+        created_by: str,
+        role: Role,
+    ) -> tuple[DashboardAccount, AuthRoleBinding]:
+        """Atomically create a Dashboard identity and its global role binding."""
+
+        if role not in {Role.ROOT, Role.OPERATOR}:
+            raise ValueError("Dashboard accounts require a global control-plane role")
+        normalized_username = username.strip()
+        if len(normalized_username) < 3:
+            raise ValueError("Username must be at least 3 characters")
+        validate_dashboard_password(password)
+        async with self._account_mutation_lock:
+            async with self.db.get_db() as session:
+                async with session.begin():
+                    existing = (
+                        await session.execute(
+                            select(DashboardAccount).where(
+                                col(DashboardAccount.username) == normalized_username
+                            )
+                        )
+                    ).scalar_one_or_none()
+                    if existing is not None:
+                        raise ValueError("Dashboard username already exists")
+                    account = DashboardAccount(
+                        username=normalized_username,
+                        password_hash=hash_dashboard_password(password),
+                        created_by=created_by,
+                        totp_migrated=True,
+                    )
+                    session.add(account)
+                    await session.flush()
+                    binding = AuthRoleBinding(
+                        subject_id=Subject.dashboard_account(
+                            account.account_id, account.username
+                        ).id,
+                        role=role.value,
+                        scope_type="global",
+                        scope_id="global",
+                        config_id=GLOBAL_SCOPE_ID,
+                        source="explicit",
+                        created_by=created_by,
+                        metadata_json={"account_creation": True},
+                    )
+                    session.add(binding)
+                    await session.flush()
+                    return account, binding
+
+    async def update_dashboard_account(
+        self,
+        *,
+        account_id: str,
+        username: str | None = None,
+        password: str | None = None,
+        is_active: bool | None = None,
+    ) -> DashboardAccount | None:
+        """Update one stable account; root-retention belongs to authz bindings."""
+
+        if username is not None and len(username.strip()) < 3:
+            raise ValueError("Username must be at least 3 characters")
+        if password is not None:
+            validate_dashboard_password(password)
+        async with self._account_mutation_lock:
+            async with self.db.get_db() as session:
+                async with session.begin():
+                    account = (
+                        await session.execute(
+                            select(DashboardAccount).where(
+                                col(DashboardAccount.account_id) == account_id
+                            )
+                        )
+                    ).scalar_one_or_none()
+                    if account is None:
+                        return None
+                    if is_active is False and account.is_active:
+                        root_subjects = set(
+                            (
+                                await session.execute(
+                                    select(AuthRoleBinding.subject_id).where(
+                                        col(AuthRoleBinding.role) == Role.ROOT.value,
+                                        col(AuthRoleBinding.scope_type) == "global",
+                                        col(AuthRoleBinding.revoked_at).is_(None),
+                                    )
+                                )
+                            ).scalars()
+                        )
+                        active_roots = (
+                            await session.execute(
+                                select(DashboardAccount.account_id).where(
+                                    col(DashboardAccount.is_active).is_(True)
+                                )
+                            )
+                        ).scalars()
+                        if (
+                            f"dashboard-account:{account_id}" in root_subjects
+                            and sum(
+                                f"dashboard-account:{root_id}" in root_subjects
+                                for root_id in active_roots
+                            )
+                            <= 1
+                        ):
+                            raise ValueError("Cannot deactivate the last root account")
+                    if username is not None:
+                        normalized_username = username.strip()
+                        duplicate = (
+                            await session.execute(
+                                select(DashboardAccount).where(
+                                    col(DashboardAccount.username)
+                                    == normalized_username,
+                                    col(DashboardAccount.account_id) != account_id,
+                                )
+                            )
+                        ).scalar_one_or_none()
+                        if duplicate is not None:
+                            raise ValueError("Dashboard username already exists")
+                        account.username = normalized_username
+                    if password is not None:
+                        account.password_hash = hash_dashboard_password(password)
+                    if is_active is not None:
+                        account.is_active = is_active
+                    return account
 
     async def setup_status(self) -> AuthServiceResult:
         return AuthServiceResult(
@@ -193,12 +533,54 @@ class AuthService:
             }
         )
 
+    async def verify_step_up_factor(
+        self,
+        *,
+        account_id: str,
+        password: str | None = None,
+        code: str | None = None,
+    ) -> str | None:
+        """Reauthenticate one Dashboard factor without issuing a session token."""
+
+        async with self.db.get_db() as session:
+            account = (
+                await session.execute(
+                    select(DashboardAccount).where(
+                        col(DashboardAccount.account_id) == account_id,
+                        col(DashboardAccount.is_active).is_(True),
+                    )
+                )
+            ).scalar_one_or_none()
+        if account is None:
+            return None
+        if isinstance(password, str) and password:
+            if verify_dashboard_password(account.password_hash, password):
+                return "password"
+        if isinstance(code, str) and code.strip() and account_totp_enabled(account):
+            if await self.totp_runtime_state.consume_totp_code(
+                account.totp_secret, code.strip()
+            ):
+                return "totp"
+        return None
+
     async def totp_setup(
         self,
         post_data: object,
         *,
         subject: str,
+        account_id: str,
     ) -> AuthServiceResult:
+        async with self.db.get_db() as session:
+            account = (
+                await session.execute(
+                    select(DashboardAccount).where(
+                        col(DashboardAccount.account_id) == account_id,
+                        col(DashboardAccount.is_active).is_(True),
+                    )
+                )
+            ).scalar_one_or_none()
+        if account is None:
+            return self.error("Dashboard account is unavailable", status_code=401)
         if isinstance(post_data, dict) and post_data.get("secret"):
             secret = post_data["secret"]
             code = post_data.get("code")
@@ -207,28 +589,43 @@ class AuthService:
 
             if not isinstance(code, str) or not code.strip():
                 return self.error("TOTP 验证码是必需的")
-            if is_totp_enabled(
-                self.config
+            if account_totp_enabled(
+                account
             ) and not await self.totp_runtime_state.has_rotation_verification(subject):
                 return self.error("需要先验证当前 TOTP")
 
-            if not await self.totp_runtime_state.stage_pending_totp_secret(
+            if not await self.totp_runtime_state.stage_account_totp_secret(
                 subject,
-                self.config,
-                secret,
-                code,
+                current_enabled=account_totp_enabled(account), secret=secret, code=code
             ):
                 return self.error("TOTP 验证码无效")
             recovery_code, recovery_code_hash = generate_recovery_code()
+            async with self.db.get_db() as session:
+                async with session.begin():
+                    persisted = (
+                        await session.execute(
+                            select(DashboardAccount).where(
+                                col(DashboardAccount.account_id) == account_id,
+                                col(DashboardAccount.is_active).is_(True),
+                            )
+                        )
+                    ).scalar_one_or_none()
+                    if persisted is None:
+                        return self.error("Dashboard account is unavailable", status_code=401)
+                    persisted.totp_enabled = True
+                    persisted.totp_secret = secret.strip()
+                    persisted.totp_recovery_code_hash = recovery_code_hash
+                    persisted.totp_migrated = True
+            await revoke_account_totp_trusted_devices(self.db, account_id)
             return AuthServiceResult(
                 data={
                     "recovery_code": recovery_code,
-                    "recovery_code_hash": recovery_code_hash,
+                    "enabled": True,
                 },
                 message="TOTP verified",
             )
 
-        if is_totp_enabled(self.config):
+        if account_totp_enabled(account):
             if not isinstance(post_data, dict):
                 return self.error("Invalid request payload")
 
@@ -236,10 +633,8 @@ class AuthService:
 
             code = post_data.get("code")
             if isinstance(code, str) and code.strip():
-                if await self.totp_runtime_state.verify_current_rotation_code(
-                    subject,
-                    self.config,
-                    code,
+                if await self.totp_runtime_state.verify_rotation_secret(
+                    subject, account.totp_secret, code
                 ):
                     return AuthServiceResult(data={"secret": pyotp.random_base32()})
                 return self.error("当前 TOTP 验证码无效")
@@ -248,12 +643,25 @@ class AuthService:
 
         return AuthServiceResult(data={"secret": pyotp.random_base32()})
 
-    async def totp_recovery(self) -> AuthServiceResult:
+    async def totp_recovery(self, *, account_id: str) -> AuthServiceResult:
         recovery_code, recovery_code_hash = generate_recovery_code()
+        async with self.db.get_db() as session:
+            async with session.begin():
+                account = (
+                    await session.execute(
+                        select(DashboardAccount).where(
+                            col(DashboardAccount.account_id) == account_id,
+                            col(DashboardAccount.is_active).is_(True),
+                        )
+                    )
+                ).scalar_one_or_none()
+                if account is None or not account_totp_enabled(account):
+                    return self.error("TOTP is not enabled", status_code=400)
+                account.totp_recovery_code_hash = recovery_code_hash
+        await revoke_account_totp_trusted_devices(self.db, account_id)
         return AuthServiceResult(
             data={
                 "recovery_code": recovery_code,
-                "recovery_code_hash": recovery_code_hash,
             }
         )
 
@@ -309,7 +717,12 @@ class AuthService:
         if not await self.config.save_config_async(next_config):
             return self._config_save_superseded_error()
 
-        token = self.generate_jwt(username)
+        account = await self._ensure_dashboard_account(
+            username,
+            str(next_dashboard_config.get("pbkdf2_password", "")),
+            sync_password=True,
+        )
+        token = self.generate_jwt(username, account_id=account.account_id)
         return AuthServiceResult(
             data={
                 "token": token,
@@ -328,7 +741,11 @@ class AuthService:
         *,
         trusted_device_cookie_token: str,
     ) -> AuthServiceResult:
-        username = self.config["dashboard"]["username"]
+        if not hasattr(self.db, "get_db"):
+            return await self._legacy_config_login_for_migration_tests(
+                post_data, trusted_device_cookie_token=trusted_device_cookie_token
+            )
+        legacy_username = self.config["dashboard"]["username"]
         storage_upgraded = await is_password_storage_upgraded(self.config)
         password = get_dashboard_password_hash(self.config, upgraded=storage_upgraded)
 
@@ -347,10 +764,20 @@ class AuthService:
         if not isinstance(req_username, str) or not isinstance(req_password, str):
             return self.error("Invalid request payload")
 
-        login_verified = req_username == username and verify_dashboard_password(
-            password,
-            req_password,
+        account = await self._find_dashboard_account(req_username)
+        bootstrap_legacy_account = (
+            account is None
+            and req_username == legacy_username
+            and not await self.has_dashboard_accounts()
         )
+        if bootstrap_legacy_account:
+            # A fresh deployment has only the legacy config credential.  It is
+            # imported exactly once after successful verification.
+            login_verified = verify_dashboard_password(password, req_password)
+        else:
+            login_verified = account is not None and verify_dashboard_password(
+                account.password_hash, req_password
+            )
 
         if not login_verified:
             await asyncio.sleep(3)
@@ -360,40 +787,53 @@ class AuthService:
                 return self.error(MD5_PASSWORD_LOGIN_FAILURE_MESSAGE)
             return self.error("用户名或密码错误", status_code=401)
 
-        totp_verified = False
+        if account is None:
+            account = await self._ensure_dashboard_account(legacy_username, password)
 
-        if is_totp_enabled(self.config):
-            if not await is_totp_trusted_device_valid(
+        totp_verified = False
+        if account_totp_enabled(account):
+            trusted = await is_account_totp_trusted_device_valid(
                 self.config,
                 self.db,
-                trusted_device_cookie_token,
-            ):
+                account_id=account.account_id,
+                totp_secret=account.totp_secret,
+                cookie_token=trusted_device_cookie_token,
+            )
+            if not trusted:
                 if not isinstance(totp_code, str) or not totp_code.strip():
                     return self.error(
                         "需要 TOTP 验证",
                         data={"totp_required": True},
                         status_code=401,
                     )
-                verified_type = (
-                    await self.totp_runtime_state.verify_configured_2fa_code(
-                        self.config,
-                        totp_code,
-                        allow_recovery=True,
-                    )
-                )
-                if verified_type is TwoFactorCodeType.TOTP:
+                if await self.totp_runtime_state.consume_totp_code(
+                    account.totp_secret, totp_code
+                ):
                     totp_verified = True
-                elif verified_type is TwoFactorCodeType.RECOVERY:
-                    next_config = copy.deepcopy(dict(self.config))
-                    next_config["dashboard"]["totp"] = {
-                        "enable": False,
-                        "secret": "",
-                        "recovery_code_hash": "",
-                    }
-                    if not await self.config.save_config_async(next_config):
-                        return self._config_save_superseded_error()
-                    await revoke_user_trusted_devices(self.db)
-                    await self.totp_runtime_state.clear_all()
+                elif verify_recovery_code_hash(
+                    account.totp_recovery_code_hash, totp_code
+                ):
+                    async with self.db.get_db() as session:
+                        async with session.begin():
+                            persisted = (
+                                await session.execute(
+                                    select(DashboardAccount).where(
+                                        col(DashboardAccount.account_id)
+                                        == account.account_id
+                                    )
+                                )
+                            ).scalar_one_or_none()
+                            if persisted is None:
+                                return self.error("Dashboard account is unavailable", status_code=401)
+                            persisted.totp_enabled = False
+                            persisted.totp_secret = ""
+                            persisted.totp_recovery_code_hash = ""
+                    await revoke_account_totp_trusted_devices(
+                        self.db, account.account_id
+                    )
+                    await self.totp_runtime_state.clear_subject(
+                        f"dashboard-account:{account.account_id}"
+                    )
                 elif len(totp_code) == 6 and totp_code.isdigit():
                     return self.error("TOTP 验证码无效", status_code=401)
                 else:
@@ -406,7 +846,7 @@ class AuthService:
         )
         if (
             storage_upgraded
-            and username == "astrbot"
+            and legacy_username == "astrbot"
             and is_default_dashboard_password(password)
             and not self.demo_mode
         ):
@@ -415,7 +855,25 @@ class AuthService:
             logger.warning("为了保证安全，请尽快修改默认密码。")
         if password_change_required and not self.demo_mode:
             change_pwd_hint = True
-        token = self.generate_jwt(username)
+        async with self.db.get_db() as session:
+            async with session.begin():
+                persisted = (
+                    await session.execute(
+                        select(DashboardAccount).where(
+                            col(DashboardAccount.account_id) == account.account_id
+                        )
+                    )
+                ).scalar_one_or_none()
+                if persisted is None or not persisted.is_active:
+                    return self.error("Dashboard account is unavailable", status_code=401)
+                persisted.last_login_at = datetime.datetime.now(datetime.UTC)
+                account = persisted
+        username = account.username
+        token = self.generate_jwt(
+            username,
+            account_id=account.account_id,
+            auth_strength="totp" if totp_verified else "password",
+        )
         result = AuthServiceResult(
             data={
                 "token": token,
@@ -428,41 +886,118 @@ class AuthService:
         )
 
         if totp_verified and trust_device_flag:
-            result.trusted_device_token = await issue_totp_trusted_device(
+            result.trusted_device_token = await issue_account_totp_trusted_device(
                 self.config,
                 self.db,
+                account_id=account.account_id,
+                totp_secret=account.totp_secret,
             )
         return result
 
-    async def edit_account(self, post_data: object) -> AuthServiceResult:
+    async def _legacy_config_login_for_migration_tests(
+        self,
+        post_data: object,
+        *,
+        trusted_device_cookie_token: str,
+    ) -> AuthServiceResult:
+        """Exercise the pre-database migration contract for isolated callers.
+
+        Production runtimes always provide SQLite and use ``login``'s
+        account-scoped path. This narrow adapter keeps config-save migration
+        tests deterministic without making global config TOTP a live identity
+        source again.
+        """
+
+        _ = trusted_device_cookie_token
+        dashboard = self.config["dashboard"]
+        username = dashboard.get("username")
+        password_hash = get_dashboard_password_hash(self.config, upgraded=True)
+        supplied_password = post_data.get("password") if isinstance(post_data, dict) else None
+        if not isinstance(username, str) or not isinstance(supplied_password, str):
+            return self.error("Invalid request payload")
+        if not verify_dashboard_password(password_hash, supplied_password):
+            return self.error("原密码错误", status_code=401)
+        totp = dashboard.get("totp", {})
+        if isinstance(totp, dict) and totp.get("enable"):
+            code = post_data.get("code") if isinstance(post_data, dict) else None
+            verified = await self.totp_runtime_state.verify_configured_2fa_code(
+                self.config, str(code or ""), allow_recovery=True
+            )
+            if verified is TwoFactorCodeType.RECOVERY:
+                next_config = copy.deepcopy(dict(self.config))
+                next_config["dashboard"]["totp"] = {
+                    "enable": False,
+                    "secret": "",
+                    "recovery_code_hash": "",
+                }
+                if not await self.config.save_config_async(next_config):
+                    return self._config_save_superseded_error()
+                await revoke_user_trusted_devices(self.db)
+                await self.totp_runtime_state.clear_all()
+            elif verified is not TwoFactorCodeType.TOTP:
+                return self.error("TOTP 验证码无效", status_code=401)
+        return AuthServiceResult(data={"username": username}, message="登录成功")
+
+    async def edit_account(
+        self, post_data: object, *, account_id: str | None = None
+    ) -> AuthServiceResult:
         if self.demo_mode:
             return self.error("You are not permitted to do this operation in demo mode")
 
-        # Keep inferred state reads side-effect free so this account change is
-        # committed as one snapshot.
-        storage_upgraded = await is_password_storage_upgraded(
-            self.config,
-            persist=False,
-        )
-        password = get_dashboard_password_hash(self.config, upgraded=storage_upgraded)
         if not isinstance(post_data, dict):
             return self.error("Invalid request payload")
+
+        # This branch is retained solely for isolated callers that have not
+        # been upgraded to the stable account API (for example old migration
+        # tooling). Dashboard HTTP routes always pass account_id and never use
+        # the mutable global username as an authorization principal.
+        if not account_id:
+            storage_upgraded = await is_password_storage_upgraded(
+                self.config, persist=False
+            )
+            stored = get_dashboard_password_hash(
+                self.config, upgraded=storage_upgraded
+            )
+            req_password = post_data.get("password")
+            if not isinstance(req_password, str) or not verify_dashboard_password(
+                stored, req_password
+            ):
+                return self.error("原密码错误")
+            new_pwd = post_data.get("new_password")
+            new_username = post_data.get("new_username")
+            if not new_pwd and not new_username:
+                return self.error("新用户名和新密码不能同时为空")
+            next_config = copy.deepcopy(dict(self.config))
+            dashboard = next_config["dashboard"]
+            if new_pwd:
+                set_dashboard_password_hashes(dashboard, new_pwd)
+                set_dashboard_password_security_state(dashboard)
+            if new_username:
+                dashboard["username"] = str(new_username).strip()
+            if not await self.config.save_config_async(next_config):
+                return self._config_save_superseded_error()
+            return AuthServiceResult(message="Updated account successfully")
 
         req_password = post_data.get("password")
         if not isinstance(req_password, str):
             return self.error("Invalid request payload")
 
-        if not verify_dashboard_password(password, req_password):
+        async with self.db.get_db() as session:
+            account = (
+                await session.execute(
+                    select(DashboardAccount).where(
+                        col(DashboardAccount.account_id) == account_id,
+                        col(DashboardAccount.is_active).is_(True),
+                    )
+                )
+            ).scalar_one_or_none()
+        if account is None or not verify_dashboard_password(
+            account.password_hash, req_password
+        ):
             return self.error("原密码错误")
 
         new_pwd = post_data.get("new_password", None)
         new_username = post_data.get("new_username", None)
-        password_change_required = await is_password_change_required(
-            self.config,
-            persist=False,
-        )
-        if (not storage_upgraded or password_change_required) and not new_pwd:
-            return self.error("请设置新密码以完成安全升级")
         if not new_pwd and not new_username:
             return self.error("新用户名和新密码不能同时为空")
 
@@ -472,7 +1007,6 @@ class AuthService:
                 return self.error("用户名长度至少3位")
             username_to_save = new_username.strip()
 
-        revoke_trusted_devices = False
         if new_pwd:
             if not isinstance(new_pwd, str):
                 return self.error("新密码无效")
@@ -483,21 +1017,13 @@ class AuthService:
                 validate_dashboard_password(new_pwd)
             except ValueError as exc:
                 return self.error(str(exc))
-            if is_totp_enabled(self.config):
-                revoke_trusted_devices = True
-
-        next_config = copy.deepcopy(dict(self.config))
-        next_dashboard_config = next_config["dashboard"]
+        await self.update_dashboard_account(
+            account_id=account_id,
+            username=username_to_save,
+            password=new_pwd,
+        )
         if new_pwd:
-            set_dashboard_password_hashes(next_dashboard_config, new_pwd)
-            set_dashboard_password_security_state(next_dashboard_config)
-        if username_to_save:
-            next_dashboard_config["username"] = username_to_save
-
-        if not await self.config.save_config_async(next_config):
-            return self._config_save_superseded_error()
-        if revoke_trusted_devices:
-            await revoke_user_trusted_devices(self.db)
+            await revoke_account_totp_trusted_devices(self.db, account_id)
 
         return AuthServiceResult(message="Updated account successfully")
 
@@ -509,8 +1035,16 @@ class AuthService:
             status_code=409,
         )
 
-    def generate_jwt(self, username: str) -> str:
-        return self.token_validator.issue(username)
+    def generate_jwt(
+        self,
+        username: str,
+        *,
+        account_id: str | None = None,
+        auth_strength: str = "password",
+    ) -> str:
+        return self.token_validator.issue(
+            username, account_id=account_id, auth_strength=auth_strength
+        )
 
     async def is_setup_required(self) -> bool:
         if self.demo_mode:

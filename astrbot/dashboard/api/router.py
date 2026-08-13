@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from .api_keys import router as api_keys_router
 from .appearance import router as appearance_router
 from .auth import router as auth_router
+from .authorization import router as authorization_router
 from .backups import router as backups_router
 from .bots import router as bots_router
 from .chat import router as chat_router
@@ -38,6 +39,7 @@ API_V1_PREFIX = "/api/v1"
 def build_api_router() -> APIRouter:
     router = APIRouter(prefix=API_V1_PREFIX)
     router.include_router(auth_router)
+    router.include_router(authorization_router)
     router.include_router(appearance_router)
     router.include_router(backups_router)
     router.include_router(config_profiles_router)

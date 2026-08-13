@@ -27,6 +27,7 @@ from astrbot.core.agent.mcp_client import (
     MCPToolNameAllocator,
 )
 from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.auth.service import AuthorizationService
 from astrbot.core.tools.registry import (
     BUILTIN_TOOL_DECLARATION_ATTR,
     BUILTIN_TOOL_MODULES,
@@ -45,6 +46,41 @@ DEFAULT_ENABLE_MCP_TIMEOUT_SECONDS = 180.0
 MCP_INIT_TIMEOUT_ENV = "ASTRBOT_MCP_INIT_TIMEOUT"
 ENABLE_MCP_TIMEOUT_ENV = "ASTRBOT_MCP_ENABLE_TIMEOUT"
 MAX_MCP_TIMEOUT_SECONDS = 300.0
+
+
+class _PermissionGuardedTool(FunctionTool):
+    """Deprecated import adapter forwarding to the unified executor.
+
+    Legacy callers may still import this symbol while migrating. It does not
+    read ``tool_permissions`` or perform role checks; the shared
+    ``FunctionToolExecutor`` is the sole execution-time authorization gate.
+    """
+
+    def __init__(self, wrapped: FunctionTool, _manager: object | None = None) -> None:
+        self._wrapped = wrapped
+        super().__init__(
+            name=wrapped.name,
+            description=wrapped.description,
+            parameters=wrapped.parameters,
+            handler=wrapped.handler,
+            handler_module_path=wrapped.handler_module_path,
+            active=wrapped.active,
+            is_background_task=wrapped.is_background_task,
+            parallel_policy=wrapped.parallel_policy,
+            required_actions=wrapped.required_actions,
+        )
+
+    async def call(self, context, **kwargs):
+        return await self._wrapped.call(context, **kwargs)
+
+    async def iter_call(self, context, **kwargs):
+        iterator = getattr(self._wrapped, "iter_call", None)
+        if callable(iterator):
+            async for item in iterator(context, **kwargs):
+                yield item
+            return
+        result = await self._wrapped.call(context, **kwargs)
+        yield result
 
 
 class PluginLookup(Protocol):
@@ -147,89 +183,10 @@ PY_TO_JSON_TYPE = {
 }
 
 
-class _PermissionGuardedTool(FunctionTool):
-    """Transparent proxy that checks per-tool permissions before delegating.
-
-    Only wraps non-builtin tools. Builtin tools are added to the tool set
-    without wrapping, so their existing hardcoded permission logic
-    (``check_admin_permission`` / ``_is_restricted_env``) is unaffected.
-
-    The ``handler`` field is intentionally kept ``None`` so that
-    ``FunctionToolExecutor._execute_local`` falls through to the
-    ``is_override_call`` branch and invokes our ``call()`` instead of
-    calling the raw handler directly.  This ensures the permission
-    check runs for *every* invocation path.
-    """
-
-    def __init__(
-        self,
-        tool: FunctionTool,
-        manager: FunctionToolManager,
-    ) -> None:
-        # Do NOT pass handler to the parent — keep self.handler = None
-        # so the tool executor always routes through our call().
-        super().__init__(
-            name=tool.name,
-            description=tool.description,
-            parameters=getattr(tool, "parameters", {}),
-        )
-        self._wrapped = tool
-        self._mgr = manager
-        # Mirror mutable state from the underlying tool
-        self.active = getattr(tool, "active", True)
-        self.handler_module_path = getattr(tool, "handler_module_path", None)
-        self.is_background_task = getattr(tool, "is_background_task", False)
-        self.parallel_policy = getattr(tool, "parallel_policy", "unknown")
-        self.mcp_server_name = getattr(tool, "mcp_server_name", None)
-        self.mcp_client = getattr(tool, "mcp_client", None)
-        self.mcp_tool_name = getattr(tool, "mcp_tool_name", None)
-
-    async def authorize(self, context: Any) -> str | None:
-        """Return a permission error without invoking the wrapped tool."""
-        return await self._mgr._check_tool_permission(self.name, context)
-
-    async def _invoke_wrapped(self, context: Any, **kwargs: Any) -> Any:
-        """Invoke the original tool while preserving its native return type."""
-        if self._wrapped.handler is not None:
-            event = context.context.event
-            return self._wrapped.handler(event, **kwargs)
-
-        call_override = getattr(type(self._wrapped), "call", None)
-        if call_override is not None and call_override is not FunctionTool.call:
-            return self._wrapped.call(context, **kwargs)
-
-        return "error: tool has no callable handler"
-
-    async def iter_call(self, context: Any, **kwargs: Any):
-        """Execute the wrapped tool as an async stream for the tool executor."""
-        error = await self.authorize(context)
-        if error is not None:
-            yield error
-            return
-
-        result = await self._invoke_wrapped(context, **kwargs)
-        if inspect.isasyncgen(result):
-            async for item in result:
-                yield item
-            return
-        if inspect.isawaitable(result):
-            result = await result
-        yield result
-
-    async def call(self, context: Any, **kwargs: Any) -> Any:
-        error = await self.authorize(context)
-        if error is not None:
-            return error
-
-        last: Any = None
-        async for item in self.iter_call(context, **kwargs):
-            last = item
-        return last
-
-
 class FunctionToolManager:
     def __init__(self) -> None:
         self.preferences: SharedPreferences | None = None
+        self.authorization: AuthorizationService | None = None
         self._plugins: PluginLookup | None = None
         self.func_list: list[FunctionTool] = []
         """All tools include mcp tools and plugin tools, except astrbot builtin tools."""
@@ -275,6 +232,11 @@ class FunctionToolManager:
     def bind_preferences(self, preferences: SharedPreferences) -> None:
         """Bind runtime preferences after the tool registry has been imported."""
         self.preferences = preferences
+
+    def bind_authorization(self, authorization: AuthorizationService) -> None:
+        """Bind the runtime's single authorization entry point."""
+
+        self.authorization = authorization
 
     def bind_plugin_lookup(self, plugins: PluginLookup) -> None:
         """Bind the runtime-owned plugin catalog used for activation checks."""
@@ -459,6 +421,8 @@ class FunctionToolManager:
             return cached_tool
 
         builtin_tool = tool_cls()  # type: ignore
+        declaration = getattr(tool_cls, BUILTIN_TOOL_DECLARATION_ATTR)
+        builtin_tool.required_actions = declaration.required_actions
         self.builtin_func_list[tool_cls] = builtin_tool
         return builtin_tool
 
@@ -554,50 +518,14 @@ class FunctionToolManager:
             self._builtin_tool_config_rules[declaration.name] = rule
 
     def _default_permission(self, tool_name: str) -> str:
-        """Compute the fallback permission for a non-builtin tool.
+        """Return the migration display value for legacy Dashboard clients.
 
-        All non-builtin tools default to ``"admin"``.
-        Builtin tools are never routed through this method."""
+        It is deliberately not consulted while executing a tool. New tool
+        authorization is action/resource based and fail closed.
+        """
+
         del tool_name
-        return "admin"
-
-    async def _check_tool_permission(
-        self,
-        tool_name: str,
-        context: Any,
-    ) -> str | None:
-        """Return an error string if the caller lacks permission, or None.
-
-        Only non-builtin tools are guarded. Permission is resolved from
-        ``tool_permissions`` in SharedPreferences (``_default`` key). When
-        no explicit entry exists the tool inherits the fallback
-        ``_default_permission``."""
-        try:
-            if self.preferences is None:
-                return None
-            perms_raw = await self.preferences.global_get("tool_permissions", {})
-        except Exception:
-            perms_raw = {}
-        defaults = perms_raw.get("_default", {}) if isinstance(perms_raw, dict) else {}
-        effective = defaults.get(tool_name)
-        if effective is None:
-            effective = self._default_permission(tool_name)
-
-        if effective != "admin":
-            return None
-
-        try:
-            event = context.context.event
-        except AttributeError:
-            event = None
-        if event is None or not event.is_admin():
-            sender_id = getattr(event, "get_sender_id", lambda: "unknown")()
-            return (
-                f"error: Permission denied. The tool '{tool_name}' requires admin "
-                f"privileges. Your ID: {sender_id}. "
-                "Ask admin to configure in WebUI → Extension → Components."
-            )
-        return None
+        return "action"
 
     def get_full_tool_set(self) -> ToolSet:
         """获取完整工具集
@@ -609,13 +537,13 @@ class FunctionToolManager:
         因此，后加载的 inactive 工具不会覆盖已激活的工具；
         同时，MCP 工具在需要时仍可覆盖被禁用的内置工具。
 
-        Non-builtin tools are wrapped with ``_PermissionGuardedTool`` so that
-        every invocation checks the per-tool permission configured via the
-        dashboard.
+        Every tool is checked by ``FunctionToolExecutor`` immediately before
+        execution. A second wrapper would make legacy ``tool_permissions`` a
+        competing authorization system.
         """
         tool_set = ToolSet()
         for tool in self.func_list:
-            tool_set.add_tool(_PermissionGuardedTool(tool, self))
+            tool_set.add_tool(tool)
         return tool_set
 
     @staticmethod

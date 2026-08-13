@@ -53,12 +53,7 @@ def _is_path_within(path: Path, roots: tuple[Path, ...]) -> bool:
 def _is_restricted_local_env(context: ContextWrapper[AstrAgentContext]) -> bool:
     if not is_local_runtime(context):
         return False
-    cfg = context.context.context.get_config(
-        umo=context.context.event.unified_msg_origin
-    )
-    provider_settings = cfg.get("provider_settings", {})
-    require_admin = provider_settings.get("computer_use_require_admin", True)
-    return require_admin and context.context.event.role != "admin"
+    return True
 
 
 def _can_send_local_file(
@@ -72,7 +67,7 @@ def _can_send_local_file(
     return is_local_runtime(context) and not _is_restricted_local_env(context)
 
 
-@builtin_tool
+@builtin_tool(required_actions=("agent.manage",))
 @dataclass
 class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     name: str = "send_message_to_user"
@@ -255,7 +250,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         current_session = context.context.event.unified_msg_origin
         session = kwargs.get("session") or current_session
         if session != current_session:
-            if permission_error := check_admin_permission(
+            if permission_error := await check_admin_permission(
                 context, "Send message to another session"
             ):
                 return permission_error
@@ -356,7 +351,10 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         return f"Message sent to session {target_session}"
 
 
-@builtin_tool(config={"provider_ltm_settings.group_message_history_enable": True})
+@builtin_tool(
+    config={"provider_ltm_settings.group_message_history_enable": True},
+    required_actions=("session.read",),
+)
 @dataclass
 class GetGroupMessageHistoryTool(FunctionTool[AstrAgentContext]):
     """Read persisted history strictly scoped to the current group."""
@@ -484,7 +482,7 @@ class GetGroupMessageHistoryTool(FunctionTool[AstrAgentContext]):
         return result
 
 
-@builtin_tool
+@builtin_tool(required_actions=("agent.manage",))
 @dataclass
 class SendPokeToUserTool(FunctionTool[AstrAgentContext]):
     name: str = "send_poke_to_user"
@@ -532,7 +530,7 @@ class SendPokeToUserTool(FunctionTool[AstrAgentContext]):
             return "error: user_id is required for send_poke_to_user."
 
         if user_id != sender_id:
-            if permission_error := check_admin_permission(
+            if permission_error := await check_admin_permission(
                 context,
                 "Send a poke to another user",
             ):

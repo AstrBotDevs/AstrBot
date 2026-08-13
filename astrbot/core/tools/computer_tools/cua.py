@@ -43,7 +43,7 @@ async def _get_gui_component(context: ContextWrapper[AstrAgentContext]) -> Any:
     return gui
 
 
-@builtin_tool(config=_CUA_TOOL_CONFIG)
+@builtin_tool(config=_CUA_TOOL_CONFIG, required_actions=("tool.computer_use",))
 @dataclass
 class CuaScreenshotTool(FunctionTool):
     name: str = "astrbot_cua_screenshot"
@@ -74,7 +74,7 @@ class CuaScreenshotTool(FunctionTool):
         send_to_user: bool = True,
         return_image_to_llm: bool = True,
     ) -> ToolExecResult:
-        if err := check_admin_permission(context, "Taking CUA screenshots"):
+        if err := await check_admin_permission(context, "Taking CUA screenshots"):
             return err
         try:
             gui = await _get_gui_component(context)
@@ -101,7 +101,7 @@ class CuaScreenshotTool(FunctionTool):
             return f"Error taking CUA screenshot: {_exception_detail(e)}"
 
 
-@builtin_tool(config=_CUA_TOOL_CONFIG)
+@builtin_tool(config=_CUA_TOOL_CONFIG, required_actions=("tool.computer_use",))
 @dataclass
 class CuaMouseClickTool(FunctionTool):
     name: str = "astrbot_cua_mouse_click"
@@ -129,7 +129,7 @@ class CuaMouseClickTool(FunctionTool):
         y: int,
         button: str = "left",
     ) -> ToolExecResult:
-        if err := check_admin_permission(context, "Using CUA mouse"):
+        if err := await check_admin_permission(context, "Using CUA mouse"):
             return err
         try:
             gui = await _get_gui_component(context)
@@ -138,7 +138,7 @@ class CuaMouseClickTool(FunctionTool):
             return f"Error clicking CUA desktop: {_exception_detail(e)}"
 
 
-@builtin_tool(config=_CUA_TOOL_CONFIG)
+@builtin_tool(config=_CUA_TOOL_CONFIG, required_actions=("tool.computer_use",))
 @dataclass
 class CuaKeyboardTypeTool(FunctionTool):
     name: str = "astrbot_cua_keyboard_type"
@@ -158,7 +158,7 @@ class CuaKeyboardTypeTool(FunctionTool):
         context: ContextWrapper[AstrAgentContext],
         text: str,
     ) -> ToolExecResult:
-        if err := check_admin_permission(context, "Using CUA keyboard"):
+        if err := await check_admin_permission(context, "Using CUA keyboard"):
             return err
         try:
             gui = await _get_gui_component(context)

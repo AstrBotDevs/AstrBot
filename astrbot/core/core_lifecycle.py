@@ -10,6 +10,7 @@
 """
 
 import asyncio
+import inspect
 import os
 import threading
 import time
@@ -21,6 +22,7 @@ from pathlib import Path
 
 from astrbot import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.auth.service import AuthorizationService
 from astrbot.core.config.default import VERSION
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.core_runtime import CoreRuntime
@@ -338,6 +340,8 @@ class AstrBotCoreLifecycle:
 
     async def _initialize(self) -> None:
         """Initialize core resources in dependency order."""
+        if getattr(self.services, "authorization", None) is None:
+            self.services.authorization = AuthorizationService(self.db)
         # 初始化日志代理
         logger.info("AstrBot v" + VERSION)
         if os.environ.get("TESTING", ""):
@@ -350,6 +354,9 @@ class AstrBotCoreLifecycle:
             LogManager.configure_trace_logger(self.astrbot_config)
 
         self._register_cleanup("database", self.db.close)
+        authorization = self.services.authorization
+        if isinstance(self.db, SQLiteDatabase):
+            self._register_cleanup("authorization", authorization.close)
         self._register_cleanup(
             "file token artifacts",
             self.services.file_token_service.shutdown,
@@ -360,6 +367,9 @@ class AstrBotCoreLifecycle:
             self.services.preferences.terminate,
         )
         await self.db.initialize()
+        if isinstance(self.db, SQLiteDatabase):
+            await authorization.start()
+        self.services.catalogs.tools.bind_authorization(authorization)
         configure_trace(self.astrbot_config)
 
         self._register_cleanup(
@@ -380,6 +390,13 @@ class AstrBotCoreLifecycle:
         )
         self.astrbot_config_mgr = config_manager
         await config_manager.initialize()
+        if isinstance(self.db, SQLiteDatabase):
+            await authorization.migrate_legacy_admins(config_manager.confs)
+        preferences = self.services.preferences
+        if inspect.iscoroutinefunction(getattr(preferences, "global_get", None)):
+            result = authorization.migrate_legacy_tool_permissions(preferences)
+            if inspect.isawaitable(result):
+                await result
         self.temp_dir_cleaner = TempDirCleaner(
             max_size_getter=lambda: config_manager.default_conf.get(
                 TempDirCleaner.CONFIG_KEY,
@@ -469,6 +486,7 @@ class AstrBotCoreLifecycle:
             follow_up_coordinator=self.services.follow_up_coordinator,
             llm_metadata_catalog=self.services.llm_metadata_catalog,
             metrics=self.services.metrics,
+            authorization=self.services.authorization,
         )
         self.execution_context = execution_context
         execution_context.persona_runtime_manager = self.persona_runtime_manager
@@ -849,6 +867,7 @@ class AstrBotCoreLifecycle:
                     self.services.html_renderer,
                     self.services.file_token_service,
                     self.services.preferences,
+                    getattr(self.services, "authorization", None),
                 ),
             )
             await scheduler.initialize()
@@ -885,6 +904,7 @@ class AstrBotCoreLifecycle:
                 self.services.html_renderer,
                 self.services.file_token_service,
                 self.services.preferences,
+                getattr(self.services, "authorization", None),
             ),
         )
         await scheduler.initialize()

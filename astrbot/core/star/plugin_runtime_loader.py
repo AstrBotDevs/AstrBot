@@ -7,6 +7,7 @@ import json
 import keyword
 import logging
 import os
+import re
 import sys
 import traceback
 from collections.abc import Callable
@@ -27,7 +28,7 @@ from astrbot.core.utils.shared_preferences import SharedPreferences
 
 from .command_management import sync_command_configs
 from .dashboard_extension import validate_dashboard_manifest
-from .filter.permission import PermissionType, PermissionTypeFilter
+from .filter.permission import ActionPermissionFilter, PermissionTypeFilter
 from .plugin_catalog import PluginCatalog
 from .plugin_context import PluginContext
 from .plugin_extension_coordinator import PluginExtensionCoordinator
@@ -197,6 +198,7 @@ class PluginRuntimeLoader:
             )
         plugin_root = Path(plugin_path).resolve(strict=True)
         dashboard = validate_dashboard_manifest(metadata, plugin_root)
+        authorization_actions = cls._load_authorization_actions(metadata)
         return StarMetadata(
             name=metadata["name"],
             author=metadata["author"],
@@ -226,7 +228,35 @@ class PluginRuntimeLoader:
             dashboard=dashboard,
             dashboard_root=plugin_root,
             i18n=cls.load_i18n(plugin_path),
+            authorization_actions=authorization_actions,
         )
+
+    @staticmethod
+    def _load_authorization_actions(metadata: dict) -> frozenset[str]:
+        """Validate a plugin's small, namespaced action declaration."""
+
+        raw_authorization = metadata.get("authorization", {})
+        if raw_authorization is None:
+            return frozenset()
+        if not isinstance(raw_authorization, dict):
+            raise ValueError("metadata.yaml authorization must be an object")
+        raw_actions = raw_authorization.get("actions", [])
+        if not isinstance(raw_actions, list):
+            raise ValueError("metadata.yaml authorization.actions must be a list")
+        name = metadata.get("name")
+        author = metadata.get("author")
+        if not isinstance(name, str) or not isinstance(author, str):
+            raise ValueError("Plugin identity is required for authorization actions")
+        plugin_id = f"{author.lower().replace('/', '_')}/{name.lower().replace('/', '_')}"
+        actions: set[str] = set()
+        for item in raw_actions:
+            action = item.get("id") if isinstance(item, dict) else item
+            if not isinstance(action, str) or not re.fullmatch(
+                r"[a-z][a-z0-9_.-]{0,63}", action
+            ):
+                raise ValueError("Plugin authorization action id is invalid")
+            actions.add(f"plugin:{plugin_id}:{action}")
+        return frozenset(actions)
 
     @staticmethod
     def normalize_plugin_dir_name(plugin_name: str) -> str:
@@ -552,6 +582,7 @@ class PluginRuntimeLoader:
         metadata.dashboard = metadata_yaml.dashboard
         metadata.dashboard_root = metadata_yaml.dashboard_root
         metadata.i18n = metadata_yaml.i18n
+        metadata.authorization_actions = metadata_yaml.authorization_actions
         if not ignore_version_check:
             is_valid, error_message = self.validate_astrbot_version_specifier(
                 metadata.astrbot_version,
@@ -582,11 +613,17 @@ class PluginRuntimeLoader:
             return
         if plugin_config:
             metadata.star_cls = metadata.star_cls_type(
-                context=self._plugin_context,
+                context=self._plugin_context.for_plugin(
+                    metadata.plugin_id, metadata.authorization_actions
+                ),
                 config=plugin_config,
             )
         else:
-            metadata.star_cls = metadata.star_cls_type(context=self._plugin_context)
+            metadata.star_cls = metadata.star_cls_type(
+                context=self._plugin_context.for_plugin(
+                    metadata.plugin_id, metadata.authorization_actions
+                )
+            )
         if metadata.star_cls:
             setattr(metadata.star_cls, "plugin_id", plugin_id)
 
@@ -648,16 +685,22 @@ class PluginRuntimeLoader:
             command = alter_cmd.get(metadata.name, {}).get(handler.handler_name)
             if not isinstance(command, dict):
                 continue
-            permission = command.get("permission", "member")
-            target_permission = (
-                PermissionType.ADMIN if permission == "admin" else PermissionType.MEMBER
+            legacy_permission = command.get("permission", "member")
+            permission = command.get(
+                "permission_action",
+                "session.manage" if legacy_permission == "admin" else "session.read",
             )
             for filter_ in handler.event_filters:
-                if isinstance(filter_, PermissionTypeFilter):
-                    filter_.permission_type = target_permission
+                if isinstance(filter_, ActionPermissionFilter):
+                    filter_.action = permission
                     break
             else:
-                handler.event_filters.append(PermissionTypeFilter(target_permission))
+                handler.event_filters = [
+                    filter_
+                    for filter_ in handler.event_filters
+                    if not isinstance(filter_, PermissionTypeFilter)
+                ]
+                handler.event_filters.append(ActionPermissionFilter(permission))
             logger.debug(
                 "插入权限过滤器 %s 到 %s 的 %s 方法。",
                 permission,

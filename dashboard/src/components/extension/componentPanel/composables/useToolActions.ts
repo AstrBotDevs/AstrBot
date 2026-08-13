@@ -78,34 +78,6 @@ export function useToolActions(
     }
   };
 
-  /**
-   * Update a tool's permission level.
-   */
-  const updateToolPermission = async (
-    tool: ToolItem,
-    permission: 'admin' | 'member',
-    successMessage: string,
-    builtinMessage: string,
-    errorMessage: string,
-  ) => {
-    if (tool.origin === 'builtin') {
-      toast(builtinMessage, 'info');
-      return;
-    }
-    try {
-      const res = await toolApi.setPermission(tool.name, permission);
-      if (res.data.status === 'ok') {
-        tool.permission = permission;
-        tool.permission_configured = true;
-        toast(successMessage, 'success');
-      } else {
-        toast(res.data.message || errorMessage, 'error');
-      }
-    } catch (error) {
-      toast(resolveErrorMessage(error, errorMessage), 'error');
-    }
-  };
-
   const toggleToolParallel = async (
     tool: ToolItem,
     enabled: boolean,
@@ -157,7 +129,6 @@ export function useToolActions(
     toolSummary,
     parallelExecutionEnabled,
     toggleTool,
-    updateToolPermission,
     toggleToolParallel,
     toggleParallelExecution,
   };

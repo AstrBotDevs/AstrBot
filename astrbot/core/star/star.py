@@ -76,6 +76,9 @@ class StarMetadata:
     dashboard_root: Path | None = None
     """Validated real plugin root used by Dashboard resources."""
 
+    authorization_actions: frozenset[str] = field(default_factory=frozenset)
+    """Explicit plugin action names declared in metadata.yaml."""
+
     @property
     def plugin_id(self) -> str:
         p_name = (self.name or "unknown").lower().replace("/", "_")

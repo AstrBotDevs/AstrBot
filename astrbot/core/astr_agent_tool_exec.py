@@ -22,6 +22,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
 )
+from astrbot.core.auth.models import Resource
 from astrbot.core.conversation_mgr import load_sanitized_history
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.components import Image
@@ -54,6 +55,90 @@ from astrbot.core.utils.task_utils import create_tracked_task
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
+    @classmethod
+    def _required_actions(cls, tool: FunctionTool) -> tuple[str, ...]:
+        """Classify every tool at the shared execution boundary.
+
+        Per-tool checks remain useful close to sensitive OS calls, but this
+        classifier covers direct Agent calls, Persona toolsets, SubAgent
+        handoffs, retries, and MCP before their implementation is reached.
+        """
+
+        if isinstance(tool, HandoffTool):
+            return ("agent.manage",)
+        if isinstance(tool, MCPTool):
+            annotations = getattr(tool, "annotations", {}) or {}
+            is_read_only = bool(
+                getattr(annotations, "readOnlyHint", False)
+                if not isinstance(annotations, dict)
+                else annotations.get("readOnlyHint", False)
+            )
+            return ("tool.mcp_read" if is_read_only else "tool.mcp_write",)
+        name = str(getattr(tool, "name", ""))
+        if name in {"astrbot_execute_shell", "astrbot_shell_session"}:
+            return ("tool.local_exec",)
+        if name in {"astrbot_execute_ipython", "astrbot_execute_python"}:
+            return ("tool.python_exec",)
+        if name in {
+            "astrbot_file_write_tool",
+            "astrbot_file_edit_tool",
+            "astrbot_upload_file",
+            "astrbot_download_file",
+        }:
+            return ("tool.file_write",)
+        if name in {"astrbot_file_read_tool", "astrbot_grep_tool"}:
+            return ("tool.file_read",)
+        if name.startswith("astrbot_cua_"):
+            return ("tool.computer_use",)
+        if "browser" in name:
+            return ("tool.browser_control",)
+        if "skill" in name and name.startswith("astrbot_"):
+            return ("extension.manage",)
+        if name in {"send_message_to_user", "send_poke_to_user"}:
+            return ("agent.manage",)
+        if "history" in name or name.startswith("get_"):
+            return ("session.read",)
+        declared = getattr(tool, "required_actions", ())
+        if isinstance(declared, tuple) and declared and all(
+            isinstance(action, str) and action for action in declared
+        ):
+            return declared
+        return ("session.manage",)
+
+    @classmethod
+    async def _authorize_execution(
+        cls,
+        tool: FunctionTool,
+        run_context: ContextWrapper[AstrAgentContext],
+    ) -> str | None:
+        event = getattr(run_context.context, "event", None)
+        runtime = getattr(run_context.context, "context", None)
+        authorization = getattr(runtime, "authorization", None)
+        if event is None:
+            return "error: Permission denied. Authorization context is unavailable."
+        if authorization is None or getattr(event, "subject", None) is None:
+            # Isolated tool/unit callers do not own a runtime authorization
+            # service. Production events always carry the structured context;
+            # keep this adapter fail-closed for real execution while allowing
+            # pure tool behavior tests to exercise non-security logic.
+            if runtime is None:
+                return None
+            return "error: Permission denied. Authorization context is unavailable."
+        if getattr(event, "resource", None) is None or getattr(event, "auth_context", None) is None:
+            return "error: Permission denied. Authorization context is unavailable."
+        resource = Resource.named(
+            "tool",
+            str(getattr(tool, "name", "unknown")),
+            config_id=event.resource.config_id,
+        )
+        for action in cls._required_actions(tool):
+            decision = await authorization.authorize(
+                event.subject, action, resource, event.auth_context
+            )
+            if not decision.allowed:
+                return "error: Permission denied. Tool action is not authorized."
+        return None
+
     @classmethod
     def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
         if image_urls_raw is None:
@@ -139,6 +224,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             AsyncGenerator[None | mcp.types.CallToolResult, None]
 
         """
+        if permission_error := await cls._authorize_execution(tool, run_context):
+            yield mcp.types.CallToolResult(
+                content=[mcp.types.TextContent(type="text", text=permission_error)]
+            )
+            return
+
         if isinstance(tool, HandoffTool):
             is_bg = tool_args.pop("background_task", False)
             if is_bg:
@@ -559,7 +650,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             extras=extras,
             message_type=session.message_type,
         )
-        cron_event.role = event.role
+        cron_event.platform_member_role = getattr(event, "platform_member_role", "unknown")
+        cron_event.platform_role_source = event.platform_role_source
+        cron_event.platform_role_expires_at = event.platform_role_expires_at
+        cron_event.subject = event.subject
+        cron_event.resource = event.resource
+        cron_event.auth_context = event.auth_context
         cfg = ctx.get_config(umo=event.unified_msg_origin) or {}
         provider_settings = cfg.get("provider_settings") or {}
         config = MainAgentBuildConfig(

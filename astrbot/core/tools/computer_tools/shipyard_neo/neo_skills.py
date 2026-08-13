@@ -57,7 +57,7 @@ class NeoSkillToolBase(FunctionTool):
         neo_call: Callable[[Any, Any], Awaitable[Any]],
         error_action: str,
     ) -> ToolExecResult:
-        if err := check_admin_permission(context, "Using skill lifecycle tools"):
+        if err := await check_admin_permission(context, "Using skill lifecycle tools"):
             return err
         try:
             client, sandbox = await _get_neo_context(context)
@@ -398,7 +398,7 @@ class PromoteSkillCandidateTool(NeoSkillToolBase):
         stage: str = "canary",
         sync_to_local: bool = True,
     ) -> ToolExecResult:
-        if err := check_admin_permission(context, "Using skill lifecycle tools"):
+        if err := await check_admin_permission(context, "Using skill lifecycle tools"):
             return err
         if stage not in {"canary", "stable"}:
             return "Error promoting skill candidate: stage must be canary or stable."

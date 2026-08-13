@@ -254,10 +254,6 @@ export type EnabledPatch = {
   enabled: boolean;
 };
 
-export type ToolPermissionPatch = {
-  permission: 'admin' | 'member';
-};
-
 export type ProviderSourceConfigRequest = {
   config: DynamicConfig;
 };
@@ -457,6 +453,51 @@ export type CommandPatchRequest = {
   alias?: string;
   aliases?: Array<string>;
   permission_group?: string;
+};
+
+export type AuthorizationBindingRequest = {
+  subject_id: string;
+  role:
+    | 'root'
+    | 'operator'
+    | 'instance_operator'
+    | 'session_owner'
+    | 'session_admin'
+    | 'member'
+    | 'guest';
+  scope_type: 'global' | 'instance' | 'session' | 'resource';
+  scope_id: string;
+  config_id?: string;
+  expires_at?: string;
+};
+
+export type AuthorizationStepUpRequest = {
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  config_id?: string;
+};
+
+export type AuthorizationElevationRequest = {
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  config_id?: string;
+  approval_channel?: 'private' | 'dashboard' | 'webchat';
+};
+
+export type AuthorizationElevationApprovalRequest = {
+  nonce: string;
+};
+
+export type DashboardAccountCreateRequest = {
+  username: string;
+  role?: 'operator' | 'root';
+};
+
+export type DashboardAccountUpdateRequest = {
+  username?: string;
+  is_active?: boolean;
 };
 
 export type BuiltinCommandBulkToggleRequest = {
@@ -847,6 +888,27 @@ export type SubAgentConfigRequest = {
   }>;
 };
 
+export type AuthorizationStepUpRequestWritable = {
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  config_id?: string;
+  password?: string;
+  code?: string;
+};
+
+export type DashboardAccountCreateRequestWritable = {
+  username: string;
+  password: string;
+  role?: 'operator' | 'root';
+};
+
+export type DashboardAccountUpdateRequestWritable = {
+  username?: string;
+  password?: string;
+  is_active?: boolean;
+};
+
 export type AppearanceWallpaperId = string;
 
 export type ExtensionId = string;
@@ -1117,6 +1179,182 @@ export type DeleteApiKeyResponses = {
 
 export type DeleteApiKeyResponse =
   DeleteApiKeyResponses[keyof DeleteApiKeyResponses];
+
+export type ListAuthorizationRoleBindingsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/v1/authorization/role-bindings';
+};
+
+export type ListAuthorizationRoleBindingsResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type ListAuthorizationRoleBindingsResponse =
+  ListAuthorizationRoleBindingsResponses[keyof ListAuthorizationRoleBindingsResponses];
+
+export type GrantAuthorizationRoleBindingData = {
+  body: AuthorizationBindingRequest;
+  path?: never;
+  query?: never;
+  url: '/api/v1/authorization/role-bindings';
+};
+
+export type GrantAuthorizationRoleBindingResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type GrantAuthorizationRoleBindingResponse =
+  GrantAuthorizationRoleBindingResponses[keyof GrantAuthorizationRoleBindingResponses];
+
+export type RevokeAuthorizationRoleBindingData = {
+  body?: never;
+  path: {
+    binding_id: string;
+  };
+  query?: never;
+  url: '/api/v1/authorization/role-bindings/{binding_id}/revoke';
+};
+
+export type RevokeAuthorizationRoleBindingResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type RevokeAuthorizationRoleBindingResponse =
+  RevokeAuthorizationRoleBindingResponses[keyof RevokeAuthorizationRoleBindingResponses];
+
+export type IssueAuthorizationStepUpData = {
+  body: AuthorizationStepUpRequestWritable;
+  path?: never;
+  query?: never;
+  url: '/api/v1/authorization/step-up';
+};
+
+export type IssueAuthorizationStepUpResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type IssueAuthorizationStepUpResponse =
+  IssueAuthorizationStepUpResponses[keyof IssueAuthorizationStepUpResponses];
+
+export type CreateAuthorizationElevationRequestData = {
+  body: AuthorizationElevationRequest;
+  path?: never;
+  query?: never;
+  url: '/api/v1/authorization/elevation-requests';
+};
+
+export type CreateAuthorizationElevationRequestResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type CreateAuthorizationElevationRequestResponse =
+  CreateAuthorizationElevationRequestResponses[keyof CreateAuthorizationElevationRequestResponses];
+
+export type ApproveAuthorizationElevationRequestData = {
+  body: AuthorizationElevationApprovalRequest;
+  path: {
+    request_id: string;
+  };
+  query?: never;
+  url: '/api/v1/authorization/elevation-requests/{request_id}/approve';
+};
+
+export type ApproveAuthorizationElevationRequestResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type ApproveAuthorizationElevationRequestResponse =
+  ApproveAuthorizationElevationRequestResponses[keyof ApproveAuthorizationElevationRequestResponses];
+
+export type ListAuthorizationAuditData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/v1/authorization/audit';
+};
+
+export type ListAuthorizationAuditResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type ListAuthorizationAuditResponse =
+  ListAuthorizationAuditResponses[keyof ListAuthorizationAuditResponses];
+
+export type ListAuthorizationAccountsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/v1/authorization/accounts';
+};
+
+export type ListAuthorizationAccountsResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type ListAuthorizationAccountsResponse =
+  ListAuthorizationAccountsResponses[keyof ListAuthorizationAccountsResponses];
+
+export type CreateAuthorizationAccountData = {
+  body: DashboardAccountCreateRequestWritable;
+  path?: never;
+  query?: never;
+  url: '/api/v1/authorization/accounts';
+};
+
+export type CreateAuthorizationAccountResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type CreateAuthorizationAccountResponse =
+  CreateAuthorizationAccountResponses[keyof CreateAuthorizationAccountResponses];
+
+export type UpdateAuthorizationAccountData = {
+  body: DashboardAccountUpdateRequestWritable;
+  path: {
+    account_id: string;
+  };
+  query?: never;
+  url: '/api/v1/authorization/accounts/{account_id}';
+};
+
+export type UpdateAuthorizationAccountResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type UpdateAuthorizationAccountResponse =
+  UpdateAuthorizationAccountResponses[keyof UpdateAuthorizationAccountResponses];
 
 export type GetSystemConfigSchemaData = {
   body?: never;
@@ -3779,25 +4017,6 @@ export type SetToolParallelResponses = {
 
 export type SetToolParallelResponse =
   SetToolParallelResponses[keyof SetToolParallelResponses];
-
-export type SetToolPermissionData = {
-  body: ToolPermissionPatch;
-  path: {
-    tool_id: string;
-  };
-  query?: never;
-  url: '/api/v1/tools/{tool_id}/permission';
-};
-
-export type SetToolPermissionResponses = {
-  /**
-   * Standard AstrBot success response
-   */
-  200: SuccessEnvelope;
-};
-
-export type SetToolPermissionResponse =
-  SetToolPermissionResponses[keyof SetToolPermissionResponses];
 
 export type ListMcpServersData = {
   body?: never;
