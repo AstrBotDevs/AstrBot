@@ -1425,6 +1425,9 @@
       "dashscope_embedding": {
         "hint": "阿里云百炼 Embedding，默认地址为 https://dashscope.aliyuncs.com/api/v1。"
       },
+      "volcengine_tts_v3": {
+        "hint": "火山引擎新版音频生成 API（/api/v3/tts/create）。API Key 需在新版控制台创建，详见 https://docs.volcengine.com/docs/6561/2550782。"
+      },
       "volcengine_cluster": {
         "description": "火山引擎集群",
         "hint": "若使用语音复刻大模型，可选volcano_icl或volcano_icl_concurr，默认使用volcano_tts"
@@ -1440,6 +1443,30 @@
       "volcengine_volume_ratio": {
         "description": "音量设置",
         "hint": "音量设置，范围为 0.0 到 2.0,默认值为 1.0"
+      },
+      "volcengine_v3_speaker": {
+        "description": "火山引擎音色（v3）",
+        "hint": "音频生成 API 的音色 ID。留空时不发送音色参考，由服务端根据文本提示生成音频。"
+      },
+      "volcengine_v3_format": {
+        "description": "音频输出格式",
+        "hint": "支持 wav、mp3、pcm 和 ogg_opus；AstrBot 预设使用 mp3。"
+      },
+      "volcengine_v3_sample_rate": {
+        "description": "采样率",
+        "hint": "支持 8000、16000、24000、32000、44100 和 48000 Hz；AstrBot 预设使用 48000 Hz。"
+      },
+      "volcengine_v3_speech_rate": {
+        "description": "语速",
+        "hint": "范围 -50 到 100；-50 为 0.5 倍速，100 为 2 倍速，0 表示不调整。"
+      },
+      "volcengine_v3_loudness_rate": {
+        "description": "音量",
+        "hint": "范围 -50 到 100；-50 为 0.5 倍音量，100 为 2 倍音量，0 表示不调整。"
+      },
+      "volcengine_v3_pitch_rate": {
+        "description": "音调",
+        "hint": "范围 -12 到 12，0 表示不调整音调。"
       },
       "azure_tts_voice": {
         "description": "音色设置",
