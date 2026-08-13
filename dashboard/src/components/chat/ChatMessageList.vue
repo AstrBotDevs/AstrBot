@@ -143,7 +143,6 @@
                     hasFollowingContentBlock(msg, blockIndex)
                   "
                   :has-reasoning="msg.hasReasoning"
-                  :reasoning-len="msg.reasoningLen"
                   :reasoning-status="msg.reasoningStatus"
                   :open-in-sidebar="variant === 'main'"
                   @open="emit('openReasoning', { message: msg, blockIndex })"

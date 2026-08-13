@@ -7,7 +7,7 @@
       @click="handlePrimaryAction"
     >
       <span class="reasoning-title">
-        {{ reasoningTitle }}<span v-if="reasoningLen"> ({{ tm("reasoning.characters", { count: reasoningLen }) }})</span>
+        {{ reasoningTitle }}
       </span>
       <v-icon
         size="22"
@@ -57,7 +57,6 @@ const props = defineProps<{
   hasNonReasoningContent?: boolean;
   openInSidebar?: boolean;
   hasReasoning?: boolean;
-  reasoningLen?: number;
   reasoningStatus?: "unloaded" | "loading" | "loaded" | "error";
 }>();
 
@@ -88,11 +87,9 @@ const activityCounts = computed(() =>
 );
 
 const reasoningTitle = computed(() =>
-  props.reasoningStatus === "loading"
-    ? tm("reasoning.loading")
-    : props.reasoningStatus === "error"
-      ? tm("reasoning.retry")
-      : reasoningActivityTitle(activityCounts.value, tm),
+  props.reasoningStatus === "error"
+    ? tm("reasoning.retry")
+    : reasoningActivityTitle(activityCounts.value, tm),
 );
 
 const thinkingText = computed(() =>
