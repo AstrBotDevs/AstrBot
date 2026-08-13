@@ -19,6 +19,7 @@ from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.utils.history_saver import persist_agent_history
+from astrbot.core.utils.session_lock import session_lock_manager
 
 if TYPE_CHECKING:
     from astrbot.core.star.context import Context
@@ -448,66 +449,67 @@ class CronJobManager:
             streaming_response=False,
             provider_settings=provider_settings,
         )
-        req = ProviderRequest()
-        conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
-        req.conversation = conv
-        # finetine the messages
-        context = json.loads(conv.history)
-        if context:
-            req.contexts = context
-            context_dump = req._print_friendly_context()
-            req.contexts = []
-            req.system_prompt += (
-                "\n\nBellow is you and user previous conversation history:\n"
-                f"---\n"
-                f"{context_dump}\n"
-                f"---\n"
+        async with session_lock_manager.acquire_lock(umo):
+            req = ProviderRequest()
+            conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
+            req.conversation = conv
+            # finetine the messages
+            context = json.loads(conv.history)
+            if context:
+                req.contexts = context
+                context_dump = req._print_friendly_context()
+                req.contexts = []
+                req.system_prompt += (
+                    "\n\nBellow is you and user previous conversation history:\n"
+                    f"---\n"
+                    f"{context_dump}\n"
+                    f"---\n"
+                )
+            cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
+            req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
+                cron_job=cron_job_str
             )
-        cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
-        req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
-            cron_job=cron_job_str
-        )
-        req.prompt = (
-            "You are now responding to a scheduled task. "
-            "Proceed according to your system instructions. "
-            "Output using same language as previous conversation. "
-            "After completing your task, summarize and output your actions and results."
-        )
-        if delivery_session_str:
-            if not req.func_tool:
-                req.func_tool = ToolSet()
-            req.func_tool.add_tool(
-                self.ctx.get_llm_tool_manager().get_builtin_tool(SendMessageToUserTool)
+            req.prompt = (
+                "You are now responding to a scheduled task. "
+                "Proceed according to your system instructions. "
+                "Output using same language as previous conversation. "
+                "After completing your task, summarize and output your actions and results."
             )
+            if delivery_session_str:
+                if not req.func_tool:
+                    req.func_tool = ToolSet()
+                req.func_tool.add_tool(
+                    self.ctx.get_llm_tool_manager().get_builtin_tool(
+                        SendMessageToUserTool
+                    )
+                )
 
-        result = await build_main_agent(
-            event=cron_event, plugin_context=self.ctx, config=config, req=req
-        )
-        if not result:
-            logger.error("Failed to build main agent for cron job.")
-            return
-
-        runner = result.agent_runner
-        async for _ in runner.step_until_done(30):
-            # agent will send message to user via using tools
-            pass
-        llm_resp = runner.get_final_llm_resp()
-        cron_meta = extras.get("cron_job", {}) if extras else {}
-        summary_note = (
-            f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
-            f" triggered at {cron_meta.get('run_started_at', 'unknown time')}, "
-        )
-        if llm_resp and llm_resp.role == "assistant":
-            summary_note += (
-                f"I finished this job, here is the result: {llm_resp.completion_text}"
+            result = await build_main_agent(
+                event=cron_event, plugin_context=self.ctx, config=config, req=req
             )
+            if not result:
+                logger.error("Failed to build main agent for cron job.")
+                return
 
-        await persist_agent_history(
-            self.ctx.conversation_manager,
-            event=cron_event,
-            req=req,
-            summary_note=summary_note,
-        )
+            runner = result.agent_runner
+            async for _ in runner.step_until_done(30):
+                # agent will send message to user via using tools
+                pass
+            llm_resp = runner.get_final_llm_resp()
+            cron_meta = extras.get("cron_job", {}) if extras else {}
+            summary_note = (
+                f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
+                f" triggered at {cron_meta.get('run_started_at', 'unknown time')}, "
+            )
+            if llm_resp and llm_resp.role == "assistant":
+                summary_note += f"I finished this job, here is the result: {llm_resp.completion_text}"
+
+            await persist_agent_history(
+                self.ctx.conversation_manager,
+                event=cron_event,
+                req=req,
+                summary_note=summary_note,
+            )
         if not llm_resp:
             logger.warning("Cron job agent got no response")
             return
