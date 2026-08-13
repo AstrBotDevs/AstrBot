@@ -120,8 +120,7 @@
     "thinkSummary": "思考了 {count} 次",
     "toolSummary": "使用了 {count} 次工具",
     "think": "思考",
-    "toolUsed": "使用工具",
-    "retry": "重试加载思考内容"
+    "toolUsed": "使用工具"
   },
   "history": {
     "loadEarlier": "加载更早消息"
