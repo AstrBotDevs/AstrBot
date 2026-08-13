@@ -619,7 +619,7 @@ class ProviderGoogleGenAI(Provider):
                         config=config,
                     ),
                     max_attempts=request_max_retries,
-                    provider_id=str(self.provider_config.get("id", "")),
+                    provider_id=self.provider_config.get("id"),
                     model=model,
                 )
                 logger.debug(f"genai result: {result}")
@@ -713,7 +713,7 @@ class ProviderGoogleGenAI(Provider):
                         config=config,
                     ),
                     max_attempts=request_max_retries,
-                    provider_id=str(self.provider_config.get("id", "")),
+                    provider_id=self.provider_config.get("id"),
                     model=model,
                 )
                 break
@@ -956,7 +956,7 @@ class ProviderGoogleGenAI(Provider):
             models = await retry_provider_request(
                 "Gemini",
                 lambda: self.client.models.list(),
-                provider_id=str(self.provider_config.get("id", "")),
+                provider_id=self.provider_config.get("id"),
             )
             return [
                 m.name.replace("models/", "")
