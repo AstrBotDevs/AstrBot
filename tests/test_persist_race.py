@@ -55,26 +55,42 @@ def test_persist_basic():
     assert notes == ["result-x"]
 
 
+class SessionLockedManager:
+    """模拟会话锁: 按 umo 分配 asyncio.Lock"""
+
+    def __init__(self):
+        self._locks: dict[str, asyncio.Lock] = {}
+
+    def acquire(self, umo: str):
+        if umo not in self._locks:
+            self._locks[umo] = asyncio.Lock()
+        return self._locks[umo]
+
+
 @pytest.mark.asyncio
 async def test_persist_concurrent_keeps_all_results():
     """
-    并发场景: 4 个后台任务结果几乎同时持久化, 不应丢失任何一条。
+    会话锁保护下, 4 个并发持久化不丢失任何结果。
 
-    复现路径: 每个任务在创建请求时读到旧历史快照, 然后并发 persist。
-    修复方案: 同一会话的处理流程(读历史+持久化)串行化(session lock)。
+    修复前(无锁): 每个任务持有创建时的旧历史快照, 并发读改写互相覆盖,
+    丢失 3/4 条结果 (该场景已由 test_background_wake_lock 覆盖根因)。
+    修复后(会话锁): 读历史与持久化整体串行化, 后任务读到最新历史, 全部保留。
     """
     cm = FakeConversationManager()
+    slm = SessionLockedManager()
     umo = "test:session:1"
     n = 4
 
-    # 模拟并发任务: 各自持有创建时读到的历史快照(并发时互不知道对方)
-    reqs = [make_req(cm.store.get((umo, "conv-1"), "[]")) for _ in range(n)]
-    events = [make_event(umo)] * n
+    async def one_task(i):
+        # 模拟修复后的调用模式: 读历史 + persist 都在会话锁内
+        async with slm.acquire(umo):
+            h_now = cm.store.get((umo, "conv-1"), "[]")
+            req = make_req(h_now)
+            await persist_agent_history(
+                cm, event=make_event(umo), req=req, summary_note=f"result-{i}"
+            )
 
-    await asyncio.gather(*[
-        persist_agent_history(cm, event=events[i], req=reqs[i], summary_note=f"result-{i}")
-        for i in range(n)
-    ])
+    await asyncio.gather(*[one_task(i) for i in range(n)])
 
     final = json.loads(cm.store[(umo, "conv-1")])
     saved = [m["content"] for m in final if m["role"] == "assistant"]

@@ -50,6 +50,7 @@ from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
+from astrbot.core.utils.session_lock import session_lock_manager
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 
@@ -555,65 +556,66 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             provider_settings=provider_settings,
         )
 
-        req = ProviderRequest()
-        conv = await _get_session_conv(event=cron_event, plugin_context=ctx)
-        req.conversation = conv
-        context = json.loads(conv.history)
-        if context:
-            req.contexts = context
-            context_dump = req._print_friendly_context()
-            req.contexts = []
-            req.system_prompt += (
-                "\n\nBellow is you and user previous conversation history:\n"
-                f"{context_dump}"
+        async with session_lock_manager.acquire_lock(event.unified_msg_origin):
+            req = ProviderRequest()
+            conv = await _get_session_conv(event=cron_event, plugin_context=ctx)
+            req.conversation = conv
+            context = json.loads(conv.history)
+            if context:
+                req.contexts = context
+                context_dump = req._print_friendly_context()
+                req.contexts = []
+                req.system_prompt += (
+                    "\n\nBellow is you and user previous conversation history:\n"
+                    f"{context_dump}"
+                )
+
+            bg = json.dumps(extras["background_task_result"], ensure_ascii=False)
+            req.system_prompt += BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT.format(
+                background_task_result=bg
+            )
+            req.prompt = (
+                "Proceed according to your system instructions. "
+                "Output using same language as previous conversation. "
+                "If you need to deliver the result to the user immediately, "
+                "you MUST use `send_message_to_user` tool to send the message directly to the user, "
+                "otherwise the user will not see the result. "
+                "After completing your task, summarize and output your actions and results. "
+            )
+            if not req.func_tool:
+                req.func_tool = ToolSet()
+            req.func_tool.add_tool(
+                ctx.get_llm_tool_manager().get_builtin_tool(SendMessageToUserTool)
             )
 
-        bg = json.dumps(extras["background_task_result"], ensure_ascii=False)
-        req.system_prompt += BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT.format(
-            background_task_result=bg
-        )
-        req.prompt = (
-            "Proceed according to your system instructions. "
-            "Output using same language as previous conversation. "
-            "If you need to deliver the result to the user immediately, "
-            "you MUST use `send_message_to_user` tool to send the message directly to the user, "
-            "otherwise the user will not see the result. "
-            "After completing your task, summarize and output your actions and results. "
-        )
-        if not req.func_tool:
-            req.func_tool = ToolSet()
-        req.func_tool.add_tool(
-            ctx.get_llm_tool_manager().get_builtin_tool(SendMessageToUserTool)
-        )
-
-        result = await build_main_agent(
-            event=cron_event, plugin_context=ctx, config=config, req=req
-        )
-        if not result:
-            logger.error(f"Failed to build main agent for background task {tool_name}.")
-            return
-
-        runner = result.agent_runner
-        async for _ in runner.step_until_done(30):
-            # agent will send message to user via using tools
-            pass
-        llm_resp = runner.get_final_llm_resp()
-        task_meta = extras.get("background_task_result", {})
-        summary_note = (
-            f"[BackgroundTask] {summary_name} "
-            f"(task_id={task_meta.get('task_id', task_id)}) finished. "
-            f"Result: {task_meta.get('result') or result_text or 'no content'}"
-        )
-        if llm_resp and llm_resp.completion_text:
-            summary_note += (
-                f"I finished the task, here is the result: {llm_resp.completion_text}"
+            result = await build_main_agent(
+                event=cron_event, plugin_context=ctx, config=config, req=req
             )
-        await persist_agent_history(
-            ctx.conversation_manager,
-            event=cron_event,
-            req=req,
-            summary_note=summary_note,
-        )
+            if not result:
+                logger.error(
+                    f"Failed to build main agent for background task {tool_name}."
+                )
+                return
+
+            runner = result.agent_runner
+            async for _ in runner.step_until_done(30):
+                # agent will send message to user via using tools
+                pass
+            llm_resp = runner.get_final_llm_resp()
+            task_meta = extras.get("background_task_result", {})
+            summary_note = (
+                f"[BackgroundTask] {summary_name} "
+                f"(task_id={task_meta.get('task_id', task_id)}) finished. "
+                f"Result: {task_meta.get('result') or result_text or 'no content'}"
+            )
+            if llm_resp and llm_resp.completion_text:
+                summary_note += f"I finished the task, here is the result: {llm_resp.completion_text}"
+            await persist_agent_history(
+                ctx.conversation_manager,
+                event=cron_event,
+                req=req,
+                summary_note=summary_note,
+            )
         if not llm_resp:
             logger.warning("background task agent got no response")
             return
