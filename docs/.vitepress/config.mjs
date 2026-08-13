@@ -131,6 +131,7 @@ export default defineConfig({
                 collapsed: true,
                 items: [
                   { text: "NewAPI", link: "/newapi" },
+                  { text: "胜算云", link: "/shengsuanyun" },
                   { text: "AIHubMix", link: "/aihubmix" },
                   { text: "PPIO 派欧云", link: "/ppio" },
                   { text: "硅基流动", link: "/siliconflow" },
@@ -390,6 +391,7 @@ export default defineConfig({
                 collapsed: true,
                 items: [
                   { text: "NewAPI", link: "/newapi" },
+                  { text: "ShengSuanYun", link: "/shengsuanyun" },
                   { text: "AIHubMix", link: "/aihubmix" },
                   { text: "PPIO Cloud", link: "/ppio" },
                   { text: "SiliconFlow", link: "/siliconflow" },
