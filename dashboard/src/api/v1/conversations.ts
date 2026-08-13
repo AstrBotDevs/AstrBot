@@ -68,10 +68,11 @@ export const conversationApi = {
       openApiV1.batchDeleteConversations({ body: payload }),
     );
   },
-  export(payload: ConversationExportRequest) {
+  export(payload: ConversationExportRequest, stepUp: string) {
     return openApiV1.exportConversations({
       body: payload,
       responseType: 'blob',
+      headers: { 'X-AstrBot-Step-Up': stepUp },
     }) as Promise<AxiosResponse<Blob>>;
   },
 };

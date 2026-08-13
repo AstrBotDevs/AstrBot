@@ -1,5 +1,6 @@
 import { statsApi } from '@/api/v1';
 import { getDesktopRuntimeInfo } from '@/utils/desktopRuntime';
+import { requestDashboardStepUp, stepUpHeaders } from '@/utils/stepUp';
 
 type WaitingForRestartRef = {
   check: (initialStartTime?: number | null) => void | Promise<void>;
@@ -52,6 +53,11 @@ export async function restartAstrBot(
     return;
   }
 
-  await statsApi.restart();
+  const stepUp = await requestDashboardStepUp({
+    action: 'system.restart',
+    resourceType: 'system',
+    resourceId: 'restart',
+  });
+  await statsApi.restart({ headers: stepUpHeaders(stepUp) });
   await triggerWaiting(waitingRef);
 }

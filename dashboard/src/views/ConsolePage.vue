@@ -3,6 +3,7 @@ import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { updatesApi } from '@/api/v1';
 import { resolveErrorMessage } from '@/utils/errorUtils';
+import { requestDashboardStepUp, stepUpHeaders } from '@/utils/stepUp';
 import { useToast } from '@/utils/toast';
 import { ref, watch } from 'vue';
 
@@ -32,7 +33,14 @@ watch(hideUserChatEnabled, (value) => {
 async function pipInstall(): Promise<void> {
   loading.value = true;
   try {
-    const res = await updatesApi.installPip(pipInstallPayload.value);
+    const stepUp = await requestDashboardStepUp({
+      action: 'system.pip_install',
+      resourceType: 'system',
+      resourceId: 'pip-install',
+    });
+    const res = await updatesApi.installPip(pipInstallPayload.value, {
+      headers: stepUpHeaders(stepUp),
+    });
     if (res.data.status === 'ok') {
       toast.success(res.data.message || tm('pipInstall.installSuccess'));
       pipDialog.value = false;

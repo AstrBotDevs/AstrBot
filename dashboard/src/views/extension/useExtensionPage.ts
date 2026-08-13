@@ -12,6 +12,7 @@ import { resolveErrorMessage } from '@/utils/errorUtils';
 import { readSelectedGitHubProxy } from '@/utils/githubProxyStorage';
 import { getValidHashTab, replaceTabRoute } from '@/utils/hashRouteTabs';
 import { getPlatformDisplayName } from '@/utils/platformUtils';
+import { requestDashboardStepUp } from '@/utils/stepUp';
 import {
   buildSearchQuery,
   matchesPluginSearch,
@@ -124,6 +125,13 @@ export const useExtensionPage = () => {
   const router = useRouter();
   const route = useRoute();
   const getSelectedGitHubProxy = readSelectedGitHubProxy;
+
+  const requestPluginInstallStepUp = () =>
+    requestDashboardStepUp({
+      action: 'extension.plugin_install',
+      resourceType: 'dashboard-api',
+      resourceId: 'post-plugin',
+    });
 
   // 检查指令冲突并提示
   const conflictDialog = reactive({
@@ -881,9 +889,12 @@ export const useExtensionPage = () => {
     loadingDialog.result = '';
     loadingDialog.show = true;
     try {
-      const res = await pluginApi.update(extensionName, {
-        proxy: downloadUrl ? '' : getSelectedGitHubProxy(),
-      });
+      const stepUp = await requestPluginInstallStepUp();
+      const res = await pluginApi.update(
+        extensionName,
+        { proxy: downloadUrl ? '' : getSelectedGitHubProxy() },
+        stepUp,
+      );
 
       if (res.data.status === 'error') {
         onLoadingDialogResult(2, res.data.message, -1);
@@ -958,10 +969,14 @@ export const useExtensionPage = () => {
 
     const targets = updatableExtensions.value.map((ext) => ext.name);
     try {
-      const res = await pluginApi.updateMany({
-        names: targets,
-        proxy: getSelectedGitHubProxy(),
-      });
+      const stepUp = await requestPluginInstallStepUp();
+      const res = await pluginApi.updateMany(
+        {
+          names: targets,
+          proxy: getSelectedGitHubProxy(),
+        },
+        stepUp,
+      );
 
       if (res.data.status === 'error') {
         onLoadingDialogResult(
@@ -1685,9 +1700,11 @@ export const useExtensionPage = () => {
   const performInstallRequest = async ({
     source,
     ignoreVersionCheck,
+    stepUp,
   }: {
     source: UploadTab;
     ignoreVersionCheck: boolean;
+    stepUp: string;
   }) => {
     const shouldIgnoreVersionCheck = ignoreVersionCheck === true;
     if (source === 'file') {
@@ -1697,7 +1714,7 @@ export const useExtensionPage = () => {
       const formData = new FormData();
       formData.append('file', upload_file.value);
       formData.append('ignore_version_check', String(shouldIgnoreVersionCheck));
-      return pluginApi.installUpload(formData);
+      return pluginApi.installUpload(formData, stepUp);
     }
 
     const urlPayload: Parameters<typeof pluginApi.installUrl>[0] = {
@@ -1714,8 +1731,8 @@ export const useExtensionPage = () => {
     };
 
     return installUsesGithubSource.value
-      ? pluginApi.installGithub(githubPayload)
-      : pluginApi.installUrl(urlPayload);
+      ? pluginApi.installGithub(githubPayload, stepUp)
+      : pluginApi.installUrl(urlPayload, stepUp);
   };
 
   const finalizeSuccessfulInstall = async (
@@ -1758,9 +1775,11 @@ export const useExtensionPage = () => {
     loading_.value = true;
 
     try {
+      const stepUp = await requestPluginInstallStepUp();
       const res = await performInstallRequest({
         source,
         ignoreVersionCheck: shouldIgnoreVersionCheck,
+        stepUp,
       });
       loading_.value = false;
 

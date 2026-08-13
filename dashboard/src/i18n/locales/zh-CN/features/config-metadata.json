@@ -729,9 +729,6 @@
     },
     "general": {
       "description": "基本",
-      "admins_id": {
-        "description": "管理员 ID"
-      },
       "platform_settings": {
         "unique_session": {
           "description": "隔离会话",

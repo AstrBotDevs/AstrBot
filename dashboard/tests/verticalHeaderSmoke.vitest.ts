@@ -22,11 +22,13 @@ vi.mock('axios', () => ({
   default: {
     get: vi.fn(),
     create: vi.fn(() => ({
+      defaults: {},
       interceptors: {
         request: { use: vi.fn() },
         response: { use: vi.fn() },
       },
     })),
+    defaults: {},
   },
 }));
 

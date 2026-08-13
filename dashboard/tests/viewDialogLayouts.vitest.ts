@@ -35,6 +35,8 @@ vi.mock('vue-router', async () => {
 vi.mock('axios', () => ({
   default: {
     get: testState.axiosGetMock,
+    create: vi.fn(() => ({ defaults: {} })),
+    defaults: {},
   },
   isCancel: () => false,
 }));

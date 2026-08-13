@@ -115,16 +115,22 @@ export const pluginApi = {
     }
     return response;
   },
-  update(pluginId: string, body?: PluginUpdateRequest) {
+  update(pluginId: string, body?: PluginUpdateRequest, stepUp?: string) {
     return typed<OpenConfig>(
       openApiV1.updatePlugin({
         path: { plugin_id: pluginId },
         body,
+        headers: stepUp ? { 'X-AstrBot-Step-Up': stepUp } : undefined,
       }),
     );
   },
-  updateMany(body: PluginBatchUpdateRequest) {
-    return typed<OpenConfig>(openApiV1.updatePlugins({ body }));
+  updateMany(body: PluginBatchUpdateRequest, stepUp?: string) {
+    return typed<OpenConfig>(
+      openApiV1.updatePlugins({
+        body,
+        headers: stepUp ? { 'X-AstrBot-Step-Up': stepUp } : undefined,
+      }),
+    );
   },
   config(pluginId: string) {
     return typed<OpenConfig>(
@@ -202,10 +208,11 @@ export const pluginApi = {
       openApiV1.replacePluginSources({ body: { sources } }),
     );
   },
-  async installUpload(formData: FormData) {
+  async installUpload(formData: FormData, stepUp?: string) {
     const response = await fetchWithAuth('/api/v1/plugins/install/upload', {
       method: 'POST',
       body: formData,
+      headers: stepUp ? { 'X-AstrBot-Step-Up': stepUp } : undefined,
     });
     const data = await response.json();
     if (!response.ok) {
@@ -215,11 +222,21 @@ export const pluginApi = {
     }
     return { data } as AxiosResponse<ApiEnvelope<OpenConfig>>;
   },
-  installGithub(body: PluginGithubInstallRequest) {
-    return typed<OpenConfig>(openApiV1.installPluginFromGithub({ body }));
+  installGithub(body: PluginGithubInstallRequest, stepUp?: string) {
+    return typed<OpenConfig>(
+      openApiV1.installPluginFromGithub({
+        body,
+        headers: stepUp ? { 'X-AstrBot-Step-Up': stepUp } : undefined,
+      }),
+    );
   },
-  installUrl(body: PluginUrlInstallRequest) {
-    return typed<OpenConfig>(openApiV1.installPluginFromUrl({ body }));
+  installUrl(body: PluginUrlInstallRequest, stepUp?: string) {
+    return typed<OpenConfig>(
+      openApiV1.installPluginFromUrl({
+        body,
+        headers: stepUp ? { 'X-AstrBot-Step-Up': stepUp } : undefined,
+      }),
+    );
   },
   bindSource(pluginId: string, body: PluginSourceBindRequest) {
     return typed<OpenConfig>(

@@ -20,6 +20,7 @@ import type { Locale } from '@/i18n/types';
 import { authApi, statsApi, updatesApi } from '@/api/v1';
 import { getDesktopRuntimeInfo } from '@/utils/desktopRuntime';
 import { readSelectedGitHubProxy } from '@/utils/githubProxyStorage';
+import { requestDashboardStepUp, stepUpHeaders } from '@/utils/stepUp';
 
 const LazyMarkdownRender = defineAsyncComponent(
   () => import('@/components/shared/LazyMarkdownRender.vue'),
@@ -727,6 +728,17 @@ function startUpdateProgressPolling(progressId: string) {
 }
 
 async function switchVersion(targetVersion: string) {
+  let stepUp: string;
+  try {
+    stepUp = await requestDashboardStepUp({
+      action: 'system.update',
+      resourceType: 'system',
+      resourceId: 'core-update',
+    });
+  } catch (error) {
+    updateStatus.value = error instanceof Error ? error.message : String(error);
+    return;
+  }
   const progressId =
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
@@ -758,11 +770,14 @@ async function switchVersion(targetVersion: string) {
   startUpdateProgressPolling(progressId);
 
   updatesApi
-    .core({
-      version: targetVersion,
-      proxy: getSelectedGitHubProxy(),
-      progress_id: progressId,
-    })
+    .core(
+      {
+        version: targetVersion,
+        proxy: getSelectedGitHubProxy(),
+        progress_id: progressId,
+      },
+      { headers: stepUpHeaders(stepUp) },
+    )
     .then((res) => {
       updateStatus.value = res.data.message || '';
       if (res.data.status === 'error') {

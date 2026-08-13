@@ -83,6 +83,13 @@
       "cancel": "取消",
       "confirm": "批量删除",
       "warning": "警告：此操作不可撤销！"
+    },
+    "export": {
+      "title": "确认导出对话",
+      "message": "导出对话历史需要重新验证 Dashboard 身份。",
+      "password": "Dashboard 密码",
+      "cancel": "取消",
+      "confirm": "验证并导出"
     }
   },
   "messages": {
@@ -101,6 +108,7 @@
     "batchDeletePartial": "删除完成：成功 {deleted} 个，失败 {failed} 个",
     "exportSuccess": "导出成功",
     "exportError": "导出失败",
+    "exportStepUpRequired": "导出对话需要重新验证身份",
     "noItemSelectedForExport": "请先选择要导出的对话",
     "copySuccess": "复制成功",
     "copyError": "复制失败"

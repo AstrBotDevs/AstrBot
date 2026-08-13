@@ -21,6 +21,7 @@ import type {
   UpdateRequest,
 } from './shared';
 import type { AxiosRequestConfig } from './shared';
+import type { AxiosResponse } from './shared';
 import type {
   BackupListParams,
   BaseStatsData,
@@ -54,16 +55,22 @@ export const updatesApi = {
   releases() {
     return typed<ReleaseItemData[]>(openApiV1.listReleases());
   },
-  core(payload?: UpdateRequest) {
-    return typed<OpenConfig>(openApiV1.updateCore({ body: payload }));
+  core(payload?: UpdateRequest, requestConfig?: AxiosRequestConfig) {
+    return typed<OpenConfig>(
+      openApiV1.updateCore(generatedOptions({ body: payload }, requestConfig)),
+    );
   },
   progress(taskId: string) {
     return typed<UpdateProgressData>(
       openApiV1.getUpdateProgress({ path: { task_id: taskId } }),
     );
   },
-  installPip(payload: PipInstallRequest) {
-    return typed<OpenConfig>(openApiV1.installPipPackage({ body: payload }));
+  installPip(payload: PipInstallRequest, requestConfig?: AxiosRequestConfig) {
+    return typed<OpenConfig>(
+      openApiV1.installPipPackage(
+        generatedOptions({ body: payload }, requestConfig),
+      ),
+    );
   },
 };
 
@@ -126,8 +133,11 @@ export const backupApi = {
       openApiV1.renameBackup({ path: { filename }, body: payload }),
     );
   },
-  downloadUrl(filename: string, token: string) {
-    return `/api/v1/backups/${encodeURIComponent(filename)}?token=${encodeURIComponent(token)}`;
+  download(filename: string) {
+    return openApiV1.downloadBackup({
+      path: { filename },
+      responseType: 'blob',
+    }) as Promise<AxiosResponse<Blob>>;
   },
 };
 

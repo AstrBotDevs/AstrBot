@@ -1004,26 +1004,24 @@ const resetImport = async () => {
   uploadProgress.value = { uploaded: 0, total: 0, percent: 0, message: '' };
 };
 
-// 下载备份（使用浏览器原生下载，可显示下载进度）
-const downloadBackup = (filename) => {
-  // 获取 token 用于鉴权（因为浏览器原生下载无法携带 Authorization header）
-  const token = localStorage.getItem('token');
-  if (!token) {
-    alert(t('core.common.unauthorized'));
-    return;
+// Download through the authenticated API client so the Dashboard token never
+// appears in a URL, browser history, or a referrer header.
+const downloadBackup = async (filename) => {
+  if (!filename) return;
+  try {
+    const response = await backupApi.download(filename);
+    const url = URL.createObjectURL(response.data);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    alert(error.response?.data?.message || error.message || 'Download failed');
   }
-
-  // 直接使用浏览器下载，这样可以看到原生下载进度条
-  const downloadUrl = backupApi.downloadUrl(filename, token);
-
-  // 创建隐藏的 a 标签触发下载
-  const link = document.createElement('a');
-  link.href = downloadUrl;
-  link.download = filename;
-  link.style.display = 'none';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
 };
 
 // 从列表中恢复备份

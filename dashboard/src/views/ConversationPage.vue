@@ -81,7 +81,7 @@
             :disabled="loading"
             size="small"
             class="mr-2"
-            @click="exportConversations"
+            @click="requestConversationExport"
           >
             {{ tm('batch.exportSelected', { count: selectedItems.length }) }}
           </v-btn>
@@ -580,6 +580,45 @@
       </v-card>
     </v-dialog>
 
+    <v-dialog v-model="dialogExportStepUp" max-width="460px" persistent>
+      <v-card class="conversation-export-step-up-dialog">
+        <v-card-title class="bg-primary text-white py-3">
+          <v-icon color="white" class="me-2">mdi-shield-lock</v-icon>
+          <span>{{ tm('dialogs.export.title') }}</span>
+        </v-card-title>
+        <v-card-text class="py-4 conversation-modal-body">
+          <p>{{ tm('dialogs.export.message') }}</p>
+          <v-text-field
+            v-model="exportStepUpPassword"
+            class="mt-4"
+            type="password"
+            autocomplete="current-password"
+            :label="tm('dialogs.export.password')"
+            :disabled="exportStepUpSubmitting"
+          />
+        </v-card-text>
+        <v-divider></v-divider>
+        <v-card-actions class="pa-4 conversation-modal-actions">
+          <v-spacer></v-spacer>
+          <v-btn
+            variant="text"
+            :disabled="exportStepUpSubmitting"
+            @click="dialogExportStepUp = false"
+          >
+            {{ tm('dialogs.export.cancel') }}
+          </v-btn>
+          <v-btn
+            color="primary"
+            :loading="exportStepUpSubmitting"
+            :disabled="!exportStepUpPassword"
+            @click="confirmConversationExport"
+          >
+            {{ tm('dialogs.export.confirm') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- 消息提示 -->
     <v-snackbar
       v-model="showMessage"
@@ -610,6 +649,7 @@ import {
   type ConversationPaginationData,
   type ConversationRecordData,
 } from '@/api/v1';
+import { authorizationApi } from '@/api/v1/authorization';
 import { useCommonStore } from '@/stores/common';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
@@ -748,6 +788,9 @@ const dialogView = ref(false);
 const dialogEdit = ref(false);
 const dialogDelete = ref(false);
 const dialogBatchDelete = ref(false);
+const dialogExportStepUp = ref(false);
+const exportStepUpPassword = ref('');
+const exportStepUpSubmitting = ref(false);
 
 const selectedConversation = ref<ConversationRecord | null>(null);
 const conversationHistory = ref<HistoryMessage[]>([]);
@@ -1493,20 +1536,57 @@ async function batchDeleteConversations() {
   }
 }
 
-async function exportConversations() {
+function requestConversationExport() {
   if (selectedItems.value.length === 0) {
     showErrorMessage(tm('messages.noItemSelectedForExport'));
     return;
   }
 
+  exportStepUpPassword.value = '';
+  dialogExportStepUp.value = true;
+}
+
+async function confirmConversationExport() {
+  if (!exportStepUpPassword.value) {
+    return;
+  }
+
+  exportStepUpSubmitting.value = true;
+  try {
+    const stepUp = await authorizationApi.stepUp({
+      action: 'data.export_all',
+      resource_type: 'conversation',
+      resource_id: 'export',
+      password: exportStepUpPassword.value,
+    });
+    const token = stepUp.data?.data?.token;
+    if (!token) {
+      showErrorMessage(tm('messages.exportStepUpRequired'));
+      return;
+    }
+    dialogExportStepUp.value = false;
+    await exportConversations(token);
+  } catch (error) {
+    showErrorMessage(
+      resolveErrorMessage(error, tm('messages.exportStepUpRequired')),
+    );
+  } finally {
+    exportStepUpSubmitting.value = false;
+  }
+}
+
+async function exportConversations(stepUp: string) {
   loading.value = true;
   try {
-    const response = await conversationApi.export({
-      conversations: selectedItems.value.map((item) => ({
-        user_id: item.user_id,
-        cid: item.cid,
-      })),
-    });
+    const response = await conversationApi.export(
+      {
+        conversations: selectedItems.value.map((item) => ({
+          user_id: item.user_id,
+          cid: item.cid,
+        })),
+      },
+      stepUp,
+    );
 
     const url = window.URL.createObjectURL(response.data);
     const link = document.createElement('a');

@@ -286,7 +286,7 @@
     "permanentWarning": "Permanent API keys are high risk. Store them securely and use only when necessary.",
     "scopes": "Scopes",
     "sensitiveScope": "high risk",
-    "sensitiveScopeWarning": "High-risk scopes are explicit grants. Only assign them to an integration that is trusted to impersonate an AstrBot administrator or modify administrator IDs.",
+    "sensitiveScopeWarning": "High-risk scopes are explicit grants. Only assign them to integrations you fully trust, and keep their scope as narrow as possible.",
     "create": "Create API Key",
     "revoke": "Revoke",
     "delete": "Delete",

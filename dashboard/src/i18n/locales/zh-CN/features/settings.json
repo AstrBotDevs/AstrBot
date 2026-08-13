@@ -286,7 +286,7 @@
     "permanentWarning": "永久有效的 API Key 风险较高，请妥善保存并建议仅在必要场景使用。",
     "scopes": "权限范围",
     "sensitiveScope": "高风险",
-    "sensitiveScopeWarning": "高风险权限必须显式授权。只有可信集成可模拟 AstrBot 管理员或修改管理员 ID 时才应授予。",
+    "sensitiveScopeWarning": "高风险权限必须显式授权。只授予完全可信的集成，并尽量使用最小权限范围。",
     "create": "创建 API Key",
     "revoke": "吊销",
     "delete": "删除",

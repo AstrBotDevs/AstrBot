@@ -83,6 +83,13 @@
       "cancel": "Cancel",
       "confirm": "Batch Delete",
       "warning": "Warning: This action cannot be undone!"
+    },
+    "export": {
+      "title": "Confirm conversation export",
+      "message": "Exporting conversation history requires fresh Dashboard authentication.",
+      "password": "Dashboard password",
+      "cancel": "Cancel",
+      "confirm": "Verify and export"
     }
   },
   "messages": {
@@ -101,6 +108,7 @@
     "batchDeletePartial": "Delete completed: {deleted} successful, {failed} failed",
     "exportSuccess": "Export successful",
     "exportError": "Export failed",
+    "exportStepUpRequired": "Reauthentication is required to export conversations",
     "noItemSelectedForExport": "Please select conversations to export first",
     "copySuccess": "Copied",
     "copyError": "Copy failed"
