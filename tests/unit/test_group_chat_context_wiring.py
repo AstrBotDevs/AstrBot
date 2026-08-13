@@ -1,10 +1,12 @@
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.api.message_components import Plain
-from astrbot.api.provider import LLMResponse
+from astrbot.api.message_components import Image, Plain
+from astrbot.api.provider import LLMResponse, ProviderRequest
+from astrbot.builtin_stars.astrbot.group_chat_context import GroupChatContext
 from astrbot.builtin_stars.astrbot.main import Main
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_type import MessageType
@@ -51,6 +53,40 @@ def make_event(
     event.get_extra.side_effect = get_extra
     event.set_extra.side_effect = set_extra
     return event
+
+
+def make_group_context_event(message, nickname="user"):
+    event = MagicMock()
+    event.unified_msg_origin = "aiocqhttp:GroupMessage:user_123_group_456"
+    event.message_obj = SimpleNamespace(
+        message=message,
+        sender=SimpleNamespace(nickname=nickname),
+    )
+    event.get_message_type.return_value = MessageType.GROUP_MESSAGE
+    event.get_messages.return_value = message
+
+    store, get_extra, set_extra = _make_extras_store()
+    event.get_extra.side_effect = get_extra
+    event.set_extra.side_effect = set_extra
+    return event
+
+
+def make_group_chat_context():
+    context = MagicMock()
+    context.get_config.return_value = {
+        "provider_ltm_settings": {
+            "group_message_max_cnt": 1000,
+            "image_caption": True,
+            "image_caption_provider_id": "vision-provider",
+            "active_reply": {
+                "enable": False,
+                "method": "possibility_reply",
+                "possibility_reply": 0,
+            },
+        },
+        "provider_settings": {"image_caption_prompt": "Describe the image."},
+    }
+    return GroupChatContext(MagicMock(), context)
 
 
 @pytest.mark.asyncio
@@ -176,6 +212,55 @@ async def test_on_message_skips_recording_when_command_handler_matched():
 
     main.group_chat_context.need_active_reply.assert_awaited_once_with(event)
     main.group_chat_context.handle_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_group_context_preserves_message_order_while_captioning_image():
+    group_context = make_group_chat_context()
+    caption_started = asyncio.Event()
+    release_caption = asyncio.Event()
+
+    async def delayed_caption(*_args):
+        caption_started.set()
+        await release_caption.wait()
+        return "a driving test conversation"
+
+    group_context.get_image_caption = delayed_caption
+    image_event = make_group_context_event([Image.fromURL("https://example.com/a.jpg")])
+    text_event = make_group_context_event([Plain("I think I might fail")])
+
+    image_task = asyncio.create_task(group_context.handle_message(image_event))
+    await caption_started.wait()
+    text_task = asyncio.create_task(group_context.handle_message(text_event))
+    await asyncio.sleep(0)
+    text_completed_before_caption = text_task.done()
+
+    release_caption.set()
+    await asyncio.gather(image_task, text_task)
+
+    req = ProviderRequest()
+    await group_context.on_req_llm(text_event, req)
+
+    assert not text_completed_before_caption
+    assert len(req.extra_user_content_parts) == 1
+    assert (
+        "[Image: a driving test conversation]" in req.extra_user_content_parts[0].text
+    )
+
+
+@pytest.mark.asyncio
+async def test_group_context_keeps_image_placeholder_when_caption_fails():
+    group_context = make_group_chat_context()
+    group_context.get_image_caption = AsyncMock(
+        side_effect=RuntimeError("caption failed")
+    )
+    image_event = make_group_context_event([Image.fromURL("https://example.com/a.jpg")])
+
+    await group_context.handle_message(image_event)
+
+    records = list(group_context.raw_records[image_event.unified_msg_origin])
+    assert len(records) == 1
+    assert records[0].endswith(":  [Image]")
 
 
 @pytest.mark.asyncio

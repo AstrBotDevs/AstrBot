@@ -143,9 +143,10 @@ class GroupChatContext:
 
         umo = event.unified_msg_origin
         cfg = self.cfg(event)
-        final_message = await self._format_message(event, cfg)
 
+        # Caption and append atomically so later messages cannot overtake images.
         async with self._get_lock(umo):
+            final_message = await self._format_message(event, cfg)
             records = self.raw_records[umo]
             record_ids = self._record_ids[umo]
             record_id = uuid.uuid4().hex
@@ -215,6 +216,7 @@ class GroupChatContext:
                         parts.append(f" [Image: {caption}]")
                     except Exception as e:
                         logger.error(f"获取图片描述失败: {e}")
+                        parts.append(" [Image]")
                 else:
                     parts.append(" [Image]")
             elif isinstance(comp, At):
