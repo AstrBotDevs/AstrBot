@@ -377,6 +377,9 @@ class ProviderOpenAIOfficial(Provider):
                 default_headers=self.custom_headers,
                 base_url=provider_config.get("api_base", ""),
                 timeout=self.timeout,
+                # Retry is handled by retry_provider_request(); disable the
+                # SDK built-in retry to avoid stacking request attempts.
+                max_retries=0,
                 http_client=self._create_http_client(provider_config),
             )
         else:
@@ -386,6 +389,9 @@ class ProviderOpenAIOfficial(Provider):
                 base_url=provider_config.get("api_base", None),
                 default_headers=self.custom_headers,
                 timeout=self.timeout,
+                # Retry is handled by retry_provider_request(); disable the
+                # SDK built-in retry to avoid stacking request attempts.
+                max_retries=0,
                 http_client=self._create_http_client(provider_config),
             )
 

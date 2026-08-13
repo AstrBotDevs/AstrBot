@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
+from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from PIL import Image as PILImage
@@ -58,6 +59,26 @@ def _make_groq_provider(overrides: dict | None = None) -> ProviderGroq:
         provider_config=provider_config,
         provider_settings={},
     )
+
+
+@pytest.mark.asyncio
+async def test_openai_client_disables_sdk_builtin_retries():
+    provider = _make_provider()
+    try:
+        assert isinstance(provider.client, AsyncOpenAI)
+        assert provider.client.max_retries == 0
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_azure_client_disables_sdk_builtin_retries():
+    provider = _make_provider({"api_version": "2024-02-01"})
+    try:
+        assert isinstance(provider.client, AsyncAzureOpenAI)
+        assert provider.client.max_retries == 0
+    finally:
+        await provider.terminate()
 
 
 def test_create_http_client_uses_openai_httpx_module(monkeypatch):
