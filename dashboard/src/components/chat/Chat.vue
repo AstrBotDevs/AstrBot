@@ -441,22 +441,6 @@
                 {{ tm("actions.retry") }}
               </v-btn>
             </div>
-            <div
-              v-if="activeSessionPagination?.has_more"
-              class="load-earlier-bar"
-            >
-              <v-btn
-                size="small"
-                variant="text"
-                :loading="activeSessionPagination.loading"
-                @click="loadEarlierWithAnchor"
-              >
-                {{ tm("history.loadEarlier") }}
-              </v-btn>
-              <span v-if="activeSessionPagination.error" class="load-earlier-error">
-                {{ activeSessionPagination.error }}
-              </span>
-            </div>
             <ChatMessageList
               v-model:edit-draft="messageEditDraft"
               :messages="activeMessages"
@@ -766,6 +750,7 @@ const composerShell = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const shouldStickToBottom = ref(true);
 const suppressAutoScroll = ref(false);
+const LOAD_EARLIER_SCROLL_THRESHOLD = 120;
 const replyTarget = ref<ChatRecord | null>(null);
 const threadPanelOpen = ref(false);
 const activeThread = ref<ChatThread | null>(null);
@@ -1856,6 +1841,17 @@ function handleMessagesScroll() {
   const distance =
     container.scrollHeight - container.scrollTop - container.clientHeight;
   shouldStickToBottom.value = distance < 80;
+  maybeLoadEarlierOnScroll(container);
+}
+
+function maybeLoadEarlierOnScroll(container: HTMLElement) {
+  const sessionId = currSessionId.value;
+  const pagination = activeSessionPagination.value;
+  if (!sessionId || !pagination) return;
+  if (!pagination.has_more || pagination.loading) return;
+  if (container.scrollHeight <= container.clientHeight) return;
+  if (container.scrollTop > LOAD_EARLIER_SCROLL_THRESHOLD) return;
+  void loadEarlierWithAnchor();
 }
 
 function scrollToBottom() {
