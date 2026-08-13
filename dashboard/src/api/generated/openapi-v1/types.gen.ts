@@ -1376,6 +1376,10 @@ export type GetChatSessionData = {
     path: {
         session_id: string;
     };
+    query?: {
+        page?: number;
+        page_size?: number;
+    };
 };
 
 export type GetChatSessionResponse = (SuccessEnvelope);
@@ -1412,6 +1416,22 @@ export type StopChatSessionData = {
 export type StopChatSessionResponse = (SuccessEnvelope);
 
 export type StopChatSessionError = unknown;
+
+export type GetChatMessageData = {
+    path: {
+        message_id: number;
+    };
+    query?: {
+        /**
+         * Required for API-key callers; ignored for JWT callers.
+         */
+        username?: string;
+    };
+};
+
+export type GetChatMessageResponse = (SuccessEnvelope);
+
+export type GetChatMessageError = (unknown);
 
 export type ResumeChatRunData = {
     path: {
@@ -1462,6 +1482,10 @@ export type CreateChatThreadError = unknown;
 export type GetChatThreadData = {
     path: {
         thread_id: string;
+    };
+    query?: {
+        page?: number;
+        page_size?: number;
     };
 };
 

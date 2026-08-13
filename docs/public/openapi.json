@@ -1871,6 +1871,25 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/SessionId"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 1000
+            }
           }
         ],
         "responses": {
@@ -1948,6 +1967,48 @@
           }
         },
         "description": "**Required scope:** `chat`"
+      }
+    },
+    "/api/v1/chat/messages/{message_id}": {
+      "get": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "Get one full WebChat history message",
+        "operationId": "getChatMessage",
+        "x-astrbot-scope": "chat",
+        "x-astrbot-sensitive-scopes": [
+          "chat:admin"
+        ],
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "username",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for API-key callers; ignored for JWT callers."
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "404": {
+            "description": "Message not found"
+          }
+        },
+        "description": "**Required scope:** `chat`\n\n**Conditional sensitive scope:** `chat:admin`"
       }
     },
     "/api/v1/chat/runs/{run_id}/stream": {
@@ -2111,6 +2172,25 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 1000
             }
           }
         ],
