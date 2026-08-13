@@ -244,6 +244,11 @@ class SkillsService:
             return SkillsOperationResult(ok=False, message=str(exc))
 
     def get_skills(self) -> dict:
+        """Return the Skill inventory for Dashboard consumers.
+
+        Returns:
+            The serialized Skill inventory and current runtime metadata.
+        """
         provider_settings = self.core_lifecycle.astrbot_config.get(
             "provider_settings", {}
         )
@@ -255,16 +260,26 @@ class SkillsService:
             show_sandbox_path=False,
         )
         plugin_display_names = {}
+        plugin_activation_by_root_name = {}
         for plugin in self.core_lifecycle.plugin_manager.context.get_all_stars():
             display_name = str(plugin.display_name or plugin.name or "").strip()
             for plugin_name in (plugin.name, plugin.root_dir_name):
                 if plugin_name:
                     plugin_display_names[str(plugin_name)] = display_name
+            if plugin.root_dir_name:
+                plugin_activation_by_root_name[str(plugin.root_dir_name)] = bool(
+                    plugin.activated
+                )
 
         serialized_skills = []
         for skill in skills:
             skill_data = dict(skill.__dict__)
             if skill.source_type == "plugin":
+                plugin_active = plugin_activation_by_root_name.get(
+                    skill.plugin_name,
+                    False,
+                )
+                skill_data["plugin_active"] = plugin_active
                 skill_data["plugin_display_name"] = plugin_display_names.get(
                     skill.plugin_name,
                     "",

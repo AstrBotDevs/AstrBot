@@ -58,23 +58,31 @@
               :key="skill.name"
               :title="skill.name"
               class="skill-list-item"
+              :class="{
+                'skill-list-item--inactive':
+                  skill.active === false || isInactivePluginSkill(skill),
+              }"
               clickable
               @click="openSkillEditor(skill)"
             >
               <template #title-extra>
                 <div class="d-flex align-center ga-1">
                   <v-chip
-                    v-if="skill.source_type === 'sandbox_only'"
+                    v-if="skill.preset || skill.source_type === 'sandbox_only'"
                     size="x-small"
                     variant="tonal"
                     color="secondary"
                   >
                     {{ tm("status.preset") }}
                   </v-chip>
-                  <CapabilitySourceChip
-                    :label="sourceTypeLabel(skill.source_type, skill)"
-                    :tone="sourceTypeTone(skill.source_type)"
-                  />
+                  <v-chip
+                    v-if="isInactivePluginSkill(skill)"
+                    size="x-small"
+                    variant="tonal"
+                    color="warning"
+                  >
+                    {{ tm("skills.pluginDisabled") }}
+                  </v-chip>
                 </div>
               </template>
 
@@ -133,22 +141,32 @@
                       density="compact"
                       hide-details
                       inset
-                      :model-value="skill.active"
+                      :model-value="
+                        skill.active && !isInactivePluginSkill(skill)
+                      "
                       :aria-label="
-                        skill.active
+                        isInactivePluginSkill(skill)
+                          ? tm('skills.pluginDisabled')
+                          : skill.active
                           ? tm('skills.disable')
                           : tm('skills.enable')
                       "
                       :loading="itemLoading[skill.name] || false"
                       :disabled="
-                        itemLoading[skill.name] || isSandboxPresetSkill(skill)
+                        itemLoading[skill.name] ||
+                        isSandboxPresetSkill(skill) ||
+                        isInactivePluginSkill(skill)
                       "
                       @click.stop
                       @update:model-value="toggleSkill(skill)"
                     />
                   </template>
                   <span>{{
-                    skill.active ? tm("skills.disable") : tm("skills.enable")
+                    isInactivePluginSkill(skill)
+                      ? tm("skills.pluginDisabled")
+                      : skill.active
+                      ? tm("skills.disable")
+                      : tm("skills.enable")
                   }}</span>
                 </v-tooltip>
               </template>
@@ -794,7 +812,6 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import { skillApi, systemConfigApi } from "@/api/v1";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
-import CapabilitySourceChip from "@/components/shared/CapabilitySourceChip.vue";
 import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
 import { useCustomizerStore } from "@/stores/customizer";
 
@@ -807,7 +824,6 @@ const STATUS_SKIPPED = "skipped";
 export default {
   name: "SkillsSection",
   components: {
-    CapabilitySourceChip,
     OutlinedActionListItem,
     VueMonacoEditor,
   },
@@ -985,31 +1001,11 @@ export default {
       return payload.skills || [];
     };
 
-    const sourceTypeLabel = (sourceType, skill = null) => {
-      if (sourceType === "plugin") {
-        return tm("skills.sourcePlugin", {
-          plugin:
-            skill?.plugin_display_name ||
-            skill?.source_label ||
-            skill?.plugin_name ||
-            "",
-        });
-      }
-      if (sourceType === "sandbox_only") return tm("skills.sourceSandboxOnly");
-      if (sourceType === "both") return tm("skills.sourceBoth");
-      return tm("skills.sourceLocalOnly");
-    };
-
-    const sourceTypeTone = (sourceType) => {
-      if (sourceType === "sandbox_only") return "preset";
-      if (sourceType === "plugin") return "plugin";
-      if (sourceType === "both") return "mixed";
-      return "local";
-    };
-
     const isSandboxPresetSkill = (skill) =>
       skill?.source_type === "sandbox_only";
     const isPluginProvidedSkill = (skill) => skill?.source_type === "plugin";
+    const isInactivePluginSkill = (skill) =>
+      isPluginProvidedSkill(skill) && skill?.plugin_active === false;
     const isReadOnlySourceSkill = (skill) =>
       isSandboxPresetSkill(skill) || isPluginProvidedSkill(skill);
 
@@ -1279,6 +1275,10 @@ export default {
     };
 
     const toggleSkill = async (skill) => {
+      if (isInactivePluginSkill(skill)) {
+        showMessage(tm("skills.pluginDisabled"), "warning");
+        return;
+      }
       if (isSandboxPresetSkill(skill)) {
         showMessage(tm("skills.sandboxPresetReadonly"), "warning");
         return;
@@ -1863,10 +1863,9 @@ export default {
       viewPayload,
       deleteCandidate,
       deleteRelease,
-      sourceTypeLabel,
-      sourceTypeTone,
       isSandboxPresetSkill,
       isPluginProvidedSkill,
+      isInactivePluginSkill,
       isReadOnlySourceSkill,
     };
   },
@@ -1886,6 +1885,10 @@ export default {
 
 .skill-list-item :deep(.outlined-action-list-item__main) {
   gap: 0;
+}
+
+.skill-list-item--inactive {
+  opacity: 0.58;
 }
 
 .skill-list-item :deep(.outlined-action-list-item__content) {

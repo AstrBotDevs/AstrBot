@@ -469,6 +469,11 @@ def _build_local_sandbox_command(
     return command
 
 
+def resolve_windows_shell() -> str:
+    """Prefer PowerShell 7 (pwsh.exe) when on PATH, else Windows PowerShell 5.1."""
+    return "pwsh.exe" if shutil.which("pwsh") else "powershell.exe"
+
+
 def _decode_bytes_with_fallback(
     output: bytes | None,
     *,
@@ -563,8 +568,9 @@ class LocalShellComponent(ShellComponent):
             popen_command: str | list[str] = command
             popen_shell = shell
             if sys.platform == "win32" and shell:
+                shell_executable = resolve_windows_shell()
                 popen_command = [
-                    "powershell.exe",
+                    shell_executable,
                     "-NoLogo",
                     "-NoProfile",
                     "-NonInteractive",
@@ -573,8 +579,9 @@ class LocalShellComponent(ShellComponent):
                 ]
                 popen_shell = False
             if background:
-                # Shell commands use PowerShell 5.1 on Windows and the platform
-                # shell elsewhere. Safety relies on `_is_safe_command()`.
+                # Shell commands use PowerShell 7 if available, else Windows
+                # PowerShell 5.1, on Windows and the platform shell elsewhere.
+                # Safety relies on `_is_safe_command()`.
                 proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                     popen_command,
                     shell=popen_shell,
@@ -584,8 +591,9 @@ class LocalShellComponent(ShellComponent):
                     stderr=subprocess.DEVNULL,
                 )
                 return {"pid": proc.pid, "stdout": "", "stderr": "", "exit_code": None}
-            # Shell commands use PowerShell 5.1 on Windows and the platform shell
-            # elsewhere. Safety relies on `_is_safe_command()`.
+            # Shell commands use PowerShell 7 if available, else Windows
+            # PowerShell 5.1, on Windows and the platform shell elsewhere.
+            # Safety relies on `_is_safe_command()`.
             proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                 popen_command,
                 shell=popen_shell,
@@ -714,8 +722,9 @@ class LocalShellComponent(ShellComponent):
             if not sandboxed:
                 if sys.platform == "win32":
                     process_factory = asyncio.create_subprocess_exec
+                    shell_executable = resolve_windows_shell()
                     process_args = (
-                        "powershell.exe",
+                        shell_executable,
                         "-NoLogo",
                         "-NoProfile",
                         "-NonInteractive",

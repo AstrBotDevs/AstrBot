@@ -399,6 +399,7 @@ class TestAstrBotCoreLifecycleInitialize:
         mock_umop_config_router.initialize = AsyncMock()
 
         mock_astrbot_config_mgr = MagicMock()
+        mock_astrbot_config_mgr.initialize = AsyncMock()
         mock_astrbot_config_mgr.default_conf = {}
         mock_astrbot_config_mgr.confs = {}
 
@@ -505,6 +506,9 @@ class TestAstrBotCoreLifecycleInitialize:
         # Verify UMOP config router initialized
         mock_umop_config_router.initialize.assert_awaited_once()
 
+        # Verify config manager initialized
+        mock_astrbot_config_mgr.initialize.assert_awaited_once()
+
         # Verify persona manager initialized
         mock_persona_mgr.initialize.assert_awaited_once()
 
@@ -539,6 +543,7 @@ class TestAstrBotCoreLifecycleInitialize:
         mock_umop_config_router.initialize = AsyncMock()
 
         mock_astrbot_config_mgr = MagicMock()
+        mock_astrbot_config_mgr.initialize = AsyncMock()
         mock_astrbot_config_mgr.default_conf = {}
         mock_astrbot_config_mgr.confs = {}
 

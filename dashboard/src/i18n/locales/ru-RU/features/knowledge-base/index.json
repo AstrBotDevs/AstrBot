@@ -11,7 +11,8 @@
         "documents": "док.",
         "chunks": "фрагм.",
         "sessionConfig": "Профиль",
-        "initError": "Ошибка инициализации"
+        "initError": "Ошибка инициализации",
+        "retry": "Повторить"
     },
     "card": {
         "edit": "Изменить",

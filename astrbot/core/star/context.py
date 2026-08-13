@@ -338,7 +338,7 @@ class Context:
         Raises:
             ProviderNotFoundError: 未找到。
         """
-        prov = self.get_using_provider(umo)
+        prov = await self.get_using_provider_async(umo)
         if not prov:
             raise ProviderNotFoundError("Provider not found")
         return prov.meta().id
@@ -357,6 +357,7 @@ class Context:
         """获取 LLM Tool Manager，其用于管理注册的所有的 Function-calling tools"""
         return self.provider_manager.llm_tools
 
+    @deprecated(reason="Use activate_llm_tool_async() instead.")
     def activate_llm_tool(self, name: str) -> bool:
         """激活一个已经注册的函数调用工具。
 
@@ -371,6 +372,24 @@ class Context:
         """
         return self.provider_manager.llm_tools.activate_llm_tool(name, star_map)
 
+    async def activate_llm_tool_async(self, name: str) -> bool:
+        """Asynchronously activate a registered function-calling tool.
+
+        Args:
+            name: Tool name.
+
+        Returns:
+            True when the tool was activated, or False when it was not found.
+
+        Note:
+            Registered tools are active by default.
+        """
+        return await self.provider_manager.llm_tools.activate_llm_tool_async(
+            name,
+            star_map,
+        )
+
+    @deprecated(reason="Use deactivate_llm_tool_async() instead.")
     def deactivate_llm_tool(self, name: str) -> bool:
         """停用一个已经注册的函数调用工具。
 
@@ -381,6 +400,17 @@ class Context:
             如果成功停用返回 True，如果没找到工具返回 False。
         """
         return self.provider_manager.llm_tools.deactivate_llm_tool(name)
+
+    async def deactivate_llm_tool_async(self, name: str) -> bool:
+        """Asynchronously deactivate a registered function-calling tool.
+
+        Args:
+            name: Tool name.
+
+        Returns:
+            True when the tool was deactivated, or False when it was not found.
+        """
+        return await self.provider_manager.llm_tools.deactivate_llm_tool_async(name)
 
     def get_provider_by_id(
         self,
@@ -423,6 +453,7 @@ class Context:
         """获取所有用于 Embedding 任务的 Provider。"""
         return self.provider_manager.embedding_provider_insts
 
+    @deprecated(reason="Use get_using_provider_async() instead.")
     def get_using_provider(self, umo: str | None = None) -> Provider | None:
         """获取当前使用的用于文本生成任务的 LLM Provider(Chat_Completion 类型)。
 
@@ -448,6 +479,34 @@ class Context:
             )
         return prov
 
+    async def get_using_provider_async(
+        self,
+        umo: str | None = None,
+    ) -> Provider | None:
+        """Asynchronously get the current text-generation provider.
+
+        Args:
+            umo: Unified message origin used for session-specific preferences.
+
+        Returns:
+            Current chat provider, or None if no provider is available.
+
+        Raises:
+            ValueError: If the resolved provider is not a chat provider.
+        """
+        prov = await self.provider_manager.get_using_provider_async(
+            provider_type=ProviderType.CHAT_COMPLETION,
+            umo=umo,
+        )
+        if prov is None:
+            return None
+        if not isinstance(prov, Provider):
+            raise ValueError(
+                f"该会话来源的对话模型（提供商）的类型不正确: {type(prov)}"
+            )
+        return prov
+
+    @deprecated(reason="Use get_using_tts_provider_async() instead.")
     def get_using_tts_provider(self, umo: str | None = None) -> TTSProvider | None:
         """获取当前使用的用于 TTS 任务的 Provider。
 
@@ -468,6 +527,30 @@ class Context:
             raise ValueError("返回的 Provider 不是 TTSProvider 类型")
         return prov
 
+    async def get_using_tts_provider_async(
+        self,
+        umo: str | None = None,
+    ) -> TTSProvider | None:
+        """Asynchronously get the current text-to-speech provider.
+
+        Args:
+            umo: Unified message origin used for session-specific preferences.
+
+        Returns:
+            Current TTS provider, or None if no provider is available.
+
+        Raises:
+            ValueError: If the resolved provider is not a TTS provider.
+        """
+        prov = await self.provider_manager.get_using_provider_async(
+            provider_type=ProviderType.TEXT_TO_SPEECH,
+            umo=umo,
+        )
+        if prov and not isinstance(prov, TTSProvider):
+            raise ValueError("返回的 Provider 不是 TTSProvider 类型")
+        return prov
+
+    @deprecated(reason="Use get_using_stt_provider_async() instead.")
     def get_using_stt_provider(self, umo: str | None = None) -> STTProvider | None:
         """获取当前使用的用于 STT 任务的 Provider。
 
@@ -481,6 +564,29 @@ class Context:
             ValueError: 返回的提供者不是 STTProvider 类型。
         """
         prov = self.provider_manager.get_using_provider(
+            provider_type=ProviderType.SPEECH_TO_TEXT,
+            umo=umo,
+        )
+        if prov and not isinstance(prov, STTProvider):
+            raise ValueError("返回的 Provider 不是 STTProvider 类型")
+        return prov
+
+    async def get_using_stt_provider_async(
+        self,
+        umo: str | None = None,
+    ) -> STTProvider | None:
+        """Asynchronously get the current speech-to-text provider.
+
+        Args:
+            umo: Unified message origin used for session-specific preferences.
+
+        Returns:
+            Current STT provider, or None if no provider is available.
+
+        Raises:
+            ValueError: If the resolved provider is not an STT provider.
+        """
+        prov = await self.provider_manager.get_using_provider_async(
             provider_type=ProviderType.SPEECH_TO_TEXT,
             umo=umo,
         )

@@ -12,6 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
+import jwt
 import pyotp
 import pytest
 import pytest_asyncio
@@ -45,6 +46,7 @@ from astrbot.dashboard.server import AstrBotDashboard
 from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 from astrbot.dashboard.services.plugin_page_service import PluginPageService
 from astrbot.dashboard.services.plugin_service import PluginService
+from astrbot.dashboard.services.skills_service import SkillsService
 from tests.fixtures.helpers import (
     MockPluginBuilder,
     create_mock_updater_install,
@@ -54,6 +56,66 @@ from tests.fixtures.helpers import (
 _TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
 PLUGIN_PAGE_DEMO_NAME = "astrbot_plugin_page_demo"
 PLUGIN_PAGE_DEMO_PAGE_NAME = "bridge-demo"
+
+
+def test_skills_service_marks_inactive_plugin_skills(monkeypatch):
+    skills = [
+        SimpleNamespace(
+            name="local-skill",
+            source_type="local_only",
+            plugin_name="",
+        ),
+        SimpleNamespace(
+            name="active-plugin-skill",
+            source_type="plugin",
+            plugin_name="astrbot_plugin_active",
+        ),
+        SimpleNamespace(
+            name="inactive-plugin-skill",
+            source_type="plugin",
+            plugin_name="astrbot_plugin_inactive",
+        ),
+    ]
+    skill_manager = SimpleNamespace(
+        list_skills=lambda **_kwargs: skills,
+        get_sandbox_skills_cache_status=lambda: {},
+    )
+    plugins = [
+        StarMetadata(
+            name="active",
+            display_name="Active Plugin",
+            root_dir_name="astrbot_plugin_active",
+            activated=True,
+        ),
+        StarMetadata(
+            name="inactive",
+            display_name="Inactive Plugin",
+            root_dir_name="astrbot_plugin_inactive",
+            activated=False,
+        ),
+    ]
+    core_lifecycle = SimpleNamespace(
+        astrbot_config={"provider_settings": {}},
+        plugin_manager=SimpleNamespace(
+            context=SimpleNamespace(get_all_stars=lambda: plugins)
+        ),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.skills_service.SkillManager",
+        lambda: skill_manager,
+    )
+
+    result = SkillsService(core_lifecycle).get_skills()
+
+    assert [skill["name"] for skill in result["skills"]] == [
+        "local-skill",
+        "active-plugin-skill",
+        "inactive-plugin-skill",
+    ]
+    assert result["skills"][1]["plugin_display_name"] == "Active Plugin"
+    assert result["skills"][1]["plugin_active"] is True
+    assert result["skills"][2]["plugin_display_name"] == "Inactive Plugin"
+    assert result["skills"][2]["plugin_active"] is False
 
 
 def _removed_md5_hint_alias_key() -> str:
@@ -433,6 +495,120 @@ async def test_auth_login(
     assert "HttpOnly" in jwt_cookie_header
     _assert_cookie_samesite_strict(jwt_cookie_header)
     assert "Secure" not in jwt_cookie_header
+
+
+@pytest.mark.asyncio
+async def test_desktop_session_issues_jwt_without_password(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    secret = "desktop-session-secret-" * 2
+    monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
+    monkeypatch.setenv("ASTRBOT_DESKTOP_SESSION_SECRET", secret)
+    app._dashboard_server._rate_limiter_registry.clear()
+
+    response = await app.test_client().post(
+        "/api/v1/auth/desktop-session",
+        headers={"X-AstrBot-Desktop-Session": secret},
+        json={},
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["username"] == core_lifecycle_td.astrbot_config[
+        "dashboard"
+    ]["username"]
+    token = data["data"]["token"]
+    payload = jwt.decode(
+        token,
+        core_lifecycle_td.astrbot_config["dashboard"]["jwt_secret"],
+        algorithms=["HS256"],
+    )
+    assert payload["auth_source"] == "desktop"
+
+
+@pytest.mark.asyncio
+async def test_desktop_session_rejects_wrong_secret(
+    app: FastAPIAppAdapter,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
+    monkeypatch.setenv("ASTRBOT_DESKTOP_SESSION_SECRET", "a" * 64)
+    app._dashboard_server._rate_limiter_registry.clear()
+
+    response = await app.test_client().post(
+        "/api/v1/auth/desktop-session",
+        headers={"X-AstrBot-Desktop-Session": "b" * 64},
+        json={},
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 401
+    assert data["status"] == "error"
+    assert "token" not in (data.get("data") or {})
+
+
+@pytest.mark.asyncio
+async def test_desktop_session_endpoint_is_hidden_when_not_managed(
+    app: FastAPIAppAdapter,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.delenv("ASTRBOT_DESKTOP_MANAGED", raising=False)
+    monkeypatch.delenv("ASTRBOT_DESKTOP_SESSION_SECRET", raising=False)
+    app._dashboard_server._rate_limiter_registry.clear()
+
+    response = await app.test_client().post(
+        "/api/v1/auth/desktop-session",
+        headers={"X-AstrBot-Desktop-Session": "a" * 64},
+        json={},
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 404
+    assert data["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_desktop_session_suppresses_password_setup_and_warnings(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    secret = "desktop-session-secret-" * 2
+    monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
+    monkeypatch.setenv("ASTRBOT_DESKTOP_SESSION_SECRET", secret)
+    app._dashboard_server._rate_limiter_registry.clear()
+    await _set_dashboard_password_change_required(core_lifecycle_td, True)
+
+    try:
+        client = app.test_client()
+        setup_response = await client.get("/api/v1/auth/setup-status")
+        setup_data = await setup_response.get_json()
+        assert setup_data["data"] == {
+            "setup_required": False,
+            "skip_default_password_auth": False,
+            "password_upgrade_required": False,
+        }
+
+        session_response = await client.post(
+            "/api/v1/auth/desktop-session",
+            headers={"X-AstrBot-Desktop-Session": secret},
+            json={},
+        )
+        session_data = await session_response.get_json()
+        token = session_data["data"]["token"]
+        version_response = await client.get(
+            "/api/v1/stats/version",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        version_data = await version_response.get_json()
+        assert version_data["data"]["change_pwd_hint"] is False
+        assert version_data["data"]["md5_pwd_hint"] is False
+        assert version_data["data"]["password_upgrade_required"] is False
+    finally:
+        await _set_dashboard_password_change_required(core_lifecycle_td, False)
 
 
 @pytest.mark.asyncio
