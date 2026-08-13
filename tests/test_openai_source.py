@@ -61,22 +61,50 @@ def _make_groq_provider(overrides: dict | None = None) -> ProviderGroq:
     )
 
 
+@pytest.mark.parametrize(
+    ("overrides", "expected_client"),
+    [
+        ({}, AsyncOpenAI),
+        ({"api_version": "2024-02-01"}, AsyncAzureOpenAI),
+    ],
+)
 @pytest.mark.asyncio
-async def test_openai_client_disables_sdk_builtin_retries():
-    provider = _make_provider()
+async def test_provider_client_disables_sdk_builtin_retries(overrides, expected_client):
+    provider = _make_provider(overrides)
     try:
-        assert isinstance(provider.client, AsyncOpenAI)
+        assert isinstance(provider.client, expected_client)
         assert provider.client.max_retries == 0
     finally:
         await provider.terminate()
 
 
 @pytest.mark.asyncio
-async def test_azure_client_disables_sdk_builtin_retries():
-    provider = _make_provider({"api_version": "2024-02-01"})
+async def test_query_attempts_exactly_request_max_retries_times(monkeypatch):
+    monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MIN_S", 0)
+    monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MAX_S", 0)
+
+    provider = _make_provider()
     try:
-        assert isinstance(provider.client, AsyncAzureOpenAI)
-        assert provider.client.max_retries == 0
+        calls = 0
+
+        async def failing_create(**kwargs):
+            nonlocal calls
+            calls += 1
+            raise httpx.ConnectError("temporary connection failure")
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", failing_create)
+
+        with pytest.raises(httpx.ConnectError):
+            await provider._query(
+                payloads={
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": "hi"}],
+                },
+                tools=None,
+                request_max_retries=2,
+            )
+
+        assert calls == 2
     finally:
         await provider.terminate()
 
