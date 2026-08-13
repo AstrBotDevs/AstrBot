@@ -152,7 +152,7 @@ async def test_on_message_does_not_clear_group_context_on_first_enabled_message(
 
 
 @pytest.mark.asyncio
-async def test_on_message_records_json_card_in_group_context():
+async def test_on_message_records_json_card_and_checks_active_reply():
     main = Main.__new__(Main)
     main.context = MagicMock()
     main.context.get_config.return_value = {
@@ -171,7 +171,7 @@ async def test_on_message_records_json_card_in_group_context():
     async for _ in main.on_message(event):
         pass
 
-    main.group_chat_context.need_active_reply.assert_not_awaited()
+    main.group_chat_context.need_active_reply.assert_awaited_once_with(event)
     main.group_chat_context.handle_message.assert_awaited_once_with(event)
 
 

@@ -197,13 +197,11 @@ class Main(star.Star):
     async def on_message(self, event: AstrMessageEvent):
         """群聊上下文感知"""
         message_components = _iter_message_components(event)
-        has_plain_or_image = False
         has_context_content = False
         for comp in message_components:
             if isinstance(comp, Plain | Image | Json):
                 has_context_content = True
-            if isinstance(comp, Plain | Image):
-                has_plain_or_image = True
+                break
 
         group_context_enabled = False
         if self.group_chat_context:
@@ -213,9 +211,7 @@ class Main(star.Star):
                 logger.error(f"group chat context: {e}")
 
         if group_context_enabled and self.group_chat_context and has_context_content:
-            need_active = has_plain_or_image and (
-                await self.group_chat_context.need_active_reply(event)
-            )
+            need_active = await self.group_chat_context.need_active_reply(event)
 
             group_icl_enable = self.context.get_config(umo=event.unified_msg_origin)[
                 "provider_ltm_settings"
