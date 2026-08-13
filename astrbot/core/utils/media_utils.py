@@ -1128,7 +1128,20 @@ async def convert_audio_format(
         Exception: Raised when ffmpeg is unavailable or conversion fails.
     """
     if audio_path.lower().endswith(f".{output_format}"):
-        return audio_path
+        # Verify the file content actually matches the target format.
+        # Some platforms (e.g. NapCat) save audio in one encoding but use a
+        # mismatched file extension (e.g. AMR content saved as .wav), which
+        # would cause downstream consumers to receive malformed data.
+        detected = _get_audio_magic_type(audio_path)
+        if not detected or detected == output_format:
+            return audio_path
+        logger.debug(
+            "Audio file %s has .%s extension but actual format is %s; "
+            "proceeding with conversion",
+            audio_path,
+            output_format,
+            detected,
+        )
 
     if output_path is None:
         temp_dir = Path(get_astrbot_temp_path())

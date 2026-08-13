@@ -786,3 +786,136 @@ async def test_wav_to_tencent_silk_skips_resample_for_supported_rate(
 
     assert len(fake.calls) == 1
     assert fake.calls[0]["sample_rate"] == 24000
+
+
+# ---------------------------------------------------------------------------
+# convert_audio_format: extension vs magic-byte mismatch (issue #9594)
+# ---------------------------------------------------------------------------
+
+# Minimal AMR header (magic bytes: #!AMR)
+_AMR_HEADER = b"#!AMR\n"
+
+
+def _make_wav_bytes() -> bytes:
+    """Build a minimal valid WAV header (RIFF/WAVE)."""
+    return b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 16
+
+
+class _FakeFFmpegProcess:
+    """Minimal async subprocess mock for ffmpeg."""
+
+    def __init__(self, returncode: int = 0, stderr: bytes = b"") -> None:
+        self.returncode = returncode
+
+    async def communicate(self) -> tuple[bytes, bytes]:
+        return (b"", b"")
+
+
+@pytest.mark.asyncio
+async def test_convert_audio_format_amr_with_wav_extension_does_not_short_circuit(
+    tmp_path, monkeypatch
+):
+    """AMR content saved with a .wav extension must still be converted (#9594)."""
+    # NapCat saves AMR-encoded QQ voice with a .wav extension.
+    audio_file = tmp_path / "voice.wav"
+    audio_file.write_bytes(_AMR_HEADER + b"\x00" * 50)
+
+    # Intercept ffmpeg subprocess so the test never depends on a real binary.
+    ffmpeg_called = False
+
+    async def fake_exec(*args, **kwargs):
+        nonlocal ffmpeg_called
+        ffmpeg_called = True
+        # Write a dummy output file so convert_audio_format can return it.
+        output_path = args[-1]
+        Path(output_path).write_bytes(_make_wav_bytes())
+        return _FakeFFmpegProcess()
+
+    monkeypatch.setattr(media_utils.asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+
+    result = await media_utils.convert_audio_format(str(audio_file), "wav")
+
+    assert ffmpeg_called, (
+        "ffmpeg should have been invoked because content is AMR, not WAV"
+    )
+    assert result != str(audio_file)
+
+
+@pytest.mark.asyncio
+async def test_convert_audio_format_real_wav_with_wav_extension_short_circuits(
+    tmp_path, monkeypatch
+):
+    """Genuine WAV content with a .wav extension should skip conversion."""
+    audio_file = tmp_path / "voice.wav"
+    audio_file.write_bytes(_make_wav_bytes())
+
+    async def fake_exec(*args, **kwargs):
+        raise AssertionError("ffmpeg should not be called for a real WAV file")
+
+    monkeypatch.setattr(media_utils.asyncio, "create_subprocess_exec", fake_exec)
+
+    result = await media_utils.convert_audio_format(str(audio_file), "wav")
+    assert result == str(audio_file)
+
+
+@pytest.mark.asyncio
+async def test_convert_audio_format_unknown_content_with_matching_ext_short_circuits(
+    tmp_path, monkeypatch
+):
+    """When magic bytes cannot be identified, fall back to extension matching."""
+    audio_file = tmp_path / "voice.wav"
+    audio_file.write_bytes(b"\x00" * 64)
+
+    async def fake_exec(*args, **kwargs):
+        raise AssertionError("ffmpeg should not be called for unrecognised content")
+
+    monkeypatch.setattr(media_utils.asyncio, "create_subprocess_exec", fake_exec)
+
+    result = await media_utils.convert_audio_format(str(audio_file), "wav")
+    assert result == str(audio_file)
+
+
+@pytest.mark.asyncio
+async def test_convert_audio_format_real_amr_with_amr_extension_short_circuits(
+    tmp_path, monkeypatch
+):
+    """AMR content with a matching .amr extension should skip conversion."""
+    audio_file = tmp_path / "voice.amr"
+    audio_file.write_bytes(_AMR_HEADER + b"\x00" * 50)
+
+    async def fake_exec(*args, **kwargs):
+        raise AssertionError("ffmpeg should not be called for a real AMR file")
+
+    monkeypatch.setattr(media_utils.asyncio, "create_subprocess_exec", fake_exec)
+
+    result = await media_utils.convert_audio_format(str(audio_file), "amr")
+    assert result == str(audio_file)
+
+
+@pytest.mark.asyncio
+async def test_convert_audio_format_wav_with_ogg_extension_does_not_short_circuit(
+    tmp_path, monkeypatch
+):
+    """WAV content saved with a .ogg extension must still be converted."""
+    audio_file = tmp_path / "voice.ogg"
+    audio_file.write_bytes(_make_wav_bytes())
+
+    ffmpeg_called = False
+
+    async def fake_exec(*args, **kwargs):
+        nonlocal ffmpeg_called
+        ffmpeg_called = True
+        output_path = args[-1]
+        Path(output_path).write_bytes(b"OggS" + b"\x00" * 60)
+        return _FakeFFmpegProcess()
+
+    monkeypatch.setattr(media_utils.asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+
+    result = await media_utils.convert_audio_format(str(audio_file), "ogg")
+
+    assert ffmpeg_called, (
+        "ffmpeg should have been invoked because content is WAV, not OGG"
+    )
+    assert result != str(audio_file)
