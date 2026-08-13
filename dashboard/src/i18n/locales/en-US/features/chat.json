@@ -120,7 +120,13 @@
     "thinkSummary": "Thought {count} times",
     "toolSummary": "used {count} tools",
     "think": "Thinking",
-    "toolUsed": "Using Tool"
+    "toolUsed": "Using Tool",
+    "characters": "{count} chars",
+    "loading": "Loading reasoning...",
+    "retry": "Retry loading reasoning"
+  },
+  "history": {
+    "loadEarlier": "Load earlier messages"
   },
   "reply": {
     "replyTo": "Reply to",

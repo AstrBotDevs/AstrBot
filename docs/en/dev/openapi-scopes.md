@@ -144,6 +144,7 @@ Use chat capabilities and manage ChatUI sessions and projects.
 | --- | --- | --- |
 | `POST` | `/api/v1/chat` | `chat:admin` |
 | `GET` | `/api/v1/chat/configs` | — |
+| `GET` | `/api/v1/chat/messages/{message_id}` | `chat:admin` |
 | `GET` | `/api/v1/chat/projects` | — |
 | `POST` | `/api/v1/chat/projects` | — |
 | `DELETE` | `/api/v1/chat/projects/sessions/{session_id}` | — |

@@ -120,7 +120,13 @@
     "thinkSummary": "思考了 {count} 次",
     "toolSummary": "使用了 {count} 次工具",
     "think": "思考",
-    "toolUsed": "使用工具"
+    "toolUsed": "使用工具",
+    "characters": "{count} 字",
+    "loading": "正在加载思考内容…",
+    "retry": "重试加载思考内容"
+  },
+  "history": {
+    "loadEarlier": "加载更早消息"
   },
   "reply": {
     "replyTo": "引用",

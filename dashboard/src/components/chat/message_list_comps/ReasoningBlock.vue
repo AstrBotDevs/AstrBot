@@ -7,7 +7,7 @@
       @click="handlePrimaryAction"
     >
       <span class="reasoning-title">
-        {{ reasoningTitle }}
+        {{ reasoningTitle }}<span v-if="reasoningLen"> ({{ tm("reasoning.characters", { count: reasoningLen }) }})</span>
       </span>
       <v-icon
         size="22"
@@ -56,10 +56,14 @@ const props = defineProps<{
   isStreaming?: boolean;
   hasNonReasoningContent?: boolean;
   openInSidebar?: boolean;
+  hasReasoning?: boolean;
+  reasoningLen?: number;
+  reasoningStatus?: "unloaded" | "loading" | "loaded" | "error";
 }>();
 
 const emit = defineEmits<{
   open: [];
+  "load-reasoning": [];
 }>();
 
 const { tm } = useModuleI18n("features/chat");
@@ -84,7 +88,11 @@ const activityCounts = computed(() =>
 );
 
 const reasoningTitle = computed(() =>
-  reasoningActivityTitle(activityCounts.value, tm),
+  props.reasoningStatus === "loading"
+    ? tm("reasoning.loading")
+    : props.reasoningStatus === "error"
+      ? tm("reasoning.retry")
+      : reasoningActivityTitle(activityCounts.value, tm),
 );
 
 const thinkingText = computed(() =>
@@ -109,6 +117,13 @@ const previewTransitionName = computed(() =>
 );
 
 function handlePrimaryAction() {
+  if (
+    props.hasReasoning &&
+    props.reasoningStatus !== "loaded"
+  ) {
+    emit("load-reasoning");
+    return;
+  }
   if (openInSidebar.value) {
     emit("open");
     return;
@@ -189,6 +204,19 @@ watch(
   syncPreviewTimer,
   {
     immediate: true,
+  },
+);
+
+watch(
+  () => props.reasoningStatus,
+  (status, previousStatus) => {
+    if (
+      status === "loaded" &&
+      previousStatus !== "loaded" &&
+      !openInSidebar.value
+    ) {
+      isExpanded.value = true;
+    }
   },
 );
 
