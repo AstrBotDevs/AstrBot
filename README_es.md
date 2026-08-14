@@ -226,7 +226,7 @@ Amigos del código abierto ❤️
 
 <div align="center">
 
-[![Gráfico de historial de estrellas](https://api.star-history.com/svg?repos=astrbotdevs/astrbot&type=Date)](https://star-history.com/#astrbotdevs/astrbot&Date)
+[![Gráfico de historial de estrellas](https://star-history.dera.page/svg?repos=astrbotdevs/astrbot&type=Date)](https://star-history.dera.page/#astrbotdevs/astrbot&Date)
 
 </div>
 
