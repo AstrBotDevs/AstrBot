@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import json
 import re
 from typing import Any, TypedDict
@@ -10,6 +11,7 @@ from astrbot.core.message.components import (
     File,
     Forward,
     Image,
+    Json,
     Node,
     Nodes,
     Plain,
@@ -142,6 +144,10 @@ def _extract_text_from_component_chain(
             parts.append(f"[File:{file_name}]")
         elif isinstance(seg, Forward):
             parts.append("[Forward Message]")
+        elif isinstance(seg, Json):
+            card_text = _extract_text_from_json_card(seg.data)
+            if card_text:
+                parts.append(card_text)
         elif isinstance(seg, Reply):
             nested = _extract_text_from_reply_component(
                 seg,
@@ -261,6 +267,83 @@ def _extract_text_from_multimsg_json(raw_json: str) -> str | None:
     return "\n".join(texts).strip() or None
 
 
+# Safety valve: keeps a single card from flooding the LLM context window.
+_MAX_JSON_CARD_TEXT_LENGTH = 1000
+
+
+def _clean_json_card_text(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = html.unescape(value).strip()
+    return cleaned or None
+
+
+def _extract_text_from_json_card(payload: str | dict[str, Any]) -> str | None:
+    """Extract readable text from a generic QQ JSON card (mini-program, music, etc.).
+
+    Keeps the existing behavior for ``com.tencent.multimsg`` (forward) cards by
+    delegating to :func:`_extract_text_from_multimsg_json`; other cards are read
+    from their top-level ``prompt`` and ``meta`` fields.
+    """
+    parsed = payload
+    if isinstance(parsed, str):
+        try:
+            parsed = json.loads(parsed)
+        except Exception:
+            return None
+    if not isinstance(parsed, dict):
+        return None
+
+    # Unwrap the double-encoded {"data": "<nested json>"} form when the outer
+    # dict carries no app identifier of its own.
+    nested = parsed.get("data")
+    if isinstance(nested, str) and parsed.get("app") is None:
+        try:
+            nested_parsed = json.loads(nested)
+            if isinstance(nested_parsed, dict):
+                parsed = nested_parsed
+        except Exception:
+            pass
+
+    if parsed.get("app") == "com.tencent.multimsg":
+        return _extract_text_from_multimsg_json(json.dumps(parsed))
+
+    parts: list[str] = []
+    seen: set[str] = set()
+
+    def _append(value: str) -> None:
+        if value and value not in seen:
+            seen.add(value)
+            parts.append(value)
+
+    def _append_field(label: str, value: Any) -> None:
+        cleaned = _clean_json_card_text(value)
+        if cleaned:
+            _append(f"{label}: {cleaned}")
+
+    _append(_clean_json_card_text(parsed.get("prompt")))
+
+    meta = parsed.get("meta")
+    if isinstance(meta, dict):
+        for detail in meta.values():
+            if not isinstance(detail, dict):
+                continue
+            _append_field("Title", detail.get("title"))
+            _append_field("Description", detail.get("desc"))
+            url = _clean_json_card_text(
+                detail.get("qqdocurl") or detail.get("jumpUrl") or detail.get("url")
+            )
+            if url:
+                _append(f"URL: {url}")
+
+    if not parts:
+        return None
+    text = "\n".join(parts).strip()
+    if len(text) > _MAX_JSON_CARD_TEXT_LENGTH:
+        text = text[:_MAX_JSON_CARD_TEXT_LENGTH].rstrip() + "..."
+    return text
+
+
 def _parse_onebot_segments(
     segments: list[Any],
     *,
@@ -335,9 +418,9 @@ def _parse_onebot_segments(
             raw_json = seg_data.get("data")
             if isinstance(raw_json, str) and raw_json.strip():
                 raw_json = raw_json.replace("&#44;", ",")
-                multimsg_text = _extract_text_from_multimsg_json(raw_json)
-                if multimsg_text:
-                    text_parts.append(multimsg_text)
+                card_text = _extract_text_from_json_card(raw_json)
+                if card_text:
+                    text_parts.append(card_text)
 
     return _build_parsed_payload(
         _join_text_parts(text_parts),
