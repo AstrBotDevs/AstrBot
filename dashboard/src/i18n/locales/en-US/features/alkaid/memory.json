@@ -2,11 +2,11 @@
   "title": "Long-term Memory",
   "subtitle": "Manage auditable, deletable, and restorable persona memory",
   "stats": {
-    "title": "Runtime",
     "activeFacts": "Active facts",
     "deletedFacts": "Deleted facts",
     "profiles": "Profiles",
     "queue": "Writeback queue",
+    "worker": "Writeback service",
     "workerRunning": "Writeback worker running",
     "workerStopped": "Writeback worker stopped"
   },
@@ -37,6 +37,7 @@
     "title": "Actions",
     "refresh": "Refresh",
     "search": "Search",
+    "clearFilters": "Clear",
     "view": "View details",
     "delete": "Delete",
     "restore": "Restore",
@@ -48,7 +49,15 @@
     "refresh": "Refresh profile"
   },
   "operations": {
-    "title": "Operation Log"
+    "title": "Operation Log",
+    "memoryFact": "Memory #{id}",
+    "unknownTarget": "Unknown target",
+    "actions": {
+      "create": "Created",
+      "delete": "Deleted",
+      "restore": "Restored",
+      "update": "Updated"
+    }
   },
   "detail": {
     "title": "Memory Detail"
@@ -63,6 +72,9 @@
     "emptyProfiles": "No person profiles",
     "emptyOperations": "No operation logs",
     "loadFactsError": "Failed to load memories",
+    "loadStatsError": "Failed to load runtime status",
+    "loadProfilesError": "Failed to load person profiles",
+    "loadOperationsError": "Failed to load operation log",
     "detailError": "Failed to load memory detail",
     "deleteSuccess": "Memory deleted",
     "restoreSuccess": "Memory restored",

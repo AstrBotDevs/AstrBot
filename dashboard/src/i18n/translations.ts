@@ -27,8 +27,6 @@ import zhCNChart from './locales/zh-CN/features/chart.json';
 import zhCNDashboard from './locales/zh-CN/features/dashboard.json';
 import zhCNCron from './locales/zh-CN/features/cron.json';
 import zhCNStats from './locales/zh-CN/features/stats.json';
-import zhCNAlkaidIndex from './locales/zh-CN/features/alkaid/index.json';
-import zhCNAlkaidKnowledgeBase from './locales/zh-CN/features/alkaid/knowledge-base.json';
 import zhCNAlkaidMemory from './locales/zh-CN/features/alkaid/memory.json';
 import zhCNKnowledgeBaseIndex from './locales/zh-CN/features/knowledge-base/index.json';
 import zhCNKnowledgeBaseDetail from './locales/zh-CN/features/knowledge-base/detail.json';
@@ -68,8 +66,6 @@ import enUSChart from './locales/en-US/features/chart.json';
 import enUSDashboard from './locales/en-US/features/dashboard.json';
 import enUSCron from './locales/en-US/features/cron.json';
 import enUSStats from './locales/en-US/features/stats.json';
-import enUSAlkaidIndex from './locales/en-US/features/alkaid/index.json';
-import enUSAlkaidKnowledgeBase from './locales/en-US/features/alkaid/knowledge-base.json';
 import enUSAlkaidMemory from './locales/en-US/features/alkaid/memory.json';
 import enUSKnowledgeBaseIndex from './locales/en-US/features/knowledge-base/index.json';
 import enUSKnowledgeBaseDetail from './locales/en-US/features/knowledge-base/detail.json';
@@ -114,8 +110,6 @@ export const translations = {
       cron: zhCNCron,
       stats: zhCNStats,
       alkaid: {
-        index: zhCNAlkaidIndex,
-        'knowledge-base': zhCNAlkaidKnowledgeBase,
         memory: zhCNAlkaidMemory,
       },
       'knowledge-base': {
@@ -163,8 +157,6 @@ export const translations = {
       cron: enUSCron,
       stats: enUSStats,
       alkaid: {
-        index: enUSAlkaidIndex,
-        'knowledge-base': enUSAlkaidKnowledgeBase,
         memory: enUSAlkaidMemory,
       },
       'knowledge-base': {
