@@ -14,13 +14,24 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
-from astrbot.core.agent.message import ImageURLPart, Message, TextPart
+from astrbot.core.agent.message import (
+    AssistantMessageSegment,
+    ImageURLPart,
+    Message,
+    TextPart,
+    ToolCallMessageSegment,
+)
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.exceptions import EmptyModelOutputError
-from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
+from astrbot.core.provider.entities import (
+    LLMResponse,
+    ProviderRequest,
+    TokenUsage,
+    ToolCallsResult,
+)
 from astrbot.core.provider.provider import Provider
 
 
@@ -1557,6 +1568,156 @@ async def test_tool_result_injects_follow_up_notice(
     assert ticket2.resolved.is_set() is True
     assert ticket1.consumed is True
     assert ticket2.consumed is True
+
+
+@pytest.mark.asyncio
+async def test_reset_appends_injected_tool_calls_result_after_user(
+    runner, mock_provider, mock_tool_executor, mock_hooks
+):
+    """reset() 把 on_llm_request 注入的 tool_calls_result 追加在当前 user 消息之后。
+
+    最终顺序：history → 当前 user → assistant(tool_calls) → tool(result)。
+    """
+    request = ProviderRequest(
+        prompt="当前问题",
+        contexts=[
+            {"role": "user", "content": "历史消息"},
+            {"role": "assistant", "content": "历史回答"},
+        ],
+        tool_calls_result=ToolCallsResult(
+            tool_calls_info=AssistantMessageSegment(
+                tool_calls=[
+                    {
+                        "id": "fake_1",
+                        "type": "function",
+                        "function": {
+                            "name": "recall_long_term_memory",
+                            "arguments": "{}",
+                        },
+                    }
+                ]
+            ),
+            tool_calls_result=[
+                ToolCallMessageSegment(
+                    tool_call_id="fake_1",
+                    content="memory json",
+                )
+            ],
+        ),
+    )
+
+    await runner.reset(
+        provider=mock_provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    roles = [m.role for m in runner.run_context.messages]
+    assert roles == ["user", "assistant", "user", "assistant", "tool"]
+    assert runner.run_context.messages[-2].tool_calls[0].id == "fake_1"
+    assert runner.run_context.messages[-1].tool_call_id == "fake_1"
+
+
+@pytest.mark.asyncio
+async def test_runner_with_openai_provider_preserves_injected_tool_calls_order(
+    mock_tool_executor, mock_hooks
+):
+    """端到端：runner 消费注入的 tool_calls_result 后，OpenAI payload 顺序保持正确。
+
+    覆盖 ToolLoopAgentRunner → ProviderOpenAIOfficial.text_chat → _query 的完整
+    payload 组装路径（真实 provider，仅对 SDK create 的入口 _query 打桩捕获）。
+    顺序：history → 当前 user → assistant(tool_calls) → tool(result)。
+    """
+    from astrbot.core.agent.tool import FunctionTool, ToolSet
+    from astrbot.core.provider.entities import ToolCallsResult
+    from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
+
+    provider = ProviderOpenAIOfficial(
+        provider_config={
+            "id": "test-openai",
+            "type": "openai_chat_completion",
+            "model": "gpt-4o-mini",
+            "key": ["test-key"],
+        },
+        provider_settings={},
+    )
+    captured: dict[str, list[dict[str, Any]]] = {}
+
+    async def fake_query(payloads, func_tool, *, request_max_retries=None):
+        captured["messages"] = [dict(m) for m in payloads["messages"]]
+        return LLMResponse(role="assistant", completion_text="ok")
+
+    provider._query = fake_query  # type: ignore[method-assign]
+
+    tool_set = ToolSet(
+        tools=[
+            FunctionTool(
+                name="test_tool",
+                description="测试工具",
+                parameters={
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                },
+                handler=AsyncMock(),
+            )
+        ]
+    )
+    request = ProviderRequest(
+        prompt="当前问题",
+        func_tool=tool_set,
+        contexts=[
+            {"role": "user", "content": "历史消息"},
+            {"role": "assistant", "content": "历史回答"},
+        ],
+        tool_calls_result=ToolCallsResult(
+            tool_calls_info=AssistantMessageSegment(
+                tool_calls=[
+                    {
+                        "id": "fake_1",
+                        "type": "function",
+                        "function": {
+                            "name": "recall_long_term_memory",
+                            "arguments": "{}",
+                        },
+                    }
+                ]
+            ),
+            tool_calls_result=[
+                ToolCallMessageSegment(
+                    tool_call_id="fake_1",
+                    content="memory json",
+                )
+            ],
+        ),
+    )
+
+    runner = ToolLoopAgentRunner()
+    try:
+        await runner.reset(
+            provider=provider,
+            request=request,
+            run_context=ContextWrapper(context=None),
+            tool_executor=mock_tool_executor,
+            agent_hooks=mock_hooks,
+            streaming=False,
+        )
+        async for _ in runner.step():
+            pass
+    finally:
+        await provider.terminate()
+
+    assert [m["role"] for m in captured["messages"]] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "tool",
+    ]
+    assert captured["messages"][-2]["tool_calls"][0]["id"] == "fake_1"
+    assert captured["messages"][-1]["tool_call_id"] == "fake_1"
 
 
 @pytest.mark.asyncio

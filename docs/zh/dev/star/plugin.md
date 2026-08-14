@@ -561,6 +561,61 @@ async def my_custom_hook_1(self, event: AstrMessageEvent, req: ProviderRequest):
 
 > 这里不能使用 yield 来发送消息。如需发送，请直接使用 `event.send()` 方法。
 
+###### 注入工具调用结果
+
+> 适用于 AstrBot 版本 > v4.27.3
+
+如果希望 LLM 在回答本轮问题时"看到"一次工具调用及其结果（例如插件自行检索了长期记忆后，将结果包装成一次记忆召回的工具调用），不要直接向 `req.contexts` 追加消息，而应通过 `req.append_tool_calls_result()` 注入。runner 会保证最终消息顺序为：
+
+```
+history → 当前 user → assistant(tool_calls) → tool(result)
+```
+
+```python
+from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api.provider import (
+    ProviderRequest,
+    ToolCallsResult,
+    AssistantMessageSegment,
+    ToolCallMessageSegment,
+)
+
+@filter.on_llm_request()
+async def inject_memory_recall(self, event: AstrMessageEvent, req: ProviderRequest):
+    tool_call_id = "fake_recall_memory"
+    req.append_tool_calls_result(
+        ToolCallsResult(
+            tool_calls_info=AssistantMessageSegment(
+                tool_calls=[
+                    {
+                        "id": tool_call_id,
+                        "type": "function",
+                        "function": {
+                            "name": "recall_long_term_memory",
+                            "arguments": '{"query": "..."}',
+                        },
+                    }
+                ]
+            ),
+            tool_calls_result=[
+                ToolCallMessageSegment(
+                    tool_call_id=tool_call_id,
+                    content="<memory json>",
+                )
+            ],
+        )
+    )
+```
+
+注入的工具调用结果**默认会随会话历史持久化**。如果只希望参与本轮请求、不落库，请对 assistant 与 tool 消息**成对**调用 `.mark_as_temp()`：
+
+```python
+tool_calls_info=AssistantMessageSegment(...).mark_as_temp(),
+tool_calls_result=[ToolCallMessageSegment(...).mark_as_temp()],
+```
+
+> 这里不能使用 yield 来发送消息。如需发送，请直接使用 `event.send()` 方法。
+
 ##### LLM 请求完成时
 
 在 LLM 请求完成后，会触发 `on_llm_response` 钩子。

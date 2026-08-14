@@ -215,6 +215,15 @@ class Message(BaseModel):
     _no_save: bool = PrivateAttr(default=False)
     _checkpoint_after: CheckpointData | None = PrivateAttr(default=None)
 
+    def mark_as_temp(self) -> "Message":
+        """Mark this message as provider-facing only, not persisted.
+
+        临时注入（如伪造工具调用对）应成对标记：assistant 与 tool 消息都调用
+        本方法，避免历史中残留悬空的 tool 消息。
+        """
+        self._no_save = True
+        return self
+
     @model_validator(mode="after")
     def check_content_required(self):
         if self.role == CHECKPOINT_ROLE:
