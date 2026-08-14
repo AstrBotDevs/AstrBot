@@ -27,7 +27,7 @@ from tenacity import (
 from astrbot import logger
 from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.agent.tool_image_cache import tool_image_cache
+from astrbot.core.agent.tool_image_cache import CachedImage, tool_image_cache
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
@@ -1054,8 +1054,78 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         logger.debug(
                             f"Appended {len(cached_images)} cached image(s) to context for LLM review"
                         )
+                else:
+                    # The main model cannot view images: fall back to the configured
+                    # image caption provider so the image content is not silently
+                    # dropped. Mirrors astr_main_agent._ensure_img_caption().
+                    caption_parts = await self._caption_cached_tool_images(
+                        cached_images
+                    )
+                    if caption_parts:
+                        self.run_context.messages.append(
+                            Message(role="user", content=caption_parts)
+                        )
+                        logger.debug(
+                            f"Appended captions for {len(cached_images)} cached image(s) to context for LLM review"
+                        )
 
             self.req.append_tool_calls_result(tool_calls_result)
+
+    async def _caption_cached_tool_images(
+        self, cached_images: list[CachedImage]
+    ) -> list[TextPart]:
+        """主模型不支持图片时，用默认图片转述模型生成文字描述，失败或未配置则退化为占位文本。"""
+        plugin_context = getattr(self.run_context.context, "context", None)
+        event = getattr(self.run_context.context, "event", None)
+        cfg: dict = {}
+        img_cap_prov_id = ""
+        if plugin_context is not None:
+            try:
+                cfg = plugin_context.get_config(
+                    umo=getattr(event, "unified_msg_origin", None)
+                ).get("provider_settings", {})
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Failed to read provider settings: %s", exc)
+            img_cap_prov_id = cfg.get("default_image_caption_provider_id") or ""
+
+        fallback_note = (
+            "[Image not visible to the current model]"
+            if not img_cap_prov_id
+            else "[Image Captioning Failed]"
+        )
+
+        parts: list[TextPart] = []
+        for cached_img in cached_images:
+            parts.append(
+                TextPart(
+                    text=(
+                        f"[Image from tool '{cached_img.tool_name}', "
+                        f"path='{cached_img.file_path}']"
+                    )
+                )
+            )
+            caption = None
+            if img_cap_prov_id and Path(cached_img.file_path).exists():
+                try:
+                    from astrbot.core.astr_main_agent import _request_img_caption
+
+                    caption = await _request_img_caption(
+                        img_cap_prov_id,
+                        cfg,
+                        [cached_img.file_path],
+                        plugin_context,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.error(
+                        "Failed to caption tool image %s: %s",
+                        cached_img.file_path,
+                        exc,
+                    )
+            if caption:
+                parts.append(TextPart(text=f"<image_caption>{caption}</image_caption>"))
+            else:
+                parts.append(TextPart(text=fallback_note))
+        return parts
 
     async def step_until_done(
         self, max_step: int
