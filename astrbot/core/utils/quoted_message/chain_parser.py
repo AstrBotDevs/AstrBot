@@ -321,7 +321,9 @@ def _extract_text_from_json_card(payload: str | dict[str, Any]) -> str | None:
         if cleaned:
             _append(f"{label}: {cleaned}")
 
-    _append(_clean_json_card_text(parsed.get("prompt")))
+    prompt = _clean_json_card_text(parsed.get("prompt"))
+    if prompt:
+        _append(prompt)
 
     meta = parsed.get("meta")
     if isinstance(meta, dict):
