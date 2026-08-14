@@ -1091,7 +1091,6 @@ async def test_tool_image_caption_failure_placeholder(
     assert any("[Image Captioning Failed]" in t for t in context_texts)
 
 
-
 @pytest.mark.asyncio
 async def test_runner_replaces_runtime_image_context_before_provider_call(
     runner, provider_request, mock_hooks
