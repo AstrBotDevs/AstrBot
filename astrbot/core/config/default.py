@@ -2732,7 +2732,7 @@ CONFIG_METADATA_2 = {
                         "hint": "模型最大上下文 Token 大小。如果为 0，则会自动从模型元数据填充（如有）",
                     },
                     "reasoning": {
-                        "description": "推理能力",
+                        "description": "支持推理能力",
                         "type": "bool",
                         "hint": "标记该模型是否支持推理/思考能力。此项为元数据标记，不影响实际 API 调用。",
                     },
