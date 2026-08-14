@@ -3773,7 +3773,27 @@ paths:
         - $ref: "#/components/parameters/TaskId"
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Knowledge base task status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeUploadTaskResponse"
+
+  /api/v1/knowledge-bases/{kb_id}/tasks:
+    get:
+      tags: [Knowledge Base]
+      summary: List knowledge base import tasks
+      operationId: listKnowledgeTasks
+      x-astrbot-scope: kb
+      parameters:
+        - $ref: "#/components/parameters/KbId"
+      responses:
+        "200":
+          description: Knowledge base task list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeUploadTaskListResponse"
 
   /api/v1/personas/tree:
     get:
@@ -5986,6 +6006,139 @@ components:
         parser:
           type: string
       additionalProperties: false
+
+    KnowledgeUploadTaskFile:
+      type: object
+      required:
+        - file_index
+        - file_name
+        - status
+        - stage
+        - current
+        - total
+        - error
+        - document
+      properties:
+        file_index:
+          type: integer
+          minimum: 0
+        file_name:
+          type: string
+        status:
+          $ref: "#/components/schemas/KnowledgeUploadTaskStatus"
+        stage:
+          type: string
+        current:
+          type: integer
+        total:
+          type: integer
+        error:
+          type: [string, "null"]
+        document:
+          type: [object, "null"]
+          additionalProperties: true
+      additionalProperties: false
+
+    KnowledgeUploadProgress:
+      type: object
+      required: [status, file_index, file_total, stage, current, total]
+      properties:
+        status:
+          type: string
+        file_index:
+          type: integer
+          minimum: 0
+        file_total:
+          type: integer
+          minimum: 0
+        file_name:
+          type: string
+        stage:
+          type: string
+        current:
+          type: integer
+        total:
+          type: integer
+      additionalProperties: false
+
+    KnowledgeUploadTask:
+      type: object
+      required:
+        - task_id
+        - status
+        - kb_id
+        - task_type
+        - created_at
+        - updated_at
+        - files
+      properties:
+        task_id:
+          type: string
+        status:
+          $ref: "#/components/schemas/KnowledgeUploadTaskStatus"
+        kb_id:
+          type: [string, "null"]
+        task_type:
+          anyOf:
+            - $ref: "#/components/schemas/KnowledgeUploadTaskType"
+            - type: "null"
+        created_at:
+          type: [number, "null"]
+          format: double
+        updated_at:
+          type: [number, "null"]
+          format: double
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/KnowledgeUploadTaskFile"
+        progress:
+          $ref: "#/components/schemas/KnowledgeUploadProgress"
+        result:
+          type: [object, "null"]
+          additionalProperties: true
+        error:
+          type: [string, "null"]
+      additionalProperties: false
+
+    KnowledgeUploadTaskStatus:
+      type: string
+      enum: [pending, processing, completed, failed]
+
+    KnowledgeUploadTaskType:
+      type: string
+      enum: [file_upload, document_import, url_import]
+
+    KnowledgeUploadTaskList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/KnowledgeUploadTask"
+        total:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+
+    KnowledgeUploadTaskResponse:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: "#/components/schemas/KnowledgeUploadTask"
+
+    KnowledgeUploadTaskListResponse:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: "#/components/schemas/KnowledgeUploadTaskList"
 
     KnowledgeRetrieveRequest:
       type: object

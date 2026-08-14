@@ -11,21 +11,28 @@
 
     <!-- 文档列表 -->
     <v-card variant="outlined">
-      <v-data-table-server :headers="headers" :items="documents" :loading="loading"
+      <v-data-table-server :headers="headers" :items="tableDocuments" :loading="loading"
         :items-per-page="pageSize" :page="page" :items-length="total"
         @update:page="onPageChange" @update:items-per-page="onItemsPerPageChange">
         <template #item.doc_name="{ item }">
           <div class="d-flex align-center gap-2">
-            <v-icon :color="getFileColor(item.file_type)" class="mr-2">
+            <v-icon :color="item.uploadStatus === 'failed' ? 'error' : getFileColor(item.file_type)" class="mr-2">
               {{ getFileIcon(item.file_type) }}
             </v-icon>
             <div class="flex-grow-1" style="padding: 4px 0px;">
               <span class="font-weight-medium">{{ item.doc_name }}</span>
-              <!-- 上传进度 -->
-              <div v-if="item.uploading" class="mt-1">
+              <div v-if="item.uploadStatus === 'failed'" class="upload-error text-caption text-error mt-1">
+                <v-icon size="14" class="mr-1">mdi-alert-circle-outline</v-icon>
+                {{ item.uploadError || t('documents.uploadFailed') }}
+              </div>
+              <div v-else-if="item.uploadStatus === 'completed'" class="text-caption text-success mt-1">
+                <v-icon size="14" class="mr-1">mdi-check-circle-outline</v-icon>
+                {{ getStageText('completed') }}
+              </div>
+              <div v-else-if="item.uploading" class="mt-1">
                 <div class="text-caption text-medium-emphasis mb-1">
                   {{ getStageText(item.uploadProgress?.stage || 'waiting') }}
-                  <span v-if="item.uploadProgress?.current">
+                  <span v-if="item.uploadProgress?.current !== undefined">
                     ({{ item.uploadProgress.current }} / {{ item.uploadProgress.total }})
                   </span>
                 </div>
@@ -45,8 +52,10 @@
         </template>
 
         <template #item.actions="{ item }">
-          <v-btn icon="mdi-eye" variant="text" size="small" color="info" @click="viewDocument(item)" />
-          <v-btn icon="mdi-delete" variant="text" size="small" color="error" @click="confirmDelete(item)" />
+          <template v-if="!item.uploadTask">
+            <v-btn icon="mdi-eye" variant="text" size="small" color="info" @click="viewDocument(item)" />
+            <v-btn icon="mdi-delete" variant="text" size="small" color="error" @click="confirmDelete(item)" />
+          </template>
         </template>
 
         <template #no-data>
@@ -241,6 +250,7 @@ import TavilyKeyDialog from './TavilyKeyDialog.vue'
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { configProfileApi, knowledgeApi, providerApi } from '@/api/v1'
+import type { KnowledgeUploadTask } from '@/api/generated/openapi-v1'
 import { useModuleI18n } from '@/i18n/composables'
 
 const { tm: t } = useModuleI18n('features/knowledge-base/detail')
@@ -271,11 +281,12 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const uploadMode = ref('file') // 'file' or 'url'
 const uploadUrl = ref('')
 const llmProviders = ref<any[]>([])
-const uploadingTasks = ref<Map<string, any>>(new Map())
+const uploadingTasks = ref<Map<string, KnowledgeUploadTask>>(new Map())
 const progressPollingInterval = ref<number | null>(null)
+let taskRequestInFlight = false
+let componentActive = true
 const tavilyConfigStatus = ref('loading') // 'loading', 'configured', 'not_configured', 'error'
 const showTavilyDialog = ref(false)
-let documentsRequestId = 0
 
 const snackbar = ref({
   show: false,
@@ -334,17 +345,41 @@ const isUploadDisabled = computed(() => {
 
 // 表格列
 const headers = [
-  { title: t('documents.name'), key: 'doc_name', sortable: false },
-  { title: t('documents.type'), key: 'file_type', sortable: false },
-  { title: t('documents.size'), key: 'file_size', sortable: false },
-  { title: t('documents.chunks'), key: 'chunk_count', sortable: false },
-  { title: t('documents.createdAt'), key: 'created_at', sortable: false },
+  { title: t('documents.name'), key: 'doc_name', sortable: true },
+  { title: t('documents.type'), key: 'file_type', sortable: true },
+  { title: t('documents.size'), key: 'file_size', sortable: true },
+  { title: t('documents.chunks'), key: 'chunk_count', sortable: true },
+  { title: t('documents.createdAt'), key: 'created_at', sortable: true },
   { title: t('documents.actions'), key: 'actions', sortable: false, align: 'end' as const }
 ]
 
+const tableDocuments = computed(() => {
+  const taskRows = Array.from(uploadingTasks.value.values()).flatMap(task =>
+    task.files
+      .filter(file => task.status === 'pending' || task.status === 'processing' || file.status === 'failed')
+      .map(file => ({
+        doc_id: `uploading_${task.task_id}_${file.file_index}`,
+        doc_name: file.file_name,
+        file_type: task.task_type === 'url_import' ? 'url' : file.file_name.split('.').pop() || '',
+        file_size: 0,
+        chunk_count: 0,
+        created_at: task.created_at ? new Date(task.created_at * 1000).toISOString() : '',
+        uploading: file.status === 'pending' || file.status === 'processing',
+        uploadTask: true,
+        uploadStatus: file.status,
+        uploadError: file.error,
+        uploadProgress: {
+          stage: file.stage,
+          current: file.current,
+          total: file.total
+        }
+      }))
+  )
+  return [...taskRows, ...documents.value]
+})
+
 // 加载文档列表
 const loadDocuments = async () => {
-  const requestId = ++documentsRequestId
   loading.value = true
   try {
     const response = await knowledgeApi.documents(props.kbId, {
@@ -352,20 +387,16 @@ const loadDocuments = async () => {
       page_size: pageSize.value,
       search: searchQuery.value.trim() || undefined,
     })
-    if (requestId !== documentsRequestId) return
     if (response.data.status === 'ok') {
       const data = response.data.data
       documents.value = data.items || []
       total.value = data.total || 0
     }
   } catch (error) {
-    if (requestId !== documentsRequestId) return
     console.error('Failed to load documents:', error)
     showSnackbar('加载文档列表失败', 'error')
   } finally {
-    if (requestId === documentsRequestId) {
-      loading.value = false
-    }
+    loading.value = false
   }
 }
 
@@ -460,32 +491,31 @@ const uploadFiles = async () => {
 
       showSnackbar(`正在后台上传 ${result.file_count} 个文件...`, 'info')
 
-      // 为每个文件添加占位条目到文档列表
-      const uploadingDocs = selectedFiles.value.map((file, index) => ({
-        doc_id: `uploading_${taskId}_${index}`,
-        doc_name: file.name,
-        file_type: file.name.split('.').pop() || '',
-        file_size: file.size,
-        chunk_count: 0,
-        created_at: new Date().toISOString(),
-        uploading: true,
-        taskId: taskId,
-        uploadProgress: {
+      uploadingTasks.value = new Map(uploadingTasks.value).set(taskId, {
+        task_id: taskId,
+        status: 'pending',
+        kb_id: props.kbId,
+        task_type: 'file_upload',
+        created_at: Date.now() / 1000,
+        updated_at: Date.now() / 1000,
+        files: selectedFiles.value.map((file, index) => ({
+          file_index: index,
+          file_name: file.name,
+          status: 'pending',
           stage: 'waiting',
           current: 0,
-          total: 100
-        }
-      }))
-
-      // 添加到文档列表顶部
-      documents.value = [...uploadingDocs, ...documents.value]
+          total: 100,
+          error: null,
+          document: null
+        }))
+      })
 
       // 关闭对话框
       closeUploadDialog()
 
-      // 开始轮询进度
       if (taskId) {
-        startProgressPolling(taskId)
+        startProgressPolling()
+        await refreshUploadTasks(true)
       }
     } else {
       showSnackbar(response.data.message || t('documents.uploadFailed'), 'error')
@@ -536,29 +566,29 @@ const uploadFromUrl = async () => {
       const taskId = result.task_id
 
       showSnackbar(`正在从 URL 后台提取内容...`, 'info')
-
-      // 添加占位条目
-      const uploadingDoc = {
-        doc_id: `uploading_${taskId}_0`,
-        doc_name: result.url,
-        file_type: 'url',
-        file_size: 0, // URL has no size
-        chunk_count: 0,
-        created_at: new Date().toISOString(),
-        uploading: true,
-        taskId: taskId,
-        uploadProgress: {
+      uploadingTasks.value = new Map(uploadingTasks.value).set(taskId, {
+        task_id: taskId,
+        status: 'pending',
+        kb_id: props.kbId,
+        task_type: 'url_import',
+        created_at: Date.now() / 1000,
+        updated_at: Date.now() / 1000,
+        files: [{
+          file_index: 0,
+          file_name: `URL: ${result.url}`,
+          status: 'pending',
           stage: 'waiting',
           current: 0,
-          total: 100
-        }
-      }
-
-      documents.value = [uploadingDoc, ...documents.value]
+          total: 100,
+          error: null,
+          document: null
+        }]
+      })
       closeUploadDialog()
 
       if (taskId) {
-        startProgressPolling(taskId)
+        startProgressPolling()
+        await refreshUploadTasks(true)
       }
     } else {
       showSnackbar(response.data.message || t('documents.uploadFailed'), 'error')
@@ -572,87 +602,82 @@ const uploadFromUrl = async () => {
   }
 }
 
-// 开始轮询进度
-const startProgressPolling = (taskId: string) => {
-  // 如果已经在轮询，先停止
-  if (progressPollingInterval.value) {
-    stopProgressPolling()
-  }
+const refreshUploadTasks = async (notifyChanges = false) => {
+  if (taskRequestInFlight) return
+  taskRequestInFlight = true
+  const taskIdsAtRequestStart = new Set(uploadingTasks.value.keys())
 
-  progressPollingInterval.value = window.setInterval(async () => {
-    try {
-      const response = await knowledgeApi.task(taskId)
+  try {
+    const response = await knowledgeApi.tasks(props.kbId)
+    if (!componentActive) return
+    if (response.data.status !== 'ok') return
 
-      if (response.data.status === 'ok') {
-        const data = response.data.data
-        const status = data.status
-
-        if (status === 'processing' && data.progress) {
-          // 更新进度
-          const progress = data.progress
-          const fileIndex = progress.file_index || 0
-
-          // 更新对应文件的进度
-          documents.value = documents.value.map(doc => {
-            if (doc.taskId === taskId) {
-              const docIndex = parseInt(doc.doc_id.split('_').pop() || '0')
-              if (docIndex === fileIndex) {
-                return {
-                  ...doc,
-                  uploadProgress: {
-                    stage: progress.stage || 'waiting',
-                    current: progress.current || 0,
-                    total: progress.total || 100
-                  }
-                }
-              }
-            }
-            return doc
-          })
-        } else if (status === 'completed') {
-          // 任务完成
-          stopProgressPolling()
-
-          const result = data.result
-          const successCount = result?.success_count || 0
-          const failedCount = result?.failed_count || 0
-
-          // 移除上传中的占位文档
-          documents.value = documents.value.filter(doc => doc.taskId !== taskId)
-
-          // Reload current page
-          await loadDocuments()
-          emit('refresh')
-
-          if (failedCount === 0) {
-            showSnackbar(`成功上传 ${successCount} 个文档`)
-          } else {
-            showSnackbar(`上传完成: ${successCount} 个成功, ${failedCount} 个失败`, 'warning')
-          }
-        } else if (status === 'failed') {
-          // 任务失败
-          stopProgressPolling()
-
-          // 移除上传中的占位文档
-          documents.value = documents.value.filter(doc => doc.taskId !== taskId)
-
-          showSnackbar(`上传失败: ${data.error || '未知错误'}`, 'error')
-        }
-      } else {
-        // 任务不存在，停止轮询
-        stopProgressPolling()
-        documents.value = documents.value.filter(doc => doc.taskId !== taskId)
+    const previousTasks = uploadingTasks.value
+    const taskMap = new Map((response.data.data.items || []).map(task => [task.task_id, task]))
+    previousTasks.forEach((task, taskId) => {
+      if (!taskIdsAtRequestStart.has(taskId) && !taskMap.has(taskId)) {
+        taskMap.set(taskId, task)
       }
-    } catch (error) {
-      console.error('Failed to fetch progress:', error)
-      // 不立即停止，允许重试
+    })
+    const tasks = Array.from(taskMap.values())
+    const completedTasks = notifyChanges
+      ? tasks.filter(task => {
+        const previousStatus = previousTasks.get(task.task_id)?.status
+        return (previousStatus === 'pending' || previousStatus === 'processing')
+          && (task.status === 'completed' || task.status === 'failed')
+      })
+      : []
+
+    uploadingTasks.value = new Map(tasks.map(task => [task.task_id, task]))
+
+    if (completedTasks.length > 0) {
+      let successCount = 0
+      let failedCount = 0
+      const errors: string[] = []
+
+      completedTasks.forEach(task => {
+        const result = task.result as { success_count?: number; failed_count?: number } | null | undefined
+        successCount += result?.success_count ?? task.files.filter(file => file.status === 'completed').length
+        failedCount += result?.failed_count ?? task.files.filter(file => file.status === 'failed').length
+        if (task.status === 'failed' && task.error) {
+          errors.push(task.error)
+        }
+      })
+
+      await loadDocuments()
+      emit('refresh')
+
+      if (successCount === 0 && errors.length > 0) {
+        showSnackbar(`上传失败: ${errors[0]}`, 'error')
+      } else if (failedCount > 0) {
+        showSnackbar(`上传完成: ${successCount} 个成功, ${failedCount} 个失败`, 'warning')
+      } else {
+        showSnackbar(`成功上传 ${successCount} 个文档`)
+      }
     }
-  }, 500) // 每500ms轮询一次
+
+    if (tasks.some(task => task.status === 'pending' || task.status === 'processing')) {
+      startProgressPolling()
+    } else {
+      stopProgressPolling()
+    }
+  } catch (error) {
+    console.error('Failed to fetch upload tasks:', error)
+  } finally {
+    taskRequestInFlight = false
+  }
+}
+
+const startProgressPolling = () => {
+  if (progressPollingInterval.value !== null) return
+  progressPollingInterval.value = window.setInterval(() => {
+    refreshUploadTasks(true)
+  }, 1000)
 }
 
 // 停止轮询进度
 const stopProgressPolling = () => {
-  if (progressPollingInterval.value) {
+  if (progressPollingInterval.value !== null) {
     clearInterval(progressPollingInterval.value)
     progressPollingInterval.value = null
   }
@@ -674,7 +699,8 @@ const getStageText = (stage: string) => {
     'cleaning': '清洗内容...',
     'parsing': '解析文档...',
     'chunking': '文本分块...',
-    'embedding': '生成向量...'
+    'embedding': '生成向量...',
+    'completed': '已完成'
   }
   return stageMap[stage] || stage
 }
@@ -816,21 +842,21 @@ const onTavilyKeySet = () => {
 }
 
 // Reset to page 1 and reload when search text changes
-watch(searchQuery, (_value, _oldValue, onCleanup) => {
+watch(searchQuery, () => {
   page.value = 1
-  documentsRequestId += 1
-  const timeoutId = window.setTimeout(loadDocuments, 300)
-  onCleanup(() => window.clearTimeout(timeoutId))
+  loadDocuments()
 })
 
 onMounted(() => {
   loadDocuments()
+  startProgressPolling()
+  refreshUploadTasks()
   loadLlmProviders()
   checkTavilyConfig()
 })
 
 onUnmounted(() => {
-  documentsRequestId += 1
+  componentActive = false
   stopProgressPolling()
 })
 </script>
@@ -886,6 +912,10 @@ onUnmounted(() => {
 
 .file-item:hover {
   background: rgba(var(--v-theme-surface-variant), 0.8) !important;
+}
+
+.upload-error {
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 768px) {

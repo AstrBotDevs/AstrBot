@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 import traceback
 import uuid
 from pathlib import Path
@@ -46,12 +47,72 @@ class KnowledgeBaseService:
     def get_kb_manager(self):
         return self.core_lifecycle.kb_manager
 
-    def init_task(self, task_id: str, status: str = "pending") -> None:
-        self.upload_tasks[task_id] = {
-            "status": status,
-            "result": None,
-            "error": None,
-        }
+    def init_task(
+        self,
+        task_id: str,
+        status: str = "pending",
+        *,
+        kb_id: str | None = None,
+        task_type: str | None = None,
+        file_names: list[str] | None = None,
+    ) -> None:
+        """Initialize task metadata without discarding resumable state.
+
+        Args:
+            task_id: Unique upload task identifier.
+            status: Initial or updated task status.
+            kb_id: Knowledge base that owns the task.
+            task_type: Upload source type.
+            file_names: Ordered source names represented by the task.
+        """
+        now = time.time()
+        task = self.upload_tasks.get(task_id)
+        if task is None:
+            task = {
+                "status": status,
+                "kb_id": kb_id,
+                "task_type": task_type,
+                "created_at": now,
+                "updated_at": now,
+                "files": [
+                    {
+                        "file_index": index,
+                        "file_name": file_name,
+                        "status": "pending",
+                        "stage": "waiting",
+                        "current": 0,
+                        "total": 100,
+                        "error": None,
+                        "document": None,
+                    }
+                    for index, file_name in enumerate(file_names or [])
+                ],
+                "result": None,
+                "error": None,
+            }
+            self.upload_tasks[task_id] = task
+            return
+
+        task["status"] = status
+        task["updated_at"] = now
+        if kb_id is not None:
+            task["kb_id"] = kb_id
+        if task_type is not None:
+            task["task_type"] = task_type
+        if file_names is not None and not task.get("files"):
+            task["files"] = [
+                {
+                    "file_index": index,
+                    "file_name": file_name,
+                    "status": "pending",
+                    "stage": "waiting",
+                    "current": 0,
+                    "total": 100,
+                    "error": None,
+                    "document": None,
+                }
+                for index, file_name in enumerate(file_names)
+            ]
 
     def set_task_result(
         self,
@@ -60,11 +121,19 @@ class KnowledgeBaseService:
         result: Any = None,
         error: str | None = None,
     ) -> None:
-        self.upload_tasks[task_id] = {
-            "status": status,
-            "result": result,
-            "error": error,
-        }
+        if task_id not in self.upload_tasks:
+            self.init_task(task_id, status=status)
+        task = self.upload_tasks[task_id]
+        task["status"] = status
+        task["result"] = result
+        task["error"] = error
+        task["updated_at"] = time.time()
+        if status == "failed":
+            for file_info in task.get("files", []):
+                if file_info["status"] in {"pending", "processing"}:
+                    file_info["status"] = "failed"
+                    file_info["stage"] = "failed"
+                    file_info["error"] = error
         if task_id in self.upload_progress:
             self.upload_progress[task_id]["status"] = status
 
@@ -78,22 +147,62 @@ class KnowledgeBaseService:
         stage: str | None = None,
         current: int | None = None,
         total: int | None = None,
+        file_status: str | None = None,
+        error: str | None = None,
+        document: dict[str, Any] | None = None,
     ) -> None:
-        if task_id not in self.upload_progress:
+        """Update aggregate and per-file progress for an upload task.
+
+        Args:
+            task_id: Unique upload task identifier.
+            status: Aggregate task status.
+            file_index: Zero-based file position within the task.
+            file_name: Display name for the current file.
+            stage: Current processing stage.
+            current: Completed units for the current stage.
+            total: Total units for the current stage.
+            file_status: Status for the selected file only.
+            error: User-facing failure detail for the selected file.
+            document: Created document payload for a completed file.
+        """
+        progress = self.upload_progress.get(task_id)
+        if progress is not None:
+            if status is not None:
+                progress["status"] = status
+            if file_index is not None:
+                progress["file_index"] = file_index
+            if file_name is not None:
+                progress["file_name"] = file_name
+            if stage is not None:
+                progress["stage"] = stage
+            if current is not None:
+                progress["current"] = current
+            if total is not None:
+                progress["total"] = total
+        task = self.upload_tasks.get(task_id)
+        if task is None:
             return
-        progress = self.upload_progress[task_id]
-        if status is not None:
-            progress["status"] = status
-        if file_index is not None:
-            progress["file_index"] = file_index
+        task["updated_at"] = time.time()
+        if file_index is None:
+            return
+        files = task.get("files", [])
+        if file_index < 0 or file_index >= len(files):
+            return
+        file_info = files[file_index]
         if file_name is not None:
-            progress["file_name"] = file_name
+            file_info["file_name"] = file_name
         if stage is not None:
-            progress["stage"] = stage
+            file_info["stage"] = stage
         if current is not None:
-            progress["current"] = current
+            file_info["current"] = current
         if total is not None:
-            progress["total"] = total
+            file_info["total"] = total
+        if file_status is not None:
+            file_info["status"] = file_status
+        if error is not None:
+            file_info["error"] = error
+        if document is not None:
+            file_info["document"] = document
 
     def make_progress_callback(self, task_id: str, file_idx: int, file_name: str):
         async def _callback(stage: str, current: int, total: int) -> None:
@@ -128,7 +237,11 @@ class KnowledgeBaseService:
         max_retries: int,
     ) -> None:
         try:
-            self.init_task(task_id, status="processing")
+            self.init_task(
+                task_id,
+                status="processing",
+                file_names=[file_info["file_name"] for file_info in files_to_upload],
+            )
             self.upload_progress[task_id] = {
                 "status": "processing",
                 "file_index": 0,
@@ -151,6 +264,7 @@ class KnowledgeBaseService:
                         stage="parsing",
                         current=0,
                         total=100,
+                        file_status="processing",
                     )
                     progress_callback = self.make_progress_callback(
                         task_id, file_idx, file_info["file_name"]
@@ -166,16 +280,34 @@ class KnowledgeBaseService:
                         max_retries=max_retries,
                         progress_callback=progress_callback,
                     )
-                    uploaded_docs.append(doc.model_dump())
+                    uploaded_doc = doc.model_dump()
+                    uploaded_docs.append(uploaded_doc)
+                    self.update_progress(
+                        task_id,
+                        file_index=file_idx,
+                        stage="completed",
+                        current=100,
+                        total=100,
+                        file_status="completed",
+                        document=uploaded_doc,
+                    )
                 except Exception as exc:
                     logger.error(f"上传文档 {file_info['file_name']} 失败: {exc}")
+                    failed_error = self.format_failed_doc_error(
+                        file_info["file_name"], exc
+                    )
                     failed_docs.append(
                         {
                             "file_name": file_info["file_name"],
-                            "error": self.format_failed_doc_error(
-                                file_info["file_name"], exc
-                            ),
+                            "error": failed_error,
                         },
+                    )
+                    self.update_progress(
+                        task_id,
+                        file_index=file_idx,
+                        stage="failed",
+                        file_status="failed",
+                        error=failed_error,
                     )
 
             self.set_task_result(
@@ -205,7 +337,14 @@ class KnowledgeBaseService:
         max_retries: int,
     ) -> None:
         try:
-            self.init_task(task_id, status="processing")
+            self.init_task(
+                task_id,
+                status="processing",
+                file_names=[
+                    document.get("file_name", f"imported_doc_{index}")
+                    for index, document in enumerate(documents)
+                ],
+            )
             self.upload_progress[task_id] = {
                 "status": "processing",
                 "file_index": 0,
@@ -231,6 +370,7 @@ class KnowledgeBaseService:
                         stage="importing",
                         current=0,
                         total=100,
+                        file_status="processing",
                     )
                     progress_callback = self.make_progress_callback(
                         task_id, file_idx, file_name
@@ -250,14 +390,32 @@ class KnowledgeBaseService:
                         progress_callback=progress_callback,
                         pre_chunked_text=chunks,
                     )
-                    uploaded_docs.append(doc.model_dump())
+                    uploaded_doc = doc.model_dump()
+                    uploaded_docs.append(uploaded_doc)
+                    self.update_progress(
+                        task_id,
+                        file_index=file_idx,
+                        stage="completed",
+                        current=100,
+                        total=100,
+                        file_status="completed",
+                        document=uploaded_doc,
+                    )
                 except Exception as exc:
                     logger.error(f"导入文档 {file_name} 失败: {exc}")
+                    failed_error = self.format_failed_doc_error(file_name, exc)
                     failed_docs.append(
                         {
                             "file_name": file_name,
-                            "error": self.format_failed_doc_error(file_name, exc),
+                            "error": failed_error,
                         },
+                    )
+                    self.update_progress(
+                        task_id,
+                        file_index=file_idx,
+                        stage="failed",
+                        file_status="failed",
+                        error=failed_error,
                     )
 
             self.set_task_result(
@@ -553,7 +711,13 @@ class KnowledgeBaseService:
             raise KnowledgeBaseServiceError("知识库不存在")
 
         task_id = str(uuid.uuid4())
-        self.init_task(task_id, status="pending")
+        self.init_task(
+            task_id,
+            status="pending",
+            kb_id=str(kb_id),
+            task_type="file_upload",
+            file_names=[file_info["file_name"] for file_info in files_to_upload],
+        )
         asyncio.create_task(
             self.background_upload_task(
                 task_id=task_id,
@@ -617,7 +781,16 @@ class KnowledgeBaseService:
             raise KnowledgeBaseServiceError("知识库不存在")
 
         task_id = str(uuid.uuid4())
-        self.init_task(task_id, status="pending")
+        self.init_task(
+            task_id,
+            status="pending",
+            kb_id=str(kb_id),
+            task_type="document_import",
+            file_names=[
+                document.get("file_name", f"imported_doc_{index}")
+                for index, document in enumerate(documents)
+            ],
+        )
         asyncio.create_task(
             self.background_import_task(
                 task_id=task_id,
@@ -645,6 +818,11 @@ class KnowledgeBaseService:
         response_data = {
             "task_id": task_id,
             "status": status,
+            "kb_id": task_info.get("kb_id"),
+            "task_type": task_info.get("task_type"),
+            "created_at": task_info.get("created_at"),
+            "updated_at": task_info.get("updated_at"),
+            "files": task_info.get("files", []),
         }
         if status == "processing" and task_id in self.upload_progress:
             response_data["progress"] = self.upload_progress[task_id]
@@ -653,6 +831,32 @@ class KnowledgeBaseService:
         if status == "failed":
             response_data["error"] = task_info["error"]
         return response_data
+
+    def list_upload_tasks(self, kb_id: str | None) -> dict[str, Any]:
+        """List resumable upload tasks for one knowledge base.
+
+        Args:
+            kb_id: Knowledge base identifier used to filter tasks.
+
+        Returns:
+            Task summaries ordered from newest to oldest.
+
+        Raises:
+            KnowledgeBaseServiceError: If the knowledge base ID is missing.
+        """
+        if not kb_id:
+            raise KnowledgeBaseServiceError("缺少参数 kb_id")
+        task_ids = [
+            task_id
+            for task_id, task in self.upload_tasks.items()
+            if task.get("kb_id") == kb_id
+        ]
+        task_ids.sort(
+            key=lambda task_id: self.upload_tasks[task_id].get("created_at", 0),
+            reverse=True,
+        )
+        items = [self.get_upload_progress(task_id) for task_id in task_ids]
+        return {"items": items, "total": len(items)}
 
     def get_upload_progress_from_dashboard_query(
         self,
@@ -815,7 +1019,13 @@ class KnowledgeBaseService:
             raise KnowledgeBaseServiceError("知识库不存在")
 
         task_id = str(uuid.uuid4())
-        self.init_task(task_id, status="pending")
+        self.init_task(
+            task_id,
+            status="pending",
+            kb_id=str(kb_id),
+            task_type="url_import",
+            file_names=[f"URL: {url}"],
+        )
         asyncio.create_task(
             self.background_upload_from_url_task(
                 task_id=task_id,
@@ -850,7 +1060,11 @@ class KnowledgeBaseService:
         cleaning_provider_id: str | None,
     ) -> None:
         try:
-            self.init_task(task_id, status="processing")
+            self.init_task(
+                task_id,
+                status="processing",
+                file_names=[f"URL: {url}"],
+            )
             self.upload_progress[task_id] = {
                 "status": "processing",
                 "file_index": 0,
@@ -860,6 +1074,15 @@ class KnowledgeBaseService:
                 "current": 0,
                 "total": 100,
             }
+            self.update_progress(
+                task_id,
+                file_index=0,
+                file_name=f"URL: {url}",
+                stage="extracting",
+                current=0,
+                total=100,
+                file_status="processing",
+            )
             progress_callback = self.make_progress_callback(task_id, 0, f"URL: {url}")
             doc = await kb_helper.upload_from_url(
                 url=url,
@@ -872,12 +1095,22 @@ class KnowledgeBaseService:
                 enable_cleaning=enable_cleaning,
                 cleaning_provider_id=cleaning_provider_id,
             )
+            uploaded_doc = doc.model_dump()
+            self.update_progress(
+                task_id,
+                file_index=0,
+                stage="completed",
+                current=100,
+                total=100,
+                file_status="completed",
+                document=uploaded_doc,
+            )
             self.set_task_result(
                 task_id,
                 "completed",
                 result={
                     "task_id": task_id,
-                    "uploaded": [doc.model_dump()],
+                    "uploaded": [uploaded_doc],
                     "failed": [],
                     "total": 1,
                     "success_count": 1,
@@ -887,6 +1120,13 @@ class KnowledgeBaseService:
         except Exception as exc:
             logger.error(f"后台上传URL任务 {task_id} 失败: {exc}")
             logger.error(traceback.format_exc())
+            self.update_progress(
+                task_id,
+                file_index=0,
+                stage="failed",
+                file_status="failed",
+                error=str(exc),
+            )
             self.set_task_result(task_id, "failed", error=str(exc))
 
     @staticmethod

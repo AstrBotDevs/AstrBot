@@ -117,6 +117,18 @@ async def get_knowledge_base_task(
     )
 
 
+@router.get("/knowledge-bases/{kb_id}/tasks")
+async def list_knowledge_base_tasks(
+    kb_id: str,
+    _auth: AuthContext = Depends(require_kb_scope),
+    service: KnowledgeBaseService = Depends(get_service),
+):
+    return await _run(
+        lambda: service.list_upload_tasks(kb_id),
+        prefix="获取上传任务失败",
+    )
+
+
 @router.get("/knowledge-bases/{kb_id}")
 async def get_knowledge_base(
     kb_id: str,
