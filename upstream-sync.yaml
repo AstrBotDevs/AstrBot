@@ -5,18 +5,16 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 08d0b1f74f062b9883032363816ba75e7cedb4e3
-  synced_at_utc: 2026-08-14T00:21:45Z
+  commit: d5f737199483802513f097dbb9d5126511f37ff9
+  synced_at_utc: 2026-08-14T15:05:52Z
   sync_method: manual-adaptation
-  source_pr: '9658,9659,9655,9612,9648'
+  source_pr: '9674'
   note: >-
-    Reviewed and integrated 604392d9, 27689db5, de337304, d0bb26aa,
-    3bb56602, and 08d0b1f from the previous cursor through upstream/master.
-    Adapted the statistics service, SSYCloud provider, JSON card group context,
-    bilingual ShengSuanYun documentation, and Windows shell logging to the fork
-    architecture. Cherry-picked the audio magic-format detection fix with
-    provenance. The follow-up fork navigation correction is in 71ebf793.
-    Focused Python, Dashboard formatting, docs formatting, Dashboard build, and
-    docs build passed; see upstream-decisions.jsonl for the per-commit ledger.
-    No upstream version bump occurred in this interval, so the existing 4.27.3
-    changelog remains unchanged and no new version is invented.
+    Reviewed the interval from 08d0b1f74f062b9883032363816ba75e7cedb4e3
+    through d5f737199483802513f097dbb9d5126511f37ff9. Skipped the sole
+    Misskey visibility resolver alias migration (#9674) because the fork's
+    no-legacy cleanup already removed the alias and migrated the event caller
+    in 0620974b95af6ad543fb75cae02e46d4bc868d5e. No implementation commit was
+    needed. Focused validation passed: uv run pytest
+    tests/unit/test_misskey_adapter.py -q. No upstream version bump occurred
+    in this interval, so the existing 4.27.3 changelog remains unchanged.
