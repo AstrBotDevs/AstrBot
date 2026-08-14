@@ -34,6 +34,7 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
+from astrbot.core.provider.stats import record_agent_runner_stats
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
@@ -550,37 +551,10 @@ async def _record_internal_agent_stats(
     final_resp: LLMResponse | None,
 ) -> None:
     """Persist internal agent stats without affecting the user response flow."""
-    if agent_runner is None:
-        return
-
-    provider = agent_runner.provider
-    stats = agent_runner.stats
-    if provider is None or stats is None:
-        return
-
-    try:
-        provider_config = getattr(provider, "provider_config", {}) or {}
-        conversation_id = (
-            req.conversation.cid
-            if req is not None and req.conversation is not None
-            else None
-        )
-
-        if agent_runner.was_aborted():
-            status = "aborted"
-        elif final_resp is not None and final_resp.role == "err":
-            status = "error"
-        else:
-            status = "completed"
-
-        await db_helper.insert_provider_stat(
-            umo=event.unified_msg_origin,
-            conversation_id=conversation_id,
-            provider_id=provider_config.get("id", "") or provider.meta().id,
-            provider_model=provider.get_model(),
-            status=status,
-            stats=stats.to_dict(),
-            agent_type="internal",
-        )
-    except Exception as e:
-        logger.warning("Persist provider stats failed: %s", e, exc_info=True)
+    await record_agent_runner_stats(
+        db_helper,
+        umo=event.unified_msg_origin,
+        request=req,
+        agent_runner=agent_runner,
+        final_response=final_resp,
+    )
