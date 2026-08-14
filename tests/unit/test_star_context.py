@@ -166,7 +166,7 @@ async def test_llm_generate_persists_one_provider_stat(temp_db):
     assert response.completion_text == "ok"
     assert len(records) == 1
     record = records[0]
-    assert record.agent_type == "internal"
+    assert record.agent_type == "provider"
     assert record.status == "completed"
     assert record.umo == "provider:provider-1:session-1"
     assert record.provider_id == "provider-1"
@@ -242,3 +242,58 @@ async def test_tool_loop_agent_persists_one_aggregated_provider_stat(
     assert record.token_output == 7
     assert record.start_time == 100.0
     assert record.end_time == 106.0
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_agent_persists_failed_provider_stat(
+    temp_db,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    provider = StatsProvider()
+
+    class FakeRunner:
+        def __init__(self) -> None:
+            self.provider = provider
+            self.stats = AgentStats(
+                token_usage=TokenUsage(input_other=4, output=2),
+                start_time=100.0,
+                end_time=101.0,
+            )
+
+        async def reset(self, **kwargs) -> None:
+            return None
+
+        async def step_until_done(self, max_steps):
+            raise RuntimeError("provider failed")
+            yield
+
+        def get_final_llm_resp(self):
+            return None
+
+        def was_aborted(self) -> bool:
+            return False
+
+    monkeypatch.setattr("astrbot.core.star.context.ToolLoopAgentRunner", FakeRunner)
+
+    context = Context.__new__(Context)
+    context._db = temp_db
+    context.provider_manager = SimpleNamespace(
+        get_provider_by_id=AsyncMock(return_value=provider),
+    )
+    event = SimpleNamespace(
+        unified_msg_origin="webchat:FriendMessage:failed-session",
+    )
+
+    with pytest.raises(RuntimeError, match="provider failed"):
+        await context.tool_loop_agent(
+            event=event,
+            chat_provider_id="provider-1",
+            prompt="test",
+            agent_context=SimpleNamespace(),
+        )
+
+    records = await get_provider_stats(temp_db)
+    assert len(records) == 1
+    assert records[0].status == "error"
+    assert records[0].token_input_other == 4
+    assert records[0].token_output == 2

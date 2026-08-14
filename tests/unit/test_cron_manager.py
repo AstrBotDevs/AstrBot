@@ -739,6 +739,78 @@ class TestRunActiveAgentJob:
         assert record.token_input_cached == 4
         assert record.token_output == 10
 
+    @pytest.mark.asyncio
+    async def test_woke_main_agent_persists_failed_provider_stat(self, temp_db):
+        manager = CronJobManager(temp_db)
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "admins_id": [],
+            "provider_settings": {},
+        }
+        ctx.conversation_manager = MagicMock()
+        manager.ctx = ctx
+
+        conv = MagicMock()
+        conv.cid = "conv-cron-failed"
+        conv.history = "[]"
+        provider = SimpleNamespace(
+            provider_config={"id": "provider-cron"},
+            meta=lambda: SimpleNamespace(id="provider-cron", type="test"),
+            get_model=lambda: "cron-model",
+        )
+
+        class FakeRunner:
+            def __init__(self) -> None:
+                self.provider = provider
+                self.stats = AgentStats(
+                    token_usage=TokenUsage(input_other=6, output=3),
+                    start_time=200.0,
+                    end_time=201.0,
+                )
+
+            async def step_until_done(self, max_steps):
+                raise RuntimeError("cron provider failed")
+                yield
+
+            def get_final_llm_resp(self):
+                return None
+
+            def was_aborted(self) -> bool:
+                return False
+
+        async def fake_build_main_agent(*, event, plugin_context, config, req):
+            return MagicMock(agent_runner=FakeRunner())
+
+        with (
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                AsyncMock(return_value=conv),
+            ),
+            patch(
+                "astrbot.core.astr_main_agent.build_main_agent",
+                side_effect=fake_build_main_agent,
+            ),
+            patch(
+                "astrbot.core.cron.manager.persist_agent_history",
+                new=AsyncMock(),
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="cron provider failed"):
+                await manager._woke_main_agent(
+                    message="scheduled task",
+                    session_str="test:FriendMessage:user123",
+                    extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+                )
+
+        async with temp_db.get_db() as session:
+            result = await session.execute(select(ProviderStat))
+            records = result.scalars().all()
+
+        assert len(records) == 1
+        assert records[0].status == "error"
+        assert records[0].token_input_other == 6
+        assert records[0].token_output == 3
+
 
 class TestGetNextRunTime:
     """Tests for _get_next_run_time method."""
