@@ -13,9 +13,7 @@ class ProviderSSYCloud(ProviderOpenAIChatCompletions):
     """SSYCloud provider using its OpenAI-compatible Chat Completions API."""
 
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
-        provider_config.setdefault(
-            "api_base", "https://router.shengsuanyun.com/api/v1"
-        )
+        provider_config.setdefault("api_base", "https://router.shengsuanyun.com/api/v1")
         custom_headers = provider_config.get("custom_headers")
         if not isinstance(custom_headers, dict):
             custom_headers = {}
