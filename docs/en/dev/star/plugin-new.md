@@ -168,3 +168,5 @@ Thank you for contributing to the AstrBot ecosystem. Please follow these princip
 - Before committing, please use the [ruff](https://docs.astral.sh/ruff/) tool to format your code.
 - Do not use the `requests` library for network requests; use asynchronous network request libraries such as `aiohttp` or `httpx`.
 - If you're extending functionality for an existing plugin, please prioritize submitting a PR to that plugin rather than creating a separate one (unless the original plugin author has stopped maintaining it).
+- If your plugin directly draws on another project's design, feature ideas, or implementation approach, clearly acknowledge the source of inspiration in the README and link to the relevant project.
+- If you use, modify, or port code or assets from another project, follow the original project's open-source license and retain copyright and license notices as required by that license.
