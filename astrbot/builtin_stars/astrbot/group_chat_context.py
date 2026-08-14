@@ -92,7 +92,7 @@ class GroupChatContext:
         image_caption_prompt: str,
     ) -> str:
         if not image_caption_provider_id:
-            provider = self.context.get_using_provider()
+            provider = await self.context.get_using_provider_async()
         else:
             provider = self.context.get_provider_by_id(image_caption_provider_id)
             if not provider:

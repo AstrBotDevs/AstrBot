@@ -298,10 +298,8 @@ class InternalAgentSubStage(Stage):
                         )
 
                         # 获取 TTS Provider
-                        tts_provider = (
-                            self.ctx.plugin_manager.context.get_using_tts_provider(
-                                event.unified_msg_origin
-                            )
+                        tts_provider = await self.ctx.plugin_manager.context.get_using_tts_provider_async(
+                            event.unified_msg_origin
                         )
 
                         if not tts_provider:

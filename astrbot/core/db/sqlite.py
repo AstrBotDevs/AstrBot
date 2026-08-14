@@ -1379,11 +1379,13 @@ class SQLiteDatabase(BaseDatabase):
             result = await session.execute(query)
             return result.scalar_one_or_none()
 
-    async def get_preferences(self, scope, scope_id=None, key=None):
-        """Get all preferences for a specific scope ID or key."""
+    async def get_preferences(self, scope=None, scope_id=None, key=None):
+        """Get preferences, optionally filtered by scope, scope ID, or key."""
         async with self.get_db() as session:
             session: AsyncSession
-            query = select(Preference).where(Preference.scope == scope)
+            query = select(Preference)
+            if scope is not None:
+                query = query.where(Preference.scope == scope)
             if scope_id is not None:
                 query = query.where(Preference.scope_id == scope_id)
             if key is not None:
