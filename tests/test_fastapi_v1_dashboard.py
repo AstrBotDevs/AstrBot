@@ -165,7 +165,13 @@ class FakeLlmTools:
     def activate_llm_tool(self, _tool_name: str, *, star_map) -> bool:
         return True
 
+    async def activate_llm_tool_async(self, _tool_name: str, *, star_map) -> bool:
+        return True
+
     def deactivate_llm_tool(self, _tool_name: str) -> bool:
+        return True
+
+    async def deactivate_llm_tool_async(self, _tool_name: str) -> bool:
         return True
 
 
@@ -3331,10 +3337,13 @@ async def test_v1_skill_scope_accepts_api_key_and_rejects_plural_scope(
     fake_db: FakeDb,
     monkeypatch: pytest.MonkeyPatch,
 ):
+    def fake_get_skills():
+        return {"skills": [{"name": "demo_skill"}]}
+
     monkeypatch.setattr(
         asgi_app.state.services.skills,
         "get_skills",
-        lambda: {"skills": [{"name": "demo_skill"}]},
+        fake_get_skills,
     )
 
     plural_key = "abk_fastapi_v1_skills"

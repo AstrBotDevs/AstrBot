@@ -159,6 +159,9 @@ def test_sync_skills_includes_plugin_provided_skills(
     monkeypatch,
     tmp_path: Path,
 ):
+    import astrbot.core.star.star as star_module
+    from astrbot.core.star.star import StarMetadata
+
     skills_root = tmp_path / "skills"
     plugins_root = tmp_path / "plugins"
     temp_root = tmp_path / "temp"
@@ -189,6 +192,17 @@ def test_sync_skills_includes_plugin_provided_skills(
         "astrbot.core.computer.computer_client.SkillManager.set_sandbox_skills_cache",
         _fake_set_cache,
     )
+    monkeypatch.setattr(
+        star_module,
+        "star_registry",
+        [
+            StarMetadata(
+                name="demo",
+                root_dir_name="astrbot_plugin_demo",
+                activated=True,
+            )
+        ],
+    )
 
     booter = _FakeBooter(
         '{"skills":[{"name":"demo-skill","description":"","path":"skills/demo-skill/SKILL.md"}]}'
@@ -204,6 +218,53 @@ def test_sync_skills_includes_plugin_provided_skills(
             "path": "skills/demo-skill/SKILL.md",
         }
     ]
+
+
+def test_sync_skills_skips_inactive_plugin_provided_skills(
+    monkeypatch,
+    tmp_path: Path,
+):
+    import astrbot.core.star.star as star_module
+    from astrbot.core.star.star import StarMetadata
+
+    skills_root = tmp_path / "skills"
+    plugins_root = tmp_path / "plugins"
+    temp_root = tmp_path / "temp"
+    skills_root.mkdir(parents=True, exist_ok=True)
+    temp_root.mkdir(parents=True, exist_ok=True)
+    plugin_skill_dir = plugins_root / "astrbot_plugin_demo" / "skills" / "demo-skill"
+    plugin_skill_dir.mkdir(parents=True)
+    plugin_skill_dir.joinpath("SKILL.md").write_text("# demo", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.get_astrbot_skills_path",
+        lambda: str(skills_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_plugin_path",
+        lambda: str(plugins_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.get_astrbot_temp_path",
+        lambda: str(temp_root),
+    )
+    monkeypatch.setattr(
+        star_module,
+        "star_registry",
+        [
+            StarMetadata(
+                name="demo",
+                root_dir_name="astrbot_plugin_demo",
+                activated=False,
+            )
+        ],
+    )
+
+    booter = _FakeBooter('{"skills":[]}')
+    asyncio.run(computer_client._sync_skills_to_sandbox(cast(ComputerBooter, booter)))
+
+    assert booter.uploads == []
+    assert any(cmd == "rm -f skills/skills.zip" for cmd in booter.shell.commands)
 
 
 def test_build_scan_command_frontmatter_newline_is_escaped_literal():

@@ -100,6 +100,8 @@ def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
 
 def _collect_sync_skill_dirs() -> list[tuple[str, Path]]:
     """Collect local and plugin-provided skills that should be synced."""
+    from astrbot.core.star.star import star_registry
+
     skills_root = Path(get_astrbot_skills_path())
     try:
         skill_manager = SkillManager(skills_root=str(skills_root))
@@ -107,6 +109,11 @@ def _collect_sync_skill_dirs() -> list[tuple[str, Path]]:
         logger.warning("[Computer] Failed to initialize skill manager: %s", exc)
         return []
 
+    active_plugin_root_names = {
+        plugin.root_dir_name
+        for plugin in star_registry
+        if plugin.activated and plugin.root_dir_name
+    }
     sync_dirs: list[tuple[str, Path]] = []
     for skill in skill_manager.list_skills(
         active_only=False,
@@ -114,6 +121,11 @@ def _collect_sync_skill_dirs() -> list[tuple[str, Path]]:
         show_sandbox_path=False,
     ):
         if skill.source_type == "sandbox_only":
+            continue
+        if (
+            skill.source_type == "plugin"
+            and skill.plugin_name not in active_plugin_root_names
+        ):
             continue
         skill_md = Path(skill.path)
         if not skill_md.is_file():

@@ -6,7 +6,7 @@ import ProxySelector from "@/components/shared/ProxySelector.vue";
 import UninstallConfirmDialog from "@/components/shared/UninstallConfirmDialog.vue";
 import { useExtensionPage } from "./extension/useExtensionPage";
 import { computed, defineAsyncComponent } from "vue";
-import defaultPluginIcon from "@/assets/images/plugin_icon.png";
+import defaultPluginIcon from "/favicon.svg";
 import { usePluginI18n } from "@/utils/pluginI18n";
 
 const props = defineProps({
@@ -420,6 +420,7 @@ const updateDialogPluginLogo = computed(() => {
           :metadataKey="curr_namespace"
           :pluginName="curr_namespace"
           :pluginI18n="extension_config.i18n"
+          enable-default-reset
         />
         <p v-else>{{ tm("dialogs.config.noConfig") }}</p>
       </v-card-text>

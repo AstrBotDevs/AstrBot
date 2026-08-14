@@ -215,30 +215,27 @@ class ProviderManager:
         """根据提供商 ID 获取提供商实例"""
         return self.inst_map.get(provider_id)
 
-    def get_using_provider(
-        self, provider_type: ProviderType, umo=None
+    def _resolve_using_provider(
+        self,
+        provider_type: ProviderType,
+        umo: str | None,
+        provider_id: str | None,
     ) -> Providers | None:
-        """获取正在使用的提供商实例。
+        """Resolve a provider preference with configuration fallbacks.
 
         Args:
-            provider_type (ProviderType): 提供商类型。
-            umo (str, optional): 用户会话 ID，用于提供商会话隔离。
+            provider_type: Provider type to resolve.
+            umo: User message origin used to load session configuration.
+            provider_id: Preferred provider ID, if one is configured.
 
         Returns:
-            Provider: 正在使用的提供商实例。
+            Resolved provider instance, or None when the provider type is disabled
+            or no provider is available.
 
+        Raises:
+            ValueError: If provider_type is unsupported.
         """
-        provider = None
-        provider_id = None
-        if umo:
-            provider_id = sp.get(
-                f"provider_perf_{provider_type.value}",
-                None,
-                scope="umo",
-                scope_id=umo,
-            )
-            if provider_id:
-                provider = self.inst_map.get(provider_id)
+        provider = self.inst_map.get(provider_id) if provider_id else None
         if not provider:
             # default setting
             config = self.acm.get_conf(umo)
@@ -279,6 +276,55 @@ class ProviderManager:
             )
 
         return provider
+
+    @deprecated(reason="Use get_using_provider_async() instead.")
+    def get_using_provider(
+        self,
+        provider_type: ProviderType,
+        umo: str | None = None,
+    ) -> Providers | None:
+        """获取正在使用的提供商实例。
+
+        Args:
+            provider_type: 提供商类型。
+            umo: 用户会话 ID，用于提供商会话隔离。
+
+        Returns:
+            正在使用的提供商实例。
+        """
+        provider_id = None
+        if umo:
+            provider_id = sp.get(
+                f"provider_perf_{provider_type.value}",
+                None,
+                scope="umo",
+                scope_id=umo,
+            )
+        return self._resolve_using_provider(provider_type, umo, provider_id)
+
+    async def get_using_provider_async(
+        self,
+        provider_type: ProviderType,
+        umo: str | None = None,
+    ) -> Providers | None:
+        """Asynchronously get the provider currently in use.
+
+        Args:
+            provider_type: Provider type to resolve.
+            umo: User message origin used for session-specific preferences.
+
+        Returns:
+            Provider instance currently in use, or None if unavailable.
+        """
+        provider_id = None
+        if umo:
+            provider_id = await sp.get_async(
+                "umo",
+                umo,
+                f"provider_perf_{provider_type.value}",
+                None,
+            )
+        return self._resolve_using_provider(provider_type, umo, provider_id)
 
     async def initialize(self) -> None:
         # 逐个初始化提供商
@@ -864,6 +910,8 @@ class ProviderManager:
                     prov for prov in config["provider"] if prov.get("id") != tpid
                 ]
             config.save_config()
+            # sync in-memory config for API queries (e.g., provider list)
+            self.providers_config = config["provider"]
             logger.info(f"Providers {target_prov_ids} were removed from configuration.")
 
     async def update_provider(self, origin_provider_id: str, new_config: dict) -> None:

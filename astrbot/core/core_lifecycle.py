@@ -172,6 +172,8 @@ class AstrBotCoreLifecycle:
             LogManager.configure_trace_logger(self.astrbot_config)
 
         await self.db.initialize()
+        if sp.db_helper is self.db:
+            await sp.initialize()
 
         await html_renderer.initialize()
 
@@ -185,6 +187,7 @@ class AstrBotCoreLifecycle:
             ucr=self.umop_config_router,
             sp=sp,
         )
+        await self.astrbot_config_mgr.initialize()
         self.temp_dir_cleaner = TempDirCleaner(
             max_size_getter=lambda: self.astrbot_config_mgr.default_conf.get(
                 TempDirCleaner.CONFIG_KEY,
@@ -403,6 +406,8 @@ class AstrBotCoreLifecycle:
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()
+        if sp.db_helper is self.db:
+            await sp.close()
         self.dashboard_shutdown_event.set()
 
         # 再次遍历curr_tasks等待每个任务真正结束
@@ -426,6 +431,8 @@ class AstrBotCoreLifecycle:
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()
+        if sp.db_helper is self.db:
+            await sp.close()
         self.dashboard_shutdown_event.set()
         threading.Thread(
             target=restart_process,

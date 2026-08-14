@@ -9,6 +9,8 @@
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_es.md">Español</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ru.md">Русский</a>
 
+<br>
+
 <div>
 <a href="https://trendshift.io/repositories/21369" target="_blank"><img src="https://trendshift.io/api/badge/repositories/21369" alt="AstrBotDevs%2FAstrBot | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 <a href="https://hellogithub.com/repository/AstrBotDevs/AstrBot" target="_blank"><img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=d127d50cd5e54c5382328acc3bb25483&claim_uid=ZO9by7qCXgSd6Lp&t=2" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
@@ -28,7 +30,6 @@
 
 <br>
 
-<a href="https://astrbot.app/">主页</a> ｜
 <a href="https://astrbot.app/">文档</a> ｜
 <a href="https://blog.astrbot.app/">博客</a> ｜
 <a href="https://astrbot.featurebase.app/roadmap">路线图</a> ｜
@@ -37,9 +38,9 @@
 
 </div>
 
-AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、Telegram、企业微信、飞书、钉钉、Slack 等数十款主流即时通讯软件上部署，此外还内置类似 OpenWebUI 的轻量化 ChatUI，为个人、开发者和团队打造可靠、可扩展的对话式智能基础设施。无论是个人 AI 伙伴、智能客服、自动化助手，还是企业知识库，AstrBot 都能在你的即时通讯软件平台的工作流中快速构建 AI 应用。
+AstrBot 是一个开源的一站式 Agent 聊天机器人平台，可接入主流即时通讯应用，为个人、开发者和团队提供可靠、可扩展的对话式 AI 基础设施。无论你要构建个人 AI 伙伴、智能客服、自动化助手还是企业知识库，AstrBot 都能帮助你在即时通讯平台的工作流中快速构建可用于生产环境的 AI 应用。
 
-![landingpage](https://github.com/user-attachments/assets/45fc5699-cddf-4e21-af35-13040706f6c0)
+![screenshot_1 5x_postspark_2026-02-27_22-37-45](https://github.com/user-attachments/assets/f17cdb90-52d7-4773-be2e-ff64b566af6b)
 
 ## 主要功能
 
@@ -53,26 +54,19 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
 8. 🌈 Web ChatUI 支持，ChatUI 内置代理沙盒、网页搜索等。
 9. 🌐 国际化（i18n）支持。
 
-<br>
-
-<table align="center">
-  <tr align="center">
-    <th>💙 角色扮演 & 情感陪伴</th>
-    <th>✨ 主动式 Agent</th>
-    <th>🚀 通用 Agentic 能力</th>
-    <th>🧩 1000+ 社区插件</th>
-  </tr>
-  <tr>
-    <td align="center"><p align="center"><img width="984" height="1746" alt="99b587c5d35eea09d84f33e6cf6cfd4f" src="https://github.com/user-attachments/assets/89196061-3290-458d-b51f-afa178049f84" /></p></td>
-    <td align="center"><p align="center"><img width="976" height="1612" alt="c449acd838c41d0915cc08a3824025b1" src="https://github.com/user-attachments/assets/f75368b4-e022-41dc-a9e0-131c3e73e32e" /></p></td>
-    <td align="center"><p align="center"><img width="974" height="1732" alt="image" src="https://github.com/user-attachments/assets/e22a3968-87d7-4708-a7cd-e7f198c7c32e" /></p></td>
-    <td align="center"><p align="center"><img width="976" height="1734" alt="image" src="https://github.com/user-attachments/assets/0952b395-6b4a-432a-8a50-c294b7f89750" /></p></td>
-  </tr>
-</table>
-
 ## 快速开始
 
+### 在雨云上一键部署
+
+对于希望一键部署并让 AstrBot 24 小时在线、且不想自行管理服务器的用户，我们推荐使用雨云的一键云部署服务 ☁️：
+
+[![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
+
 ### 一键部署
+
+> [!NOTE]
+> 需要安装 [uv](https://docs.astral.sh/uv/)。
+> 对于 macOS 用户：由于 macOS 安全检查，首次运行 `astrbot` 命令可能需要较长时间（约 10-20 秒）。
 
 对于想快速体验 AstrBot、且熟悉命令行并能够自行安装 `uv` 环境的用户，我们推荐使用 `uv` 一键部署方式 ⚡️。
 
@@ -82,32 +76,17 @@ astrbot init # 仅首次执行此命令以初始化环境
 astrbot run
 ```
 
-> 需要安装 [uv](https://docs.astral.sh/uv/)。
-> AstrBot 需要 Python 3.12 或更高版本。`--python 3.12` 会确保 `uv` 使用 Python 3.12 创建 tool 环境。
-
-> [!NOTE]
-> 对于 macOS 用户：由于 macOS 安全检查，首次运行 `astrbot` 命令可能需要较长时间（约 10-20 秒）。
-
-更新 `astrbot`：
+后续更新 `astrbot`：
 
 ```bash
 uv tool upgrade astrbot --python 3.12
 ```
-
-> [!WARNING]
-> 通过 `uv` 部署的 AstrBot **不支持在 WebUI 中进行版本升级**。如需更新，请通过命令行执行上述命令。
 
 ### Docker 部署
 
 对于熟悉容器、希望获得更稳定且更适合生产环境部署方式的用户，我们推荐使用 Docker / Docker Compose 部署 AstrBot。
 
 请参考官方文档 [使用 Docker 部署 AstrBot](https://docs.astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot)。
-
-### 在 雨云 上部署
-
-对于希望一键部署 AstrBot 且不想自行管理服务器的用户，我们推荐使用雨云的一键云部署服务 ☁️：
-
-[![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
 ### 桌面客户端部署
 
@@ -121,25 +100,20 @@ uv tool upgrade astrbot --python 3.12
 
 前往 [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) 下载并安装。
 
-### 在 Replit 上部署
-
-Replit 部署由社区维护，适合在线演示和轻量试用场景。
-
-[![Run on Repl.it](https://repl.it/badge/github/AstrBotDevs/AstrBot)](https://repl.it/github/AstrBotDevs/AstrBot)
-
-### AUR
-
-AUR 方式面向 Arch Linux 用户，适合希望通过系统包管理器安装 AstrBot 的场景。
-
-在终端执行下方命令安装 `astrbot-git` 包，安装完成后即可启动使用。
-
-```bash
-yay -S astrbot-git
-```
-
 **更多部署方式**
 
 若你需要面板化或更高自定义部署，可参考 [宝塔面板](https://docs.astrbot.app/deploy/astrbot/btpanel.html)（BT Panel 应用商店安装）、[1Panel](https://docs.astrbot.app/deploy/astrbot/1panel.html)（1Panel 应用商店安装）、[CasaOS](https://docs.astrbot.app/deploy/astrbot/casaos.html)（NAS / 家庭服务器可视化部署）和 [手动部署](https://docs.astrbot.app/deploy/astrbot/cli.html)（基于源码与 `uv` 的完整自定义安装）。
+
+## ❤️ 赞助商
+
+欢迎通过 [Afdian](https://afdian.com/a/astrbot_team) 或者[通过邮件](mailto:community@astrbot.app) 赞助我们。
+
+<p align="center">
+  <a target="_blank" href="https://astrbot.app/#/sponsors">
+    <img alt="sponsors" src="https://sponsors.astrbot.app/?v=1">
+  </a>
+</p>
+
 
 ## 支持的消息平台
 
@@ -151,7 +125,7 @@ yay -S astrbot-git
 | **OneBot v11** | 官方维护 |
 | **Telegram** | 官方维护 |
 | **企微应用 & 企微智能机器人** | 官方维护 |
-| **微信客服 & 微信公众号** | 官方维护 |
+| **微信公众号** | 官方维护 |
 | **飞书** | 官方维护 |
 | **钉钉** | 官方维护 |
 | **Slack** | 官方维护 |
@@ -170,8 +144,7 @@ yay -S astrbot-git
 
 | 提供商 | 类型 |
 |---------|---------------|
-| 自定义 | 任何 OpenAI API 兼容的服务 |
-| OpenAI | LLM |
+| OpenAI 及兼容服务 | LLM |
 | Anthropic | LLM |
 | Google Gemini | LLM |
 | Moonshot AI | LLM |
@@ -181,10 +154,10 @@ yay -S astrbot-git
 | LM Studio (本地部署) | LLM |
 | [AIHubMix](https://aihubmix.com/?aff=4bfH) | LLM (API 网关, 支持所有模型) |
 | [优云智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | LLM (API 网关, 支持所有模型) |
-| [硅基流动](https://docs.siliconflow.cn/cn/usercases/use-siliconcloud-in-astrbot) | LLM (API 网关, 支持所有模型)  |
-| [PPIO 派欧云](https://ppio.com/user/register?invited_by=AIOONE) | LLM (API 网关, 支持所有模型) |
 | [302.AI](https://share.302.ai/rr1M3l) | LLM (API 网关, 支持所有模型)|
 | [小马算力](https://www.tokenpony.cn/3YPyf) | LLM (API 网关, 支持所有模型)|
+| [硅基流动](https://docs.siliconflow.cn/cn/usercases/use-siliconcloud-in-astrbot) | LLM (API 网关, 支持所有模型)  |
+| [PPIO 派欧云](https://ppio.com/user/register?invited_by=AIOONE) | LLM (API 网关, 支持所有模型) |
 | ModelScope | LLM |
 | OneAPI | LLM |
 | Dify | LLMOps 平台 |
@@ -227,29 +200,11 @@ pre-commit install
 
 ### QQ 群组
 
-- 1 群：322154837 (人满)
-- 3 群：630166526 (人满)
-- 4 群：1077826412 (人满)
-- 5 群：822130018 (人满)
-- 6 群：753075035 (人满)
-- 7 群：743746109 (人满)
-- 8 群：1030353265 (人满)
-- 9 群：1076659624 (人满)
-- 10 群：1078079676 (人满)
-- 11 群：704659519 (人满)
-- 12 群：916228568 (人满)
-- 13 群：1092185289
-- 14 群：1103419483
-- 15 群：258637629
-- 16 群：1044542496
-
-
-- 开发者群（偏闲聊吹水）：975206796
-- 开发者群（正式）：1039761811
+我们有 15 个以上的交流群，详情请参阅[社区](https://docs.astrbot.app/community.html)。
 
 ### Discord 频道
 
-- [Discord](https://discord.gg/hAVk6tgV36)
+<a href="https://discord.gg/hAVk6tgV36"><img alt="Discord_community" src="https://img.shields.io/badge/Discord-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
 
 ## ❤️ Special Thanks
 
@@ -259,19 +214,10 @@ pre-commit install
   <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=300&columns=15" />
 </a>
 
-此外，本项目的诞生离不开以下开源项目的帮助：
+开源伙伴 ❤️
 
-- [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ) - 伟大的猫猫框架
-
-开源项目友情链接：
-
-- [NoneBot2](https://github.com/nonebot/nonebot2) - 优秀的 Python 异步 ChatBot 框架
-- [Koishi](https://github.com/koishijs/koishi) - 优秀的 Node.js ChatBot 框架
-- [MaiBot](https://github.com/Mai-with-u/MaiBot) - 优秀的拟人化 AI ChatBot
-- [nekro-agent](https://github.com/KroMiose/nekro-agent) - 优秀的 Agent ChatBot
-- [LangBot](https://github.com/langbot-app/LangBot) - 优秀的多平台 AI ChatBot
-- [ChatLuna](https://github.com/ChatLunaLab/chatluna) - 优秀的多平台 AI ChatBot Koishi 插件
-- [Operit AI](https://github.com/AAswordman/Operit) - 优秀的 AI 智能助手 Android APP
+- [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ) - 出色的猫猫框架
+- [Mai-with-u/MaiBot](https://github.com/Mai-with-u/MaiBot) - QQ 中强大的“数字生命”！
 
 ## ⭐ Star History
 

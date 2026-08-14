@@ -27,6 +27,8 @@ from astrbot.dashboard.services.auth_service import (
     AuthServiceResult,
 )
 
+DESKTOP_SESSION_HEADER = "X-AstrBot-Desktop-Session"
+
 router = APIRouter(tags=["Auth"])
 legacy_router = APIRouter(
     prefix="/api/auth",
@@ -387,6 +389,18 @@ async def login(
     service: AuthService = Depends(get_auth_service),
 ):
     return await _login(request, payload, service)
+
+
+@router.post("/auth/desktop-session", include_in_schema=False)
+async def desktop_session(
+    request: Request,
+    service: AuthService = Depends(get_auth_service),
+):
+    result = await service.desktop_session(
+        request.headers.get(DESKTOP_SESSION_HEADER),
+        request.client.host if request.client else None,
+    )
+    return _auth_service_response(request, result)
 
 
 @legacy_router.post("/login")

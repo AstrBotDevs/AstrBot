@@ -5,8 +5,10 @@ import copy
 import inspect
 import os
 import traceback
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from astrbot.core import file_token_service, logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -474,7 +476,28 @@ class ConfigProfileService:
         }
 
     def get_system_config(self) -> dict:
-        return self.get_system_schema()
+        """Return the system configuration with the server's effective time.
+
+        Returns:
+            System configuration metadata, an aware UTC timestamp, and the
+            effective UTC offset in minutes.
+        """
+        data = self.get_system_schema()
+        server_utc_time = datetime.now(timezone.utc)
+        timezone_name = str(data["config"].get("timezone") or "").strip()
+        if timezone_name:
+            try:
+                configured_time = server_utc_time.astimezone(ZoneInfo(timezone_name))
+            except (ValueError, ZoneInfoNotFoundError):
+                configured_time = server_utc_time.astimezone()
+        else:
+            configured_time = server_utc_time.astimezone()
+        utc_offset = configured_time.utcoffset()
+        data["server_utc_time"] = server_utc_time.isoformat()
+        data["server_utc_offset_minutes"] = (
+            int(utc_offset.total_seconds() / 60) if utc_offset else 0
+        )
+        return data
 
     def list_profiles(self) -> dict:
         return {"info_list": self.acm.get_conf_list()}
@@ -509,7 +532,10 @@ class ConfigProfileService:
                 "config:edit_admin scope is required to change admins_id",
                 status_code=403,
             )
-        conf_id = self.acm.create_conf(name=name, config=config or DEFAULT_CONFIG)
+        conf_id = await self.acm.create_conf(
+            name=name,
+            config=config or DEFAULT_CONFIG,
+        )
         await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
         return {"conf_id": conf_id}
 
@@ -654,33 +680,33 @@ class ConfigProfileService:
             )
         )
 
-    def rename_profile(self, config_id: str, name: str | None) -> None:
-        if not self.acm.update_conf_info(config_id, name=name):
+    async def rename_profile(self, config_id: str, name: str | None) -> None:
+        if not await self.acm.update_conf_info(config_id, name=name):
             raise ValueError("Failed to update config profile")
 
-    def rename_profile_from_dashboard_payload(self, payload: object) -> str:
+    async def rename_profile_from_dashboard_payload(self, payload: object) -> str:
         data = payload if isinstance(payload, dict) else {}
         if not data:
             raise ValueError("缺少配置数据")
         conf_id = data.get("id")
         if not conf_id:
             raise ValueError("缺少配置文件 ID")
-        self.rename_profile(str(conf_id), name=data.get("name"))
+        await self.rename_profile(str(conf_id), name=data.get("name"))
         return "更新成功"
 
-    def delete_profile(self, config_id: str) -> None:
-        if not self.acm.delete_conf(config_id):
+    async def delete_profile(self, config_id: str) -> None:
+        if not await self.acm.delete_conf(config_id):
             raise ValueError("Failed to delete config profile")
         self.core_lifecycle.pipeline_scheduler_mapping.pop(config_id, None)
 
-    def delete_profile_from_dashboard_payload(self, payload: object) -> str:
+    async def delete_profile_from_dashboard_payload(self, payload: object) -> str:
         data = payload if isinstance(payload, dict) else {}
         if not data:
             raise ValueError("缺少配置数据")
         conf_id = data.get("id")
         if not conf_id:
             raise ValueError("缺少配置文件 ID")
-        self.delete_profile(str(conf_id))
+        await self.delete_profile(str(conf_id))
         return "删除成功"
 
 

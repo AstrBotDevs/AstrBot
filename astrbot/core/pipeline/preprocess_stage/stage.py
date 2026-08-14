@@ -169,7 +169,9 @@ class PreProcessStage(Stage):
         if self.stt_settings.get("enable", False):
             # TODO: 独立
             ctx = self.plugin_manager.context
-            stt_provider = ctx.get_using_stt_provider(event.unified_msg_origin)
+            stt_provider = await ctx.get_using_stt_provider_async(
+                event.unified_msg_origin
+            )
             if not stt_provider:
                 logger.warning(
                     f"Session {event.unified_msg_origin} has no speech-to-text "

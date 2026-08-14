@@ -596,10 +596,18 @@ class TelegramPlatformAdapter(Platform):
 
         elif update.message.sticker:
             # 将sticker当作图片处理
-            file = await update.message.sticker.get_file()
-            message.message.append(Comp.Image(file=file.file_path, url=file.file_path))
-            if update.message.sticker.emoji:
-                sticker_text = f"Sticker: {update.message.sticker.emoji}"
+            sticker = update.message.sticker
+            if sticker.is_animated or sticker.is_video:
+                # .tgs/.webm stickers are not bitmaps; use the static thumbnail.
+                file = await sticker.thumbnail.get_file() if sticker.thumbnail else None
+            else:
+                file = await sticker.get_file()
+            if file:
+                message.message.append(
+                    Comp.Image(file=file.file_path, url=file.file_path)
+                )
+            if sticker.emoji:
+                sticker_text = f"Sticker: {sticker.emoji}"
                 message.message_str = sticker_text
                 message.message.append(Comp.Plain(sticker_text))
 
@@ -628,6 +636,17 @@ class TelegramPlatformAdapter(Platform):
             else:
                 message.message.append(Comp.Video(file=file_path, path=file.file_path))
                 _apply_caption()
+
+        elif update.message.video_note:
+            # Video notes carry no file_name and cannot have a caption.
+            file = await update.message.video_note.get_file()
+            file_path = file.file_path
+            if file_path is None:
+                logger.warning(
+                    "Telegram video note file_path is None, cannot save the file.",
+                )
+            else:
+                message.message.append(Comp.Video(file=file_path, path=file_path))
 
         return message
 
