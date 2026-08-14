@@ -1596,12 +1596,12 @@ async def test_reset_appends_injected_tool_calls_result_after_user(
                         },
                     }
                 ]
-            ),
+            ).mark_as_temp(),
             tool_calls_result=[
                 ToolCallMessageSegment(
                     tool_call_id="fake_1",
                     content="memory json",
-                )
+                ).mark_as_temp()
             ],
         ),
     )
@@ -1619,6 +1619,122 @@ async def test_reset_appends_injected_tool_calls_result_after_user(
     assert roles == ["user", "assistant", "user", "assistant", "tool"]
     assert runner.run_context.messages[-2].tool_calls[0].id == "fake_1"
     assert runner.run_context.messages[-1].tool_call_id == "fake_1"
+    # _no_save 标记经 reset() 追加后保留，持久化时才会被过滤。
+    assert runner.run_context.messages[-2]._no_save is True
+    assert runner.run_context.messages[-1]._no_save is True
+
+
+@pytest.mark.asyncio
+async def test_reset_appends_multiple_injected_tool_calls_results_in_order(
+    runner, mock_provider, mock_tool_executor, mock_hooks
+):
+    """list 形式的多个 ToolCallsResult 按列表顺序追加在 user 消息之后。"""
+    request = ProviderRequest(
+        prompt="当前问题",
+        contexts=[
+            {"role": "user", "content": "历史消息"},
+            {"role": "assistant", "content": "历史回答"},
+        ],
+        tool_calls_result=[
+            ToolCallsResult(
+                tool_calls_info=AssistantMessageSegment(
+                    tool_calls=[
+                        {
+                            "id": "fake_1",
+                            "type": "function",
+                            "function": {
+                                "name": "recall_long_term_memory",
+                                "arguments": "{}",
+                            },
+                        }
+                    ]
+                ),
+                tool_calls_result=[
+                    ToolCallMessageSegment(
+                        tool_call_id="fake_1",
+                        content="memory json 1",
+                    )
+                ],
+            ),
+            ToolCallsResult(
+                tool_calls_info=AssistantMessageSegment(
+                    tool_calls=[
+                        {
+                            "id": "fake_2",
+                            "type": "function",
+                            "function": {
+                                "name": "recall_short_term_memory",
+                                "arguments": "{}",
+                            },
+                        }
+                    ]
+                ),
+                tool_calls_result=[
+                    ToolCallMessageSegment(
+                        tool_call_id="fake_2",
+                        content="memory json 2",
+                    )
+                ],
+            ),
+        ],
+    )
+
+    await runner.reset(
+        provider=mock_provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    roles = [m.role for m in runner.run_context.messages]
+    assert roles == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "tool",
+        "assistant",
+        "tool",
+    ]
+    tool_calls = [
+        m.tool_calls[0].id
+        for m in runner.run_context.messages
+        if m.role == "assistant" and m.tool_calls
+    ]
+    assert tool_calls == ["fake_1", "fake_2"]
+    tool_results = [
+        m.tool_call_id for m in runner.run_context.messages if m.role == "tool"
+    ]
+    assert tool_results == ["fake_1", "fake_2"]
+
+
+def test_injected_tool_calls_result_partial_temp_mark_raises():
+    """只标记对中一方时抛 ValueError，防止悬空 assistant(tool_calls) 落库。"""
+    partial = ToolCallsResult(
+        tool_calls_info=AssistantMessageSegment(
+            tool_calls=[
+                {
+                    "id": "fake_1",
+                    "type": "function",
+                    "function": {
+                        "name": "recall",
+                        "arguments": "{}",
+                    },
+                }
+            ]
+        ).mark_as_temp(),
+        tool_calls_result=[
+            ToolCallMessageSegment(
+                tool_call_id="fake_1",
+                content="memory json",
+            )
+        ],
+    )
+
+    with pytest.raises(ValueError, match="marked temp together"):
+        partial.to_openai_messages_model()
 
 
 @pytest.mark.asyncio
@@ -1631,8 +1747,6 @@ async def test_runner_with_openai_provider_preserves_injected_tool_calls_order(
     payload 组装路径（真实 provider，仅对 SDK create 的入口 _query 打桩捕获）。
     顺序：history → 当前 user → assistant(tool_calls) → tool(result)。
     """
-    from astrbot.core.agent.tool import FunctionTool, ToolSet
-    from astrbot.core.provider.entities import ToolCallsResult
     from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
 
     provider = ProviderOpenAIOfficial(

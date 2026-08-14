@@ -614,6 +614,10 @@ tool_calls_info=AssistantMessageSegment(...).mark_as_temp(),
 tool_calls_result=[ToolCallMessageSegment(...).mark_as_temp()],
 ```
 
+> **注意**：`.mark_as_temp()` 必须成对使用。只标记其中一方会导致历史中残留悬空的
+> `assistant(tool_calls)` 或 `tool` 消息，下一轮 provider API 会拒绝该请求。
+> 若标记不一致，runner 在组装上下文时会抛出 `ValueError` 提醒。
+
 > 这里不能使用 yield 来发送消息。如需发送，请直接使用 `event.send()` 方法。
 
 ##### LLM 请求完成时

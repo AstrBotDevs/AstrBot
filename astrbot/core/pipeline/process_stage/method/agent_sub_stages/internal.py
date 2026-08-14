@@ -465,8 +465,9 @@ class InternalAgentSubStage(Stage):
             if message.role == "system" and not skipped_initial_system:
                 skipped_initial_system = True
                 continue
-            # _no_save 语义与角色无关：临时注入的消息（含伪造工具调用对的
-            # tool 消息）一律不落库，避免历史中残留悬空的 tool 消息。
+            # _no_save is role-agnostic: temp-injected messages (including the
+            # tool message of a fake tool-call pair) are never persisted, so no
+            # dangling tool message remains in history.
             if message._no_save:
                 continue
             messages_to_save.append(message)

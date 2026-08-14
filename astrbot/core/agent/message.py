@@ -14,6 +14,7 @@ from pydantic import (
 from pydantic_core import core_schema
 
 ContentPartT = TypeVar("ContentPartT", bound="ContentPart")
+MessageT = TypeVar("MessageT", bound="Message")
 
 
 class ContentPart(BaseModel):
@@ -215,11 +216,15 @@ class Message(BaseModel):
     _no_save: bool = PrivateAttr(default=False)
     _checkpoint_after: CheckpointData | None = PrivateAttr(default=None)
 
-    def mark_as_temp(self) -> "Message":
+    def mark_as_temp(self: MessageT) -> MessageT:
         """Mark this message as provider-facing only, not persisted.
 
-        临时注入（如伪造工具调用对）应成对标记：assistant 与 tool 消息都调用
-        本方法，避免历史中残留悬空的 tool 消息。
+        Injected pairs (e.g. fake tool-call results) should mark both the
+        assistant and tool messages so no dangling tool message remains in
+        history.
+
+        Returns:
+            Self, for method chaining.
         """
         self._no_save = True
         return self
