@@ -618,6 +618,20 @@ tool_calls_result=[ToolCallMessageSegment(...).mark_as_temp()],
 > `assistant(tool_calls)` 或 `tool` 消息，下一轮 provider API 会拒绝该请求。
 > 若标记不一致，runner 在组装上下文时会抛出 `ValueError` 提醒。
 
+**多个插件同时注入时，顺序由 `on_llm_request(priority=...)` 控制**：priority 越高的
+handler 越早执行，其 `append_tool_calls_result()` 的结果越靠前。最终顺序为
+`history → 当前 user → 高优先级插件的注入对 → 低优先级插件的注入对 → ...`。
+
+```python
+@filter.on_llm_request(priority=10)
+async def high_priority_inject(self, event: AstrMessageEvent, req: ProviderRequest):
+    req.append_tool_calls_result(...)  # 排在前
+
+@filter.on_llm_request(priority=0)
+async def low_priority_inject(self, event: AstrMessageEvent, req: ProviderRequest):
+    req.append_tool_calls_result(...)  # 排在后
+```
+
 > 这里不能使用 yield 来发送消息。如需发送，请直接使用 `event.send()` 方法。
 
 ##### LLM 请求完成时
