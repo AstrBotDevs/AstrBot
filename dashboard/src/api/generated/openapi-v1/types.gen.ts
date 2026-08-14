@@ -339,6 +339,61 @@ export type KnowledgeRetrieveRequest = {
     score_threshold?: number;
 };
 
+export type KnowledgeUploadProgress = {
+    status: string;
+    file_index: number;
+    file_total: number;
+    file_name?: string;
+    stage: string;
+    current: number;
+    total: number;
+};
+
+export type KnowledgeUploadTask = {
+    task_id: string;
+    status: KnowledgeUploadTaskStatus;
+    kb_id: (string) | null;
+    task_type: (KnowledgeUploadTaskType | null);
+    created_at: (number) | null;
+    updated_at: (number) | null;
+    files: Array<KnowledgeUploadTaskFile>;
+    progress?: KnowledgeUploadProgress;
+    result?: {
+        [key: string]: unknown;
+    } | null;
+    error?: (string) | null;
+};
+
+export type KnowledgeUploadTaskFile = {
+    file_index: number;
+    file_name: string;
+    status: KnowledgeUploadTaskStatus;
+    stage: string;
+    current: number;
+    total: number;
+    error: (string) | null;
+    document: {
+        [key: string]: unknown;
+    } | null;
+};
+
+export type KnowledgeUploadTaskList = {
+    items: Array<KnowledgeUploadTask>;
+    total: number;
+};
+
+export type KnowledgeUploadTaskListResponse = SuccessEnvelope & {
+    data: KnowledgeUploadTaskList;
+};
+
+export type KnowledgeUploadTaskResponse = SuccessEnvelope & {
+    data: KnowledgeUploadTask;
+};
+
+export type KnowledgeUploadTaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+export type KnowledgeUploadTaskType = 'file_upload' | 'document_import' | 'url_import';
+
 export type LoginRequest = {
     username: string;
     password: string;
@@ -2902,9 +2957,19 @@ export type GetKnowledgeTaskData = {
     };
 };
 
-export type GetKnowledgeTaskResponse = (SuccessEnvelope);
+export type GetKnowledgeTaskResponse = (KnowledgeUploadTaskResponse);
 
 export type GetKnowledgeTaskError = unknown;
+
+export type ListKnowledgeTasksData = {
+    path: {
+        kb_id: string;
+    };
+};
+
+export type ListKnowledgeTasksResponse = (KnowledgeUploadTaskListResponse);
+
+export type ListKnowledgeTasksError = unknown;
 
 export type GetPersonaTreeResponse = (SuccessEnvelope);
 
