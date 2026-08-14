@@ -189,7 +189,6 @@ async def list_commands() -> list[dict[str, Any]]:
     descriptors = _collect_descriptors(include_sub_commands=True)
     config_records = await db_helper.get_command_configs()
     _bind_configs_to_descriptors(descriptors, config_records)
-    _apply_plugin_activation_to_descriptors(descriptors)
 
     conflict_groups = _group_conflicts(descriptors)
     conflict_handler_names: set[str] = {
@@ -229,7 +228,6 @@ async def list_command_conflicts() -> list[dict[str, Any]]:
     descriptors = _collect_descriptors(include_sub_commands=False)
     config_records = await db_helper.get_command_configs()
     _bind_configs_to_descriptors(descriptors, config_records)
-    _apply_plugin_activation_to_descriptors(descriptors)
 
     conflict_groups = _group_conflicts(descriptors)
     details = [
@@ -255,15 +253,6 @@ async def list_command_conflicts() -> list[dict[str, Any]]:
 def _is_plugin_activated(desc: CommandDescriptor) -> bool:
     plugin_meta = star_map.get(desc.module_path)
     return bool(plugin_meta.activated) if plugin_meta else True
-
-
-def _apply_plugin_activation_to_descriptors(
-    descriptors: list[CommandDescriptor],
-) -> None:
-    """Keep per-command config, but treat inactive-plugin commands as not live."""
-    for desc in descriptors:
-        if not _is_plugin_activated(desc):
-            desc.enabled = False
 
 
 def _collect_descriptors(include_sub_commands: bool) -> list[CommandDescriptor]:
@@ -481,7 +470,7 @@ def _group_conflicts(
 ) -> dict[str, list[CommandDescriptor]]:
     conflicts: dict[str, list[CommandDescriptor]] = defaultdict(list)
     for desc in descriptors:
-        if desc.effective_command and desc.enabled:
+        if desc.effective_command and desc.enabled and _is_plugin_activated(desc):
             conflicts[desc.effective_command].append(desc)
     return {k: v for k, v in conflicts.items() if len(v) > 1}
 

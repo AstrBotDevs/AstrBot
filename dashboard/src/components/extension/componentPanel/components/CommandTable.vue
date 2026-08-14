@@ -65,7 +65,7 @@ const getPermissionLabel = (permission: string): string => {
   }
 };
 
-const isPluginInactive = (cmd: CommandItem) => cmd.plugin_activated === false;
+const isPluginInactive = (cmd: CommandItem) => !cmd.plugin_activated;
 
 // 获取状态信息
 const getStatusInfo = (cmd: CommandItem): StatusInfo => {
@@ -230,9 +230,9 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
               <v-tooltip activator="parent" location="top">{{ isPluginInactive(item) ? tm('tooltips.pluginInactive') : tm('tooltips.rename') }}</v-tooltip>
             </v-btn>
 
-            <v-btn icon size="small" :disabled="isPluginInactive(item)" @click="emit('view-details', item)">
+            <v-btn icon size="small" @click="emit('view-details', item)">
               <v-icon size="22">mdi-information</v-icon>
-              <v-tooltip activator="parent" location="top">{{ isPluginInactive(item) ? tm('tooltips.pluginInactive') : tm('tooltips.viewDetails') }}</v-tooltip>
+              <v-tooltip activator="parent" location="top">{{ tm('tooltips.viewDetails') }}</v-tooltip>
             </v-btn>
           </v-btn-group>
         </div>
@@ -319,10 +319,9 @@ code.sub-command-code {
   opacity: 1;
 }
 
-.v-data-table .plugin-inactive-row .v-btn-group .v-btn,
-.v-data-table .plugin-inactive-row .v-chip.cursor-pointer {
+.v-data-table .plugin-inactive-row .v-btn-group .v-btn:disabled,
+.v-data-table .plugin-inactive-row .v-chip.cursor-pointer.v-chip--disabled {
   cursor: not-allowed !important;
-  pointer-events: none !important;
 }
 </style>
 
