@@ -224,7 +224,7 @@ Amis de l'open source ❤️
 
 <div align="center">
 
-[![Star History Chart](https://api.star-history.com/svg?repos=astrbotdevs/astrbot&type=Date)](https://star-history.com/#astrbotdevs/astrbot&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=astrbotdevs/astrbot&type=Date)](https://star-history.dera.page/#astrbotdevs/astrbot&Date)
 
 </div>
 
