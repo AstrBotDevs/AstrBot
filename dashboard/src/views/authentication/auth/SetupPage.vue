@@ -106,7 +106,7 @@ onMounted(async () => {
 
 .setup-title {
   margin-top: 8px;
-  color: #000000;
+  color: rgba(var(--v-theme-on-surface), 0.92);
   font-size: 26px;
   font-weight: 600;
   line-height: 1.2;
@@ -114,7 +114,7 @@ onMounted(async () => {
 
 .setup-subtitle {
   margin-top: 6px;
-  color: grey;
+  color: rgba(var(--v-theme-on-surface), 0.62);
   font-size: 14px;
   line-height: 1.35;
 }

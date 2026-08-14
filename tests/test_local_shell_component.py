@@ -60,6 +60,61 @@ def test_local_shell_component_uses_windows_powershell(monkeypatch):
 
     monkeypatch.setattr(subprocess, "Popen", fake_run)
     monkeypatch.setattr(local_booter.sys, "platform", "win32")
+    monkeypatch.setattr(local_booter.shutil, "which", lambda _cmd: None)
+
+    result = asyncio.run(LocalShellComponent().exec("Get-ChildItem"))
+
+    assert result["exit_code"] == 0
+    assert calls[0][0][0] == [
+        "powershell.exe",
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "Get-ChildItem",
+    ]
+    assert calls[0][1]["shell"] is False
+
+
+def test_local_shell_component_prefers_pwsh_when_available(monkeypatch):
+    calls = []
+
+    def fake_run(*args, **kwargs):
+        calls.append((args, kwargs))
+        return _FakePopen(stdout=b"")
+
+    monkeypatch.setattr(subprocess, "Popen", fake_run)
+    monkeypatch.setattr(local_booter.sys, "platform", "win32")
+    monkeypatch.setattr(
+        local_booter.shutil,
+        "which",
+        lambda cmd: "/opt/pwsh" if cmd == "pwsh" else None,
+    )
+
+    result = asyncio.run(LocalShellComponent().exec("Get-ChildItem"))
+
+    assert result["exit_code"] == 0
+    assert calls[0][0][0] == [
+        "pwsh.exe",
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "Get-ChildItem",
+    ]
+    assert calls[0][1]["shell"] is False
+
+
+def test_exec_falls_back_to_powershell_when_pwsh_missing(monkeypatch):
+    calls = []
+
+    def fake_run(*args, **kwargs):
+        calls.append((args, kwargs))
+        return _FakePopen(stdout=b"")
+
+    monkeypatch.setattr(subprocess, "Popen", fake_run)
+    monkeypatch.setattr(local_booter.sys, "platform", "win32")
+    monkeypatch.setattr(local_booter.shutil, "which", lambda _cmd: None)
 
     result = asyncio.run(LocalShellComponent().exec("Get-ChildItem"))
 
@@ -122,6 +177,7 @@ async def test_managed_shell_uses_windows_powershell(monkeypatch, tmp_path):
         raise AssertionError("Windows managed commands must not use cmd.exe.")
 
     monkeypatch.setattr(local_booter.sys, "platform", "win32")
+    monkeypatch.setattr(local_booter.shutil, "which", lambda _cmd: None)
     monkeypatch.setattr(
         local_booter.asyncio,
         "create_subprocess_exec",
@@ -147,6 +203,75 @@ async def test_managed_shell_uses_windows_powershell(monkeypatch, tmp_path):
     assert result["stdout"] == "done\n"
     assert calls[0][0] == (
         "powershell.exe",
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "Get-ChildItem",
+    )
+    assert "creationflags" in calls[0][1]
+
+
+@pytest.mark.asyncio
+async def test_managed_shell_prefers_pwsh_when_available(monkeypatch, tmp_path):
+    calls = []
+
+    class FakeStdout:
+        def __init__(self):
+            self.chunks = [b"done\n", b""]
+
+        async def read(self, _limit):
+            return self.chunks.pop(0)
+
+    class FakeProcess:
+        def __init__(self):
+            self.pid = 12345
+            self.returncode = None
+            self.stdout = FakeStdout()
+            self.stdin = None
+
+        async def wait(self):
+            self.returncode = 0
+            return 0
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        calls.append((args, kwargs))
+        return FakeProcess()
+
+    async def fail_create_subprocess_shell(*_args, **_kwargs):
+        raise AssertionError("Windows managed commands must not use cmd.exe.")
+
+    monkeypatch.setattr(local_booter.sys, "platform", "win32")
+    monkeypatch.setattr(
+        local_booter.shutil,
+        "which",
+        lambda cmd: "/opt/pwsh" if cmd == "pwsh" else None,
+    )
+    monkeypatch.setattr(
+        local_booter.asyncio,
+        "create_subprocess_exec",
+        fake_create_subprocess_exec,
+    )
+    monkeypatch.setattr(
+        local_booter.asyncio,
+        "create_subprocess_shell",
+        fail_create_subprocess_shell,
+    )
+
+    result = await LocalShellComponent().exec_managed(
+        "Get-ChildItem",
+        owner_id="owner-a",
+        creator_id="user-a",
+        creator_is_admin=False,
+        sandboxed=False,
+        cwd=str(tmp_path),
+        yield_time_ms=5_000,
+    )
+
+    assert result["status"] == "completed"
+    assert result["stdout"] == "done\n"
+    assert calls[0][0] == (
+        "pwsh.exe",
         "-NoLogo",
         "-NoProfile",
         "-NonInteractive",
@@ -242,6 +367,7 @@ def test_local_shell_component_falls_back_when_windows_taskkill_fails(monkeypatc
         lambda *_args, **_kwargs: _FakeTaskkillResult(returncode=1),
     )
     monkeypatch.setattr(local_booter.sys, "platform", "win32")
+    monkeypatch.setattr(local_booter.shutil, "which", lambda _cmd: None)
 
     with pytest.raises(subprocess.TimeoutExpired):
         asyncio.run(LocalShellComponent().exec("dummy", timeout=1))
@@ -264,7 +390,7 @@ async def test_managed_shell_returns_completed_output_without_open_session():
     )
 
     assert result["status"] == "completed"
-    assert result["stdout"] == "hello\n"
+    assert result["stdout"].splitlines() == ["hello"]
     assert result["exit_code"] == 0
     assert result["session_closed"] is True
     assert await shell.list_sessions(
@@ -288,7 +414,7 @@ async def test_managed_shell_allows_creator_and_conversation_admin():
 
     try:
         assert result["status"] == "running"
-        assert result["stdout"] == "ready\n"
+        assert result["stdout"].splitlines() == ["ready"]
         session_id = result["session_id"]
         assert (
             await shell.list_sessions(
@@ -463,7 +589,7 @@ async def test_managed_shell_accepts_stdin_and_polls_incremental_output():
             output += completed["stdout"]
 
         assert completed["status"] == "completed"
-        assert output == "got:hello\n"
+        assert output.splitlines() == ["got:hello"]
         assert completed["session_closed"] is True
     finally:
         await shell.shutdown_sessions()
@@ -525,7 +651,7 @@ async def test_managed_shell_keeps_completed_session_until_output_is_drained():
             )
             output += result["stdout"]
 
-        assert output == f"{'x' * 25000}\n"
+        assert output.splitlines() == ["x" * 25000]
         assert result["session_closed"] is True
         assert await shell.list_sessions(
             owner_id="owner-a",

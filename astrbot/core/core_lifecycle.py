@@ -205,6 +205,8 @@ class AstrBotCoreLifecycle:
 
         # Core quick initializations
         await self.db.initialize()
+        if sp.db_helper is self.db:
+            await sp.initialize()
 
         await html_renderer.initialize()
 
@@ -485,6 +487,8 @@ class AstrBotCoreLifecycle:
             LogManager.configure_trace_logger(self.astrbot_config)
 
         await self.db.initialize()
+        if sp.db_helper is self.db:
+            await sp.initialize()
 
         await html_renderer.initialize()
 
@@ -769,6 +773,9 @@ class AstrBotCoreLifecycle:
             except Exception:
                 logger.exception("Error terminating kb_manager")
 
+        if sp.db_helper is self.db:
+            await sp.close()
+
         # Signal dashboard shutdown if event exists
         if self.dashboard_shutdown_event is not None:
             try:
@@ -799,6 +806,8 @@ class AstrBotCoreLifecycle:
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()
+        if sp.db_helper is self.db:
+            await sp.close()
         if self.dashboard_shutdown_event is not None:
             self.dashboard_shutdown_event.set()
         threading.Thread(

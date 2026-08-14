@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-__version__ = "4.27.2"
+__version__ = "4.27.3"
 
 
 if TYPE_CHECKING:
