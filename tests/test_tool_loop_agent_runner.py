@@ -996,9 +996,11 @@ def _tool_image_runner_setup(
     monkeypatch,
     tmp_path,
     caption_context,
-    modalities: list[str] | None = ["tool_use"],
+    modalities: list[str] | None = None,
     tool_executor=MockMixedContentToolExecutor,
 ):
+    if modalities is None:
+        modalities = ["tool_use"]
     from astrbot.core.agent.tool_image_cache import CachedImage, tool_image_cache
 
     img_path = tmp_path / "tool_img.png"
