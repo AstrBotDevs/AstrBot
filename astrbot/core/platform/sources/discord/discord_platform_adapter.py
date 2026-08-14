@@ -55,6 +55,8 @@ class DiscordPlatformAdapter(Platform):
         self.activity_name = self.config.get("discord_activity_name", None)
         self.shutdown_event = asyncio.Event()
         self._polling_task = None
+        self._command_sync_lock = asyncio.Lock()
+        self._managed_application_commands: list[Any] = []
 
     @override
     async def send_by_session(
@@ -118,6 +120,14 @@ class DiscordPlatformAdapter(Platform):
             default_config_tmpl=self.config,
             support_streaming_message=False,
         )
+
+    @override
+    async def refresh_registered_commands(self) -> None:
+        if not self.enable_command_register:
+            return
+        if not getattr(self, "client", None) or self.client.user is None:
+            return
+        await self._collect_and_register_commands()
 
     @override
     async def run(self) -> None:
@@ -433,10 +443,22 @@ class DiscordPlatformAdapter(Platform):
         """注册处理器信息"""
         self.registered_handlers.append(handler_info)
 
+    def _replace_managed_application_commands(self, commands: list[Any]) -> None:
+        for command in self._managed_application_commands:
+            self.client.remove_application_command(command)
+        for command in commands:
+            self.client.add_application_command(command)
+        self._managed_application_commands = list(commands)
+
     async def _collect_and_register_commands(self) -> None:
+        async with self._command_sync_lock:
+            await self._collect_and_register_commands_unlocked()
+
+    async def _collect_and_register_commands_unlocked(self) -> None:
         """收集所有指令并注册到Discord"""
         logger.info("[Discord] Collecting and registering slash commands...")
         registered_commands = []
+        application_commands = []
 
         for handler_md in star_handlers_registry:
             if not star_map[handler_md.handler_module_path].activated:
@@ -471,7 +493,7 @@ class DiscordPlatformAdapter(Platform):
                     options=options,
                     guild_ids=[self.guild_id] if self.guild_id else None,
                 )
-                self.client.add_application_command(slash_command)
+                application_commands.append(slash_command)
                 registered_commands.append(cmd_name)
 
         if registered_commands:
@@ -481,12 +503,18 @@ class DiscordPlatformAdapter(Platform):
         else:
             logger.info("[Discord] No commands found for registration.")
 
+        previous_commands = list(self._managed_application_commands)
+        self._replace_managed_application_commands(application_commands)
+
         # 使用 Pycord 的方法同步指令
         # 注意：这可能需要一些时间，并且有频率限制
         try:
-            await self.client.sync_commands()
+            await self.client.sync_commands(
+                check_guilds=[self.guild_id] if self.guild_id else [],
+            )
             logger.info("[Discord] Command synchronization completed.")
         except discord.HTTPException as e:
+            self._replace_managed_application_commands(previous_commands)
             if self._is_daily_command_quota_error(e):
                 logger.warning(
                     "[Discord] Daily application command create quota reached "
@@ -495,6 +523,9 @@ class DiscordPlatformAdapter(Platform):
                 )
                 return
             logger.warning(f"[Discord] Sync commands failed: {e}")
+        except Exception:
+            self._replace_managed_application_commands(previous_commands)
+            raise
 
     @staticmethod
     def _is_daily_command_quota_error(error: discord.HTTPException) -> bool:
