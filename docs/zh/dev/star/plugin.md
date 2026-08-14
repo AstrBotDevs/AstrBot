@@ -1152,9 +1152,11 @@ await empty_mention_waiter(event, session_filter=CustomFilter()) # 这里传入 
 
 获取提供商有以下几种方式:
 
-- 获取当前使用的大语言模型提供商: `self.context.get_using_provider(umo=event.unified_msg_origin)`。
+- 异步获取当前使用的大语言模型提供商: `await self.context.get_using_provider_async(umo=event.unified_msg_origin)`。
 - 根据 ID 获取大语言模型提供商: `self.context.get_provider_by_id(provider_id="xxxx")`。
 - 获取所有大语言模型提供商: `self.context.get_all_providers()`。
+
+异步事件处理函数中请使用 `get_using_provider_async()`。为兼容现有插件，`get_using_provider()` 同步接口仍然可用，但已标记为弃用。
 
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
@@ -1162,7 +1164,9 @@ from astrbot.api.event import filter, AstrMessageEvent
 @filter.command("test")
 async def test(self, event: AstrMessageEvent):
     # func_tools_mgr = self.context.get_llm_tool_manager()
-    prov = self.context.get_using_provider(umo=event.unified_msg_origin)
+    prov = await self.context.get_using_provider_async(
+        umo=event.unified_msg_origin
+    )
     if prov:
         llm_resp = await prov.text_chat(
             prompt="Hi!",
@@ -1287,11 +1291,13 @@ class LLMResponse:
 
 > 嵌入、重排序 没有 “当前使用”。这两个提供商主要用于知识库。
 
-- 获取当前使用的语音识别提供商(STTProvider): `self.context.get_using_stt_provider(umo=event.unified_msg_origin)`。
-- 获取当前使用的语音合成提供商(TTSProvider): `self.context.get_using_tts_provider(umo=event.unified_msg_origin)`。
+- 异步获取当前使用的语音识别提供商(STTProvider): `await self.context.get_using_stt_provider_async(umo=event.unified_msg_origin)`。
+- 异步获取当前使用的语音合成提供商(TTSProvider): `await self.context.get_using_tts_provider_async(umo=event.unified_msg_origin)`。
 - 获取所有语音识别提供商: `self.context.get_all_stt_providers()`。
 - 获取所有语音合成提供商: `self.context.get_all_tts_providers()`。
 - 获取所有嵌入提供商: `self.context.get_all_embedding_providers()`。
+
+同步接口 `get_using_stt_provider()` 和 `get_using_tts_provider()` 仍然保留，用于兼容已有插件，但已标记为弃用。
 
 ::: details STTProvider / TTSProvider / EmbeddingProvider 类型定义
 

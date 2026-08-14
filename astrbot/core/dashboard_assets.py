@@ -141,8 +141,20 @@ def resolve_dashboard_dist(webui_dir: str | Path | None = None) -> Path | None:
         Explicit, managed, bundled, or stale fallback dist in priority order;
         None when an existing managed dist is incomplete.
     """
-    if webui_dir and Path(webui_dir).exists():
-        return Path(webui_dir).absolute()
+    explicit_dist = Path(webui_dir).absolute() if webui_dir else None
+    if explicit_dist is not None and explicit_dist.exists():
+        if not _is_dist_compatible(explicit_dist, VERSION):
+            explicit_version = _read_dashboard_version(explicit_dist) or "unknown"
+            logger.warning(
+                "Serving the explicitly configured WebUI directory even though it "
+                "does not declare a version matching core: %s, expected v%s (%s). "
+                "Some dashboard features may not work until matching assets are "
+                "available.",
+                explicit_version,
+                VERSION,
+                explicit_dist,
+            )
+        return explicit_dist
 
     user_dist = Path(get_astrbot_data_path()) / "dist"
     bundled_dist = _get_bundled_dist_path()

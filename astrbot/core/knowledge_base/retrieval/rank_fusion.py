@@ -28,7 +28,7 @@ class RankFusion:
 
     职责:
     - 融合稠密检索和稀疏检索的结果
-    - 在每个知识库内归一化不可直接比较的检索分数
+    - 全局归一化稠密分数，并在每个知识库内归一化稀疏分数
     - 使用 RRF 作为确定性的同分排序依据
     """
 
@@ -63,8 +63,10 @@ class RankFusion:
     ) -> list[FusedResult]:
         """融合稠密和稀疏检索结果。
 
-        每个知识库内分别对稠密相似度和 BM25 分数做 min-max 归一化，
-        再按权重合并。RRF 分数仅用于融合分数相同时的稳定排序。
+        在所有候选中对稠密相似度做 min-max 归一化，BM25 分数则在
+        每个独立知识库内归一化，再按权重合并。RRF 分数仅用于融合分数
+        相同时的稳定排序。最终结果只去除完全相同的文本块，
+        不按来源文档去重。
 
         Args:
             dense_results: 稠密检索结果
@@ -106,33 +108,24 @@ class RankFusion:
             vec_doc_id_to_dense[vec_doc_id] = r
             dense_metadata[vec_doc_id] = json.loads(r.data["metadata"])
 
-        # 3. 在每个知识库内归一化两路分数，避免跨索引直接比较 BM25。
-        dense_groups: dict[str, list[tuple[str, float]]] = {}
-        for identifier, result in vec_doc_id_to_dense.items():
-            kb_id = dense_metadata[identifier].get("kb_id")
-            if not kb_id and identifier in chunk_id_to_sparse:
-                kb_id = chunk_id_to_sparse[identifier].kb_id
-            dense_groups.setdefault(kb_id or "", []).append(
-                (identifier, result.similarity)
-            )
+        # 3. Calibrate dense scores globally while keeping independent BM25 scales.
+        normalized_dense: dict[str, float] = {}
+        if vec_doc_id_to_dense:
+            scores = [result.similarity for result in vec_doc_id_to_dense.values()]
+            minimum = min(scores)
+            score_range = max(scores) - minimum
+            for identifier, result in vec_doc_id_to_dense.items():
+                normalized_dense[identifier] = (
+                    (result.similarity - minimum) / score_range if score_range else 1.0
+                )
 
+        normalized_sparse: dict[str, float] = {}
         sparse_groups: dict[str, list[tuple[str, float]]] = {}
         for identifier, result in chunk_id_to_sparse.items():
             sparse_groups.setdefault(result.kb_id, []).append(
                 (identifier, result.score)
             )
 
-        normalized_dense: dict[str, float] = {}
-        for group in dense_groups.values():
-            scores = [score for _, score in group]
-            minimum = min(scores)
-            score_range = max(scores) - minimum
-            for identifier, score in group:
-                normalized_dense[identifier] = (
-                    (score - minimum) / score_range if score_range else 1.0
-                )
-
-        normalized_sparse: dict[str, float] = {}
         for group in sparse_groups.values():
             scores = [score for _, score in group]
             minimum = min(scores)
@@ -172,9 +165,9 @@ class RankFusion:
             ),
         )
 
-        # 6. 构建融合结果，每篇来源文档只保留得分最高的块。
+        # 6. Keep distinct chunk text regardless of how many chunks share a document.
         fused_results = []
-        seen_documents: set[tuple[str, str]] = set()
+        seen_contents: set[str] = set()
         for identifier in sorted_ids:
             # 优先从稀疏检索获取完整信息
             if identifier in chunk_id_to_sparse:
@@ -202,10 +195,9 @@ class RankFusion:
             else:
                 continue
 
-            document_key = (fused_result.kb_id, fused_result.doc_id)
-            if document_key in seen_documents:
+            if fused_result.content in seen_contents:
                 continue
-            seen_documents.add(document_key)
+            seen_contents.add(fused_result.content)
             fused_results.append(fused_result)
             if len(fused_results) >= top_k:
                 break
