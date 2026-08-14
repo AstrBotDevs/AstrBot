@@ -287,7 +287,7 @@ async def test_on_message_records_json_card_and_checks_active_reply():
         ({"app": "com.example.unknown"}, " [Shared Card]"),
     ],
 )
-async def test_format_message_summarizes_json_card(card_data, expected):
+async def test_json_card_rendering(card_data, expected):
     context = GroupChatContext(MagicMock())
     event = MagicMock()
     event.message_obj = SimpleNamespace(sender=SimpleNamespace(nickname="Alice"))
