@@ -299,7 +299,7 @@ class StatService:
                 result = await session.execute(
                     select(ProviderStat)
                     .where(
-                        ProviderStat.agent_type == "internal",
+                        col(ProviderStat.agent_type).in_(("internal", "provider")),
                         ProviderStat.created_at >= query_start_utc,
                     )
                     .order_by(col(ProviderStat.created_at).asc())
@@ -353,7 +353,7 @@ class StatService:
                     total_by_bucket[bucket_ts] += token_total
                     range_total_tokens += token_total
                     range_total_calls += 1
-                    if record.status != "error":
+                    if record.status == "completed":
                         range_success_calls += 1
                     if record.time_to_first_token > 0:
                         range_ttft_total_ms += record.time_to_first_token * 1000

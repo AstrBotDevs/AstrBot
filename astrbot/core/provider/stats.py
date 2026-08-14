@@ -21,7 +21,7 @@ def _response_status(response: LLMResponse | None) -> str:
 def _runner_status(response: LLMResponse | None, aborted: bool) -> str:
     if aborted:
         return "aborted"
-    if response is not None and response.role == "err":
+    if response is None or response.role == "err":
         return "error"
     return "completed"
 
