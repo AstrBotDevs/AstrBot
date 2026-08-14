@@ -227,32 +227,14 @@ class ProviderManager:
         """根据提供商 ID 获取提供商实例"""
         return self.inst_map.get(provider_id)
 
-    def get_using_provider(
+    def _resolve_using_provider(
         self,
         provider_type: ProviderType,
-        umo=None,
+        umo: str | None,
+        provider_id: str | None,
     ) -> Providers | None:
-        """获取正在使用的提供商实例｡
-
-        Args:
-            provider_type (ProviderType): 提供商类型｡
-            umo (str, optional): 用户会话 ID,用于提供商会话隔离｡
-
-        Returns:
-            Provider: 正在使用的提供商实例｡
-
-        """
-        provider = None
-        provider_id = None
-        if umo:
-            provider_id = sp.get(
-                f"provider_perf_{provider_type.value}",
-                None,
-                scope="umo",
-                scope_id=umo,
-            )
-            if provider_id:
-                provider = self.inst_map.get(provider_id)
+        """Resolve a provider preference with configuration fallbacks."""
+        provider = self.inst_map.get(provider_id) if provider_id else None
         if not provider:
             # default setting
             config = self.acm.get_conf(umo)
@@ -293,6 +275,39 @@ class ProviderManager:
             )
 
         return provider
+
+    @deprecated(reason="Use get_using_provider_async() instead.")
+    def get_using_provider(
+        self,
+        provider_type: ProviderType,
+        umo: str | None = None,
+    ) -> Providers | None:
+        """Get the provider currently in use through the legacy sync API."""
+        provider_id = None
+        if umo:
+            provider_id = sp.get(
+                f"provider_perf_{provider_type.value}",
+                None,
+                scope="umo",
+                scope_id=umo,
+            )
+        return self._resolve_using_provider(provider_type, umo, provider_id)
+
+    async def get_using_provider_async(
+        self,
+        provider_type: ProviderType,
+        umo: str | None = None,
+    ) -> Providers | None:
+        """Asynchronously get the provider currently in use."""
+        provider_id = None
+        if umo:
+            provider_id = await sp.get_async(
+                "umo",
+                umo,
+                f"provider_perf_{provider_type.value}",
+                None,
+            )
+        return self._resolve_using_provider(provider_type, umo, provider_id)
 
     async def initialize(self) -> None:
         # 逐个初始化提供商
@@ -411,6 +426,10 @@ class ProviderManager:
             case "openrouter_chat_completion":
                 from .sources.openrouter_source import (
                     ProviderOpenRouter as ProviderOpenRouter,
+                )
+            case "ssycloud_chat_completion":
+                from .sources.ssycloud_source import (
+                    ProviderSSYCloud as ProviderSSYCloud,
                 )
             case "anthropic_chat_completion":
                 from .sources.anthropic_source import (

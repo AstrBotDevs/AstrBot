@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import json
 import random
 import uuid
 from collections import defaultdict, deque
@@ -14,6 +15,7 @@ from astrbot.api.message_components import (
     File,
     Forward,
     Image,
+    Json,
     Plain,
     Record,
     Reply,
@@ -92,7 +94,7 @@ class GroupChatContext:
         image_caption_prompt: str,
     ) -> str:
         if not image_caption_provider_id:
-            provider = self.context.get_using_provider()
+            provider = await self.context.get_using_provider_async()
         else:
             provider = self.context.get_provider_by_id(image_caption_provider_id)
             if not provider:
@@ -217,6 +219,37 @@ class GroupChatContext:
                         logger.error(f"获取图片描述失败: {e}")
                 else:
                     parts.append(" [Image]")
+            elif isinstance(comp, Json):
+                card_data = comp.data
+                if isinstance(card_data, dict) and isinstance(
+                    card_data.get("data"), str
+                ):
+                    try:
+                        nested_data = json.loads(card_data["data"])
+                        if isinstance(nested_data, dict):
+                            card_data = nested_data
+                    except json.JSONDecodeError:
+                        pass
+
+                detail = {}
+                if isinstance(card_data, dict):
+                    meta = card_data.get("meta")
+                    if isinstance(meta, dict):
+                        candidate = meta.get("detail_1") or meta.get("news")
+                        if isinstance(candidate, dict):
+                            detail = candidate
+
+                fields = []
+                for label, value in (
+                    ("Title", detail.get("title")),
+                    ("Description", detail.get("desc")),
+                    ("URL", detail.get("qqdocurl") or detail.get("jumpUrl")),
+                ):
+                    if isinstance(value, str) and value.strip():
+                        normalized = " ".join(value.split())
+                        fields.append(f"{label}: {_truncate_reply_text(normalized)}")
+                suffix = f": {'; '.join(fields)}" if fields else ""
+                parts.append(f" [Shared Card{suffix}]")
             elif isinstance(comp, At):
                 is_at_self = str(comp.qq) in (
                     event.get_self_id(),

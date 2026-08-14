@@ -152,7 +152,7 @@ class ProviderCommands:
                 ),
             )
 
-            provider_using = self.context.get_using_provider(umo=umo)
+            provider_using = await self.context.get_using_provider_async(umo=umo)
             for i, d in enumerate(llm_data):
                 line = f"{i + 1}. {d['info']}{d['mark']}"
                 if (
@@ -164,7 +164,7 @@ class ProviderCommands:
 
             if tts_data:
                 parts.append("\n## TTS Providers\n")
-                tts_using = self.context.get_using_tts_provider(umo=umo)
+                tts_using = await self.context.get_using_tts_provider_async(umo=umo)
                 for i, d in enumerate(tts_data):
                     line = f"{i + 1}. {d['info']}{d['mark']}"
                     if tts_using and tts_using.meta().id == d["provider"].meta().id:
@@ -173,7 +173,7 @@ class ProviderCommands:
 
             if stt_data:
                 parts.append("\n## STT Providers\n")
-                stt_using = self.context.get_using_stt_provider(umo=umo)
+                stt_using = await self.context.get_using_stt_provider_async(umo=umo)
                 for i, d in enumerate(stt_data):
                     line = f"{i + 1}. {d['info']}{d['mark']}"
                     if stt_using and stt_using.meta().id == d["provider"].meta().id:

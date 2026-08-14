@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import shutil
+import sys
 import time
 import uuid
 from dataclasses import dataclass
@@ -20,7 +21,7 @@ from astrbot.core.utils.astrbot_path import (
 
 from .booters.base import ComputerBooter
 from .booters.constants import BOOTER_BOXLITE, BOOTER_SHIPYARD, BOOTER_SHIPYARD_NEO
-from .booters.local import LocalBooter
+from .booters.local import LocalBooter, resolve_windows_shell
 
 if TYPE_CHECKING:
     from astrbot.core.agent.tool import ToolSchema
@@ -719,6 +720,11 @@ def get_local_booter() -> ComputerBooter:
     global local_booter
     if local_booter is None:
         local_booter = LocalBooter()
+        if sys.platform == "win32":
+            logger.info(
+                "[Computer] Windows local runtime shell: %s",
+                resolve_windows_shell(),
+            )
     return local_booter
 
 

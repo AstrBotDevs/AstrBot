@@ -1805,11 +1805,10 @@ async def test_cleanup_plugin_optional_artifacts_clears_kv_when_plugin_id_presen
 ):
     cleared = []
 
-    class MockDB:
-        async def clear_preferences(self, scope, scope_id):
-            cleared.append((scope, scope_id))
+    async def clear_preferences(scope, scope_id):
+        cleared.append((scope, scope_id))
 
-    monkeypatch.setattr(plugin_manager_pm.context, "get_db", MockDB, raising=False)
+    monkeypatch.setattr(star_manager_module.sp, "clear_async", clear_preferences)
 
     await plugin_manager_pm._cleanup_plugin_optional_artifacts(
         root_dir_name="test_plugin",
@@ -1828,11 +1827,10 @@ async def test_cleanup_plugin_optional_artifacts_skips_kv_when_plugin_id_none(
 ):
     cleared = []
 
-    class MockDB:
-        async def clear_preferences(self, scope, scope_id):
-            cleared.append((scope, scope_id))
+    async def clear_preferences(scope, scope_id):
+        cleared.append((scope, scope_id))
 
-    monkeypatch.setattr(plugin_manager_pm.context, "get_db", MockDB, raising=False)
+    monkeypatch.setattr(star_manager_module.sp, "clear_async", clear_preferences)
 
     await plugin_manager_pm._cleanup_plugin_optional_artifacts(
         root_dir_name="test_plugin",

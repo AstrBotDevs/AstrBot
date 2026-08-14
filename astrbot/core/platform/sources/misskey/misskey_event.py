@@ -13,7 +13,7 @@ from .misskey_utils import (
     extract_user_id_from_session_id,
     is_valid_room_session_id,
     is_valid_user_session_id,
-    resolve_visibility_from_raw_message,
+    resolve_message_visibility,
     serialize_message_chain,
 )
 
@@ -108,7 +108,7 @@ class MisskeyPlatformEvent(AstrMessageEvent):
                     room_id = extract_room_id_from_session_id(self.session_id)
                     await self.client.send_room_message(room_id, content)
                 elif original_message_id and hasattr(self.client, "create_note"):
-                    visibility, visible_user_ids = resolve_visibility_from_raw_message(
+                    visibility, visible_user_ids = resolve_message_visibility(
                         raw_message,
                     )
                     await self.client.create_note(
