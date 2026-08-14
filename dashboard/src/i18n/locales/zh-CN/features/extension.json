@@ -132,6 +132,7 @@
       "author": "作者",
       "category": "类别",
       "stars": "Star数",
+      "updatedAt": "更新时间",
       "tags": "标签",
       "astrbotVersion": "AstrBot 版本要求",
       "supportPlatforms": "支持平台",
