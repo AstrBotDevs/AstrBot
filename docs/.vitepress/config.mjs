@@ -117,6 +117,8 @@ export default defineConfig({
                 collapsed: true,
                 items: [
                   { text: '服务提供商配置', link: '/llm' },
+                  { text: '胜算云', link: '/shengsuanyun' },
+                  { text: 'ShengSuanYun', link: '/shengsuanyun' },
                   { text: 'Ollama', link: '/provider-ollama' },
                   { text: 'LMStudio', link: '/provider-lmstudio' },
                 ],
