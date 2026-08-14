@@ -1457,19 +1457,6 @@ paths:
           required: true
           schema:
             type: string
-        - name: page
-          in: query
-          schema:
-            type: integer
-            minimum: 1
-            default: 1
-        - name: page_size
-          in: query
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 1000
-            default: 1000
       responses:
         "200":
           $ref: "#/components/responses/Ok"

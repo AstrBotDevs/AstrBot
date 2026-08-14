@@ -23,28 +23,11 @@
       </blockquote>
 
       <div ref="messagesEl" class="thread-messages">
-        <div v-if="pagination.error" class="thread-load-error">
-          <span>{{ pagination.error }}</span>
-          <v-btn size="small" variant="text" @click="retryLoad">
-            {{ tm("actions.retry") }}
-          </v-btn>
-        </div>
-        <div v-if="pagination.has_more" class="thread-load-earlier">
-          <v-btn
-            size="small"
-            variant="text"
-            :loading="pagination.loading"
-            @click="loadEarlier"
-          >
-            {{ tm("history.loadEarlier") }}
-          </v-btn>
-        </div>
         <ChatMessageList
           :messages="messages"
           :is-dark="isDark"
           :is-streaming="sending"
           variant="thread"
-          @load-reasoning="loadReasoning"
         />
       </div>
 
@@ -54,14 +37,14 @@
           class="thread-input"
           :placeholder="tm('thread.placeholder')"
           rows="1"
-          :disabled="sending || pagination.loading"
+          :disabled="sending"
           @keydown.enter.exact.prevent="send"
         ></textarea>
         <v-btn
           class="thread-send-button"
           variant="text"
           :loading="sending"
-          :disabled="!draft.trim() || pagination.loading"
+          :disabled="!draft.trim()"
           type="submit"
         >
           {{ tm("input.send") }}
@@ -72,8 +55,8 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, reactive, ref, watch } from "vue";
-import { chatApi, fileApi } from "@/api/v1";
+import { nextTick, ref, watch } from "vue";
+import { chatApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
 import {
   appendPlain,
@@ -84,7 +67,6 @@ import {
   hasPlainText,
   markMessageStarted,
   normalizeMessageParts,
-  type HistoryPaginationState,
   parseJsonSafe,
   payloadText,
   upsertToolCall,
@@ -112,356 +94,37 @@ const messages = ref<ChatRecord[]>([]);
 const draft = ref("");
 const sending = ref(false);
 const messagesEl = ref<HTMLElement | null>(null);
-const pagination = reactive<HistoryPaginationState>({
-  page: 1,
-  page_size: 50,
-  total: 0,
-  has_more: false,
-  loading: false,
-});
-let loadEpoch = 0;
-let streamAbort: AbortController | null = null;
-const mediaUrls = new Set<string>();
-const mediaPromises = new Map<string, Promise<string>>();
-
-interface ActiveThreadRun {
-  run_id: string;
-  llm_checkpoint_id?: string | null;
-  status?: string;
-  content?: Record<string, unknown>;
-}
-
-function clearMediaUrls() {
-  for (const url of mediaUrls) URL.revokeObjectURL(url);
-  mediaUrls.clear();
-  mediaPromises.clear();
-}
-
-function invalidateThread() {
-  loadEpoch += 1;
-  streamAbort?.abort();
-  streamAbort = null;
-  sending.value = false;
-  clearMediaUrls();
-}
 
 watch(
-  [() => props.modelValue, () => props.thread?.thread_id],
-  ([isOpen, threadId]) => {
-    invalidateThread();
-    messages.value = [];
-    pagination.error = undefined;
-    pagination.page = 1;
-    pagination.page_size = 50;
-    pagination.total = 0;
-    pagination.has_more = false;
-    pagination.loading = Boolean(isOpen && threadId);
-    if (isOpen && threadId) void loadThread(threadId);
+  () => props.thread?.thread_id,
+  (threadId) => {
+    if (threadId) {
+      loadThread(threadId);
+    } else {
+      messages.value = [];
+    }
   },
   { immediate: true },
 );
 
 function close() {
-  invalidateThread();
-  messages.value = [];
   emit("update:modelValue", false);
 }
 
-onBeforeUnmount(() => {
-  invalidateThread();
-  clearMediaUrls();
-});
-
 async function loadThread(threadId: string) {
-  const epoch = ++loadEpoch;
-  const previousPagination = { ...pagination };
-  pagination.page = 1;
-  pagination.page_size = 50;
-  pagination.total = 0;
-  pagination.has_more = false;
-  pagination.loading = true;
-  pagination.error = undefined;
   try {
-    const response = await chatApi.getThread(threadId, { page: 1, page_size: 50 });
-    if (epoch !== loadEpoch) return;
-    if (response.data?.status !== "ok") {
-      throw new Error(response.data?.message || "Failed to load thread messages");
-    }
-    const payload = response.data?.data || {};
-    const history = payload.history || [];
-    const records: ChatRecord[] = history.map(
-      (record: any): ChatRecord => normalizeRecord(record),
-    );
-    await resolveRecordMedia(records, epoch);
-    if (epoch !== loadEpoch || props.thread?.thread_id !== threadId) return;
-    messages.value = records;
-    pagination.page = Number(payload.page) || 1;
-    pagination.page_size = Number(payload.page_size) || 50;
-    pagination.total = Number(payload.total) || messages.value.length;
-    pagination.has_more = Boolean(payload.has_more);
+    const response = await chatApi.getThread(threadId);
+    const history = response.data?.data?.history || [];
+    messages.value = history.map(normalizeRecord);
     scrollToBottom();
-    const activeRun = (payload.active_runs || [])[0] as
-      | ActiveThreadRun
-      | undefined;
-    if (activeRun?.run_id) {
-      const existing = messages.value.find(
-        (record) =>
-          record.content?.type === "bot" &&
-          activeRun.llm_checkpoint_id &&
-          record.llm_checkpoint_id === activeRun.llm_checkpoint_id,
-      );
-      const botRecord =
-        existing ||
-        normalizeRecord({
-          id: `active-run-${activeRun.run_id}`,
-          content: activeRun.content || { type: "bot", message: [] },
-          llm_checkpoint_id: activeRun.llm_checkpoint_id || null,
-        });
-      botRecord.content.isLoading =
-        activeRun.status === "running" && botRecord.content.message.length === 0;
-      if (!existing) messages.value.push(botRecord);
-      void resumeActiveRun(threadId, activeRun, botRecord, epoch);
-    }
   } catch (error) {
-    if (epoch !== loadEpoch) return;
     console.error("Failed to load thread:", error);
-    pagination.page = previousPagination.page;
-    pagination.page_size = previousPagination.page_size;
-    pagination.total = previousPagination.total;
-    pagination.has_more = previousPagination.has_more;
-    pagination.error = String((error as Error)?.message || error);
-  } finally {
-    if (epoch === loadEpoch && props.thread?.thread_id === threadId) {
-      pagination.loading = false;
-    }
+    messages.value = [];
   }
-}
-
-async function retryLoad() {
-  const threadId = props.thread?.thread_id;
-  if (!threadId || pagination.loading) return;
-  if (messages.value.length && pagination.has_more) {
-    await loadEarlier();
-  } else {
-    await loadThread(threadId);
-  }
-}
-
-async function resolveRecordMedia(records: ChatRecord[], epoch: number) {
-  const mediaTypes = new Set(["image", "record", "audio", "video"]);
-  const tasks: Promise<void>[] = [];
-  for (const record of records) {
-    for (const part of record.content?.message || []) {
-      if (
-        !mediaTypes.has(part.type) ||
-        part.embedded_url ||
-        !(part.attachment_id || part.stored_filename || part.filename)
-      ) {
-        continue;
-      }
-      const lookupFilename = part.stored_filename || part.filename || "";
-      const cacheKey = part.attachment_id
-        ? `attachment:${part.attachment_id}`
-        : `file:${lookupFilename}`;
-      let promise = mediaPromises.get(cacheKey);
-      if (!promise) {
-        promise = part.attachment_id
-          ? fetchWithAuth(fileApi.contentUrl(part.attachment_id)).then(
-              async (response) => {
-                if (!response.ok) {
-                  throw new Error(`Media request failed: ${response.status}`);
-                }
-                return URL.createObjectURL(await response.blob());
-              },
-            )
-          : fileApi
-              .getByName(lookupFilename)
-              .then((response) => URL.createObjectURL(response.data));
-        mediaPromises.set(cacheKey, promise);
-      }
-      tasks.push(
-        promise
-          .then((url) => {
-            if (epoch === loadEpoch) {
-              part.embedded_url = url;
-              mediaUrls.add(url);
-            } else {
-              URL.revokeObjectURL(url);
-            }
-          })
-          .catch((error) => {
-            mediaPromises.delete(cacheKey);
-            console.error("Failed to resolve thread media:", cacheKey, error);
-          }),
-      );
-    }
-  }
-  await Promise.all(tasks);
-}
-
-async function loadEarlier() {
-  const threadId = props.thread?.thread_id;
-  if (!threadId || pagination.loading || !pagination.has_more) return;
-  const epoch = loadEpoch;
-  const anchor = messages.value[0];
-  const anchorId = anchor?.id == null ? "" : String(anchor.id);
-  const anchorTop = anchorId
-    ? messagesEl.value?.querySelector<HTMLElement>(
-        `[data-message-id="${CSS.escape(anchorId)}"]`,
-      )?.getBoundingClientRect().top
-    : undefined;
-  pagination.loading = true;
-  try {
-    const response = await chatApi.getThread(threadId, {
-      page: pagination.page + 1,
-      page_size: pagination.page_size,
-    });
-    if (epoch !== loadEpoch || props.thread?.thread_id !== threadId) return;
-    if (response.data?.status !== "ok") {
-      throw new Error(response.data?.message || "Failed to load earlier thread messages");
-    }
-    const payload = response.data?.data || {};
-    const incoming: ChatRecord[] = (payload.history || []).map(
-      (record: any): ChatRecord => normalizeRecord(record),
-    );
-    await resolveRecordMedia(incoming, epoch);
-    if (epoch !== loadEpoch || props.thread?.thread_id !== threadId) return;
-    const ids = new Set(messages.value.map((record) => String(record.id)));
-    messages.value = [
-      ...incoming.filter((record) => record.id == null || !ids.has(String(record.id))),
-      ...messages.value,
-    ];
-    pagination.page = Number(payload.page) || pagination.page + 1;
-    pagination.total = Number(payload.total) || pagination.total;
-    pagination.has_more = Boolean(payload.has_more);
-    pagination.error = undefined;
-    await nextTick();
-    if (
-      anchorTop != null &&
-      messagesEl.value &&
-      anchorId &&
-      epoch === loadEpoch &&
-      props.thread?.thread_id === threadId
-    ) {
-      const row = messagesEl.value.querySelector<HTMLElement>(
-        `[data-message-id="${CSS.escape(anchorId)}"]`,
-      );
-      if (row) messagesEl.value.scrollTop += row.getBoundingClientRect().top - anchorTop;
-    }
-  } catch (error) {
-    if (epoch === loadEpoch && props.thread?.thread_id === threadId) {
-      pagination.error = String((error as Error)?.message || error);
-      console.error("Failed to load earlier thread messages:", error);
-    }
-  } finally {
-    if (epoch === loadEpoch && props.thread?.thread_id === threadId) {
-      pagination.loading = false;
-    }
-  }
-}
-
-async function loadReasoning(record: ChatRecord) {
-  if (!record.hasReasoning || record.id == null || record.reasoningStatus === "loading") return;
-  const threadId = props.thread?.thread_id;
-  const epoch = loadEpoch;
-  const requestId = String(record.id);
-  record.reasoningStatus = "loading";
-  try {
-    const response = await chatApi.getMessage(record.id);
-    const full = response.data?.data?.message;
-    if (response.data?.status !== "ok") {
-      throw new Error(response.data?.message || "Failed to load message reasoning");
-    }
-    if (!full) throw new Error("Reasoning message is unavailable");
-    const normalized = normalizeRecord(full);
-    await resolveRecordMedia([normalized], epoch);
-    if (
-      epoch !== loadEpoch ||
-      props.thread?.thread_id !== threadId ||
-      String(record.id) !== requestId
-    ) {
-      return;
-    }
-    Object.assign(record, normalized);
-    record.reasoningStatus = "loaded";
-  } catch (error) {
-    if (
-      epoch === loadEpoch &&
-      props.thread?.thread_id === threadId &&
-      String(record.id) === requestId
-    ) {
-      record.reasoningStatus = "error";
-      record.reasoningError = String((error as Error)?.message || error);
-    }
-  }
-}
-
-function resumeActiveRun(
-  threadId: string,
-  run: ActiveThreadRun,
-  botRecord: ChatRecord,
-  epoch: number,
-) {
-  const abort = new AbortController();
-  streamAbort = abort;
-  sending.value = true;
-  void (async () => {
-    let receivedEnd = false;
-    try {
-      const response = await fetchWithAuth(chatApi.resumeRunStreamUrl(run.run_id), {
-        headers: { Accept: "text/event-stream" },
-        signal: abort.signal,
-      });
-      const contentType = response.headers.get("content-type") || "";
-      if (
-        !response.ok ||
-        !response.body ||
-        !contentType.includes("text/event-stream")
-      ) {
-        throw new Error(`Resume thread stream failed: ${response.status}`);
-      }
-      await readSseStream(response.body, (payload) => {
-        if (
-          epoch !== loadEpoch ||
-          props.thread?.thread_id !== threadId ||
-          !messages.value.includes(botRecord)
-        ) {
-          return;
-        }
-        processPayload(botRecord, undefined, payload);
-        if ((payload?.type || payload?.t) === "end") receivedEnd = true;
-        scrollToBottom(threadId, epoch);
-      });
-    } catch (error) {
-      if (!abort.signal.aborted && epoch === loadEpoch) {
-        console.error("Failed to resume thread stream:", error);
-      }
-    } finally {
-      if (
-        epoch === loadEpoch &&
-        props.thread?.thread_id === threadId &&
-        streamAbort === abort
-      ) {
-        streamAbort = null;
-        sending.value = false;
-        botRecord.content.isLoading = false;
-        if (!receivedEnd) pagination.error = "Thread stream closed before completion.";
-      }
-    }
-  })();
 }
 
 async function send() {
-  if (
-    !props.thread ||
-    sending.value ||
-    pagination.loading ||
-    !draft.value.trim()
-  ) {
-    return;
-  }
-  const threadId = props.thread.thread_id;
-  const epoch = loadEpoch;
+  if (!props.thread || sending.value || !draft.value.trim()) return;
   const text = draft.value.trim();
   draft.value = "";
   const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
@@ -489,10 +152,9 @@ async function send() {
   scrollToBottom();
 
   const abort = new AbortController();
-  streamAbort = abort;
   sending.value = true;
   try {
-    const response = await fetchWithAuth(chatApi.sendThreadMessageUrl(threadId), {
+    const response = await fetchWithAuth(chatApi.sendThreadMessageUrl(props.thread.thread_id), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -507,38 +169,17 @@ async function send() {
       throw new Error(`Thread request failed: ${response.status}`);
     }
     await readSseStream(response.body, (payload) => {
-      if (
-        epoch !== loadEpoch ||
-        props.thread?.thread_id !== threadId ||
-        !messages.value.includes(threadBotRecord)
-      ) {
-        return;
-      }
       processPayload(threadBotRecord, threadUserRecord, payload);
       scrollToBottom();
     });
   } catch (error) {
-    if (
-      epoch !== loadEpoch ||
-      props.thread?.thread_id !== threadId ||
-      abort.signal.aborted
-    ) {
-      return;
-    }
     appendPlain(
       threadBotRecord,
       `\n\n${String((error as Error)?.message || error)}`,
     );
     console.error("Failed to send thread message:", error);
   } finally {
-    if (
-      epoch === loadEpoch &&
-      props.thread?.thread_id === threadId &&
-      streamAbort === abort
-    ) {
-      streamAbort = null;
-      sending.value = false;
-    }
+    sending.value = false;
   }
 }
 
@@ -548,24 +189,15 @@ function normalizeRecord(record: any): ChatRecord {
     content.message || [],
     content.reasoning || "",
   );
-  const reasoning = extractReasoningText(normalizedMessage, content.reasoning || "");
-  const hasReasoning = record.has_reasoning === true || Boolean(reasoning);
-  const reasoningLen = Number(record.reasoning_len);
   return {
     ...record,
     content: {
       type: content.type || (record.sender_id === "bot" ? "bot" : "user"),
       message: normalizedMessage,
-      reasoning,
+      reasoning: extractReasoningText(normalizedMessage, content.reasoning || ""),
       agentStats: content.agentStats || content.agent_stats,
       refs: content.refs,
     },
-    hasReasoning,
-    reasoningLen:
-      Number.isFinite(reasoningLen) && reasoningLen >= 0
-        ? reasoningLen
-        : reasoning.length,
-    reasoningStatus: hasReasoning && !reasoning ? "unloaded" : "loaded",
   };
 }
 
@@ -598,11 +230,7 @@ async function readSseStream(
   }
 }
 
-function processPayload(
-  botRecord: ChatRecord,
-  userRecord: ChatRecord | undefined,
-  payload: any,
-) {
+function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: any) {
   const normalized =
     payload?.ct === "chat"
       ? { ...payload, type: payload.type || payload.t }
@@ -613,27 +241,7 @@ function processPayload(
 
   if (type === "session_id" || type === "session_bound") return;
 
-  if (type === "run_snapshot") {
-    const snapshot = data && typeof data === "object" ? data : {};
-    const snapshotRecord = normalizeRecord({
-      id: botRecord.id,
-      content: snapshot.content || { type: "bot", message: [] },
-      llm_checkpoint_id: snapshot.llm_checkpoint_id || botRecord.llm_checkpoint_id,
-    });
-    botRecord.content = snapshotRecord.content;
-    botRecord.hasReasoning = snapshotRecord.hasReasoning;
-    botRecord.reasoningLen = snapshotRecord.reasoningLen;
-    botRecord.reasoningStatus = snapshotRecord.reasoningStatus;
-    botRecord.reasoningError = undefined;
-    botRecord.llm_checkpoint_id = snapshotRecord.llm_checkpoint_id;
-    botRecord.content.isLoading =
-      snapshot.status === "running" && botRecord.content.message.length === 0;
-    void resolveRecordMedia([botRecord], loadEpoch);
-    return;
-  }
-
   if (type === "user_message_saved") {
-    if (!userRecord) return;
     userRecord.id = data?.id || userRecord.id;
     userRecord.created_at = data?.created_at || userRecord.created_at;
     userRecord.llm_checkpoint_id =
@@ -708,14 +316,13 @@ function processPayload(
     return;
   }
 
-  if (["image", "record", "file", "video", "audio"].includes(type)) {
+  if (["image", "record", "file", "video"].includes(type)) {
     markMessageStarted(botRecord);
     const rawFilename = String(data)
       .replace("[IMAGE]", "")
       .replace("[RECORD]", "")
       .replace("[FILE]", "")
-      .replace("[VIDEO]", "")
-      .replace("[AUDIO]", "");
+      .replace("[VIDEO]", "");
     const separatorIndex = rawFilename.indexOf("|");
     const storedFilename =
       separatorIndex >= 0 ? rawFilename.slice(0, separatorIndex) : rawFilename;
@@ -727,23 +334,14 @@ function processPayload(
       mediaPart.stored_filename = storedFilename;
     }
     botRecord.content.message.push(mediaPart);
-    if (type !== "file") void resolveRecordMedia([botRecord], loadEpoch);
   }
 }
 
-function scrollToBottom(
-  threadId = props.thread?.thread_id,
-  epoch = loadEpoch,
-) {
+function scrollToBottom() {
   nextTick(() => {
-    if (
-      epoch !== loadEpoch ||
-      props.thread?.thread_id !== threadId ||
-      !messagesEl.value
-    ) {
-      return;
+    if (messagesEl.value) {
+      messagesEl.value.scrollTop = messagesEl.value.scrollHeight;
     }
-    messagesEl.value.scrollTop = messagesEl.value.scrollHeight;
   });
 }
 </script>
@@ -818,17 +416,6 @@ function scrollToBottom(
   min-height: 0;
   overflow-y: auto;
   padding: 0 14px 12px;
-}
-
-.thread-load-error {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 8px 4px;
-  color: rgb(var(--v-theme-error));
-  font-size: 12px;
-  text-align: center;
 }
 
 .thread-composer {

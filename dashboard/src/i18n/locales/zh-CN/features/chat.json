@@ -122,9 +122,6 @@
     "think": "思考",
     "toolUsed": "使用工具"
   },
-  "history": {
-    "loadEarlier": "加载更早消息"
-  },
   "reply": {
     "replyTo": "引用",
     "notFound": "无法定位消息"

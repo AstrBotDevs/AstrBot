@@ -14,7 +14,6 @@ from astrbot.dashboard.api.auth import AuthContext
 from astrbot.dashboard.api.chat import (
     get_chat_message,
     get_chat_session,
-    get_chat_thread,
 )
 from astrbot.dashboard.responses import ApiError
 from astrbot.dashboard.services.chat_service import (
@@ -100,7 +99,6 @@ def test_serializer_falls_back_to_top_level_reasoning_and_preserves_user():
 
 def test_v1_history_routes_keep_legacy_default_page_size():
     assert signature(get_chat_session).parameters["page_size"].default.default == 1000
-    assert signature(get_chat_thread).parameters["page_size"].default.default == 1000
 
 
 @pytest.mark.asyncio

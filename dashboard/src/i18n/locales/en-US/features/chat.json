@@ -122,9 +122,6 @@
     "think": "Thinking",
     "toolUsed": "Using Tool"
   },
-  "history": {
-    "loadEarlier": "Load earlier messages"
-  },
   "reply": {
     "replyTo": "Reply to",
     "notFound": "Message not found"
