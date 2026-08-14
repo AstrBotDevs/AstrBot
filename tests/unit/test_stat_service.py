@@ -1,5 +1,6 @@
 import time
-from datetime import datetime
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -48,6 +49,20 @@ async def test_stat_service_get_stat_accepts_unix_second_timestamps(
         ]
 
     db_helper.get_platform_stats = _get_platform_stats
+
+    class _ScalarResult:
+        def scalar_one(self):
+            return 4
+
+    class _Session:
+        async def execute(self, _query):
+            return _ScalarResult()
+
+    @asynccontextmanager
+    async def _get_db():
+        yield _Session()
+
+    db_helper.get_db = _get_db
     monkeypatch.setattr(
         "astrbot.dashboard.services.stat_service.psutil.Process",
         lambda: SimpleNamespace(
@@ -86,6 +101,54 @@ async def test_stat_service_get_stat_accepts_unix_second_timestamps(
         }
     ]
     assert data["cpu_percent"] == 12.5
+
+
+@pytest.mark.asyncio
+async def test_stat_service_get_stat_message_count_includes_history_outside_window(
+    temp_db,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    now = datetime.now()
+    await temp_db.insert_platform_stats(
+        "qq-main", "onebot", count=3, timestamp=now - timedelta(hours=1)
+    )
+    await temp_db.insert_platform_stats(
+        "qq-main", "onebot", count=5, timestamp=now - timedelta(days=2)
+    )
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.stat_service.psutil.Process",
+        lambda: SimpleNamespace(
+            cpu_percent=lambda interval=0.5: 0.0,
+            memory_info=lambda: SimpleNamespace(rss=256 << 20),
+        ),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.stat_service.psutil.cpu_count",
+        lambda: 1,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.stat_service.psutil.virtual_memory",
+        lambda: SimpleNamespace(total=1024 << 20),
+    )
+
+    service = StatService(
+        temp_db,
+        SimpleNamespace(),
+        {},
+        demo_mode=False,
+        start_time=int(time.time()) - 3600,
+        html_renderer=SimpleNamespace(get_runtime_stats=lambda: {}),
+        plugin_catalog=SimpleNamespace(all=lambda: ()),
+        platform_manager=SimpleNamespace(get_platform_count=lambda: 1),
+    )
+
+    data = await service.get_stat(offset_sec=86400)
+
+    assert data["message_count"] == 8
+    assert len(data["platform"]) == 1
+    assert data["platform"][0]["name"] == "qq-main"
+    assert data["platform"][0]["count"] == 3
 
 
 def test_stat_service_get_first_notice_uses_only_supported_locales(
