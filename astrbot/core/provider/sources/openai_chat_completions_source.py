@@ -8,7 +8,7 @@ import re
 from collections.abc import AsyncGenerator
 from typing import Any, Literal
 
-import httpx
+import httpx2
 from openai import AsyncAzureOpenAI, AsyncOpenAI, NotFoundError
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
@@ -446,10 +446,10 @@ class ProviderOpenAIChatCompletions(Provider):
             image_fallback_used,
         )
 
-    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient:
+    def _create_http_client(self, provider_config: dict) -> httpx2.AsyncClient:
         """创建带代理的 HTTP 客户端"""
         proxy = provider_config.get("proxy", "")
-        return create_proxy_client("OpenAI", proxy, httpx_module=httpx)
+        return create_proxy_client("OpenAI", proxy, httpx_module=httpx2)
 
     def __init__(self, provider_config, provider_settings) -> None:
         super().__init__(provider_config, provider_settings)

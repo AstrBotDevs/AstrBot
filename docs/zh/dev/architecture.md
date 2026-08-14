@@ -21,7 +21,7 @@ outline: deep
 | 当前上游同步点          | `upstream-sync.yaml`                                                                          |
 | 版本化变更记录          | `changelogs/`；它记录已吸收的版本变更，不等同于 fork 已发布资产；更晚提交尚未纳入最新版本记录 |
 
-当前可复现开发与 CI 基线为 Python 3.14.6、Node.js 26.5.0 和 pnpm 11.15.1；Python 包元数据允许 3.14 及以上版本。
+当前可复现开发与 CI 基线为 Python 3.14.6、Node.js 26.5.0 和 pnpm 11.21.0；Python 包元数据允许 3.14 及以上版本。
 
 ## 启动流程
 

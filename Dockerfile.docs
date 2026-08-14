@@ -5,7 +5,7 @@ WORKDIR /src
 
 # hadolint ignore=DL3018
 RUN apk add --no-cache git \
-    && npm install --global npm@12.0.1 pnpm@11.15.1
+    && npm install --global npm@12.0.2 pnpm@11.21.0
 
 COPY docs/package.json docs/pnpm-lock.yaml ./
 

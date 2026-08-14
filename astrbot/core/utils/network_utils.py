@@ -4,6 +4,7 @@ import ssl
 from typing import Any
 
 import httpx
+import httpx2
 
 from astrbot import logger
 from astrbot.utils.http_ssl_common import build_ssl_context_with_certifi
@@ -35,6 +36,14 @@ def is_connection_error(exc: BaseException) -> bool:
             httpx.NetworkError,
             httpx.ProxyError,
             httpx.RequestError,
+            httpx2.ConnectError,
+            httpx2.ConnectTimeout,
+            httpx2.ReadTimeout,
+            httpx2.WriteTimeout,
+            httpx2.PoolTimeout,
+            httpx2.NetworkError,
+            httpx2.ProxyError,
+            httpx2.RequestError,
         ),
     ):
         return True
@@ -92,7 +101,7 @@ def create_proxy_client(
     headers: dict[str, str] | None = None,
     verify: ssl.SSLContext | str | bool | None = None,
     httpx_module: Any = httpx,
-) -> httpx.AsyncClient:
+) -> Any:
     """Create an httpx AsyncClient with proxy configuration if provided.
 
     Uses a hybrid SSL context that combines the system SSL certificate store
@@ -113,7 +122,7 @@ def create_proxy_client(
             httpx import.
 
     Returns:
-        An httpx.AsyncClient created with the hybrid SSL context (system store + certifi); the proxy is applied only if one is provided.
+        An async client created with the hybrid SSL context (system store + certifi); the proxy is applied only if one is provided.
     """
     resolved_verify = _SYSTEM_SSL_CTX if verify is None else verify
     if proxy:
