@@ -37,9 +37,13 @@ from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_event,
 )
 from astrbot.core.provider.entities import (
+    MALFORMED_TOOL_NAME_PLACEHOLDER as _MALFORMED_TOOL_NAME_PLACEHOLDER,
+)
+from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
     ToolCallsResult,
+    fallback_tool_call_id,
 )
 from astrbot.core.provider.modalities import (
     log_context_sanitize_stats,
@@ -144,7 +148,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     REPEATED_TOOL_NOTICE_L1_THRESHOLD = 3
     REPEATED_TOOL_NOTICE_L2_THRESHOLD = 4
     REPEATED_TOOL_NOTICE_L3_THRESHOLD = 5
-    MALFORMED_TOOL_NAME_PLACEHOLDER = "__malformed_tool_name__"
+    MALFORMED_TOOL_NAME_PLACEHOLDER = _MALFORMED_TOOL_NAME_PLACEHOLDER
     REPEATED_TOOL_NOTICE_L1_TEMPLATE = (
         "\n\n[SYSTEM NOTICE] By the way, you have executed the same tool "
         "`{tool_name}` with the same arguments {streak} times consecutively. "
@@ -771,7 +775,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         llm_resp: LLMResponse,
     ) -> None:
-        """Normalize malformed tool call names.
+        """Normalize malformed tool call names and ids.
+
+        Some OpenAI-compatible upstreams return tool calls without a usable
+        ``name`` or ``id`` (refs: AstrBot#8911 / AstrBot#9590). ``ToolCall.id`` and
+        ``ToolCall.FunctionBody.name`` are both required strings, so leaving them
+        as ``None`` blows up later when the assistant message is assembled.
+        Normalizing here — the single funnel every provider response passes
+        through — guarantees the executed tool result and the assistant tool call
+        share the very same id, which the OpenAI spec requires.
 
         Args:
             llm_resp: The LLM response whose tool call lists should be sanitized.
@@ -782,6 +794,42 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             else tool_name
             for tool_name in llm_resp.tools_call_name
         ]
+
+        total = max(len(llm_resp.tools_call_name), len(llm_resp.tools_call_args))
+        original_ids = list(llm_resp.tools_call_ids)
+        ids: list[str | None] = original_ids[:total]
+        # pad so that zip() in _handle_function_tools never silently truncates
+        ids.extend([None] * (total - len(ids)))
+
+        seen: set[str] = set()
+        normalized_ids: list[str] = []
+        for idx, call_id in enumerate(ids):
+            if isinstance(call_id, str) and call_id.strip():
+                candidate = call_id
+            else:
+                candidate = fallback_tool_call_id(idx)
+            if candidate in seen:
+                # extremely unlikely, but a placeholder must never collide with a
+                # real id, otherwise tool results get paired with the wrong call
+                candidate = f"{candidate}_{uuid.uuid4().hex[:6]}"
+            seen.add(candidate)
+            normalized_ids.append(candidate)
+            if (
+                candidate != call_id
+                and isinstance(call_id, str)
+                and call_id in llm_resp.tools_call_extra_content
+            ):
+                # keep provider-specific payloads reachable under the new id
+                # (e.g. gemini thought_signature)
+                llm_resp.tools_call_extra_content[candidate] = (
+                    llm_resp.tools_call_extra_content[call_id]
+                )
+
+        if normalized_ids != original_ids:
+            logger.warning(
+                f"Normalized malformed tool call ids: {original_ids} -> {normalized_ids}"
+            )
+        llm_resp.tools_call_ids = normalized_ids
 
     @override
     async def step(self):

@@ -2051,6 +2051,149 @@ async def test_follow_up_after_stop_not_merged_into_tool_result(
         assert ticket_before.resolved.is_set()
 
 
+class MissingToolCallIdProvider(Provider):
+    """模拟上游不返回 tool_call.id 的 Provider（refs #9590）。"""
+
+    def __init__(self):
+        super().__init__({}, {})
+        self.call_count = 0
+
+    def get_current_key(self) -> str:
+        return "test_key"
+
+    def set_key(self, key: str):
+        pass
+
+    async def get_models(self) -> list[str]:
+        return ["test_model"]
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        if self.call_count == 1:
+            return LLMResponse(
+                role="assistant",
+                completion_text="",
+                tools_call_name=["test_tool"],
+                tools_call_args=[{"query": "test"}],
+                tools_call_ids=[None],  # type: ignore[list-item]
+                usage=TokenUsage(input_other=10, output=5),
+            )
+        return LLMResponse(
+            role="assistant",
+            completion_text="这是我的最终回答",
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+    async def text_chat_stream(self, **kwargs):
+        response = await self.text_chat(**kwargs)
+        response.is_chunk = True
+        yield response
+        response.is_chunk = False
+        yield response
+
+
+def test_sanitize_malformed_tool_calls_fills_missing_ids(runner):
+    """缺失/空白的 tool_call id 必须被回退成确定性占位 id。"""
+    resp = LLMResponse(
+        role="tool",
+        completion_text="",
+        tools_call_name=["tool_a", "tool_b"],
+        tools_call_args=[{}, {}],
+        tools_call_ids=[None, "   "],  # type: ignore[list-item]
+    )
+
+    runner._sanitize_malformed_tool_calls(resp)
+
+    assert resp.tools_call_ids == ["call_0", "call_1"]
+    # 关键：不再抛 ValidationError
+    assert [tc.id for tc in resp.to_openai_tool_calls_model()] == ["call_0", "call_1"]
+
+
+def test_sanitize_malformed_tool_calls_pads_missing_ids(runner):
+    """id 列表比工具列表短时必须补齐，避免 zip 静默丢工具。"""
+    resp = LLMResponse(
+        role="tool",
+        completion_text="",
+        tools_call_name=["tool_a", "tool_b"],
+        tools_call_args=[{}, {}],
+        tools_call_ids=[],
+    )
+
+    runner._sanitize_malformed_tool_calls(resp)
+
+    assert resp.tools_call_ids == ["call_0", "call_1"]
+
+
+def test_sanitize_malformed_tool_calls_avoids_id_collision(runner):
+    """占位 id 与上游真实 id 撞车时必须去重。"""
+    resp = LLMResponse(
+        role="tool",
+        completion_text="",
+        tools_call_name=["tool_a", "tool_b"],
+        tools_call_args=[{}, {}],
+        tools_call_ids=[None, "call_0"],  # type: ignore[list-item]
+    )
+
+    runner._sanitize_malformed_tool_calls(resp)
+
+    assert resp.tools_call_ids[0] == "call_0"
+    assert resp.tools_call_ids[1] != "call_0"
+    assert resp.tools_call_ids[1].startswith("call_0_")
+
+
+def test_sanitize_malformed_tool_calls_keeps_valid_ids(runner):
+    """上游给了合法 id 时不得改写。"""
+    resp = LLMResponse(
+        role="tool",
+        completion_text="",
+        tools_call_name=["tool_a"],
+        tools_call_args=[{"query": "x"}],
+        tools_call_ids=["call_upstream_abc"],
+    )
+
+    runner._sanitize_malformed_tool_calls(resp)
+
+    assert resp.tools_call_ids == ["call_upstream_abc"]
+
+
+@pytest.mark.asyncio
+async def test_tool_call_id_none_does_not_break_step(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    """tool_call.id 为 None 时整轮不应失败，且 assistant/tool 消息 id 必须配对。"""
+    provider = MissingToolCallIdProvider()
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    responses = []
+    async for response in runner.step_until_done(3):
+        responses.append(response)
+
+    assert [r for r in responses if r.type == "err"] == []
+
+    assistant_messages = [
+        msg
+        for msg in runner.run_context.messages
+        if msg.role == "assistant" and msg.tool_calls
+    ]
+    assert len(assistant_messages) == 1
+    tool_calls = assistant_messages[0].tool_calls
+    assert tool_calls is not None
+    assert tool_calls[0].id == "call_0"
+
+    tool_messages = [msg for msg in runner.run_context.messages if msg.role == "tool"]
+    assert tool_messages
+    # OpenAI 硬约束：tool 结果消息必须引用同一个 tool_call_id
+    assert tool_messages[0].tool_call_id == tool_calls[0].id
+
+
 if __name__ == "__main__":
     # 运行测试
     pytest.main([__file__, "-v"])

@@ -25,6 +25,26 @@ from astrbot.core.db.po import Conversation
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.media_utils import MediaResolver
 
+MALFORMED_TOOL_NAME_PLACEHOLDER = "__malformed_tool_name__"
+"""Placeholder used when the upstream returns a tool call without a usable name."""
+
+
+def fallback_tool_call_id(idx: int) -> str:
+    """Build a deterministic placeholder id for a tool call missing its ``id``.
+
+    Some OpenAI-compatible upstreams (Gemini's compatible endpoint, several
+    proxy gateways) omit ``tool_calls[].id``. The OpenAI spec still requires the
+    following ``role="tool"`` message to reference the very same id, so both the
+    provider layer and the agent runner must derive the same placeholder.
+
+    Args:
+        idx: The position of the tool call within the current response.
+
+    Returns:
+        A deterministic placeholder tool call id.
+    """
+    return f"call_{idx}"
+
 
 class ProviderType(enum.Enum):
     CHAT_COMPLETION = "chat_completion"
@@ -403,23 +423,44 @@ class LLMResponse:
         else:
             self._completion_text = value
 
+    def _safe_tool_call_id(self, idx: int) -> str:
+        """Return a valid tool call id for ``idx``.
+
+        Falls back to :func:`fallback_tool_call_id` when the upstream omitted the
+        id or the id list is shorter than the argument list.
+        """
+        call_id = self.tools_call_ids[idx] if idx < len(self.tools_call_ids) else None
+        if isinstance(call_id, str) and call_id.strip():
+            return call_id
+        return fallback_tool_call_id(idx)
+
+    def _safe_tool_call_name(self, idx: int) -> str:
+        """Return a valid tool call name for ``idx``.
+
+        ``ToolCall.FunctionBody.name`` is a required string, so a ``None`` name
+        would raise the very same validation error as a missing id.
+        """
+        name = self.tools_call_name[idx] if idx < len(self.tools_call_name) else None
+        if isinstance(name, str) and name.strip():
+            return name
+        return MALFORMED_TOOL_NAME_PLACEHOLDER
+
     @deprecated(reason="Use to_openai_tool_calls_model instead.")
     def to_openai_tool_calls(self) -> list[dict]:
         """Convert to OpenAI tool calls format. Deprecated, use to_openai_tool_calls_model instead."""
         ret = []
         for idx, tool_call_arg in enumerate(self.tools_call_args):
+            call_id = self._safe_tool_call_id(idx)
             payload = {
-                "id": self.tools_call_ids[idx],
+                "id": call_id,
                 "function": {
-                    "name": self.tools_call_name[idx],
+                    "name": self._safe_tool_call_name(idx),
                     "arguments": json.dumps(tool_call_arg),
                 },
                 "type": "function",
             }
-            if self.tools_call_extra_content.get(self.tools_call_ids[idx]):
-                payload["extra_content"] = self.tools_call_extra_content[
-                    self.tools_call_ids[idx]
-                ]
+            if self.tools_call_extra_content.get(call_id):
+                payload["extra_content"] = self.tools_call_extra_content[call_id]
             ret.append(payload)
         return ret
 
@@ -427,17 +468,16 @@ class LLMResponse:
         """The same as to_openai_tool_calls but return pydantic model."""
         ret = []
         for idx, tool_call_arg in enumerate(self.tools_call_args):
+            call_id = self._safe_tool_call_id(idx)
             ret.append(
                 ToolCall(
-                    id=self.tools_call_ids[idx],
+                    id=call_id,
                     function=ToolCall.FunctionBody(
-                        name=self.tools_call_name[idx],
+                        name=self._safe_tool_call_name(idx),
                         arguments=json.dumps(tool_call_arg),
                     ),
                     # the extra_content will not serialize if it's None when calling ToolCall.model_dump()
-                    extra_content=self.tools_call_extra_content.get(
-                        self.tools_call_ids[idx]
-                    ),
+                    extra_content=self.tools_call_extra_content.get(call_id),
                 ),
             )
         return ret
