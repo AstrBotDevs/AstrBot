@@ -142,6 +142,33 @@ class MockMixedContentToolExecutor:
         return generator()
 
 
+class MockMultiImageToolExecutor:
+    """模拟一次工具调用返回多张图片的工具执行器。"""
+
+    @classmethod
+    def execute(cls, tool, run_context, **tool_args):
+        async def generator():
+            from mcp.types import CallToolResult, ImageContent
+
+            result = CallToolResult(
+                content=[
+                    ImageContent(
+                        type="image",
+                        data="dGVzdA==",
+                        mimeType="image/png",
+                    ),
+                    ImageContent(
+                        type="image",
+                        data="dGVzdA==",
+                        mimeType="image/png",
+                    ),
+                ]
+            )
+            yield result
+
+        return generator()
+
+
 class MockCaptionProvider(MockProvider):
     """模拟默认图片转述模型，记录收到的图片路径并返回固定描述。"""
 
@@ -151,6 +178,7 @@ class MockCaptionProvider(MockProvider):
         self.captioned_paths: list[str] = []
 
     async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
         self.captioned_paths.extend(kwargs.get("image_urls", []))
         return LLMResponse(
             role="assistant",
@@ -969,6 +997,7 @@ def _tool_image_runner_setup(
     tmp_path,
     caption_context,
     modalities: list[str] | None = ["tool_use"],
+    tool_executor=MockMixedContentToolExecutor,
 ):
     from astrbot.core.agent.tool_image_cache import CachedImage, tool_image_cache
 
@@ -998,7 +1027,7 @@ def _tool_image_runner_setup(
             run_context=ContextWrapper(
                 context=SimpleNamespace(event=event, context=caption_context)
             ),
-            tool_executor=MockMixedContentToolExecutor,
+            tool_executor=tool_executor,
             agent_hooks=mock_hooks,
             streaming=False,
         )
@@ -1046,6 +1075,31 @@ async def test_tool_image_caption_injected_when_main_model_lacks_image(
         )
     )
     assert caption_msg_index > tool_msg_index
+
+
+@pytest.mark.asyncio
+async def test_tool_multi_image_caption_single_call(
+    runner, provider_request, mock_hooks, monkeypatch, tmp_path
+):
+    """一次工具调用返回多张图片时，只发起一次转述调用，避免长对话中被多次串行转述拖慢。"""
+    caption_provider = MockCaptionProvider(caption_text="两张截图")
+    provider, img_path, run = _tool_image_runner_setup(
+        runner,
+        provider_request,
+        mock_hooks,
+        monkeypatch,
+        tmp_path,
+        caption_context=MockImageCaptionContext(caption_provider),
+        tool_executor=MockMultiImageToolExecutor,
+    )
+    await run()
+
+    assert provider.call_count == 2
+    assert caption_provider.call_count == 1
+    assert caption_provider.captioned_paths == [str(img_path), str(img_path)]
+    second_contexts = provider.received_contexts[1]
+    context_texts = _all_context_texts(second_contexts)
+    assert context_texts.count("<image_caption>两张截图</image_caption>") == 1
 
 
 @pytest.mark.asyncio
