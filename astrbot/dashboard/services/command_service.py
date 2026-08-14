@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from astrbot.core import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star.command_management import (
@@ -53,6 +54,20 @@ class CommandService:
         except ValueError as exc:
             raise CommandServiceError(str(exc)) from exc
 
+        if self.core_lifecycle:
+            platform_manager = getattr(self.core_lifecycle, "platform_manager", None)
+            if platform_manager:
+                for platform in list(platform_manager.get_insts()):
+                    try:
+                        await platform.refresh_registered_commands()
+                    except Exception as exc:
+                        logger.warning(
+                            "Failed to refresh registered commands for platform %s: %s",
+                            type(platform).__name__,
+                            exc,
+                            exc_info=True,
+                        )
+
         return await self._get_command_payload(handler_full_name)
 
     async def rename_command(
@@ -68,6 +83,20 @@ class CommandService:
             await rename_command(handler_full_name, new_name, aliases=aliases)
         except ValueError as exc:
             raise CommandServiceError(str(exc)) from exc
+
+        if self.core_lifecycle:
+            platform_manager = getattr(self.core_lifecycle, "platform_manager", None)
+            if platform_manager:
+                for platform in list(platform_manager.get_insts()):
+                    try:
+                        await platform.refresh_registered_commands()
+                    except Exception as exc:
+                        logger.warning(
+                            "Failed to refresh registered commands for platform %s: %s",
+                            type(platform).__name__,
+                            exc,
+                            exc_info=True,
+                        )
 
         return await self._get_command_payload(handler_full_name)
 
