@@ -895,12 +895,9 @@ export const chatApi = {
   createThread(payload: ChatThreadCreateRequest) {
     return typed<any>(openApiV1.createChatThread({ body: payload }));
   },
-  getThread(threadId: string, params?: ChatHistoryPageParams) {
+  getThread(threadId: string) {
     return typed<any>(
-      openApiV1.getChatThread({
-        path: { thread_id: threadId },
-        query: generatedQuery(params),
-      }),
+      openApiV1.getChatThread({ path: { thread_id: threadId } }),
     );
   },
   deleteThread(threadId: string) {

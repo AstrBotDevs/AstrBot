@@ -1614,33 +1614,7 @@ class ChatService:
     ) -> dict:
         return await self.create_thread(username, self._dashboard_payload(payload))
 
-    async def get_thread(
-        self,
-        username: str,
-        thread_id: str,
-        page: int = 1,
-        page_size: int = 1000,
-        strip_reasoning: bool = False,
-    ) -> dict:
-        """Get a WebChat side thread and a page of its history.
-
-        Args:
-            username: Authenticated dashboard username.
-            thread_id: WebChat side-thread identifier.
-            page: One-based history page, with page one containing the newest rows.
-            page_size: Number of history records to return (at most 1000).
-            strip_reasoning: Whether to omit thinking content from list records.
-
-        Returns:
-            Thread metadata, history page, and pagination metadata.
-
-        Raises:
-            ChatServiceError: If pagination is invalid or the thread is inaccessible.
-        """
-        if page < 1:
-            raise ChatServiceError("page must be at least 1")
-        if page_size < 1 or page_size > 1000:
-            raise ChatServiceError("page_size must be between 1 and 1000")
+    async def get_thread(self, username: str, thread_id: str) -> dict:
         thread = await self.db.get_webchat_thread_by_id(thread_id)
         if not thread:
             raise ChatServiceError(f"Thread {thread_id} not found")
@@ -1650,23 +1624,12 @@ class ChatService:
         history_ls = await self.platform_history_mgr.get(
             platform_id="webchat_thread",
             user_id=thread_id,
-            page=page,
-            page_size=page_size,
-        )
-        total = await self.platform_history_mgr.count(
-            platform_id="webchat_thread",
-            user_id=thread_id,
+            page=1,
+            page_size=1000,
         )
         return {
             "thread": serialize_thread(thread),
-            "history": [
-                serialize_history_entry(history, strip_reasoning=strip_reasoning)
-                for history in history_ls
-            ],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "has_more": (page - 1) * page_size + len(history_ls) < total,
+            "history": [serialize_history_entry(history) for history in history_ls],
             "is_running": self.running_convs.get(thread_id, False),
             "active_runs": self.get_active_chat_runs(username, thread_id),
         }

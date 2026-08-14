@@ -326,20 +326,10 @@ async def create_chat_thread(
 @router.get("/chat/threads/{thread_id}")
 async def get_chat_thread(
     thread_id: str,
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=1000, ge=1, le=1000),
     auth: AuthContext = Depends(require_chat_scope),
     service: ChatService = Depends(get_service),
 ):
-    return await _run(
-        lambda: service.get_thread(
-            auth.username,
-            thread_id,
-            page=page,
-            page_size=page_size,
-            strip_reasoning=True,
-        )
-    )
+    return await _run(lambda: service.get_thread(auth.username, thread_id))
 
 
 @router.delete("/chat/threads/{thread_id}")
