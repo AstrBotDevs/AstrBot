@@ -39,6 +39,7 @@ from astrbot.core.persona_error_reply import (
 from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
+    TokenUsage,
     ToolCallsResult,
 )
 from astrbot.core.provider.modalities import (
@@ -46,6 +47,7 @@ from astrbot.core.provider.modalities import (
     sanitize_contexts_by_modalities,
 )
 from astrbot.core.provider.provider import Provider
+from astrbot.core.provider.stats import ProviderStatSegment
 
 from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
@@ -324,6 +326,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         self.stats = AgentStats()
         self.stats.start_time = time.time()
+        self.provider_stat_segments: list[ProviderStatSegment] = []
 
     def _read_tool_hint(self) -> str:
         if self.read_tool is not None:
@@ -551,6 +554,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     candidate_id,
                 )
             self.provider = candidate
+            candidate_start_time = time.time()
             try:
                 retrying = AsyncRetrying(
                     retry=retry_if_exception_type(EmptyModelOutputError),
@@ -583,6 +587,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     and (not is_last_candidate)
                                 ):
                                     last_err_response = resp
+                                    if resp.usage is not None:
+                                        self.stats.token_usage += resp.usage
+                                        self.provider_stat_segments.append(
+                                            ProviderStatSegment(
+                                                provider=candidate,
+                                                usage=resp.usage,
+                                                start_time=candidate_start_time,
+                                                end_time=time.time(),
+                                            )
+                                        )
                                     logger.warning(
                                         "Chat Model %s returns error response, trying fallback to next provider.",
                                         candidate_id,
@@ -613,6 +627,18 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         return
             except Exception as exc:  # noqa: BLE001
                 last_exception = exc
+                failed_usage = getattr(exc, "_astrbot_token_usage", None)
+                if isinstance(failed_usage, TokenUsage):
+                    self.stats.token_usage += failed_usage
+                    if not is_last_candidate:
+                        self.provider_stat_segments.append(
+                            ProviderStatSegment(
+                                provider=candidate,
+                                usage=failed_usage,
+                                start_time=candidate_start_time,
+                                end_time=time.time(),
+                            )
+                        )
                 logger.warning(
                     "Chat Model %s request error: %s",
                     candidate_id,

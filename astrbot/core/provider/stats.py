@@ -1,10 +1,20 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from astrbot import logger
 from astrbot.core.db import BaseDatabase
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
+
+
+@dataclass(slots=True)
+class ProviderStatSegment:
+    provider: Any
+    usage: TokenUsage
+    start_time: float
+    end_time: float
+    status: str = "error"
 
 
 def _provider_id(provider: Any) -> str:
@@ -50,6 +60,47 @@ async def record_agent_runner_stats(
             if request is not None and request.conversation is not None
             else None
         )
+        segments: list[ProviderStatSegment] = list(
+            getattr(agent_runner, "provider_stat_segments", ())
+        )
+        segmented_usage = TokenUsage()
+        for segment in segments:
+            segmented_usage += segment.usage
+            await db.insert_provider_stat(
+                umo=umo,
+                conversation_id=conversation_id,
+                provider_id=_provider_id(segment.provider),
+                provider_model=segment.provider.get_model(),
+                status=segment.status,
+                stats={
+                    "token_usage": segment.usage.__dict__.copy(),
+                    "start_time": segment.start_time,
+                    "end_time": segment.end_time,
+                    "time_to_first_token": 0.0,
+                },
+                agent_type=agent_type,
+            )
+
+        aggregate_stats = stats.to_dict()
+        aggregate_usage = stats.token_usage - segmented_usage
+        aggregate_stats["token_usage"] = {
+            "input_other": max(0, aggregate_usage.input_other),
+            "input_cached": max(0, aggregate_usage.input_cached),
+            "output": max(0, aggregate_usage.output),
+        }
+        if segments:
+            original_start = aggregate_stats["start_time"]
+            aggregate_start = max(
+                original_start,
+                max(segment.end_time for segment in segments),
+            )
+            aggregate_stats["start_time"] = aggregate_start
+            aggregate_stats["time_to_first_token"] = max(
+                0.0,
+                aggregate_stats["time_to_first_token"]
+                - (aggregate_start - original_start),
+            )
+
         await db.insert_provider_stat(
             umo=umo,
             conversation_id=conversation_id,
@@ -59,7 +110,7 @@ async def record_agent_runner_stats(
                 final_response,
                 agent_runner.was_aborted(),
             ),
-            stats=stats.to_dict(),
+            stats=aggregate_stats,
             agent_type=agent_type,
         )
     except Exception as exc:  # noqa: BLE001

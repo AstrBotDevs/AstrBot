@@ -221,7 +221,9 @@ class InternalAgentSubStage(Stage):
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
                 logger.debug("acquired session lock for llm request")
                 agent_runner: AgentRunner | None = None
+                req: ProviderRequest | None = None
                 runner_registered = False
+                stats_scheduled = False
                 try:
                     build_cfg = replace(
                         self.main_agent_cfg,
@@ -395,13 +397,12 @@ class InternalAgentSubStage(Stage):
                         resp=final_resp.completion_text if final_resp else None,
                     )
 
-                    asyncio.create_task(
-                        _record_internal_agent_stats(
-                            event,
-                            req,
-                            agent_runner,
-                            final_resp,
-                        )
+                    stats_scheduled = _schedule_internal_agent_stats(
+                        stats_scheduled,
+                        event,
+                        req,
+                        agent_runner,
+                        final_resp,
                     )
 
                     # 检查事件是否被停止，如果被停止则不保存历史记录
@@ -423,6 +424,14 @@ class InternalAgentSubStage(Stage):
                         ),
                     )
                 finally:
+                    if agent_runner is not None:
+                        stats_scheduled = _schedule_internal_agent_stats(
+                            stats_scheduled,
+                            event,
+                            req,
+                            agent_runner,
+                            agent_runner.get_final_llm_resp(),
+                        )
                     if runner_registered and agent_runner is not None:
                         unregister_active_runner(event.unified_msg_origin, agent_runner)
 
@@ -558,3 +567,18 @@ async def _record_internal_agent_stats(
         agent_runner=agent_runner,
         final_response=final_resp,
     )
+
+
+def _schedule_internal_agent_stats(
+    already_scheduled: bool,
+    event: AstrMessageEvent,
+    req: ProviderRequest | None,
+    agent_runner: AgentRunner | None,
+    final_resp: LLMResponse | None,
+) -> bool:
+    if already_scheduled or agent_runner is None:
+        return already_scheduled
+    asyncio.create_task(
+        _record_internal_agent_stats(event, req, agent_runner, final_resp)
+    )
+    return True
