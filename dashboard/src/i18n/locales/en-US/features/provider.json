@@ -102,6 +102,7 @@
     "save": "Save Configuration",
     "saveAndFetchModels": "Save and Fetch Models",
     "fetchModels": "Fetch Model List",
+    "getApiKey": "Get API Key",
     "saveSuccess": "Provider source saved successfully",
     "saveError": "Failed to save provider source",
     "responsesBackgroundConflict": "Responses background mode requires store=true and a non-stateless state mode.",

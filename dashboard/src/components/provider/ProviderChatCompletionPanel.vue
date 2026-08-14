@@ -25,7 +25,7 @@
           <div class="provider-config-header">
             <div class="provider-config-headline">
               <div class="provider-config-title">
-                {{ selectedProviderSource.id }}
+                {{ getSourceDisplayName(selectedProviderSource) }}
               </div>
               <div class="provider-config-subtitle">
                 {{ selectedProviderSource.api_base || 'N/A' }}
@@ -60,6 +60,7 @@
                 v-if="basicSourceConfig"
                 :iterable="basicSourceConfig"
                 :metadata="providerSourceSchema"
+                :field-links="providerSourceFieldLinks"
                 metadata-key="provider"
                 :is-editing="true"
               />
@@ -195,7 +196,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import ProviderModelsPanel from '@/components/provider/ProviderModelsPanel.vue';
@@ -263,6 +264,17 @@ const {
   tm,
   showMessage,
 });
+
+const providerSourceFieldLinks = computed(() =>
+  selectedProviderSource.value?.provider === 'ssycloud'
+    ? {
+        key: {
+          label: tm('providerSources.getApiKey'),
+          href: 'https://www.shengsuanyun.com/?from=CH_T70U2X9L',
+        },
+      }
+    : {},
+);
 
 const showManualModelDialog = ref(false);
 
