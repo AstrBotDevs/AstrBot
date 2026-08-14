@@ -228,6 +228,12 @@ class TelegramPlatformAdapter(Platform):
         return PlatformMetadata(name="telegram", description="telegram 适配器", id=id_)
 
     @override
+    async def refresh_registered_commands(self) -> None:
+        if not self.enable_command_register or not self._application_started:
+            return
+        await self.register_commands()
+
+    @override
     async def run(self) -> None:
         self._loop = asyncio.get_running_loop()
         self._start_command_scheduler()
@@ -322,16 +328,16 @@ class TelegramPlatformAdapter(Platform):
         """收集所有注册的指令并注册到 Telegram"""
         try:
             commands = self.collect_commands()
+            current_hash = hash(
+                tuple((cmd.command, cmd.description) for cmd in commands),
+            )
+            if current_hash == self.last_command_hash:
+                return
 
+            await self.client.delete_my_commands()
             if commands:
-                current_hash = hash(
-                    tuple((cmd.command, cmd.description) for cmd in commands),
-                )
-                if current_hash == self.last_command_hash:
-                    return
-                self.last_command_hash = current_hash
-                await self.client.delete_my_commands()
                 await self.client.set_my_commands(commands)
+            self.last_command_hash = current_hash
 
         except Exception as e:
             logger.error(f"向 Telegram 注册指令时发生错误: {e!s}")
