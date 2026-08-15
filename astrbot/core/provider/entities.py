@@ -23,7 +23,7 @@ from astrbot.core.agent.message import (
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.utils.media_utils import MediaResolver
+from astrbot.core.utils.media_utils import MediaResolver, resolve_image_ref_to_images
 
 
 class ProviderType(enum.Enum):
@@ -208,19 +208,17 @@ class ProviderRequest:
         # 3. 图片内容
         if self.image_urls:
             for image_url in self.image_urls:
-                image_data = await MediaResolver(
-                    image_url,
-                    media_type="image",
-                ).to_base64_data()
-                if not image_data:
+                image_datas = await resolve_image_ref_to_images(image_url)
+                if not image_datas:
                     logger.warning("图片预处理结果为空，将忽略。")
                     continue
-                content_blocks.append(
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": image_data.to_data_url()},
-                    },
-                )
+                for image_data in image_datas:
+                    content_blocks.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": image_data.to_data_url()},
+                        },
+                    )
 
         # 4. 音频内容
         if self.audio_urls:

@@ -6,6 +6,9 @@ from .openai_source import ProviderOpenAIOfficial
     "xai_chat_completion", "xAI Chat Completion Provider Adapter"
 )
 class ProviderXAI(ProviderOpenAIOfficial):
+    supported_image_formats = frozenset({"image/jpeg", "image/png"})
+    """The official xAI vision API accepts only JPEG and PNG."""
+
     def __init__(
         self,
         provider_config: dict,

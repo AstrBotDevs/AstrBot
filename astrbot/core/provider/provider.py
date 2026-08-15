@@ -2,7 +2,7 @@ import abc
 import asyncio
 import os
 from collections.abc import AsyncGenerator
-from typing import Literal, TypeAlias, Union
+from typing import ClassVar, Literal, TypeAlias, Union
 
 from astrbot.core.agent.message import ContentPart, Message, is_checkpoint_message
 from astrbot.core.agent.tool import ToolSet
@@ -14,6 +14,16 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.provider.register import provider_cls_map
 from astrbot.core.utils.astrbot_path import get_astrbot_path
+from astrbot.core.utils.media_utils import (
+    ANIMATED_DEFAULT_MAX_FRAMES,
+    ANIMATED_MAX_FRAMES_LIMIT,
+    ANIMATED_STRATEGY_FIRST_FRAME,
+    ANIMATED_STRATEGY_MULTI_FRAME,
+    IMAGE_SHORT_MIME_TYPES,
+)
+
+DEFAULT_FALLBACK_IMAGE_FORMATS = frozenset({"image/jpeg", "image/png"})
+"""Conservative image formats assumed for providers without a declared set."""
 
 Providers: TypeAlias = Union[
     "Provider",
@@ -66,6 +76,14 @@ class AbstractProvider(abc.ABC):
 class Provider(AbstractProvider):
     """Chat Provider"""
 
+    supported_image_formats: ClassVar[frozenset[str] | None] = None
+    """Image MIME types the provider officially accepts.
+
+    ``None`` means undeclared and falls back to DEFAULT_FALLBACK_IMAGE_FORMATS.
+    Aggregator subclasses (e.g. OpenRouter) must set this back to ``None``
+    explicitly so they do not inherit an official vendor's format set.
+    """
+
     def __init__(
         self,
         provider_config: dict,
@@ -73,6 +91,63 @@ class Provider(AbstractProvider):
     ) -> None:
         super().__init__(provider_config)
         self.provider_settings = provider_settings
+
+    def resolve_allowed_image_formats(self) -> frozenset[str] | None:
+        """Resolve the image MIME types allowed for this provider instance.
+
+        Priority: ``provider_config["image_formats"]`` (per-instance override,
+        short names like ``jpeg`` or MIME types, ``*`` disables restriction) >
+        the class-level ``supported_image_formats`` > the conservative
+        DEFAULT_FALLBACK_IMAGE_FORMATS (jpeg/png).
+
+        Returns:
+            The allowed MIME types, or ``None`` when unrestricted.
+        """
+        configured = self.provider_config.get("image_formats")
+        if configured:
+            normalized = {
+                str(value).strip().lower() for value in configured if str(value).strip()
+            }
+            if "*" in normalized:
+                return None
+            mapped = {
+                IMAGE_SHORT_MIME_TYPES.get(value, value)
+                for value in normalized
+                if value.startswith("image/") or value in IMAGE_SHORT_MIME_TYPES
+            }
+            if mapped:
+                return frozenset(mapped)
+        if self.supported_image_formats is not None:
+            return self.supported_image_formats
+        return DEFAULT_FALLBACK_IMAGE_FORMATS
+
+    def get_animated_image_strategy(self) -> tuple[str, int]:
+        """Read the animated image handling strategy from the provider config.
+
+        Returns:
+            Tuple of ``(strategy, max_frames)`` where strategy is
+            ``first_frame`` or ``multi_frame`` and max_frames is clamped to
+            ``[1, 16]``.
+        """
+        strategy = str(
+            self.provider_config.get("animated_image_strategy")
+            or ANIMATED_STRATEGY_FIRST_FRAME
+        )
+        if strategy not in (
+            ANIMATED_STRATEGY_FIRST_FRAME,
+            ANIMATED_STRATEGY_MULTI_FRAME,
+        ):
+            strategy = ANIMATED_STRATEGY_FIRST_FRAME
+        raw_max_frames = self.provider_config.get("animated_image_max_frames")
+        try:
+            max_frames = (
+                ANIMATED_DEFAULT_MAX_FRAMES
+                if raw_max_frames is None
+                else int(raw_max_frames)
+            )
+        except (TypeError, ValueError):
+            max_frames = ANIMATED_DEFAULT_MAX_FRAMES
+        return strategy, min(max(max_frames, 1), ANIMATED_MAX_FRAMES_LIMIT)
 
     @abc.abstractmethod
     def get_current_key(self) -> str:

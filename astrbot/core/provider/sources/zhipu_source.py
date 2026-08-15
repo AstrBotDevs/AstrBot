@@ -8,6 +8,9 @@ from .openai_source import ProviderOpenAIOfficial
 
 @register_provider_adapter("zhipu_chat_completion", "智谱 Chat Completion 提供商适配器")
 class ProviderZhipu(ProviderOpenAIOfficial):
+    supported_image_formats = frozenset({"image/jpeg", "image/png"})
+    """GLM vision officially guarantees JPEG/PNG; keep it conservative."""
+
     def __init__(
         self,
         provider_config: dict,
