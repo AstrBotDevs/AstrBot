@@ -59,6 +59,7 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
 
   function openProviderEdit(provider: any) {
     const editableProvider = JSON.parse(JSON.stringify(provider))
+    delete editableProvider.reasoning
     providerEditData.value = editableProvider
     providerEditOriginalId.value = provider.id
     providerEditMode.value = 'edit'
@@ -88,6 +89,7 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
   async function saveEditedProvider() {
     if (!providerEditData.value) return
 
+    delete providerEditData.value.reasoning
     savingProviders.value.push(providerEditData.value.id)
     try {
       const isAdding = providerEditMode.value === 'add'
