@@ -642,3 +642,360 @@ root/operator/session_owner/session_admin/member/guest
 9. 后续单独立项：跨平台提权通道和任意策略扩展。
 
 每个任务都必须同时提交对应的单元/集成测试；涉及 Dashboard 路由时同步更新 `openspec/openapi-v1.yaml`、生成客户端和公开 OpenAPI 文档。
+
+## 19. 统一权限系统 v2 设计提案（未实现）
+
+### 19.1 定位、范围与非目标
+
+v2 是在当前 v1 授权入口、资源规范化、step-up、脱敏审计和
+fail-closed 行为上的增量设计，不是立即替换运行时的完整授权引擎。当前实现的
+事实来源仍是 AuthorizationService.authorize()、ACTIONS、高风险动作表以及
+现有 Dashboard/API/插件契约；本节不会把提案描述成已实现功能。
+
+目标是让授权能表达“谁通过什么关系访问哪个对象”，同时把 API Key、插件、Agent
+和工具的附加限制显式化：
+
+```text
+关系（subject -> relation -> resource）
+  + 有限的上下文条件（ABAC）
+  + API Key 的显式 capability
+  + root/operator 仅用于 Dashboard 控制面；会话角色仍受资源作用域约束
+```
+
+不在本期做以下事情：
+
+- 不引入 OpenFGA、Zanzibar、Cedar 等外部策略服务；
+- 不提供用户可编辑的任意 deny DSL、递归关系查询或脚本化策略；
+- 不把平台昵称、WebChat username、群号或裸 session_id 当作身份；
+- 不通过兼容 shim 继续读取旧字段；如有存量数据，使用一次性迁移或阻断升级；
+- 不返回 Provider 密钥。凭据只允许安全地写入、替换或删除，读取接口必须脱敏。
+
+单实例、本地 SQLite、插件和 Dashboard 是当前部署形态。只有在多实例共享授权域、
+关系规模或一致性需求明显超出本地实现时，才重新评估外部 FGA 服务。
+
+### 19.2 与当前实现的契合度审计
+
+当前代码已经提供适合 v2 演进的边界：
+
+- authorize(subject, action, resource, context) 是单一授权入口；
+- Subject、Resource、AuthContext 已区分认证身份、来源、配置档和原始会话；
+- ACTIONS 是动作注册表，插件动作使用命名空间；
+- 平台成员事实具有来源和 TTL，Dashboard 高风险操作使用一次性 step-up；
+- API Key 仍以历史 scope 映射动作，且 NULL 和显式 * 具有历史语义；
+- 高风险 allow 依赖审计写入，授权异常默认拒绝。
+
+因此 v2 应保留入口和安全不变量，只替换“按最高角色放行”的内部策略。原方案中
+改名为 tool.local.exec、新增 provider.credentials.read、把 operator 绑定到
+instance、以及直接删除所有 v1 数据的写法均不契合当前契约。
+
+**评审结论**：建议采纳本节的有限关系 + 结构化上下文 + 显式 capability 方案，
+但按增量路线落地。它能解决当前 v1 的对象级作用域、API Key 资源边界和工具/Agent
+调用链问题，又不会把单实例 SQLite 项目提前变成外部策略服务。v2 的首要交付物应是
+action/resource/policy registry、对象级查询过滤和迁移预检；关系推理、可编辑策略和
+跨平台 elevation 都必须排在这些契约之后。
+
+### 19.3 主体和可信上下文
+
+主体继续使用现有命名空间：
+
+```text
+dashboard-account:<account-id>
+dashboard-session:<session-id>
+im:<platform-instance>:<bot-account-id>:<sender-id>
+api-key:<key-id>
+plugin:<plugin-id>
+agent:<agent-id>
+system:<component>
+guest:<id>
+```
+
+规则如下：
+
+1. dashboard-account 是稳定的 Dashboard 关系主体；dashboard-session 只表示当前
+   已认证会话，不能单独产生永久授权。
+2. plugin 和 agent 是执行组件，不会自动继承调用者的 root/operator 权限。子 Agent
+   必须携带原始调用主体和调用链，handoff 不能提升权限。
+3. IM 主体必须由适配器根据平台实例、Bot 账户和发送者 ID 构造。显示名、昵称、
+   username 和调用方自报的主体 ID 永远不可信。
+4. AuthContext.source、config_id、origin_session_resource_id、认证强度和平台事实
+   由受信任入口填充；缺失或不一致时拒绝，而不是猜测。
+
+### 19.4 Canonical Resource：先固定边界，再做关系推理
+
+资源 ID 由服务端规范化生成，调用方只能引用已存在的对象。v2 的最小资源图为：
+
+```text
+global
+└── instance:<config-id>
+    ├── session:<config-id>:<platform-instance>:<bot-account-id>:<umo>
+    │   ├── conversation:<session-resource>:<conversation-id>
+    │   └── memory:<session-resource>:<memory-id>
+    ├── provider:<config-id>:<provider-id>
+    ├── knowledge-base:<config-id>:<kb-id>
+    │   └── knowledge-base-document:<kb-id>:<document-id>
+    └── file:<config-id>:<owner-kind>:<owner-id>:<file-id>
+```
+
+其中：
+
+- session 必须同时包含 config_id、platform_instance、bot_account_id 和规范化
+  UMO；不得用裸 session_id 作为跨平台身份；
+- conversation、memory、文件和知识库文档必须携带可验证的父资源或配置档；
+- provider.credentials.write 的资源必须是具体 Provider 或其所属 instance，不能
+  用一个全局 provider 字符串代替；
+- 父子关系只提供候选范围，不自动授予权限。每条继承关系必须在固定策略表中明确
+  声明，且最多向上解析一层；禁止递归、循环和调用方自定义父路径；
+- 查询服务必须先根据授权主体过滤对象，再序列化响应。只授权 collection endpoint
+  而不做行级过滤是不合格的对象级授权。
+
+当前 v1 canonical session 编码保持不变。v2 可以新增独立的 session:v2 编码，但必须提供一次性数据库迁移：对每条现存 v1 session
+binding 由可信平台元数据补全字段。若无法无歧义补全，升级预检必须停止并要求管理员
+导出、确认或重建绑定；“本分支没有存量用户”不能替代迁移预检。
+
+### 19.5 有限关系模型，而不是可编程 ReBAC
+
+关系 tuple 的内部表达为：
+
+```text
+subject --relation--> resource
+```
+
+关系 registry 只允许固定集合：root、operator、instance_operator、owner、admin、
+member、guest、viewer、editor、executor、caller。与当前 `Role` 的迁移映射为
+`session_owner -> owner`、`session_admin -> admin`；平台事实中的 owner/admin/member
+仍是带来源和 TTL 的短期事实，不是全局关系绑定。`viewer`、`editor`、`executor`、
+`caller` 先作为受约束的预留关系，只有对应 action/resource 策略和数据模型落地后
+才能启用。root 和 operator 只能绑定 Dashboard account 的 global 关系；
+instance_operator 绑定 instance；平台 owner/admin/member 不能产生 global 或 instance
+控制面权限。
+
+每个 (action, resource_type) 在代码中登记：
+
+- 可匹配的 relation；
+- 允许的父资源和最大深度（v2 固定为 0 或 1）；
+- 必需的 context 属性（来源、配置档、原始 session、认证强度）；
+- 风险级别和是否要求 step-up。
+
+关系数据优先复用当前的 `auth_role_bindings`：将现有 `role` 按固定关系语义解释，
+通过一次 schema 迁移补足 relation/source/expiry 所需字段；只有在确认现有表无法
+承载关系元数据时才改名为 `auth_relationships`，不得让两套表长期并存。关系表必须
+有 (subject_id, resource_type, resource_id, relation, revoked_at) 索引、唯一有效约束、
+过期清理和来源字段。授权结果保留 matched_relations、relation_sources 和可审计的
+拒绝原因，不再把单一 effective_role 当作决策依据。
+
+示例：
+
+```text
+dashboard-account:a --root---------------> global
+dashboard-account:b --operator-----------> global
+dashboard-account:c --instance_operator--> instance:default
+im:napcat:bot:42 --owner---------------> session:default:...
+im:napcat:bot:99 --admin---------------> session:default:...
+session:default:... --owner-------------> conversation:...
+```
+
+### 19.6 决策流程和适用约束
+
+保留现有接口：
+
+```text
+authorize(subject, action, resource, context) -> Decision
+```
+
+决策顺序固定为：
+
+1. 验证 subject 与 context 的绑定；
+2. 规范化并验证 resource、配置档和原始 session；
+3. 验证 action registry（未知动作默认拒绝）；
+4. 解析直接关系和最多一层父关系；
+5. 检查来源、TTL、同配置和其他 ABAC 条件；
+6. 仅在 `source == api_key` 且主体类型为 `api-key` 时检查 API Key capability；
+7. 按风险策略检查 Dashboard step-up；
+8. 写入必要的脱敏审计并返回 Decision。
+
+授权成立必须同时满足：
+
+```text
+authenticated
+AND known_action
+AND valid_resource
+AND (relationship_grant OR api_key_capability_grant)
+AND applicable_context_constraints_pass
+AND applicable_capability_constraints_pass
+AND step_up_passed
+```
+
+对于 API Key，显式 capability 本身就是 grant，不要求额外伪造一个 role binding；
+它必须精确匹配 action、resource、配置档和有效期，并且不能覆盖高风险动作。对于
+其他主体，`relationship_grant` 来自固定关系和有限父资源解析。
+
+“适用”是关键边界：API Key capability 只约束 API Key；插件声明只约束
+`plugin:<id>:<action>` 自有动作；Persona 工具白名单只约束该 Persona 发起的工具
+调用；IM 的原始 session 约束只约束 IM 来源。未适用的约束视为 true，不能把普通
+Dashboard/IM 用户与不存在的 API Key 或插件声明求交而误拒绝。
+
+Agent/工具调用必须保留原始调用主体、执行组件和完整调用链。核心授权检查与直接
+工具执行、Agent 间接执行、MCP 调用使用同一 action/resource 结果；插件声明是必要
+条件，不是提升调用者权限的通道。Dashboard Extension 的 `required_scope` 仍先映射
+到现有 API scope/action；它与插件自有的 `plugin:<plugin-id>:<action>` 动作命名空间
+是两条不同的声明路径，不能混用。
+
+### 19.7 Action Registry 兼容策略
+
+v2 不擅自改名。以下现有动作继续作为 canonical 名称：session.read、session.manage、
+session.assign、provider.read、provider.use、provider.manage、
+provider.credentials.write、platform.read、platform.manage、agent.manage、
+extension.read、extension.manage、extension.plugin_install、data.manage、
+data.export_all、system.manage、system.update、system.restart、system.pip_install、
+identity.read、identity.manage、identity.operator.write、identity.root.write、
+tool.local_exec、tool.python_exec、tool.file_read、tool.file_write、
+tool.browser_control、tool.mcp_read、tool.mcp_write、tool.computer_use 和
+`dashboard.account.manage`。插件动作继续使用 `plugin:<plugin-id>:<action>` 命名空间并
+经过声明校验。
+
+细分 data.manage 或工具动作只有在对应服务、路由和测试同时落地时才新增。新增动作
+必须登记资源类型、关系、风险、来源和迁移映射；旧动作不能通过字符串别名长期共存。
+特别注意：
+
+- 不新增 provider.credentials.read；任何 Provider 读取响应都必须脱敏；
+- 文档和代码使用 tool.file_write，不是未注册的 tool.file.write；
+- provider.credentials.write、extension.plugin_install、data.export_all、
+  tool.local_exec、tool.python_exec、tool.file_write、tool.browser_control、
+  tool.mcp_write、tool.computer_use、identity.manage、dashboard.account.manage、
+  系统更新/重启/安装等高风险动作保持独立授权，不能从父动作静默继承。
+
+### 19.8 典型策略和入口矩阵
+
+| 入口/资源                        | 允许的关系或条件                                                          | 必须额外满足                                     |
+| -------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------ |
+| 当前 IM session                  | owner/admin/member；instance operator 或 global operator/root             | resource == origin_session_resource_id           |
+| session 下的 conversation/memory | 该 session 的 owner/admin/member；instance operator；global operator/root | 服务层按对象过滤                                 |
+| Provider 配置/凭据               | instance operator、operator、root                                         | 仅 Dashboard；凭据写入需 step-up，读取脱敏       |
+| 插件目录与插件 Action            | extension 相关关系；插件自有 Action 需声明                                | Action 仍调用核心 authorize                      |
+| API Key 请求                     | 该 key 的显式 action/resource capability（不依赖角色绑定）                | 高风险 action 一律拒绝                           |
+| Agent/Computer/MCP/本地工具      | 原始调用者对目标 resource 的 action 授权                                  | Persona/插件声明/风险规则仅在适用时叠加          |
+| 导出、下载、更新、重启           | 明确的高风险 action                                                       | Dashboard step-up；IM、插件、Agent、API Key 拒绝 |
+
+列表、搜索、批量导出和下载都必须在 service/query 层执行对象级过滤；禁止先取全量
+数据再在 Dashboard 或插件层隐藏。批量变更的 step-up 必须绑定排序后的完整资源集合，
+防止拆分重放。
+
+### 19.9 持久化与 API Key 迁移
+
+关系存储建议：
+
+```text
+auth_role_bindings（沿用现有表；role 按 relation 解释）
+binding_id, subject_id, role/relation, scope_type, scope_id,
+config_id, source, expires_at, created_by, created_at,
+revoked_at, revoked_by, metadata_json
+```
+
+如确实需要独立的资源关系表，必须提供从 `auth_role_bindings` 到新表的一次性、可审计
+迁移，并删除旧读取路径；不得同时读取两张表。API Key 则新增显式能力表：
+
+```text
+auth_capabilities:
+capability_id, subject_id, action, resource_type, resource_id,
+config_id, expires_at, created_by, revoked_at
+```
+
+约束包括固定 relation/action registry、canonical resource 校验、来源 TTL、撤销时间、
+唯一有效记录和必要索引。平台事实仍保留完整隔离键：
+subject_id + config_id + platform_instance + bot_account_id + umo，不能只按
+subject_id + config_id + umo 查询。
+
+API Key 从 scope 迁移为显式 capability：
+
+```json
+{
+  "capabilities": [
+    {
+      "action": "session.read",
+      "resource": "session:v2:..."
+    },
+    {
+      "action": "provider.use",
+      "resource": "instance:default"
+    }
+  ],
+  "expires_at": "..."
+}
+```
+
+`NULL` scope 在当前代码中不是 wildcard，而是固定的历史默认 scope 集合；显式 `*`
+才是另一种历史 wildcard。二者都不能在 v2 继续产生扩权语义，但迁移处理不同：
+
+1. 预检并统计所有 role binding、policy override、v1 resource 和 API Key；
+2. `NULL` 按代码中冻结的 `DEFAULT_API_KEY_SCOPES` 展开为有限 action 集合；由于旧
+   scope 没有对象级边界，只有能确定配置档/资源范围的记录才自动生成 capability，
+   其余记录要求管理员重新签发；
+3. 显式 `*` 和冲突记录标记为需重建并禁用，而不是扩大权限；不得把 wildcard 当作
+   普通 capability 迁移；
+4. 迁移在事务中写入审计，完成后删除旧字段读取路径；
+5. 若管理员选择不迁移 API Key，明确要求全部重建并在升级说明中列出影响。
+
+这不是运行时兼容层；迁移脚本或升级预检完成后，核心只读取 v2 schema。
+
+### 19.10 WebChat、Dashboard 与 Step-up
+
+WebChat 的 username 仍可作为协议兼容字段，但永远不等于认证主体。匿名请求使用
+guest；Dashboard 驱动的 WebChat 同时传递已认证 account/session 上下文，修改
+username 不能改变权限。
+
+v2.0 只保留 Dashboard step-up：
+
+- 高风险 Dashboard 操作要求新鲜密码或 TOTP；
+- step-up 绑定 subject、Dashboard session、action、精确 resource、config、source
+  和 policy version，短 TTL、单次消费、原子更新；
+- IM 仅保留当前 origin session 内受限的成员管理例外；不得借此操作其他会话、
+  instance 或 global identity；
+- 插件、Agent、MCP 和 API Key 不能直接执行高风险动作；
+- 不在公开群发送可执行凭证。
+
+跨平台提权作为独立 v2.1 设计，必须分离 request/approve/execute，并要求审批者同时
+拥有目标 action 和 resource 的授权；在协议、审计和回滚方案落地前不实现。
+
+### 19.11 实施与发布闸门
+
+1. **契约冻结**：整理当前 ACTIONS、高风险表、插件 action 和 API scope 映射，生成
+   action/resource/risk 矩阵。
+2. **关系内核**：引入 RelationshipTuple 和有限策略 registry，保留 authorize()，
+   先以 shadow decision 对比 v1，不改变放行结果。
+3. **资源与存储**：补全 session v2 canonical 资源、父资源解析、关系表索引和一次性
+   迁移预检。
+4. **能力迁移**：实现 API Key capability，拒绝 wildcard/未界定资源，完成旧 key
+   重建或事务迁移。
+5. **入口覆盖**：逐一覆盖 Dashboard JSON、WebSocket、SSE、下载、插件、Agent、
+   MCP、Computer Tool 和本地工具，并在 query/service 层过滤对象。
+6. **切换与清理**：shadow 矩阵无差异后切换决策，将仍需保留的结构化 policy
+   override 显式迁移到新 registry；删除旧 scope/字段读取代码，不保留长期 shim。
+7. **发布闸门**：迁移预检、授权矩阵、越权回归、step-up 重放、审计队列满载、
+   并发撤销和跨配置/跨平台测试全部通过；否则阻断升级。
+
+### 19.12 验收标准
+
+1. 每次授权都能定位 subject、action、resource、来源、匹配关系和 context。
+2. 授权不依赖单一 effective_role，关系策略最多解析一层且无循环。
+3. session 资源不可由裸 session ID 构造；不同配置、平台实例和 Bot 账户隔离。
+4. 未知 action/resource、缺失 context、策略异常和审计不可用均 fail closed。
+5. provider.credentials.read、tool.file.write 等未注册/越界动作不会被文档或运行时
+   接受；Provider 凭据永不返回。
+6. API Key 只有显式 action/resource capability，运行时没有 wildcard 或 NULL 扩权，
+   也没有隐式 operator 权限。
+7. 列表、搜索、导出、下载和批量写入均执行对象级授权。
+8. 插件、Agent、MCP、Computer Tool 和本地工具不能绕过核心授权或提升调用者。
+9. 高风险 Dashboard 操作需要精确、一次性 step-up；IM/插件/Agent/API Key 被拒绝。
+10. 关系变更、step-up、拒绝和高风险 allow 都有脱敏、可查询审计。
+11. Dashboard、WebSocket、SSE、下载、插件和工具入口均有授权矩阵测试。
+12. 迁移前置检查能识别无法安全映射的数据，并阻断不完整升级。
+
+### 19.13 参考原则（已核对，2026-08-15）
+
+- [OWASP Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html)：
+  认证与授权分离、默认拒绝、最小权限、每次请求检查、对象级授权和授权回归测试；
+- [NIST SP 800-162](https://csrc.nist.gov/pubs/sp/800/162/upd2/final)：ABAC 评估主体、对象、
+  操作和环境属性及其策略关系；
+- [OpenFGA Authorization Concepts](https://openfga.dev/docs/concepts)：用
+  object-relation-user tuple 表达关系，但本项目只采纳其表达方式，不引入外部服务或
+  无限递归模型。
