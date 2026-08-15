@@ -71,7 +71,7 @@ uv run python scripts/sync_dashboard_dist.py
 uv run main.py
 ```
 
-请先安装 [uv](https://docs.astral.sh/uv/)、Node.js 26.5.0 和 pnpm 11.15.1。仓库固定使用 Python 3.14.6 和对应的 pnpm 版本。首次启动后访问 `http://localhost:6185`，默认用户名为 `astrbot`，随机初始密码会打印在日志中。
+请先安装 [uv](https://docs.astral.sh/uv/)、Node.js 26.5.0 和 pnpm 11.21.0。仓库固定使用 Python 3.14.6 和对应的 pnpm 版本。首次启动后访问 `http://localhost:6185`，默认用户名为 `astrbot`，随机初始密码会打印在日志中。
 
 如果启用本地文转图或插件 HTML 渲染，还需执行一次 `uv run astrbot install-browser`。更新、远程访问和安全配置请参阅[从源码部署 AstrBot](docs/zh/deploy/astrbot/cli.md)。
 

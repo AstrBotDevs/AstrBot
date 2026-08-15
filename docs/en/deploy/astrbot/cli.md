@@ -8,7 +8,7 @@
 - Git
 - `uv`
 - Node.js 26.5.0
-- pnpm 11.15.1
+- pnpm 11.21.0
 
 Package metadata requires Python 3.14 or later. The checkout pins Python 3.14.6 in `.python-version`; `uv` can download that version when its managed-Python support is enabled.
 

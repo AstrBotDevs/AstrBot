@@ -2,13 +2,13 @@
   "title": "长期记忆",
   "subtitle": "管理可审计、可删除、可恢复的人格长期记忆",
   "stats": {
-    "title": "运行状态",
     "activeFacts": "有效事实",
     "deletedFacts": "已删除事实",
     "profiles": "画像",
     "queue": "写回队列",
-    "workerRunning": "写回 worker 运行中",
-    "workerStopped": "写回 worker 未运行"
+    "worker": "写回服务",
+    "workerRunning": "写回服务运行中",
+    "workerStopped": "写回服务未运行"
   },
   "memories": {
     "title": "记忆列表",
@@ -16,15 +16,15 @@
     "content": "内容",
     "person": "人物",
     "chat": "会话",
-    "scope": "Scope",
+    "scope": "范围",
     "confidence": "置信度",
     "status": "状态",
     "updatedAt": "更新时间"
   },
   "filters": {
-    "personId": "Person ID",
-    "chatId": "Chat ID",
-    "scopeId": "Scope ID",
+    "personId": "人物 ID",
+    "chatId": "会话 ID",
+    "scopeId": "范围 ID",
     "status": "状态",
     "query": "搜索内容"
   },
@@ -37,6 +37,7 @@
     "title": "操作",
     "refresh": "刷新",
     "search": "查询",
+    "clearFilters": "清除",
     "view": "查看详情",
     "delete": "删除",
     "restore": "恢复",
@@ -48,7 +49,15 @@
     "refresh": "刷新画像"
   },
   "operations": {
-    "title": "操作记录"
+    "title": "操作记录",
+    "memoryFact": "记忆 #{id}",
+    "unknownTarget": "未知对象",
+    "actions": {
+      "create": "创建",
+      "delete": "删除",
+      "restore": "恢复",
+      "update": "更新"
+    }
   },
   "detail": {
     "title": "记忆详情"
@@ -63,6 +72,9 @@
     "emptyProfiles": "暂无人物画像",
     "emptyOperations": "暂无操作记录",
     "loadFactsError": "加载记忆失败",
+    "loadStatsError": "加载运行状态失败",
+    "loadProfilesError": "加载人物画像失败",
+    "loadOperationsError": "加载操作记录失败",
     "detailError": "加载详情失败",
     "deleteSuccess": "记忆已删除",
     "restoreSuccess": "记忆已恢复",

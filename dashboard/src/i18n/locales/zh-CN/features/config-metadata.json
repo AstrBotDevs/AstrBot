@@ -1237,6 +1237,11 @@
             "description": "最大词元（Tokens）数",
             "hint": "生成的最大词元（Tokens）数。",
             "name": "Max Tokens"
+          },
+          "reasoning_effort": {
+            "description": "推理强度",
+            "hint": "控制推理模型的推理强度，支持的值取决于具体模型。",
+            "name": "Reasoning Effort"
           }
         }
       },

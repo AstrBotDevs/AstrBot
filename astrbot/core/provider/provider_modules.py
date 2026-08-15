@@ -12,6 +12,7 @@ PROVIDER_MODULES = {
     "xai_chat_completion": "astrbot.core.provider.sources.xai_source",
     "aihubmix_chat_completion": "astrbot.core.provider.sources.oai_aihubmix_source",
     "openrouter_chat_completion": "astrbot.core.provider.sources.openrouter_source",
+    "ssycloud_chat_completion": "astrbot.core.provider.sources.ssycloud_source",
     "anthropic_chat_completion": "astrbot.core.provider.sources.anthropic_source",
     "kimi_code_chat_completion": "astrbot.core.provider.sources.kimi_code_source",
     "googlegenai_chat_completion": "astrbot.core.provider.sources.gemini_source",

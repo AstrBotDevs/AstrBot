@@ -45,7 +45,6 @@ interface ProviderItem extends GenericObject {
   enable?: boolean;
   provider_type?: string;
   modalities?: string[];
-  reasoning?: boolean;
   max_context_tokens?: number;
   model_metadata?: ProviderModelMetadata | null;
 }
@@ -274,7 +273,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return {
       modalities: { input },
       tool_call: mods.includes('tool_use'),
-      reasoning: Boolean(provider.reasoning),
       limit: { context: provider.max_context_tokens || 0 },
     };
   }
@@ -451,6 +449,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   function getSourceDisplayName(source: ProviderSourceItem | null | undefined) {
     if (!source) return '';
     if (source.isPlaceholder) return source.templateKey || source.id || '';
+    if (source.id === 'ssycloud') return 'ssycloud(胜算云)';
     return source.id || '';
   }
 
@@ -810,7 +809,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       modalities,
       custom_extra_body: {},
       max_context_tokens,
-      reasoning: supportsReasoning(metadata),
     };
   }
 

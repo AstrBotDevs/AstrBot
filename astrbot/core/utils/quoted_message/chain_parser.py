@@ -497,17 +497,24 @@ def _extract_text_forward_ids_and_images_from_forward_nodes(
         if not isinstance(node, dict):
             continue
 
-        sender = node.get("sender")
+        node_data = node
+        if node.get("type") == "node" and isinstance(node.get("data"), dict):
+            node_data = node["data"]
+
+        sender = node_data.get("sender")
         if not isinstance(sender, dict):
             sender = {}
         sender_name = (
             sender.get("nickname")
             or sender.get("card")
             or sender.get("user_id")
+            or node_data.get("nickname")
+            or node_data.get("name")
+            or node_data.get("user_id")
             or "Unknown User"
         )
 
-        raw_content = node.get("message") or node.get("content") or []
+        raw_content = node_data.get("message") or node_data.get("content") or []
         chain: list[Any] = []
         if isinstance(raw_content, list):
             chain = raw_content

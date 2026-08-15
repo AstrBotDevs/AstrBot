@@ -1065,7 +1065,10 @@ async def convert_audio_format(
     Raises:
         Exception: Raised when ffmpeg is unavailable or conversion fails.
     """
-    if audio_path.lower().endswith(f".{output_format}"):
+    source_path = Path(audio_path)
+    if source_path.suffix.lower() == f".{output_format}" and (
+        not source_path.exists() or _get_audio_magic_type(audio_path) == output_format
+    ):
         return audio_path
 
     if output_path is None:

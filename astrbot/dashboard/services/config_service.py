@@ -1457,6 +1457,20 @@ class ProviderConfigService:
             self._ensure_provider_type(copy.deepcopy(source))
         )
 
+    @staticmethod
+    def _strip_legacy_reasoning_metadata(provider: dict) -> dict:
+        """Remove model capability metadata from source-backed providers.
+
+        Args:
+            provider: Provider configuration to sanitize.
+
+        Returns:
+            The sanitized provider configuration.
+        """
+        if provider.get("provider_source_id"):
+            provider.pop("reasoning", None)
+        return provider
+
     def _attach_model_metadata(self, provider: dict) -> dict:
         model_id = provider.get("model")
         if isinstance(model_id, str) and (
@@ -1470,11 +1484,13 @@ class ProviderConfigService:
             normalized = self.provider_manager.get_merged_provider_config(provider)
         else:
             normalized = copy.deepcopy(provider)
+        self._strip_legacy_reasoning_metadata(normalized)
         normalized = self._ensure_provider_type(normalized)
         return _redact_sensitive_config(self._attach_model_metadata(normalized))
 
     def _build_raw_provider_response(self, provider: dict) -> dict:
         normalized = self._ensure_provider_type(copy.deepcopy(provider))
+        self._strip_legacy_reasoning_metadata(normalized)
         return _redact_sensitive_config(self._attach_model_metadata(normalized))
 
     def get_provider_schema(self) -> dict:
@@ -1777,6 +1793,7 @@ class ProviderConfigService:
             config["provider_source_id"] = source_id
         else:
             self._ensure_provider_type(config)
+        self._strip_legacy_reasoning_metadata(config)
         await self.provider_manager.create_provider(config)
 
     async def update_provider(self, provider_id: str, config: dict) -> None:
@@ -1790,6 +1807,7 @@ class ProviderConfigService:
             config["id"] = provider_id
         if not config.get("provider_source_id"):
             self._ensure_provider_type(config)
+        self._strip_legacy_reasoning_metadata(config)
         await self.provider_manager.update_provider(provider_id, config)
 
     async def set_provider_enabled(self, provider_id: str, enabled: bool) -> None:

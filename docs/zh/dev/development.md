@@ -11,7 +11,7 @@ outline: deep
 - Python 包要求：3.14 及以上
 - 当前开发、Docker 与 CI Python：3.14.6
 - Node.js：26.5.0
-- Dashboard 与文档 pnpm：11.15.1
+- Dashboard 与文档 pnpm：11.21.0
 - Python 依赖管理：`uv`
 
 版本来源分别是 `.python-version`、工作流、Dockerfile 和各目录的 `packageManager` 字段。升级工具链时必须同步这些位置及相应锁文件。
@@ -25,7 +25,7 @@ make doctor
 make bootstrap
 ```
 
-`make doctor` 检查 Python 3.14.x、`uv`、Node 26.x 和 Dashboard pnpm 11.15.x；在 POSIX 上还检查 `shfmt`、`shellcheck` 和 `hadolint`。`make bootstrap` 使用锁文件同步 Python dev 依赖、根目录 Node 格式化工具和 Dashboard 依赖，但不会安装文档依赖。
+`make doctor` 检查 Python 3.14.x、`uv`、Node 26.x 和 Dashboard pnpm 11.21.x；在 POSIX 上还检查 `shfmt`、`shellcheck` 和 `hadolint`。`make bootstrap` 使用锁文件同步 Python dev 依赖、根目录 Node 格式化工具和 Dashboard 依赖，但不会安装文档依赖。
 
 - Windows：另需 GNU Make、PowerShell 7；PowerShell 检查还需要 PSScriptAnalyzer。`make doctor` 当前不会验证这三项。
 - Linux/macOS：使用 Bash，不要求 PowerShell；严格检查需要 `shfmt`、`shellcheck` 和 `hadolint`。

@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -250,7 +251,9 @@ async def test_create_kb_raises_when_embedding_provider_is_missing():
     kb_manager = MagicMock()
     service = make_service(kb_manager)
 
-    with pytest.raises(KnowledgeBaseServiceError, match="缺少参数 embedding_provider_id"):
+    with pytest.raises(
+        KnowledgeBaseServiceError, match="缺少参数 embedding_provider_id"
+    ):
         await service.create_kb({"kb_name": "Test KB"})
 
 
@@ -264,3 +267,57 @@ async def test_create_kb_raises_when_embedding_provider_is_invalid():
         await service.create_kb(
             {"kb_name": "Test KB", "embedding_provider_id": "missing-provider"}
         )
+
+
+@pytest.mark.asyncio
+async def test_upload_document_accepts_more_than_ten_files_and_cleans_staging_dir(
+    tmp_path, monkeypatch
+):
+    """Stage uploads without retaining every file in memory."""
+
+    class FakeUpload:
+        def __init__(self, filename: str, content: bytes) -> None:
+            self.filename = filename
+            self._content = content
+            self._position = 0
+
+        async def seek(self, offset: int) -> None:
+            self._position = offset
+
+        async def read(self, size: int = -1) -> bytes:
+            if size < 0:
+                size = len(self._content) - self._position
+            chunk = self._content[self._position : self._position + size]
+            self._position += len(chunk)
+            return chunk
+
+    kb_helper = SimpleNamespace(
+        upload_document=AsyncMock(
+            return_value=SimpleNamespace(model_dump=lambda: {"doc_id": "doc-1"})
+        )
+    )
+    kb_manager = SimpleNamespace(get_kb=AsyncMock(return_value=kb_helper))
+    service = make_service(kb_manager)
+    files = [
+        FakeUpload(f"document-{index}.txt", f"content-{index}".encode())
+        for index in range(11)
+    ]
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.knowledge_base_service.get_astrbot_temp_path",
+        lambda: str(tmp_path),
+    )
+
+    result = await service.upload_document(
+        content_type="multipart/form-data",
+        form_data={"kb_id": "kb-1"},
+        files=files,
+    )
+    await asyncio.gather(*list(service._get_background_tasks()))
+
+    assert result["file_count"] == 11
+    assert kb_helper.upload_document.await_count == 11
+    assert [
+        call.kwargs["file_content"]
+        for call in kb_helper.upload_document.await_args_list
+    ] == [f"content-{index}".encode() for index in range(11)]
+    assert not list(tmp_path.glob("kb_upload_*"))

@@ -1690,6 +1690,38 @@ async def test_v1_system_config_returns_system_metadata(
 
 
 @pytest.mark.asyncio
+async def test_v1_provider_schema_keeps_reasoning_in_model_metadata(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    fake_core_lifecycle.astrbot_config["provider"][0]["reasoning"] = True
+    model_metadata = {
+        "id": "gpt-4o-mini",
+        "reasoning": True,
+        "tool_call": True,
+        "knowledge": "2023-10",
+        "release_date": "2024-07-18",
+        "modalities": {"input": ["text"], "output": ["text"]},
+        "open_weights": False,
+        "limit": {"context": 128000, "output": 16384},
+    }
+    fake_core_lifecycle.services.llm_metadata_catalog.replace(
+        {"gpt-4o-mini": model_metadata}
+    )
+
+    response = await asgi_client.get(
+        "/api/v1/providers/schema",
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    provider = next(item for item in data["providers"] if item["id"] == "gpt-mini")
+    assert "reasoning" not in provider
+    assert data["model_metadata"]["gpt-4o-mini"] == model_metadata
+
+
+@pytest.mark.asyncio
 async def test_v1_provider_source_rename_updates_provider_refs(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
@@ -1768,6 +1800,7 @@ async def test_v1_provider_update_keeps_dashboard_id_rename_behavior(
                 "provider_source_id": "openai-source",
                 "model": "gpt-4o-mini",
                 "enable": True,
+                "reasoning": True,
             }
         },
         headers=_jwt_headers(),
@@ -1777,9 +1810,66 @@ async def test_v1_provider_update_keeps_dashboard_id_rename_behavior(
     assert response.json()["status"] == "ok"
     config = fake_core_lifecycle.astrbot_config
     assert config["provider"][0]["id"] == "gpt-renamed"
+    assert "reasoning" not in config["provider"][0]
     assert fake_core_lifecycle.provider_manager.reloaded_providers == [
         config["provider"][0]
     ]
+
+
+@pytest.mark.asyncio
+async def test_v1_create_source_provider_strips_reasoning_metadata(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    response = await asgi_client.post(
+        "/api/v1/providers",
+        json={
+            "config": {
+                "id": "gpt-source-model",
+                "provider_source_id": "openai-source",
+                "model": "gpt-4o-mini",
+                "enable": True,
+                "reasoning": True,
+            }
+        },
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    provider = fake_core_lifecycle.astrbot_config["provider"][-1]
+    assert provider["id"] == "gpt-source-model"
+    assert "reasoning" not in provider
+
+
+@pytest.mark.asyncio
+async def test_v1_create_standalone_provider_keeps_reasoning_field(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    response = await asgi_client.post(
+        "/api/v1/providers",
+        json={
+            "config": {
+                "id": "standalone-agent-runner",
+                "type": "dify",
+                "provider_type": "agent_runner",
+                "enable": True,
+                "reasoning": True,
+            }
+        },
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert fake_core_lifecycle.astrbot_config["provider"][-1] == {
+        "id": "standalone-agent-runner",
+        "type": "dify",
+        "provider_type": "agent_runner",
+        "enable": True,
+        "reasoning": True,
+    }
 
 
 @pytest.mark.asyncio
@@ -1912,7 +2002,12 @@ async def test_v1_safe_provider_routes_accept_slash_ids(
     assert get_response.status_code == 200
     assert get_response.json()["data"]["provider"]["id"] == provider_id
     assert schema_response.status_code == 200
-    assert "config_schema" in schema_response.json()["data"]
+    config_schema = schema_response.json()["data"]["config_schema"]
+    reasoning_effort_preset = config_schema["provider"]["items"]["custom_extra_body"][
+        "template_schema"
+    ]["reasoning_effort"]
+    assert reasoning_effort_preset["type"] == "string"
+    assert reasoning_effort_preset["default"] == "high"
     assert path_test_response.status_code == 200
     assert path_test_response.json()["data"]["status"] == "available"
     assert provider_instance.tested is True

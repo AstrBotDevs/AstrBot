@@ -92,7 +92,7 @@ def test_openai_embedding_does_not_log_proxy_or_api_base_credentials(
         def __init__(self, **_kwargs: object) -> None:
             pass
 
-    monkeypatch.setattr(openai_embedding_source.httpx, "AsyncClient", _HTTPClient)
+    monkeypatch.setattr(openai_embedding_source.httpx2, "AsyncClient", _HTTPClient)
     monkeypatch.setattr(openai_embedding_source, "AsyncOpenAI", _OpenAIClient)
 
     with caplog.at_level(logging.INFO, logger="astrbot"):

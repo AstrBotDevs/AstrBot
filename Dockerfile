@@ -246,7 +246,7 @@ RUN touch "${BASH_ENV}" \
     && source "${BASH_ENV}" \
     && nvm install 26.5.0 \
     && nvm alias default 26.5.0 \
-    && npm install -g npm@12.0.1 pnpm@11.15.1 \
+    && npm install -g npm@12.0.2 pnpm@11.21.0 \
     && current_node_dir="$(dirname "$(dirname "$(nvm which current)")")" \
     && for tool in node npm npx pnpm; do \
         if [[ -x "${current_node_dir}/bin/${tool}" ]]; then \

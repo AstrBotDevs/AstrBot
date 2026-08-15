@@ -153,7 +153,7 @@ def _make_groq_provider(overrides: dict | None = None) -> ProviderGroq:
     )
 
 
-def test_create_http_client_uses_public_httpx_module(monkeypatch):
+def test_create_http_client_uses_openai_sdk_httpx_module(monkeypatch):
     captured: dict[str, object] = {}
 
     def fake_create_proxy_client(
@@ -175,7 +175,7 @@ def test_create_http_client_uses_public_httpx_module(monkeypatch):
     provider = ProviderOpenAIChatCompletions.__new__(ProviderOpenAIChatCompletions)
     provider._create_http_client({"proxy": ""})
 
-    assert captured["httpx_module"] is openai_chat_completions_module.httpx
+    assert captured["httpx_module"] is openai_chat_completions_module.httpx2
 
 
 @pytest.mark.asyncio

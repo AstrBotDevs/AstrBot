@@ -143,18 +143,9 @@ const MainRoutes = {
           redirect: '/alkaid/long-term-memory',
         },
         {
-          path: 'knowledge-base',
-          redirect: '/knowledge-base',
-        },
-        {
           name: 'AlkaidLongTermMemory',
           path: 'long-term-memory',
           component: () => import('@/views/alkaid/LongTermMemoryPage.vue'),
-        },
-        {
-          name: 'AlkaidOther',
-          path: 'other',
-          component: () => import('@/views/alkaid/Other.vue'),
         },
       ],
     },

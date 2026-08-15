@@ -348,4 +348,38 @@ describe('PluginPageHost', () => {
     });
     wrapper.unmount();
   });
+
+  it('shows a localized update time for marketplace plugin details', async () => {
+    const { default: PluginDetailPage } =
+      await import('@/views/extension/PluginDetailPage.vue');
+    const { tm } = useModuleI18n('features.extension');
+    const plugin = {
+      name: 'astrbot_plugin_palette',
+      display_name: 'Palette',
+      updated_at: '2026-08-15T12:34:56Z',
+    };
+    const wrapper = mount(PluginDetailPage, {
+      props: {
+        plugin,
+        sourceTab: 'market',
+        state: { tm, router: { push: routerPush } },
+      },
+      global: { stubs: globalStubs },
+    });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Updated At');
+    expect(wrapper.text()).toContain(
+      new Intl.DateTimeFormat('en-US', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      }).format(new Date(plugin.updated_at)),
+    );
+    wrapper.unmount();
+  });
 });

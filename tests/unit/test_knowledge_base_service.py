@@ -46,7 +46,9 @@ class _RerankProviderStub(RerankProvider):
 
 
 @pytest.mark.asyncio
-async def test_background_upload_task_aggregates_uploaded_and_failed_documents():
+async def test_background_upload_task_aggregates_uploaded_and_failed_documents(
+    tmp_path,
+):
     uploaded_doc = MagicMock()
     uploaded_doc.model_dump.return_value = {"doc_id": "doc-1", "doc_name": "ok.txt"}
     kb_helper = AsyncMock()
@@ -54,14 +56,29 @@ async def test_background_upload_task_aggregates_uploaded_and_failed_documents()
         side_effect=[uploaded_doc, RuntimeError("embedding failed")]
     )
     service = _make_service()
+    staging_dir = tmp_path / "task-upload"
+    staging_dir.mkdir()
+    ok_file = staging_dir / "ok.txt"
+    bad_file = staging_dir / "bad.md"
+    ok_file.write_bytes(b"ok")
+    bad_file.write_bytes(b"bad")
 
     await service.background_upload_task(
         task_id="task-upload",
         kb_helper=kb_helper,
         files_to_upload=[
-            {"file_name": "ok.txt", "file_content": b"ok", "file_type": "txt"},
-            {"file_name": "bad.md", "file_content": b"bad", "file_type": "md"},
+            {
+                "file_name": "ok.txt",
+                "temp_file_path": ok_file,
+                "file_type": "txt",
+            },
+            {
+                "file_name": "bad.md",
+                "temp_file_path": bad_file,
+                "file_type": "md",
+            },
         ],
+        staging_dir=staging_dir,
         chunk_size=256,
         chunk_overlap=32,
         batch_size=8,
@@ -82,20 +99,27 @@ async def test_background_upload_task_aggregates_uploaded_and_failed_documents()
     assert kb_helper.upload_document.await_count == 2
     first_call = kb_helper.upload_document.await_args_list[0]
     assert first_call.kwargs["file_name"] == "ok.txt"
+    assert first_call.kwargs["file_content"] == b"ok"
     assert first_call.kwargs["chunk_size"] == 256
     assert first_call.kwargs["chunk_overlap"] == 32
     assert callable(first_call.kwargs["progress_callback"])
+    assert not staging_dir.exists()
 
 
 @pytest.mark.asyncio
-async def test_background_upload_task_marks_failed_when_file_shape_breaks_outer_flow():
+async def test_background_upload_task_marks_failed_when_file_shape_breaks_outer_flow(
+    tmp_path,
+):
     kb_helper = AsyncMock()
     service = _make_service()
+    staging_dir = tmp_path / "task-upload-broken"
+    staging_dir.mkdir()
 
     await service.background_upload_task(
         task_id="task-upload-broken",
         kb_helper=kb_helper,
-        files_to_upload=[{"file_content": b"oops", "file_type": "txt"}],
+        files_to_upload=[{"file_name": "broken.txt", "file_type": "txt"}],
+        staging_dir=staging_dir,
         chunk_size=256,
         chunk_overlap=32,
         batch_size=8,
@@ -110,6 +134,7 @@ async def test_background_upload_task_marks_failed_when_file_shape_breaks_outer_
     )
     assert service.upload_progress["task-upload-broken"]["status"] == "failed"
     kb_helper.upload_document.assert_not_awaited()
+    assert not staging_dir.exists()
 
 
 @pytest.mark.asyncio
@@ -856,13 +881,6 @@ async def test_upload_document_rejects_invalid_input_shapes():
             files=[],
         )
 
-    with pytest.raises(KnowledgeBaseServiceError, match="最多只能上传10个文件"):
-        await service.upload_document(
-            content_type="multipart/form-data",
-            form_data={"kb_id": "kb-1"},
-            files=[MagicMock(filename=f"doc-{index}.txt") for index in range(11)],
-        )
-
 
 @pytest.mark.asyncio
 async def test_upload_document_rejects_missing_kb_after_staging_files(
@@ -948,29 +966,30 @@ async def test_upload_document_schedules_background_task_with_sanitized_files(
     assert result["file_count"] == 2
     assert result["task_id"] in service.upload_tasks
     assert service.upload_tasks[result["task_id"]]["status"] == "pending"
-    assert scheduled_calls == [
-        {
-            "task_id": result["task_id"],
-            "kb_helper": kb_helper,
-            "files_to_upload": [
-                {
-                    "file_name": "guide.md",
-                    "file_content": b"guide",
-                    "file_type": "md",
-                },
-                {
-                    "file_name": "document",
-                    "file_content": b"fallback",
-                    "file_type": "",
-                },
-            ],
-            "chunk_size": 1024,
-            "chunk_overlap": 80,
-            "batch_size": 16,
-            "tasks_limit": 5,
-            "max_retries": 6,
-        }
+    assert len(scheduled_calls) == 1
+    scheduled_call = scheduled_calls[0]
+    assert scheduled_call["task_id"] == result["task_id"]
+    assert scheduled_call["kb_helper"] is kb_helper
+    assert scheduled_call["chunk_size"] == 1024
+    assert scheduled_call["chunk_overlap"] == 80
+    assert scheduled_call["batch_size"] == 16
+    assert scheduled_call["tasks_limit"] == 5
+    assert scheduled_call["max_retries"] == 6
+
+    staging_dir = scheduled_call["staging_dir"]
+    assert staging_dir.parent == tmp_path
+    assert staging_dir.name == f"kb_upload_{result['task_id']}"
+    assert [
+        {key: file_info[key] for key in ("file_name", "file_type")}
+        for file_info in scheduled_call["files_to_upload"]
+    ] == [
+        {"file_name": "guide.md", "file_type": "md"},
+        {"file_name": "document", "file_type": ""},
     ]
+    assert [
+        file_info["temp_file_path"].read_bytes()
+        for file_info in scheduled_call["files_to_upload"]
+    ] == [b"guide", b"fallback"]
 
 
 @pytest.mark.asyncio

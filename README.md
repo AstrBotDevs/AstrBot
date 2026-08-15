@@ -73,7 +73,7 @@ uv run python scripts/sync_dashboard_dist.py
 uv run main.py
 ```
 
-Install [uv](https://docs.astral.sh/uv/), Node.js 26.5.0, and pnpm 11.15.1 first. The checkout pins Python 3.14.6 and the required pnpm version. On first startup, open `http://localhost:6185` and use the random password printed in the log; the default username is `astrbot`.
+Install [uv](https://docs.astral.sh/uv/), Node.js 26.5.0, and pnpm 11.21.0 first. The checkout pins Python 3.14.6 and the required pnpm version. On first startup, open `http://localhost:6185` and use the random password printed in the log; the default username is `astrbot`.
 
 If you enable local text-to-image or plugin HTML rendering, also run `uv run astrbot install-browser` once. See [Deploy AstrBot from Source](docs/en/deploy/astrbot/cli.md) for updates, remote access, and security guidance.
 

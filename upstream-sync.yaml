@@ -5,15 +5,19 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 19c029e36da451e4bef15a1adecba89dcef5e008
-  synced_at_utc: 2026-08-12T19:17:14Z
+  commit: b9e565f3ba44cef54800bfd962fcea2f9b6d2671
+  synced_at_utc: 2026-08-15T12:47:06Z
   sync_method: manual-adaptation
-  source_pr: '9650'
+  source_pr: '9690, 9688, 9698, 9665, 9699, 9701'
   note: >-
-    Reviewed the interval from e9ae69f93a72448c70ef1ead039ff78479c8c8f3
-    through 19c029e36da451e4bef15a1adecba89dcef5e008. Included the upstream
-    4.27.3 release metadata and version bump after confirming that the runtime
-    changes in the release interval were already adapted in this fork. The
-    release changelog's desktop-only passwordless session feature (#9585) is
-    not present in this fork's desktop/auth surface. The fork changelog records
-    the included adaptations and its own deviations.
+    Reviewed the interval from 70b95e0185ddac9a993e615302ecd51c2ec4b0e7
+    through b9e565f3ba44cef54800bfd962fcea2f9b6d2671. Adapted marketplace
+    update timestamps (#9690), plugin attribution guidance, Trace theme colors
+    (#9688), dashboard password stability (#9665), source-provider reasoning
+    metadata separation (#9699), and unlimited knowledge-base uploads (#9701)
+    against the fork's bilingual, runtime-ownership, and security policies.
+    Skipped the medium-width chat sidebar change (#9698) because the existing
+    hidden-lg-and-up layout is behaviorally equivalent. Validation passed:
+    focused pytest/Vitest coverage, make check, make quality, and
+    docs/pnpm run docs:build. No upstream version bump occurred in this
+    interval, so the existing 4.27.3 changelog remains unchanged.

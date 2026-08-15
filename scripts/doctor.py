@@ -67,12 +67,12 @@ def main() -> None:
             failures.append(check.name)
 
     dashboard_pnpm = version(("pnpm", "--version"), root / "dashboard")
-    pnpm_ok = dashboard_pnpm is not None and dashboard_pnpm.startswith("11.15.")
+    pnpm_ok = dashboard_pnpm is not None and dashboard_pnpm.startswith("11.21.")
     print(
         f"{'pnpm':12} {'ok' if pnpm_ok else 'missing/unexpected':18} {dashboard_pnpm or ''}"
     )
     if not pnpm_ok:
-        failures.append("pnpm 11.15")
+        failures.append("pnpm 11.21")
 
     if failures:
         print(

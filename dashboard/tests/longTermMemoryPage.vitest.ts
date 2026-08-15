@@ -103,6 +103,9 @@ describe('LongTermMemoryPage', () => {
     await flushPromises();
 
     expect(apiMocks.facts).toHaveBeenCalled();
+    expect(apiMocks.facts).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'all' }),
+    );
     expect(wrapper.text()).toContain('用户喜欢猫娘。');
     expect(wrapper.text()).toContain('Active');
 
@@ -120,5 +123,31 @@ describe('LongTermMemoryPage', () => {
     await flushPromises();
 
     expect(apiMocks.deleteFact).toHaveBeenCalledWith(7, undefined);
+  });
+
+  it('submits all fact filters from the visible filter action', async () => {
+    const wrapper = mountWithVuetify(LongTermMemoryPage);
+    await flushPromises();
+
+    await wrapper
+      .get('[data-testid="memory-person-filter"] input')
+      .setValue('person-42');
+    await wrapper
+      .get('[data-testid="memory-chat-filter"] input')
+      .setValue('chat-7');
+    await wrapper
+      .get('[data-testid="memory-query-filter"] input')
+      .setValue('deployment');
+    await wrapper.get('[data-testid="memory-filter-submit"]').trigger('click');
+    await flushPromises();
+
+    expect(apiMocks.facts).toHaveBeenLastCalledWith({
+      page: 1,
+      page_size: 10,
+      status: 'all',
+      person_id: 'person-42',
+      chat_id: 'chat-7',
+      query: 'deployment',
+    });
   });
 });

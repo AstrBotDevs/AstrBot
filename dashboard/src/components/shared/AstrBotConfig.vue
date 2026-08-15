@@ -43,6 +43,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  fieldLinks: {
+    type: Object,
+    default: () => ({}),
+  },
 });
 
 const { t } = useI18n();
@@ -378,20 +382,35 @@ function hasVisibleItemsAfter(items, currentIndex) {
 
                   <v-list-item-subtitle class="property-hint">
                     <span
-                      v-if="
-                        metadata[metadataKey].items[key]?.obvious_hint &&
-                        getItemHint(key, metadata[metadataKey].items[key])
-                      "
-                      class="important-hint"
-                      >‼️</span
+                      :class="{
+                        'property-hint__content--linked': fieldLinks[key],
+                      }"
                     >
-                    {{
-                      resolveConfigText(
-                        getItemPath(key),
-                        'hint',
-                        getItemHint(key, metadata[metadataKey].items[key]),
-                      )
-                    }}
+                      <span
+                        v-if="
+                          metadata[metadataKey].items[key]?.obvious_hint &&
+                          getItemHint(key, metadata[metadataKey].items[key])
+                        "
+                        class="important-hint"
+                        >‼️</span
+                      >
+                      <span>{{
+                        resolveConfigText(
+                          getItemPath(key),
+                          'hint',
+                          getItemHint(key, metadata[metadataKey].items[key]),
+                        )
+                      }}</span>
+                      <a
+                        v-if="fieldLinks[key]"
+                        class="property-link"
+                        :href="fieldLinks[key].href"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        @click.stop
+                        >{{ fieldLinks[key].label }}</a
+                      >
+                    </span>
                   </v-list-item-subtitle>
                 </v-list-item>
               </v-col>
@@ -618,6 +637,25 @@ function hasVisibleItemsAfter(items, currentIndex) {
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--v-theme-primaryText);
+}
+
+.property-link {
+  color: rgb(var(--v-theme-primary));
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.property-link:hover {
+  text-decoration: underline;
+}
+
+.property-hint__content--linked {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
 }
 
 .property-hint {

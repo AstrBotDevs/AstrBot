@@ -216,7 +216,7 @@ fi
 
 if [[ "$RUN_DASHBOARD" == true ]]; then
   if ! command -v pnpm >/dev/null 2>&1; then
-    echo "pnpm 11.15 is required for dashboard builds." >&2
+    echo "pnpm 11.21 is required for dashboard builds." >&2
     exit 1
   fi
   echo "==> Building dashboard"

@@ -12,13 +12,13 @@ from typing import Any, Literal
 
 import aiohttp
 import psutil
-from sqlmodel import col, select
+from sqlmodel import col, func, select
 
 from astrbot import logger
 from astrbot.core.config import VERSION
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.core_runtime import CoreControl
-from astrbot.core.db.po import ProviderStat
+from astrbot.core.db.po import PlatformStat, ProviderStat
 from astrbot.core.db.protocols import StatisticsSessionStore
 from astrbot.core.desktop_runtime import (
     DESKTOP_MANAGED_RESTART_MESSAGE,
@@ -211,6 +211,12 @@ class StatService:
     async def get_stat(self, offset_sec: int) -> dict:
         try:
             stat = await self.db_helper.get_platform_stats(offset_sec)
+            async with self.db_helper.get_db() as session:
+                total_messages = (
+                    await session.execute(
+                        select(func.coalesce(func.sum(PlatformStat.count), 0)),
+                    )
+                ).scalar_one()
             now = int(time.time())
             start_time = now - offset_sec
             message_time_based_stats = []
@@ -282,11 +288,9 @@ class StatService:
             running_time = self.get_running_time_components(
                 int(time.time()) - self.start_time,
             )
-            message_count = sum(item.count for item, _timestamp in platform_stats)
-
             stat_dict.update(
                 {
-                    "message_count": message_count,
+                    "message_count": total_messages,
                     "platform_count": self.platform_manager.get_platform_count(),
                     "plugin_count": len(plugins),
                     "plugins": plugin_info,

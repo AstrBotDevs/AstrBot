@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 268 icons */
+/* Auto-generated MDI subset – 267 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -994,10 +994,6 @@
 
 .mdi-text-box-outline::before {
   content: "\F09ED";
-}
-
-.mdi-text-box-search::before {
-  content: "\F0EAE";
 }
 
 .mdi-text-box-search-outline::before {

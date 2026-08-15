@@ -8,7 +8,7 @@
 - Git
 - `uv`
 - Node.js 26.5.0
-- pnpm 11.15.1
+- pnpm 11.21.0
 
 Python 包要求为 3.14+；仓库的 `.python-version` 固定为 3.14.6，`uv` 可以在本机缺少该版本时按配置自动下载。
 

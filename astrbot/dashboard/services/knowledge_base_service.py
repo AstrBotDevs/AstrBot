@@ -1,4 +1,5 @@
 import asyncio
+import shutil
 import uuid
 from collections.abc import Sequence
 from pathlib import Path
@@ -138,11 +139,30 @@ class KnowledgeBaseService:
         message = _DOCUMENT_UPLOAD_ERROR
         return f"{file_name}: {message}"
 
+    @staticmethod
+    def _cleanup_upload_staging_dir(staging_dir: Path) -> None:
+        """Remove a knowledge base upload staging directory.
+
+        Args:
+            staging_dir: Task-specific temporary directory to remove.
+        """
+        try:
+            shutil.rmtree(staging_dir)
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            logger.warning(
+                "Failed to clean knowledge base upload staging directory %s: %s",
+                staging_dir,
+                safe_error("", exc),
+            )
+
     async def background_upload_task(
         self,
         task_id: str,
         kb_helper,
         files_to_upload: list[dict[str, Any]],
+        staging_dir: Path,
         chunk_size: int,
         chunk_overlap: int,
         batch_size: int,
@@ -164,7 +184,11 @@ class KnowledgeBaseService:
             failed_docs = []
 
             for file_idx, file_info in enumerate(files_to_upload):
+                file_content = None
                 try:
+                    temp_file_path = Path(file_info["temp_file_path"])
+                    async with aiofiles.open(temp_file_path, "rb") as file_obj:
+                        file_content = await file_obj.read()
                     self.update_progress(
                         task_id,
                         status="processing",
@@ -179,7 +203,7 @@ class KnowledgeBaseService:
                     )
                     doc = await kb_helper.upload_document(
                         file_name=file_info["file_name"],
-                        file_content=file_info["file_content"],
+                        file_content=file_content,
                         file_type=file_info["file_type"],
                         chunk_size=chunk_size,
                         chunk_overlap=chunk_overlap,
@@ -203,6 +227,9 @@ class KnowledgeBaseService:
                             ),
                         },
                     )
+                finally:
+                    file_content = None
+                    Path(file_info["temp_file_path"]).unlink(missing_ok=True)
 
             self.set_task_result(
                 task_id,
@@ -216,6 +243,8 @@ class KnowledgeBaseService:
                     "failed_count": len(failed_docs),
                 },
             )
+        except asyncio.CancelledError:
+            raise
         except Exception as exc:
             logger.error(
                 "后台上传任务 %s 失败: %s",
@@ -223,6 +252,8 @@ class KnowledgeBaseService:
                 safe_error("", exc),
             )
             self.set_task_result(task_id, "failed", error=_BACKGROUND_TASK_ERROR)
+        finally:
+            self._cleanup_upload_staging_dir(staging_dir)
 
     async def background_import_task(
         self,
@@ -537,54 +568,64 @@ class KnowledgeBaseService:
 
         if not files:
             raise KnowledgeBaseServiceError("缺少文件")
-        if len(files) > 10:
-            raise KnowledgeBaseServiceError("最多只能上传10个文件")
 
+        task_id = str(uuid.uuid4())
+        temp_root = Path(get_astrbot_temp_path())
+        temp_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        staging_dir = temp_root / f"kb_upload_{task_id}"
+        staging_dir.mkdir(mode=0o700)
         files_to_upload = []
-        for file in files:
-            file_name = Path(str(file.filename or "document").replace("\\", "/")).name
-            if file_name in {"", ".", ".."}:
-                file_name = "document"
-            temp_file_path = (
-                Path(get_astrbot_temp_path()) / f"kb_upload_{uuid.uuid4()}_{file_name}"
-            )
-            await save_upload_to_path(file, temp_file_path)
-            try:
-                async with aiofiles.open(temp_file_path, "rb") as file_obj:
-                    file_content = await file_obj.read()
+        try:
+            for file in files:
+                file_name = Path(
+                    str(file.filename or "document").replace("\\", "/")
+                ).name
+                if file_name in {"", ".", ".."}:
+                    file_name = "document"
+                temp_file_path = staging_dir / f"{uuid.uuid4()}_{file_name}"
                 file_type = (
                     file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
                 )
                 files_to_upload.append(
                     {
                         "file_name": file_name,
-                        "file_content": file_content,
+                        "temp_file_path": temp_file_path,
                         "file_type": file_type,
                     },
                 )
-            finally:
-                temp_file_path.unlink(missing_ok=True)
+                await save_upload_to_path(file, temp_file_path)
+        except Exception:
+            self._cleanup_upload_staging_dir(staging_dir)
+            raise
 
-        kb_helper = await self.get_kb_manager().get_kb(kb_id)
-        if not kb_helper:
-            raise KnowledgeBaseServiceError("知识库不存在")
+        try:
+            kb_helper = await self.get_kb_manager().get_kb(kb_id)
+            if not kb_helper:
+                raise KnowledgeBaseServiceError("知识库不存在")
+        except Exception:
+            self._cleanup_upload_staging_dir(staging_dir)
+            raise
 
-        task_id = str(uuid.uuid4())
-        self.init_task(task_id, status="pending")
-        create_tracked_task(
-            self._get_background_tasks(),
-            self.background_upload_task(
-                task_id=task_id,
-                kb_helper=kb_helper,
-                files_to_upload=files_to_upload,
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-                batch_size=batch_size,
-                tasks_limit=tasks_limit,
-                max_retries=max_retries,
-            ),
-            name=f"kb-upload:{task_id}",
-        )
+        try:
+            self.init_task(task_id, status="pending")
+            create_tracked_task(
+                self._get_background_tasks(),
+                self.background_upload_task(
+                    task_id=task_id,
+                    kb_helper=kb_helper,
+                    files_to_upload=files_to_upload,
+                    staging_dir=staging_dir,
+                    chunk_size=chunk_size,
+                    chunk_overlap=chunk_overlap,
+                    batch_size=batch_size,
+                    tasks_limit=tasks_limit,
+                    max_retries=max_retries,
+                ),
+                name=f"kb-upload:{task_id}",
+            )
+        except Exception:
+            self._cleanup_upload_staging_dir(staging_dir)
+            raise
         return {
             "task_id": task_id,
             "file_count": len(files_to_upload),

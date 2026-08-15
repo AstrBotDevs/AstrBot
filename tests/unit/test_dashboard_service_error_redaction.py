@@ -189,11 +189,16 @@ async def test_provider_test_preserves_missing_provider_validation_error() -> No
 @pytest.mark.asyncio
 async def test_knowledge_base_document_failure_result_and_log_are_redacted(
     caplog,
+    tmp_path,
 ) -> None:
     service = _knowledge_base_service()
     kb_helper = SimpleNamespace(
         upload_document=AsyncMock(side_effect=RuntimeError(_SENSITIVE_ERROR))
     )
+    staging_dir = tmp_path / "kb-document"
+    staging_dir.mkdir()
+    temp_file_path = staging_dir / "document.txt"
+    temp_file_path.write_bytes(b"content")
 
     with caplog.at_level(logging.ERROR, logger="astrbot"):
         await service.background_upload_task(
@@ -202,10 +207,11 @@ async def test_knowledge_base_document_failure_result_and_log_are_redacted(
             files_to_upload=[
                 {
                     "file_name": "document.txt",
-                    "file_content": b"content",
+                    "temp_file_path": temp_file_path,
                     "file_type": "txt",
                 }
             ],
+            staging_dir=staging_dir,
             chunk_size=256,
             chunk_overlap=32,
             batch_size=8,
@@ -218,6 +224,7 @@ async def test_knowledge_base_document_failure_result_and_log_are_redacted(
         {"file_name": "document.txt", "error": "document.txt: Document upload failed"}
     ]
     _assert_no_sensitive_values(result["failed"][0]["error"], caplog.text)
+    assert not staging_dir.exists()
 
 
 @pytest.mark.asyncio
