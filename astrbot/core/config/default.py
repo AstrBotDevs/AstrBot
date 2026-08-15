@@ -2127,6 +2127,13 @@ CONFIG_METADATA_2 = {
                                 "type": "int",
                                 "default": 8192,
                             },
+                            "reasoning_effort": {
+                                "name": "Reasoning Effort",
+                                "description": "推理强度",
+                                "hint": "控制推理模型的推理强度，支持的值取决于具体模型。",
+                                "type": "string",
+                                "default": "high",
+                            },
                         },
                     },
                     "responses_state_mode": {
