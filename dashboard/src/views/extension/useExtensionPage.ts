@@ -57,6 +57,28 @@ interface CategoryMeta {
   rawLabel: string;
 }
 
+const MARKET_CATEGORY_ALIASES: Record<string, string> = {
+  ai_增强: 'ai_tools',
+  ai_tools: 'ai_tools',
+  entertainment: 'entertainment',
+  integrations: 'integrations',
+  knowledge_base: 'knowledge_base',
+  long_term_memory: 'long_term_memory',
+  productivity: 'productivity',
+  tools: 'tools',
+  utilities: 'utilities',
+  三方集成: 'integrations',
+  娱乐: 'entertainment',
+  工具: 'tools',
+  生活: 'utilities',
+  生活实用: 'utilities',
+  知识库: 'knowledge_base',
+  长期记忆: 'long_term_memory',
+  外部集成: 'integrations',
+  其他: 'other',
+  other: 'other',
+};
+
 interface LoadingDialogState {
   show: boolean;
   title: string;
@@ -121,7 +143,7 @@ const buildFailedPluginItems = (
 export const useExtensionPage = () => {
   const commonStore = useCommonStore();
   const { t } = useI18n();
-  const { tm } = useModuleI18n('features/extension');
+  const { tm, getRaw } = useModuleI18n('features/extension');
   const router = useRouter();
   const route = useRoute();
   const getSelectedGitHubProxy = readSelectedGitHubProxy;
@@ -301,7 +323,8 @@ export const useExtensionPage = () => {
     if (!normalized) {
       return 'other';
     }
-    return normalized.replace(/[\s-]+/g, '_');
+    const normalizedKey = normalized.replace(/[\s-]+/g, '_');
+    return MARKET_CATEGORY_ALIASES[normalizedKey] || normalizedKey;
   };
 
   const getMarketCategoryLabel = (key: string, rawCategory = '') => {
@@ -312,21 +335,25 @@ export const useExtensionPage = () => {
       productivity: 'Productivity',
       integrations: 'Integrations',
       utilities: 'Utilities',
+      tools: 'Tools',
+      knowledge_base: 'Knowledge Base',
+      long_term_memory: 'Long-term Memory',
       other: 'Other',
     };
-    const i18nKey = `market.categories.${key}`;
-    const translated = tm(i18nKey);
-    if (translated && !translated.includes('[MISSING:')) {
+    const categoryKey = normalizeMarketCategory(key);
+    const i18nKey = `market.categories.${categoryKey}`;
+    const translated = getRaw(i18nKey);
+    if (typeof translated === 'string') {
       return translated;
     }
-    if (fallbackMap[key]) {
-      return fallbackMap[key];
+    if (fallbackMap[categoryKey]) {
+      return fallbackMap[categoryKey];
     }
     const normalizedRaw = String(rawCategory || '').trim();
     if (normalizedRaw) {
       return normalizedRaw;
     }
-    return key
+    return categoryKey
       .split(/[_-]+/)
       .filter(Boolean)
       .map((part: string) => part[0].toUpperCase() + part.slice(1))
@@ -2014,6 +2041,7 @@ export const useExtensionPage = () => {
     commonStore,
     t,
     tm,
+    getRaw,
     router,
     route,
     getSelectedGitHubProxy,
@@ -2048,6 +2076,7 @@ export const useExtensionPage = () => {
     marketCategoryFilter,
     marketCategoryItems,
     marketCategoryCounts,
+    getMarketCategoryLabel,
     dangerConfirmDialog,
     selectedDangerPlugin,
     selectedMarketInstallPlugin,
