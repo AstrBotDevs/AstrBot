@@ -154,7 +154,12 @@ function shouldShowItem(itemMeta, itemKey) {
   if (itemMeta?.condition) {
     for (const [conditionKey, expectedValue] of Object.entries(itemMeta.condition)) {
       const actualValue = getValueBySelector(props.iterable, conditionKey)
-      if (actualValue !== expectedValue) {
+      // List-valued fields (e.g. modalities) match when they contain the expected value
+      if (Array.isArray(actualValue) && !Array.isArray(expectedValue)) {
+        if (!actualValue.includes(expectedValue)) {
+          return false
+        }
+      } else if (actualValue !== expectedValue) {
         return false
       }
     }

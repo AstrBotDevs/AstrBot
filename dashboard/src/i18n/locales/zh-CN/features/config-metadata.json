@@ -1281,6 +1281,28 @@
           "工具使用"
         ]
       },
+      "image_formats": {
+        "description": "图片格式支持",
+        "hint": "发送给该提供商前允许的图片格式，不兼容的格式会自动转换。留空使用内置默认值（官方 API 按其文档，未知第三方默认仅 jpeg/png）。勾选「不限制」时其他选项不生效。",
+        "labels": [
+          "JPEG",
+          "PNG",
+          "WebP",
+          "GIF",
+          "BMP",
+          "HEIC",
+          "不限制"
+        ]
+      },
+      "animated_image_strategy": {
+        "description": "动图处理策略",
+        "hint": "GIF 等动图发送给模型时的处理方式：仅取首帧（省 token），或按时长均匀抽帧后作为多张图片发送。",
+        "labels": ["仅首帧", "多帧抽取"]
+      },
+      "animated_image_max_frames": {
+        "description": "动图最大抽帧数",
+        "hint": "多帧抽取策略下最多发送的帧数（1-16），默认 4。帧数越多 token 消耗越大。"
+      },
       "custom_headers": {
         "description": "自定义请求头",
         "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。"

@@ -615,7 +615,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       modalities,
       custom_extra_body: {},
       max_context_tokens: max_context_tokens,
-      reasoning: supportsReasoning(metadata)
+      reasoning: supportsReasoning(metadata),
+      image_formats: [],
+      animated_image_strategy: 'first_frame',
+      animated_image_max_frames: 4
     }
   }
 
