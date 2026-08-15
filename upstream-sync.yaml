@@ -5,16 +5,19 @@ upstream:
   branch: master
 
 last_synced:
-  commit: d5f737199483802513f097dbb9d5126511f37ff9
-  synced_at_utc: 2026-08-14T15:05:52Z
+  commit: b9e565f3ba44cef54800bfd962fcea2f9b6d2671
+  synced_at_utc: 2026-08-15T12:47:06Z
   sync_method: manual-adaptation
-  source_pr: '9674'
+  source_pr: '9690, 9688, 9698, 9665, 9699, 9701'
   note: >-
-    Reviewed the interval from 08d0b1f74f062b9883032363816ba75e7cedb4e3
-    through d5f737199483802513f097dbb9d5126511f37ff9. Skipped the sole
-    Misskey visibility resolver alias migration (#9674) because the fork's
-    no-legacy cleanup already removed the alias and migrated the event caller
-    in 0620974b95af6ad543fb75cae02e46d4bc868d5e. No implementation commit was
-    needed. Focused validation passed: uv run pytest
-    tests/unit/test_misskey_adapter.py -q. No upstream version bump occurred
-    in this interval, so the existing 4.27.3 changelog remains unchanged.
+    Reviewed the interval from 70b95e0185ddac9a993e615302ecd51c2ec4b0e7
+    through b9e565f3ba44cef54800bfd962fcea2f9b6d2671. Adapted marketplace
+    update timestamps (#9690), plugin attribution guidance, Trace theme colors
+    (#9688), dashboard password stability (#9665), source-provider reasoning
+    metadata separation (#9699), and unlimited knowledge-base uploads (#9701)
+    against the fork's bilingual, runtime-ownership, and security policies.
+    Skipped the medium-width chat sidebar change (#9698) because the existing
+    hidden-lg-and-up layout is behaviorally equivalent. Validation passed:
+    focused pytest/Vitest coverage, make check, make quality, and
+    docs/pnpm run docs:build. No upstream version bump occurred in this
+    interval, so the existing 4.27.3 changelog remains unchanged.
