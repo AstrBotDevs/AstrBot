@@ -731,7 +731,6 @@ class AuthRoleBinding(TimestampMixin, SQLModel, table=True):
     __table_args__ = (
         UniqueConstraint(
             "subject_id",
-            "role",
             "scope_type",
             "scope_id",
             "config_id",

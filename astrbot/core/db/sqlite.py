@@ -125,11 +125,31 @@ class SQLiteDatabase(BaseDatabase):
                 "WHERE scope_type = 'global' AND config_id IS NULL"
             )
         )
+        # The early experimental table did not have the partial active-row
+        # index. Keep the oldest active binding if an interrupted migration or
+        # a manual SQLite edit produced duplicates. Revoked rows remain intact
+        # for audit history.
+        await conn.execute(
+            text(
+                "DELETE FROM auth_role_bindings WHERE revoked_at IS NULL "
+                "AND rowid NOT IN ("
+                "SELECT MIN(rowid) FROM auth_role_bindings "
+                "WHERE revoked_at IS NULL "
+                "GROUP BY subject_id, scope_type, scope_id, config_id"
+                ")"
+            )
+        )
+        # Recreate the partial index with the same scope key as the ORM
+        # constraint.  Older revisions included ``role`` and therefore could
+        # retain two active roles for one subject/scope.
+        await conn.execute(
+            text("DROP INDEX IF EXISTS uix_auth_role_binding_active_scope")
+        )
         await conn.execute(
             text(
                 "CREATE UNIQUE INDEX IF NOT EXISTS "
                 "uix_auth_role_binding_active_scope "
-                "ON auth_role_bindings(subject_id, role, scope_type, scope_id, config_id) "
+                "ON auth_role_bindings(subject_id, scope_type, scope_id, config_id) "
                 "WHERE revoked_at IS NULL"
             )
         )
@@ -151,7 +171,6 @@ class SQLiteDatabase(BaseDatabase):
                         f"ADD COLUMN {column} {definition}"
                     )
                 )
-
         trusted_columns_result = await conn.execute(
             text("PRAGMA table_info(dashboard_trusted_devices)")
         )

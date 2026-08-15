@@ -77,7 +77,6 @@ ACTIONS = frozenset(
         "tool.mcp_read",
         "tool.mcp_write",
         "tool.computer_use",
-        "tool.function",
         "dashboard.account.manage",
     }
 )
@@ -278,6 +277,15 @@ class Subject:
             authenticated=False,
         )
 
+    @classmethod
+    def from_id(cls, subject_id: str) -> Subject:
+        """Validate a persisted subject ID without inferring an authority role."""
+
+        kind, separator, _ = subject_id.partition(":")
+        if not separator:
+            raise AuthorizationValueError("Subject id must include a namespace")
+        return cls(id=subject_id, kind=kind, authenticated=True)
+
 
 @dataclass(frozen=True, slots=True)
 class Resource:
@@ -351,6 +359,7 @@ class AuthContext:
     auth_strength: str = "none"
     authenticated_at: datetime | None = None
     step_up_token: str | None = None
+    origin_session_resource_id: str | None = None
     caller_declared_username: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -364,6 +373,12 @@ class AuthContext:
             _validate_identifier(self.principal_subject_id, "principal subject id")
         if self.auth_strength not in {"none", "password", "totp", "step_up"}:
             raise AuthorizationValueError("Invalid authentication strength")
+        if self.origin_session_resource_id is not None:
+            origin_config_id, _ = parse_canonical_session_resource(
+                self.origin_session_resource_id
+            )
+            if self.config_id is not None and origin_config_id != self.config_id:
+                raise AuthorizationValueError("Origin session config mismatch")
 
     def digest_for(self, action: str, resource: Resource) -> str:
         """Return policy facts that bind a Dashboard step-up credential.
@@ -384,6 +399,7 @@ class AuthContext:
                 "platform_member_role": self.platform_member_role,
                 "platform_role_source": self.platform_role_source,
                 "principal_subject_id": self.principal_subject_id,
+                "origin_session_resource_id": self.origin_session_resource_id,
                 "caller_declared_username": self.caller_declared_username,
             },
         )
@@ -401,6 +417,7 @@ class Decision:
     reason: str
     requires_step_up: bool = False
     audit_id: str | None = None
+    step_up_id: str | None = None
 
 
 def utc_now() -> datetime:

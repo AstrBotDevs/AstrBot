@@ -7,7 +7,7 @@ import hashlib
 import secrets
 import uuid
 from collections.abc import Iterable, Mapping
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import update
@@ -26,6 +26,7 @@ from astrbot.core.auth.models import (
     Role,
     Subject,
     canonical_session_resource,
+    parse_canonical_session_resource,
     utc_now,
 )
 from astrbot.core.db.po import (
@@ -43,12 +44,18 @@ _AUDIT_QUEUE_SIZE = 2048
 _STEP_UP_TTL_SECONDS = 300
 _SENSITIVE_KEYS = frozenset(
     {
+        "access_token",
+        "auth_token",
+        "authorization",
         "jwt",
+        "jwt_token",
         "token",
         "api_key",
         "key",
         "nonce",
         "password",
+        "refresh_token",
+        "session_id",
         "credential",
         "secret",
         "message",
@@ -148,7 +155,9 @@ _ACTION_ROLES: dict[str, frozenset[Role]] = {
     "system.restart": frozenset({Role.ROOT}),
     "system.pip_install": frozenset({Role.ROOT}),
     "identity.read": frozenset({Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}),
-    "identity.manage": frozenset({Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}),
+    "identity.manage": frozenset(
+        {Role.SESSION_OWNER, Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}
+    ),
     "identity.operator.write": frozenset({Role.ROOT}),
     "identity.root.write": frozenset({Role.ROOT}),
     "tool.local_exec": frozenset({Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}),
@@ -179,16 +188,6 @@ _ACTION_ROLES: dict[str, frozenset[Role]] = {
     ),
     "tool.mcp_write": frozenset({Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}),
     "tool.computer_use": frozenset({Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}),
-    "tool.function": frozenset(
-        {
-            Role.MEMBER,
-            Role.SESSION_ADMIN,
-            Role.SESSION_OWNER,
-            Role.INSTANCE_OPERATOR,
-            Role.OPERATOR,
-            Role.ROOT,
-        }
-    ),
     "dashboard.account.manage": frozenset({Role.ROOT}),
 }
 
@@ -214,18 +213,83 @@ _API_SCOPE_ACTIONS: dict[str, frozenset[str]] = {
 }
 
 
-def api_key_scopes_allow_action(scopes: Iterable[str], action: str) -> bool:
-    """Map scopes to action capability without creating an operator role."""
+_API_SCOPE_RESOURCE_TYPES: dict[str, frozenset[str]] = {
+    "provider": frozenset({"provider", "provider-model", "instance", "dashboard-api"}),
+    "config": frozenset(
+        {"instance", "config-profile", "config-route", "dashboard-api"}
+    ),
+    "chat": frozenset(
+        {"session", "conversation", "webchat", "webchat-user", "dashboard-api"}
+    ),
+    "persona": frozenset({"persona", "session", "dashboard-api"}),
+    "plugin": frozenset({"plugin", "dashboard-api"}),
+    "mcp": frozenset({"mcp", "tool", "dashboard-api"}),
+    "skill": frozenset({"skill", "dashboard-api"}),
+    "kb": frozenset(
+        {
+            "knowledge-base",
+            "knowledge-base-document",
+            "knowledge-base-chunk",
+            "dashboard-api",
+        }
+    ),
+    "memory": frozenset({"memory", "memory-fact", "memory-profile", "dashboard-api"}),
+    "data": frozenset(
+        {
+            "conversation",
+            "memory",
+            "memory-fact",
+            "memory-profile",
+            "knowledge-base",
+            "knowledge-base-document",
+            "knowledge-base-chunk",
+            "file",
+            "data",
+            "dashboard-api",
+        }
+    ),
+    "file": frozenset({"file", "dashboard-api"}),
+    "im": frozenset({"session", "webchat", "dashboard-api"}),
+    "bot": frozenset({"platform", "bot", "dashboard-api"}),
+}
+
+
+def api_key_scopes_allow_action(
+    scopes: Iterable[str], action: str, resource: Resource | None = None
+) -> bool:
+    """Map scopes to action and resource capabilities, never roles."""
 
     if action in HIGH_RISK_ACTIONS:
         return False
-    return any(action in _API_SCOPE_ACTIONS.get(scope, ()) for scope in set(scopes))
+    selected_scopes = set(scopes)
+    if "*" in selected_scopes:
+        return True
+    return any(
+        action in _API_SCOPE_ACTIONS.get(scope, ())
+        and (
+            resource is None
+            or resource.type in _API_SCOPE_RESOURCE_TYPES.get(scope, ())
+        )
+        for scope in selected_scopes
+    )
 
 
-def _requires_step_up(action: str, context: AuthContext) -> bool:
+def _requires_step_up(action: str, resource: Resource, context: AuthContext) -> bool:
     """Return whether a fixed high-risk capability needs fresh proof."""
 
-    del context
+    # A session owner can manage members in the session from which the request
+    # originated. This narrow IM path cannot affect another session, instance,
+    # or global identity. Dashboard mutations always require fresh proof,
+    # including mutations of session bindings.
+    if (
+        action == "identity.manage"
+        and resource.type == "session"
+        and context.source != "dashboard"
+        and context.origin_session_resource_id == resource.id
+    ):
+        return False
+    if action == "platform.manage" and resource.type == "bot":
+        return True
     return action in HIGH_RISK_ACTIONS
 
 
@@ -303,7 +367,7 @@ class AuthorizationService:
             async with session.begin():
                 session.add(record)
 
-    def _audit(
+    def _audit_record(
         self,
         *,
         audit_id: str,
@@ -316,8 +380,8 @@ class AuthorizationService:
         effective_role: Role | None = None,
         step_up_id: str | None = None,
         metadata: Mapping[str, Any] | None = None,
-    ) -> None:
-        record = AuthAuditLog(
+    ) -> AuthAuditLog:
+        return AuthAuditLog(
             audit_id=audit_id,
             request_id=context.request_id,
             subject_id=subject.id,
@@ -333,10 +397,41 @@ class AuthorizationService:
             outcome=decision,
             metadata_json=_sanitize_metadata({**context.metadata, **(metadata or {})}),
         )
+
+    def _audit(
+        self,
+        *,
+        audit_id: str,
+        subject: Subject,
+        action: str,
+        resource: Resource,
+        context: AuthContext,
+        decision: str,
+        reason: str,
+        effective_role: Role | None = None,
+        step_up_id: str | None = None,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> bool:
+        """Queue a redacted audit record and report whether it was retained."""
+
+        record = self._audit_record(
+            audit_id=audit_id,
+            subject=subject,
+            action=action,
+            resource=resource,
+            context=context,
+            decision=decision,
+            reason=reason,
+            effective_role=effective_role,
+            step_up_id=step_up_id,
+            metadata=metadata,
+        )
         try:
             self._audit_queue.put_nowait(record)
+            return True
         except asyncio.QueueFull:
             logger.error("Authorization audit queue full; event id=%s", audit_id)
+            return False
 
     async def record_platform_membership(
         self,
@@ -408,6 +503,15 @@ class AuthorizationService:
 
         if scope_type not in {"global", "instance", "session", "resource"}:
             raise AuthorizationValueError("Invalid binding scope")
+        Subject.from_id(subject_id)
+        if expires_at is not None:
+            if not isinstance(expires_at, datetime):
+                raise AuthorizationValueError("Invalid binding expiry")
+            expires_at = (
+                expires_at.replace(tzinfo=UTC)
+                if expires_at.tzinfo is None
+                else expires_at.astimezone(UTC)
+            )
         valid_scope_roles = {
             "global": {Role.ROOT, Role.OPERATOR},
             "instance": {Role.INSTANCE_OPERATOR},
@@ -423,82 +527,179 @@ class AuthorizationService:
         if scope_type == "instance" and (not config_id or scope_id != config_id):
             raise AuthorizationValueError("Invalid instance binding scope")
         if scope_type == "session":
-            canonical_session_resource(config_id or "", scope_id)
+            scope_id = self._normalize_session_binding_scope(config_id, scope_id)
         if role in {Role.ROOT, Role.OPERATOR}:
             await self._require_active_dashboard_account(subject_id)
+        management_decision: Decision | None = None
         if enforce_actor:
-            await self._assert_binding_management_allowed(
-                actor, role, scope_type, scope_id, config_id, context=context
+            management_decision = await self._assert_binding_management_allowed(
+                actor,
+                subject_id,
+                role,
+                scope_type,
+                scope_id,
+                config_id,
+                context=context,
             )
-        async with self._db.get_db() as session:
-            async with session.begin():
-                if role in {Role.ROOT, Role.OPERATOR}:
-                    account_id = subject_id.removeprefix("dashboard-account:")
-                    account = (
-                        await session.execute(
-                            select(DashboardAccount).where(
-                                col(DashboardAccount.account_id) == account_id,
-                                col(DashboardAccount.is_active).is_(True),
+        async with self._binding_mutation_lock:
+            async with self._db.get_db() as session:
+                async with session.begin():
+                    if role in {Role.ROOT, Role.OPERATOR}:
+                        account_id = subject_id.removeprefix("dashboard-account:")
+                        account = (
+                            await session.execute(
+                                select(DashboardAccount).where(
+                                    col(DashboardAccount.account_id) == account_id,
+                                    col(DashboardAccount.is_active).is_(True),
+                                )
                             )
-                        )
-                    ).scalar_one_or_none()
-                    if account is None:
-                        raise AuthorizationValueError(
-                            "Global control-plane roles require an active Dashboard account"
-                        )
-                query = select(AuthRoleBinding).where(
-                    col(AuthRoleBinding.subject_id) == subject_id,
-                    col(AuthRoleBinding.role) == role.value,
-                    col(AuthRoleBinding.scope_type) == scope_type,
-                    col(AuthRoleBinding.scope_id) == scope_id,
-                    col(AuthRoleBinding.config_id) == config_id,
-                )
-                binding = (await session.execute(query)).scalar_one_or_none()
-                if binding is None:
-                    binding = AuthRoleBinding(
-                        subject_id=subject_id,
-                        role=role.value,
-                        scope_type=scope_type,
-                        scope_id=scope_id,
-                        config_id=config_id,
-                        source=source,
-                        expires_at=expires_at,
-                        created_by=actor.id,
-                        metadata_json=_sanitize_metadata(metadata or {}),
+                        ).scalar_one_or_none()
+                        if account is None:
+                            raise AuthorizationValueError(
+                                "Global control-plane roles require an active Dashboard account"
+                            )
+                    query = select(AuthRoleBinding).where(
+                        col(AuthRoleBinding.subject_id) == subject_id,
+                        col(AuthRoleBinding.scope_type) == scope_type,
+                        col(AuthRoleBinding.scope_id) == scope_id,
+                        col(AuthRoleBinding.config_id) == config_id,
                     )
-                    session.add(binding)
-                else:
-                    binding.source = source
-                    binding.expires_at = expires_at
-                    binding.revoked_at = None
-                    binding.revoked_by = None
-                    binding.metadata_json = _sanitize_metadata(metadata or {})
-                await session.flush()
-                self._audit(
-                    audit_id=str(uuid.uuid4()),
-                    subject=actor,
-                    action="identity.manage",
-                    resource=Resource.named(
-                        "identity",
-                        subject_id,
-                        config_id=(None if config_id == GLOBAL_SCOPE_ID else config_id),
-                    ),
-                    context=AuthContext(
+                    existing_bindings = list((await session.execute(query)).scalars())
+                    binding = next(
+                        (item for item in existing_bindings if item.role == role.value),
+                        None,
+                    )
+                    if binding is None and existing_bindings:
+                        binding = next(
+                            (
+                                item
+                                for item in existing_bindings
+                                if item.revoked_at is None
+                            ),
+                            existing_bindings[0],
+                        )
+                    if binding is None:
+                        binding = AuthRoleBinding(
+                            subject_id=subject_id,
+                            role=role.value,
+                            scope_type=scope_type,
+                            scope_id=scope_id,
+                            config_id=config_id,
+                            source=source,
+                            expires_at=expires_at,
+                            created_by=actor.id,
+                            metadata_json=_sanitize_metadata(metadata or {}),
+                        )
+                        session.add(binding)
+                    else:
+                        binding.role = role.value
+                        binding.source = source
+                        binding.expires_at = expires_at
+                        binding.revoked_at = None
+                        binding.revoked_by = None
+                        binding.metadata_json = _sanitize_metadata(metadata or {})
+                    for existing in existing_bindings:
+                        if existing is binding or existing.revoked_at is not None:
+                            continue
+                        existing.revoked_at = utc_now()
+                        existing.revoked_by = actor.id
+                    await session.flush()
+                    audit_context = context or AuthContext(
                         subject=actor,
                         source="system",
                         authenticated=True,
                         config_id=(None if config_id == GLOBAL_SCOPE_ID else config_id),
-                    ),
-                    decision="allow",
-                    reason="binding_granted",
-                    effective_role=role,
-                    metadata={
-                        "target_subject_id": subject_id,
-                        "scope_type": scope_type,
-                        "scope_id": scope_id,
-                    },
-                )
-                return binding
+                    )
+                    session.add(
+                        self._audit_record(
+                            audit_id=str(uuid.uuid4()),
+                            subject=actor,
+                            action="identity.manage",
+                            resource=self._binding_resource(
+                                subject_id, scope_type, scope_id, config_id
+                            ),
+                            context=audit_context,
+                            decision="allow",
+                            reason="binding_granted",
+                            effective_role=role,
+                            step_up_id=(
+                                management_decision.step_up_id
+                                if isinstance(management_decision, Decision)
+                                else None
+                            ),
+                            metadata={
+                                "target_subject_id": subject_id,
+                                "scope_type": scope_type,
+                                "scope_id": scope_id,
+                            },
+                        )
+                    )
+                    return binding
+
+    @staticmethod
+    def _normalize_session_binding_scope(config_id: str | None, scope_id: str) -> str:
+        """Store every session binding in the one canonical resource format."""
+
+        if not config_id:
+            raise AuthorizationValueError("Session bindings require a config id")
+        try:
+            scoped_config_id, _ = parse_canonical_session_resource(scope_id)
+        except AuthorizationValueError:
+            return canonical_session_resource(config_id, scope_id)
+        if scoped_config_id != config_id:
+            raise AuthorizationValueError("Session binding config mismatch")
+        return scope_id
+
+    @staticmethod
+    def _binding_resource(
+        subject_id: str,
+        scope_type: str,
+        scope_id: str,
+        config_id: str | None,
+    ) -> Resource:
+        """Return the exact resource whose binding is being changed."""
+
+        if scope_type == "session":
+            canonical_scope_id = AuthorizationService._normalize_session_binding_scope(
+                config_id, scope_id
+            )
+            resolved_config_id, umo = parse_canonical_session_resource(
+                canonical_scope_id
+            )
+            if resolved_config_id != config_id:
+                raise AuthorizationValueError("Session binding config mismatch")
+            return Resource.session(resolved_config_id, umo)
+        if scope_type == "instance":
+            if not config_id:
+                raise AuthorizationValueError("Instance bindings require a config id")
+            return Resource.instance(config_id)
+        return Resource.named(
+            "identity",
+            subject_id,
+            config_id=None if config_id == GLOBAL_SCOPE_ID else config_id,
+        )
+
+    @staticmethod
+    def _binding_failure_resource(binding_id: str) -> Resource:
+        """Return a non-enumerating audit resource for an invalid binding ID."""
+
+        binding_digest = hashlib.sha256(binding_id.encode()).hexdigest()
+        return Resource.named("identity", f"binding-{binding_digest}")
+
+    @staticmethod
+    def _binding_audit_context(
+        actor: Subject, context: AuthContext | None, config_id: str | None = None
+    ) -> AuthContext:
+        """Use the caller context or a safe internal context for mutation audit."""
+
+        if context is not None:
+            return context
+        return AuthContext(
+            subject=actor,
+            source="system",
+            authenticated=True,
+            config_id=None if config_id == GLOBAL_SCOPE_ID else config_id,
+        )
 
     async def _require_active_dashboard_account(self, subject_id: str) -> None:
         """Limit global control-plane roles to active Dashboard identities."""
@@ -527,19 +728,16 @@ class AuthorizationService:
     async def _assert_binding_management_allowed(
         self,
         actor: Subject,
+        subject_id: str,
         role: Role,
         scope_type: str,
         scope_id: str,
         config_id: str | None,
         *,
         context: AuthContext | None = None,
-    ) -> None:
+    ) -> Decision:
         resource_config_id = None if config_id == GLOBAL_SCOPE_ID else config_id
-        resource = (
-            Resource.instance(resource_config_id)
-            if resource_config_id
-            else Resource.named("identity", actor.id)
-        )
+        resource = self._binding_resource(subject_id, scope_type, scope_id, config_id)
         decision_context = context or AuthContext(
             subject=actor,
             source="dashboard",
@@ -554,6 +752,30 @@ class AuthorizationService:
         decision = await self.authorize(actor, action, resource, decision_context)
         if not decision.allowed:
             raise PermissionError("Authorization denied")
+        await self._validate_binding_management_decision(
+            actor=actor,
+            role=role,
+            scope_type=scope_type,
+            config_id=config_id,
+            resource=resource,
+            context=decision_context,
+            decision=decision,
+        )
+        return decision
+
+    async def _validate_binding_management_decision(
+        self,
+        *,
+        actor: Subject,
+        role: Role,
+        scope_type: str,
+        config_id: str | None,
+        resource: Resource,
+        context: AuthContext,
+        decision: Decision,
+    ) -> None:
+        """Apply role-delegation rules after a binding mutation is authorized."""
+
         if (
             role in {Role.ROOT, Role.OPERATOR, Role.INSTANCE_OPERATOR}
             or scope_type == "global"
@@ -571,6 +793,98 @@ class AuthorizationService:
             raise PermissionError("Authorization denied")
         if scope_type == "session" and config_id is None:
             raise PermissionError("Authorization denied")
+        if decision.effective_role is Role.SESSION_OWNER and (
+            scope_type != "session"
+            or role not in {Role.SESSION_ADMIN, Role.MEMBER}
+            or context.origin_session_resource_id != resource.id
+        ):
+            # A current session owner may manage members, but cannot delegate
+            # ownership or use a session-scoped fact to alter another scope.
+            raise PermissionError("Authorization denied")
+
+    @staticmethod
+    def _normalize_binding_ids(binding_ids: Iterable[str]) -> tuple[str, ...]:
+        """Return a bounded, deterministic binding ID set for a batch action."""
+
+        provided = tuple(binding_ids)
+        normalized = tuple(sorted({item for item in provided if isinstance(item, str)}))
+        if not 1 <= len(normalized) <= 100:
+            raise AuthorizationValueError(
+                "A batch must contain between 1 and 100 bindings"
+            )
+        if any(not item or len(item) > 128 for item in normalized):
+            raise AuthorizationValueError("Invalid binding id")
+        if len(normalized) != len(provided):
+            raise AuthorizationValueError("Binding IDs must be unique strings")
+        return normalized
+
+    async def _active_bindings_for_ids(
+        self, binding_ids: Iterable[str]
+    ) -> list[AuthRoleBinding]:
+        """Load exactly the requested active bindings or fail without enumeration."""
+
+        binding_id_set = self._normalize_binding_ids(binding_ids)
+        async with self._db.get_db() as session:
+            result = await session.execute(
+                select(AuthRoleBinding).where(
+                    col(AuthRoleBinding.binding_id).in_(binding_id_set),
+                    col(AuthRoleBinding.revoked_at).is_(None),
+                )
+            )
+            found = {binding.binding_id: binding for binding in result.scalars()}
+        if len(found) != len(binding_id_set):
+            raise AuthorizationValueError("Binding batch is no longer current")
+        return [found[binding_id] for binding_id in binding_id_set]
+
+    @staticmethod
+    def _binding_batch_resource(bindings: Iterable[AuthRoleBinding]) -> Resource:
+        """Bind a batch credential to its exact active binding snapshots."""
+
+        snapshots = [
+            {
+                "binding_id": binding.binding_id,
+                "subject_id": binding.subject_id,
+                "role": binding.role,
+                "scope_type": binding.scope_type,
+                "scope_id": binding.scope_id,
+                "config_id": binding.config_id,
+                "expires_at": binding.expires_at.isoformat()
+                if binding.expires_at is not None
+                else None,
+                "revoked_at": binding.revoked_at.isoformat()
+                if binding.revoked_at is not None
+                else None,
+            }
+            for binding in bindings
+        ]
+        if not snapshots:
+            raise AuthorizationValueError("Binding batch is empty")
+        config_ids = {
+            str(item["config_id"])
+            for item in snapshots
+            if item["config_id"] not in {None, GLOBAL_SCOPE_ID}
+        }
+        has_global_scope = any(
+            item["config_id"] in {None, GLOBAL_SCOPE_ID} for item in snapshots
+        )
+        config_id = (
+            next(iter(config_ids))
+            if len(config_ids) == 1 and not has_global_scope
+            else None
+        )
+        batch_digest = hashlib.sha256(repr(snapshots).encode("utf-8")).hexdigest()
+        return Resource.named(
+            "identity-batch", f"revoke-{batch_digest}", config_id=config_id
+        )
+
+    async def binding_revocation_batch_resource(
+        self, binding_ids: Iterable[str]
+    ) -> Resource:
+        """Resolve the one resource that represents an exact revoke batch."""
+
+        return self._binding_batch_resource(
+            await self._active_bindings_for_ids(binding_ids)
+        )
 
     async def _has_global_root(self, subject_id: str) -> bool:
         now = utc_now()
@@ -618,10 +932,41 @@ class AuthorizationService:
                     )
                 ).scalar_one_or_none()
             if binding is None or binding.revoked_at is not None:
+                self._audit(
+                    audit_id=str(uuid.uuid4()),
+                    subject=actor,
+                    action="identity.manage",
+                    resource=self._binding_failure_resource(binding_id),
+                    context=self._binding_audit_context(actor, context),
+                    decision="deny",
+                    reason="binding_not_found",
+                    metadata={
+                        "binding_id_digest": hashlib.sha256(
+                            binding_id.encode()
+                        ).hexdigest()
+                    },
+                )
                 return False
-            await self._assert_binding_management_allowed(
+            try:
+                binding_role = Role(binding.role)
+            except ValueError:
+                self._audit(
+                    audit_id=str(uuid.uuid4()),
+                    subject=actor,
+                    action="identity.manage",
+                    resource=self._binding_failure_resource(binding_id),
+                    context=self._binding_audit_context(
+                        actor, context, binding.config_id
+                    ),
+                    decision="deny",
+                    reason="invalid_binding_role",
+                    metadata={"binding_id": binding.binding_id},
+                )
+                return False
+            management_decision = await self._assert_binding_management_allowed(
                 actor,
-                Role(binding.role),
+                binding.subject_id,
+                binding_role,
                 binding.scope_type,
                 binding.scope_id,
                 binding.config_id,
@@ -672,6 +1017,29 @@ class AuthorizationService:
                             )
                         )
                         if active_root_count <= 1:
+                            self._audit(
+                                audit_id=str(uuid.uuid4()),
+                                subject=actor,
+                                action="identity.root.write",
+                                resource=self._binding_resource(
+                                    binding.subject_id,
+                                    binding.scope_type,
+                                    binding.scope_id,
+                                    binding.config_id,
+                                ),
+                                context=self._binding_audit_context(
+                                    actor, context, binding.config_id
+                                ),
+                                decision="deny",
+                                reason="last_root_protected",
+                                effective_role=Role.ROOT,
+                                step_up_id=(
+                                    management_decision.step_up_id
+                                    if isinstance(management_decision, Decision)
+                                    else None
+                                ),
+                                metadata={"binding_id": binding.binding_id},
+                            )
                             raise ValueError("Cannot revoke the last root binding")
                     result = await session.execute(
                         update(AuthRoleBinding)
@@ -681,7 +1049,177 @@ class AuthorizationService:
                         )
                         .values(revoked_at=now, revoked_by=actor.id)
                     )
-                    return bool(result.rowcount)
+                    revoked = bool(result.rowcount)
+                    if revoked:
+                        audit_context = self._binding_audit_context(
+                            actor, context, binding.config_id
+                        )
+                        session.add(
+                            self._audit_record(
+                                audit_id=str(uuid.uuid4()),
+                                subject=actor,
+                                action="identity.manage",
+                                resource=self._binding_resource(
+                                    binding.subject_id,
+                                    binding.scope_type,
+                                    binding.scope_id,
+                                    binding.config_id,
+                                ),
+                                context=audit_context,
+                                decision="allow",
+                                reason="binding_revoked",
+                                effective_role=binding_role,
+                                step_up_id=(
+                                    management_decision.step_up_id
+                                    if isinstance(management_decision, Decision)
+                                    else None
+                                ),
+                                metadata={"binding_id": binding.binding_id},
+                            )
+                        )
+                    return revoked
+
+    async def revoke_bindings(
+        self,
+        *,
+        actor: Subject,
+        binding_ids: Iterable[str],
+        context: AuthContext | None = None,
+    ) -> int:
+        """Atomically revoke an exact, step-up-bound set of active bindings."""
+
+        async with self._binding_mutation_lock:
+            bindings = await self._active_bindings_for_ids(binding_ids)
+            batch_resource = self._binding_batch_resource(bindings)
+            decision_context = context or AuthContext(
+                subject=actor,
+                source="dashboard",
+                authenticated=True,
+                config_id=batch_resource.config_id,
+            )
+            decision = await self.authorize(
+                actor, "identity.manage", batch_resource, decision_context
+            )
+            if not decision.allowed:
+                raise PermissionError("Authorization denied")
+            binding_roles: dict[str, Role] = {}
+            for binding in bindings:
+                try:
+                    binding_role = Role(binding.role)
+                except ValueError as exc:
+                    raise AuthorizationValueError("Invalid binding role") from exc
+                binding_resource = self._binding_resource(
+                    binding.subject_id,
+                    binding.scope_type,
+                    binding.scope_id,
+                    binding.config_id,
+                )
+                await self._validate_binding_management_decision(
+                    actor=actor,
+                    role=binding_role,
+                    scope_type=binding.scope_type,
+                    config_id=binding.config_id,
+                    resource=binding_resource,
+                    context=decision_context,
+                    decision=decision,
+                )
+                binding_roles[binding.binding_id] = binding_role
+
+            now = utc_now()
+            binding_id_set = tuple(binding_roles)
+            async with self._db.get_db() as session:
+                async with session.begin():
+                    selected_root_ids = {
+                        binding.binding_id
+                        for binding in bindings
+                        if binding.role == Role.ROOT.value
+                    }
+                    if selected_root_ids:
+                        roots = await session.execute(
+                            select(AuthRoleBinding.binding_id).where(
+                                col(AuthRoleBinding.role) == Role.ROOT.value,
+                                col(AuthRoleBinding.scope_type) == "global",
+                                col(AuthRoleBinding.scope_id) == "global",
+                                col(AuthRoleBinding.config_id) == GLOBAL_SCOPE_ID,
+                                col(AuthRoleBinding.revoked_at).is_(None),
+                                (col(AuthRoleBinding.expires_at).is_(None))
+                                | (col(AuthRoleBinding.expires_at) > now),
+                            )
+                        )
+                        root_ids = list(roots.scalars())
+                        active_accounts = set(
+                            (
+                                await session.execute(
+                                    select(DashboardAccount.account_id).where(
+                                        col(DashboardAccount.is_active).is_(True)
+                                    )
+                                )
+                            ).scalars()
+                        )
+                        root_subjects = (
+                            await session.execute(
+                                select(
+                                    AuthRoleBinding.binding_id,
+                                    AuthRoleBinding.subject_id,
+                                ).where(col(AuthRoleBinding.binding_id).in_(root_ids))
+                            )
+                        ).all()
+                        remaining_root_count = sum(
+                            binding_id not in selected_root_ids
+                            and subject_id.removeprefix("dashboard-account:")
+                            in active_accounts
+                            for binding_id, subject_id in root_subjects
+                        )
+                        if remaining_root_count < 1:
+                            self._audit(
+                                audit_id=str(uuid.uuid4()),
+                                subject=actor,
+                                action="identity.root.write",
+                                resource=batch_resource,
+                                context=decision_context,
+                                decision="deny",
+                                reason="last_root_protected",
+                                effective_role=Role.ROOT,
+                                step_up_id=decision.step_up_id,
+                                metadata={"binding_count": len(binding_id_set)},
+                            )
+                            raise ValueError("Cannot revoke the last root binding")
+                    result = await session.execute(
+                        update(AuthRoleBinding)
+                        .where(
+                            col(AuthRoleBinding.binding_id).in_(binding_id_set),
+                            col(AuthRoleBinding.revoked_at).is_(None),
+                        )
+                        .values(revoked_at=now, revoked_by=actor.id)
+                    )
+                    if result.rowcount != len(binding_id_set):
+                        raise AuthorizationValueError(
+                            "Binding batch is no longer current"
+                        )
+                    for binding in bindings:
+                        session.add(
+                            self._audit_record(
+                                audit_id=str(uuid.uuid4()),
+                                subject=actor,
+                                action="identity.manage",
+                                resource=self._binding_resource(
+                                    binding.subject_id,
+                                    binding.scope_type,
+                                    binding.scope_id,
+                                    binding.config_id,
+                                ),
+                                context=decision_context,
+                                decision="allow",
+                                reason="binding_revoked",
+                                effective_role=binding_roles[binding.binding_id],
+                                step_up_id=decision.step_up_id,
+                                metadata={
+                                    "binding_id": binding.binding_id,
+                                    "batch_size": len(binding_id_set),
+                                },
+                            )
+                        )
+                    return len(binding_id_set)
 
     async def list_bindings(
         self,
@@ -759,12 +1297,13 @@ class AuthorizationService:
                 "authorization_unavailable",
                 audit_id=audit_id,
             )
-        if (
+        needs_audit = (
             not decision.allowed
-            or _requires_step_up(action, context)
+            or _requires_step_up(action, resource, context)
             or action.startswith("identity.")
-        ):
-            self._audit(
+        )
+        if needs_audit:
+            audit_written = self._audit(
                 audit_id=audit_id,
                 subject=subject,
                 action=action,
@@ -773,7 +1312,18 @@ class AuthorizationService:
                 decision="allow" if decision.allowed else "deny",
                 reason=decision.reason,
                 effective_role=decision.effective_role,
+                step_up_id=decision.step_up_id,
             )
+            if decision.allowed and not audit_written:
+                return Decision(
+                    False,
+                    subject,
+                    action,
+                    resource,
+                    decision.effective_role,
+                    "audit_unavailable",
+                    audit_id=audit_id,
+                )
         return decision
 
     async def _authorize(
@@ -818,6 +1368,20 @@ class AuthorizationService:
                 "cross_config_resource",
                 audit_id=audit_id,
             )
+        if (
+            context.origin_session_resource_id is not None
+            and resource.type == "session"
+            and resource.id != context.origin_session_resource_id
+        ):
+            return Decision(
+                False,
+                subject,
+                action,
+                resource,
+                None,
+                "cross_session_resource",
+                audit_id=audit_id,
+            )
         if action.startswith("plugin:"):
             parts = action.split(":")
             if len(parts) != 3 or not all(parts):
@@ -844,7 +1408,7 @@ class AuthorizationService:
                     audit_id=audit_id,
                 )
         api_key_capability = subject.kind == "api-key" and api_key_scopes_allow_action(
-            context.api_scopes, action
+            context.api_scopes, action, resource
         )
         if subject.kind == "api-key" and not api_key_capability:
             return Decision(
@@ -882,9 +1446,13 @@ class AuthorizationService:
                 "role_scope_denied",
                 audit_id=audit_id,
             )
-        if _requires_step_up(action, context):
+        step_up_id: str | None = None
+        if _requires_step_up(action, resource, context):
             if context.source == "dashboard":
-                if not await self._consume_step_up(subject, action, resource, context):
+                step_up_id = await self._consume_step_up(
+                    subject, action, resource, context
+                )
+                if step_up_id is None:
                     return Decision(
                         False,
                         subject,
@@ -906,7 +1474,14 @@ class AuthorizationService:
                     audit_id=audit_id,
                 )
         return Decision(
-            True, subject, action, resource, role, "allowed", audit_id=audit_id
+            True,
+            subject,
+            action,
+            resource,
+            role,
+            "allowed",
+            audit_id=audit_id,
+            step_up_id=step_up_id,
         )
 
     async def _policy_override_allows(
@@ -935,6 +1510,32 @@ class AuthorizationService:
                     return True
         return False
 
+    @staticmethod
+    def _origin_session_resource(context: AuthContext) -> Resource | None:
+        if context.origin_session_resource_id is None:
+            return None
+        config_id, umo = parse_canonical_session_resource(
+            context.origin_session_resource_id
+        )
+        return Resource.session(config_id, umo)
+
+    @classmethod
+    def _session_scope_resource(
+        cls, resource: Resource, context: AuthContext
+    ) -> Resource | None:
+        """Return the current-session scope usable for a session-bound tool."""
+
+        if resource.type == "session":
+            return resource
+        origin = cls._origin_session_resource(context)
+        if (
+            origin is not None
+            and resource.type == "tool"
+            and resource.config_id == origin.config_id
+        ):
+            return origin
+        return None
+
     async def _resolve_role(
         self, subject: Subject, resource: Resource, context: AuthContext
     ) -> Role:
@@ -944,7 +1545,12 @@ class AuthorizationService:
             and context.principal_subject_id not in candidates
         ):
             candidates.append(context.principal_subject_id)
-        roles = [Role.MEMBER if subject.authenticated else Role.GUEST]
+        session_scope = self._session_scope_resource(resource, context)
+        roles = [Role.GUEST]
+        if subject.authenticated and session_scope is not None:
+            origin = self._origin_session_resource(context)
+            if origin is not None and session_scope.id == origin.id:
+                roles.append(Role.MEMBER)
         now = utc_now()
         async with self._db.get_db() as session:
             bindings = await session.execute(
@@ -959,6 +1565,12 @@ class AuthorizationService:
                         Role.ROOT.value,
                         Role.OPERATOR.value,
                     }:
+                        # Global control-plane roles are intentionally not an
+                        # IM privilege. A Dashboard account must not become a
+                        # group administrator merely because it shares a
+                        # normalized subject ID with a message sender.
+                        if context.source != "dashboard":
+                            continue
                         # Global control-plane roles are tied to the current
                         # Dashboard account state. This check also closes the
                         # race between account deactivation and a concurrent
@@ -979,16 +1591,24 @@ class AuthorizationService:
                         ).scalar_one_or_none()
                         if account is None:
                             continue
-                    if self._binding_matches_resource(binding, resource):
+                    if self._binding_matches_resource(binding, resource) or (
+                        session_scope is not None
+                        and session_scope.id != resource.id
+                        and self._binding_matches_resource(binding, session_scope)
+                    ):
                         roles.append(Role(binding.role))
-            if resource.type == "session" and resource.umo and resource.config_id:
+            if (
+                session_scope is not None
+                and session_scope.umo
+                and session_scope.config_id
+            ):
                 fact = (
                     await session.execute(
                         select(AuthPlatformMembershipFact).where(
                             col(AuthPlatformMembershipFact.subject_id) == subject.id,
                             col(AuthPlatformMembershipFact.config_id)
-                            == resource.config_id,
-                            col(AuthPlatformMembershipFact.umo) == resource.umo,
+                            == session_scope.config_id,
+                            col(AuthPlatformMembershipFact.umo) == session_scope.umo,
                             col(AuthPlatformMembershipFact.expires_at) > now,
                         )
                     )
@@ -1001,13 +1621,20 @@ class AuthorizationService:
                         if fact.platform_role == "admin"
                         else Role.MEMBER
                     )
-        if resource.type == "session" and context.platform_member_role in {
+        if session_scope is not None and context.platform_member_role in {
             "owner",
             "admin",
         }:
             if (
-                context.platform_role_expires_at is None
-                or context.platform_role_expires_at > now
+                context.platform_role_source in {"adapter", "api", "cache"}
+                and (
+                    context.origin_session_resource_id is None
+                    or context.origin_session_resource_id == session_scope.id
+                )
+                and (
+                    context.platform_role_expires_at is None
+                    or context.platform_role_expires_at > now
+                )
             ):
                 roles.append(
                     Role.SESSION_OWNER
@@ -1051,7 +1678,7 @@ class AuthorizationService:
 
         if (
             context.source != "dashboard"
-            or not _requires_step_up(action, context)
+            or not _requires_step_up(action, resource, context)
             or not 0 < ttl_seconds <= 900
         ):
             raise AuthorizationValueError("Invalid step-up request")
@@ -1070,21 +1697,43 @@ class AuthorizationService:
         async with self._db.get_db() as session:
             async with session.begin():
                 session.add(record)
-        self._audit(
+                session.add(
+                    self._audit_record(
+                        audit_id=str(uuid.uuid4()),
+                        subject=subject,
+                        action=action,
+                        resource=resource,
+                        context=context,
+                        decision="allow",
+                        reason="step_up_issued",
+                        step_up_id=credential_id,
+                    )
+                )
+        return credential_id, f"{credential_id}.{secret}"
+
+    def record_step_up_failure(
+        self,
+        *,
+        subject: Subject,
+        action: str,
+        resource: Resource,
+        context: AuthContext,
+    ) -> bool:
+        """Record a failed Dashboard reauthentication attempt without secrets."""
+
+        return self._audit(
             audit_id=str(uuid.uuid4()),
             subject=subject,
             action=action,
             resource=resource,
             context=context,
-            decision="allow",
-            reason="step_up_issued",
-            step_up_id=credential_id,
+            decision="deny",
+            reason="step_up_verification_failed",
         )
-        return credential_id, f"{credential_id}.{secret}"
 
     async def _consume_step_up(
         self, subject: Subject, action: str, resource: Resource, context: AuthContext
-    ) -> bool:
+    ) -> str | None:
         token = context.step_up_token
         session_id = context.metadata.get("dashboard_session_id")
         if (
@@ -1092,7 +1741,7 @@ class AuthorizationService:
             or "." not in token
             or not isinstance(session_id, str)
         ):
-            return False
+            return None
         credential_id, secret = token.split(".", 1)
         now = utc_now()
         async with self._db.get_db() as session:
@@ -1114,4 +1763,4 @@ class AuthorizationService:
                     )
                     .values(consumed_at=now)
                 )
-                return bool(result.rowcount)
+                return credential_id if result.rowcount else None
