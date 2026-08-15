@@ -896,6 +896,19 @@ class _FakeFFmpegProcess:
         return (b"", b"")
 
 
+def _patch_ffmpeg_not_called(monkeypatch, reason: str) -> None:
+    """Monkeypatch ``asyncio.create_subprocess_exec`` to fail if ffmpeg runs.
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture.
+        reason: scenario description included in the failure message.
+    """
+    async def fake_exec(*args, **kwargs):
+        raise AssertionError(f"ffmpeg should not be called {reason}")
+
+    monkeypatch.setattr(media_utils.asyncio, "create_subprocess_exec", fake_exec)
+
+
 def _patch_ffmpeg(monkeypatch, tmp_path, *, output_content: bytes = b""):
     """Monkeypatch ``asyncio.create_subprocess_exec`` to simulate ffmpeg.
 
@@ -945,10 +958,7 @@ async def test_convert_audio_format_real_wav_with_wav_extension_short_circuits(
     audio_file = tmp_path / "voice.wav"
     audio_file.write_bytes(_make_wav_bytes())
 
-    async def fake_exec(*args, **kwargs):
-        raise AssertionError("ffmpeg should not be called for a real WAV file")
-
-    monkeypatch.setattr(media_utils.asyncio, "create_subprocess_exec", fake_exec)
+    _patch_ffmpeg_not_called(monkeypatch, "for a real WAV file")
 
     result = await media_utils.convert_audio_format(str(audio_file), "wav")
     assert result == str(audio_file)
@@ -962,10 +972,7 @@ async def test_convert_audio_format_unknown_content_with_matching_ext_short_circ
     audio_file = tmp_path / "voice.wav"
     audio_file.write_bytes(b"\x00" * 64)
 
-    async def fake_exec(*args, **kwargs):
-        raise AssertionError("ffmpeg should not be called for unrecognised content")
-
-    monkeypatch.setattr(media_utils.asyncio, "create_subprocess_exec", fake_exec)
+    _patch_ffmpeg_not_called(monkeypatch, "for unrecognised content")
 
     result = await media_utils.convert_audio_format(str(audio_file), "wav")
     assert result == str(audio_file)
@@ -979,10 +986,7 @@ async def test_convert_audio_format_real_amr_with_amr_extension_short_circuits(
     audio_file = tmp_path / "voice.amr"
     audio_file.write_bytes(_AMR_HEADER + b"\x00" * 50)
 
-    async def fake_exec(*args, **kwargs):
-        raise AssertionError("ffmpeg should not be called for a real AMR file")
-
-    monkeypatch.setattr(media_utils.asyncio, "create_subprocess_exec", fake_exec)
+    _patch_ffmpeg_not_called(monkeypatch, "for a real AMR file")
 
     result = await media_utils.convert_audio_format(str(audio_file), "amr")
     assert result == str(audio_file)
