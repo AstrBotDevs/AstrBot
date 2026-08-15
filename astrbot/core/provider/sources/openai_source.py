@@ -289,14 +289,14 @@ class ProviderOpenAIOfficial(Provider):
             },
         }
 
-    async def _transform_content_part(self, part: dict) -> dict | list[dict]:
+    async def _transform_content_part(self, part: dict) -> list[dict]:
         if not isinstance(part, dict):
-            return part
+            return [part]
 
         if part.get("type") == "image_url":
             url, image_detail = self._extract_image_part_info(part)
             if not url:
-                return part
+                return [part]
 
             try:
                 resolved_parts = await self._resolve_image_parts(
@@ -308,18 +308,18 @@ class ProviderOpenAIOfficial(Provider):
                     url,
                     exc,
                 )
-                return part
+                return [part]
 
-            return resolved_parts or part
+            return resolved_parts or [part]
 
         if part.get("type") == "audio_url":
             audio_ref = self._extract_audio_part_info(part)
             if not audio_ref:
-                return part
+                return [part]
             resolved_part = await self._resolve_audio_part(audio_ref)
-            return resolved_part or part
+            return [resolved_part] if resolved_part else [part]
 
-        return part
+        return [part]
 
     async def _materialize_message_image_parts(self, message: dict) -> dict:
         content = message.get("content")
@@ -328,11 +328,7 @@ class ProviderOpenAIOfficial(Provider):
 
         new_content: list[dict] = []
         for part in content:
-            transformed = await self._transform_content_part(part)
-            if isinstance(transformed, list):
-                new_content.extend(transformed)
-            else:
-                new_content.append(transformed)
+            new_content.extend(await self._transform_content_part(part))
         return {**message, "content": new_content}
 
     async def _materialize_context_image_parts(
