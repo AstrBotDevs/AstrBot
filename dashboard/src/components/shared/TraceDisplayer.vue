@@ -347,7 +347,7 @@ export default {
   padding: 0;
   height: 100%;
   overflow-y: auto;
-  color: #2b3340;
+  color: rgba(var(--v-theme-on-surface), 0.88);
   font-family: 'Fira Code', monospace;
 }
 
@@ -358,7 +358,7 @@ export default {
 }
 
 .trace-group {
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   background: transparent;
   padding: 8px 0;
 }
@@ -374,8 +374,8 @@ export default {
 
 .trace-header {
   font-weight: 600;
-  color: #6b7280;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.12);
+  color: rgba(var(--v-theme-on-surface), 0.62);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   padding-bottom: 10px;
 }
 
@@ -387,24 +387,24 @@ export default {
 
 .event-title {
   font-weight: 600;
-  color: #1f2937;
+  color: rgba(var(--v-theme-on-surface), 0.88);
 }
 
 .event-meta {
   font-size: 12px;
-  color: #6b7280;
+  color: rgba(var(--v-theme-on-surface), 0.62);
   margin-top: 4px;
 }
 
 .event-sub {
   font-size: 12px;
-  color: #4b5563;
+  color: rgba(var(--v-theme-on-surface), 0.72);
   margin-top: 2px;
   word-break: break-word;
 }
 
 .event-sub.outline {
-  color: #6b7280;
+  color: rgba(var(--v-theme-on-surface), 0.62);
 }
 
 .event-controls {
@@ -426,13 +426,13 @@ export default {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  color: #4b5563;
+  color: rgba(var(--v-theme-on-surface), 0.72);
 }
 
 .trace-empty {
   padding: 24px;
   text-align: center;
-  color: #6b7280;
+  color: rgba(var(--v-theme-on-surface), 0.62);
 }
 
 @media (max-width: 1200px) {
@@ -457,12 +457,12 @@ export default {
 }
 
 .trace-record-time {
-  color: #6b7280;
+  color: rgba(var(--v-theme-on-surface), 0.62);
   font-size: 11px;
 }
 
 .trace-record-action {
-  color: #1f2937;
+  color: rgba(var(--v-theme-on-surface), 0.88);
   font-weight: 600;
   font-size: 11px;
 }
@@ -471,7 +471,7 @@ export default {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  color: #4b5563;
+  color: rgba(var(--v-theme-on-surface), 0.72);
   font-size: 10px;
 }
 
