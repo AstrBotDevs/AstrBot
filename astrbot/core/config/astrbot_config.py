@@ -78,12 +78,7 @@ class AstrBotConfig(dict):
         # 检查配置完整性，并插入
         has_new = self._migrate_openai_chat_completions_type(conf)
         has_new |= self.check_config_integrity(default_config, conf)
-        if self._should_reset_dashboard_password(
-            conf,
-            stored_dashboard_password_change_required=(
-                stored_dashboard_password_change_required
-            ),
-        ):
+        if self._should_reset_dashboard_password(conf):
             self._reset_generated_dashboard_password(conf)
             has_new = True
         self.update(conf)
@@ -135,12 +130,7 @@ class AstrBotConfig(dict):
             conf_str = conf_str[1:]
         return json.loads(conf_str)
 
-    def _should_reset_dashboard_password(
-        self,
-        conf: dict,
-        *,
-        stored_dashboard_password_change_required: bool,
-    ) -> bool:
+    def _should_reset_dashboard_password(self, conf: dict) -> bool:
         dashboard_conf = conf.get("dashboard")
         if not isinstance(dashboard_conf, dict):
             return False
@@ -150,10 +140,7 @@ class AstrBotConfig(dict):
             "password"
         ):
             return True
-        return bool(
-            stored_dashboard_password_change_required
-            and dashboard_conf.get("pbkdf2_password")
-        )
+        return False
 
     def _reset_generated_dashboard_password(self, conf: dict) -> None:
         generated_password = self._resolve_initial_dashboard_password()
