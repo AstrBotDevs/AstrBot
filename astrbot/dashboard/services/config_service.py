@@ -1358,6 +1358,20 @@ class ProviderConfigService:
         self.config = core_lifecycle.astrbot_config
         self.provider_manager = core_lifecycle.provider_manager
 
+    @staticmethod
+    def _strip_legacy_reasoning_metadata(provider: dict) -> dict:
+        """Remove reasoning metadata accidentally stored as provider configuration.
+
+        Args:
+            provider: Provider configuration to sanitize in place.
+
+        Returns:
+            The sanitized provider configuration.
+        """
+        if provider.get("provider_source_id"):
+            provider.pop("reasoning", None)
+        return provider
+
     def get_provider_schema(self) -> dict:
         provider_metadata = ConfigMetadataI18n.convert_to_i18n_keys(
             {
@@ -1382,6 +1396,7 @@ class ProviderConfigService:
 
         model_metadata = {}
         for provider in providers:
+            self._strip_legacy_reasoning_metadata(provider)
             model_id = provider.get("model")
             if isinstance(model_id, str) and model_id in LLM_METADATAS:
                 model_metadata[model_id] = LLM_METADATAS[model_id]
@@ -1659,6 +1674,7 @@ class ProviderConfigService:
                 )
             else:
                 provider_response = copy.deepcopy(provider)
+            self._strip_legacy_reasoning_metadata(provider_response)
             model_id = provider_response.get("model")
             if isinstance(model_id, str) and model_id in LLM_METADATAS:
                 model_metadata[model_id] = LLM_METADATAS[model_id]
@@ -1694,6 +1710,7 @@ class ProviderConfigService:
         if provider is None:
             raise ValueError(f"Provider {provider_id} not found")
         provider_response = copy.deepcopy(provider)
+        self._strip_legacy_reasoning_metadata(provider_response)
         from astrbot.core.utils.llm_metadata import LLM_METADATAS
 
         model_id = provider_response.get("model")
@@ -1706,11 +1723,14 @@ class ProviderConfigService:
         config = copy.deepcopy(config)
         if source_id:
             config["provider_source_id"] = source_id
+        self._strip_legacy_reasoning_metadata(config)
         await self.provider_manager.create_provider(config)
 
     async def update_provider(self, provider_id: str, config: dict) -> None:
+        config = copy.deepcopy(config)
         if not config.get("id"):
             config["id"] = provider_id
+        self._strip_legacy_reasoning_metadata(config)
         await self.provider_manager.update_provider(provider_id, config)
 
     async def set_provider_enabled(self, provider_id: str, enabled: bool) -> None:
