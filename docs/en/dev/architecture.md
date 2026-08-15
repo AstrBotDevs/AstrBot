@@ -64,7 +64,7 @@ The order in `astrbot/core/pipeline/stage_order.py` is:
 
 `ProcessStage` runs plugin handlers and the Agent. `ResultDecorateStage` applies prefixes, segmentation, TTS, local text-to-image rendering, quoting, and related transformations. `RespondStage` uses the platform's unified send API. The scheduler supports both ordinary async stages and async-generator onion middleware; preserve stop-propagation and finalization semantics.
 
-Group wake behavior is explicit. `platform_settings.group_wake_policy` separately controls whether mentioning or replying to the bot wakes a group message, and both values default to false. `WakingCheckStage` records the actual `wake_reasons` on the event. Built-in command availability is stored per handler in the command database; the old `disable_builtin_commands` value is only a startup migration input and no longer filters the Pipeline.
+Group wake behavior is explicit. `platform_settings.group_wake_policy` separately controls whether mentioning or replying to the bot wakes a group message, and both values default to false. `WakingCheckStage` records the actual `wake_reasons` on the event. Built-in command availability is stored per handler in the command database; `disable_builtin_commands` is not migrated, accepted by Dashboard config writes, or read by the Pipeline.
 
 ### Command Parsing Subsystem
 

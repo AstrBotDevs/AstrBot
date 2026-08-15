@@ -66,7 +66,7 @@ text = response.completion_text
 from astrbot.api.event import AstrMessageEvent, filter
 
 
-@filter.llm_tool(name="get_weather")
+@filter.llm_tool(name="get_weather", required_actions=("provider.use",))
 async def get_weather(
     self,
     event: AstrMessageEvent,
@@ -83,6 +83,8 @@ async def get_weather(
 工具 schema 由 Google-style docstring 生成。`Args:` 中使用 `name(type): description`，支持 `string`、`number`、`object`、`boolean`、`array` 和 `array[string]` 等数组子类型。类型注解不能代替 docstring schema。
 
 工具返回简短字符串或框架支持的结果。不要在错误中返回 API Key、完整响应头或远端凭据。
+
+每个工具都必须以 `required_actions` 声明稳定能力；缺少声明的工具会在执行边界被拒绝。插件自定义动作使用完整的 `plugin:<plugin-id>:<action>`，并且必须在 `metadata.yaml` 的 `authorization.actions` 中声明。
 
 ### 显式 `FunctionTool`
 
@@ -111,6 +113,7 @@ weather_tool = FunctionTool(
         "required": ["city"],
     },
     handler=weather_handler,
+    required_actions=("provider.use",),
 )
 
 self.context.tools.add(weather_tool)

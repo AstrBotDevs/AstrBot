@@ -213,7 +213,7 @@ controls whether mentioning or replying to the bot wakes a group message, and
 `WakingCheckStage` records the selected `wake_reasons` on the event. Do not
 restore implicit mention/reply wakeups. Built-in command availability is stored
 per handler in the command database; the removed `disable_builtin_commands`
-flag exists only as a startup migration input and must not become a pipeline
+field is not migrated or read by runtime code and must not become a pipeline
 switch again.
 
 ### Agents, providers, and runners

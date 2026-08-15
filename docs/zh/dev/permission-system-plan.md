@@ -6,8 +6,9 @@
 
 **目标版本**：当前分支已完成 v1 阶段；固定角色、显式 action/resource/context、Dashboard step-up、审计和控制面均已启用。跨平台 IM elevation 明确不属于 v1。
 
-实现说明：本分支没有存量用户，不执行旧配置迁移。旧版 `admins_id`、
-`tool_permissions` 与相关兼容字段会被丢弃，不再参与运行时授权。
+实现说明：本分支没有存量用户，不执行旧权限迁移，也不保留旧字段清理路径。
+Dashboard 配置写入会明确拒绝 `admins_id`、`tool_permissions`、
+`disable_builtin_commands`；运行时授权不会读取这些字段。
 WebChat/Open API 的 `username` 字段继续兼容，但它是 caller-declared 数据，不是认证主体。
 
 对话导出属于 Dashboard 控制面高风险操作：必须对精确的
@@ -29,6 +30,18 @@ API scope 授权。Extension API 不会创建独立角色模型，也不存在�
 分别绑定 `system:core-update`、`system:pip-install`、`system:restart` 资源和
 `system.update`、`system.pip_install`、`system.restart` action。API Key 不能调用
 这些高风险操作。
+
+## 0. 2026-08-14 验收修订
+
+本次验收修复并强制以下边界：
+
+- 所有新建 session binding 一律保存为版本化 canonical session resource；本分支没有 pre-canonical binding 存量，因此启动时不迁移或合并旧记录。
+- 入站会话上下文带有不可变的 `origin_session_resource_id`。默认 `member`、session binding、平台成员事实和会话级工具授权只在该发起会话生效；请求其他会话或命名 `data` 资源默认拒绝。
+- `root` 与 `operator` 是 Dashboard 控制面身份，不能因同名主体出现在 IM 消息上下文而成为群管理权限。当前会话的 owner 只可授予/撤销 `session_admin` 或 `member`，不能委派 owner 或修改其他作用域。
+- Dashboard 的每一次绑定授予、单条撤销和账户修改都对精确目标资源消费一次性 step-up。批量撤销则把排序后的完整 binding 快照摘要作为资源，单次密码或 TOTP 验证只能消费该集合，不能重放到其他集合或逐条复用。
+- 拒绝、高风险决策、step-up 和绑定变更均写脱敏审计；高风险 allow 在有界审计队列已满时 fail closed。绑定变更与 step-up 签发同时写入业务事务，避免安全变更已提交而审计丢失。
+
+`openspec/openapi-v1.yaml` 是 Dashboard 授权接口的完整契约。`docs/public/openapi.json` 刻意只包含 API Key 面向的公开接口，因此不发布 Dashboard-only Authorization 控制面路径。
 
 ## 1. 摘要
 
@@ -69,7 +82,7 @@ guest                                 未认证或受限作用域
 | `astrbot/core/pipeline/waking_check/stage.py`                     | 历史实现曾根据 `admins_id` 设置 `event.role`                               | 配置档管理员身份依赖消息事件字段                               | 当前实现只挂载规范化 `subject`，由授权服务读取显式绑定                                    |
 | `astrbot/core/platform/astr_message_event.py`                     | `is_admin()` 只判断 `event.role == "admin"`                                | 无法区分平台群管理员和 AstrBot operator                        | 改为 `event.authz.require(...)` 或 `event.has_capability(...)`                            |
 | `astrbot/core/platform/sources/napcat/napcat_platform_adapter.py` | 将 QQ 的 `sender.role` 直接写入 `event.role`                               | QQ 群管理员可能被当成 AstrBot 管理员                           | 保存到带来源和 TTL 的平台成员事实，禁止写入全局角色字段                                   |
-| `astrbot/core/config/default.py`、`commands/admin.py`             | 历史配置曾保存 `admins_id`                                                 | 不能表达会话范围和过期时间；直接升级为全局 operator 会扩大权限 | 当前实现丢弃该字段；配置档级管理员只能通过显式绑定授予                                    |
+| `astrbot/core/config/default.py`、`commands/admin.py`             | 历史配置曾保存 `admins_id`                                                 | 不能表达会话范围和过期时间；直接升级为全局 operator 会扩大权限 | 当前分支不读取、迁移或清理该字段；配置档级管理员只能通过显式绑定授予                      |
 | `builtin_stars/builtin_commands/main.py`                          | Provider、Model、Chat、Persona、Plugin、Admin 等大量命令要求 `ADMIN`       | 管理能力过粗，无法区分当前会话与全局配置                       | 按能力域映射到 `session.*`、`provider.*` 等动作                                           |
 | `astrbot/core/tools/function_tool_manager.py`                     | 历史非内置工具默认要求 admin，可由 `tool_permissions` 降为 member          | 配置粒度和统一授权服务不一致                                   | 当前工具声明所需动作并统一调用授权服务                                                    |
 | `astrbot/core/tools/computer_tools/*`                             | `computer_use_require_admin` 控制 Computer Use                             | 只支持全局 admin，无法绑定会话/操作者                          | 映射到 `tool.local_exec` 等高风险动作                                                     |
@@ -514,7 +527,7 @@ root/operator/session_owner/session_admin/member/guest
 ### 阶段 A：只读审计和数据导入（历史计划；本分支不执行旧权限导入）
 
 1. 新增授权模型、主体/资源规范化和审计表。
-2. 旧 `admins_id` 只会从配置快照中丢弃，不会转换为任何角色绑定。
+2. 本分支不读取、迁移或清理旧 `admins_id`，也不会将其转换为任何角色绑定。
 3. 为 Dashboard 账户建立受保护的控制面 principal 映射，不根据用户名猜测 root；首次部署时创建稳定 `account_id` 和 bootstrap root。
 4. 读取旧 `event.role` 时同时记录冲突诊断，NapCat 等适配器改为填充 `platform_member_role` 和 `auth_platform_membership_facts`；平台事实不写入 role binding。
 5. 授权服务以 observe-only 模式计算新决策并与旧 `is_admin()` 结果对比，发现放行差异时写审计和告警。
@@ -595,11 +608,11 @@ root/operator/session_owner/session_admin/member/guest
 | instance_operator 或兼容 `username` 自助提权为 root | 只有现有 root 可在 step-up 后管理 root/operator；目标角色写入策略硬编码；兼容 `username` 不具备提权语义         |
 | 后续提权消息被转发/重放                             | nonce 只存哈希；短 TTL；绑定 subject/action/resource/context digest；原子消费。第一阶段只使用 Dashboard step-up |
 | 插件或 Agent 绕过授权                               | SDK 入口和工具执行入口双重检查；插件不能访问内部表                                                              |
-| 旧命令/配置行为变化                                 | 明确记录旧字段被丢弃；不创建旧权限快照或运行时兼容路径                                                          |
+| 旧命令/配置行为变化                                 | 明确记录旧字段不迁移、不清理；不创建旧权限快照或运行时兼容路径                                                  |
 | API Key 历史 scope 意外扩权                         | scope 到 action 显式映射；新增敏感动作默认不继承历史 wildcard                                                   |
 | 授权服务故障导致误放行或审计阻塞                    | 写操作 fail closed；低风险 allow 不同步落库；拒绝和高风险事件进入有界异步队列，队列满时使用受限安全日志         |
 
-数据库迁移采用新增表和可回滚索引；本分支不保留或恢复旧 `admins_id` 快照。提权和审计表即使应用回滚也应保留，避免失去安全事件记录。
+数据库迁移采用新增表和可回滚索引；本分支不导入或恢复旧 `admins_id` 快照。提权和审计表即使应用回滚也应保留，避免失去安全事件记录。
 
 ## 17. 验收标准
 

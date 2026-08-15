@@ -64,7 +64,7 @@ outline: deep
 
 `ProcessStage` 负责插件处理与 Agent 调用；`ResultDecorateStage` 处理前缀、分段、TTS、本地文转图、引用等结果装饰；`RespondStage` 统一调用平台发送接口。流水线同时支持普通异步 stage 和用异步生成器实现的洋葱式前后处理，修改时必须保留停止传播和收尾语义。
 
-群聊唤醒规则是显式配置。`platform_settings.group_wake_policy` 分别控制“提及机器人”和“回复机器人”是否唤醒，默认都关闭；`WakingCheckStage` 会把实际原因写入事件的 `wake_reasons`。内置命令是否可用则按 handler 存储在命令数据库中，旧的 `disable_builtin_commands` 只用于启动迁移，不再参与 Pipeline 过滤。
+群聊唤醒规则是显式配置。`platform_settings.group_wake_policy` 分别控制“提及机器人”和“回复机器人”是否唤醒，默认都关闭；`WakingCheckStage` 会把实际原因写入事件的 `wake_reasons`。内置命令是否可用则按 handler 存储在命令数据库中；`disable_builtin_commands` 不迁移、不接受配置写入，也不被 Pipeline 读取。
 
 ### 指令解析子系统
 

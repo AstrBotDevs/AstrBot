@@ -2,6 +2,18 @@
 
 Status: implemented (authorization v1).
 
+## Acceptance revision, 2026-08-14
+
+The acceptance repair enforces these boundaries:
+
+- Every new session binding is stored as a versioned canonical session resource. This branch has no pre-canonical binding data, so startup neither migrates nor merges legacy records.
+- Inbound session contexts carry an immutable `origin_session_resource_id`. Default `member`, session bindings, platform facts, and session-scoped tool authority apply only to that origin; another session or a named `data` resource is denied by default.
+- `root` and `operator` are Dashboard control-plane identities, never IM group authority. A current session owner may manage `session_admin` and `member` bindings only in that session; ownership cannot be delegated.
+- Each Dashboard grant, single revoke, and account mutation consumes a one-time step-up credential bound to its exact resource. Batch revocation instead binds one password or TOTP verification to the complete, sorted binding snapshot, so it cannot be replayed for another set or reused one row at a time.
+- Denials, high-risk decisions, step-up, and binding mutations are redacted audit events. A full bounded audit queue fails closed for high-risk allows, while step-up issuance and binding mutations commit their audit rows in the same transaction.
+
+`openspec/openapi-v1.yaml` is the complete Dashboard authorization contract. `docs/public/openapi.json` deliberately contains only public API-key-facing operations and therefore excludes Dashboard-only Authorization control-plane paths.
+
 Plugin package installation and remote package updates both require the high-risk
 `extension.plugin_install` action and a Dashboard step-up credential. API keys
 cannot perform either operation. The Dashboard asks for fresh proof before each
@@ -29,8 +41,9 @@ uses normalized `Subject`, `Resource`, `AuthContext`, and fail-closed
 `AuthorizationService` decisions for commands, Dashboard/API principals,
 plugins, agents, and tools. Dashboard requests use stable account principals;
 account CRUD is protected by root bindings and step-up. This fork has no existing
-users to migrate; legacy `admins_id`, `tool_permissions`, and related compatibility
-fields are discarded and are not read by runtime authorization.
+users to migrate. It performs no legacy permission migration or configuration
+cleanup: Dashboard config writes explicitly reject `admins_id`, `tool_permissions`,
+and `disable_builtin_commands`, and runtime authorization never reads them.
 
 WebChat/Open API `username` remains a compatibility field and is never treated
 as an authenticated root/operator identity. High-risk Dashboard writes,

@@ -66,7 +66,7 @@ A direct call does not automatically save its input and output into the current 
 from astrbot.api.event import AstrMessageEvent, filter
 
 
-@filter.llm_tool(name="get_weather")
+@filter.llm_tool(name="get_weather", required_actions=("provider.use",))
 async def get_weather(
     self,
     event: AstrMessageEvent,
@@ -83,6 +83,8 @@ async def get_weather(
 AstrBot generates the schema from the Google-style docstring. In `Args:`, use `name(type): description`. Supported forms include `string`, `number`, `object`, `boolean`, `array`, and array subtypes such as `array[string]`. Python annotations do not replace the docstring schema.
 
 Return a concise string or another framework-supported result. Never include API keys, complete response headers, or remote credentials in an error.
+
+Every tool must declare stable capabilities with `required_actions`; an undeclared tool is denied at the execution boundary. A plugin-defined action uses the complete `plugin:<plugin-id>:<action>` form and must also be declared in `metadata.yaml` under `authorization.actions`.
 
 ### Explicit `FunctionTool`
 
@@ -111,6 +113,7 @@ weather_tool = FunctionTool(
         "required": ["city"],
     },
     handler=weather_handler,
+    required_actions=("provider.use",),
 )
 
 self.context.tools.add(weather_tool)
