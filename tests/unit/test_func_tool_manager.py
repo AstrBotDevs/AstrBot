@@ -48,6 +48,41 @@ def test_builtin_tool_ignores_inactivated_llm_tools():
         sp.put("inactivated_llm_tools", [], scope="global", scope_id="global")
 
 
+@pytest.mark.asyncio
+async def test_async_tool_toggle_waits_for_preference_persistence(monkeypatch):
+    manager = FunctionToolManager()
+
+    async def handler():
+        return None
+
+    manager.add_func("custom_tool", [], "Custom tool", handler)
+    get_async = AsyncMock(return_value=[])
+    put_async = AsyncMock()
+    monkeypatch.setattr(ftm.sp, "get_async", get_async)
+    monkeypatch.setattr(ftm.sp, "put_async", put_async)
+
+    assert await manager.deactivate_llm_tool_async("custom_tool") is True
+    assert manager.get_func("custom_tool").active is False
+    put_async.assert_awaited_once_with(
+        "global",
+        "global",
+        "inactivated_llm_tools",
+        ["custom_tool"],
+    )
+
+    get_async.return_value = ["custom_tool"]
+    put_async.reset_mock()
+
+    assert await manager.activate_llm_tool_async("custom_tool", {}) is True
+    assert manager.get_func("custom_tool").active is True
+    put_async.assert_awaited_once_with(
+        "global",
+        "global",
+        "inactivated_llm_tools",
+        [],
+    )
+
+
 def test_computer_tools_are_registered_as_builtin_tools():
     manager = FunctionToolManager()
 

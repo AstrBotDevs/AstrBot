@@ -1361,6 +1361,8 @@ async function sendCurrentMessage() {
         await loadProjectSessions(targetProjectId);
         selectedProjectId.value = null;
       }
+      // 关联项目后再刷新，否则新会话会短暂出现在"对话"列表
+      await getSessions();
     }
 
     const text = draft.value.trim();

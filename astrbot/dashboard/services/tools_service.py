@@ -320,7 +320,18 @@ class ToolsService:
                 f"Failed to update tool permission: {exc!s}"
             ) from exc
 
-    def toggle_tool(self, data: Any) -> str:
+    async def toggle_tool(self, data: Any) -> str:
+        """Toggle a tool and wait for its preference change to persist.
+
+        Args:
+            data: Mapping containing the tool name and activation state.
+
+        Returns:
+            Operation result message.
+
+        Raises:
+            ToolsServiceError: If validation or the tool operation fails.
+        """
         try:
             tool_name = data.get("name")
             action = data.get("activate")
@@ -335,13 +346,16 @@ class ToolsService:
 
             if action:
                 try:
-                    ok = self.tool_mgr.activate_llm_tool(tool_name, star_map=star_map)
+                    ok = await self.tool_mgr.activate_llm_tool_async(
+                        tool_name,
+                        star_map=star_map,
+                    )
                 except ValueError as exc:
                     raise ToolsServiceError(
                         f"Failed to activate tool: {exc!s}"
                     ) from exc
             else:
-                ok = self.tool_mgr.deactivate_llm_tool(tool_name)
+                ok = await self.tool_mgr.deactivate_llm_tool_async(tool_name)
 
             if ok:
                 return "Operation successful."

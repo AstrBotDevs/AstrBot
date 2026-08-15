@@ -46,6 +46,7 @@ from astrbot.dashboard.server import AstrBotDashboard
 from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 from astrbot.dashboard.services.plugin_page_service import PluginPageService
 from astrbot.dashboard.services.plugin_service import PluginService
+from astrbot.dashboard.services.skills_service import SkillsService
 from tests.fixtures.helpers import (
     MockPluginBuilder,
     create_mock_updater_install,
@@ -55,6 +56,66 @@ from tests.fixtures.helpers import (
 _TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
 PLUGIN_PAGE_DEMO_NAME = "astrbot_plugin_page_demo"
 PLUGIN_PAGE_DEMO_PAGE_NAME = "bridge-demo"
+
+
+def test_skills_service_marks_inactive_plugin_skills(monkeypatch):
+    skills = [
+        SimpleNamespace(
+            name="local-skill",
+            source_type="local_only",
+            plugin_name="",
+        ),
+        SimpleNamespace(
+            name="active-plugin-skill",
+            source_type="plugin",
+            plugin_name="astrbot_plugin_active",
+        ),
+        SimpleNamespace(
+            name="inactive-plugin-skill",
+            source_type="plugin",
+            plugin_name="astrbot_plugin_inactive",
+        ),
+    ]
+    skill_manager = SimpleNamespace(
+        list_skills=lambda **_kwargs: skills,
+        get_sandbox_skills_cache_status=lambda: {},
+    )
+    plugins = [
+        StarMetadata(
+            name="active",
+            display_name="Active Plugin",
+            root_dir_name="astrbot_plugin_active",
+            activated=True,
+        ),
+        StarMetadata(
+            name="inactive",
+            display_name="Inactive Plugin",
+            root_dir_name="astrbot_plugin_inactive",
+            activated=False,
+        ),
+    ]
+    core_lifecycle = SimpleNamespace(
+        astrbot_config={"provider_settings": {}},
+        plugin_manager=SimpleNamespace(
+            context=SimpleNamespace(get_all_stars=lambda: plugins)
+        ),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.skills_service.SkillManager",
+        lambda: skill_manager,
+    )
+
+    result = SkillsService(core_lifecycle).get_skills()
+
+    assert [skill["name"] for skill in result["skills"]] == [
+        "local-skill",
+        "active-plugin-skill",
+        "inactive-plugin-skill",
+    ]
+    assert result["skills"][1]["plugin_display_name"] == "Active Plugin"
+    assert result["skills"][1]["plugin_active"] is True
+    assert result["skills"][2]["plugin_display_name"] == "Inactive Plugin"
+    assert result["skills"][2]["plugin_active"] is False
 
 
 def _removed_md5_hint_alias_key() -> str:

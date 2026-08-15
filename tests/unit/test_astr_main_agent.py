@@ -2,6 +2,7 @@
 
 import datetime
 import os
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -15,7 +16,9 @@ from astrbot.core.message.components import File, Image, Plain, Reply, Video
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
-from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.provider import manager as provider_manager_module
+from astrbot.core.provider.entities import ProviderRequest, ProviderType
+from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.skills.skill_manager import SkillInfo
 from astrbot.core.star.star import StarMetadata
 
@@ -37,6 +40,9 @@ def mock_context():
     """Create a mock Context."""
     ctx = MagicMock()
     ctx.get_config.return_value = {}
+    ctx.get_using_provider_async = AsyncMock(
+        side_effect=lambda *args, **kwargs: ctx.get_using_provider(*args, **kwargs)
+    )
     ctx.conversation_manager = MagicMock()
     ctx.persona_manager = MagicMock()
     ctx.persona_manager.personas_v3 = []
@@ -170,12 +176,39 @@ def test_append_system_reminders_includes_weekday(mock_event):
 
 
 def test_local_mode_prompt_uses_windows_powershell_51():
-    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"):
+    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"), patch(
+        "astrbot.core.astr_main_agent.resolve_windows_shell",
+        return_value="powershell.exe",
+    ):
         prompt = ama._build_local_mode_prompt()
 
     assert "Windows PowerShell 5.1 (powershell.exe)" in prompt
     assert "PowerShell 7-only syntax" in prompt
     assert "cmd.exe" not in prompt
+
+
+def test_local_mode_prompt_hints_pwsh_when_resolved():
+    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"), patch(
+        "astrbot.core.astr_main_agent.resolve_windows_shell",
+        return_value="pwsh.exe",
+    ):
+        prompt = ama._build_local_mode_prompt()
+
+    assert "PowerShell 7 (pwsh.exe)" in prompt
+    assert "Windows PowerShell 5.1" not in prompt
+    assert "Unix-like" not in prompt
+
+
+def test_local_mode_prompt_ignores_pwsh_on_non_windows():
+    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Linux"), patch(
+        "astrbot.core.astr_main_agent.resolve_windows_shell",
+        return_value="pwsh.exe",
+    ):
+        prompt = ama._build_local_mode_prompt()
+
+    assert "Unix-like" in prompt
+    assert "POSIX-compatible" in prompt
+    assert "PowerShell" not in prompt
 
 
 def test_local_mode_prompt_keeps_posix_shell_guidance():
@@ -229,7 +262,13 @@ class TestMainAgentBuildConfig:
 class TestSelectProvider:
     """Tests for _select_provider function."""
 
-    def test_select_provider_by_id(self, mock_event, mock_context, mock_provider):
+    @pytest.mark.asyncio
+    async def test_select_provider_by_id(
+        self,
+        mock_event,
+        mock_context,
+        mock_provider,
+    ):
         """Test selecting provider by ID from event extra."""
         module = ama
         mock_event.get_extra.side_effect = lambda k: (
@@ -237,12 +276,13 @@ class TestSelectProvider:
         )
         mock_context.get_provider_by_id.return_value = mock_provider
 
-        result = module._select_provider(mock_event, mock_context)
+        result = await module._select_provider(mock_event, mock_context)
 
         assert result == mock_provider
         mock_context.get_provider_by_id.assert_called_once_with("test-provider")
 
-    def test_select_provider_not_found(self, mock_event, mock_context):
+    @pytest.mark.asyncio
+    async def test_select_provider_not_found(self, mock_event, mock_context):
         """Test selecting provider when ID is not found."""
         module = ama
         mock_event.get_extra.side_effect = lambda k: (
@@ -250,7 +290,7 @@ class TestSelectProvider:
         )
         mock_context.get_provider_by_id.return_value = None
 
-        result = module._select_provider(mock_event, mock_context)
+        result = await module._select_provider(mock_event, mock_context)
 
         assert result is None
         mock_event.set_extra.assert_called_with(
@@ -258,7 +298,8 @@ class TestSelectProvider:
             "LLM 请求失败：未找到指定的提供商 `non-existent`。请检查提供商配置或重新选择可用模型。",
         )
 
-    def test_select_provider_invalid_type(self, mock_event, mock_context):
+    @pytest.mark.asyncio
+    async def test_select_provider_invalid_type(self, mock_event, mock_context):
         """Test selecting provider when result is not a Provider instance."""
         module = ama
         mock_event.get_extra.side_effect = lambda k: (
@@ -266,7 +307,7 @@ class TestSelectProvider:
         )
         mock_context.get_provider_by_id.return_value = "not a provider"
 
-        result = module._select_provider(mock_event, mock_context)
+        result = await module._select_provider(mock_event, mock_context)
 
         assert result is None
         mock_event.set_extra.assert_called_with(
@@ -274,32 +315,63 @@ class TestSelectProvider:
             "LLM 请求失败：选择的提供商类型无效（str），已跳过本次请求。",
         )
 
-    def test_select_provider_fallback(self, mock_event, mock_context, mock_provider):
+    @pytest.mark.asyncio
+    async def test_select_provider_fallback(
+        self,
+        mock_event,
+        mock_context,
+        mock_provider,
+    ):
         """Test provider selection fallback to using provider."""
         module = ama
         mock_event.get_extra.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
 
-        result = module._select_provider(mock_event, mock_context)
+        result = await module._select_provider(mock_event, mock_context)
 
         assert result == mock_provider
         mock_context.get_using_provider.assert_called_once_with(
             umo=mock_event.unified_msg_origin
         )
 
-    def test_select_provider_fallback_error(self, mock_event, mock_context):
+    @pytest.mark.asyncio
+    async def test_select_provider_fallback_error(self, mock_event, mock_context):
         """Test provider selection when fallback raises ValueError."""
         module = ama
         mock_event.get_extra.return_value = None
         mock_context.get_using_provider.side_effect = ValueError("Test error")
 
-        result = module._select_provider(mock_event, mock_context)
+        result = await module._select_provider(mock_event, mock_context)
 
         assert result is None
         mock_event.set_extra.assert_called_with(
             module.LLM_ERROR_MESSAGE_EXTRA_KEY,
             "LLM 请求失败：Test error",
         )
+
+
+@pytest.mark.asyncio
+async def test_provider_manager_async_selection_uses_session_preference(monkeypatch):
+    preferred_provider = object()
+    manager = ProviderManager.__new__(ProviderManager)
+    manager.inst_map = {"preferred": preferred_provider}
+    manager.acm = MagicMock()
+
+    get_async = AsyncMock(return_value="preferred")
+    monkeypatch.setattr(provider_manager_module.sp, "get_async", get_async)
+
+    result = await manager.get_using_provider_async(
+        ProviderType.CHAT_COMPLETION,
+        "session-1",
+    )
+
+    assert result is preferred_provider
+    get_async.assert_awaited_once_with(
+        "umo",
+        "session-1",
+        "provider_perf_chat_completion",
+        None,
+    )
 
 
 class TestGetSessionConv:
@@ -1873,6 +1945,7 @@ class TestBuildMainAgent:
     ):
         """Test building main agent with video attachments."""
         module = ama
+        video_path = str(Path("/path/to/video.mp4"))
         mock_video = Video(file="file:///path/to/video.mp4")
         mock_event.message_obj.message = [mock_video]
 
@@ -1900,7 +1973,7 @@ class TestBuildMainAgent:
         assert result is not None
         assert [
             part.text for part in result.provider_request.extra_user_content_parts
-        ] == ["[Video Attachment: name video.mp4, path /path/to/video.mp4]"]
+        ] == [f"[Video Attachment: name video.mp4, path {video_path}]"]
 
     @pytest.mark.asyncio
     async def test_build_main_agent_with_quoted_video_attachment(
@@ -1908,6 +1981,7 @@ class TestBuildMainAgent:
     ):
         """Test building main agent with quoted video attachments."""
         module = ama
+        video_path = str(Path("/path/to/quoted-video.mp4"))
         mock_video = Video(file="file:///path/to/quoted-video.mp4")
         mock_reply = Reply(
             id="reply-1",
@@ -1941,7 +2015,7 @@ class TestBuildMainAgent:
         assert result is not None
         assert (
             "[Video Attachment in quoted message: "
-            "name quoted-video.mp4, path /path/to/quoted-video.mp4]"
+            f"name quoted-video.mp4, path {video_path}]"
         ) in [part.text for part in result.provider_request.extra_user_content_parts]
 
     @pytest.mark.asyncio
