@@ -529,7 +529,10 @@ async def test_group_crud_rejects_bad_input_and_skips_corrupt_group_preferences(
     assert deleted["message"] == "分组 'New group' 已删除"
 
 
-def _session_app(service: SessionManagementService) -> tuple[FastAPI, dict[str, str]]:
+def _session_app(
+    service: SessionManagementService,
+    authorization: object | None = None,
+) -> tuple[FastAPI, dict[str, str]]:
     secret = "session-management-service-test-secret"
     validator = DashboardTokenValidator(secret)
     app = FastAPI()
@@ -537,7 +540,7 @@ def _session_app(service: SessionManagementService) -> tuple[FastAPI, dict[str, 
     app.state.services = SimpleNamespace(sessions=service)
     app.state.runtime = SimpleNamespace(
         services=SimpleNamespace(
-            authorization=TestAuthorizationService("data.manage"),
+            authorization=authorization or TestAuthorizationService("data.manage"),
         )
     )
 
@@ -547,6 +550,19 @@ def _session_app(service: SessionManagementService) -> tuple[FastAPI, dict[str, 
 
     app.include_router(sessions_router, prefix="/api/v1")
     return app, {"Authorization": f"Bearer {validator.issue('dashboard-user')}"}
+
+
+class _ConfigBoundAuthorization:
+    """Allow only one server-resolved configuration in route tests."""
+
+    def __init__(self, config_id: str) -> None:
+        self.config_id = config_id
+
+    async def authorize(self, _subject, _action, resource, _context):
+        return SimpleNamespace(
+            allowed=resource.config_id == self.config_id,
+            requires_step_up=False,
+        )
 
 
 @pytest.mark.asyncio
@@ -582,3 +598,29 @@ async def test_session_api_routes_keep_the_standard_envelope(session_service, te
     assert created_group.status_code == 200
     assert created_group.json()["status"] == "ok"
     assert created_group.json()["data"]["group"]["name"] == "API group"
+
+
+@pytest.mark.asyncio
+async def test_session_mutation_authorizes_the_router_resolved_target_config(
+    session_service,
+):
+    service, preferences, _providers = session_service
+    target_umo = "napcat:GroupMessage:config-b-room"
+    service.config_router = SimpleNamespace(
+        get_conf_id_for_umop=lambda umo: "config-b" if umo == target_umo else None
+    )
+    app, headers = _session_app(service, _ConfigBoundAuthorization("config-a"))
+    headers["X-AstrBot-Config-Id"] = "config-a"
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.patch(
+            "/api/v1/sessions/service",
+            json={"umos": [target_umo], "llm_enabled": False},
+            headers=headers,
+        )
+
+    assert response.status_code == 403
+    assert preferences.session_values == {}

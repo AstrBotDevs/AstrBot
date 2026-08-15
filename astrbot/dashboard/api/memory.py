@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Request
 
 from astrbot import logger
+from astrbot.core.auth.models import Resource
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.schemas import (
@@ -13,7 +14,7 @@ from astrbot.dashboard.schemas import (
 )
 from astrbot.dashboard.services.memory_service import MemoryService, MemoryServiceError
 
-from .auth import AuthContext, require_scope
+from .auth import AuthContext, object_resource, require_resource_action, require_scope
 from .error_handling import internal_error_response
 
 router = APIRouter(tags=["Memory"])
@@ -24,7 +25,21 @@ def get_service(request: Request) -> MemoryService:
 
 
 async def require_memory_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "memory")
+    auth = await require_scope(request, "memory")
+    path_params = request.path_params
+    if fact_id := path_params.get("fact_id"):
+        resource = object_resource("memory-fact", fact_id)
+    elif person_id := path_params.get("person_id"):
+        resource = object_resource("memory-profile", person_id)
+    else:
+        resource = Resource.named("memory", "collection")
+    await require_resource_action(
+        request,
+        auth,
+        action="data.manage",
+        resource=resource,
+    )
+    return auth
 
 
 def _to_int(value: Any, default: int) -> int:

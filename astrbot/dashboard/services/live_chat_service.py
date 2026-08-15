@@ -36,7 +36,11 @@ from astrbot.core.webchat.run_coordinator import (
     WebChatRun,
     WebChatRunCoordinator,
 )
-from astrbot.dashboard.services.auth_service import DashboardTokenValidator
+from astrbot.dashboard.services.auth_service import (
+    AuthService,
+    DashboardSessionPrincipal,
+    DashboardTokenValidator,
+)
 
 if TYPE_CHECKING:
     from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -56,9 +60,15 @@ class LiveChatAuthError(Exception):
 class LiveChatSession:
     """Live Chat 会话管理器"""
 
-    def __init__(self, session_id: str, username: str) -> None:
+    def __init__(
+        self,
+        session_id: str,
+        username: str,
+        dashboard_principal: DashboardSessionPrincipal | None = None,
+    ) -> None:
         self.session_id = session_id
         self.username = username
+        self.dashboard_principal = dashboard_principal
         self.conversation_id = str(uuid.uuid4())
         self.is_speaking = False
         self.is_processing = False
@@ -140,6 +150,7 @@ class LiveChatService:
         webchat_run_coordinator: WebChatRunCoordinator,
         mcp_interaction_coordinator: MCPInteractionCoordinator | None = None,
         token_validator: DashboardTokenValidator | None = None,
+        auth_service: AuthService | None = None,
     ) -> None:
         self.db = db
         self.preferences = preferences
@@ -150,6 +161,7 @@ class LiveChatService:
         self.token_validator = token_validator or DashboardTokenValidator(
             self.config["dashboard"].get("jwt_secret", "")
         )
+        self.auth_service = auth_service
         self.platform_history_mgr = platform_message_history_manager
         self.sessions: dict[str, LiveChatSession] = {}
         self._mcp_publishers: dict[str, tuple[LiveChatSession, SendJson]] = {}
@@ -181,11 +193,51 @@ class LiveChatService:
         except jwt.InvalidTokenError as exc:
             raise LiveChatAuthError("Invalid token") from exc
 
-    def create_session(self, username: str) -> LiveChatSession:
+    async def _validate_dashboard_principal(
+        self, token: str
+    ) -> DashboardSessionPrincipal | None:
+        """Validate account state before accepting a Dashboard WebSocket."""
+
+        if self.auth_service is None:
+            return None
+        try:
+            principal = self.token_validator.validate(token)
+        except jwt.ExpiredSignatureError as exc:
+            raise LiveChatAuthError("Token expired") from exc
+        except jwt.InvalidTokenError as exc:
+            raise LiveChatAuthError("Invalid token") from exc
+        if (
+            not principal.account_id
+            or not await self.auth_service.validate_dashboard_principal(principal)
+        ):
+            raise LiveChatAuthError("Invalid token")
+        return principal
+
+    def create_session(
+        self,
+        username: str,
+        dashboard_principal: DashboardSessionPrincipal | None = None,
+    ) -> LiveChatSession:
         session_id = f"webchat_live!{username}!{uuid.uuid4()}"
-        session = LiveChatSession(session_id, username)
+        session = LiveChatSession(session_id, username, dashboard_principal)
         self.sessions[session_id] = session
         return session
+
+    @staticmethod
+    def _dashboard_principal_payload(
+        session: LiveChatSession,
+    ) -> dict[str, dict[str, str]]:
+        principal = session.dashboard_principal
+        if principal is None or not principal.account_id:
+            return {}
+        return {
+            "_dashboard_principal": {
+                "account_id": principal.account_id,
+                "sid": principal.sid,
+                "username": principal.username,
+                "auth_strength": principal.auth_strength,
+            }
+        }
 
     async def cleanup_session(self, session: LiveChatSession) -> None:
         if session.session_id in self.sessions:
@@ -204,11 +256,16 @@ class LiveChatService:
     ) -> None:
         try:
             username = self.authenticate_token(token)
+            dashboard_principal = (
+                await self._validate_dashboard_principal(token)
+                if self.auth_service is not None and token is not None
+                else None
+            )
         except LiveChatAuthError as exc:
             await close(1008, str(exc))
             return
 
-        live_session = self.create_session(username)
+        live_session = self.create_session(username, dashboard_principal)
         self._mcp_publishers[live_session.session_id] = (live_session, send_json)
         logger.info(f"[Live Chat] WebSocket 连接建立: {username}")
 
@@ -553,6 +610,7 @@ class LiveChatService:
                     "show_reasoning": show_reasoning,
                     "enable_streaming": enable_streaming,
                     "llm_checkpoint_id": llm_checkpoint_id,
+                    **self._dashboard_principal_payload(session),
                 },
             )
 
@@ -1041,6 +1099,7 @@ class LiveChatService:
                 {
                     "message": [{"type": "plain", "text": user_text}],
                     "action_type": "live",
+                    **self._dashboard_principal_payload(session),
                 },
             )
 

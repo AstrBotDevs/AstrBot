@@ -16,7 +16,7 @@ from astrbot.dashboard.services.live_chat_service import LiveChatService
 _LIVE_CHAT_JWT_SECRET = "live-chat-test-secret-with-32-bytes"
 
 
-def _service() -> LiveChatService:
+def _service(auth_service=None) -> LiveChatService:
     return LiveChatService(
         SimpleNamespace(),
         preferences=SimpleNamespace(temporary_cache={}),
@@ -24,6 +24,7 @@ def _service() -> LiveChatService:
         provider_manager=SimpleNamespace(stt_provider_insts=[None]),
         platform_message_history_manager=SimpleNamespace(),
         webchat_run_coordinator=WebChatRunCoordinator(WebChatQueueManager()),
+        auth_service=auth_service,
     )
 
 
@@ -39,6 +40,38 @@ def test_authenticate_dashboard_session_token():
     token = DashboardTokenValidator(_LIVE_CHAT_JWT_SECRET).issue("dashboard-user")
 
     assert service.authenticate_token(token) == "dashboard-user"
+
+
+@pytest.mark.asyncio
+async def test_run_websocket_session_rejects_disabled_dashboard_account():
+    auth_service = SimpleNamespace(
+        validate_dashboard_principal=AsyncMock(return_value=False)
+    )
+    service = _service(auth_service)
+    token = DashboardTokenValidator(_LIVE_CHAT_JWT_SECRET).issue(
+        "dashboard-user", account_id="account-1"
+    )
+    closed: list[tuple[int, str]] = []
+
+    async def close(code: int, reason: str) -> None:
+        closed.append((code, reason))
+
+    async def receive_json() -> dict:
+        raise AssertionError("receive_json should not be called")
+
+    async def send_json(payload: dict) -> None:
+        raise AssertionError(f"send_json should not be called: {payload}")
+
+    await service.run_websocket_session(
+        token=token,
+        force_ct=None,
+        receive_json=receive_json,
+        send_json=send_json,
+        close=close,
+    )
+
+    assert closed == [(1008, "Invalid token")]
+    auth_service.validate_dashboard_principal.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -321,8 +354,8 @@ async def test_handle_chat_message_scopes_events_to_request():
     )
 
     try:
-        input_queue = (
-            service.webchat_run_coordinator.queue_manager.get_or_create_queue(session_id)
+        input_queue = service.webchat_run_coordinator.queue_manager.get_or_create_queue(
+            session_id
         )
         await asyncio.wait_for(input_queue.get(), timeout=1)
         await service.webchat_run_coordinator.queue_manager.put_back_queue(

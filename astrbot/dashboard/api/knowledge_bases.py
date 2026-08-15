@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request, UploadFile
 
 from astrbot import logger
+from astrbot.core.auth.models import Resource
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.schemas import (
@@ -17,7 +18,7 @@ from astrbot.dashboard.services.knowledge_base_service import (
     KnowledgeBaseServiceError,
 )
 
-from .auth import AuthContext, require_scope
+from .auth import AuthContext, object_resource, require_resource_action, require_scope
 from .error_handling import internal_error_response
 
 router = APIRouter(tags=["Knowledge Bases"])
@@ -28,7 +29,32 @@ def get_service(request: Request) -> KnowledgeBaseService:
 
 
 async def require_kb_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "kb")
+    auth = await require_scope(request, "kb")
+    path_params = request.path_params
+    if chunk_id := path_params.get("chunk_id"):
+        resource = object_resource(
+            "knowledge-base-chunk",
+            path_params.get("kb_id", ""),
+            request.query_params.get("document_id")
+            or request.query_params.get("doc_id")
+            or "",
+            chunk_id,
+        )
+    elif document_id := path_params.get("document_id"):
+        resource = object_resource(
+            "knowledge-base-document", path_params.get("kb_id", ""), document_id
+        )
+    elif kb_id := path_params.get("kb_id"):
+        resource = object_resource("knowledge-base", kb_id)
+    else:
+        resource = Resource.named("knowledge-base", "collection")
+    await require_resource_action(
+        request,
+        auth,
+        action="data.manage",
+        resource=resource,
+    )
+    return auth
 
 
 def _to_int(value: Any, default: int) -> int:
@@ -167,7 +193,7 @@ async def upload_knowledge_base_document(
             for key, value in form.multi_items()
             if not isinstance(value, UploadFile)
         }
-        form_data.setdefault("kb_id", kb_id)
+        form_data["kb_id"] = kb_id
         files = [
             value
             for key, value in form.multi_items()
@@ -192,7 +218,7 @@ async def import_knowledge_base_documents(
 ):
     body = payload.model_dump(exclude_none=True)
     return await _run(
-        lambda: service.import_documents({"kb_id": kb_id, **body}),
+        lambda: service.import_documents({**body, "kb_id": kb_id}),
         prefix="导入文档失败",
     )
 
@@ -206,7 +232,7 @@ async def import_knowledge_base_document_url(
 ):
     body = payload.model_dump(exclude_none=True)
     return await _run(
-        lambda: service.upload_document_from_url({"kb_id": kb_id, **body}),
+        lambda: service.upload_document_from_url({**body, "kb_id": kb_id}),
         prefix="从URL上传文档失败",
     )
 
@@ -286,6 +312,6 @@ async def retrieve_knowledge_base(
 ):
     body = payload.model_dump(exclude_none=True)
     return await _run(
-        lambda: service.retrieve({"kb_id": kb_id, **body}),
+        lambda: service.retrieve({**body, "kb_id": kb_id}),
         prefix="检索失败",
     )

@@ -103,6 +103,13 @@ def create_dashboard_asgi_app(
         plugin_page_sessions,
         plugin_file_tickets,
     )
+    auth_service = AuthService(
+        db,
+        runtime.astrbot_config,
+        demo_mode=runtime.services.demo_mode,
+        totp_runtime_state=runtime.services.totp_runtime_state,
+        token_validator=dashboard_token_validator,
+    )
     app.state.services = SimpleNamespace(
         appearance=AppearanceService(),
         config_profiles=ConfigProfileService(
@@ -125,13 +132,7 @@ def create_dashboard_asgi_app(
         ),
         config_routes=ConfigRoutingService(runtime.umop_config_router),
         api_keys=ApiKeyService(db),
-        auth=AuthService(
-            db,
-            runtime.astrbot_config,
-            demo_mode=runtime.services.demo_mode,
-            totp_runtime_state=runtime.services.totp_runtime_state,
-            token_validator=dashboard_token_validator,
-        ),
+        auth=auth_service,
         backups=BackupService(
             db,
             runtime.astrbot_config,
@@ -173,6 +174,7 @@ def create_dashboard_asgi_app(
                 runtime.catalogs.tools, "mcp_interaction_coordinator", None
             ),
             token_validator=dashboard_token_validator,
+            auth_service=auth_service,
         ),
         logs=LogService(runtime.log_broker, runtime.astrbot_config),
         bots=BotConfigService(
@@ -221,6 +223,7 @@ def create_dashboard_asgi_app(
             runtime.persona_mgr,
             runtime.catalogs.plugins,
             runtime.knowledge_base_manager,
+            runtime.umop_config_router,
         ),
         skills=SkillsService(
             runtime.astrbot_config,

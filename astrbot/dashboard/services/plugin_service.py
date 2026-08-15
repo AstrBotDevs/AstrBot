@@ -20,7 +20,7 @@ from astrbot.core.file_token_service import FileTokenService
 from astrbot.core.skills.skill_manager import SkillManager
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
-from astrbot.core.star.filter.permission import PermissionTypeFilter
+from astrbot.core.star.filter.permission import ActionPermissionFilter
 from astrbot.core.star.filter.regex import RegexFilter
 from astrbot.core.star.plugin_extension_coordinator import PluginExtensionCoordinator
 from astrbot.core.star.plugin_lifecycle import PluginLifecycle
@@ -697,8 +697,8 @@ class PluginService:
                             "description": handler.desc or "无描述",
                             "match": "regex",
                         }
-                    elif isinstance(event_filter, PermissionTypeFilter):
-                        has_admin = True
+                    elif isinstance(event_filter, ActionPermissionFilter):
+                        has_admin = event_filter.action != "session.read"
                 info["has_admin"] = has_admin
                 if "cmd" not in info:
                     info["cmd"] = "未知"

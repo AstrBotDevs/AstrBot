@@ -1,3 +1,4 @@
+import hashlib
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
@@ -36,12 +37,28 @@ router = APIRouter(tags=["Auth"])
 _SAFE_HTTP_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
 
 
+def object_resource(
+    resource_type: str, *parts: object, config_id: str | None = None
+) -> Resource:
+    """Build a stable opaque resource id from untrusted object identifiers.
+
+    Dashboard data identifiers may contain long UMO strings or user supplied
+    paths.  Hashing the tuple keeps audit/resource identifiers bounded and
+    prevents raw caller data from becoming part of the authorization key.
+    """
+
+    payload = "\x00".join(str(part) for part in parts)
+    resource_id = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    return Resource.named(resource_type, resource_id, config_id=config_id)
+
+
 @dataclass(frozen=True)
 class AuthContext:
     username: str
     scopes: list[str]
     subject: str
     api_key_id: str | None = None
+    api_key_created_by: str | None = None
     account_id: str | None = None
     sid: str | None = None
     auth_strength: str = "none"
@@ -180,6 +197,7 @@ async def _authorize_scope_action(
             "dashboard_session_id": session_id,
             "dashboard_write": request.method.upper() not in _SAFE_HTTP_METHODS,
             "path": request.url.path,
+            "api_key_created_by": auth.api_key_created_by,
         },
     )
     decision = await authorization.authorize(subject, action, resource, core_context)
@@ -223,7 +241,10 @@ def core_authorization_context(request: Request, auth: AuthContext) -> CoreAuthC
         auth_strength=auth.auth_strength,
         authenticated_at=auth.issued_at,
         step_up_token=request.headers.get("X-AstrBot-Step-Up"),
-        metadata={"dashboard_session_id": session_id},
+        metadata={
+            "dashboard_session_id": session_id,
+            "api_key_created_by": auth.api_key_created_by,
+        },
     )
 
 
@@ -550,6 +571,7 @@ async def _require_api_key_scope(
         scopes=scopes,
         subject=f"api-key:{api_key.key_id}",
         api_key_id=api_key.key_id,
+        api_key_created_by=getattr(api_key, "created_by", None),
         via="api_key",
     )
 

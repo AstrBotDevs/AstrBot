@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Query, Request
 
+from astrbot.core.auth.models import Resource
 from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import BotActionRequest, BotConfigRequest, EnabledPatch
 from astrbot.dashboard.services.config_service import BotConfigService
@@ -8,13 +9,36 @@ from astrbot.dashboard.services.platform_service import (
     PlatformServiceError,
 )
 
-from .auth import AuthContext, require_scope
+from .auth import (
+    AuthContext,
+    object_resource,
+    require_resource_action,
+    require_scope,
+)
 
 router = APIRouter(tags=["Bots"])
 
 
 async def require_bot_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "bot")
+    auth = await require_scope(request, "bot")
+    bot_id = request.path_params.get("bot_id")
+    resource = (
+        object_resource("bot", bot_id)
+        if bot_id
+        else Resource.named("bot", "collection")
+    )
+    action = (
+        "platform.read"
+        if request.method.upper() in {"GET", "HEAD"}
+        else "platform.manage"
+    )
+    await require_resource_action(
+        request,
+        auth,
+        action=action,
+        resource=resource,
+    )
+    return auth
 
 
 def get_service(request: Request) -> BotConfigService:

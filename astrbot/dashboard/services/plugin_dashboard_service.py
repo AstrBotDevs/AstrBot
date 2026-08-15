@@ -518,7 +518,10 @@ class PluginDashboardService:
         context = DashboardActionContext(
             request_id=request_id,
             username=principal.username,
-            scopes=frozenset(ALL_OPEN_API_SCOPES),
+            # The route has already authorized this exact Action.  Do not
+            # hand a plugin a fabricated wildcard capability set: a handler
+            # may safely observe only the scope that admitted this call.
+            scopes=frozenset({action.spec.required_scope}),
             extension_id=snapshot.extension_id,
             plugin_name=snapshot.plugin_name,
             cancellation=cancellation,

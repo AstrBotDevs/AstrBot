@@ -4,12 +4,13 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Upl
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
+from astrbot.core.auth.models import Resource
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.services.chat_service import ChatService, ChatServiceError
 from astrbot.dashboard.services.file_service import FileService, FileServiceError
 
-from .auth import AuthContext, require_scope
+from .auth import AuthContext, object_resource, require_resource_action, require_scope
 
 router = APIRouter(tags=["Files"])
 _BINARY_FILE_RESPONSE: dict[int | str, dict[str, Any]] = {
@@ -33,7 +34,20 @@ def get_chat_service(request: Request) -> ChatService:
 
 
 async def require_file_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "file")
+    auth = await require_scope(request, "file")
+    attachment_id = request.path_params.get("attachment_id")
+    resource = (
+        object_resource("file", attachment_id)
+        if attachment_id
+        else Resource.named("file", "collection")
+    )
+    await require_resource_action(
+        request,
+        auth,
+        action="data.manage",
+        resource=resource,
+    )
+    return auth
 
 
 async def _serve_token_file(file_token: str, service: FileService):

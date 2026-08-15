@@ -388,8 +388,8 @@ async def test_prepare_chat_send_treats_username_as_caller_declared_data():
     service.astrbot_config_mgr = SimpleNamespace(
         get_conf_list=lambda: [],
         confs={
-            "default": {"admins_id": ["primary-admin"]},
-            "active-profile": {"admins_id": [42]},
+            "default": {},
+            "active-profile": {},
         },
     )
     service.ensure_chat_session = AsyncMock(return_value=None)

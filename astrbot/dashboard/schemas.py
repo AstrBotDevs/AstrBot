@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -50,13 +51,41 @@ def _reject_legacy_mcp_request_fields(
     return value
 
 
+_DEPRECATED_PERMISSION_CONFIG_FIELDS = frozenset(
+    {"admins_id", "tool_permissions", "disable_builtin_commands"}
+)
+
+
+def _reject_deprecated_permission_config_fields(value: Any) -> Any:
+    """Reject removed permission fields at the Dashboard config boundary."""
+    if not isinstance(value, dict):
+        return value
+    fields = sorted(_DEPRECATED_PERMISSION_CONFIG_FIELDS.intersection(value))
+    if fields:
+        joined = ", ".join(fields)
+        raise ValueError(
+            f"Deprecated permission config fields are not supported: {joined}"
+        )
+    return value
+
+
 class ConfigProfileCreateRequest(BaseModel):
     name: str | None = None
     config: dict[str, Any] | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def reject_deprecated_permission_fields(cls, value: Any) -> Any:
+        if isinstance(value, dict):
+            _reject_deprecated_permission_config_fields(value.get("config"))
+        return value
+
 
 class ConfigContentRequest(OpenModel):
-    pass
+    @model_validator(mode="before")
+    @classmethod
+    def reject_deprecated_permission_fields(cls, value: Any) -> Any:
+        return _reject_deprecated_permission_config_fields(value)
 
 
 class RenameRequest(BaseModel):
@@ -119,21 +148,52 @@ class DashboardAccountUpdateRequest(BaseModel):
 
 
 class AuthorizationBindingRequest(BaseModel):
-    subject_id: str
-    role: str
-    scope_type: str
-    scope_id: str
-    config_id: str | None = None
-    expires_at: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    subject_id: str = Field(min_length=3, max_length=512)
+    role: Literal[
+        "root",
+        "operator",
+        "instance_operator",
+        "session_owner",
+        "session_admin",
+        "member",
+    ]
+    scope_type: Literal["global", "instance", "session", "resource"]
+    scope_id: str = Field(min_length=1, max_length=4096)
+    config_id: str | None = Field(default=None, max_length=128)
+    expires_at: datetime | None = None
 
 
 class AuthorizationStepUpRequest(BaseModel):
-    action: str
-    resource_type: str
-    resource_id: str
-    config_id: str | None = None
-    password: str | None = None
-    code: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    action: str = Field(min_length=1, max_length=128)
+    resource_type: str = Field(min_length=1, max_length=128)
+    resource_id: str = Field(min_length=1, max_length=4096)
+    config_id: str | None = Field(default=None, max_length=128)
+    password: str | None = Field(default=None, max_length=1024)
+    code: str | None = Field(default=None, max_length=128)
+
+
+class AuthorizationBindingBatchRevokeRequest(BaseModel):
+    """One exact binding set plus an optional factor for issuing step-up."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    binding_ids: list[str] = Field(min_length=1, max_length=100)
+    password: str | None = Field(default=None, max_length=1024)
+    code: str | None = Field(default=None, max_length=128)
+
+    @model_validator(mode="after")
+    def validate_binding_ids(self) -> AuthorizationBindingBatchRevokeRequest:
+        if any(
+            not binding_id or len(binding_id) > 128 for binding_id in self.binding_ids
+        ):
+            raise ValueError("Invalid binding id")
+        if len(set(self.binding_ids)) != len(self.binding_ids):
+            raise ValueError("Binding IDs must be unique")
+        return self
 
 
 class BackupUploadInitRequest(OpenModel):
@@ -216,7 +276,7 @@ class CommandUpdateRequest(BaseModel):
     enabled: bool | None = None
     alias: str | None = None
     aliases: list[str] | None = None
-    permission_group: str | None = None
+    action: str | None = Field(default=None, min_length=3, max_length=128)
 
 
 class CommandToggleRequest(BaseModel):
@@ -236,7 +296,7 @@ class CommandRenameRequest(BaseModel):
 
 class CommandPermissionRequest(BaseModel):
     handler_full_name: str
-    permission: str
+    action: str
 
 
 class SubAgentConfigRequest(BaseModel):

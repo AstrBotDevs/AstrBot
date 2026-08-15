@@ -614,7 +614,7 @@ async def test_open_chat_username_is_not_an_admin_identity(
 
 
 @pytest.mark.asyncio
-async def test_api_key_configuration_discards_retired_permission_fields(
+async def test_api_key_configuration_rejects_deprecated_permission_fields(
     test_client: DashboardTestClient,
     authenticated_header: dict,
     dashboard_password: str,
@@ -626,6 +626,16 @@ async def test_api_key_configuration_discards_retired_permission_fields(
         scopes=["config"],
         name_prefix="config-admin-boundary",
     )
+    rejected_create = await test_client.post(
+        "/api/v1/config-profiles",
+        json={
+            "name": "deprecated-config-profile",
+            "config": {"admins_id": ["stale-admin"]},
+        },
+        headers={"X-API-Key": config_key},
+    )
+    assert rejected_create.status_code == 422
+
     created = await test_client.post(
         "/api/v1/config-profiles",
         json={"name": "ordinary-config-profile"},
@@ -640,19 +650,23 @@ async def test_api_key_configuration_discards_retired_permission_fields(
     profile_config = copy.deepcopy((await profile.get_json())["data"]["config"])
     profile_config["admins_id"] = ["changed-profile-admin"]
     profile_config["tool_permissions"] = {"shell": "admin"}
+    profile_config["disable_builtin_commands"] = True
     profile_update = await test_client.put(
         f"/api/v1/config-profiles/{profile_id}",
         json=profile_config,
         headers={"X-API-Key": config_key},
     )
-    assert profile_update.status_code == 200
+    assert profile_update.status_code == 422
     stored_profile = await test_client.get(
         f"/api/v1/config-profiles/{profile_id}",
         headers={"X-API-Key": config_key},
     )
     stored_profile_config = (await stored_profile.get_json())["data"]["config"]
-    assert "admins_id" not in stored_profile_config
-    assert "tool_permissions" not in stored_profile_config
+    assert not {
+        "admins_id",
+        "tool_permissions",
+        "disable_builtin_commands",
+    }.intersection(stored_profile_config)
 
     system = await test_client.get(
         "/api/v1/system-config",
@@ -661,19 +675,23 @@ async def test_api_key_configuration_discards_retired_permission_fields(
     system_config = copy.deepcopy((await system.get_json())["data"]["config"])
     system_config["admins_id"] = ["changed-system-admin"]
     system_config["tool_permissions"] = {"python": "admin"}
+    system_config["disable_builtin_commands"] = True
     system_update = await test_client.put(
         "/api/v1/system-config",
         json=system_config,
         headers={"X-API-Key": config_key},
     )
-    assert system_update.status_code == 200
+    assert system_update.status_code == 422
     stored_system = await test_client.get(
         "/api/v1/system-config",
         headers={"X-API-Key": config_key},
     )
     stored_system_config = (await stored_system.get_json())["data"]["config"]
-    assert "admins_id" not in stored_system_config
-    assert "tool_permissions" not in stored_system_config
+    assert not {
+        "admins_id",
+        "tool_permissions",
+        "disable_builtin_commands",
+    }.intersection(stored_system_config)
 
 
 @pytest.mark.asyncio

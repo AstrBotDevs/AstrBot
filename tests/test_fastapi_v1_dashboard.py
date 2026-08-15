@@ -600,6 +600,9 @@ class FakeUmopConfigRouter:
     async def delete_route(self, umo: str) -> None:
         self.umop_to_conf_id.pop(umo, None)
 
+    def get_conf_id_for_umop(self, umo: str) -> str | None:
+        return self.umop_to_conf_id.get(umo)
+
 
 class FakeAstrBotUpdator:
     async def check_update(self, *_args, **_kwargs):
@@ -3215,7 +3218,7 @@ async def test_v1_session_groups_use_async_shared_preferences(
     headers = _jwt_headers()
     create_response = await asgi_client.post(
         "/api/v1/session-groups",
-        json={"name": "Ops", "umos": ["umo-1"]},
+        json={"name": "Ops", "umos": ["webchat:FriendMessage:umo-1"]},
         headers=headers,
     )
     assert create_response.status_code == 200
@@ -3224,7 +3227,7 @@ async def test_v1_session_groups_use_async_shared_preferences(
     list_response = await asgi_client.get("/api/v1/session-groups", headers=headers)
     update_response = await asgi_client.put(
         f"/api/v1/session-groups/{group_id}",
-        json={"add_umos": ["umo-2"]},
+        json={"add_umos": ["webchat:FriendMessage:umo-2"]},
         headers=headers,
     )
     delete_response = await asgi_client.delete(
@@ -3237,12 +3240,15 @@ async def test_v1_session_groups_use_async_shared_preferences(
         {
             "id": group_id,
             "name": "Ops",
-            "umos": ["umo-1"],
+            "umos": ["webchat:FriendMessage:umo-1"],
             "umo_count": 1,
         }
     ]
     assert update_response.status_code == 200
-    assert set(update_response.json()["data"]["group"]["umos"]) == {"umo-1", "umo-2"}
+    assert set(update_response.json()["data"]["group"]["umos"]) == {
+        "webchat:FriendMessage:umo-1",
+        "webchat:FriendMessage:umo-2",
+    }
     assert delete_response.status_code == 200
     assert store["session_groups"] == {}
 
@@ -3254,7 +3260,10 @@ async def test_v1_batch_session_service_uses_async_shared_preferences(
     monkeypatch: pytest.MonkeyPatch,
 ):
     store = {
-        ("umo-1", "session_service_config"): {"llm_enabled": True, "tts_enabled": True}
+        ("webchat:FriendMessage:umo-1", "session_service_config"): {
+            "llm_enabled": True,
+            "tts_enabled": True,
+        }
     }
 
     async def fake_session_get(umo: str, key: str, default=None):
@@ -3269,13 +3278,17 @@ async def test_v1_batch_session_service_uses_async_shared_preferences(
 
     response = await asgi_client.patch(
         "/api/v1/sessions/service",
-        json={"umos": ["umo-1"], "llm_enabled": False, "session_enabled": False},
+        json={
+            "umos": ["webchat:FriendMessage:umo-1"],
+            "llm_enabled": False,
+            "session_enabled": False,
+        },
         headers=_jwt_headers(),
     )
 
     assert response.status_code == 200
     assert response.json()["data"]["success_count"] == 1
-    assert store[("umo-1", "session_service_config")] == {
+    assert store[("webchat:FriendMessage:umo-1", "session_service_config")] == {
         "llm_enabled": False,
         "tts_enabled": True,
         "session_enabled": False,
@@ -3290,7 +3303,7 @@ async def test_v1_session_provider_rule_uses_provider_manager_cache_path(
     response = await asgi_client.post(
         "/api/v1/sessions/rules",
         json={
-            "umo": "umo-1",
+            "umo": "webchat:FriendMessage:umo-1",
             "rule_key": "provider_perf_chat_completion",
             "rule_value": "gpt-mini",
         },
@@ -3301,7 +3314,7 @@ async def test_v1_session_provider_rule_uses_provider_manager_cache_path(
     assert len(fake_core_lifecycle.provider_manager.set_provider_calls) == 1
     call = fake_core_lifecycle.provider_manager.set_provider_calls[0]
     assert call["provider_id"] == "gpt-mini"
-    assert call["umo"] == "umo-1"
+    assert call["umo"] == "webchat:FriendMessage:umo-1"
     assert getattr(call["provider_type"], "value", None) == "chat_completion"
 
 
@@ -3312,14 +3325,17 @@ async def test_v1_delete_session_provider_rule_clears_provider_manager_cache_pat
 ):
     response = await asgi_client.post(
         "/api/v1/sessions/rules/delete",
-        json={"umo": "umo-1", "rule_key": "provider_perf_chat_completion"},
+        json={
+            "umo": "webchat:FriendMessage:umo-1",
+            "rule_key": "provider_perf_chat_completion",
+        },
         headers=_jwt_headers(),
     )
 
     assert response.status_code == 200
     assert len(fake_core_lifecycle.provider_manager.cleared_provider_calls) == 1
     call = fake_core_lifecycle.provider_manager.cleared_provider_calls[0]
-    assert call["umo"] == "umo-1"
+    assert call["umo"] == "webchat:FriendMessage:umo-1"
     assert getattr(call["provider_type"], "value", None) == "chat_completion"
 
 

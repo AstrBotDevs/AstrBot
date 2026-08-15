@@ -13,6 +13,7 @@ from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.star.star import PluginRegistry
 from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
+from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
@@ -42,6 +43,7 @@ class SessionManagementService:
         persona_manager: PersonaManager,
         plugin_catalog: PluginRegistry,
         knowledge_base_manager: KnowledgeBaseManager,
+        config_router: UmopConfigRouter | None = None,
     ) -> None:
         self.db_helper = db_helper
         self.preferences = preferences
@@ -49,6 +51,7 @@ class SessionManagementService:
         self.persona_manager = persona_manager
         self.plugin_catalog = plugin_catalog
         self.knowledge_base_manager = knowledge_base_manager
+        self.config_router = config_router
 
     @staticmethod
     def _payload(data: object) -> dict[str, Any]:
@@ -85,6 +88,21 @@ class SessionManagementService:
         ):
             raise SessionManagementServiceError("参数 umos 必须是非空字符串数组")
         return umos
+
+    def resolve_umo_config_id(self, umo: str) -> str:
+        """Resolve a UMO's configuration from runtime-owned routing state.
+
+        Dashboard clients may select a view configuration, but that value must
+        never define the authorization target for a session write. The router
+        is the single source of truth and falls back to the default profile in
+        the same way inbound event routing does.
+        """
+
+        if not isinstance(umo, str) or not umo:
+            raise SessionManagementServiceError("参数 umo 必须是非空字符串")
+        if self.config_router is None:
+            return "default"
+        return self.config_router.get_conf_id_for_umop(umo) or "default"
 
     @staticmethod
     def _normalize_group_umos(umos: object) -> list[str]:

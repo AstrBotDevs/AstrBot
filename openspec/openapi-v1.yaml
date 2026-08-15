@@ -268,6 +268,36 @@ paths:
         '200':
           $ref: '#/components/responses/Ok'
 
+  /api/v1/authorization/role-bindings/batch-revoke/step-up:
+    post:
+      tags: [Authorization]
+      summary: Reauthenticate for one exact batch role-binding revocation
+      operationId: issueAuthorizationBatchRevokeStepUp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorizationBindingBatchRevokeRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  /api/v1/authorization/role-bindings/batch-revoke:
+    post:
+      tags: [Authorization]
+      summary: Revoke one exact batch of scoped role bindings
+      operationId: revokeAuthorizationRoleBindings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorizationBindingBatchRevokeRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
   /api/v1/authorization/step-up:
     post:
       tags: [Authorization]
@@ -2431,7 +2461,7 @@ paths:
   /api/v1/commands/{command_id}:
     patch:
       tags: [Commands]
-      summary: Update command enabled state, alias, or permission group
+      summary: Update command enabled state, alias, or authorization action
       operationId: updateCommand
       x-astrbot-scope: plugin
       parameters:
@@ -5955,7 +5985,7 @@ components:
           type: array
           items:
             type: string
-        permission_group:
+        action:
           type: string
       additionalProperties: false
 
@@ -5976,7 +6006,6 @@ components:
               session_owner,
               session_admin,
               member,
-              guest,
             ]
         scope_type:
           type: string
@@ -6005,6 +6034,29 @@ components:
         config_id:
           type: string
           nullable: true
+        password:
+          type: string
+          writeOnly: true
+          nullable: true
+        code:
+          type: string
+          writeOnly: true
+          nullable: true
+
+    AuthorizationBindingBatchRevokeRequest:
+      type: object
+      additionalProperties: false
+      required: [binding_ids]
+      properties:
+        binding_ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
         password:
           type: string
           writeOnly: true
@@ -6100,9 +6152,9 @@ components:
           type: array
           items:
             type: string
-        permission:
+        action:
           type: string
-          enum: [admin, everyone, member]
+          nullable: true
         enabled:
           type: boolean
         is_group:

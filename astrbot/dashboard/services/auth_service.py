@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import os
 import secrets
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -14,9 +15,15 @@ from sqlalchemy import update
 from sqlmodel import col, select
 
 from astrbot import logger
-from astrbot.core.auth.models import GLOBAL_SCOPE_ID, Role, Subject
+from astrbot.core.auth.models import (
+    GLOBAL_SCOPE_ID,
+    AuthContext,
+    Decision,
+    Role,
+    Subject,
+)
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core.db.po import AuthRoleBinding, DashboardAccount
+from astrbot.core.db.po import AuthAuditLog, AuthRoleBinding, DashboardAccount
 from astrbot.core.db.protocols import DatabaseSessionStore
 from astrbot.core.utils.auth_password import (
     hash_dashboard_password,
@@ -245,6 +252,35 @@ class AuthService:
             self.config["dashboard"].get("jwt_secret", "")
         )
 
+    @staticmethod
+    def _account_audit_record(
+        *,
+        actor: Subject,
+        context: AuthContext,
+        decision: Decision,
+        reason: str,
+        metadata: dict[str, Any],
+    ) -> AuthAuditLog:
+        """Create the business audit row committed with account mutations."""
+
+        return AuthAuditLog(
+            audit_id=str(uuid.uuid4()),
+            request_id=context.request_id,
+            subject_id=actor.id,
+            effective_role=(
+                decision.effective_role.value if decision.effective_role else None
+            ),
+            source=context.source,
+            config_id=context.config_id,
+            action=decision.action,
+            resource_id=decision.resource.id,
+            decision="allow",
+            reason=reason,
+            step_up_id=decision.step_up_id,
+            outcome="allow",
+            metadata_json=metadata,
+        )
+
     async def _ensure_dashboard_account(
         self, username: str, password_hash: str, *, sync_password: bool = False
     ) -> DashboardAccount:
@@ -399,6 +435,9 @@ class AuthService:
         password: str,
         created_by: str,
         role: Role,
+        actor: Subject | None = None,
+        audit_context: AuthContext | None = None,
+        audit_decision: Decision | None = None,
     ) -> tuple[DashboardAccount, AuthRoleBinding]:
         """Atomically create a Dashboard identity and its global role binding."""
 
@@ -442,6 +481,24 @@ class AuthService:
                     )
                     session.add(binding)
                     await session.flush()
+                    if (
+                        actor is not None
+                        and audit_context is not None
+                        and audit_decision
+                    ):
+                        session.add(
+                            self._account_audit_record(
+                                actor=actor,
+                                context=audit_context,
+                                decision=audit_decision,
+                                reason="account_created",
+                                metadata={
+                                    "account_id": account.account_id,
+                                    "binding_id": binding.binding_id,
+                                    "role": role.value,
+                                },
+                            )
+                        )
                     return account, binding
 
     async def update_dashboard_account(
@@ -451,6 +508,9 @@ class AuthService:
         username: str | None = None,
         password: str | None = None,
         is_active: bool | None = None,
+        actor: Subject | None = None,
+        audit_context: AuthContext | None = None,
+        audit_decision: Decision | None = None,
     ) -> DashboardAccount | None:
         """Update one stable account and revoke its bindings when disabled."""
 
@@ -523,6 +583,7 @@ class AuthService:
                     if is_active is not None:
                         account.is_active = is_active
                         if not is_active:
+                            now = datetime.datetime.now(datetime.UTC)
                             await session.execute(
                                 update(AuthRoleBinding)
                                 .where(
@@ -536,6 +597,25 @@ class AuthService:
                                     revoked_at=now, revoked_by="system:account-disable"
                                 )
                             )
+                    if (
+                        actor is not None
+                        and audit_context is not None
+                        and audit_decision
+                    ):
+                        session.add(
+                            self._account_audit_record(
+                                actor=actor,
+                                context=audit_context,
+                                decision=audit_decision,
+                                reason="account_updated",
+                                metadata={
+                                    "account_id": account.account_id,
+                                    "is_active": account.is_active,
+                                    "password_changed": password is not None,
+                                    "username_changed": username is not None,
+                                },
+                            )
+                        )
                     return account
 
     async def setup_status(self) -> AuthServiceResult:

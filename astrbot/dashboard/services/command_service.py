@@ -131,17 +131,17 @@ class CommandService:
     async def update_permission(
         self,
         handler_full_name: str | None,
-        permission: str | None,
+        action: str | None,
     ) -> dict:
-        if not handler_full_name or not permission:
-            raise CommandServiceError("handler_full_name 与 permission 均为必填。")
+        if not handler_full_name or not action:
+            raise CommandServiceError("handler_full_name 与 action 均为必填。")
 
         try:
             await update_command_permission(
                 self.preferences,
                 self.handler_registry,
                 handler_full_name,
-                permission,
+                action,
             )
         except ValueError as exc:
             raise CommandServiceError(str(exc)) from exc

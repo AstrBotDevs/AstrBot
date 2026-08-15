@@ -82,9 +82,7 @@ async def _update_command_permission(
 ):
     try:
         return ok(
-            await service.update_permission(
-                payload.handler_full_name, payload.permission
-            )
+            await service.update_permission(payload.handler_full_name, payload.action)
         )
     except CommandServiceError as exc:
         _raise_command_error(exc)
@@ -143,7 +141,7 @@ async def update_command(
     return await _update_command_permission(
         CommandPermissionRequest(
             handler_full_name=command_id,
-            permission=payload.permission_group or "",
+            action=payload.action or "",
         ),
         service,
     )

@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile, WebSocket
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
+from astrbot.core.auth.models import Resource
 from astrbot.dashboard.responses import ApiError, error, ok
 from astrbot.dashboard.schemas import ImMessageRequest, OpenApiChatRequest
 from astrbot.dashboard.services.chat_service import (
@@ -16,7 +17,12 @@ from astrbot.dashboard.services.open_api_service import (
     OpenApiWebSocketChatBridge,
 )
 
-from .auth import AuthContext, require_scope
+from .auth import (
+    AuthContext,
+    object_resource,
+    require_resource_action,
+    require_scope,
+)
 
 router = APIRouter(tags=["Open API"])
 _SSE_RESPONSE: dict[int | str, dict[str, Any]] = {
@@ -40,7 +46,20 @@ async def require_config_scope(request: Request) -> AuthContext:
 
 
 async def require_file_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "file")
+    auth = await require_scope(request, "file")
+    attachment_id = request.query_params.get("attachment_id")
+    resource = (
+        object_resource("file", attachment_id)
+        if attachment_id
+        else Resource.named("file", "collection")
+    )
+    await require_resource_action(
+        request,
+        auth,
+        action="data.manage",
+        resource=resource,
+    )
+    return auth
 
 
 def get_service(request: Request) -> OpenApiService:
@@ -219,6 +238,12 @@ async def chat_sessions(
     chat_service: ChatService = Depends(get_chat_service),
 ):
     if auth.via != "api_key":
+        await require_resource_action(
+            request,
+            auth,
+            action="session.read",
+            resource=object_resource("webchat-user", auth.username),
+        )
         try:
             return ok(
                 await chat_service.get_sessions(
@@ -237,6 +262,12 @@ async def chat_sessions(
             return error(username_err)
         if not resolved_username:
             return error("Invalid username")
+        await require_resource_action(
+            request,
+            auth,
+            action="session.read",
+            resource=object_resource("webchat-user", resolved_username),
+        )
         return ok(
             await service.get_chat_sessions(
                 username=resolved_username,
