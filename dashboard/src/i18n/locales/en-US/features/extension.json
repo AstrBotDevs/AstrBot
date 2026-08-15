@@ -126,6 +126,7 @@
       "author": "Author",
       "category": "Category",
       "stars": "Stars",
+      "updatedAt": "Updated At",
       "tags": "Tags",
       "astrbotVersion": "AstrBot Version Requirement",
       "supportPlatforms": "Supported Platforms",
