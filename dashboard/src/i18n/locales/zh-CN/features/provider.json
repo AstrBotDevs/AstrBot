@@ -101,6 +101,7 @@
     "save": "保存配置",
     "saveAndFetchModels": "保存并获取模型",
     "fetchModels": "获取模型列表",
+    "getApiKey": "获取 API Key",
     "saveSuccess": "提供商源保存成功",
     "saveError": "提供商源保存失败",
     "deleteConfirm": "确定要删除提供商源 {id} 吗？这将同时删除关联的所有模型配置。",
