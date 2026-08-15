@@ -155,6 +155,7 @@ filterwarnings = [
   "ignore:datetime\\.datetime\\.utcfromtimestamp\\(\\) is deprecated and scheduled for removal in a future version.*:DeprecationWarning:lark_oapi\\.ws\\.pb\\.google\\.protobuf\\.internal\\.well_known_types",
   "ignore:The default datetime adapter is deprecated as of Python 3\\.12.*:DeprecationWarning:aiosqlite\\.core",
   "ignore:Use 'content=<\\.\\.\\.>' to upload raw bytes/text content\\.:DeprecationWarning:httpx\\._models",
+  "ignore:The Assistants API \\(dashscope\\.assistants\\) is deprecated.*:DeprecationWarning:dashscope",
 ]
 
 [tool.hatch.metadata]
