@@ -86,7 +86,6 @@
                 <p class="mt-4 text-h6">{{ t('upload.dropzone') }}</p>
                 <p class="text-caption text-medium-emphasis mt-2">{{ t('upload.supportedFormats') }}</p>
                 <p class="text-caption text-medium-emphasis">{{ t('upload.maxSize') }}</p>
-                <p class="text-caption text-medium-emphasis">最多可上传 10 个文件</p>
                 <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.markdown,.rst,.adoc,.pdf,.docx,.epub,.xls,.xlsx"
                   @change="handleFileSelect" />
               </div>
@@ -391,13 +390,8 @@ const handleFileSelect = (event: Event) => {
   target.value = ''
 }
 
-// 添加文件（检查数量限制）
+// Add files
 const addFiles = (files: File[]) => {
-  const totalFiles = selectedFiles.value.length + files.length
-  if (totalFiles > 10) {
-    showSnackbar('最多只能选择 10 个文件', 'warning')
-    return
-  }
   selectedFiles.value.push(...files)
 }
 
