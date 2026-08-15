@@ -128,11 +128,17 @@ export const useCommonStore = defineStore('common', {
         return;
       }
 
+      const token = localStorage.getItem('token');
+      if (!token) {
+        this.sse_connected = false;
+        return;
+      }
+
       const controller = new AbortController();
       const { signal } = controller;
       const headers = {
         'Content-Type': 'multipart/form-data',
-        Authorization: `Bearer ${localStorage.getItem('token')}`,
+        Authorization: `Bearer ${token}`,
       };
 
       fetchWithAuth(logApi.liveUrl(), {
@@ -143,6 +149,11 @@ export const useCommonStore = defineStore('common', {
       })
         .then((response) => {
           if (!response.ok) {
+            if (response.status === 401 || response.status === 403) {
+              this.sse_connected = false;
+              this.eventSource = null;
+              return;
+            }
             throw new Error(`SSE connection failed: ${response.status}`);
           }
 
@@ -217,6 +228,9 @@ export const useCommonStore = defineStore('common', {
           void reader.read().then(processStream);
         })
         .catch((error: unknown) => {
+          if (signal.aborted) {
+            return;
+          }
           console.error('SSE error:', error);
           this.log_cache.push({
             type: 'log',
