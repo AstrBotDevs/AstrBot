@@ -16,7 +16,7 @@
       "type": "类型",
       "plugin": "所属插件",
       "description": "描述",
-      "permission": "权限",
+      "action": "授权动作",
       "status": "状态",
       "actions": "操作"
     }
@@ -30,10 +30,6 @@
     "enabled": "已启用",
     "disabled": "已禁用",
     "conflict": "有冲突"
-  },
-  "permission": {
-    "everyone": "所有人",
-    "admin": "管理员"
   },
   "tooltips": {
     "enable": "启用指令",
@@ -61,7 +57,7 @@
       "parentGroup": "所属指令组",
       "subCommands": "子指令列表",
       "aliases": "别名",
-      "permission": "权限要求",
+      "action": "授权动作",
       "conflictStatus": "冲突状态"
     }
   },
@@ -88,7 +84,7 @@
     "conflict": "有冲突",
     "byPlugin": "按插件筛选",
     "byType": "按类型筛选",
-    "byPermission": "按权限筛选",
+    "byAction": "按动作筛选",
     "byStatus": "按状态筛选",
     "showSystemPlugins": "显示系统插件指令",
     "systemPluginConflictHint": "存在涉及系统插件的冲突，需解决冲突后才能隐藏"

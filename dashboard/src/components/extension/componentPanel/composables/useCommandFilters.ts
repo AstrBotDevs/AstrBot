@@ -9,7 +9,7 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
   // 过滤状态
   const searchQuery = ref('');
   const pluginFilter = ref('all');
-  const permissionFilter = ref('all');
+  const actionFilter = ref('all');
   const statusFilter = ref('all');
   const typeFilter = ref('all');
   const showSystemPlugins = ref(false);
@@ -43,6 +43,16 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
     return Array.from(plugins).sort();
   });
 
+  const availableActions = computed(() =>
+    Array.from(
+      new Set(
+        commands.value
+          .map((cmd) => cmd.action)
+          .filter((action): action is string => Boolean(action)),
+      ),
+    ).sort(),
+  );
+
   /**
    * 检查指令是否匹配过滤条件
    */
@@ -68,14 +78,9 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
       return false;
     }
 
-    // 权限过滤
-    if (permissionFilter.value !== 'all') {
-      if (permissionFilter.value === 'everyone') {
-        if (cmd.permission !== 'everyone' && cmd.permission !== 'member')
-          return false;
-      } else if (cmd.permission !== permissionFilter.value) {
-        return false;
-      }
+    // Authorization action filter
+    if (actionFilter.value !== 'all' && cmd.action !== actionFilter.value) {
+      return false;
     }
 
     // 状态过滤
@@ -176,7 +181,7 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
     // 状态
     searchQuery,
     pluginFilter,
-    permissionFilter,
+    actionFilter,
     statusFilter,
     typeFilter,
     showSystemPlugins,
@@ -186,6 +191,7 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
     hasSystemPluginConflict,
     effectiveShowSystemPlugins,
     availablePlugins,
+    availableActions,
     filteredCommands,
 
     // 方法

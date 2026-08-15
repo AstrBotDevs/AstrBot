@@ -19,11 +19,6 @@ const emit = defineEmits<{
   (e: 'toggle-command', cmd: CommandItem): void;
   (e: 'rename', cmd: CommandItem): void;
   (e: 'view-details', cmd: CommandItem): void;
-  (
-    e: 'update-permission',
-    cmd: CommandItem,
-    permission: 'admin' | 'member',
-  ): void;
 }>();
 
 // 表格表头
@@ -46,8 +41,8 @@ const commandHeaders = computed(() => [
     sortable: false,
   },
   {
-    title: tm('table.headers.permission'),
-    key: 'permission',
+    title: tm('table.headers.action'),
+    key: 'action',
     sortable: false,
     width: '100px',
   },
@@ -91,26 +86,6 @@ const getTypeInfo = (type: string): TypeInfo => {
         color: 'primary',
         icon: 'mdi-console-line',
       };
-  }
-};
-
-// 获取权限颜色
-const getPermissionColor = (permission: string): string => {
-  switch (permission) {
-    case 'admin':
-      return 'error';
-    default:
-      return 'success';
-  }
-};
-
-// 获取权限标签
-const getPermissionLabel = (permission: string): string => {
-  switch (permission) {
-    case 'admin':
-      return tm('permission.admin');
-    default:
-      return tm('permission.everyone');
   }
 };
 
@@ -216,41 +191,10 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
         </div>
       </template>
 
-      <template #item.permission="{ item }">
-        <v-menu location="bottom">
-          <template #activator="{ props: activatorProps }">
-            <v-chip
-              v-bind="activatorProps"
-              :color="getPermissionColor(item.permission)"
-              size="small"
-              class="font-weight-medium cursor-pointer"
-              link
-            >
-              {{ getPermissionLabel(item.permission) }}
-              <v-icon end size="14">mdi-chevron-down</v-icon>
-            </v-chip>
-          </template>
-          <v-list density="compact">
-            <v-list-item
-              :value="'member'"
-              :active="item.permission !== 'admin'"
-              @click="$emit('update-permission', item, 'member')"
-            >
-              <v-list-item-title>{{
-                tm('permission.everyone')
-              }}</v-list-item-title>
-            </v-list-item>
-            <v-list-item
-              :value="'admin'"
-              :active="item.permission === 'admin'"
-              @click="$emit('update-permission', item, 'admin')"
-            >
-              <v-list-item-title>{{
-                tm('permission.admin')
-              }}</v-list-item-title>
-            </v-list-item>
-          </v-list>
-        </v-menu>
+      <template #item.action="{ item }">
+        <v-chip size="small" color="primary" variant="tonal">
+          {{ item.action || '—' }}
+        </v-chip>
       </template>
 
       <template #item.enabled="{ item }">

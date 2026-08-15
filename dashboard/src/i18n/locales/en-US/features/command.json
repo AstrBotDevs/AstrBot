@@ -16,7 +16,7 @@
       "type": "Type",
       "plugin": "Plugin",
       "description": "Description",
-      "permission": "Permission",
+      "action": "Authorization action",
       "status": "Status",
       "actions": "Actions"
     }
@@ -30,10 +30,6 @@
     "enabled": "Enabled",
     "disabled": "Disabled",
     "conflict": "Conflict"
-  },
-  "permission": {
-    "everyone": "Everyone",
-    "admin": "Admin"
   },
   "tooltips": {
     "enable": "Enable command",
@@ -61,7 +57,7 @@
       "parentGroup": "Parent Group",
       "subCommands": "Sub-commands",
       "aliases": "Aliases",
-      "permission": "Permission",
+      "action": "Authorization action",
       "conflictStatus": "Conflict Status"
     }
   },
@@ -88,7 +84,7 @@
     "conflict": "Conflict",
     "byPlugin": "Filter by plugin",
     "byType": "Filter by type",
-    "byPermission": "Filter by permission",
+    "byAction": "Filter by action",
     "byStatus": "Filter by status",
     "showSystemPlugins": "Show system plugins commands",
     "systemPluginConflictHint": "System plugin conflicts detected. Resolve conflicts to hide."

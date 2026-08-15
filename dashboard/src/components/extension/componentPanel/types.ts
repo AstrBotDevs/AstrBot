@@ -21,7 +21,7 @@ export interface ToolSummary {
 export interface FilterState {
   searchQuery: string;
   pluginFilter: string;
-  permissionFilter: string;
+  actionFilter: string;
   statusFilter: string;
   typeFilter: string;
   showSystemPlugins: boolean;

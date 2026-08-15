@@ -6,8 +6,6 @@
  */
 export type CommandType = 'command' | 'group' | 'sub_command';
 
-export type PermissionType = 'admin' | 'everyone' | 'member';
-
 export interface CommandItem {
   handler_full_name: string;
   handler_name: string;
@@ -24,7 +22,7 @@ export interface CommandItem {
   signature: string;
   display_signature: string;
   aliases: string[];
-  permission: PermissionType;
+  action: string | null;
   enabled: boolean;
   is_group: boolean;
   has_conflict: boolean;

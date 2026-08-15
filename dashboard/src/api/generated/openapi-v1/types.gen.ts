@@ -450,7 +450,7 @@ export type CommandPatchRequest = {
   enabled?: boolean;
   alias?: string;
   aliases?: Array<string>;
-  permission_group?: string;
+  action?: string;
 };
 
 export type AuthorizationBindingRequest = {
@@ -461,8 +461,7 @@ export type AuthorizationBindingRequest = {
     | 'instance_operator'
     | 'session_owner'
     | 'session_admin'
-    | 'member'
-    | 'guest';
+    | 'member';
   scope_type: 'global' | 'instance' | 'session' | 'resource';
   scope_id: string;
   config_id?: string;
@@ -474,6 +473,10 @@ export type AuthorizationStepUpRequest = {
   resource_type: string;
   resource_id: string;
   config_id?: string;
+};
+
+export type AuthorizationBindingBatchRevokeRequest = {
+  binding_ids: Array<string>;
 };
 
 export type DashboardAccountCreateRequest = {
@@ -513,7 +516,7 @@ export type CommandItem = {
   signature?: string;
   display_signature?: string;
   aliases?: Array<string>;
-  permission?: 'admin' | 'everyone' | 'member';
+  action?: string;
   enabled?: boolean;
   is_group?: boolean;
   has_conflict?: boolean;
@@ -883,6 +886,12 @@ export type AuthorizationStepUpRequestWritable = {
   code?: string;
 };
 
+export type AuthorizationBindingBatchRevokeRequestWritable = {
+  binding_ids: Array<string>;
+  password?: string;
+  code?: string;
+};
+
 export type DashboardAccountCreateRequestWritable = {
   username: string;
   password: string;
@@ -1218,6 +1227,40 @@ export type RevokeAuthorizationRoleBindingResponses = {
 
 export type RevokeAuthorizationRoleBindingResponse =
   RevokeAuthorizationRoleBindingResponses[keyof RevokeAuthorizationRoleBindingResponses];
+
+export type IssueAuthorizationBatchRevokeStepUpData = {
+  body: AuthorizationBindingBatchRevokeRequestWritable;
+  path?: never;
+  query?: never;
+  url: '/api/v1/authorization/role-bindings/batch-revoke/step-up';
+};
+
+export type IssueAuthorizationBatchRevokeStepUpResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type IssueAuthorizationBatchRevokeStepUpResponse =
+  IssueAuthorizationBatchRevokeStepUpResponses[keyof IssueAuthorizationBatchRevokeStepUpResponses];
+
+export type RevokeAuthorizationRoleBindingsData = {
+  body: AuthorizationBindingBatchRevokeRequestWritable;
+  path?: never;
+  query?: never;
+  url: '/api/v1/authorization/role-bindings/batch-revoke';
+};
+
+export type RevokeAuthorizationRoleBindingsResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type RevokeAuthorizationRoleBindingsResponse =
+  RevokeAuthorizationRoleBindingsResponses[keyof RevokeAuthorizationRoleBindingsResponses];
 
 export type IssueAuthorizationStepUpData = {
   body: AuthorizationStepUpRequestWritable;

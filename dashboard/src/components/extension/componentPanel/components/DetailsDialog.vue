@@ -40,26 +40,6 @@ const getTypeInfo = (type: string): TypeInfo => {
       };
   }
 };
-
-// 获取权限颜色
-const getPermissionColor = (permission: string): string => {
-  switch (permission) {
-    case 'admin':
-      return 'error';
-    default:
-      return 'success';
-  }
-};
-
-// 获取权限标签
-const getPermissionLabel = (permission: string): string => {
-  switch (permission) {
-    case 'admin':
-      return tm('permission.admin');
-    default:
-      return tm('permission.everyone');
-  }
-};
 </script>
 
 <template>
@@ -178,14 +158,11 @@ const getPermissionLabel = (permission: string): string => {
           </v-list-item>
           <v-list-item>
             <v-list-item-title class="font-weight-bold">{{
-              tm('dialogs.details.permission')
+              tm('dialogs.details.action')
             }}</v-list-item-title>
             <v-list-item-subtitle>
-              <v-chip
-                :color="getPermissionColor(command.permission)"
-                size="small"
-              >
-                {{ getPermissionLabel(command.permission) }}
+              <v-chip color="primary" size="small" variant="tonal">
+                {{ command.action || '—' }}
               </v-chip>
             </v-list-item-subtitle>
           </v-list-item>

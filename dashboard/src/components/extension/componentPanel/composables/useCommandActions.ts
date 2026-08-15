@@ -134,33 +134,6 @@ export function useCommandActions(
   };
 
   /**
-   * 获取权限颜色
-   */
-  const getPermissionColor = (permission: string): string => {
-    switch (permission) {
-      case 'admin':
-        return 'error';
-      default:
-        return 'success';
-    }
-  };
-
-  /**
-   * 获取权限标签
-   */
-  const getPermissionLabel = (
-    permission: string,
-    translations: { admin: string; everyone: string },
-  ): string => {
-    switch (permission) {
-      case 'admin':
-        return translations.admin;
-      default:
-        return translations.everyone;
-    }
-  };
-
-  /**
    * 获取状态显示信息
    */
   const getStatusInfo = (
@@ -193,30 +166,6 @@ export function useCommandActions(
     return classes.length > 0 ? { class: classes.join(' ') } : {};
   };
 
-  /**
-   * 更新指令权限
-   */
-  const updatePermission = async (
-    cmd: CommandItem,
-    permission: 'admin' | 'member',
-    successMessage: string,
-    errorMessage: string,
-  ) => {
-    try {
-      const res = await commandApi.update(cmd.handler_full_name, {
-        permission_group: permission,
-      });
-      if (res.data.status === 'ok') {
-        toast(successMessage, 'success');
-        await fetchCommands();
-      } else {
-        toast(res.data.message || errorMessage, 'error');
-      }
-    } catch (err) {
-      toast(resolveErrorMessage(err, errorMessage), 'error');
-    }
-  };
-
   return {
     // 状态
     renameDialog,
@@ -224,13 +173,10 @@ export function useCommandActions(
 
     // 方法
     toggleCommand,
-    updatePermission,
     openRenameDialog,
     confirmRename,
     openDetailsDialog,
     getTypeInfo,
-    getPermissionColor,
-    getPermissionLabel,
     getStatusInfo,
     getRowProps,
   };

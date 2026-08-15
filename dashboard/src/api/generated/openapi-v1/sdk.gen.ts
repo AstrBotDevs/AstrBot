@@ -299,6 +299,8 @@ import type {
   InvokePluginDashboardUploadData,
   InvokePluginDashboardUploadErrors,
   InvokePluginDashboardUploadResponses,
+  IssueAuthorizationBatchRevokeStepUpData,
+  IssueAuthorizationBatchRevokeStepUpResponses,
   IssueAuthorizationStepUpData,
   IssueAuthorizationStepUpResponses,
   ListActiveUmosData,
@@ -471,6 +473,8 @@ import type {
   RevokeApiKeyResponses,
   RevokeAuthorizationRoleBindingData,
   RevokeAuthorizationRoleBindingResponses,
+  RevokeAuthorizationRoleBindingsData,
+  RevokeAuthorizationRoleBindingsResponses,
   RevokeMcpOAuthData,
   RevokeMcpOAuthResponses,
   RollbackNeoSkillReleaseData,
@@ -880,6 +884,60 @@ export const revokeAuthorizationRoleBinding = <
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/authorization/role-bindings/{binding_id}/revoke',
     ...options,
+  });
+
+/**
+ * Reauthenticate for one exact batch role-binding revocation
+ */
+export const issueAuthorizationBatchRevokeStepUp = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<IssueAuthorizationBatchRevokeStepUpData, ThrowOnError>,
+): RequestResult<
+  IssueAuthorizationBatchRevokeStepUpResponses,
+  unknown,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    IssueAuthorizationBatchRevokeStepUpResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/authorization/role-bindings/batch-revoke/step-up',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Revoke one exact batch of scoped role bindings
+ */
+export const revokeAuthorizationRoleBindings = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<RevokeAuthorizationRoleBindingsData, ThrowOnError>,
+): RequestResult<
+  RevokeAuthorizationRoleBindingsResponses,
+  unknown,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    RevokeAuthorizationRoleBindingsResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/authorization/role-bindings/batch-revoke',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
   });
 
 /**
@@ -3341,7 +3399,7 @@ export const listCommands = <ThrowOnError extends boolean = false>(
   );
 
 /**
- * Update command enabled state, alias, or permission group
+ * Update command enabled state, alias, or authorization action
  */
 export const updateCommand = <ThrowOnError extends boolean = false>(
   options: Options<UpdateCommandData, ThrowOnError>,

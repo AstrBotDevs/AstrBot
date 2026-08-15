@@ -59,7 +59,7 @@ const {
 const {
   searchQuery,
   pluginFilter,
-  permissionFilter,
+  actionFilter,
   statusFilter,
   typeFilter,
   showSystemPlugins,
@@ -67,6 +67,7 @@ const {
   hasSystemPluginConflict,
   effectiveShowSystemPlugins,
   availablePlugins,
+  availableActions,
   filteredCommands,
   toggleGroupExpand,
 } = useCommandFilters(commands);
@@ -76,7 +77,6 @@ const {
   renameDialog,
   detailsDialog,
   toggleCommand,
-  updatePermission,
   openRenameDialog,
   confirmRename,
   openDetailsDialog,
@@ -100,18 +100,6 @@ const handleToggleCommand = async (cmd: CommandItem) => {
     cmd,
     tm('messages.toggleSuccess'),
     tm('messages.toggleFailed'),
-  );
-};
-
-const handleUpdatePermission = async (
-  cmd: CommandItem,
-  permission: 'admin' | 'member',
-) => {
-  await updatePermission(
-    cmd,
-    permission,
-    tm('messages.updateSuccess'),
-    tm('messages.updateFailed'),
   );
 };
 
@@ -218,7 +206,8 @@ watch(viewMode, async (mode) => {
             <CommandFilters
               :plugin-filter="pluginFilter"
               :type-filter="typeFilter"
-              :permission-filter="permissionFilter"
+              :action-filter="actionFilter"
+              :available-actions="availableActions"
               :status-filter="statusFilter"
               :show-system-plugins="showSystemPlugins"
               :search-query="searchQuery"
@@ -227,7 +216,7 @@ watch(viewMode, async (mode) => {
               :effective-show-system-plugins="effectiveShowSystemPlugins"
               @update:plugin-filter="pluginFilter = $event"
               @update:type-filter="typeFilter = $event"
-              @update:permission-filter="permissionFilter = $event"
+              @update:action-filter="actionFilter = $event"
               @update:status-filter="statusFilter = $event"
               @update:show-system-plugins="showSystemPlugins = $event"
               @update:search-query="searchQuery = $event"
@@ -292,7 +281,6 @@ watch(viewMode, async (mode) => {
               @toggle-command="handleToggleCommand"
               @rename="openRenameDialog"
               @view-details="openDetailsDialog"
-              @update-permission="handleUpdatePermission"
             />
           </div>
 
