@@ -1094,7 +1094,7 @@ def _extract_animation_frames_sync(
     source_bytes: bytes,
     target_mime_type: str,
     max_frames: int,
-) -> list[Path]:
+) -> tuple[list[Path], bool]:
     """Extract evenly spaced frames from an animated image, with caching.
 
     Args:
@@ -1103,7 +1103,8 @@ def _extract_animation_frames_sync(
         max_frames: Maximum number of frames to extract.
 
     Returns:
-        Paths of the extracted frame images in playback order.
+        Tuple of frame paths in playback order and whether extraction actually
+        ran (``False`` when the cached frame set was served).
     """
     suffix = _MIME_FILE_SUFFIX[target_mime_type]
     cache_key = _image_convert_cache_key(
@@ -1114,10 +1115,11 @@ def _extract_animation_frames_sync(
     if frames_dir.is_dir():
         cached = sorted(frames_dir.glob(f"*{suffix}"))
         if cached:
-            return cached
+            return cached, False
     # Extract into a staging dir and publish it with one atomic rename, so a
     # crash mid-extraction never leaves a partial frame set behind.
     staging_dir = Path(tempfile.mkdtemp(dir=cache_dir, prefix=f".{cache_key}_"))
+    published = True
     try:
         with PILImage.open(io.BytesIO(source_bytes)) as image:
             total_frames = getattr(image, "n_frames", 1)
@@ -1134,10 +1136,11 @@ def _extract_animation_frames_sync(
             shutil.rmtree(staging_dir, ignore_errors=True)
             if not frames_dir.is_dir():
                 raise
+            published = False
     except BaseException:
         shutil.rmtree(staging_dir, ignore_errors=True)
         raise
-    return sorted(frames_dir.glob(f"*{suffix}"))
+    return sorted(frames_dir.glob(f"*{suffix}")), published
 
 
 async def _path_to_resolved_media_data(path: Path, mime_type: str) -> ResolvedMediaData:
@@ -1227,17 +1230,18 @@ async def resolve_image_ref_to_images(
             None if unrestricted else allowed_mime_types,
         )
         if animated_strategy == ANIMATED_STRATEGY_MULTI_FRAME:
-            frame_paths = await asyncio.to_thread(
+            frame_paths, extracted = await asyncio.to_thread(
                 _extract_animation_frames_sync,
                 image_bytes,
                 target_mime_type,
                 max_frames,
             )
-            logger.info(
-                "Animated image %s extracted into %d frame(s) for the provider.",
-                describe_media_ref(image_ref),
-                len(frame_paths),
-            )
+            if extracted:
+                logger.info(
+                    "Animated image %s extracted into %d frame(s) for the provider.",
+                    describe_media_ref(image_ref),
+                    len(frame_paths),
+                )
         else:
             frame_paths = [
                 await asyncio.to_thread(
