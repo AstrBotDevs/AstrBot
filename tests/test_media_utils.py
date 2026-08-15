@@ -1031,6 +1031,31 @@ async def test_resolve_images_multi_frame_clamps_to_limit(tmp_path, monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_resolve_images_ignores_stale_staging_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    gif_bytes = _make_animated_gif_bytes([(255, 0, 0), (0, 255, 0), (0, 0, 255)])
+
+    # Simulate a crash mid-extraction: a staging dir with a partial frame set.
+    cache_dir = tmp_path / media_utils.CONVERT_CACHE_DIR_NAME
+    cache_dir.mkdir(parents=True)
+    staging = cache_dir / ".stale_staging"
+    staging.mkdir()
+    (staging / "f0.png").write_bytes(b"partial")
+
+    images = await media_utils.resolve_image_ref_to_images(
+        _image_data_uri("image/gif", gif_bytes),
+        allowed_mime_types={"image/png"},
+        animated_strategy=media_utils.ANIMATED_STRATEGY_MULTI_FRAME,
+        animated_max_frames=3,
+    )
+
+    assert len(images) == 3
+    # The published frame set lives in a dedicated dir, not the staging dir.
+    assert all(image_data.to_bytes() != b"partial" for image_data in images)
+    assert list(cache_dir.glob("*_frames"))
+
+
+@pytest.mark.asyncio
 async def test_resolve_images_cache_hit_skips_reencode(tmp_path, monkeypatch):
     monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
     bmp_bytes = _make_image_bytes("BMP")

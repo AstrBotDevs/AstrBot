@@ -4,6 +4,7 @@ import os
 from collections.abc import AsyncGenerator
 from typing import ClassVar, Literal, TypeAlias, Union
 
+from astrbot import logger
 from astrbot.core.agent.message import ContentPart, Message, is_checkpoint_message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.provider.entities import (
@@ -117,6 +118,12 @@ class Provider(AbstractProvider):
             }
             if mapped:
                 return frozenset(mapped)
+            logger.warning(
+                "Provider %s: image_formats %s contains no valid entries; "
+                "falling back to the default format set.",
+                self.provider_config.get("id"),
+                sorted(normalized),
+            )
         if self.supported_image_formats is not None:
             return self.supported_image_formats
         return DEFAULT_FALLBACK_IMAGE_FORMATS

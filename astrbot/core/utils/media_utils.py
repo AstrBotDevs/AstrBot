@@ -13,6 +13,7 @@ import mimetypes
 import os
 import shutil
 import subprocess
+import tempfile
 from collections.abc import AsyncIterator, Collection
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -1031,6 +1032,25 @@ def _save_current_image_frame(
             working.close()
 
 
+def _save_image_frame_atomic(
+    image: PILImage.Image,
+    target_mime_type: str,
+    output_path: Path,
+) -> None:
+    """Save via a unique temp file then atomically replace the cache entry.
+
+    Concurrent readers never observe a partially written cache file.
+    """
+    fd, tmp_name = tempfile.mkstemp(dir=output_path.parent, suffix=".tmp")
+    os.close(fd)
+    tmp_path = Path(tmp_name)
+    try:
+        _save_current_image_frame(image, target_mime_type, tmp_path)
+        os.replace(tmp_path, output_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
 def _convert_image_bytes_sync(
     source_bytes: bytes,
     target_mime_type: str,
@@ -1058,7 +1078,7 @@ def _convert_image_bytes_sync(
     with PILImage.open(io.BytesIO(source_bytes)) as image:
         if frame_index is not None:
             image.seek(frame_index)
-        _save_current_image_frame(image, target_mime_type, output_path)
+        _save_image_frame_atomic(image, target_mime_type, output_path)
     return output_path
 
 
@@ -1090,20 +1110,34 @@ def _extract_animation_frames_sync(
         source_bytes, f"frames|{target_mime_type}|n={max_frames}"
     )
     cache_dir = _image_convert_cache_dir()
-    cached = sorted(cache_dir.glob(f"{cache_key}_f*{suffix}"))
-    if cached:
-        return cached
-    frame_paths: list[Path] = []
-    with PILImage.open(io.BytesIO(source_bytes)) as image:
-        total_frames = getattr(image, "n_frames", 1)
-        for out_index, frame_index in enumerate(
-            _even_frame_indices(total_frames, max_frames)
-        ):
-            frame_path = cache_dir / f"{cache_key}_f{out_index}{suffix}"
-            image.seek(frame_index)
-            _save_current_image_frame(image, target_mime_type, frame_path)
-            frame_paths.append(frame_path)
-    return frame_paths
+    frames_dir = cache_dir / f"{cache_key}_frames"
+    if frames_dir.is_dir():
+        cached = sorted(frames_dir.glob(f"*{suffix}"))
+        if cached:
+            return cached
+    # Extract into a staging dir and publish it with one atomic rename, so a
+    # crash mid-extraction never leaves a partial frame set behind.
+    staging_dir = Path(tempfile.mkdtemp(dir=cache_dir, prefix=f".{cache_key}_"))
+    try:
+        with PILImage.open(io.BytesIO(source_bytes)) as image:
+            total_frames = getattr(image, "n_frames", 1)
+            for out_index, frame_index in enumerate(
+                _even_frame_indices(total_frames, max_frames)
+            ):
+                frame_path = staging_dir / f"f{out_index}{suffix}"
+                image.seek(frame_index)
+                _save_current_image_frame(image, target_mime_type, frame_path)
+        try:
+            os.replace(staging_dir, frames_dir)
+        except OSError:
+            # Lost a concurrent publish race; use the winner's complete set.
+            shutil.rmtree(staging_dir, ignore_errors=True)
+            if not frames_dir.is_dir():
+                raise
+    except BaseException:
+        shutil.rmtree(staging_dir, ignore_errors=True)
+        raise
+    return sorted(frames_dir.glob(f"*{suffix}"))
 
 
 async def _path_to_resolved_media_data(path: Path, mime_type: str) -> ResolvedMediaData:

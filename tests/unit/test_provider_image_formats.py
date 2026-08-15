@@ -75,6 +75,14 @@ def test_unknown_config_entries_fall_back_to_class_default():
     )
 
 
+def test_unknown_config_entries_log_warning(caplog):
+    provider = _make_dummy({"image_formats": ["not-a-format"]})
+    with caplog.at_level("WARNING"):
+        provider.resolve_allowed_image_formats()
+    assert "no valid entries" in caplog.text
+    assert "not-a-format" in caplog.text
+
+
 def test_aggregators_do_not_inherit_openai_format_set():
     assert ProviderOpenRouter.supported_image_formats is None
     assert ProviderAIHubMix.supported_image_formats is None
@@ -82,9 +90,7 @@ def test_aggregators_do_not_inherit_openai_format_set():
     assert ProviderOpenAIOfficial.supported_image_formats == frozenset(
         {"image/png", "image/jpeg", "image/webp", "image/gif"}
     )
-    assert ProviderXAI.supported_image_formats == frozenset(
-        {"image/jpeg", "image/png"}
-    )
+    assert ProviderXAI.supported_image_formats == frozenset({"image/jpeg", "image/png"})
 
 
 def test_animated_strategy_defaults():
@@ -146,9 +152,7 @@ async def test_xai_animated_gif_reduced_to_still(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_openai_multi_frame_strategy_expands_image_blocks(
-    tmp_path, monkeypatch
-):
+async def test_openai_multi_frame_strategy_expands_image_blocks(tmp_path, monkeypatch):
     monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
     provider = ProviderOpenAIOfficial(
         {
