@@ -36,6 +36,14 @@ def _runner_status(response: LLMResponse | None, aborted: bool) -> str:
     return "completed"
 
 
+def _token_usage_dict(usage: TokenUsage) -> dict[str, int]:
+    return {
+        "input_other": usage.input_other,
+        "input_cached": usage.input_cached,
+        "output": usage.output,
+    }
+
+
 async def record_agent_runner_stats(
     db: BaseDatabase,
     *,
@@ -73,7 +81,7 @@ async def record_agent_runner_stats(
                 provider_model=segment.provider.get_model(),
                 status=segment.status,
                 stats={
-                    "token_usage": segment.usage.__dict__.copy(),
+                    "token_usage": _token_usage_dict(segment.usage),
                     "start_time": segment.start_time,
                     "end_time": segment.end_time,
                     "time_to_first_token": 0.0,
@@ -138,7 +146,7 @@ async def record_llm_response_stats(
             provider_model=provider.get_model(),
             status=_response_status(response),
             stats={
-                "token_usage": usage.__dict__.copy(),
+                "token_usage": _token_usage_dict(usage),
                 "start_time": start_time,
                 "end_time": end_time,
                 "time_to_first_token": 0.0,

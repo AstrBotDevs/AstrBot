@@ -587,16 +587,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     and (not is_last_candidate)
                                 ):
                                     last_err_response = resp
-                                    if resp.usage is not None:
-                                        self.stats.token_usage += resp.usage
-                                        self.provider_stat_segments.append(
-                                            ProviderStatSegment(
-                                                provider=candidate,
-                                                usage=resp.usage,
-                                                start_time=candidate_start_time,
-                                                end_time=time.time(),
-                                            )
+                                    last_exception = None
+                                    failed_usage = resp.usage or TokenUsage()
+                                    self.stats.token_usage += failed_usage
+                                    self.provider_stat_segments.append(
+                                        ProviderStatSegment(
+                                            provider=candidate,
+                                            usage=failed_usage,
+                                            start_time=candidate_start_time,
+                                            end_time=time.time(),
                                         )
+                                    )
                                     logger.warning(
                                         "Chat Model %s returns error response, trying fallback to next provider.",
                                         candidate_id,
@@ -627,18 +628,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         return
             except Exception as exc:  # noqa: BLE001
                 last_exception = exc
+                last_err_response = None
                 failed_usage = getattr(exc, "_astrbot_token_usage", None)
-                if isinstance(failed_usage, TokenUsage):
-                    self.stats.token_usage += failed_usage
-                    if not is_last_candidate:
-                        self.provider_stat_segments.append(
-                            ProviderStatSegment(
-                                provider=candidate,
-                                usage=failed_usage,
-                                start_time=candidate_start_time,
-                                end_time=time.time(),
-                            )
+                if not isinstance(failed_usage, TokenUsage):
+                    failed_usage = TokenUsage()
+                self.stats.token_usage += failed_usage
+                if not is_last_candidate:
+                    self.provider_stat_segments.append(
+                        ProviderStatSegment(
+                            provider=candidate,
+                            usage=failed_usage,
+                            start_time=candidate_start_time,
+                            end_time=time.time(),
                         )
+                    )
                 logger.warning(
                     "Chat Model %s request error: %s",
                     candidate_id,

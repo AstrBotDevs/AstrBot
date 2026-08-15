@@ -178,6 +178,62 @@ async def test_llm_generate_persists_one_provider_stat(temp_db):
 
 
 @pytest.mark.asyncio
+async def test_llm_generate_persists_error_stat_when_provider_raises(temp_db):
+    provider = StatsProvider()
+    provider.text_chat = AsyncMock(side_effect=RuntimeError("provider failed"))
+    context = Context.__new__(Context)
+    context._db = temp_db
+    context.provider_manager = SimpleNamespace(
+        get_provider_by_id=AsyncMock(return_value=provider),
+    )
+
+    with pytest.raises(RuntimeError, match="provider failed"):
+        await context.llm_generate(
+            chat_provider_id="provider-1",
+            prompt="test",
+            session_id="failed-session",
+        )
+
+    records = await get_provider_stats(temp_db)
+    assert len(records) == 1
+    record = records[0]
+    assert record.status == "error"
+    assert record.token_input_other == 0
+    assert record.token_input_cached == 0
+    assert record.token_output == 0
+
+
+@pytest.mark.asyncio
+async def test_llm_generate_persists_error_response_usage(temp_db):
+    provider = StatsProvider()
+    error_response = LLMResponse(
+        role="err",
+        usage=TokenUsage(input_other=7, input_cached=2, output=1),
+    )
+    provider.text_chat = AsyncMock(return_value=error_response)
+    context = Context.__new__(Context)
+    context._db = temp_db
+    context.provider_manager = SimpleNamespace(
+        get_provider_by_id=AsyncMock(return_value=provider),
+    )
+
+    response = await context.llm_generate(
+        chat_provider_id="provider-1",
+        prompt="test",
+        session_id="error-response-session",
+    )
+
+    records = await get_provider_stats(temp_db)
+    assert response is error_response
+    assert len(records) == 1
+    record = records[0]
+    assert record.status == "error"
+    assert record.token_input_other == 7
+    assert record.token_input_cached == 2
+    assert record.token_output == 1
+
+
+@pytest.mark.asyncio
 async def test_tool_loop_agent_persists_one_aggregated_provider_stat(
     temp_db,
     monkeypatch: pytest.MonkeyPatch,

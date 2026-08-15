@@ -9,7 +9,83 @@ from astrbot.core.agent.response import AgentStats
 from astrbot.core.db.po import ProviderStat
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages import internal
 from astrbot.core.provider.entities import ProviderRequest, TokenUsage
-from astrbot.core.provider.stats import ProviderStatSegment
+from astrbot.core.provider.stats import (
+    ProviderStatSegment,
+    record_agent_runner_stats,
+    record_llm_response_stats,
+)
+
+
+def assert_public_token_usage(token_usage: dict[str, int]) -> None:
+    assert token_usage == {
+        "input_other": 5,
+        "input_cached": 2,
+        "output": 3,
+    }
+
+
+@pytest.mark.asyncio
+async def test_record_llm_response_stats_only_passes_public_token_fields():
+    usage = TokenUsage(input_other=5, input_cached=2, output=3)
+    usage.internal_note = "must not reach the database"
+    db = SimpleNamespace(insert_provider_stat=AsyncMock())
+    provider = SimpleNamespace(
+        provider_config={"id": "provider-1"},
+        meta=lambda: SimpleNamespace(id="provider-1"),
+        get_model=lambda: "test-model",
+    )
+
+    await record_llm_response_stats(
+        db,
+        umo="provider:provider-1:test",
+        provider=provider,
+        response=SimpleNamespace(role="assistant", usage=usage),
+        start_time=100.0,
+        end_time=101.0,
+    )
+
+    stats = db.insert_provider_stat.await_args.kwargs["stats"]
+    assert_public_token_usage(stats["token_usage"])
+
+
+@pytest.mark.asyncio
+async def test_record_agent_runner_stats_only_passes_public_segment_token_fields():
+    usage = TokenUsage(input_other=5, input_cached=2, output=3)
+    usage.internal_note = "must not reach the database"
+    db = SimpleNamespace(insert_provider_stat=AsyncMock())
+    provider = SimpleNamespace(
+        provider_config={"id": "provider-1"},
+        meta=lambda: SimpleNamespace(id="provider-1"),
+        get_model=lambda: "test-model",
+    )
+    runner = SimpleNamespace(
+        provider=provider,
+        stats=AgentStats(
+            token_usage=usage,
+            start_time=100.0,
+            end_time=102.0,
+        ),
+        provider_stat_segments=[
+            ProviderStatSegment(
+                provider=provider,
+                usage=usage,
+                start_time=100.0,
+                end_time=101.0,
+            )
+        ],
+        was_aborted=lambda: False,
+    )
+
+    await record_agent_runner_stats(
+        db,
+        umo="test:session",
+        request=None,
+        agent_runner=runner,
+        final_response=SimpleNamespace(role="assistant"),
+    )
+
+    segment_stats = db.insert_provider_stat.await_args_list[0].kwargs["stats"]
+    assert_public_token_usage(segment_stats["token_usage"])
 
 
 @pytest.mark.asyncio
