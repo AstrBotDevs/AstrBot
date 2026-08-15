@@ -280,24 +280,28 @@ class TestAstrBotConfigLoad:
                 default_config=default_config,
             )
 
-    def test_legacy_password_change_required_rotates_and_keeps_config_flag(
+    def test_password_change_required_does_not_rotate_existing_password(
         self, temp_config_path
     ):
-        """Test that the setup flag stays in dashboard config."""
+        """A pending password change must not silently rotate the stored password."""
         default_config = {
             "dashboard": {
                 "username": "astrbot",
                 "password": "",
                 "pbkdf2_password": "",
+                "password_storage_upgraded": False,
+                "password_change_required": False,
             },
         }
+        stored_pbkdf2 = "pbkdf2_sha256$600000$00$00"
         with open(temp_config_path, "w", encoding="utf-8") as f:
             json.dump(
                 {
                     "dashboard": {
                         "username": "astrbot",
                         "password": "",
-                        "pbkdf2_password": "pbkdf2_sha256$600000$00$00",
+                        "pbkdf2_password": stored_pbkdf2,
+                        "password_storage_upgraded": True,
                         "password_change_required": True,
                     }
                 },
@@ -308,20 +312,55 @@ class TestAstrBotConfigLoad:
             config_path=temp_config_path,
             default_config=default_config,
         )
-        generated_password = getattr(config, "_generated_dashboard_password", None)
 
-        assert isinstance(generated_password, str)
+        assert getattr(config, "_generated_dashboard_password", None) is None
+        assert config["dashboard"]["pbkdf2_password"] == stored_pbkdf2
         assert config["dashboard"]["password_change_required"] is True
         assert config["dashboard"]["password_storage_upgraded"] is True
         assert (
             getattr(config, "_dashboard_password_change_required_from_config", False)
             is True
         )
-        assert verify_dashboard_password(
-            config["dashboard"]["pbkdf2_password"], generated_password
+
+    def test_password_change_required_is_stable_across_reloads(self, temp_config_path):
+        """Repeated constructions must not rotate a pending generated password (issue #9662)."""
+        default_config = {
+            "dashboard": {
+                "username": "astrbot",
+                "password": "",
+                "pbkdf2_password": "",
+                "password_storage_upgraded": False,
+                "password_change_required": False,
+            },
+        }
+        with open(temp_config_path, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "dashboard": {
+                        "username": "astrbot",
+                        "password": "",
+                        "pbkdf2_password": "pbkdf2_sha256$600000$00$00",
+                        "password_storage_upgraded": True,
+                        "password_change_required": True,
+                    }
+                },
+                f,
+            )
+
+        first = AstrBotConfig(
+            config_path=temp_config_path,
+            default_config=default_config,
         )
-        assert verify_dashboard_password(
-            config["dashboard"]["password"], generated_password
+        second = AstrBotConfig(
+            config_path=temp_config_path,
+            default_config=default_config,
+        )
+
+        assert getattr(first, "_generated_dashboard_password", None) is None
+        assert getattr(second, "_generated_dashboard_password", None) is None
+        assert (
+            first["dashboard"]["pbkdf2_password"]
+            == second["dashboard"]["pbkdf2_password"]
         )
 
     def test_reset_dashboard_password_env_rotates_existing_password(

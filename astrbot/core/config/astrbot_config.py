@@ -98,14 +98,6 @@ class AstrBotConfig(dict):
         ):
             self._reset_generated_dashboard_password(conf)
             has_new = True
-        elif (
-            "dashboard" in conf
-            and isinstance(conf["dashboard"], dict)
-            and stored_dashboard_password_change_required
-            and conf["dashboard"].get("pbkdf2_password")
-        ):
-            self._reset_generated_dashboard_password(conf)
-            has_new = True
         self.update(conf)
         if has_new:
             self.save_config()
