@@ -18,6 +18,6 @@ overrides:
   lodash-es: 4.18.1
   minimatch@^9.0.1: 10.2.5
   minimatch@^9.0.4: 10.2.5
-  nanoid: 3.3.17
+  nanoid: 3.3.18
   postcss: 8.5.23
   undici: 7.29.0
