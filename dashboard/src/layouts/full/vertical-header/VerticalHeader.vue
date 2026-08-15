@@ -1105,8 +1105,9 @@ onMounted(async () => {
       <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
     </div>
 
+    <!-- Keep the chat drawer accessible whenever it is not permanent. -->
     <v-btn
-      v-if="isChatPath && $vuetify.display.smAndDown"
+      v-if="isChatPath && !lgAndUp"
       class="chat-mobile-sidebar-toggle"
       icon
       size="small"
