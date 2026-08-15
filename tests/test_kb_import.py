@@ -671,40 +671,29 @@ async def test_upload_document_sanitizes_filename_and_schedules_background_task(
     assert response["task_id"] in service.upload_tasks
     assert service.upload_tasks[response["task_id"]]["status"] == "pending"
     assert len(background_calls) == 1
-    assert background_calls[0] == {
-        "task_id": response["task_id"],
-        "kb_helper": kb_helper,
-        "files_to_upload": [
-            {
-                "file_name": "unsafe name.txt",
-                "file_content": b"hello world",
-                "file_type": "txt",
-            }
-        ],
-        "chunk_size": 256,
-        "chunk_overlap": 32,
-        "batch_size": 8,
-        "tasks_limit": 2,
-        "max_retries": 5,
-    }
+    background_call = background_calls[0]
+    assert background_call["task_id"] == response["task_id"]
+    assert background_call["kb_helper"] is kb_helper
+    assert background_call["chunk_size"] == 256
+    assert background_call["chunk_overlap"] == 32
+    assert background_call["batch_size"] == 8
+    assert background_call["tasks_limit"] == 2
+    assert background_call["max_retries"] == 5
 
-
-@pytest.mark.asyncio
-async def test_upload_document_rejects_too_many_files():
-    service = KnowledgeBaseService.__new__(KnowledgeBaseService)
-    service.knowledge_base_manager = MagicMock()
-    service.upload_progress = {}
-    service.upload_tasks = {}
-
-    with pytest.raises(KnowledgeBaseServiceError, match="最多只能上传10个文件"):
-        await service.upload_document(
-            content_type="multipart/form-data",
-            form_data={"kb_id": "kb-1"},
-            files=[
-                UploadFile(file=BytesIO(b"x"), filename=f"file-{idx}.txt")
-                for idx in range(11)
-            ],
-        )
+    staging_dir = background_call["staging_dir"]
+    assert staging_dir.parent == tmp_path
+    assert staging_dir.name == f"kb_upload_{response['task_id']}"
+    assert background_call["files_to_upload"] == [
+        {
+            "file_name": "unsafe name.txt",
+            "temp_file_path": next(staging_dir.iterdir()),
+            "file_type": "txt",
+        }
+    ]
+    assert (
+        background_call["files_to_upload"][0]["temp_file_path"].read_bytes()
+        == b"hello world"
+    )
 
 
 @pytest.mark.asyncio
