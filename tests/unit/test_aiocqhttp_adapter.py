@@ -300,7 +300,6 @@ async def test_aiocqhttp_reply_only_wake_resolves_sender_lazily(monkeypatch):
     await stage.initialize(
         SimpleNamespace(
             astrbot_config={
-                "admins_id": [],
                 "wake_prefix": ["/"],
                 "platform_settings": {
                     "no_permission_reply": True,
@@ -313,13 +312,12 @@ async def test_aiocqhttp_reply_only_wake_resolves_sender_lazily(monkeypatch):
                         "reply_to_bot": True,
                     },
                 },
-                "disable_builtin_commands": False,
                 "plugin_set": ["*"],
             },
             astrbot_config_id="default",
-                plugin_catalog=SimpleNamespace(
-                    get_command_catalog=lambda *_args: CommandCatalogStore(),
-                ),
+            plugin_catalog=SimpleNamespace(
+                get_command_catalog=lambda *_args: CommandCatalogStore(),
+            ),
             preferences=SimpleNamespace(get_async=AsyncMock(return_value={})),
             handlers=catalogs.handlers,
             plugins=catalogs.plugins,

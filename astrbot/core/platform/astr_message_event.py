@@ -450,16 +450,6 @@ class AstrMessageEvent(abc.ABC):
 
         return False
 
-    @property
-    def role(self) -> str:
-        """Deprecated platform-role compatibility view, not an auth decision."""
-
-        return self.platform_member_role
-
-    @role.setter
-    def role(self, value: object) -> None:
-        self.set_platform_member_role(str(value), source="legacy")
-
     def set_platform_member_role(
         self,
         role: str,

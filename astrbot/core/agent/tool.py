@@ -120,12 +120,12 @@ class FunctionTool[TContext](ToolSchema):
     enabled through configuration.
     """
 
-    required_actions: tuple[str, ...] = ("tool.function",)
+    required_actions: tuple[str, ...] = ()
     """Actions required at the shared execution boundary.
 
-    Tool declarations can select a narrower capability. The executor adds
-    execution-near classifications for sensitive builtin tool families. A
-    third-party tool must never inherit chat/session management capability.
+    Tool declarations must select an explicit capability. The executor adds
+    execution-near classifications for sensitive builtin tool families. An
+    undeclared third-party tool is denied at the execution boundary.
     """
 
     def __repr__(self) -> str:

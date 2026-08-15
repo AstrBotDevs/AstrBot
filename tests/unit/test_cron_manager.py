@@ -31,7 +31,7 @@ def mock_db():
 def mock_context():
     """Create a mock Context."""
     ctx = MagicMock()
-    ctx.get_config = MagicMock(return_value={"admins_id": []})
+    ctx.get_config = MagicMock(return_value={})
     ctx.conversation_manager = MagicMock()
     return ctx
 
@@ -655,7 +655,6 @@ class TestRunActiveAgentJob:
         }
         ctx = MagicMock()
         ctx.get_config.return_value = {
-            "admins_id": [],
             "provider_settings": provider_settings,
         }
         cron_manager.ctx = ctx

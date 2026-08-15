@@ -404,6 +404,19 @@ class ConversationCommands:
                 session_id=str(session_id),
             ),
         )
+        for action in ("session.assign", "session.manage"):
+            decision = await self.context.authz.authorize_target_session(
+                message,
+                action=action,
+                umo=session,
+            )
+            if not decision.allowed:
+                message.set_result(
+                    MessageEventResult().message(
+                        "❌ You are not authorized to manage this target session.",
+                    )
+                )
+                return
         current_persona = await self._get_current_persona_id(session)
         cid = await self.context.conversations.create(
             session,

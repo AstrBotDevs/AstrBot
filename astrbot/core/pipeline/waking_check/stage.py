@@ -18,10 +18,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
-from astrbot.core.star.filter.permission import (
-    ActionPermissionFilter,
-    PermissionTypeFilter,
-)
+from astrbot.core.star.filter.permission import ActionPermissionFilter
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.star.star_handler import (
     EventType,
@@ -175,7 +172,10 @@ class WakingCheckStage(Stage):
 
         config_id = self.ctx.astrbot_config_id
         scopes: tuple[str, ...] = ()
+        principal_subject_id: str | None = None
+        dashboard_session_id: str | None = None
         api_key_principal = event.get_extra("_api_key_principal")
+        dashboard_principal = event.get_extra("_dashboard_principal")
         if event.get_platform_name() == "webchat" and isinstance(
             api_key_principal, dict
         ):
@@ -185,6 +185,7 @@ class WakingCheckStage(Stage):
                 subject = Subject.api_key(key_id)
                 authenticated = True
                 source = "api_key"
+                principal_subject_id = subject.id
             else:
                 subject = Subject.guest(
                     f"webchat-{hashlib.sha256(event.get_sender_id().encode()).hexdigest()[:24]}"
@@ -192,6 +193,29 @@ class WakingCheckStage(Stage):
                 authenticated = False
                 source = "webchat"
                 scopes = ()
+        elif event.get_platform_name() == "webchat" and isinstance(
+            dashboard_principal, dict
+        ):
+            account_id = dashboard_principal.get("account_id")
+            session_id = dashboard_principal.get("sid")
+            principal_username = dashboard_principal.get("username")
+            if (
+                isinstance(account_id, str)
+                and isinstance(session_id, str)
+                and isinstance(principal_username, str)
+                and principal_username == event.get_sender_id()
+            ):
+                subject = Subject.dashboard_account(account_id, principal_username)
+                authenticated = True
+                source = "webchat"
+                principal_subject_id = subject.id
+                dashboard_session_id = session_id
+            else:
+                subject = Subject.guest(
+                    f"webchat-{hashlib.sha256(event.get_sender_id().encode()).hexdigest()[:24]}"
+                )
+                authenticated = False
+                source = "webchat"
         elif event.get_platform_name() == "webchat":
             # WebChat's username is caller-declared compatibility data, not a
             # principal. A trusted Dashboard/API principal is attached later.
@@ -239,12 +263,17 @@ class WakingCheckStage(Stage):
             platform_role_source=getattr(event, "platform_role_source", "none"),
             platform_role_expires_at=getattr(event, "platform_role_expires_at", None),
             authenticated=authenticated,
+            origin_session_resource_id=resource.id,
             caller_declared_username=(
                 event.get_sender_id() if source == "webchat" else None
             ),
             api_scopes=tuple(scopes) if isinstance(scopes, (list, tuple)) else (),
-            principal_subject_id=(subject.id if source == "api_key" else None),
-            metadata={},
+            principal_subject_id=principal_subject_id,
+            metadata=(
+                {"dashboard_session_id": dashboard_session_id}
+                if dashboard_session_id is not None
+                else {}
+            ),
         )
         attach_authorization = getattr(event, "attach_authorization", None)
         if callable(attach_authorization):
@@ -258,20 +287,6 @@ class WakingCheckStage(Stage):
             event.set_extra("auth_context", context)
         event.set_extra("config_id", config_id)
         authorization = getattr(self.ctx, "authorization", None)
-        if authorization is not None:
-            for action in (
-                "tool.local_exec",
-                "tool.python_exec",
-                "tool.file_read",
-                "tool.file_write",
-                "tool.browser_control",
-                "tool.mcp_write",
-                "tool.computer_use",
-            ):
-                decision = await authorization.authorize(
-                    subject, action, resource, context
-                )
-                event.set_extra(f"authz:{action}", decision.allowed)
         platform_member_role = getattr(event, "platform_member_role", "unknown")
         if authorization is not None and platform_member_role in {
             "owner",
@@ -515,9 +530,7 @@ class WakingCheckStage(Stage):
                             entries_by_filter[id(filter)], resolved_command
                         )
                         bound_params = dict(bound.values)
-                    elif isinstance(
-                        filter, (ActionPermissionFilter, PermissionTypeFilter)
-                    ):
+                    elif isinstance(filter, ActionPermissionFilter):
                         if not await self._permission_filter_allowed(event, filter):
                             permission_not_pass = True
                             permission_filter_raise_error = filter.raise_error
@@ -669,9 +682,7 @@ class WakingCheckStage(Stage):
                 for filter_ref in handler.event_filters:
                     if isinstance(filter_ref, CommandGroupFilter):
                         continue
-                    if isinstance(
-                        filter_ref, (ActionPermissionFilter, PermissionTypeFilter)
-                    ):
+                    if isinstance(filter_ref, ActionPermissionFilter):
                         if not await self._permission_filter_allowed(event, filter_ref):
                             permission_not_pass = True
                             permission_filter_raise_error = filter_ref.raise_error
@@ -697,7 +708,7 @@ class WakingCheckStage(Stage):
     async def _permission_filter_allowed(
         self,
         event: AstrMessageEvent,
-        filter_ref: ActionPermissionFilter | PermissionTypeFilter,
+        filter_ref: ActionPermissionFilter,
     ) -> bool:
         authorization = getattr(self.ctx, "authorization", None)
         if (

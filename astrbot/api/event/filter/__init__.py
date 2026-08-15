@@ -4,11 +4,7 @@ from astrbot.core.star.filter.event_message_type import (
     EventMessageType,
     EventMessageTypeFilter,
 )
-from astrbot.core.star.filter.permission import (
-    ActionPermissionFilter,
-    PermissionType,
-    PermissionTypeFilter,
-)
+from astrbot.core.star.filter.permission import ActionPermissionFilter
 from astrbot.core.star.filter.platform_adapter_type import (
     PlatformAdapterType,
     PlatformAdapterTypeFilter,
@@ -42,7 +38,6 @@ from astrbot.core.star.register import (
     register_on_waiting_llm_request as on_waiting_llm_request,
 )
 from astrbot.core.star.register import register_permission as permission
-from astrbot.core.star.register import register_permission_type as permission_type
 from astrbot.core.star.register import (
     register_platform_adapter_type as platform_adapter_type,
 )
@@ -53,8 +48,6 @@ __all__ = [
     "EventMessageType",
     "EventMessageTypeFilter",
     "GreedyStr",
-    "PermissionType",
-    "PermissionTypeFilter",
     "ActionPermissionFilter",
     "PlatformAdapterType",
     "PlatformAdapterTypeFilter",
@@ -77,7 +70,6 @@ __all__ = [
     "on_plugin_unloaded",
     "on_platform_loaded",
     "on_waiting_llm_request",
-    "permission_type",
     "permission",
     "platform_adapter_type",
     "regex",

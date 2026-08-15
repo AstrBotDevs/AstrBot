@@ -39,7 +39,7 @@ def _make_runner(tmp_path, preferences: _Preferences) -> ToolLoopAgentRunner:
     runner._aborted = False
     event = _Event()
     runtime = SimpleNamespace(preferences=preferences)
-    attach_authorized_tool_context(event, runtime, "tool.function")
+    attach_authorized_tool_context(event, runtime, "session.read")
     runner.run_context = ContextWrapper(
         context=SimpleNamespace(context=runtime, event=event)
     )
@@ -72,6 +72,7 @@ async def test_parallel_tools_overlap_and_preserve_result_order(tmp_path):
             handler=handler,
             handler_module_path="tests.parallel_tools",
             parallel_policy="safe",
+            required_actions=("session.read",),
         ),
         FunctionTool(
             name="read_b",
@@ -80,6 +81,7 @@ async def test_parallel_tools_overlap_and_preserve_result_order(tmp_path):
             handler=handler,
             handler_module_path="tests.parallel_tools",
             parallel_policy="safe",
+            required_actions=("session.read",),
         ),
     ]
     preferences = _Preferences(
@@ -131,6 +133,7 @@ async def test_parallel_feature_requires_explicit_tool_allowlist(tmp_path):
             handler=handler,
             handler_module_path="tests.parallel_tools",
             parallel_policy="safe",
+            required_actions=("session.read",),
         ),
         FunctionTool(
             name="read_b",
@@ -139,6 +142,7 @@ async def test_parallel_feature_requires_explicit_tool_allowlist(tmp_path):
             handler=handler,
             handler_module_path="tests.parallel_tools",
             parallel_policy="safe",
+            required_actions=("session.read",),
         ),
     ]
     runner = _make_runner(
@@ -173,6 +177,7 @@ async def test_parallel_stop_cancels_the_batch(tmp_path):
             handler=handler,
             handler_module_path="tests.parallel_tools",
             parallel_policy="safe",
+            required_actions=("session.read",),
         )
         for suffix in ("a", "b")
     ]

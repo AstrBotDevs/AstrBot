@@ -21,7 +21,6 @@ from .star_handler import (
     register_on_using_llm_tool,
     register_on_waiting_llm_request,
     register_permission,
-    register_permission_type,
     register_platform_adapter_type,
     register_regex,
 )
@@ -46,7 +45,6 @@ __all__ = [
     "register_on_plugin_unloaded",
     "register_on_platform_loaded",
     "register_on_waiting_llm_request",
-    "register_permission_type",
     "register_permission",
     "register_platform_adapter_type",
     "register_regex",

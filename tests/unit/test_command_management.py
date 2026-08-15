@@ -6,7 +6,6 @@ import pytest
 
 from astrbot.api.event.filter import option
 from astrbot.core.command import CommandResolutionKind, build_command_catalog
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.po import CommandConfig
 from astrbot.core.runtime_catalogs import RuntimeCatalogs
 from astrbot.core.star.command_management import list_commands, sync_command_configs
@@ -296,97 +295,6 @@ async def test_bulk_toggle_builtin_commands_only_updates_builtin_handlers(monkey
     assert result == {"enabled": False, "updated": ["builtin.help", "builtin.nested"]}
     assert catalog_refreshes == [True]
     refresh_registered_commands.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_legacy_builtin_command_switch_migrates_to_command_records(monkeypatch):
-    commands = [
-        {
-            "handler_full_name": "builtin.help",
-            "module_path": "astrbot.builtin_stars.builtin_commands.main",
-            "sub_commands": [],
-        },
-        {
-            "handler_full_name": "plugin.command",
-            "module_path": "plugin.demo",
-            "sub_commands": [],
-        },
-    ]
-    toggled = []
-
-    async def fake_list_commands(_db, _handlers):
-        return commands
-
-    async def fake_toggle_command(_db, _handlers, handler_full_name, enabled):
-        toggled.append((handler_full_name, enabled))
-
-    monkeypatch.setattr("astrbot.core.core_lifecycle.list_commands", fake_list_commands)
-    monkeypatch.setattr(
-        "astrbot.core.core_lifecycle.toggle_command", fake_toggle_command
-    )
-
-    class MigratedConfig(dict):
-        pass
-
-    migrated_config = MigratedConfig(disable_builtin_commands=True)
-
-    async def save_config_async(next_config):
-        migrated_config.clear()
-        migrated_config.update(next_config)
-        return True
-
-    migrated_config.save_config_async = AsyncMock(side_effect=save_config_async)
-    lifecycle = AstrBotCoreLifecycle.__new__(AstrBotCoreLifecycle)
-    lifecycle.db = SimpleNamespace()
-    lifecycle.services = SimpleNamespace(catalogs=RuntimeCatalogs())
-    lifecycle.astrbot_config_mgr = SimpleNamespace(confs={"default": migrated_config})
-
-    await lifecycle._migrate_legacy_builtin_command_switch()
-
-    assert toggled == [("builtin.help", False)]
-    assert "disable_builtin_commands" not in migrated_config
-    migrated_config.save_config_async.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_legacy_builtin_command_switch_does_not_toggle_when_save_is_superseded(
-    monkeypatch,
-):
-    commands = [
-        {
-            "handler_full_name": "builtin.help",
-            "module_path": "astrbot.builtin_stars.builtin_commands.main",
-            "sub_commands": [],
-        }
-    ]
-    toggled = []
-
-    async def fake_list_commands(_db, _handlers):
-        return commands
-
-    async def fake_toggle_command(_db, _handlers, handler_full_name, enabled):
-        toggled.append((handler_full_name, enabled))
-
-    monkeypatch.setattr("astrbot.core.core_lifecycle.list_commands", fake_list_commands)
-    monkeypatch.setattr(
-        "astrbot.core.core_lifecycle.toggle_command", fake_toggle_command
-    )
-
-    class MigratedConfig(dict):
-        pass
-
-    migrated_config = MigratedConfig(disable_builtin_commands=True)
-    migrated_config.save_config_async = AsyncMock(return_value=False)
-    lifecycle = AstrBotCoreLifecycle.__new__(AstrBotCoreLifecycle)
-    lifecycle.db = SimpleNamespace()
-    lifecycle.services = SimpleNamespace(catalogs=RuntimeCatalogs())
-    lifecycle.astrbot_config_mgr = SimpleNamespace(confs={"default": migrated_config})
-
-    with pytest.raises(RuntimeError, match="migration was superseded"):
-        await lifecycle._migrate_legacy_builtin_command_switch()
-
-    assert toggled == []
-    migrated_config.save_config_async.assert_awaited_once()
 
 
 @pytest.mark.asyncio

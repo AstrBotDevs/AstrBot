@@ -292,6 +292,8 @@ class FunctionToolManager:
         func_args: list[dict],
         desc: str,
         handler: Callable[..., Awaitable[Any] | AsyncGenerator[Any]],
+        *,
+        required_actions: tuple[str, ...] = (),
     ) -> FunctionTool:
         params = {
             "type": "object",  # hard-coded here
@@ -306,6 +308,7 @@ class FunctionToolManager:
             parameters=params,
             description=desc,
             handler=handler,
+            required_actions=required_actions,
         )
 
     def add_tool(

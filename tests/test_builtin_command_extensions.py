@@ -23,6 +23,7 @@ from astrbot.core.provider.entities import ProviderType
 from astrbot.core.runtime_catalogs import RuntimeCatalogs
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
+from astrbot.core.star.filter.permission import ActionPermissionFilter
 from astrbot.core.star.register.star_handler import collect_plugin_module_declarations
 from astrbot.core.star.star import StarMetadata
 from astrbot.core.star.star_handler import (
@@ -170,8 +171,7 @@ async def test_admin_list_reports_authorization_bindings():
     event = DummyEvent(message_str="admin list")
     await command.list_admins(event)
     assert _plain_text(event.result) == (
-        "✅ Authorization bindings:\n"
-        "- im:napcat:bot:42: session_admin (session)"
+        "✅ Authorization bindings:\n- im:napcat:bot:42: session_admin (session)"
     )
     authz.list_bindings.assert_awaited_once_with(event)
 
@@ -761,6 +761,40 @@ def test_builtin_command_names_follow_grouped_cli_conventions():
     assert list_param.option.names == ("--page", "-p")
     assert history_param.default == 1
     assert list_param.default == 1
+
+
+def test_non_public_builtin_commands_declare_the_planned_actions():
+    from astrbot.builtin_stars.builtin_commands import main as builtin_commands_main
+
+    declarations = collect_plugin_module_declarations(builtin_commands_main)
+    handlers = materialize_handler_declarations(list(declarations.handlers))
+    actions = {
+        handler.handler_name: next(
+            (
+                filter_ref.action
+                for filter_ref in handler.event_filters
+                if isinstance(filter_ref, ActionPermissionFilter)
+            ),
+            None,
+        )
+        for handler in handlers
+    }
+
+    assert {
+        "sid": "session.read",
+        "stop": "session.manage",
+        "new_conv": "session.manage",
+        "stats": "session.read",
+        "history": "session.read",
+        "convs": "session.read",
+        "switch": "session.manage",
+        "rename": "session.manage",
+        "set_variable": "session.manage",
+        "unset_variable": "session.manage",
+        "plugin_ls": "extension.read",
+        "plugin_help": "extension.read",
+    }.items() <= actions.items()
+    assert actions["groupnew"] is None
 
 
 def test_normalized_builtin_paths_resolve_and_legacy_subcommands_do_not():

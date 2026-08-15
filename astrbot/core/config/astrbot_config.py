@@ -337,11 +337,6 @@ class AstrBotConfig(dict):
         with self._save_state_lock:
             if replace_config:
                 self.update(replace_config)
-            # Retired permission fields must not be persisted again when a
-            # stale Dashboard client posts an old configuration snapshot.
-            # They never participate in the current authorization model.
-            self.pop("admins_id", None)
-            self.pop("tool_permissions", None)
             snapshot = copy.deepcopy(dict(self))
             revision = self._save_revision + 1
             object.__setattr__(self, "_save_revision", revision)

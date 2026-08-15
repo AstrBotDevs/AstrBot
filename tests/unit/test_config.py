@@ -143,20 +143,6 @@ class TestAstrBotConfigLoad:
         assert hasattr(config, "first_deploy")
         assert config.first_deploy is True
 
-    @pytest.mark.asyncio
-    async def test_save_discards_retired_admin_ids(
-        self, temp_config_path, minimal_default_config
-    ):
-        config = AstrBotConfig(
-            config_path=temp_config_path, default_config=minimal_default_config
-        )
-
-        await config.save_config_async({**config, "admins_id": ["stale-admin"]})
-
-        assert "admins_id" not in config
-        with open(temp_config_path, encoding="utf-8-sig") as file:
-            assert "admins_id" not in json.load(file)
-
     def test_init_with_schema(self, temp_config_path):
         """Test initialization with schema."""
         schema = {

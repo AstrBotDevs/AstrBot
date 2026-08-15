@@ -39,7 +39,6 @@ from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryMana
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.runtime_services import RuntimeServices
 from astrbot.core.skills.skill_manager import SkillManager
-from astrbot.core.star.command_management import list_commands, toggle_command
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
@@ -520,8 +519,6 @@ class AstrBotCoreLifecycle:
             skill_manager,
             self.services.catalogs.plugins,
         )
-        await self._migrate_legacy_builtin_command_switch()
-
         # 根据配置实例化各个 Provider
         self._default_chat_provider_warning_emitted = False
         self._register_cleanup("provider manager", self.provider_manager.terminate)
@@ -614,51 +611,6 @@ class AstrBotCoreLifecycle:
             start_time=self.start_time,
             updater=self.astrbot_updator,
         )
-
-    async def _migrate_legacy_builtin_command_switch(self) -> None:
-        """Migrate the removed global builtin-command flag into command records."""
-        config_manager = self.astrbot_config_mgr
-        if config_manager is None:
-            raise RuntimeError("Configuration manager is not initialized")
-        configs_to_migrate = [
-            config
-            for config in config_manager.confs.values()
-            if config.get("disable_builtin_commands") is True
-        ]
-        if not configs_to_migrate:
-            return
-
-        # Persist removal of the legacy switch before mutating the command
-        # database. A superseded configuration must not disable commands from
-        # a stale startup snapshot.
-        for config in configs_to_migrate:
-            next_config = dict(config)
-            next_config.pop("disable_builtin_commands", None)
-            committed = await config.save_config_async(next_config)
-            if not committed:
-                raise RuntimeError(
-                    "Builtin command migration was superseded by a newer "
-                    "configuration update."
-                )
-
-        commands = await list_commands(self.db, self.services.catalogs.handlers)
-        pending = list(commands)
-        while pending:
-            command = pending.pop()
-            pending.extend(command.get("sub_commands", []))
-            if command.get(
-                "module_path"
-            ) == "astrbot.builtin_stars.builtin_commands.main" and isinstance(
-                command.get("handler_full_name"), str
-            ):
-                await toggle_command(
-                    self.db,
-                    self.services.catalogs.handlers,
-                    command["handler_full_name"],
-                    False,
-                )
-
-        logger.info("Migrated disable_builtin_commands to per-command settings.")
 
     def _load(self) -> None:
         """加载事件总线和任务并初始化."""

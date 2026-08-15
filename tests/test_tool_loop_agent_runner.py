@@ -1439,12 +1439,13 @@ async def test_stop_interrupts_pending_regular_tool(mock_hooks, tmp_path):
     tool_state = BlockingToolState()
     event = MockEvent("webchat:FriendMessage:webchat!user!session", "user")
     runtime = SimpleNamespace()
-    attach_authorized_tool_context(event, runtime, "tool.function")
+    attach_authorized_tool_context(event, runtime, "session.read")
     tool = FunctionTool(
         name="long_tool",
         description="A long-running test tool",
         parameters={"type": "object", "properties": {"query": {"type": "string"}}},
         handler=tool_state.handler,
+        required_actions=("session.read",),
     )
     provider = MockToolCallProvider(tool.name, {"query": "slow"})
     request = ProviderRequest(

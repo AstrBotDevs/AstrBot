@@ -17,11 +17,7 @@ from ..filter.command import CommandFilter
 from ..filter.command_group import CommandGroupFilter
 from ..filter.custom_filter import CustomFilterAnd, CustomFilterOr
 from ..filter.event_message_type import EventMessageType, EventMessageTypeFilter
-from ..filter.permission import (
-    ActionPermissionFilter,
-    PermissionType,
-    PermissionTypeFilter,
-)
+from ..filter.permission import ActionPermissionFilter
 from ..filter.platform_adapter_type import (
     PlatformAdapterType,
     PlatformAdapterTypeFilter,
@@ -315,31 +311,6 @@ def register_regex(regex: str | re.Pattern, **kwargs):
     return decorator
 
 
-def register_permission_type(
-    permission_type: PermissionType, raise_error: bool = True, **kwargs
-):
-    """注册一个 PermissionType
-
-    Args:
-        permission_type: PermissionType
-        raise_error: 如果没有权限，是否抛出错误到消息平台，并且停止事件传播。默认为 True
-
-    """
-
-    def decorator(awaitable):
-        handler_md = get_handler_declaration(
-            awaitable,
-            EventType.AdapterMessageEvent,
-            **kwargs,
-        )
-        handler_md.event_filters.append(
-            PermissionTypeFilter(permission_type, raise_error),
-        )
-        return awaitable
-
-    return decorator
-
-
 def register_permission(action: str, raise_error: bool = True, **kwargs):
     """Declare the stable action required by a command or event handler."""
 
@@ -620,6 +591,7 @@ class FunctionToolDeclaration:
     handler: Callable[..., Any]
     handler_declaration: HandlerDeclaration | None = None
     handoff_name: str | None = None
+    required_actions: tuple[str, ...] = ()
 
     @property
     def module_path(self) -> str:
@@ -679,6 +651,11 @@ def register_llm_tool(name: str | None = None, **kwargs):
     """
     name_ = name
     registering_agent = kwargs.pop("registering_agent", None)
+    required_actions = kwargs.pop("required_actions", ())
+    if not isinstance(required_actions, tuple) or not all(
+        isinstance(action, str) and action for action in required_actions
+    ):
+        raise ValueError("LLM tool required_actions must be a tuple of action IDs")
 
     def decorator(
         awaitable: Callable[
@@ -742,6 +719,7 @@ def register_llm_tool(name: str | None = None, **kwargs):
                 if isinstance(registering_agent, RegisteringAgent)
                 else None
             ),
+            required_actions=required_actions,
         )
         existing = tuple(getattr(awaitable, _FUNCTION_TOOL_DECLARATIONS_ATTR, ()))
         setattr(

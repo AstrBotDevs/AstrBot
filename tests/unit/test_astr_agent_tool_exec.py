@@ -40,7 +40,9 @@ def _build_run_context(message_components: list[object] | None = None):
     authorization = SimpleNamespace(
         authorize=AsyncMock(return_value=SimpleNamespace(allowed=True))
     )
-    ctx = SimpleNamespace(event=event, context=SimpleNamespace(authorization=authorization))
+    ctx = SimpleNamespace(
+        event=event, context=SimpleNamespace(authorization=authorization)
+    )
     return ContextWrapper(context=ctx)
 
 
@@ -86,6 +88,7 @@ async def test_background_tool_tasks_are_owned_by_the_execution_context(
         description="run in the background",
         parameters={"type": "object", "properties": {}},
         is_background_task=True,
+        required_actions=("session.read",),
     )
     first_tasks: set[asyncio.Task] = set()
     second_tasks: set[asyncio.Task] = set()
@@ -102,9 +105,7 @@ async def test_background_tool_tasks_are_owned_by_the_execution_context(
                 context=SimpleNamespace(
                     **vars(execution_context),
                     authorization=SimpleNamespace(
-                        authorize=AsyncMock(
-                            return_value=SimpleNamespace(allowed=True)
-                        )
+                        authorize=AsyncMock(return_value=SimpleNamespace(allowed=True))
                     ),
                 ),
             )

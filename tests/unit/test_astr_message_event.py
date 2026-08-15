@@ -79,7 +79,7 @@ class TestAstrMessageEventInit:
     def test_init_basic(self, astr_message_event):
         """Test basic AstrMessageEvent initialization."""
         assert astr_message_event.message_str == "Hello world"
-        assert astr_message_event.role == "member"
+        assert astr_message_event.platform_member_role == "member"
         assert astr_message_event.is_wake is False
         assert astr_message_event.is_at_or_wake_command is False
         assert astr_message_event._extras == {}
@@ -576,7 +576,7 @@ class TestIsAdmin:
 
     def test_is_admin_does_not_promote_platform_role(self, astr_message_event):
         """Platform admin facts never become AstrBot administrator status."""
-        astr_message_event.role = "admin"
+        astr_message_event.set_platform_member_role("admin", source="adapter")
         assert astr_message_event.is_admin() is False
 
 

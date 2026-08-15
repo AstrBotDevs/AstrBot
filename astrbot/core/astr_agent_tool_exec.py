@@ -105,7 +105,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             and all(isinstance(action, str) and action for action in declared)
         ):
             return declared
-        return ("tool.function",)
+        return ()
 
     @classmethod
     async def _authorize_execution(
@@ -130,7 +130,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             str(getattr(tool, "name", "unknown")),
             config_id=event.resource.config_id,
         )
-        for action in cls._required_actions(tool):
+        required_actions = cls._required_actions(tool)
+        if not required_actions:
+            return "error: Permission denied. Tool action is not declared."
+        for action in required_actions:
             decision = await authorization.authorize(
                 event.subject, action, resource, event.auth_context
             )

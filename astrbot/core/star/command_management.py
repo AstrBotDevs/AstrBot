@@ -7,11 +7,7 @@ from astrbot.core.db.po import CommandConfig
 from astrbot.core.db.protocols import CommandStore
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
-from astrbot.core.star.filter.permission import (
-    ActionPermissionFilter,
-    PermissionType,
-    PermissionTypeFilter,
-)
+from astrbot.core.star.filter.permission import ActionPermissionFilter
 from astrbot.core.star.star_handler import HandlerRegistry, StarHandlerMetadata
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
@@ -39,7 +35,7 @@ class CommandDescriptor:
     signature: str = ""
     display_signature: str = ""
     aliases: list[str] = field(default_factory=list)
-    permission: str = "everyone"
+    action: str | None = None
     enabled: bool = True
     is_group: bool = False
     is_sub_command: bool = False
@@ -195,15 +191,12 @@ async def update_command_permission(
     preferences: SharedPreferences,
     handler_registry: HandlerRegistry,
     handler_full_name: str,
-    permission_type: str,
+    action: str,
 ) -> CommandDescriptor:
     descriptor = _build_descriptor_by_full_name(handler_registry, handler_full_name)
     if not descriptor:
         raise ValueError("指定的处理函数不存在或不是指令。")
 
-    action = {"admin": "session.manage", "member": "session.read"}.get(
-        permission_type, permission_type
-    )
     if not action or "." not in action:
         raise ValueError("Permission must be a stable authorization action.")
 
@@ -232,11 +225,6 @@ async def update_command_permission(
             break
 
     if not found_permission_filter:
-        handler.event_filters = [
-            filter_
-            for filter_ in handler.event_filters
-            if not isinstance(filter_, PermissionTypeFilter)
-        ]
         handler.event_filters.insert(0, ActionPermissionFilter(action))
 
     # Re-build descriptor to reflect changes
@@ -417,7 +405,7 @@ def _build_descriptor(
             include_aliases=True,
         ),
         aliases=sorted(getattr(filter_ref, "alias", set())),
-        permission=_determine_permission(handler),
+        action=_determine_action(handler),
         enabled=handler.enabled,
         is_group=isinstance(filter_ref, CommandGroupFilter),
         is_sub_command=is_sub_command,
@@ -445,17 +433,11 @@ def _locate_primary_filter(
     return None
 
 
-def _determine_permission(handler: StarHandlerMetadata) -> str:
+def _determine_action(handler: StarHandlerMetadata) -> str | None:
     for filter_ref in handler.event_filters:
         if isinstance(filter_ref, ActionPermissionFilter):
             return filter_ref.action
-        if isinstance(filter_ref, PermissionTypeFilter):
-            return (
-                "session.manage"
-                if filter_ref.permission_type == PermissionType.ADMIN
-                else "session.read"
-            )
-    return "everyone"
+    return None
 
 
 def _resolve_group_parent_signature(
@@ -674,7 +656,7 @@ def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:
         "signature": desc.signature,
         "display_signature": desc.display_signature,
         "aliases": desc.aliases,
-        "permission": desc.permission,
+        "action": desc.action,
         "enabled": desc.enabled,
         "is_group": desc.is_group,
         "has_conflict": desc.has_conflict,

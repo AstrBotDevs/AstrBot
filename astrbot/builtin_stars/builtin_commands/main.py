@@ -44,6 +44,7 @@ class Main(star.Star):
     def session(self) -> None:
         """Manage the current message session"""
 
+    @filter.permission("session.read")
     @session.command("info")
     async def sid(self, event: AstrMessageEvent) -> None:
         """Show IDs and metadata for the current session"""
@@ -71,21 +72,25 @@ class Main(star.Star):
     def task(self) -> None:
         """Manage running tasks"""
 
+    @filter.permission("session.manage")
     @task.command("stop")
     async def stop(self, message: AstrMessageEvent) -> None:
         """Stop running tasks in the current session"""
         await self.conversation_c.stop(message)
 
+    @filter.permission("session.manage")
     @conversation.command("create")
     async def new_conv(self, message: AstrMessageEvent) -> None:
         """Create new conversation"""
         await self.conversation_c.create(message)
 
+    @filter.permission("session.read")
     @conversation.command("stats")
     async def stats(self, message: AstrMessageEvent) -> None:
         """Show token usage statistics for the current conversation"""
         await self.conversation_c.stats(message)
 
+    @filter.permission("session.read")
     @conversation.command("history")
     async def history(
         self,
@@ -95,6 +100,7 @@ class Main(star.Star):
         """Show conversation history"""
         await self.conversation_c.history(event, page)
 
+    @filter.permission("session.read")
     @conversation.command("list")
     async def convs(
         self,
@@ -104,17 +110,18 @@ class Main(star.Star):
         """List conversations"""
         await self.conversation_c.list_conversations(event, page)
 
-    @filter.permission("session.assign")
     @conversation.command("create-for")
     async def groupnew(self, event: AstrMessageEvent, session_id: str) -> None:
         """Create a conversation for a target group session"""
         await self.conversation_c.create_for(event, session_id)
 
+    @filter.permission("session.manage")
     @conversation.command("switch")
     async def switch(self, event: AstrMessageEvent, index: int) -> None:
         """Switch to a listed conversation"""
         await self.conversation_c.switch(event, index)
 
+    @filter.permission("session.manage")
     @conversation.command("rename")
     async def rename(
         self,
@@ -184,11 +191,13 @@ class Main(star.Star):
     def variable(self) -> None:
         """Manage session variables"""
 
+    @filter.permission("session.manage")
     @variable.command("set")
     async def set_variable(self, event: AstrMessageEvent, key: str, value: str) -> None:
         """Set session variable"""
         await self.variable_c.set_variable(event, key, value)
 
+    @filter.permission("session.manage")
     @variable.command("unset")
     async def unset_variable(self, event: AstrMessageEvent, key: str) -> None:
         """Unset session variable"""
@@ -278,6 +287,7 @@ class Main(star.Star):
     def plugin(self) -> None:
         """Plugin management"""
 
+    @filter.permission("extension.read")
     @plugin.command("list")
     async def plugin_ls(self, event: AstrMessageEvent) -> None:
         """List loaded plugins"""
@@ -301,6 +311,7 @@ class Main(star.Star):
         """Install a plugin"""
         await self.plugin_c.install(event, repository_url)
 
+    @filter.permission("extension.read")
     @plugin.command("show")
     async def plugin_help(self, event: AstrMessageEvent, plugin_name: str) -> None:
         """Show plugin help"""
