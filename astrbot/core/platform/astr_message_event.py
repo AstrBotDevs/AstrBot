@@ -8,6 +8,8 @@ from collections.abc import AsyncGenerator
 from time import time
 from typing import Any
 
+from deprecated import deprecated
+
 from astrbot import logger
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
@@ -301,9 +303,11 @@ class AstrMessageEvent(abc.ABC):
         默认实现为空，由具体平台按需重写。
         """
 
+    @deprecated(version="3.5.18", reason="No longer invoked by the message scheduler.")
     async def _pre_send(self) -> None:
         """调度器会在执行 send() 前调用该方法 deprecated in v3.5.18"""
 
+    @deprecated(version="3.5.18", reason="No longer invoked by the message scheduler.")
     async def _post_send(self) -> None:
         """调度器会在执行 send() 后调用该方法 deprecated in v3.5.18"""
 

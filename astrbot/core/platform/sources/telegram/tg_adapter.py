@@ -628,17 +628,18 @@ class TelegramPlatformAdapter(Platform):
 
         elif update.message.sticker:
             # 将sticker当作图片处理
-            file = await update.message.sticker.get_file()
-            file_path = file.file_path
-            if file_path is None:
-                logger.warning(
-                    "Telegram sticker file_path is None, cannot save the file."
-                )
+            sticker = update.message.sticker
+            if sticker.is_animated or sticker.is_video:
+                # .tgs/.webm stickers are not bitmaps; use the static thumbnail.
+                file = await sticker.thumbnail.get_file() if sticker.thumbnail else None
             else:
-                temp_path = await self._download_to_temp(file_path)
-                message.message.append(Comp.Image(file=temp_path, url=temp_path))
-            if update.message.sticker.emoji:
-                sticker_text = f"Sticker: {update.message.sticker.emoji}"
+                file = await sticker.get_file()
+            if file:
+                message.message.append(
+                    Comp.Image(file=file.file_path, url=file.file_path)
+                )
+            if sticker.emoji:
+                sticker_text = f"Sticker: {sticker.emoji}"
                 message.message_str = sticker_text
                 message.message.append(Comp.Plain(sticker_text))
 
@@ -669,6 +670,17 @@ class TelegramPlatformAdapter(Platform):
                 temp_path = await self._download_to_temp(file_path)
                 message.message.append(Comp.Video(file=temp_path, path=temp_path))
                 _apply_caption()
+
+        elif update.message.video_note:
+            # Video notes carry no file_name and cannot have a caption.
+            file = await update.message.video_note.get_file()
+            file_path = file.file_path
+            if file_path is None:
+                logger.warning(
+                    "Telegram video note file_path is None, cannot save the file.",
+                )
+            else:
+                message.message.append(Comp.Video(file=file_path, path=file_path))
 
         return message
 

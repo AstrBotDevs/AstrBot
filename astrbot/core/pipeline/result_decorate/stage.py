@@ -267,8 +267,10 @@ class ResultDecorateStage(Stage):
                     result.chain = new_chain
 
             # TTS
-            tts_provider = self.ctx.plugin_manager.context.get_using_tts_provider(
-                event.unified_msg_origin,
+            tts_provider = (
+                await self.ctx.plugin_manager.context.get_using_tts_provider_async(
+                    event.unified_msg_origin,
+                )
             )
 
             should_tts = (
@@ -323,8 +325,6 @@ class ResultDecorateStage(Stage):
                                 )
                                 new_chain.append(comp)
                                 continue
-
-                            event.track_temporary_local_file(audio_path)
 
                             use_file_service = self.ctx.astrbot_config[
                                 "provider_tts_settings"

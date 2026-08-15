@@ -64,7 +64,20 @@
                                 :class="{ 'system-config-group--with-cleanup': group.key === 'tempStorage' }"
                                 @focusout.capture="scheduleSystemConfigAutoSave"
                             >
-                                <div class="system-config-group__title">{{ group.title }}</div>
+                                <div class="system-config-group__heading">
+                                    <div class="system-config-group__title">{{ group.title }}</div>
+                                    <div
+                                        v-if="group.key === 'runtime' && timezoneTimePreview"
+                                        class="timezone-time-preview"
+                                    >
+                                        <span
+                                            class="timezone-time-preview__item"
+                                        >
+                                            {{ tm('systemConfig.timePreview.label') }} ·
+                                            {{ timezoneTimePreview.offsetLabel }} {{ timezoneTimePreview.localTime }}
+                                        </span>
+                                    </div>
+                                </div>
                                 <AstrBotConfigV4
                                     :metadata="group.metadata"
                                     :iterable="systemConfigData"
@@ -309,17 +322,62 @@
                                     </v-alert>
 
                                     <div class="text-caption text-medium-emphasis mb-1">{{ tm('apiKey.scopes') }}</div>
-                                    <v-chip-group v-model="newApiKeyScopes" multiple class="mb-3">
-                                        <v-chip
+                                    <div class="api-key-scope-list mb-3">
+                                        <div
                                             v-for="scope in availableScopes"
                                             :key="scope.value"
-                                            :value="scope.value"
-                                            :color="newApiKeyScopes.includes(scope.value) ? 'primary' : undefined"
-                                            :variant="newApiKeyScopes.includes(scope.value) ? 'flat' : 'tonal'"
+                                            class="api-key-scope-item"
                                         >
-                                            {{ scope.label }}
-                                        </v-chip>
-                                    </v-chip-group>
+                                            <v-checkbox
+                                                v-model="newApiKeyScopes"
+                                                :value="scope.value"
+                                                density="compact"
+                                                hide-details
+                                                color="primary"
+                                            >
+                                                <template #label>
+                                                    <div class="api-key-scope-label">
+                                                        <code>{{ scope.label }}</code>
+                                                        <span>{{ tm(scope.descriptionKey) }}</span>
+                                                    </div>
+                                                </template>
+                                            </v-checkbox>
+                                            <div
+                                                v-if="scope.children?.length && newApiKeyScopes.includes(scope.value)"
+                                                class="api-key-subscope-list"
+                                            >
+                                                <div class="api-key-subscope-heading">
+                                                    {{ tm('apiKey.sensitiveSubscope') }}
+                                                </div>
+                                                <v-checkbox
+                                                    v-for="child in scope.children"
+                                                    :key="child.value"
+                                                    v-model="newApiKeyScopes"
+                                                    :value="child.value"
+                                                    density="compact"
+                                                    hide-details
+                                                    color="warning"
+                                                >
+                                                    <template #label>
+                                                        <div class="api-key-scope-label">
+                                                            <code>{{ child.label }}</code>
+                                                            <span>{{ tm(child.descriptionKey) }}</span>
+                                                        </div>
+                                                    </template>
+                                                </v-checkbox>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <v-alert
+                                        v-if="newApiKeyScopes.includes('chat:admin')"
+                                        type="warning"
+                                        variant="tonal"
+                                        density="compact"
+                                        class="mb-3"
+                                    >
+                                        {{ tm('apiKey.chatAdminWarning') }}
+                                    </v-alert>
 
                                     <v-alert v-if="createdApiKeyPlaintext" type="warning" variant="tonal" class="mb-4">
                                         <div class="d-flex align-center justify-space-between flex-wrap">
@@ -514,7 +572,7 @@ const apiKeys = ref([]);
 const apiKeyCreating = ref(false);
 const newApiKeyName = ref('');
 const newApiKeyExpiresInDays = ref(30);
-const newApiKeyScopes = ref(['bot', 'provider', 'im', 'config', 'chat', 'file']);
+const newApiKeyScopes = ref(['bot', 'provider', 'im', 'chat', 'file']);
 const createdApiKeyPlaintext = ref('');
 const systemConfigData = ref({});
 const systemConfigMetadata = ref({});
@@ -528,6 +586,11 @@ const configSave2faSaving = ref(false);
 const configSave2faRotationHint = ref('');
 const configSavePendingData = ref(null);
 const systemConfigAutoSaveTimer = ref(null);
+const serverUtcEpochMs = ref(null);
+const serverUtcOffsetMinutes = ref(null);
+const serverClockAnchorMs = ref(null);
+const serverClockTickMs = ref(null);
+const serverClockTimer = ref(null);
 const activeSettingsSection = ref('general');
 const changelogDialog = ref(false);
 
@@ -540,18 +603,44 @@ const apiKeyExpiryOptions = computed(() => [
 ]);
 
 const availableScopes = [
-    { value: 'bot', label: 'bot' },
-    { value: 'provider', label: 'provider' },
-    { value: 'persona', label: 'persona' },
-    { value: 'im', label: 'im' },
-    { value: 'config', label: 'config' },
-    { value: 'chat', label: 'chat' },
-    { value: 'data', label: 'data' },
-    { value: 'file', label: 'file' },
-    { value: 'plugin', label: 'plugin' },
-    { value: 'mcp', label: 'mcp' },
-    { value: 'skill', label: 'skill' }
+    { value: 'bot', label: 'bot', descriptionKey: 'apiKey.scopeDescriptions.bot' },
+    { value: 'provider', label: 'provider', descriptionKey: 'apiKey.scopeDescriptions.provider' },
+    { value: 'persona', label: 'persona', descriptionKey: 'apiKey.scopeDescriptions.persona' },
+    { value: 'im', label: 'im', descriptionKey: 'apiKey.scopeDescriptions.im' },
+    {
+        value: 'config',
+        label: 'config',
+        descriptionKey: 'apiKey.scopeDescriptions.config',
+        children: [
+            {
+                value: 'config:edit_admin',
+                label: 'edit_admin',
+                descriptionKey: 'apiKey.scopeDescriptions.editAdmin'
+            }
+        ]
+    },
+    {
+        value: 'chat',
+        label: 'chat',
+        descriptionKey: 'apiKey.scopeDescriptions.chat',
+        children: [
+            {
+                value: 'chat:admin',
+                label: 'admin',
+                descriptionKey: 'apiKey.scopeDescriptions.chatAdmin'
+            }
+        ]
+    },
+    { value: 'data', label: 'data', descriptionKey: 'apiKey.scopeDescriptions.data' },
+    { value: 'file', label: 'file', descriptionKey: 'apiKey.scopeDescriptions.file' },
+    { value: 'plugin', label: 'plugin', descriptionKey: 'apiKey.scopeDescriptions.plugin' },
+    { value: 'mcp', label: 'mcp', descriptionKey: 'apiKey.scopeDescriptions.mcp' },
+    { value: 'skill', label: 'skill', descriptionKey: 'apiKey.scopeDescriptions.skill' }
 ];
+const apiKeyScopeOrder = availableScopes.flatMap((scope) => [
+    scope.value,
+    ...(scope.children || []).map((child) => child.value)
+]);
 
 const settingsNavItems = computed(() => [
     { id: 'general', label: tm('sections.general.title'), icon: 'mdi mdi-tune-variant' },
@@ -606,11 +695,40 @@ const resourceItems = computed(() => [
 ]);
 
 const configIncludedScopes = ['bot', 'provider'];
+const sensitiveApiKeyScopes = ['config:edit_admin', 'chat:admin'];
 const previousApiKeyScopes = ref([...newApiKeyScopes.value]);
 
 const systemConfigHasChanges = computed(() => (
     JSON.stringify(systemConfigData.value || {}) !== systemConfigLastSavedSnapshot.value
 ));
+
+const timezoneTimePreview = computed(() => {
+    if (
+        serverUtcEpochMs.value === null ||
+        serverUtcOffsetMinutes.value === null ||
+        serverClockAnchorMs.value === null ||
+        serverClockTickMs.value === null
+    ) {
+        return null;
+    }
+
+    const localDate = new Date(
+        serverUtcEpochMs.value +
+            Math.max(0, serverClockTickMs.value - serverClockAnchorMs.value) +
+            serverUtcOffsetMinutes.value * 60_000
+    );
+    const localIsoTime = localDate.toISOString();
+    const absoluteOffset = Math.abs(serverUtcOffsetMinutes.value);
+    const offsetHours = Math.floor(absoluteOffset / 60);
+    const offsetMinutes = absoluteOffset % 60;
+    const offsetLabel = serverUtcOffsetMinutes.value === 0
+        ? 'UTC'
+        : `UTC${serverUtcOffsetMinutes.value > 0 ? '+' : '-'}${offsetHours}${offsetMinutes ? `:${String(offsetMinutes).padStart(2, '0')}` : ''}`;
+    return {
+        localTime: `${localIsoTime.slice(0, 4)}/${localIsoTime.slice(5, 7)}/${localIsoTime.slice(8, 10)} ${localIsoTime.slice(11, 16)}`,
+        offsetLabel
+    };
+});
 
 const systemConfigGroups = computed(() => {
     const systemSection = systemConfigMetadata.value?.system_group?.metadata?.system || {};
@@ -702,16 +820,21 @@ watch(
                     selectedScopes.add(scope);
                 }
             }
-
-            nextScopes = availableScopes
-                .map((scopeOption) => scopeOption.value)
-                .filter((scope) => selectedScopes.has(scope));
-            if (
-                nextScopes.length !== scopes.length
-                || nextScopes.some((scope, index) => scope !== scopes[index])
-            ) {
-                newApiKeyScopes.value = nextScopes;
+        }
+        for (const scopeOption of availableScopes) {
+            if (!selectedScopes.has(scopeOption.value)) {
+                for (const child of scopeOption.children || []) {
+                    selectedScopes.delete(child.value);
+                }
             }
+        }
+
+        nextScopes = apiKeyScopeOrder.filter((scope) => selectedScopes.has(scope));
+        if (
+            nextScopes.length !== scopes.length
+            || nextScopes.some((scope, index) => scope !== scopes[index])
+        ) {
+            newApiKeyScopes.value = nextScopes;
         }
         previousApiKeyScopes.value = [...nextScopes];
     },
@@ -743,6 +866,12 @@ const loadSystemConfig = async () => {
         }
         systemConfigData.value = res.data.data?.config || {};
         systemConfigMetadata.value = res.data.data?.metadata || {};
+        const parsedServerTime = Date.parse(res.data.data?.server_utc_time || '');
+        const parsedUtcOffset = Number(res.data.data?.server_utc_offset_minutes);
+        serverUtcEpochMs.value = Number.isNaN(parsedServerTime) ? null : parsedServerTime;
+        serverUtcOffsetMinutes.value = Number.isFinite(parsedUtcOffset) ? parsedUtcOffset : null;
+        serverClockAnchorMs.value = serverUtcEpochMs.value === null ? null : performance.now();
+        serverClockTickMs.value = serverClockAnchorMs.value;
         systemConfigLastSavedSnapshot.value = JSON.stringify(systemConfigData.value || {});
         systemConfigRestartRequired.value = false;
     } catch (error) {
@@ -787,6 +916,23 @@ const saveSystemConfig = async (configOverride = null, headers = {}, allow2faPro
         configSave2faError.value = '';
         systemConfigData.value = configPayload;
         systemConfigLastSavedSnapshot.value = JSON.stringify(configPayload);
+        serverUtcEpochMs.value = null;
+        serverUtcOffsetMinutes.value = null;
+        serverClockAnchorMs.value = null;
+        serverClockTickMs.value = null;
+        try {
+            const timeRes = await systemConfigApi.get();
+            if (timeRes.data.status === 'ok') {
+                const parsedServerTime = Date.parse(timeRes.data.data?.server_utc_time || '');
+                const parsedUtcOffset = Number(timeRes.data.data?.server_utc_offset_minutes);
+                serverUtcEpochMs.value = Number.isNaN(parsedServerTime) ? null : parsedServerTime;
+                serverUtcOffsetMinutes.value = Number.isFinite(parsedUtcOffset) ? parsedUtcOffset : null;
+                serverClockAnchorMs.value = serverUtcEpochMs.value === null ? null : performance.now();
+                serverClockTickMs.value = serverClockAnchorMs.value;
+            }
+        } catch {
+            // Keep the preview hidden until the backend time can be confirmed.
+        }
         systemConfigRestartRequired.value = true;
         showToast(res.data.message || tm('systemConfig.messages.saveSuccess'), 'success');
         return { success: true };
@@ -892,12 +1038,23 @@ const createApiKey = async () => {
             selectedScopeSet.add(scope);
         }
     }
-    const selectedScopes = availableScopes
-        .map((scope) => scope.value)
-        .filter((scope) => selectedScopeSet.has(scope));
+    const selectedScopes = apiKeyScopeOrder.filter((scope) => selectedScopeSet.has(scope));
 
     if (selectedScopes.length === 0) {
         showToast(tm('apiKey.messages.scopeRequired'), 'warning');
+        return;
+    }
+    const selectedSensitiveScopes = selectedScopes.filter((scope) => (
+        sensitiveApiKeyScopes.includes(scope)
+    ));
+    const confirmationMessage = selectedSensitiveScopes.length > 0
+        ? tm('apiKey.sensitiveCreateConfirm', {
+            scopes: selectedSensitiveScopes.join(', ')
+        })
+        : tm('apiKey.createConfirm', {
+            scopes: selectedScopes.join(', ')
+        });
+    if (!(await askForConfirmation(confirmationMessage, confirmDialog))) {
         return;
     }
     apiKeyCreating.value = true;
@@ -981,6 +1138,9 @@ const resetThemeColors = () => {
 
 onMounted(async () => {
     await Promise.all([loadApiKeys(), loadSystemConfig()]);
+    serverClockTimer.value = window.setInterval(() => {
+        serverClockTickMs.value = performance.now();
+    }, 1000);
     const hash = window.location.hash;
     if (hash.includes('settings-appearance')) {
         activeSettingsSection.value = 'appearance';
@@ -998,6 +1158,10 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+    if (serverClockTimer.value) {
+        clearInterval(serverClockTimer.value);
+        serverClockTimer.value = null;
+    }
     if (systemConfigAutoSaveTimer.value) {
         clearTimeout(systemConfigAutoSaveTimer.value);
         systemConfigAutoSaveTimer.value = null;
@@ -1243,13 +1407,40 @@ onUnmounted(() => {
     margin-bottom: 0;
 }
 
-.system-config-group__title {
+.system-config-group__heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
     margin-bottom: 12px;
+}
+
+.system-config-group__title {
     color: rgb(var(--v-theme-on-surface));
     font-size: 1.04rem;
     font-weight: 760;
     letter-spacing: 0;
     line-height: 1.32;
+}
+
+.timezone-time-preview {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 5px;
+    font-variant-numeric: tabular-nums;
+}
+
+.timezone-time-preview__item {
+    padding: 3px 7px;
+    border: 1px solid rgba(var(--v-theme-primary), 0.16);
+    border-radius: 6px;
+    color: rgb(var(--v-theme-primary));
+    background: rgba(var(--v-theme-primary), 0.055);
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.3;
+    white-space: nowrap;
 }
 
 .system-config-group :deep(.v-card) {
@@ -1408,9 +1599,58 @@ onUnmounted(() => {
     font-size: 0.84rem;
 }
 
-.api-key-panel :deep(.v-chip) {
-    height: 30px;
-    font-size: 0.8rem;
+.api-key-scope-list {
+    overflow: hidden;
+    border: 1px solid var(--settings-border);
+    border-radius: 10px;
+}
+
+.api-key-scope-item {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--settings-divider);
+}
+
+.api-key-scope-item:last-child {
+    border-bottom: 0;
+}
+
+.api-key-scope-item :deep(.v-selection-control) {
+    align-items: flex-start;
+}
+
+.api-key-scope-label {
+    display: grid;
+    gap: 2px;
+    padding: 3px 0;
+}
+
+.api-key-scope-label code {
+    width: fit-content;
+    color: rgb(var(--v-theme-on-surface));
+    font-weight: 650;
+}
+
+.api-key-scope-label span {
+    color: rgba(var(--v-theme-on-surface), 0.64);
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
+.api-key-subscope-list {
+    margin: 4px 0 4px 34px;
+    padding: 10px 12px;
+    border-left: 3px solid rgb(var(--v-theme-warning));
+    border-radius: 0 8px 8px 0;
+    background: rgba(var(--v-theme-warning), 0.07);
+}
+
+.api-key-subscope-heading {
+    margin-bottom: 2px;
+    color: rgb(var(--v-theme-warning));
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
 }
 
 .api-key-plain {
@@ -1597,6 +1837,15 @@ onUnmounted(() => {
     .color-controls :deep(.v-input) {
         flex: 1 1 120px;
         max-width: none;
+    }
+
+    .system-config-group__heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .timezone-time-preview {
+        justify-content: flex-start;
     }
 
     .system-config-group :deep(.config-row) {

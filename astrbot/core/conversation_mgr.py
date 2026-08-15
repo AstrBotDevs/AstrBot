@@ -7,6 +7,8 @@
 import json
 from collections.abc import Awaitable, Callable
 
+from deprecated import deprecated
+
 from astrbot.core import sp
 from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment
 from astrbot.core.db import BaseDatabase
@@ -304,6 +306,7 @@ class ConversationManager:
                 token_usage=token_usage,
             )
 
+    @deprecated(reason="Use update_conversation() with the title parameter instead.")
     async def update_conversation_title(
         self,
         unified_msg_origin: str,
@@ -326,6 +329,9 @@ class ConversationManager:
             title=title,
         )
 
+    @deprecated(
+        reason="Use update_conversation() with the persona_id parameter instead."
+    )
     async def update_conversation_persona_id(
         self,
         unified_msg_origin: str,

@@ -3,13 +3,13 @@ import base64
 import json
 import os
 import shutil
-import uuid
 from pathlib import Path, PurePosixPath
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import File, Image, Json, Plain, Record
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.datetime_utils import generate_timestamp_id
 from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
     detect_image_mime_type_async,
@@ -84,7 +84,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                     default_mime_type=None,
                 )
                 suffix = MEDIA_MIME_EXTENSIONS.get(mime_type or "", ".jpg")
-                filename = f"{str(uuid.uuid4())}{suffix}"
+                filename = f"{generate_timestamp_id()}{suffix}"
                 path = os.path.join(attachments_dir, filename)
                 await asyncio.to_thread(Path(path).write_bytes, image_bytes)
                 data = f"[IMAGE]{filename}"
@@ -101,7 +101,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                     return None
             elif isinstance(comp, Record):
                 # save record to local
-                filename = f"{str(uuid.uuid4())}.wav"
+                filename = f"{generate_timestamp_id()}.wav"
                 path = os.path.join(attachments_dir, filename)
                 record_base64 = await comp.convert_to_base64()
                 record_bytes = base64.b64decode(record_base64)
@@ -130,7 +130,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                 if original_name in {"", ".", ".."}:
                     original_name = os.path.basename(file_path) or "file"
                 ext = os.path.splitext(original_name)[1] or ""
-                filename = f"{uuid.uuid4()!s}{ext}"
+                filename = f"{generate_timestamp_id()}{ext}"
                 dest_path = os.path.join(attachments_dir, filename)
                 shutil.copy2(file_path, dest_path)
                 data = f"[FILE]{filename}|{original_name}"

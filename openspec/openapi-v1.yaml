@@ -8,8 +8,54 @@ info:
     JSON objects because their schemas are provided at runtime by template
     endpoints.
     Developer API keys currently support these scopes only: bot, provider,
-    persona, im, config, chat, data, file, plugin, mcp, skill. The config scope also
-    grants bot and provider access.
+    persona, im, config, chat, data, file, plugin, mcp, skill, plus the sensitive
+    config:edit_admin and chat:admin sub-scopes. The config scope also grants bot
+    and provider access, but no parent scope grants a sensitive sub-scope.
+x-astrbot-scope-definitions:
+  bot:
+    description: Manage bot and platform configurations.
+    description_zh: 管理机器人及平台配置。
+  provider:
+    description: Manage model providers and provider sources.
+    description_zh: 管理模型服务提供商和提供商源。
+  persona:
+    description: Manage personas and persona folders.
+    description_zh: 管理人格设定和人格文件夹。
+  im:
+    description: Send proactive IM messages and query bot or platform identifiers.
+    description_zh: 主动发送 IM 消息，并查询机器人或平台标识。
+  config:
+    description: Manage configuration profiles, system configuration, and shared configuration, excluding changes to `admins_id`.
+    description_zh: 管理配置文件、系统配置和通用配置，但不包含修改 `admins_id` 的能力。
+    includes: [bot, provider]
+  "config:edit_admin":
+    description: Allow a `config`-scoped key to change `admins_id`. This sub-scope must be granted explicitly.
+    description_zh: 允许具有 `config` 权限的 Key 修改 `admins_id`。该子权限必须显式授予。
+    parent: config
+    sensitive: true
+  chat:
+    description: Use chat capabilities and manage ChatUI sessions and projects.
+    description_zh: 调用对话能力，并管理 ChatUI 会话和项目。
+  "chat:admin":
+    description: Allow `username` to use a configured AstrBot administrator ID. This sub-scope must be granted explicitly.
+    description_zh: 允许 `username` 使用 AstrBot 中已配置的管理员 ID。该子权限必须显式授予。
+    parent: chat
+    sensitive: true
+  data:
+    description: Manage conversations and platform-session data.
+    description_zh: 管理对话记录和平台会话数据。
+  file:
+    description: Upload and download chat attachments.
+    description_zh: 上传和下载对话附件。
+  plugin:
+    description: Manage plugins, plugin configuration, plugin sources, and marketplace data.
+    description_zh: 管理插件、插件配置、插件源和插件市场数据。
+  mcp:
+    description: Manage MCP server configuration and provider synchronization.
+    description_zh: 管理 MCP 服务器配置和服务端同步。
+  skill:
+    description: Manage Skills, archives, files, and Shipyard Neo Skill workflows.
+    description_zh: 管理 Skills、Skill 压缩包、Skill 文件和 Shipyard Neo Skill 流程。
 servers:
   - url: http://localhost:6185
     description: Local AstrBot server
@@ -211,6 +257,7 @@ paths:
       summary: Replace the system configuration
       operationId: updateSystemConfig
       x-astrbot-scope: config
+      x-astrbot-sensitive-scopes: ["config:edit_admin"]
       requestBody:
         required: true
         content:
@@ -255,6 +302,7 @@ paths:
       summary: Create a configuration profile
       operationId: createConfigProfile
       x-astrbot-scope: config
+      x-astrbot-sensitive-scopes: ["config:edit_admin"]
       requestBody:
         required: true
         content:
@@ -281,6 +329,7 @@ paths:
       summary: Replace a configuration profile
       operationId: updateConfigProfileContent
       x-astrbot-scope: config
+      x-astrbot-sensitive-scopes: ["config:edit_admin"]
       parameters:
         - $ref: "#/components/parameters/ConfigId"
       requestBody:
@@ -386,7 +435,7 @@ paths:
       tags: [Bots]
       summary: Run a bot type registration flow action
       operationId: registerBotType
-      x-astrbot-scope: bot
+      x-astrbot-scope: config
       parameters:
         - name: bot_type
           in: path
@@ -1104,6 +1153,7 @@ paths:
       summary: Send a webchat message
       operationId: sendChatMessage
       x-astrbot-scope: chat
+      x-astrbot-sensitive-scopes: ["chat:admin"]
       requestBody:
         required: true
         content:
@@ -1121,6 +1171,7 @@ paths:
       operationId: openChatWebSocket
       x-websocket: true
       x-astrbot-scope: chat
+      x-astrbot-sensitive-scopes: ["chat:admin"]
       parameters:
         - name: api_key
           in: query
@@ -1334,7 +1385,7 @@ paths:
       tags: [Chat]
       summary: List chat-selectable configuration profiles
       operationId: listChatConfigs
-      x-astrbot-scope: config
+      x-astrbot-scope: chat
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -1694,7 +1745,7 @@ paths:
       tags: [Files]
       summary: Get a tokenized public file
       operationId: getTokenFile
-      x-astrbot-scope: file
+      security: []
       parameters:
         - name: file_token
           in: path
@@ -2366,7 +2417,7 @@ paths:
   /api/v1/plugins/validate/repo:
     post:
       tags: [Plugins]
-      summary: Validate a GitHub plugin repository before installation
+      summary: Validate a plugin repository before installation
       operationId: validatePluginRepo
       x-astrbot-scope: plugin
       requestBody:
@@ -2436,7 +2487,22 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/PluginGithubInstallRequest"
+              $ref: "#/components/schemas/PluginRepositoryInstallRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+  /api/v1/plugins/install/git:
+    post:
+      tags: [Plugins]
+      summary: Install a plugin with a shallow Git clone
+      operationId: installPluginFromGit
+      x-astrbot-scope: plugin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginRepositoryInstallRequest"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -2755,7 +2821,7 @@ paths:
       tags: [Commands]
       summary: List plugin commands
       operationId: listCommands
-      x-astrbot-scope: plugin
+      x-astrbot-scope: tool
       parameters:
         - name: config_id
           in: query
@@ -2770,7 +2836,7 @@ paths:
       tags: [Commands]
       summary: Update command enabled state, alias, or permission group
       operationId: updateCommand
-      x-astrbot-scope: plugin
+      x-astrbot-scope: tool
       parameters:
         - $ref: "#/components/parameters/CommandId"
       requestBody:
@@ -2788,7 +2854,7 @@ paths:
       tags: [Commands]
       summary: List command conflicts
       operationId: listCommandConflicts
-      x-astrbot-scope: plugin
+      x-astrbot-scope: tool
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -5294,8 +5360,8 @@ components:
           type: array
           items:
             type: string
-            enum: [bot, provider, persona, im, config, chat, data, file, plugin, mcp, skill]
-          example: [bot, provider, persona, im, config, chat, data, file, plugin, mcp, skill]
+            enum: [bot, provider, persona, im, config, "config:edit_admin", chat, "chat:admin", data, file, plugin, mcp, skill]
+          example: [bot, provider, persona, im, config, "config:edit_admin", chat, "chat:admin", data, file, plugin, mcp, skill]
         expires_at:
           type: string
           format: date-time
@@ -5451,7 +5517,7 @@ components:
       properties:
         username:
           type: string
-          description: Caller-declared WebChat sender/session owner. This value is used as the message sender identity and may participate in sender-ID-based command permission checks. Treat chat-scoped API keys as trusted backend credentials and map or validate usernames before accepting end-user input.
+          description: Caller-declared WebChat sender/session owner. Configured AstrBot administrator IDs require the chat:admin API key sub-scope.
         session_id:
           type: string
         conversation_id:
@@ -5583,8 +5649,10 @@ components:
         workspace_type:
           type: string
           enum: [session, project, custom]
+          description: Workspace mode. API key callers may use only session or project; project is the default.
         workspace_path:
           type: string
+          description: Dashboard-only custom workspace path. API key callers cannot set this field.
       additionalProperties: false
 
     MessagePart:
@@ -5675,18 +5743,18 @@ components:
           type: string
       additionalProperties: false
 
-    PluginGithubInstallRequest:
+    PluginRepositoryInstallRequest:
       type: object
       required: [repository]
       properties:
         repository:
           type: string
-          description: GitHub URL or owner/repository slug.
+          description: GitHub shorthand, HTTP(S), SSH, or SCP-style Git repository locator.
         ref:
           type: string
         download_url:
           type: string
-          description: Optional downloadable ZIP URL to use instead of GitHub archive resolution.
+          description: Optional downloadable ZIP URL to use instead of repository archive resolution.
         proxy:
           type: string
         ignore_version_check:

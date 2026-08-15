@@ -106,15 +106,24 @@ export type ChatProjectRequest = {
     title?: string;
     emoji?: string;
     description?: string;
+    /**
+     * Workspace mode. API key callers may use only session or project; project is the default.
+     */
     workspace_type?: 'session' | 'project' | 'custom';
+    /**
+     * Dashboard-only custom workspace path. API key callers cannot set this field.
+     */
     workspace_path?: string;
 };
 
+/**
+ * Workspace mode. API key callers may use only session or project; project is the default.
+ */
 export type workspace_type = 'session' | 'project' | 'custom';
 
 export type ChatRequest = {
     /**
-     * Caller-declared WebChat sender/session owner. This value is used as the message sender identity and may participate in sender-ID-based command permission checks. Treat chat-scoped API keys as trusted backend credentials and map or validate usernames before accepting end-user input.
+     * Caller-declared WebChat sender/session owner. Configured AstrBot administrator IDs require the chat:admin API key sub-scope.
      */
     username?: string;
     session_id?: string;
@@ -231,7 +240,7 @@ export type ConversationRef = {
 
 export type CreateApiKeyRequest = {
     name: string;
-    scopes?: Array<('bot' | 'provider' | 'persona' | 'im' | 'config' | 'chat' | 'data' | 'file' | 'plugin' | 'mcp' | 'skill')>;
+    scopes?: Array<('bot' | 'provider' | 'persona' | 'im' | 'config' | 'config:edit_admin' | 'chat' | 'chat:admin' | 'data' | 'file' | 'plugin' | 'mcp' | 'skill')>;
     expires_at?: string;
     expires_in_days?: number;
 };
@@ -496,14 +505,14 @@ export type PluginConfigFileDeleteRequest = {
     path: string;
 };
 
-export type PluginGithubInstallRequest = {
+export type PluginRepositoryInstallRequest = {
     /**
-     * GitHub URL or owner/repository slug.
+     * GitHub shorthand, HTTP(S), SSH, or SCP-style Git repository locator.
      */
     repository: string;
     ref?: string;
     /**
-     * Optional downloadable ZIP URL to use instead of GitHub archive resolution.
+     * Optional downloadable ZIP URL to use instead of repository archive resolution.
      */
     download_url?: string;
     proxy?: string;
@@ -2096,12 +2105,20 @@ export type ReloadFailedPluginResponse = (SuccessEnvelope);
 export type ReloadFailedPluginError = unknown;
 
 export type InstallPluginFromGithubData = {
-    body: PluginGithubInstallRequest;
+    body: PluginRepositoryInstallRequest;
 };
 
 export type InstallPluginFromGithubResponse = (SuccessEnvelope);
 
 export type InstallPluginFromGithubError = unknown;
+
+export type InstallPluginFromGitData = {
+    body: PluginRepositoryInstallRequest;
+};
+
+export type InstallPluginFromGitResponse = (SuccessEnvelope);
+
+export type InstallPluginFromGitError = unknown;
 
 export type InstallPluginFromUrlData = {
     body: PluginUrlInstallRequest;

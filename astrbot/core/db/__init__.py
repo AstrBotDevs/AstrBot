@@ -218,6 +218,7 @@ class BaseDatabase(abc.ABC):
         sender_id: str | None = None,
         sender_name: str | None = None,
         llm_checkpoint_id: str | None = None,
+        max_messages: int | None = None,
     ) -> PlatformMessageHistory:
         """Insert a new platform message history record."""
         ...
@@ -576,11 +577,11 @@ class BaseDatabase(abc.ABC):
     @abc.abstractmethod
     async def get_preferences(
         self,
-        scope: str,
+        scope: str | None = None,
         scope_id: str | None = None,
         key: str | None = None,
     ) -> list[Preference]:
-        """Get all preferences for a specific scope ID or key."""
+        """Get preferences, optionally filtered by scope, scope ID, or key."""
         ...
 
     @abc.abstractmethod
