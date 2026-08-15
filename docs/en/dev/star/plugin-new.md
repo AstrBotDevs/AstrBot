@@ -238,3 +238,8 @@ described in [Plugin Storage](./guides/storage).
 - Run Ruff formatting and checks before committing Python code.
 - Prefer contributing an extension to an existing plugin unless it is no
   longer maintained.
+- When a plugin directly draws on another project's design, feature ideas, or
+  implementation approach, acknowledge that source in the README and link to
+  the relevant project.
+- When using, modifying, or porting another project's code or assets, follow
+  its license and retain the required copyright and license notices.
