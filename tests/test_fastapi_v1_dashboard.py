@@ -55,6 +55,7 @@ from astrbot.dashboard.services.session_management_service import (
 from astrbot.dashboard.services.skills_service import SkillArchive, SkillsServiceError
 
 JWT_SECRET = "fastapi-v1-test-secret-with-32-bytes"
+TEST_DASHBOARD_ACCOUNT_ID = "fastapi-v1-dashboard-account"
 
 
 @dataclass
@@ -882,6 +883,11 @@ def asgi_app(fake_core_lifecycle, fake_db: FakeDb):
         db=fake_db,
         jwt_secret=JWT_SECRET,
     )
+
+    async def validate_dashboard_principal(principal) -> bool:
+        return principal.account_id == TEST_DASHBOARD_ACCOUNT_ID
+
+    app.state.services.auth.validate_dashboard_principal = validate_dashboard_principal
     return app
 
 
@@ -936,7 +942,10 @@ async def test_dashboard_shutdown_owns_update_service(asgi_app: FastAPI, monkeyp
 
 
 def _jwt_headers() -> dict[str, str]:
-    token = DashboardTokenValidator(JWT_SECRET).issue("fastapi-v1-test")
+    token = DashboardTokenValidator(JWT_SECRET).issue(
+        "fastapi-v1-test",
+        account_id=TEST_DASHBOARD_ACCOUNT_ID,
+    )
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -1001,7 +1010,10 @@ async def test_dashboard_unhandled_errors_use_the_standard_error_envelope(
 async def test_v1_scope_dependencies_accept_dashboard_cookie(
     asgi_client: httpx.AsyncClient,
 ):
-    token = DashboardTokenValidator(JWT_SECRET).issue("fastapi-v1-cookie-test")
+    token = DashboardTokenValidator(JWT_SECRET).issue(
+        "fastapi-v1-cookie-test",
+        account_id=TEST_DASHBOARD_ACCOUNT_ID,
+    )
 
     response = await asgi_client.get(
         "/api/v1/bots",
@@ -1012,6 +1024,20 @@ async def test_v1_scope_dependencies_accept_dashboard_cookie(
     data = response.json()
     assert data["status"] == "ok"
     assert isinstance(data["data"]["bots"], list)
+
+
+@pytest.mark.asyncio
+async def test_accountless_dashboard_session_is_rejected(
+    asgi_client: httpx.AsyncClient,
+):
+    token = DashboardTokenValidator(JWT_SECRET).issue("legacy-dashboard-user")
+
+    response = await asgi_client.get(
+        "/api/v1/bots",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -1051,7 +1077,7 @@ async def test_dashboard_session_claim_mismatch_is_rejected(
 ):
     validator = DashboardTokenValidator(JWT_SECRET)
     payload = jwt.decode(
-        validator.issue("fastapi-v1-test"),
+        validator.issue("fastapi-v1-test", account_id=TEST_DASHBOARD_ACCOUNT_ID),
         options={"verify_signature": False},
     )
     payload[claim] = value
@@ -1076,7 +1102,7 @@ async def test_dashboard_session_missing_required_claim_is_rejected(
 ):
     validator = DashboardTokenValidator(JWT_SECRET)
     payload = jwt.decode(
-        validator.issue("fastapi-v1-test"),
+        validator.issue("fastapi-v1-test", account_id=TEST_DASHBOARD_ACCOUNT_ID),
         options={"verify_signature": False},
     )
     del payload[missing_claim]
@@ -1093,8 +1119,12 @@ async def test_dashboard_session_missing_required_claim_is_rejected(
 def test_each_dashboard_login_token_has_a_distinct_session_id(asgi_app: FastAPI):
     validator = asgi_app.state.dashboard_token_validator
 
-    first = validator.validate(validator.issue("dashboard-user"))
-    second = validator.validate(validator.issue("dashboard-user"))
+    first = validator.validate(
+        validator.issue("dashboard-user", account_id=TEST_DASHBOARD_ACCOUNT_ID)
+    )
+    second = validator.validate(
+        validator.issue("dashboard-user", account_id=TEST_DASHBOARD_ACCOUNT_ID)
+    )
 
     assert first.sid != second.sid
     assert first.jti != second.jti
@@ -1104,7 +1134,10 @@ def test_each_dashboard_login_token_has_a_distinct_session_id(asgi_app: FastAPI)
 async def test_cookie_authenticated_mutation_rejects_untrusted_origins(
     asgi_client: httpx.AsyncClient,
 ):
-    token = DashboardTokenValidator(JWT_SECRET).issue("cookie-user")
+    token = DashboardTokenValidator(JWT_SECRET).issue(
+        "cookie-user",
+        account_id=TEST_DASHBOARD_ACCOUNT_ID,
+    )
     cookie = {"Cookie": f"{DASHBOARD_JWT_COOKIE_NAME}={token}"}
 
     missing = await asgi_client.post("/api/v1/auth/logout", headers=cookie)
@@ -1151,7 +1184,10 @@ async def test_cookie_csrf_uses_trusted_proxy_external_origin(
     astrbot_config = asgi_app.state.astrbot_config
     previous_dashboard_config = astrbot_config.get("dashboard")
     astrbot_config["dashboard"] = {"trust_proxy_headers": True}
-    token = DashboardTokenValidator(JWT_SECRET).issue("proxy-user")
+    token = DashboardTokenValidator(JWT_SECRET).issue(
+        "proxy-user",
+        account_id=TEST_DASHBOARD_ACCOUNT_ID,
+    )
     try:
         response = await asgi_client.post(
             "/api/v1/auth/logout",
@@ -1336,7 +1372,10 @@ async def test_v1_backup_download_requires_authorized_dashboard_bearer(
     service = asgi_app.state.services.backups
     service.backup_dir = str(tmp_path)
     (tmp_path / "backup.zip").write_bytes(b"backup")
-    valid_token = DashboardTokenValidator(JWT_SECRET).issue("backup-user")
+    valid_token = DashboardTokenValidator(JWT_SECRET).issue(
+        "backup-user",
+        account_id=TEST_DASHBOARD_ACCOUNT_ID,
+    )
 
     bearer = await asgi_client.get(
         "/api/v1/backups/backup.zip",
@@ -1361,7 +1400,10 @@ async def test_v1_backup_download_rejects_non_dashboard_credentials(
     service = asgi_app.state.services.backups
     service.backup_dir = str(tmp_path)
     (tmp_path / "backup.zip").write_bytes(b"backup")
-    valid_token = DashboardTokenValidator(JWT_SECRET).issue("backup-user")
+    valid_token = DashboardTokenValidator(JWT_SECRET).issue(
+        "backup-user",
+        account_id=TEST_DASHBOARD_ACCOUNT_ID,
+    )
     expired_payload = jwt.decode(valid_token, options={"verify_signature": False})
     expired_payload["exp"] = 0
     expired_token = jwt.encode(expired_payload, JWT_SECRET, algorithm="HS256")

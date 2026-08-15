@@ -1170,6 +1170,7 @@ async def test_auth_totp_setup_with_valid_code_returns_recovery_code(
 async def test_totp_rotation_is_scoped_to_the_authenticated_dashboard_session(
     app: FastAPI,
     core_lifecycle_td: AstrBotCoreLifecycle,
+    authenticated_header: dict,
 ):
     original_dashboard_config = copy.deepcopy(
         core_lifecycle_td.astrbot_config["dashboard"]
@@ -1185,8 +1186,19 @@ async def test_totp_rotation_is_scoped_to_the_authenticated_dashboard_session(
             "recovery_code_hash": "recovery-hash",
         }
         username = core_lifecycle_td.astrbot_config["dashboard"]["username"]
-        first_token = app.state.dashboard_token_validator.issue(username)
-        second_token = app.state.dashboard_token_validator.issue(username)
+        bootstrap_token = authenticated_header["Authorization"].split(" ", 1)[1]
+        account_id = app.state.dashboard_token_validator.validate(
+            bootstrap_token
+        ).account_id
+        assert account_id is not None
+        first_token = app.state.dashboard_token_validator.issue(
+            username,
+            account_id=account_id,
+        )
+        second_token = app.state.dashboard_token_validator.issue(
+            username,
+            account_id=account_id,
+        )
         first_headers = {"Authorization": f"Bearer {first_token}"}
         second_headers = {"Authorization": f"Bearer {second_token}"}
 

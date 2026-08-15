@@ -463,11 +463,7 @@ async def require_dashboard_user(request: Request) -> str:
         raise ApiError("Token 无效", status_code=401) from exc
     auth_service = getattr(request.app.state.services, "auth", None)
     validate_principal = getattr(auth_service, "validate_dashboard_principal", None)
-    if (
-        principal.account_id
-        and callable(validate_principal)
-        and not await validate_principal(principal)
-    ):
+    if callable(validate_principal) and not await validate_principal(principal):
         raise ApiError("Token 无效", status_code=401)
     if source == "cookie":
         _require_cookie_mutation_origin(request)
@@ -514,10 +510,8 @@ async def require_dashboard_session_principal(
     auth_service = getattr(request.app.state.services, "auth", None)
     validate_principal = getattr(auth_service, "validate_dashboard_principal", None)
     selected_principal = bearer_principal or cookie_principal
-    if (
-        selected_principal.account_id
-        and callable(validate_principal)
-        and not await validate_principal(selected_principal)
+    if callable(validate_principal) and not await validate_principal(
+        selected_principal
     ):
         raise ApiError("Unauthorized", status_code=401)
     # An explicit Bearer credential is the API authentication path.  Only a
@@ -609,11 +603,7 @@ async def require_scope(
 
     auth_service = getattr(request.app.state.services, "auth", None)
     validate_principal = getattr(auth_service, "validate_dashboard_principal", None)
-    if (
-        principal.account_id
-        and callable(validate_principal)
-        and not await validate_principal(principal)
-    ):
+    if callable(validate_principal) and not await validate_principal(principal):
         raise ApiError("Invalid token", status_code=401)
 
     if source == "cookie":
