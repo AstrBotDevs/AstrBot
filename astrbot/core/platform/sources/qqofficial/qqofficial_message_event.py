@@ -13,6 +13,15 @@ import botpy.errors
 import botpy.message
 import botpy.types
 import botpy.types.message
+from astrbot.api import logger
+from astrbot.api.event import AstrMessageEvent, MessageChain
+from astrbot.api.message_components import At, File, Image, Plain, Record, Video
+from astrbot.api.platform import AstrBotMessage, Group, PlatformMetadata
+from astrbot.core.platform.sources.qqofficial.qqofficial_chunked_upload import (
+    QQOFFICIAL_CHUNKED_UPLOAD_THRESHOLD,
+    QQOfficialChunkedUploader,
+)
+from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path, is_file_uri
 from botpy import Client
 from botpy.http import Route
 from botpy.types import message
@@ -24,16 +33,6 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
 )
-
-from astrbot.api import logger
-from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import File, Image, Plain, Record, Video
-from astrbot.api.platform import AstrBotMessage, Group, PlatformMetadata
-from astrbot.core.platform.sources.qqofficial.qqofficial_chunked_upload import (
-    QQOFFICIAL_CHUNKED_UPLOAD_THRESHOLD,
-    QQOfficialChunkedUploader,
-)
-from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path, is_file_uri
 
 
 class APIReturnNoneError(Exception):
@@ -234,6 +233,28 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         return str(ret_id) if ret_id is not None else None
 
     @staticmethod
+    def _get_mention_id(component: At) -> str | None:
+        qq = getattr(component, "qq", None)
+        if not qq:
+            return None
+        qq_id = str(qq)
+        return qq_id if qq_id != "all" else None
+
+    @classmethod
+    def _has_mention(cls, message: MessageChain) -> bool:
+        return any(
+            isinstance(component, At) and cls._get_mention_id(component) is not None
+            for component in message.chain
+        )
+
+    @staticmethod
+    def _set_media_payload(payload: dict, media: Media, plain_text: str) -> None:
+        payload["media"] = media
+        payload["msg_type"] = 7
+        payload.pop("markdown", None)
+        payload["content"] = plain_text or None
+
+    @staticmethod
     def _split_message_chain_by_media(message: MessageChain) -> list[MessageChain]:
         chunks: list[MessageChain] = []
         current_chain = []
@@ -339,9 +360,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         ):
             plain_text = plain_text + "\n"
 
-        # 根据消息链的 use_markdown_ 标记决定发送模式
+        # QQ only resolves <@openid> mentions in Markdown messages.
+        has_mention = self._has_mention(message_to_send)
         use_md = getattr(self.send_buffer, "use_markdown_", None)
-        if use_md is False:
+        if use_md is False and not has_mention:
             payload: dict = {
                 "content": plain_text,
                 "msg_type": 0,
@@ -371,10 +393,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         self.IMAGE_FILE_TYPE,
                         group_openid=source.group_openid,
                     )
-                    payload["media"] = media
-                    payload["msg_type"] = 7
-                    payload.pop("markdown", None)
-                    payload["content"] = plain_text or None
+                    self._set_media_payload(payload, media, plain_text)
                 if record_file_path:  # group record msg
                     media = await self.upload_group_and_c2c_media(
                         record_file_path,
@@ -382,10 +401,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         group_openid=source.group_openid,
                     )
                     if media:
-                        payload["media"] = media
-                        payload["msg_type"] = 7
-                        payload.pop("markdown", None)
-                        payload["content"] = plain_text or None
+                        self._set_media_payload(payload, media, plain_text)
                 if video_file_source:
                     media = await self.upload_group_and_c2c_media(
                         video_file_source,
@@ -393,10 +409,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         group_openid=source.group_openid,
                     )
                     if media:
-                        payload["media"] = media
-                        payload["msg_type"] = 7
-                        payload.pop("markdown", None)
-                        payload["content"] = plain_text or None
+                        self._set_media_payload(payload, media, plain_text)
                 if file_source:
                     media = await self.upload_group_and_c2c_media(
                         file_source,
@@ -405,10 +418,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         group_openid=source.group_openid,
                     )
                     if media:
-                        payload["media"] = media
-                        payload["msg_type"] = 7
-                        payload.pop("markdown", None)
-                        payload["content"] = plain_text or None
+                        self._set_media_payload(payload, media, plain_text)
                 ret = await self._send_with_markdown_fallback(
                     send_func=lambda retry_payload: self.bot.api.post_group_message(
                         group_openid=source.group_openid or "",
@@ -426,10 +436,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         self.IMAGE_FILE_TYPE,
                         openid=source.author.user_openid,
                     )
-                    payload["media"] = media
-                    payload["msg_type"] = 7
-                    payload.pop("markdown", None)
-                    payload["content"] = plain_text or None
+                    self._set_media_payload(payload, media, plain_text)
                 if record_file_path:  # c2c record
                     media = await self.upload_group_and_c2c_media(
                         record_file_path,
@@ -437,10 +444,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         openid=source.author.user_openid,
                     )
                     if media:
-                        payload["media"] = media
-                        payload["msg_type"] = 7
-                        payload.pop("markdown", None)
-                        payload["content"] = plain_text or None
+                        self._set_media_payload(payload, media, plain_text)
                 if video_file_source:
                     media = await self.upload_group_and_c2c_media(
                         video_file_source,
@@ -448,10 +452,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         openid=source.author.user_openid,
                     )
                     if media:
-                        payload["media"] = media
-                        payload["msg_type"] = 7
-                        payload.pop("markdown", None)
-                        payload["content"] = plain_text or None
+                        self._set_media_payload(payload, media, plain_text)
                 if file_source:
                     media = await self.upload_group_and_c2c_media(
                         file_source,
@@ -460,10 +461,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         openid=source.author.user_openid,
                     )
                     if media:
-                        payload["media"] = media
-                        payload["msg_type"] = 7
-                        payload.pop("markdown", None)
-                        payload["content"] = plain_text or None
+                        self._set_media_payload(payload, media, plain_text)
                 if stream:
                     ret = await self._send_with_markdown_fallback(
                         send_func=lambda retry_payload: self.post_c2c_message(
@@ -806,6 +804,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         for i in message.chain:
             if isinstance(i, Plain):
                 plain_text += i.text
+            elif isinstance(i, At):
+                qq_id = QQOfficialMessageEvent._get_mention_id(i)
+                if qq_id:
+                    plain_text += f"<@{qq_id}>"
             elif isinstance(i, Image) and not image_base64:
                 if not i.file:
                     raise ValueError("Unsupported image file format")

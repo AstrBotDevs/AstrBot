@@ -21,9 +21,6 @@ from typing import Any
 
 import botpy
 import botpy.message
-from botpy import Client
-from botpy.connection import ConnectionState
-
 from astrbot import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, File, Image, Plain, Record, Reply, Video
@@ -39,6 +36,8 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
+from botpy import Client
+from botpy.connection import ConnectionState
 
 from .qqofficial_message_event import QQOfficialMessageEvent
 
@@ -332,7 +331,17 @@ class QQOfficialPlatformAdapter(Platform):
             )
             return
 
-        payload: dict[str, Any] = {"content": plain_text}
+        has_mention = QQOfficialMessageEvent._has_mention(message_chain)
+        use_markdown = (
+            has_mention or getattr(message_chain, "use_markdown_", None) is True
+        )
+        if use_markdown and plain_text:
+            payload: dict[str, Any] = {
+                "markdown": botpy.types.message.MarkdownPayload(content=plain_text),
+                "msg_type": 2,
+            }
+        else:
+            payload = {"content": plain_text, "msg_type": 0}
         if msg_id and not group_proactive_send:
             payload["msg_id"] = msg_id
         ret: Any | None = None
@@ -361,8 +370,9 @@ class QQOfficialPlatformAdapter(Platform):
                         QQOfficialMessageEvent.IMAGE_FILE_TYPE,
                         group_openid=session.session_id,
                     )
-                    payload["media"] = media
-                    payload["msg_type"] = 7
+                    QQOfficialMessageEvent._set_media_payload(
+                        payload, media, plain_text
+                    )
                 if record_file_path:
                     media = await helper_event.upload_group_and_c2c_media(
                         record_file_path,
@@ -370,8 +380,9 @@ class QQOfficialPlatformAdapter(Platform):
                         group_openid=session.session_id,
                     )
                     if media:
-                        payload["media"] = media
-                        payload["msg_type"] = 7
+                        QQOfficialMessageEvent._set_media_payload(
+                            payload, media, plain_text
+                        )
                 if video_file_source:
                     media = await helper_event.upload_group_and_c2c_media(
                         video_file_source,
@@ -379,8 +390,9 @@ class QQOfficialPlatformAdapter(Platform):
                         group_openid=session.session_id,
                     )
                     if media:
-                        payload["media"] = media
-                        payload["msg_type"] = 7
+                        QQOfficialMessageEvent._set_media_payload(
+                            payload, media, plain_text
+                        )
                         payload.pop("msg_id", None)
                 if file_source:
                     media = await helper_event.upload_group_and_c2c_media(
@@ -390,8 +402,9 @@ class QQOfficialPlatformAdapter(Platform):
                         group_openid=session.session_id,
                     )
                     if media:
-                        payload["media"] = media
-                        payload["msg_type"] = 7
+                        QQOfficialMessageEvent._set_media_payload(
+                            payload, media, plain_text
+                        )
                         payload.pop("msg_id", None)
                 ret = await self.client.api.post_group_message(
                     group_openid=session.session_id or "",
@@ -401,6 +414,7 @@ class QQOfficialPlatformAdapter(Platform):
                 # channel (guild) message path
                 if image_path:
                     payload["file_image"] = image_path
+                payload.pop("msg_type", None)
                 ret = await self.client.api.post_message(
                     channel_id=session.session_id or "",
                     **payload,
@@ -415,8 +429,7 @@ class QQOfficialPlatformAdapter(Platform):
                     QQOfficialMessageEvent.IMAGE_FILE_TYPE,
                     openid=session.session_id,
                 )
-                payload["media"] = media
-                payload["msg_type"] = 7
+                QQOfficialMessageEvent._set_media_payload(payload, media, plain_text)
             if record_file_path:
                 media = await helper_event.upload_group_and_c2c_media(
                     record_file_path,
@@ -424,8 +437,9 @@ class QQOfficialPlatformAdapter(Platform):
                     openid=session.session_id,
                 )
                 if media:
-                    payload["media"] = media
-                    payload["msg_type"] = 7
+                    QQOfficialMessageEvent._set_media_payload(
+                        payload, media, plain_text
+                    )
             if video_file_source:
                 media = await helper_event.upload_group_and_c2c_media(
                     video_file_source,
@@ -433,8 +447,9 @@ class QQOfficialPlatformAdapter(Platform):
                     openid=session.session_id,
                 )
                 if media:
-                    payload["media"] = media
-                    payload["msg_type"] = 7
+                    QQOfficialMessageEvent._set_media_payload(
+                        payload, media, plain_text
+                    )
             if file_source:
                 media = await helper_event.upload_group_and_c2c_media(
                     file_source,
@@ -443,8 +458,9 @@ class QQOfficialPlatformAdapter(Platform):
                     openid=session.session_id,
                 )
                 if media:
-                    payload["media"] = media
-                    payload["msg_type"] = 7
+                    QQOfficialMessageEvent._set_media_payload(
+                        payload, media, plain_text
+                    )
             ret = await helper_event.post_c2c_message(
                 openid=session.session_id,
                 **payload,
@@ -621,6 +637,17 @@ class QQOfficialPlatformAdapter(Platform):
         return re.sub(r"<faceType=\d+[^>]*>", replace_face, content)
 
     @staticmethod
+    def _strip_bot_mention_markup(content: str | None, mention_id: str) -> str:
+        normalized = content or ""
+        for markup in (
+            f'<qqbot-at-user id="{mention_id}" />',
+            f"<@{mention_id}>",
+            f"<@!{mention_id}>",
+        ):
+            normalized = normalized.replace(markup, "")
+        return normalized
+
+    @staticmethod
     async def _parse_from_qqofficial(
         message: botpy.message.Message
         | botpy.message.GroupMessage
@@ -708,12 +735,8 @@ class QQOfficialPlatformAdapter(Platform):
                 group_mentioned = bool(bot_mention_ids) or force_group_mention
                 plain_content = str(getattr(message, "content", "") or "")
                 for mention_id in bot_mention_ids:
-                    plain_content = plain_content.replace(
-                        f"<@{mention_id}>",
-                        "",
-                    ).replace(
-                        f"<@!{mention_id}>",
-                        "",
+                    plain_content = QQOfficialPlatformAdapter._strip_bot_mention_markup(
+                        plain_content, mention_id
                     )
                 abm.message_str = QQOfficialPlatformAdapter._parse_face_message(
                     plain_content.strip(),
@@ -759,7 +782,9 @@ class QQOfficialPlatformAdapter(Platform):
                 abm.self_id = ""
             content_raw = getattr(message, "content", "") or ""
             plain_content = QQOfficialPlatformAdapter._parse_face_message(
-                content_raw.replace(f"<@!{abm.self_id}>", "").strip(),
+                QQOfficialPlatformAdapter._strip_bot_mention_markup(
+                    content_raw, str(abm.self_id)
+                ).strip()
             )
             await QQOfficialPlatformAdapter._append_attachments(
                 msg,
