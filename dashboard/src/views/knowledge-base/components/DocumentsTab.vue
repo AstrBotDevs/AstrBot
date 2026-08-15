@@ -146,9 +146,6 @@
                 <p class="text-caption text-medium-emphasis">
                   {{ t('upload.maxSize') }}
                 </p>
-                <p class="text-caption text-medium-emphasis">
-                  最多可上传 10 个文件
-                </p>
                 <input
                   ref="fileInput"
                   type="file"
@@ -663,13 +660,8 @@ const handleFileSelect = (event: Event) => {
   target.value = '';
 };
 
-// 添加文件（检查数量限制）
+// Add files
 const addFiles = (files: File[]) => {
-  const totalFiles = selectedFiles.value.length + files.length;
-  if (totalFiles > 10) {
-    showSnackbar('最多只能选择 10 个文件', 'warning');
-    return;
-  }
   selectedFiles.value.push(...files);
 };
 
