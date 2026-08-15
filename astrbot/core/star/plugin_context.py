@@ -11,7 +11,7 @@ from __future__ import annotations
 import inspect
 import logging
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
@@ -827,7 +827,12 @@ class SessionCapability:
 class AuthorizationCapability:
     """Event-bound authorization access without exposing database tables."""
 
-    __slots__ = ("_authorization", "_plugin_id", "_declared_actions")
+    __slots__ = (
+        "_authorization",
+        "_plugin_id",
+        "_declared_actions",
+        "_allow_core_actions",
+    )
 
     def __init__(
         self,
@@ -835,20 +840,27 @@ class AuthorizationCapability:
         *,
         plugin_id: str | None = None,
         declared_actions: frozenset[str] = frozenset(),
+        allow_core_actions: bool = False,
     ) -> None:
         self._authorization = authorization
         self._plugin_id = plugin_id
         self._declared_actions = declared_actions
+        self._allow_core_actions = allow_core_actions
 
     def for_plugin(
-        self, plugin_id: str, declared_actions: frozenset[str]
+        self,
+        plugin_id: str,
+        declared_actions: frozenset[str],
+        *,
+        allow_core_actions: bool = False,
     ) -> AuthorizationCapability:
-        """Return a plugin-bound view that cannot authorize another namespace."""
+        """Return a plugin-bound view limited to declared plugin actions."""
 
         return AuthorizationCapability(
             self._authorization,
             plugin_id=plugin_id,
             declared_actions=declared_actions,
+            allow_core_actions=allow_core_actions,
         )
 
     async def authorize(
@@ -859,12 +871,13 @@ class AuthorizationCapability:
     ) -> Decision:
         """Authorize an event's trusted actor against an explicit resource."""
 
-        if action.startswith("plugin:") and (
-            self._plugin_id is None
-            or action not in self._declared_actions
-            or not action.startswith(f"plugin:{self._plugin_id}:")
-        ):
-            raise PermissionError("Plugin action is not declared by this plugin")
+        if self._plugin_id is not None and not self._allow_core_actions:
+            if (
+                not action.startswith("plugin:")
+                or action not in self._declared_actions
+                or not action.startswith(f"plugin:{self._plugin_id}:")
+            ):
+                raise PermissionError("Plugin action is not declared by this plugin")
         if (
             self._authorization is None
             or event.subject is None
@@ -879,6 +892,49 @@ class AuthorizationCapability:
             event.auth_context,
         )
 
+    async def authorize_target_session(
+        self,
+        event: AstrMessageEvent,
+        *,
+        action: str,
+        umo: str,
+    ) -> Decision:
+        """Authorize an explicit cross-session operation against its target.
+
+        Session facts attached to the inbound event are only valid for the
+        inbound resource. Clearing them prevents a command argument from
+        inheriting the caller's owner/admin fact or member fallback.
+        """
+
+        if self._plugin_id is not None and not self._allow_core_actions:
+            if (
+                not action.startswith("plugin:")
+                or action not in self._declared_actions
+                or not action.startswith(f"plugin:{self._plugin_id}:")
+            ):
+                raise PermissionError("Plugin action is not declared by this plugin")
+        if (
+            self._authorization is None
+            or event.subject is None
+            or event.auth_context is None
+            or not event.auth_context.config_id
+        ):
+            raise PermissionError("Authorization context is unavailable")
+        target = Resource.session(event.auth_context.config_id, umo)
+        target_context = replace(
+            event.auth_context,
+            origin_session_resource_id=None,
+            platform_member_role="unknown",
+            platform_role_source="none",
+            platform_role_expires_at=None,
+        )
+        return await self._authorization.authorize(
+            event.subject,
+            action,
+            target,
+            target_context,
+        )
+
     def session_resource(
         self, event: AstrMessageEvent, *, umo: str | None = None
     ) -> Resource:
@@ -891,21 +947,41 @@ class AuthorizationCapability:
         )
 
     async def list_bindings(self, event: AstrMessageEvent) -> list[object]:
-        """List visible bindings only after an identity-read decision."""
+        """List bindings visible to the caller's authorized scope.
 
-        decision = await self.authorize(event, "identity.read")
+        Session owners may inspect the bindings for their current session, while
+        instance operators and Dashboard control-plane identities may inspect
+        the bindings in their authorized configuration scope.  Do not widen a
+        session owner's read to every session in the configuration.
+        """
+
+        if self._plugin_id is not None and not self._allow_core_actions:
+            raise PermissionError("Plugin cannot manage authorization bindings")
+        decision = await self.authorize(event, "identity.manage")
         if not decision.allowed:
             raise PermissionError("Authorization denied")
         assert self._authorization is not None
-        return await self._authorization.list_bindings(
+        bindings = await self._authorization.list_bindings(
             config_id=event.auth_context.config_id
         )
+        if decision.effective_role is Role.SESSION_OWNER:
+            if event.resource is None or event.resource.type != "session":
+                raise PermissionError("Authorization context is unavailable")
+            return [
+                binding
+                for binding in bindings
+                if binding.scope_type == "session"
+                and binding.scope_id == event.resource.id
+            ]
+        return bindings
 
     async def grant_session_admin(
         self, event: AstrMessageEvent, target_sender_id: str
     ) -> object:
         """Grant only a current-session administrator binding."""
 
+        if self._plugin_id is not None and not self._allow_core_actions:
+            raise PermissionError("Plugin cannot manage authorization bindings")
         decision = await self.authorize(event, "identity.manage")
         if not decision.allowed:
             raise PermissionError("Authorization denied")
@@ -923,6 +999,7 @@ class AuthorizationCapability:
             scope_type="session",
             scope_id=event.resource.id,
             config_id=event.resource.config_id,
+            context=event.auth_context,
         )
 
     async def revoke_session_admin(
@@ -930,6 +1007,8 @@ class AuthorizationCapability:
     ) -> bool:
         """Revoke a current-session administrator binding if one exists."""
 
+        if self._plugin_id is not None and not self._allow_core_actions:
+            raise PermissionError("Plugin cannot manage authorization bindings")
         decision = await self.authorize(event, "identity.manage")
         if not decision.allowed:
             raise PermissionError("Authorization denied")
@@ -949,6 +1028,7 @@ class AuthorizationCapability:
                 return await self._authorization.revoke_binding(
                     actor=event.subject,
                     binding_id=getattr(binding, "binding_id"),
+                    context=event.auth_context,
                 )
         return False
 
@@ -1168,7 +1248,11 @@ class PluginContext:
         self.runtime_info._bind_plugin_control(control)
 
     def for_plugin(
-        self, plugin_id: str, declared_actions: frozenset[str]
+        self,
+        plugin_id: str,
+        declared_actions: frozenset[str],
+        *,
+        allow_core_actions: bool = False,
     ) -> PluginContext:
         """Create a plugin-scoped SDK view with a restricted authz capability."""
 
@@ -1190,7 +1274,11 @@ class PluginContext:
             rendering=self.rendering,
             files=self.files,
             sessions=self.sessions,
-            authz=self.authz.for_plugin(plugin_id, declared_actions),
+            authz=self.authz.for_plugin(
+                plugin_id,
+                declared_actions,
+                allow_core_actions=allow_core_actions,
+            ),
         )
 
     def _rebind_runtime_catalogs(self, catalogs: RuntimeCatalogs) -> None:

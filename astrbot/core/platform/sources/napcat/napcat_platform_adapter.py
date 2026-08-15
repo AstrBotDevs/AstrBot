@@ -1375,7 +1375,10 @@ class NapCatPlatformAdapter(Platform):
         raw_event = message.raw_message
         sender = getattr(raw_event, "sender", None)
         role = getattr(sender, "role", None)
-        if role is not None:
+        # NapCat's sender role is a group-membership fact.  Private-message
+        # payloads must never be able to promote their sender to a
+        # session_owner/session_admin during authorization attachment.
+        if not event.is_private_chat() and role is not None:
             event.set_platform_member_role(
                 str(getattr(role, "value", role)), source="adapter"
             )

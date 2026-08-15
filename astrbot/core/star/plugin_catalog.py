@@ -171,6 +171,33 @@ class PluginCatalog:
         )
 
     @staticmethod
+    def _resolve_plugin_tool_actions(
+        metadata: StarMetadata,
+        required_actions: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        """Validate plugin tool actions against its manifest declaration."""
+
+        resolved: list[str] = []
+        prefix = f"plugin:{metadata.plugin_id}:"
+        for action in required_actions:
+            if not action.startswith("plugin:"):
+                resolved.append(action)
+                continue
+            local_action = action.removeprefix("plugin:")
+            resolved_action = (
+                f"{prefix}{local_action}" if ":" not in local_action else action
+            )
+            if (
+                not resolved_action.startswith(prefix)
+                or resolved_action not in metadata.authorization_actions
+            ):
+                raise ValueError(
+                    f"Plugin tool action is not declared: {resolved_action!r}"
+                )
+            resolved.append(resolved_action)
+        return tuple(resolved)
+
+    @staticmethod
     def iter_tool_tree(tool: FunctionTool):
         """Yield a top-level tool and local tools nested in a handoff."""
         yield tool
@@ -205,11 +232,16 @@ class PluginCatalog:
         def create_function_tool(
             tool_declaration: FunctionToolDeclaration,
         ) -> FunctionTool:
+            required_actions = self._resolve_plugin_tool_actions(
+                metadata,
+                tool_declaration.required_actions,
+            )
             tool = self.runtime_catalogs.tools.spec_to_func(
                 tool_declaration.name,
                 list(tool_declaration.parameters),
                 tool_declaration.description,
                 tool_declaration.handler,
+                required_actions=required_actions,
             )
             tool.handler_module_path = module_path
             return tool

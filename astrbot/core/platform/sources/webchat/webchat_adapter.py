@@ -293,6 +293,12 @@ class WebChatAdapter(Platform):
                         "_api_key_principal",
                         api_key_principal,
                     )
+                dashboard_principal = payload.get("_dashboard_principal")
+                if isinstance(dashboard_principal, dict):
+                    message_event.set_extra(
+                        "_dashboard_principal",
+                        dashboard_principal,
+                    )
 
         return message_event
 

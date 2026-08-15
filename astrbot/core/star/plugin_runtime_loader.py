@@ -28,7 +28,7 @@ from astrbot.core.utils.shared_preferences import SharedPreferences
 
 from .command_management import sync_command_configs
 from .dashboard_extension import validate_dashboard_manifest
-from .filter.permission import ActionPermissionFilter, PermissionTypeFilter
+from .filter.permission import ActionPermissionFilter
 from .plugin_catalog import PluginCatalog
 from .plugin_context import PluginContext
 from .plugin_extension_coordinator import PluginExtensionCoordinator
@@ -616,14 +616,18 @@ class PluginRuntimeLoader:
         if plugin_config:
             metadata.star_cls = metadata.star_cls_type(
                 context=self._plugin_context.for_plugin(
-                    metadata.plugin_id, metadata.authorization_actions
+                    metadata.plugin_id,
+                    metadata.authorization_actions,
+                    allow_core_actions=metadata.reserved,
                 ),
                 config=plugin_config,
             )
         else:
             metadata.star_cls = metadata.star_cls_type(
                 context=self._plugin_context.for_plugin(
-                    metadata.plugin_id, metadata.authorization_actions
+                    metadata.plugin_id,
+                    metadata.authorization_actions,
+                    allow_core_actions=metadata.reserved,
                 )
             )
         if metadata.star_cls:
@@ -685,31 +689,67 @@ class PluginRuntimeLoader:
         ):
             full_names.append(handler.handler_full_name)
             command = alter_cmd.get(metadata.name, {}).get(handler.handler_name)
-            if not isinstance(command, dict):
-                continue
-            legacy_permission = command.get("permission", "member")
-            permission = command.get(
-                "permission_action",
-                "session.manage" if legacy_permission == "admin" else "session.read",
+            configured_action = (
+                command.get("permission_action") if isinstance(command, dict) else None
             )
-            for filter_ in handler.event_filters:
-                if isinstance(filter_, ActionPermissionFilter):
-                    filter_.action = permission
-                    break
-            else:
-                handler.event_filters = [
-                    filter_
-                    for filter_ in handler.event_filters
-                    if not isinstance(filter_, PermissionTypeFilter)
-                ]
-                handler.event_filters.append(ActionPermissionFilter(permission))
-            logger.debug(
-                "插入权限过滤器 %s 到 %s 的 %s 方法。",
-                permission,
-                metadata.name,
-                handler.handler_name,
-            )
+            if isinstance(configured_action, str) and configured_action:
+                action = self._resolve_plugin_action(metadata, configured_action)
+                for filter_ in handler.event_filters:
+                    if isinstance(filter_, ActionPermissionFilter):
+                        filter_.action = action
+                        break
+                else:
+                    handler.event_filters.append(ActionPermissionFilter(action))
+                logger.debug(
+                    "插入权限过滤器 %s 到 %s 的 %s 方法。",
+                    action,
+                    metadata.name,
+                    handler.handler_name,
+                )
+
+            permission_filters = [
+                filter_
+                for filter_ in handler.event_filters
+                if isinstance(filter_, ActionPermissionFilter)
+            ]
+            for filter_ in permission_filters:
+                filter_.action = self._resolve_plugin_action(metadata, filter_.action)
+            if (
+                not metadata.reserved
+                and handler.event_type is EventType.AdapterMessageEvent
+                and not permission_filters
+            ):
+                # Plugin message handlers execute with user-originated events.
+                # Without an explicit action they have no policy boundary, so
+                # bind an intentionally invalid action and fail closed.
+                handler.event_filters.append(
+                    ActionPermissionFilter("plugin:__undeclared__")
+                )
+                logger.warning(
+                    "Plugin handler %s has no declared authorization action; denying it.",
+                    handler.handler_full_name,
+                )
         return full_names
+
+    @staticmethod
+    def _resolve_plugin_action(metadata: StarMetadata, action: str) -> str:
+        """Expand and validate plugin-local action declarations."""
+
+        if not action.startswith("plugin:"):
+            return action
+        local_action = action.removeprefix("plugin:")
+        prefix = f"plugin:{metadata.plugin_id}:"
+        resolved_action = (
+            f"{prefix}{local_action}" if ":" not in local_action else action
+        )
+        if (
+            not resolved_action.startswith(prefix)
+            or resolved_action not in metadata.authorization_actions
+        ):
+            raise ValueError(
+                f"Plugin handler action is not declared: {resolved_action!r}"
+            )
+        return resolved_action
 
     async def _initialize_plugin_and_run_hooks(self, metadata: StarMetadata) -> None:
         await self._extensions.initialize(metadata)

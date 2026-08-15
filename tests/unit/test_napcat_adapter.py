@@ -1016,10 +1016,43 @@ async def test_napcat_forward_ws_client_defaults_missing_group_sender_role(caplo
 
     queued = queue.get_nowait()
     assert queued.get_message_str() == "hello"
-    assert queued.role == "member"
+    assert queued.platform_member_role == "member"
     assert any(
         "defaulted sender.role to member" in message for message in caplog.messages
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["owner", "admin"])
+async def test_napcat_private_sender_role_cannot_grant_group_privilege(role):
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+
+    await adapter.client._handle_ws_payload(
+        json.dumps(
+            {
+                "post_type": "message",
+                "message_type": "private",
+                "sub_type": "friend",
+                "time": 1720000000,
+                "self_id": 123456,
+                "user_id": 111222,
+                "message_id": 784,
+                "font": 14,
+                "raw_message": "hello",
+                "sender": {
+                    "user_id": 111222,
+                    "nickname": "tester",
+                    "role": role,
+                },
+                "message": [{"type": "text", "data": {"text": "hello"}}],
+            }
+        )
+    )
+
+    queued = queue.get_nowait()
+    assert queued.is_private_chat()
+    assert queued.platform_member_role == "member"
 
 
 @pytest.mark.asyncio
@@ -1708,7 +1741,7 @@ async def test_napcat_group_message_event_is_queued_with_expected_components():
 
     queued = queue.get_nowait()
     assert queued.get_message_str() == "hello"
-    assert queued.role == "admin"
+    assert queued.platform_member_role == "admin"
     assert queued.get_message_type() == MessageType.GROUP_MESSAGE
     assert queued.session.session_id == "654321"
     assert [type(component).__name__ for component in queued.get_messages()] == [
@@ -2510,7 +2543,6 @@ async def test_napcat_private_notice_events_do_not_auto_wake_pipeline(monkeypatc
     await stage.initialize(
         SimpleNamespace(
             astrbot_config={
-                "admins_id": [],
                 "wake_prefix": ["/"],
                 "platform_settings": {
                     "no_permission_reply": True,
@@ -2523,11 +2555,10 @@ async def test_napcat_private_notice_events_do_not_auto_wake_pipeline(monkeypatc
                         "reply_to_bot": True,
                     },
                 },
-                "disable_builtin_commands": False,
                 "plugin_set": ["*"],
             },
             astrbot_config_id="default",
-                plugin_catalog=SimpleNamespace(
+            plugin_catalog=SimpleNamespace(
                 get_command_catalog=lambda *_args: CommandCatalogStore(),
             ),
             preferences=SimpleNamespace(get_async=AsyncMock(return_value={})),
@@ -2631,7 +2662,6 @@ async def test_napcat_group_notice_keeps_group_session_when_unique_session_enabl
     await stage.initialize(
         SimpleNamespace(
             astrbot_config={
-                "admins_id": [],
                 "wake_prefix": ["/"],
                 "platform_settings": {
                     "no_permission_reply": True,
@@ -2640,11 +2670,10 @@ async def test_napcat_group_notice_keeps_group_session_when_unique_session_enabl
                     "ignore_at_all": False,
                     "unique_session": True,
                 },
-                "disable_builtin_commands": False,
                 "plugin_set": ["*"],
             },
             astrbot_config_id="default",
-                plugin_catalog=SimpleNamespace(
+            plugin_catalog=SimpleNamespace(
                 get_command_catalog=lambda *_args: CommandCatalogStore(),
             ),
             preferences=SimpleNamespace(get_async=AsyncMock(return_value={})),
@@ -2678,7 +2707,6 @@ async def test_napcat_group_message_route_identity_keeps_original_group_target_a
     await stage.initialize(
         SimpleNamespace(
             astrbot_config={
-                "admins_id": [],
                 "wake_prefix": ["/"],
                 "platform_settings": {
                     "no_permission_reply": True,
@@ -2687,11 +2715,10 @@ async def test_napcat_group_message_route_identity_keeps_original_group_target_a
                     "ignore_at_all": False,
                     "unique_session": True,
                 },
-                "disable_builtin_commands": False,
                 "plugin_set": ["*"],
             },
             astrbot_config_id="default",
-                plugin_catalog=SimpleNamespace(
+            plugin_catalog=SimpleNamespace(
                 get_command_catalog=lambda *_args: CommandCatalogStore(),
             ),
             preferences=SimpleNamespace(get_async=AsyncMock(return_value={})),
@@ -2754,7 +2781,6 @@ async def test_napcat_reply_only_wake_resolves_sender_lazily_in_waking_stage(
     await stage.initialize(
         SimpleNamespace(
             astrbot_config={
-                "admins_id": [],
                 "wake_prefix": ["/"],
                 "platform_settings": {
                     "no_permission_reply": True,
@@ -2767,11 +2793,10 @@ async def test_napcat_reply_only_wake_resolves_sender_lazily_in_waking_stage(
                         "reply_to_bot": True,
                     },
                 },
-                "disable_builtin_commands": False,
                 "plugin_set": ["*"],
             },
             astrbot_config_id="default",
-                plugin_catalog=SimpleNamespace(
+            plugin_catalog=SimpleNamespace(
                 get_command_catalog=lambda *_args: CommandCatalogStore(),
             ),
             preferences=SimpleNamespace(get_async=AsyncMock(return_value={})),
