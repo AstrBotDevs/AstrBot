@@ -145,7 +145,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return {
       modalities: { input },
       tool_call: mods.includes('tool_use'),
-      reasoning: Boolean(provider.reasoning),
       limit: { context: provider.max_context_tokens || 0 }
     }
   }
@@ -614,8 +613,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       model: modelName,
       modalities,
       custom_extra_body: {},
-      max_context_tokens: max_context_tokens,
-      reasoning: supportsReasoning(metadata)
+      max_context_tokens: max_context_tokens
     }
   }
 
