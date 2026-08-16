@@ -34,11 +34,23 @@
       </v-card-actions>
     </v-card>
   </v-dialog>
+
+  <DashboardStepUpDialog
+    v-model="stepUpDialogOpen"
+    :loading="stepUpLoading"
+    :error-message="stepUpErrorMessage"
+    @confirm="submitStepUp"
+    @cancel="cancelStepUp"
+  />
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { configProfileApi } from '@/api/v1';
+import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
+import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
+import { runConfigMutationWithStepUp } from '@/utils/configStepUp';
+import { stepUpHeaders } from '@/utils/stepUp';
 import { resolveErrorMessage } from '@/utils/errorUtils';
 
 interface ProviderSettings {
@@ -62,6 +74,14 @@ const dialog = ref(props.modelValue);
 const apiKey = ref('');
 const saving = ref(false);
 const errorMessage = ref('');
+const {
+  dialogOpen: stepUpDialogOpen,
+  loading: stepUpLoading,
+  errorMessage: stepUpErrorMessage,
+  requestStepUp,
+  submitStepUp,
+  cancelStepUp,
+} = useDashboardStepUp();
 
 watch(
   () => props.modelValue,
@@ -110,10 +130,17 @@ const saveKey = async () => {
     currentConfig.provider_settings.websearch_provider = 'tavily';
 
     // 3. 保存整个配置
-    const saveResponse = await configProfileApi.update(
+    const saveResponse = await runConfigMutationWithStepUp(
+      (stepUp) =>
+        configProfileApi.update(
+          'default',
+          currentConfig,
+          stepUp ? { headers: stepUpHeaders(stepUp) } : undefined,
+        ),
       'default',
-      currentConfig,
+      requestStepUp,
     );
+    if (!saveResponse) return;
 
     if (saveResponse.data.status === 'ok') {
       emit('success');

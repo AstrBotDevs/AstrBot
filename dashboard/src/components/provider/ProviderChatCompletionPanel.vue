@@ -314,6 +314,7 @@ const {
   loadConfig,
   tm,
   showMessage,
+  requestStepUp,
 });
 
 function openManualModelDialog() {

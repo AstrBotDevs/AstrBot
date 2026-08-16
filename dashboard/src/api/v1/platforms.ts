@@ -26,39 +26,52 @@ export const botApi = {
       }),
     );
   },
-  create(config: OpenConfig) {
-    return typed<OpenConfig>(openApiV1.createBot({ body: botConfig(config) }));
+  create(config: OpenConfig, stepUp?: string) {
+    return typed<OpenConfig>(
+      openApiV1.createBot({
+        body: botConfig(config),
+        headers: stepUp ? { 'X-AstrBot-Step-Up': stepUp } : undefined,
+      }),
+    );
   },
   get(botId: string) {
     return typed<{ bot: OpenConfig }>(
       openApiV1.getBot({ path: { bot_id: botId } }),
     );
   },
-  update(botId: string, config: OpenConfig) {
+  update(botId: string, config: OpenConfig, stepUp?: string) {
     return typed<OpenConfig>(
       openApiV1.updateBot({
         path: { bot_id: botId },
         body: botConfig(config),
+        headers: stepUp ? { 'X-AstrBot-Step-Up': stepUp } : undefined,
       }),
     );
   },
-  setEnabled(botId: string, payload: EnabledPatch) {
+  setEnabled(botId: string, payload: EnabledPatch, stepUp?: string) {
     return typed<OpenConfig>(
       openApiV1.setBotEnabled({
         path: { bot_id: botId },
         body: payload,
+        headers: stepUp ? { 'X-AstrBot-Step-Up': stepUp } : undefined,
       }),
     );
   },
-  invokeAction(botId: string, payload: BotActionRequest) {
+  invokeAction(botId: string, payload: BotActionRequest, stepUp?: string) {
     return typed<OpenConfig>(
       openApiV1.invokeBotAction({
         path: { bot_id: botId },
         body: payload,
+        headers: stepUp ? { 'X-AstrBot-Step-Up': stepUp } : undefined,
       }),
     );
   },
-  delete(botId: string) {
-    return typed<OpenConfig>(openApiV1.deleteBot({ path: { bot_id: botId } }));
+  delete(botId: string, stepUp?: string) {
+    return typed<OpenConfig>(
+      openApiV1.deleteBot({
+        path: { bot_id: botId },
+        headers: stepUp ? { 'X-AstrBot-Step-Up': stepUp } : undefined,
+      }),
+    );
   },
 };

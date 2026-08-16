@@ -1,6 +1,10 @@
 import { computed, ref, type Ref } from 'vue';
 import { providerApi } from '@/api/v1';
 import { resolveErrorMessage } from '@/utils/errorUtils';
+import {
+  runProviderMutationWithStepUp,
+  type RequestDashboardStepUp,
+} from '@/utils/providerStepUp';
 
 interface ProviderSourceRef {
   id?: string;
@@ -31,6 +35,7 @@ interface UseProviderModelConfigDialogOptions {
   loadConfig: () => Promise<void> | void;
   tm: (key: string, params?: Record<string, unknown>) => string;
   showMessage: (message: string, color?: string) => void;
+  requestStepUp?: RequestDashboardStepUp;
 }
 
 export function useProviderModelConfigDialog(
@@ -44,6 +49,7 @@ export function useProviderModelConfigDialog(
     loadConfig,
     tm,
     showMessage,
+    requestStepUp,
   } = options;
 
   const showProviderEditDialog = ref(false);
@@ -125,15 +131,21 @@ export function useProviderModelConfigDialog(
       if (isAdding && !sourceId) {
         throw new Error(tm('providerSources.selectHint'));
       }
-      const res = isAdding
-        ? await providerApi.createInSource(
-            sourceId as string,
-            providerEditData.value,
-          )
-        : await providerApi.update(
-            providerEditOriginalId.value || providerEditData.value.id,
-            providerEditData.value,
-          );
+      const providerConfig = providerEditData.value;
+      const providerId = providerEditOriginalId.value || providerConfig.id;
+      const res = await runProviderMutationWithStepUp(
+        (stepUp) =>
+          isAdding
+            ? providerApi.createInSource(
+                sourceId as string,
+                providerConfig,
+                stepUp,
+              )
+            : providerApi.update(providerId, providerConfig, stepUp),
+        providerId || String(sourceId),
+        requestStepUp,
+      );
+      if (!res) return;
 
       if (res.data.status === 'error') {
         throw new Error(res.data.message || tm('providerSources.saveError'));

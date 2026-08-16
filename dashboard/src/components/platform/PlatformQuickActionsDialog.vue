@@ -179,6 +179,10 @@ import {
   createInitialQuickActionForm as createInitialQuickActionFormData,
 } from '@/components/platform/platformQuickActionRuntime';
 import { useModuleI18n } from '@/i18n/composables';
+import {
+  runBotMutationWithStepUp,
+  type RequestDashboardStepUp,
+} from '@/utils/botStepUp';
 import { copyToClipboard } from '@/utils/clipboard';
 import { resolveErrorMessage } from '@/utils/errorUtils';
 
@@ -190,6 +194,7 @@ const props = defineProps<{
   modelValue: boolean;
   platformId: string;
   supportedActions: string[];
+  requestStepUp?: RequestDashboardStepUp;
 }>();
 
 const emit = defineEmits<{
@@ -312,10 +317,22 @@ async function runQuickAction() {
       quickActionDefinitions.value,
       tm,
     );
-    const res = await botApi.invokeAction(props.platformId, {
-      action_name: selectedQuickAction.value,
-      payload,
-    });
+    const res = await runBotMutationWithStepUp(
+      (stepUp) => {
+        const request = {
+          action_name: selectedQuickAction.value,
+          payload,
+        };
+        return stepUp
+          ? botApi.invokeAction(props.platformId, request, stepUp)
+          : botApi.invokeAction(props.platformId, request);
+      },
+      props.platformId,
+      props.requestStepUp,
+    );
+    if (!res) {
+      return;
+    }
     quickActionResult.value = JSON.stringify(res.data.data, null, 2);
     emit('show-toast', {
       message: res.data.message || tm('quickActions.success'),

@@ -836,6 +836,12 @@ import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapp
 import ConfigPage from '@/views/ConfigPage.vue';
 import PlatformRegistrationAction from '@/components/platform/PlatformRegistrationAction.vue';
 import UmoDisplay from '@/components/shared/UmoDisplay.vue';
+import {
+  runBotMutationWithStepUp,
+  type RequestDashboardStepUp,
+} from '@/utils/botStepUp';
+import { runConfigMutationWithStepUp } from '@/utils/configStepUp';
+import { stepUpHeaders } from '@/utils/stepUp';
 
 defineOptions({
   name: 'AddNewPlatform',
@@ -952,6 +958,7 @@ interface Props {
   configData?: PlatformConfigState;
   updatingMode?: boolean;
   updatingPlatformConfig?: PlatformConfigItem;
+  requestStepUp?: RequestDashboardStepUp;
 }
 
 type DialogScrollTarget = HTMLElement | { $el?: HTMLElement | null } | null;
@@ -962,6 +969,7 @@ const props = withDefaults(defineProps<Props>(), {
   configData: () => ({}),
   updatingMode: false,
   updatingPlatformConfig: () => ({}),
+  requestStepUp: undefined,
 });
 
 const emit = defineEmits<{
@@ -1507,7 +1515,18 @@ async function updatePlatform() {
   }
 
   try {
-    const resp = await botApi.update(platformId, updatingPlatformConfig.value);
+    const resp = await runBotMutationWithStepUp(
+      (stepUp) =>
+        stepUp
+          ? botApi.update(platformId, updatingPlatformConfig.value, stepUp)
+          : botApi.update(platformId, updatingPlatformConfig.value),
+      platformId,
+      props.requestStepUp,
+    );
+    if (!resp) {
+      state.loading = false;
+      return;
+    }
     if (resp.data.status === 'error') {
       throw new Error(resp.data.message || tm('messages.platformUpdateFailed'));
     }
@@ -1558,7 +1577,18 @@ async function savePlatform() {
   }
 
   try {
-    const res = await botApi.create(platformConfig);
+    const res = await runBotMutationWithStepUp(
+      (stepUp) =>
+        stepUp
+          ? botApi.create(platformConfig, stepUp)
+          : botApi.create(platformConfig),
+      'collection',
+      props.requestStepUp,
+    );
+    if (!res) {
+      state.loading = false;
+      return;
+    }
     await handleConfigFile();
     state.loading = false;
     showDialog.value = false;
@@ -1614,10 +1644,21 @@ async function createNewConfigFile(configName: string) {
         ? state.newConfigData
         : undefined;
 
-    const createRes = await configProfileApi.create({
-      name: configName,
-      config: configPayload,
-    });
+    const createRes = await runConfigMutationWithStepUp(
+      (stepUp) =>
+        configProfileApi.create(
+          {
+            name: configName,
+            config: configPayload,
+          },
+          stepUp ? { headers: stepUpHeaders(stepUp) } : undefined,
+        ),
+      'default',
+      props.requestStepUp,
+    );
+    if (!createRes) {
+      throw new Error(tm('messages.configIdMissing'));
+    }
 
     const newConfigId = getString(createRes.data.data.conf_id);
     if (!newConfigId) {

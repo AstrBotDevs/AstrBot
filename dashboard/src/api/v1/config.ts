@@ -13,14 +13,22 @@ export const configProfileApi = {
   list() {
     return typed<{ info_list: OpenConfig[] }>(openApiV1.listConfigProfiles());
   },
-  create(payload: { name?: string | null; config?: OpenConfig | null }) {
+  create(
+    payload: { name?: string | null; config?: OpenConfig | null },
+    requestConfig?: AxiosRequestConfig,
+  ) {
     return typed<{ conf_id: string }>(
-      openApiV1.createConfigProfile({
-        body: {
-          name: payload.name ?? undefined,
-          config: payload.config ?? undefined,
-        },
-      }),
+      openApiV1.createConfigProfile(
+        generatedOptions(
+          {
+            body: {
+              name: payload.name ?? undefined,
+              config: payload.config ?? undefined,
+            },
+          },
+          requestConfig,
+        ),
+      ),
     );
   },
   get(configId: string) {

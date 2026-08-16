@@ -11,6 +11,7 @@ import {
   isDashboardStepUpRequired,
   type DashboardStepUpTarget,
 } from '@/composables/useDashboardStepUp';
+import { runProviderMutationWithStepUp } from '@/utils/providerStepUp';
 
 type GenericObject = Record<string, unknown>;
 
@@ -839,10 +840,20 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     if (!newProvider) return;
 
     try {
-      const res = await providerApi.createInSource(
-        String(newProvider.provider_source_id),
-        newProvider,
+      const providerId = String(
+        newProvider.id || newProvider.provider_source_id,
       );
+      const res = await runProviderMutationWithStepUp(
+        (stepUp) =>
+          providerApi.createInSource(
+            String(newProvider.provider_source_id),
+            newProvider,
+            stepUp,
+          ),
+        providerId,
+        options.requestStepUp,
+      );
+      if (!res) return;
       if (res.data.status === 'error') {
         throw new Error(res.data.message || tm('providerSources.saveError'));
       }

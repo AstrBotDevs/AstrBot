@@ -415,6 +415,7 @@ import { useProviderModelConfigDialog } from '@/composables/useProviderModelConf
 import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 import { useProviderSources } from '@/composables/useProviderSources';
 import { getProviderIcon } from '@/utils/providerUtils';
+import { runProviderMutationWithStepUp } from '@/utils/providerStepUp';
 
 const props = defineProps({
   defaultTab: {
@@ -518,6 +519,7 @@ const {
   loadConfig,
   tm,
   showMessage,
+  requestStepUp,
 });
 
 function openManualModelDialog() {
@@ -635,11 +637,21 @@ async function newProvider() {
   loading.value = true;
   const wasUpdating = updatingMode.value;
   try {
+    const providerId = wasUpdating
+      ? newProviderOriginalId.value || newSelectedProviderName.value
+      : String(newSelectedProviderConfig.value.id || 'new');
     if (wasUpdating) {
-      const res = await providerApi.update(
-        newProviderOriginalId.value || newSelectedProviderName.value,
-        newSelectedProviderConfig.value,
+      const res = await runProviderMutationWithStepUp(
+        (stepUp) =>
+          providerApi.update(
+            providerId,
+            newSelectedProviderConfig.value,
+            stepUp,
+          ),
+        providerId,
+        requestStepUp,
       );
+      if (!res) return;
       if (res.data.status === 'error') {
         showMessage(res.data.message || '更新失败!', 'error');
         return;
@@ -649,7 +661,12 @@ async function newProvider() {
         updatingMode.value = false;
       }
     } else {
-      const res = await providerApi.create(newSelectedProviderConfig.value);
+      const res = await runProviderMutationWithStepUp(
+        (stepUp) => providerApi.create(newSelectedProviderConfig.value, stepUp),
+        providerId,
+        requestStepUp,
+      );
+      if (!res) return;
       if (res.data.status === 'error') {
         showMessage(res.data.message || '添加失败!', 'error');
         return;
@@ -683,7 +700,12 @@ async function copyProvider(providerToCopy) {
 
   loading.value = true;
   try {
-    const res = await providerApi.create(newProviderConfig);
+    const res = await runProviderMutationWithStepUp(
+      (stepUp) => providerApi.create(newProviderConfig, stepUp),
+      newProviderConfig.id,
+      requestStepUp,
+    );
+    if (!res) return;
     showMessage(res.data.message || `成功复制并创建了 ${newProviderConfig.id}`);
     await loadConfig();
   } catch (err) {

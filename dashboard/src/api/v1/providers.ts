@@ -92,9 +92,12 @@ export const providerApi = {
       },
     };
   },
-  create(config: OpenConfig) {
+  create(config: OpenConfig, stepUp?: string) {
     return typed<OpenConfig>(
-      openApiV1.createProvider({ body: providerConfig(config) }),
+      openApiV1.createProvider({
+        body: providerConfig(config),
+        headers: stepUp ? { 'X-AstrBot-Step-Up': stepUp } : undefined,
+      }),
     );
   },
   listBySource(
@@ -108,11 +111,12 @@ export const providerApi = {
       }),
     );
   },
-  createInSource(sourceId: string, config: OpenConfig) {
+  createInSource(sourceId: string, config: OpenConfig, stepUp?: string) {
     return typed<OpenConfig>(
       openApiV1.createProviderInSource({
         path: { source_id: sourceId },
         body: { config },
+        headers: stepUp ? { 'X-AstrBot-Step-Up': stepUp } : undefined,
       }),
     );
   },
@@ -124,11 +128,12 @@ export const providerApi = {
       }),
     );
   },
-  update(providerId: string, config: OpenConfig) {
+  update(providerId: string, config: OpenConfig, stepUp?: string) {
     return typed<OpenConfig>(
       openApiV1.updateProvider({
         path: { provider_id: providerId },
         body: { config },
+        headers: stepUp ? { 'X-AstrBot-Step-Up': stepUp } : undefined,
       }),
     );
   },

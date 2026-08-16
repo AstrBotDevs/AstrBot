@@ -567,6 +567,7 @@ import StorageCleanupPanel from '@/components/shared/StorageCleanupPanel.vue';
 import DashboardTwoFactorDialog from '@/components/shared/DashboardTwoFactorDialog.vue';
 import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
 import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
+import { runConfigMutationWithStepUp } from '@/utils/configStepUp';
 import { stepUpHeaders } from '@/utils/stepUp';
 import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot';
 import { copyToClipboard } from '@/utils/clipboard';
@@ -652,6 +653,7 @@ const configSave2faError = ref('');
 const configSave2faSaving = ref(false);
 const configSave2faRotationHint = ref('');
 const configSavePendingData = ref(null);
+const configSavePendingHeaders = ref({});
 const systemConfigAutoSaveTimer = ref(null);
 const serverUtcEpochMs = ref(null);
 const serverUtcOffsetMinutes = ref(null);
@@ -979,16 +981,27 @@ const saveSystemConfig = async (
     JSON.stringify(configOverride || systemConfigData.value || {}),
   );
   try {
-    const requestConfig = {
-      headers,
-      validateStatus: (status) =>
-        (status >= 200 && status < 300) || status === 401,
-    };
-    const res = await systemConfigApi.update(configPayload, requestConfig);
+    const requestHeaders = { ...headers };
+    const res = await runConfigMutationWithStepUp(
+      (stepUp) => {
+        if (stepUp) {
+          Object.assign(requestHeaders, stepUpHeaders(stepUp));
+        }
+        return systemConfigApi.update(configPayload, {
+          headers: requestHeaders,
+          validateStatus: (status) =>
+            (status >= 200 && status < 300) || status === 401,
+        });
+      },
+      'default',
+      requestStepUp,
+    );
+    if (!res) return { success: false };
 
     if (res.status === 401 && res.data?.data?.totp_required) {
       if (allow2faPrompt && !headers['X-2FA-Code']) {
         configSavePendingData.value = configPayload;
+        configSavePendingHeaders.value = { ...requestHeaders };
         configSave2faError.value = '';
         configSave2faRotationHint.value =
           getConfigSaveRotationHint(configPayload);
@@ -1011,6 +1024,7 @@ const saveSystemConfig = async (
     }
 
     configSavePendingData.value = null;
+    configSavePendingHeaders.value = {};
     configSave2faDialogVisible.value = false;
     configSave2faError.value = '';
     systemConfigData.value = configPayload;
@@ -1041,6 +1055,7 @@ const scheduleSystemConfigAutoSave = (delay = 250) => {
   systemConfigAutoSaveTimer.value = setTimeout(async () => {
     systemConfigAutoSaveTimer.value = null;
     if (!systemConfigHasChanges.value) return;
+    if (stepUpDialogOpen.value || configSave2faDialogVisible.value) return;
     if (systemConfigSaving.value) {
       scheduleSystemConfigAutoSave();
       return;
@@ -1071,6 +1086,7 @@ const handleConfigSave2faConfirm = async (payload) => {
   configSave2faSaving.value = true;
   configSave2faError.value = '';
   const headers = {
+    ...configSavePendingHeaders.value,
     'X-2FA-Code': payload,
   };
   try {
@@ -1093,6 +1109,7 @@ const handleConfigSave2faCancel = () => {
     }
   }
   configSavePendingData.value = null;
+  configSavePendingHeaders.value = {};
   configSave2faError.value = '';
   configSave2faDialogVisible.value = false;
 };

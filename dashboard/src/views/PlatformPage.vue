@@ -183,6 +183,7 @@
       :config-data="config_data"
       :updating-mode="updatingMode"
       :updating-platform-config="updatingPlatformConfig"
+      :request-step-up="requestStepUp"
       @show-toast="showToast"
       @refresh-config="getConfig"
     />
@@ -266,8 +267,17 @@
       v-model="showQuickActionDialog"
       :platform-id="currentQuickActionPlatformId"
       :supported-actions="currentQuickActionSupportedActions"
+      :request-step-up="requestStepUp"
       @show-toast="showToast"
       @action-complete="getPlatformStats"
+    />
+
+    <DashboardStepUpDialog
+      v-model="stepUpDialogOpen"
+      :loading="stepUpLoading"
+      :error-message="stepUpErrorMessage"
+      @confirm="submitStepUp"
+      @cancel="cancelStepUp"
     />
 
     <!-- 错误详情对话框 -->
@@ -346,8 +356,10 @@ import { botApi, fileApi, systemConfigApi } from '@/api/v1';
 import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
 import PlatformQuickActionsDialog from '@/components/platform/PlatformQuickActionsDialog.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
+import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
 import ItemCard from '@/components/shared/ItemCard.vue';
 import QrCodeViewer from '@/components/shared/QrCodeViewer.vue';
+import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 import { useModuleI18n, mergeDynamicTranslations } from '@/i18n/composables';
 import { getPlatformIcon as getBasePlatformIcon } from '@/utils/platformUtils';
 import {
@@ -356,6 +368,7 @@ import {
 } from '@/utils/confirmDialog';
 import { copyToClipboard } from '@/utils/clipboard';
 import { resolveErrorMessage } from '@/utils/errorUtils';
+import { runBotMutationWithStepUp } from '@/utils/botStepUp';
 
 defineOptions({
   name: 'PlatformPage',
@@ -411,6 +424,14 @@ interface ShowToastPayload {
 
 const { tm } = useModuleI18n('features/platform');
 const confirmDialog = useConfirmDialog();
+const {
+  dialogOpen: stepUpDialogOpen,
+  loading: stepUpLoading,
+  errorMessage: stepUpErrorMessage,
+  requestStepUp,
+  submitStepUp,
+  cancelStepUp,
+} = useDashboardStepUp();
 
 const config_data = ref<PlatformConfigState>({});
 const metadata = ref<PlatformMetadataState>({});
@@ -967,7 +988,15 @@ async function deletePlatform(platform: PlatformConfigItem) {
   }
 
   try {
-    const res = await botApi.delete(platformId);
+    const res = await runBotMutationWithStepUp(
+      (stepUp) =>
+        stepUp ? botApi.delete(platformId, stepUp) : botApi.delete(platformId),
+      platformId,
+      requestStepUp,
+    );
+    if (!res) {
+      return;
+    }
     await getConfig();
     showSuccess(res.data.message || messages.value.deleteSuccess);
   } catch (error) {
@@ -984,9 +1013,19 @@ async function platformStatusChange(platform: PlatformConfigItem) {
   platform.enable = !currentEnabled;
 
   try {
-    const res = await botApi.setEnabled(platformId, {
-      enabled: Boolean(platform.enable),
-    });
+    const enabled = Boolean(platform.enable);
+    const res = await runBotMutationWithStepUp(
+      (stepUp) =>
+        stepUp
+          ? botApi.setEnabled(platformId, { enabled }, stepUp)
+          : botApi.setEnabled(platformId, { enabled }),
+      platformId,
+      requestStepUp,
+    );
+    if (!res) {
+      platform.enable = currentEnabled;
+      return;
+    }
     await getConfig();
     showSuccess(res.data.message || messages.value.statusUpdateSuccess);
   } catch (error) {
