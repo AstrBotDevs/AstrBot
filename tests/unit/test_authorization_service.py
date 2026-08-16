@@ -14,6 +14,7 @@ from astrbot.core.db.po import AuthAuditLog, AuthRoleBinding, DashboardAccount
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.star.plugin_context import AuthorizationCapability
 from astrbot.core.utils.totp import TotpRuntimeState
+from astrbot.dashboard.api.auth import object_resource
 from astrbot.dashboard.api.authorization import _resource
 from astrbot.dashboard.services.auth_service import AuthService
 
@@ -194,6 +195,18 @@ def test_dashboard_step_up_resource_parser_accepts_canonical_session_and_instanc
     )
     assert parsed_session == session
     assert parsed_instance == Resource.instance("default")
+
+
+def test_dashboard_step_up_resource_parser_hashes_bot_ids_like_bot_routes():
+    parsed_bot = _resource(
+        SimpleNamespace(
+            resource_type="bot",
+            resource_id="napcat",
+            config_id=None,
+        )
+    )
+
+    assert parsed_bot == object_resource("bot", "napcat")
 
 
 @pytest.mark.asyncio

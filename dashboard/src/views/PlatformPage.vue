@@ -652,7 +652,7 @@ async function getConfig() {
       );
     }
   } catch (error) {
-    showError(resolveErrorMessage(error, tm('messages.updateFailed')));
+    showError(resolveErrorMessage(error, tm('messages.platformUpdateFailed')));
   }
 }
 
@@ -1000,7 +1000,7 @@ async function deletePlatform(platform: PlatformConfigItem) {
     await getConfig();
     showSuccess(res.data.message || messages.value.deleteSuccess);
   } catch (error) {
-    showError(resolveErrorMessage(error, tm('messages.updateFailed')));
+    showError(resolveErrorMessage(error, tm('messages.platformUpdateFailed')));
   }
 }
 
@@ -1030,7 +1030,7 @@ async function platformStatusChange(platform: PlatformConfigItem) {
     showSuccess(res.data.message || messages.value.statusUpdateSuccess);
   } catch (error) {
     platform.enable = currentEnabled;
-    showError(resolveErrorMessage(error, tm('messages.updateFailed')));
+    showError(resolveErrorMessage(error, tm('messages.platformUpdateFailed')));
   }
 }
 

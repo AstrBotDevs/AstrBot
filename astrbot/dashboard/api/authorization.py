@@ -23,7 +23,7 @@ from astrbot.dashboard.schemas import (
     DashboardAccountUpdateRequest,
 )
 
-from .auth import require_dashboard_session_principal
+from .auth import object_resource, require_dashboard_session_principal
 
 router = APIRouter(prefix="/authorization", tags=["Authorization"])
 
@@ -175,6 +175,17 @@ def _resource(payload) -> Resource:
             if not payload.config_id or payload.resource_id != payload.config_id:
                 raise ApiError("Invalid instance resource", status_code=400)
             return Resource.instance(payload.config_id)
+        if payload.resource_type == "bot":
+            # Bot routes hash object identifiers before authorization so raw
+            # platform IDs never become resource keys. Keep step-up issuance
+            # on the same canonical resource as bot mutation requests.
+            if payload.resource_id == "collection":
+                return Resource.named(
+                    "bot", "collection", config_id=payload.config_id
+                )
+            return object_resource(
+                "bot", payload.resource_id, config_id=payload.config_id
+            )
         return Resource.named(
             payload.resource_type, payload.resource_id, config_id=payload.config_id
         )
