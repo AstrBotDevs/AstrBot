@@ -14,7 +14,7 @@
 
 粘贴上面创建和选择的 `API Key` 和 `模型名称`，点击保存，完成创建。您可以点击下方 `服务提供商可用性` 的 `刷新` 按钮测试配置是否成功。
 
-![配置对话模型_1](https://files.astrbot.app/docs/source/images/siliconflow/image.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/98fb7711-35c9-426b-b576-b8678bad67da" />
 
 ## 应用对话模型
 

@@ -22,7 +22,7 @@ Then use `ollama run <model_name>` to run the model.
 ## Configure AstrBot
 
 Open the AstrBot WebUI, locate Service Provider Management, click on Add Provider, find and click on `Ollama`.
-![image](https://files.astrbot.app/docs/source/images/ollama/image.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/9169f0e6-5f56-4c8e-9d88-44ac4a767945" />
 
 Save the configuration.
 

@@ -2,7 +2,7 @@
 
 The AstrBot admin panel features plugin management, log viewing, visual configuration, statistics viewing, and more.
 
-![image](https://files.astrbot.app/docs/source/images/webui/image-4.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/6b06a6a9-d2a3-4dca-9566-ea4f7481a4cb" />
 
 ## Accessing the Admin Panel
 
@@ -61,7 +61,7 @@ ChatUI supports these common workflows:
 
 In the admin panel, you can configure AstrBot's plugins through visual configuration. Click `Configuration` in the left sidebar to enter the configuration page.
 
-![image](https://files.astrbot.app/docs/source/images/webui/image-3.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/5caeddbe-7b70-4632-a19a-c669089a247f" />
 
 After modifying the configuration, you need to click the `Save` button in the bottom right corner to successfully save the configuration.
 
@@ -77,7 +77,7 @@ In the admin panel, you can view installed plugins and install new plugins throu
 
 Click the Plugin Market tab to browse plugins officially listed by AstrBot.
 
-![image](https://files.astrbot.app/docs/source/images/webui/image-1.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/903c695c-e820-4e6a-a357-80731620441c" />
 
 You can also click the + button in the bottom right corner to manually install plugins via URL or file upload.
 

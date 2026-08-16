@@ -4,7 +4,8 @@
 
 进入 `机器人` 页，点击 `+ 创建机器人`，找到 Slack 并点击进入 Slack 配置页。
 
-![image](https://files.astrbot.app/docs/source/images/slack/image-1.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/9cf8347b-f5d4-4978-8305-cd5758c13474" />
+
 
 在弹出的配置对话框中点击 `启用`。
 

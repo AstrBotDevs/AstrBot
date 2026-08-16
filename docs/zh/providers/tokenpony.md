@@ -8,9 +8,9 @@
 
 在小马算力[模型页面](https://www.tokenpony.cn/#/model)选择需要使用的模型，留存模型名称备用。
 
-进入 AstrBot WebUI，点击左栏 `服务提供商` -> `新增提供商` -> 选择 `小马算力` (需要版本 >= 4.3.3)
+进入 AstrBot WebUI，点击左栏 `服务提供商` -> `新增提供商` -> 选择 `TokenPony` (需要版本 >= 4.3.3)
 
-![配置对话模型_1](https://files.astrbot.app/docs/source/images/tokenpony/image.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/d633d0ba-1d53-4efc-a933-82265b567c7f" />
 
 > 如果没有看到 `小马算力` 选项，您也可以直接点击图中的 `接入 OpenAI`，并将 `API Base URL` 修改为 `https://api.tokenpony.cn/v1`。
 
@@ -18,6 +18,6 @@
 
 ## 应用对话模型
 
-在 AstrBot WebUI，点击左栏 `配置文件`，找到 AI 配置中的 `默认聊天模型`，选择刚刚创建的 `tokenpony`(小马算力) 提供商，点击保存。
+在 AstrBot WebUI，点击左栏 `配置文件`，找到 AI 配置中的 `默认对话模型`，选择刚刚创建的 `tokenpony`(小马算力) 提供商，点击保存。
 
-![配置对话模型_2](https://files.astrbot.app/docs/source/images/tokenpony/image_1.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/cad7937c-6f6c-4900-875f-4aee7a73da0a" />

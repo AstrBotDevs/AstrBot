@@ -32,7 +32,8 @@ Generate `Token` and `EncodingAESKey` using random generation, but do not click 
 
 1. Open AstrBot Dashboard, click `Messaging Platforms`, then click `+ Add Adapter`, choose `WeCom AI Bot`.
 
-![Add Adapter](https://files.astrbot.app/docs/source/images/wecom_ai_bot/image-2.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/b65549de-34d5-4af5-90f2-d1f1d956bbd7" />
+
 
 2. Fill AstrBot fields with values from the WeCom AI Bot create page:
 
@@ -78,9 +79,10 @@ In WeCom client internal group chat, click Add Member -> AI Bot, select the bot 
 
 Send a message in private chat or group chat to talk to the bot.
 
-If you need typing-like streaming effect, enable `Streaming Reply` in AstrBot.
+If you need typing-like streaming effect, enable `Streaming Output` in AstrBot.
 
-![Streaming Reply](https://files.astrbot.app/docs/source/images/wecom_ai_bot/image-6.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/3e0edec6-8095-48cd-9248-2b4d355b9eb3" />
+
 
 ## Help & Support
 

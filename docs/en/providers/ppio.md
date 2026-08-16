@@ -16,7 +16,7 @@ Once you find the model, click its card to expand a detail panel on the right. S
 
 Open the AstrBot dashboard → Service Providers page, click **Add Provider**, find and click `PPIO Cloud` (requires version >= 3.5.10; older versions are also supported, see below).
 
-![image](https://files.astrbot.app/docs/source/images/ppio/image.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/79846891-545e-4163-891a-a761b8bca9aa" />
 
 Fill in the API Key and model name in the dialog form, then click **Save** to complete the setup.
 

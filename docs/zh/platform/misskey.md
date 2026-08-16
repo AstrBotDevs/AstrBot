@@ -8,7 +8,7 @@
 
 进入消息平台，点击新增适配器，找到 Misskey 并单击进入 Misskey 配置页。
 
-![创建 Misskey 平台适配器](https://files.astrbot.app/docs/source/images/misskey/create.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/d47d42e7-5412-4089-8027-c6c7f9637154" />
 
 ## 配置平台适配器设置
 
@@ -20,7 +20,8 @@
 
 获取 Misskey 接入信息的方式见下文介绍。
 
-![Misskey 平台适配器配置](https://files.astrbot.app/docs/source/images/misskey/config.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/7ec1ecdc-5cba-4c9c-a596-c21237a22a1a" />
+
 
 ## Misskey 实例 URL
 
