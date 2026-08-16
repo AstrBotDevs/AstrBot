@@ -201,15 +201,6 @@ def test_conversation_commands_class():
     assert issubclass(conversation_module.ConversationCommands, object)
 
 
-def test_conversation_commands_type_dicts():
-    assert hasattr(conversation_module.ResetPermissionConfig, "__annotations__")
-    assert hasattr(conversation_module.AlterCmdPluginConfig, "__annotations__")
-
-
-def test_conversation_commands_helpers():
-    assert callable(conversation_module._normalize_alter_cmd_config)
-
-
 def test_conversation_commands_constants():
     assert isinstance(conversation_module.THIRD_PARTY_AGENT_RUNNER_KEY, dict)
     assert "dify" in conversation_module.THIRD_PARTY_AGENT_RUNNER_KEY

@@ -17,6 +17,7 @@ from astrbot.core.provider.entities import (
     ProviderRequest,
 )
 from astrbot.core.provider.provider import Provider
+from astrbot.core.utils.media_utils import MediaResolver, describe_media_ref
 
 from .coze_api_client import CozeAPIClient
 
@@ -354,8 +355,11 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                 return file_id
 
         try:
-            image_data = await self.api_client.download_image(image_url)
-            file_id = await self.api_client.upload_file(image_data)
+            image_bytes = await MediaResolver(
+                image_url,
+                media_type="image",
+            ).to_bytes()
+            file_id = await self.api_client.upload_file(image_bytes)
 
             if session_id:
                 self.file_id_cache[session_id][cache_key] = file_id
@@ -364,7 +368,9 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
             return file_id
 
         except Exception as e:
-            logger.error(f"处理图片失败 {image_url}: {e!s}")
+            logger.error(
+                f"处理图片失败 {describe_media_ref(image_url)}: {e!s}",
+            )
             raise Exception(f"处理图片失败: {e!s}") from e
 
     @override

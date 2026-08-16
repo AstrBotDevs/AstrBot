@@ -29,6 +29,7 @@ from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.provider.register import register_provider_adapter
+from astrbot.core.provider.sources.request_retry import retry_provider_request
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.network_utils import (
     create_proxy_client,
@@ -986,7 +987,10 @@ class ProviderAnthropic(Provider):
 
     async def get_models(self) -> list[str]:
         model_ids: list[str] = []
-        models_page = await self.client.models.list()
+        models_page = await retry_provider_request(
+            "Anthropic",
+            lambda: self.client.models.list(),
+        )
         for model_info in models_page.data:
             model_id = getattr(model_info, "id", None)
             if isinstance(model_id, str):

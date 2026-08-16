@@ -4,6 +4,7 @@ aiohttp>=3.11.18
 aiosqlite>=0.21.0
 anthropic>=0.51.0
 apscheduler>=3.11.0
+beautifulsoup4>=4.13.4
 certifi>=2025.4.26
 chardet~=5.1.0
 loguru>=0.7.2
@@ -55,6 +56,7 @@ shipyard-python-sdk>=0.2.4
 shipyard-neo-sdk>=0.2.0
 packaging>=24.2
 qrcode>=8.2
+readability-lxml>=0.8.4.1
 quart>=0.20.0
 python-ripgrep==0.0.8 ; python_version < '3.14'
 python-docx>=1.2.0

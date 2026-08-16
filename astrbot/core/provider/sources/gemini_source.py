@@ -30,6 +30,8 @@ from astrbot.core.utils.io import download_file, download_image_by_url
 from astrbot.core.utils.media_utils import ensure_wav
 from astrbot.core.utils.network_utils import is_connection_error, log_connection_failure
 
+from .request_retry import retry_provider_request
+
 
 class SuppressNonTextPartsWarning(logging.Filter):
     """过滤 Gemini SDK 中的非文本部分警告"""
@@ -84,10 +86,9 @@ class ProviderGoogleGenAI(Provider):
 
         # 强制使用 httpx 作为异步 HTTP 后端，避免 aiohttp 响应类型兼容问题 (#7564)
         # httpx.AsyncClient 的 timeout 单位为秒（与 HttpOptions 的毫秒不同）
-        async_client_kwargs: dict = {
-            "base_url": self.api_base,
-            "timeout": self.timeout,
-        }
+        async_client_kwargs: dict = {"timeout": self.timeout}
+        if self.api_base:
+            async_client_kwargs["base_url"] = self.api_base
         if proxy:
             async_client_kwargs["proxy"] = proxy
             async_client_kwargs["trust_env"] = False
@@ -834,7 +835,10 @@ class ProviderGoogleGenAI(Provider):
 
     async def get_models(self):
         try:
-            models = await self.client.models.list()
+            models = await retry_provider_request(
+                "Gemini",
+                lambda: self.client.models.list(),
+            )
             return [
                 m.name.replace("models/", "")
                 for m in models

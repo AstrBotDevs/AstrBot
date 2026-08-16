@@ -17,7 +17,5 @@ class TestSparseRetrieverImports:
 
     def test_import_sparse_result(self):
         assert SparseResult is not None
-        assert hasattr(SparseResult, "chunk_id")
-        assert hasattr(SparseResult, "doc_id")
-        assert hasattr(SparseResult, "content")
-        assert hasattr(SparseResult, "score")
+        fields = SparseResult.__dataclass_fields__
+        assert {"chunk_id", "doc_id", "content", "score"} <= fields.keys()

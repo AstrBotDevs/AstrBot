@@ -293,14 +293,12 @@ class AstrMessageEvent(abc.ABC):
         )
         self._has_send_oper = True
 
-    @abc.abstractmethod
     async def send_typing(self) -> None:
         """发送输入中状态。
 
         默认实现为空，由具体平台按需重写。
         """
 
-    @abc.abstractmethod
     async def stop_typing(self) -> None:
         """停止输入中状态。
 
@@ -507,7 +505,6 @@ class AstrMessageEvent(abc.ABC):
         """
         await self.send(MessageChain([Plain(emoji)]))
 
-    @abc.abstractmethod
     async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
         """获取一个群聊的数据, 如果不填写 group_id: 如果是私聊消息，返回 None。如果是群聊消息，返回当前群聊的数据。
 
@@ -515,3 +512,7 @@ class AstrMessageEvent(abc.ABC):
 
         - aiocqhttp(OneBotv11)
         """
+        group = self.message_obj.group
+        if group is None or (group_id is not None and group_id != group.group_id):
+            return None
+        return group

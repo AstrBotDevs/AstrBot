@@ -1,4 +1,4 @@
-"""Ensure frontend login logic and backend argon2id verification match.
+"""Ensure frontend login logic and backend password verification match.
 
 This guards against the kind of password-hash mismatch that can be
 introduced when the frontend encryption/encoding logic and the backend
@@ -17,10 +17,10 @@ from astrbot.core.utils.auth_password import (
 
 
 def test_password_hash_roundtrip():
-    """Backend argon2id hash → verify round-trip."""
+    """Backend PBKDF2 hash → verify round-trip."""
     password = "test-password-123"
     hashed = hash_dashboard_password(password)
-    assert hashed.startswith("$argon2id$"), f"Expected argon2id hash, got: {hashed}"
+    assert hashed.startswith("pbkdf2_sha256$600000$")
     assert verify_dashboard_password(hashed, password)
     assert not verify_dashboard_password(hashed, "wrong-password")
 
@@ -46,13 +46,15 @@ def test_is_default_password():
     assert is_legacy_dashboard_password("e99a18c428cb38d5f260853678922e03")
 
 
-def test_login_challenge_argon2():
-    """get_dashboard_login_challenge for argon2 returns algorithm marker."""
+def test_login_challenge_for_generated_hash():
+    """Generated dashboard hashes expose PBKDF2 challenge parameters."""
     password = "test-challenge-pw"
     hashed = hash_dashboard_password(password)
 
     challenge = get_dashboard_login_challenge(hashed)
-    assert challenge == {"algorithm": "argon2"}
+    assert challenge["algorithm"] == "pbkdf2_sha256"
+    assert challenge["iterations"] == 600000
+    assert isinstance(challenge["salt"], str)
 
 
 def test_login_challenge_pbkdf2():

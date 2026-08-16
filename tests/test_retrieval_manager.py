@@ -17,8 +17,5 @@ class TestRetrievalManagerImports:
 
     def test_import_retrieval_result(self):
         assert RetrievalResult is not None
-        assert hasattr(RetrievalResult, "chunk_id")
-        assert hasattr(RetrievalResult, "doc_id")
-        assert hasattr(RetrievalResult, "content")
-        assert hasattr(RetrievalResult, "score")
-        assert hasattr(RetrievalResult, "metadata")
+        fields = RetrievalResult.__dataclass_fields__
+        assert {"chunk_id", "doc_id", "content", "score", "metadata"} <= fields.keys()

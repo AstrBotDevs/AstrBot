@@ -26,6 +26,7 @@ async def test_collect_and_register_commands_ignores_daily_create_limit() -> Non
 
     class MockResponse:
         status: int = 400
+        reason: str = "Bad Request"
 
     exc = HTTPException(MockResponse(), {"code": 30034, "message": "daily limit"})  # type: ignore[arg-type]
     adapter.client.sync_commands.side_effect = exc

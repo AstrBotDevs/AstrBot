@@ -97,18 +97,18 @@ def test_sqlite_implements_all_abstract():
     assert not missing, f"SQLiteDatabase missing abstract methods: {missing}"
 
 
-def test_auth_route_import():
-    """AuthRoute class definition is importable."""
-    from astrbot.dashboard.routes.auth import AuthRoute
+def test_auth_router_import():
+    """The FastAPI auth router is importable."""
+    from astrbot.dashboard.api.auth import router
 
-    assert AuthRoute is not None
+    assert router is not None
 
 
-def test_log_route_import():
-    """LogRoute (live-log SSE) class definition is importable."""
-    from astrbot.dashboard.routes.log import LogRoute
+def test_log_router_import():
+    """The FastAPI live-log router is importable."""
+    from astrbot.dashboard.api.logs import router
 
-    assert LogRoute is not None
+    assert router is not None
 
 
 def test_password_utils_import():

@@ -25,14 +25,15 @@ class ContentSafetyCheckStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
+        check_text: str | None = None,
     ) -> AsyncGenerator[None, None]:
-        async for item in self.process_text(event, event.get_message_str()):
+        async for item in self.process_text(event, check_text):
             yield item
 
     async def process_text(
         self,
         event: AstrMessageEvent,
-        check_text: str,
+        check_text: str | None,
     ) -> AsyncGenerator[None, None]:
         """检查内容安全"""
         if check_text is None:

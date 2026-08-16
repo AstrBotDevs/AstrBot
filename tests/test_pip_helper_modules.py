@@ -226,8 +226,11 @@ def test_plan_missing_requirements_install_returns_none_when_missing_names_canno
 
     monkeypatch.setattr(
         requirements_utils,
-        "find_missing_requirements_from_lines",
-        lambda lines: {"botocore"},
+        "classify_missing_requirements_from_lines",
+        lambda lines: requirements_utils.MissingRequirementsAnalysis(
+            missing_names=frozenset({"botocore"}),
+            version_mismatch_names=frozenset(),
+        ),
     )
 
     plan = requirements_utils.plan_missing_requirements_install(str(requirements_path))

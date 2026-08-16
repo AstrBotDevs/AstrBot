@@ -20,8 +20,8 @@ import astrbot.core.pipeline.process_stage.stage  # noqa: F401
 # Extra guards —曾炸过的 import 路径
 # ---------------------------------------------------------------------------
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor  # noqa: F401
-from astrbot.dashboard.routes.live_chat import LiveChatRoute  # noqa: F401
-from astrbot.dashboard.routes.chat import ChatRoute  # noqa: F401
+from astrbot.dashboard.api.chat import router as chat_router  # noqa: F401
+from astrbot.dashboard.api.live_chat import router as live_chat_router  # noqa: F401
 from astrbot.core.pipeline.scheduler import PipelineScheduler  # noqa: F401
 from astrbot.core.utils.auth_password import (
     hash_dashboard_password,        # noqa: F401
@@ -41,8 +41,8 @@ def test_platform_abstract_methods():
     assert len(Platform.__dict__.get('__abstractmethods__', frozenset())) > 0
 
 
-def test_live_chat_route():
-    """LiveChatRoute can be imported without errors."""
-    from astrbot.dashboard.routes.live_chat import LiveChatRoute
+def test_live_chat_router():
+    """The FastAPI live-chat router can be imported without errors."""
+    from astrbot.dashboard.api.live_chat import router
 
-    assert LiveChatRoute is not None
+    assert router is not None

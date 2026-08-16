@@ -40,14 +40,16 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
 from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_file, download_image_by_url
-from astrbot.core.utils.media_utils import ensure_wav
+from astrbot.core.utils.io import download_file
+from astrbot.core.utils.media_utils import resolve_media_ref_to_base64_data
 from astrbot.core.utils.network_utils import (
     create_proxy_client,
     is_connection_error,
     log_connection_failure,
 )
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
+
+from .request_retry import retry_provider_request
 
 
 @register_provider_adapter(
@@ -283,20 +285,12 @@ class ProviderOpenAIOfficial(Provider):
         *,
         mode: Literal["safe", "strict"] = "safe",
     ) -> str | None:
-        if image_ref.startswith("base64://"):
-            return self._base64_image_ref_to_data_url(image_ref)
-
-        if image_ref.startswith("http"):
-            image_path = await download_image_by_url(image_ref)
-        elif image_ref.startswith("file://"):
-            image_path = self._file_uri_to_path(image_ref)
-        else:
-            image_path = image_ref
-
-        return self._encode_image_file_to_data_url(
-            image_path,
-            mode=mode,
+        image_data = await resolve_media_ref_to_base64_data(
+            image_ref,
+            media_type="image",
+            strict=mode == "strict",
         )
+        return image_data.to_data_url() if image_data else None
 
     async def _resolve_image_part(
         self,
@@ -370,38 +364,25 @@ class ProviderOpenAIOfficial(Provider):
         return audio_ref, cleanup_paths
 
     async def _resolve_audio_part(self, audio_ref: str) -> dict | None:
-        cleanup_paths: list[Path] = []
         try:
-            audio_path, cleanup_paths = await self._audio_ref_to_local_path(audio_ref)
-            suffix = PurePath(audio_path).suffix.lower()
-            if suffix == ".mp3":
-                audio_format = "mp3"
-            else:
-                converted_audio_path = await ensure_wav(audio_path)
-                if converted_audio_path != audio_path:
-                    cleanup_paths.append(Path(converted_audio_path))
-                audio_path = converted_audio_path
-                audio_format = "wav"
-            audio_bytes = await anyio.Path(audio_path).read_bytes()
+            audio_data = await resolve_media_ref_to_base64_data(
+                audio_ref,
+                media_type="audio",
+                strict=True,
+            )
         except Exception as exc:
-            logger.warning("音频 %s 预处理失败，将忽略。错误: %s", audio_ref, exc)
+            logger.warning("音频预处理失败，将忽略。错误: %s", exc)
             return None
-        finally:
-            for cleanup_path in cleanup_paths:
-                try:
-                    cleanup_path.unlink(missing_ok=True)
-                except Exception as cleanup_exc:
-                    logger.warning(
-                        "Failed to cleanup %s: %s",
-                        cleanup_path,
-                        cleanup_exc,
-                    )
+
+        if not audio_data or not audio_data.format:
+            logger.warning("音频预处理结果为空，将忽略。")
+            return None
 
         return {
             "type": "input_audio",
             "input_audio": {
-                "data": base64.b64encode(audio_bytes).decode("utf-8"),
-                "format": audio_format,
+                "data": audio_data.base64_data,
+                "format": audio_data.format,
             },
         }
 
@@ -579,7 +560,10 @@ class ProviderOpenAIOfficial(Provider):
     async def get_models(self):
         try:
             models_str = []
-            models = await self.client.models.list()
+            models = await retry_provider_request(
+                "OpenAI",
+                lambda: self.client.models.list(),
+            )
             models = sorted(models.data, key=lambda x: x.id)
             for model in models:
                 models_str.append(model.id)
@@ -671,7 +655,13 @@ class ProviderOpenAIOfficial(Provider):
             )
         payloads["messages"] = final
 
-    async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
+    async def _query(
+        self,
+        payloads: dict,
+        tools: ToolSet | None,
+        *,
+        request_max_retries: int | None = None,
+    ) -> LLMResponse:
         if tools:
             model = payloads.get("model", "").lower()
             omit_empty_param_field = "gemini" in model
@@ -702,10 +692,14 @@ class ProviderOpenAIOfficial(Provider):
 
         self._sanitize_assistant_messages(payloads)
 
-        completion = await self.client.chat.completions.create(
-            **payloads,
-            stream=False,
-            extra_body=extra_body,
+        completion = await retry_provider_request(
+            "OpenAI",
+            lambda: self.client.chat.completions.create(
+                **payloads,
+                stream=False,
+                extra_body=extra_body,
+            ),
+            max_attempts=request_max_retries,
         )
 
         if not isinstance(completion, ChatCompletion):
@@ -723,6 +717,8 @@ class ProviderOpenAIOfficial(Provider):
         self,
         payloads: dict,
         tools: ToolSet | None,
+        *,
+        request_max_retries: int | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式查询API,逐步返回结果"""
         if tools:
@@ -754,11 +750,15 @@ class ProviderOpenAIOfficial(Provider):
 
         self._sanitize_assistant_messages(payloads)
 
-        stream = await self.client.chat.completions.create(
-            **payloads,
-            stream=True,
-            extra_body=extra_body,
-            stream_options={"include_usage": True},
+        stream = await retry_provider_request(
+            "OpenAI",
+            lambda: self.client.chat.completions.create(
+                **payloads,
+                stream=True,
+                extra_body=extra_body,
+                stream_options={"include_usage": True},
+            ),
+            max_attempts=request_max_retries,
         )
 
         llm_response = LLMResponse("assistant", is_chunk=True)
@@ -1330,6 +1330,7 @@ class ProviderOpenAIOfficial(Provider):
         model=None,
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "required"] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
         payloads, context_query = await self._prepare_chat_payload(
@@ -1357,7 +1358,11 @@ class ProviderOpenAIOfficial(Provider):
         for retry_cnt in range(max_retries):
             try:
                 self.client.api_key = chosen_key
-                llm_response = await self._query(payloads, func_tool)
+                llm_response = await self._query(
+                    payloads,
+                    func_tool,
+                    request_max_retries=request_max_retries,
+                )
                 break
             except Exception as e:
                 last_exception = e
@@ -1403,6 +1408,7 @@ class ProviderOpenAIOfficial(Provider):
         model=None,
         extra_user_content_parts: list[ContentPart] | None = None,
         tool_choice: Literal["auto", "required"] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式对话,与服务商交互并逐步返回结果"""
@@ -1429,7 +1435,11 @@ class ProviderOpenAIOfficial(Provider):
         for retry_cnt in range(max_retries):
             try:
                 self.client.api_key = chosen_key
-                async for response in self._query_stream(payloads, func_tool):
+                async for response in self._query_stream(
+                    payloads,
+                    func_tool,
+                    request_max_retries=request_max_retries,
+                ):
                     yield response
                 break
             except Exception as e:

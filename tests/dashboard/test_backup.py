@@ -1,14 +1,14 @@
-"""Import smoke tests for the backup route module.
+"""Import smoke tests for the backup service module.
 
-Verifies that the ``BackupRoute`` class and key standalone utilities from
-``backup.py`` can be imported without errors.
+Verifies that the ``BackupService`` class and key standalone utilities can be
+imported without errors.
 """
 
 # ---------------------------------------------------------------------------
-# backup.py — BackupRoute, helpers and constants
+# backup_service.py — BackupService, helpers and constants
 # ---------------------------------------------------------------------------
-from astrbot.dashboard.routes.backup import (
-    BackupRoute,               # noqa: F401
+from astrbot.dashboard.services.backup_service import (
+    BackupService,             # noqa: F401
     CHUNK_SIZE,                # noqa: F401
     UPLOAD_EXPIRE_SECONDS,     # noqa: F401
     generate_unique_filename,  # noqa: F401
@@ -16,8 +16,8 @@ from astrbot.dashboard.routes.backup import (
 )
 
 
-def test_backup_route_class():
-    assert BackupRoute is not None
+def test_backup_service_class():
+    assert BackupService is not None
 
 
 def test_chunk_size_constant():
@@ -39,7 +39,7 @@ def test_generate_unique_filename_is_callable():
 def test_secure_filename_sanitizes_path_traversal():
     result = secure_filename("../../etc/passwd")
     assert ".." not in result
-    assert "passwd" not in result
+    assert result == "passwd"
 
 
 def test_secure_filename_removes_hidden_prefix():

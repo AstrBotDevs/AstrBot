@@ -8,7 +8,6 @@ import wave
 from io import BytesIO
 
 import anyio
-import pysilk  # requires silk-python (core dependency)
 
 from astrbot.core import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -18,6 +17,8 @@ _PYSILK_SUPPORTED_RATES = frozenset({8000, 12000, 16000, 24000, 32000, 48000})
 
 
 async def tencent_silk_to_wav(silk_path: str, output_path: str) -> str:
+    import pysilk
+
     async with await anyio.open_file(silk_path, "rb") as f:
         input_data = await f.read()
         if input_data.startswith(b"\x02"):
@@ -37,6 +38,14 @@ async def tencent_silk_to_wav(silk_path: str, output_path: str) -> str:
 
 async def wav_to_tencent_silk(wav_path: str, output_path: str) -> float:
     """Encode a WAV file as Tencent SILK and return its duration."""
+    try:
+        import pysilk
+    except (ImportError, ModuleNotFoundError) as e:
+        raise Exception(
+            "pysilk is not installed. Install the silk-python package from the "
+            "dashboard platform logs page.",
+        ) from e
+
     with wave.open(wav_path, "rb") as wav:
         rate = wav.getframerate()
         channels = wav.getnchannels()

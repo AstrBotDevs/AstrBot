@@ -559,4 +559,8 @@ class TestSubagentHandoffTools:
             session_id=None,  # type: ignore[arg-type]
             sandbox_cfg={},
         )
-        assert len(tools) == 2
+        assert set(tools) == {
+            "astrbot_execute_python",
+            "astrbot_execute_shell",
+            "astrbot_shell_session",
+        }

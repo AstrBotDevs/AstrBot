@@ -42,15 +42,9 @@ def generate_dashboard_password() -> str:
 
 
 def hash_dashboard_password(raw_password: str) -> str:
-    """Return a salted hash for dashboard password using Argon2 (if available) or PBKDF2-HMAC-SHA256 fallback."""
+    """Return a salted PBKDF2-HMAC-SHA256 dashboard password hash."""
     if not isinstance(raw_password, str) or raw_password == "":
         raise ValueError("Password cannot be empty")
-
-    if _PASSWORD_HASHER is not None:
-        try:
-            return _PASSWORD_HASHER.hash(raw_password)
-        except Exception as e:
-            raise ValueError(f"Failed to hash password securely (argon2): {e!s}") from e
 
     salt = secrets.token_hex(_PBKDF2_SALT_BYTES)
     digest = hashlib.pbkdf2_hmac(

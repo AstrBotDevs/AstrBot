@@ -1029,7 +1029,7 @@ class PipInstaller:
         package_name: str | None = None,
         requirements_path: str | None = None,
         mirror: str | None = None,
-        allow_target_upgrade: bool = False,
+        allow_target_upgrade: bool = True,
     ) -> None:
         args, requested_requirements = self._build_pip_args(
             package_name,
@@ -1048,15 +1048,15 @@ class PipInstaller:
             target_site_packages = get_astrbot_site_packages_path()
             os.makedirs(target_site_packages, exist_ok=True)
             _prepend_sys_path(target_site_packages)
-            args.extend(
-                [
-                    "--target",
-                    target_site_packages,
-                    "--upgrade",
-                    "--upgrade-strategy",
-                    "only-if-needed",
-                ],
-            )
+            args.extend(["--target", target_site_packages])
+            if allow_target_upgrade:
+                args.extend(
+                    [
+                        "--upgrade",
+                        "--upgrade-strategy",
+                        "only-if-needed",
+                    ],
+                )
         elif allow_target_upgrade:
             args.append("--upgrade")
 

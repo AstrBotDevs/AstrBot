@@ -4,8 +4,8 @@ This module provides performance benchmarks with scoring to track
 performance regressions and improvements over time.
 """
 
-import asyncio
 import gc
+import time
 import tracemalloc
 from typing import Any
 from collections.abc import Callable
@@ -55,10 +55,10 @@ class PerformanceBenchmark:
         gc.collect()
 
         # Pass 1 — throughput (no tracemalloc overhead)
-        start = asyncio.get_event_loop().time()
+        start = time.perf_counter()
         for _ in range(self.operations):
             func(*args, **kwargs)
-        end = asyncio.get_event_loop().time()
+        end = time.perf_counter()
 
         total_time = (end - start) * 1000  # ms
         avg_time = total_time / self.operations

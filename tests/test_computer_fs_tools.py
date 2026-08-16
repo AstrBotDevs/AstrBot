@@ -166,6 +166,11 @@ def _setup_local_fs_tools(
         lambda: str(workspaces_root),
     )
     monkeypatch.setattr(
+        local_booter_module,
+        "get_astrbot_root",
+        lambda: str(tmp_path),
+    )
+    monkeypatch.setattr(
         fs_tools,
         "get_astrbot_skills_path",
         lambda: str(skills_root),
