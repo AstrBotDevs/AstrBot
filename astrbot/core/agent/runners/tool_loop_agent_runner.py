@@ -1098,7 +1098,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         def _append_tool_call_result(tool_call_id: str, content: str) -> None:
             content = self._merge_follow_up_notice(content)
             if (
-                tool_call_result_blocks
+                len(tool_call_result_blocks) > tool_result_blocks_start
                 and tool_call_result_blocks[-1].tool_call_id == tool_call_id
             ):
                 previous = tool_call_result_blocks[-1]
