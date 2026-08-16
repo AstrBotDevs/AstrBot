@@ -194,6 +194,33 @@ async def test_parse_group_message_create_bot_mention_cleans_plain_text(
     assert abm.group_id == "group-1"
 
 
+@pytest.mark.parametrize(
+    ("content", "mention_id", "expected"),
+    [
+        ("before<@bot-123>after", "bot-123", "before after"),
+        ("before <@bot-123><@!bot-123> after", "bot-123", "before after"),
+        (
+            'before<qqbot-at-user id="bot-123" />after',
+            "bot-123",
+            "before after",
+        ),
+        ("before<@other-user>after", "bot-123", "before<@other-user>after"),
+        ("before<@bot.123>after", "bot.123", "before after"),
+    ],
+)
+def test_strip_bot_mention_markup_preserves_word_boundaries(
+    content: str,
+    mention_id: str,
+    expected: str,
+):
+    normalized = QQOfficialPlatformAdapter._strip_bot_mention_markup(
+        content,
+        mention_id,
+    )
+
+    assert normalized.strip() == expected
+
+
 @pytest.mark.asyncio
 async def test_parse_to_qqofficial_preserves_at_component_order():
     parsed = await QQOfficialMessageEvent._parse_to_qqofficial(

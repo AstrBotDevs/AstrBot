@@ -238,6 +238,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         if not qq:
             return None
         qq_id = str(qq)
+        # QQ Official group bots cannot send @all mentions through this path.
         return qq_id if qq_id != "all" else None
 
     @classmethod

@@ -14,6 +14,7 @@ import asyncio
 import logging
 import os
 import random
+import re
 import time
 import uuid
 from pathlib import Path
@@ -617,7 +618,6 @@ class QQOfficialPlatformAdapter(Platform):
         """
         import base64
         import json
-        import re
 
         def replace_face(match: re.Match[str]) -> str:
             face_tag = match.group(0)
@@ -639,13 +639,11 @@ class QQOfficialPlatformAdapter(Platform):
     @staticmethod
     def _strip_bot_mention_markup(content: str | None, mention_id: str) -> str:
         normalized = content or ""
-        for markup in (
-            f'<qqbot-at-user id="{mention_id}" />',
-            f"<@{mention_id}>",
-            f"<@!{mention_id}>",
-        ):
-            normalized = normalized.replace(markup, "")
-        return normalized
+        escaped_id = re.escape(mention_id)
+        markup_pattern = (
+            rf'(?:<qqbot-at-user\s+id="{escaped_id}"\s*/>|<@!?{escaped_id}>)'
+        )
+        return re.sub(rf"(?:[ \t]*{markup_pattern}[ \t]*)+", " ", normalized)
 
     @staticmethod
     async def _parse_from_qqofficial(
