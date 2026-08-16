@@ -19,7 +19,6 @@ from astrbot.api.platform import (
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.media_utils import MediaResolver
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from .line_api import LineAPIClient
@@ -308,24 +307,14 @@ class LinePlatformAdapter(Platform):
     ) -> Record | None:
         external_url = self._get_external_content_url(message)
         if external_url:
-            path_wav = await MediaResolver(
-                external_url,
-                media_type="audio",
-                default_suffix=".wav",
-            ).to_path(target_format="wav")
-            return Record(file=path_wav, url=path_wav)
+            return Record(file=external_url, url=external_url)
         content = await self.line_api.get_message_content(message_id)
         if not content:
             return None
         content_bytes, content_type, _ = content
         suffix = self._guess_suffix(content_type, ".m4a")
         file_path = self._store_temp_content("audio", message_id, content_bytes, suffix)
-        path_wav = await MediaResolver(
-            file_path,
-            media_type="audio",
-            default_suffix=".wav",
-        ).to_path(target_format="wav")
-        return Record(file=path_wav, url=path_wav)
+        return Record(file=file_path, url=file_path)
 
     async def _build_file_component(
         self,

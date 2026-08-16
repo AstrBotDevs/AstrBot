@@ -26,7 +26,6 @@ from astrbot.core.star.star_handler import (
     StarHandlerMetadata,
     star_handlers_registry,
 )
-from astrbot.core.utils.media_utils import MediaResolver
 
 from .client import DiscordBotClient
 from .discord_platform_event import DiscordPlatformEvent
@@ -277,20 +276,7 @@ class DiscordPlatformAdapter(Platform):
     async def convert_message(self, data: dict) -> AstrBotMessage:
         """将平台消息转换成 AstrBotMessage"""
         # 由于 on_interaction 已被禁用,我们只处理普通消息
-        abm = self._convert_message_to_abm(data)
-        for component in abm.message:
-            if isinstance(component, Record):
-                audio_ref = component.url or component.file
-                if audio_ref:
-                    path_wav = await MediaResolver(
-                        audio_ref,
-                        media_type="audio",
-                        default_suffix=".wav",
-                    ).to_path(target_format="wav")
-                    component.file = path_wav
-                    component.url = path_wav
-                    component.path = path_wav
-        return abm
+        return self._convert_message_to_abm(data)
 
     async def handle_msg(self, message: AstrBotMessage, followup_webhook=None) -> None:
         """处理消息"""

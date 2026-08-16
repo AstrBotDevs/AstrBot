@@ -369,6 +369,7 @@ class ProviderOpenAIOfficial(Provider):
                 audio_ref,
                 media_type="audio",
                 strict=True,
+                preserve_mp3=True,
             )
         except Exception as exc:
             logger.warning("音频预处理失败，将忽略。错误: %s", exc)
@@ -699,6 +700,7 @@ class ProviderOpenAIOfficial(Provider):
                 stream=False,
                 extra_body=extra_body,
             ),
+            retry_rate_limits=False,
             max_attempts=request_max_retries,
         )
 
@@ -758,6 +760,7 @@ class ProviderOpenAIOfficial(Provider):
                 extra_body=extra_body,
                 stream_options={"include_usage": True},
             ),
+            retry_rate_limits=False,
             max_attempts=request_max_retries,
         )
 

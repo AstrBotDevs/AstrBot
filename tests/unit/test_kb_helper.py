@@ -590,6 +590,7 @@ async def test_list_documents_delegates_to_db(
         helper.kb.kb_id,
         0,
         50,
+        search=None,
     )
     assert result == ["doc1", "doc2"]
 

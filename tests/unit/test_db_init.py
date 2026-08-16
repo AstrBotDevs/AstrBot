@@ -52,9 +52,9 @@ class TestBaseDatabaseAbstract:
             # Should not raise AttributeError or similar
             assert callable(method)
 
-    def test_initialize_is_not_abstract(self):
-        """initialize() has a concrete default implementation."""
-        assert "initialize" not in BaseDatabase.__abstractmethods__
+    def test_initialize_is_abstract(self):
+        """Database backends must implement initialize()."""
+        assert "initialize" in BaseDatabase.__abstractmethods__
 
     def test_get_db_is_not_abstract(self):
         """get_db() has a concrete implementation (async context manager)."""

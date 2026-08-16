@@ -231,6 +231,7 @@ class TelegramPlatformAdapter(Platform):
                         logger.warning(
                             f"Telegram polling loop exited unexpectedly, retrying in {self._polling_restart_delay}s.",
                         )
+                        await asyncio.sleep(self._polling_restart_delay)
                     continue
 
                 if not self._terminating:

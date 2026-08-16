@@ -25,7 +25,6 @@ from astrbot.api.platform import (
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.media_utils import MediaResolver
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from .bot_info import request_lark_bot_info
@@ -288,12 +287,7 @@ class LarkPlatformAdapter(Platform):
                 default_suffix=".opus",
             )
             if file_path:
-                path_wav = await MediaResolver(
-                    file_path,
-                    media_type="audio",
-                    default_suffix=".wav",
-                ).to_path(target_format="wav")
-                components.append(Comp.Record(file=path_wav, url=path_wav))
+                components.append(Comp.Record(file=file_path, url=file_path))
             return components
         if message_type == "media":
             file_key = str(content.get("file_key", "")).strip()

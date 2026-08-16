@@ -320,9 +320,11 @@ class TestProviderRequest:
         req = ProviderRequest(prompt="", audio_urls=["http://example.com/a.wav"])
         import asyncio
 
-        with (
-            patch.object(req, "_encode_audio_bs64", return_value="data:audio/wav;base64,xyz"),
-            patch("astrbot.core.provider.entities.download_file", AsyncMock()),
+        resolver = MagicMock()
+        resolver.to_base64_data = AsyncMock(return_value=None)
+        with patch(
+            "astrbot.core.provider.entities.MediaResolver",
+            return_value=resolver,
         ):
             ctx = asyncio.run(req.assemble_context())
             assert ctx["role"] == "user"

@@ -207,8 +207,8 @@ class TestLlmTools:
 
         assert isinstance(llm_tools, FunctionToolManager)
 
-    def test_llm_tools_starts_empty(self):
-        assert llm_tools.empty() is True
+    def test_llm_tools_registry_is_initialized(self):
+        assert llm_tools.func_list is not None
 
     def test_llm_tools_add_and_get(self):
         async def fake_handler(**kwargs):

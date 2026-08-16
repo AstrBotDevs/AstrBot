@@ -440,6 +440,7 @@ class TestConversationManagerGetFilteredConversations:
             page_size=20,
             platform_ids=["qq"],
             search_query="test",
+            include_history=True,
         )
 
 

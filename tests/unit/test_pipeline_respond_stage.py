@@ -341,7 +341,7 @@ class TestRespondStageIsSegReplyRequired:
         result = MagicMock()
         result.is_model_result.return_value = True
         event.get_result.return_value = result
-        event.get_platform_name.return_value = "qq_official"
+        event.get_platform_name.return_value = "qq_official_webhook"
         assert stage.is_seg_reply_required(event) is False
 
     def test_seg_all_conditions_met(self, stage):

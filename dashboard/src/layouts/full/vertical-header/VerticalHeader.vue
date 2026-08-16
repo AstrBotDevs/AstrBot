@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { md5 } from "js-md5";
 import { enableKatex, enableMermaid, MarkdownRender } from "markstream-vue";
 import { computed, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from "vue";
 import ProviderModelMenu from "@/components/chat/ProviderModelMenu.vue";
@@ -324,15 +323,11 @@ function accountEdit() {
   const newPasswordValue = newPassword.value ? newPassword.value : "";
   const confirmPasswordValue = confirmPassword.value ? confirmPassword.value : "";
 
-  const passwordHash = password.value ? md5(password.value) : "";
-  const newPasswordHash = newPassword.value ? md5(newPassword.value) : "";
-  const confirmPasswordHash = confirmPassword.value ? md5(confirmPassword.value) : "";
-
   axios
     .post("/api/auth/account/edit", {
-      password: passwordHash,
-      new_password: newPasswordHash,
-      confirm_password: confirmPasswordHash,
+      password: currentPasswordValue,
+      new_password: newPasswordValue,
+      confirm_password: confirmPasswordValue,
       new_username: newUsername.value ? newUsername.value : username,
     })
     .then((res) => {

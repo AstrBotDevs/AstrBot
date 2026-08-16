@@ -14,6 +14,7 @@ Skills 目录路径:固定为数据目录下的 skills 目录
 """
 
 import os
+import tempfile
 from importlib import resources
 from pathlib import Path
 
@@ -257,8 +258,8 @@ def get_astrbot_backups_path() -> str:
 
 
 def get_astrbot_system_tmp_path() -> str:
-    """获取Astrbot系统临时目录路径 (/tmp/.astrbot)"""
-    return "/tmp/.astrbot"
+    """获取当前平台的 AstrBot 系统临时目录路径。"""
+    return os.path.realpath(os.path.join(tempfile.gettempdir(), ".astrbot"))
 
 
 def get_astrbot_workspaces_path() -> str:

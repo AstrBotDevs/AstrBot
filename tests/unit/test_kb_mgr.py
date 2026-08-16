@@ -53,6 +53,7 @@ def mock_kb_db():
     db.migrate_to_v1 = AsyncMock()
     db.list_kbs = AsyncMock(return_value=[])
     db.get_kb_by_id = AsyncMock()
+    db.get_kb_by_name = AsyncMock(return_value=None)
     return db
 
 
@@ -255,10 +256,7 @@ async def test_create_kb_duplicate_name_raises(
     from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
     mock_kb_db.get_db.return_value = mock_db_context
-    # Simulate an IntegrityError-like message
-    mock_session.flush = AsyncMock(
-        side_effect=Exception("UNIQUE constraint failed: kb_name"),
-    )
+    mock_kb_db.get_kb_by_name.return_value = mock_knowledge_base
 
     mgr = KnowledgeBaseManager.__new__(KnowledgeBaseManager)
     mgr.provider_manager = mock_provider_manager

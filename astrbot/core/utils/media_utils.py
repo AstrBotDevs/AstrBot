@@ -930,6 +930,7 @@ async def resolve_media_ref_to_base64_data(
     *,
     media_type: str,
     strict: bool = False,
+    preserve_mp3: bool = False,
 ) -> ResolvedMediaData | None:
     """Resolve a media reference to base64 data through one shared entrypoint.
 
@@ -940,7 +941,10 @@ async def resolve_media_ref_to_base64_data(
     if media_type == "image":
         return await resolve_image_ref_to_base64_data(media_ref, strict=strict)
     if media_type == "audio":
-        return await resolve_audio_ref_to_base64_data(media_ref)
+        return await resolve_audio_ref_to_base64_data(
+            media_ref,
+            preserve_mp3=preserve_mp3,
+        )
 
     return await MediaResolver(
         media_ref,

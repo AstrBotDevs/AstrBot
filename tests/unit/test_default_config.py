@@ -50,7 +50,7 @@ class TestDEFAULT_VALUE_MAP:
     """Tests for DEFAULT_VALUE_MAP structure."""
 
     def test_contains_expected_types(self):
-        expected = {"int", "float", "bool", "string", "text", "list", "file", "object", "template_list"}
+        expected = {"int", "float", "bool", "string", "text", "list", "file", "object", "dict", "template_list"}
         assert set(DEFAULT_VALUE_MAP.keys()) == expected
 
     def test_default_values_are_correct_types(self):
@@ -62,6 +62,7 @@ class TestDEFAULT_VALUE_MAP:
         assert isinstance(DEFAULT_VALUE_MAP["list"], list)
         assert isinstance(DEFAULT_VALUE_MAP["file"], list)
         assert isinstance(DEFAULT_VALUE_MAP["object"], dict)
+        assert isinstance(DEFAULT_VALUE_MAP["dict"], dict)
         assert isinstance(DEFAULT_VALUE_MAP["template_list"], list)
 
     def test_specific_default_values(self):
@@ -71,6 +72,7 @@ class TestDEFAULT_VALUE_MAP:
         assert DEFAULT_VALUE_MAP["string"] == ""
         assert DEFAULT_VALUE_MAP["list"] == []
         assert DEFAULT_VALUE_MAP["object"] == {}
+        assert DEFAULT_VALUE_MAP["dict"] == {}
         assert DEFAULT_VALUE_MAP["template_list"] == []
 
 

@@ -1155,19 +1155,11 @@ async def test_cua_boot_cleans_up_sandbox_when_component_setup_fails(monkeypatch
         def __init__(self, sandbox, os_type="linux"):
             raise RuntimeError("component setup failed")
 
-    original_import = __import__
+    class FakeCuaModule:
+        Image = FakeImage
+        Sandbox = FakeSandboxFactory
 
-    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if name == "cua":
-
-            class FakeCuaModule:
-                Image = FakeImage
-                Sandbox = FakeSandboxFactory
-
-            return FakeCuaModule()
-        return original_import(name, globals, locals, fromlist, level)
-
-    monkeypatch.setattr("builtins.__import__", fake_import)
+    monkeypatch.setattr(cua_booter.importlib, "import_module", lambda _: FakeCuaModule)
     monkeypatch.setattr(cua_booter, "CuaShellComponent", BrokenShellComponent)
 
     booter = cua_booter.CuaBooter()

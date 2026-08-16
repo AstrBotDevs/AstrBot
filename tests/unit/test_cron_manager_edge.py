@@ -37,7 +37,9 @@ def mock_context():
 
 @pytest.fixture
 def cron_manager(mock_db):
-    return CronJobManager(mock_db)
+    manager = CronJobManager(mock_db)
+    manager.ctx = MagicMock()
+    return manager
 
 
 # ---- add_basic_job validation edge cases ----
@@ -227,8 +229,8 @@ class TestRunJobEdgeCases:
         mock_delete.assert_awaited_once_with("once-job")
 
     @pytest.mark.asyncio
-    async def test_run_job_active_agent_raises_on_missing_session(self, cron_manager, mock_db):
-        """run_job on an active_agent job without session payload raises."""
+    async def test_run_job_active_agent_uses_synthetic_session_when_missing(self, cron_manager, mock_db):
+        """An active-agent job without a delivery session uses its cron session."""
         job = CronJob(
             job_id="aa-no-session",
             name="NoSession",
@@ -239,13 +241,20 @@ class TestRunJobEdgeCases:
         )
         mock_db.get_cron_job.return_value = job
 
-        await cron_manager._run_job("aa-no-session")
+        with patch.object(
+            cron_manager,
+            "_woke_main_agent",
+            new_callable=AsyncMock,
+        ) as woke_main_agent:
+            await cron_manager._run_job("aa-no-session")
 
-        # Should not crash the manager; error is caught and logged,
-        # status should be "failed"
         last_call = mock_db.update_cron_job.call_args_list[-1]
-        assert last_call.kwargs["status"] == "failed"
-        assert "missing session" in (last_call.kwargs.get("last_error") or "").lower()
+        assert last_call.kwargs["status"] == "completed"
+        woke_main_agent.assert_awaited_once()
+        assert woke_main_agent.await_args.kwargs["session_str"] == (
+            "cron:OtherMessage:aa-no-session"
+        )
+        assert woke_main_agent.await_args.kwargs["delivery_session_str"] == ""
 
 
 # ---- update_job and sync_from_db ----

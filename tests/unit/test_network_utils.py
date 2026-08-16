@@ -153,10 +153,14 @@ class TestLogConnectionFailure:
 
     @patch("astrbot.core.utils.network_utils.logger.error")
     def test_without_proxy_falls_to_simple_message(self, mock_log_error: MagicMock):
-        log_connection_failure("GPT", Exception("fail"))
+        with patch.dict(
+            os.environ,
+            {"http_proxy": "", "https_proxy": "", "HTTP_PROXY": "", "HTTPS_PROXY": ""},
+        ):
+            log_connection_failure("GPT", Exception("fail"))
         mock_log_error.assert_called_once()
         msg = mock_log_error.call_args[0][0]
-        assert "网络连接失败" in msg
+        assert "Network connection failed" in msg
         assert "GPT" in msg
 
     @patch("astrbot.core.utils.network_utils.logger.error")
@@ -170,7 +174,16 @@ class TestLogConnectionFailure:
         assert "http://env-proxy:3128" in msg
 
     @patch("astrbot.core.utils.network_utils.logger.error")
-    @patch.dict(os.environ, {"https_proxy": "https://secure-proxy:8443"}, clear=False)
+    @patch.dict(
+        os.environ,
+        {
+            "http_proxy": "",
+            "HTTP_PROXY": "",
+            "HTTPS_PROXY": "",
+            "https_proxy": "https://secure-proxy:8443",
+        },
+        clear=False,
+    )
     def test_falls_back_to_env_https_proxy(
         self, mock_log_error: MagicMock
     ):

@@ -30,20 +30,25 @@ from astrbot.core.provider.provider import (
 # =========================================================================
 
 
+class _ConcreteAbstractProvider(AbstractProvider):
+    async def test(self) -> None:
+        pass
+
+
 class TestAbstractProvider:
     def test_construction(self):
-        ap = AbstractProvider(provider_config={"type": "test"})
+        ap = _ConcreteAbstractProvider(provider_config={"type": "test"})
         assert ap.model_name == ""
         assert ap.provider_config == {"type": "test"}
 
     def test_set_and_get_model(self):
-        ap = AbstractProvider(provider_config={"type": "test"})
+        ap = _ConcreteAbstractProvider(provider_config={"type": "test"})
         assert ap.get_model() == ""
         ap.set_model("gpt-4")
         assert ap.get_model() == "gpt-4"
 
     def test_set_model_empty_string(self):
-        ap = AbstractProvider(provider_config={"type": "test"})
+        ap = _ConcreteAbstractProvider(provider_config={"type": "test"})
         ap.set_model("gpt-4")
         ap.set_model("")
         assert ap.get_model() == ""
@@ -59,7 +64,7 @@ class TestAbstractProvider:
             "astrbot.core.provider.provider.provider_cls_map",
             {"test_type": pmd},
         ):
-            ap = AbstractProvider(provider_config={"type": "test_type", "id": "myid"})
+            ap = _ConcreteAbstractProvider(provider_config={"type": "test_type", "id": "myid"})
             meta = ap.meta()
             assert isinstance(meta, ProviderMeta)
             assert meta.id == "myid"
@@ -67,7 +72,7 @@ class TestAbstractProvider:
             assert meta.provider_type == ProviderType.CHAT_COMPLETION
 
     def test_meta_raises_on_unregistered_type(self):
-        ap = AbstractProvider(provider_config={"type": "nonexistent"})
+        ap = _ConcreteAbstractProvider(provider_config={"type": "nonexistent"})
         with pytest.raises(ValueError, match="not registered"):
             ap.meta()
 
@@ -79,18 +84,18 @@ class TestAbstractProvider:
             "astrbot.core.provider.provider.provider_cls_map",
             {"test_type": pmd},
         ):
-            ap = AbstractProvider(provider_config={"type": "test_type"})
+            ap = _ConcreteAbstractProvider(provider_config={"type": "test_type"})
             meta = ap.meta()
             assert meta.id == "default"
 
-    def test_test_does_not_raise(self):
-        ap = AbstractProvider(provider_config={"type": "test"})
-        # test() is a no-op on AbstractProvider
-        ap.test()  # should not raise
+    @pytest.mark.asyncio
+    async def test_test_does_not_raise(self):
+        ap = _ConcreteAbstractProvider(provider_config={"type": "test"})
+        await ap.test()
 
     def test_constructor_sets_provider_config(self):
         config = {"type": "myprovider", "key": ["sk-abc"]}
-        ap = AbstractProvider(provider_config=config)
+        ap = _ConcreteAbstractProvider(provider_config=config)
         assert ap.provider_config is config
 
 

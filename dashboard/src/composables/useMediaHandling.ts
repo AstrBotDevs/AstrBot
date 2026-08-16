@@ -41,6 +41,7 @@ export function useMediaHandling() {
       const response = await axios.get("/api/chat/get_file", {
         params: { filename },
         responseType: "blob",
+        timeout: 0,
       });
 
       const blobUrl = URL.createObjectURL(response.data);
@@ -62,6 +63,7 @@ export function useMediaHandling() {
 
     try {
       const response = await axios.post("/api/chat/post_file", formData, {
+        timeout: 0,
         headers: {
           "Content-Type": "multipart/form-data",
         },

@@ -75,9 +75,9 @@ def log_connection_failure(
     # Fallback to environment proxy if not configured
     effective_proxy = proxy
     if not effective_proxy:
-        effective_proxy = os.environ.get(
-            "http_proxy",
-            os.environ.get("https_proxy", ""),
+        effective_proxy = os.environ.get("http_proxy") or os.environ.get(
+            "https_proxy",
+            "",
         )
 
     if effective_proxy:
