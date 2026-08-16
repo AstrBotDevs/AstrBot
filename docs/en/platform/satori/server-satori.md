@@ -25,8 +25,8 @@ After enabling, `server-satori` serves Satori API under `/satori`.
 ## Configure Satori Adapter in AstrBot
 
 1. Open AstrBot Dashboard.
-2. Click `Bots`.
-3. Click `+ Create Bot`.
+2. Click `Platforms`.
+3. Click `+ Add Adapter`.
 4. Select `satori`.
 
 Fill in:

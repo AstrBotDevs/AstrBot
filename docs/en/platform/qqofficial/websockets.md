@@ -18,7 +18,7 @@ Proactive message push: Supported.
 
 ### Setup Flow
 
-1. In AstrBot WebUI, click `Bots` in the left sidebar, then click `+ Create Bot`.
+1. In AstrBot WebUI, click `Platforms` in the left sidebar, then click `+ Add Adapter`.
 2. Select `QQ Official Bot (WebSocket)`.
 3. Under `Choose setup method`, select `One-click QR setup`, click start, then scan the QR code with mobile QQ.
 4. After you confirm the QR binding, AstrBot automatically fills in `AppID` and `AppSecret`. Make sure `Enable` is checked, then click `Save`.
@@ -82,8 +82,8 @@ Open `Development -> Development Settings`, find IP whitelist, and add your serv
 ### Configure in AstrBot
 
 1. Open AstrBot Dashboard.
-2. Click `Bots` in the left sidebar.
-3. Click `+ Create Bot`.
+2. Click `Platforms` in the left sidebar.
+3. Click `+ Add Adapter`.
 4. Select `qq_official`.
 
 Recommended: use `One-click QR setup`.

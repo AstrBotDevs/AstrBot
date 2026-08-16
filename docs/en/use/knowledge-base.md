@@ -8,7 +8,7 @@
 
 ## Configuring Embedding Model
 
-Open the service provider page, click "Add Service Provider", and select Embedding.
+Open the Providers page, click "Add Provider", and select Embedding.
 
 Currently, AstrBot supports embedding vector services compatible with OpenAI API and Gemini API.
 
@@ -20,7 +20,7 @@ After completing the configuration, click Save.
 
 A reranker model can improve the precision of final retrieval results to some extent.
 
-Similar to configuring the embedding model, open the service provider page, click "Add Service Provider", and select Reranker. For more information about reranker models, please refer to online resources.
+Similar to configuring the embedding model, open the Providers page, click "Add Provider", and select Reranker. For more information about reranker models, please refer to online resources.
 
 ## Creating a Knowledge Base
 

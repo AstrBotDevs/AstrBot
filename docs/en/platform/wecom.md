@@ -19,8 +19,8 @@ Proactive message push: Supported for WeCom Application. Not fully tested for We
 ## Before You Start
 
 1. Open AstrBot Dashboard.
-2. Click `Bots` in the left sidebar.
-3. Click `+ Create Bot`.
+2. Click `Platforms` in the left sidebar.
+3. Click `+ Add Adapter`.
 4. Select `wecom`.
 
 A configuration dialog will appear. Keep it open and continue with the steps below.

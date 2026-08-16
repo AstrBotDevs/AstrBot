@@ -1,4 +1,4 @@
-# Agent 沙盒环境 ⛵️
+﻿# Agent 沙盒环境 ⛵️
 
 > [!TIP]
 > 此功能目前处于技术预览阶段，可能会存在一些 Bug。如果您遇到了问题，请在 [GitHub](https://github.com/AstrBotDevs/AstrBot/issues) 上提交 issue。
@@ -15,7 +15,7 @@
 - `Shipyard`（旧方案，仍可继续使用）
 - `CUA`（本地或云端电脑使用沙盒，适合需要桌面操作的场景）
 
-在当前版本的 AstrBot 控制台中，可在“AI 配置” -> “Agent Computer Use”中选择：
+在当前版本的 AstrBot 控制台中，可在 `配置文件 → AI配置 → 使用电脑能力` 中选择：
 
 - `Computer Use Runtime` = `sandbox`
 - `沙箱环境驱动器` = `Shipyard Neo`、`Shipyard` 或 `CUA`

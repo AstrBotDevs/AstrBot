@@ -7,7 +7,7 @@
 
 ## Create AstrBot Misskey Platform Adapter
 
-Navigate to the messaging platform, click to add a new adapter, find Misskey and click to enter the Misskey configuration page.
+Navigate to the Platforms, click to Add Adapter, find Misskey and click to enter the Misskey configuration page.
 
 ![Create Misskey Platform Adapter](https://files.astrbot.app/docs/source/images/misskey/create.png)
 

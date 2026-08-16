@@ -20,7 +20,7 @@ lms get deepseek-r1-qwen-7b
 
 In AstrBot:
 
-Go to **Configuration → Service Providers → + → OpenAI**
+Go to **Providers → Add Provider → OpenAI**
 
 Set `API Base URL` to `http://localhost:1234/v1`
 

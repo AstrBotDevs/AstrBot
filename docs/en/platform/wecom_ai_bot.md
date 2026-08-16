@@ -30,7 +30,7 @@ Generate `Token` and `EncodingAESKey` using random generation, but do not click 
 
 ## Configure AstrBot
 
-1. Open AstrBot Dashboard, click `Messaging Platforms`, then click `+ Add Adapter`, choose `WeCom AI Bot`.
+1. Open AstrBot Dashboard, click `Platforms`, then click `+ Add Adapter`, choose `WeCom AI Bot`.
 
 ![Add Adapter](https://files.astrbot.app/docs/source/images/wecom_ai_bot/image-2.png)
 

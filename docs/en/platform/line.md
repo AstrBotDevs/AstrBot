@@ -40,8 +40,8 @@ How to get them:
 ## Configure AstrBot
 
 1. Open the AstrBot admin panel
-2. Click `Bots` in the left sidebar
-3. Click `+ Create Bot`
+2. Click `Platforms` in the left sidebar
+3. Click `+ Add Adapter`
 4. Select `line`
 
 Fill in these fields:

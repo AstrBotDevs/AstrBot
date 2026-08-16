@@ -14,14 +14,14 @@ PPIO 派欧云是中国领先的独立分布式云计算服务商，您可以在
 
 ![image](https://files.astrbot.app/docs/source/images/ppio/image-3.png)
 
-打开 AstrBot 控制台 -> 服务提供商页面，点击新增提供商，找到并点击 `PPIO派欧云`(需要版本 >= 3.5.10，旧版本也可使用，见下文)。
+打开 AstrBot 控制台 -> 模型提供商页面，点击新增提供商，找到并点击 `PPIO派欧云`(需要版本 >= 3.5.10，旧版本也可使用，见下文)。
 
 ![image](https://files.astrbot.app/docs/source/images/ppio/image.png)
 
 将 API Key 和模型名称填入对话框表单，点击保存，即可完成创建。
 
 > [!TIP]
-> 如果您是 AstrBot 旧版本（< 3.5.10）的用户，请打开 AstrBot 控制台 -> 服务提供商页面，点击新增提供商，找到 `OpenAI`，点击进入。
+> 如果您是 AstrBot 旧版本（< 3.5.10）的用户，请打开 AstrBot 控制台 -> 模型提供商页面，点击新增提供商，找到 `OpenAI`，点击进入。
 > 1. 将 ID 命名为 `ppio`（随意）
 > 2. 然后将 `API Base URL` 设置为 `https://api.ppinfra.com/v3/openai`
 > 3. 然后将 API Key 和模型名称填入对话框表单，点击保存，即可完成创建。

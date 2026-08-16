@@ -8,7 +8,7 @@ Navigate to the SiliconFlow [API Keys](https://cloud.siliconflow.cn/me/account/a
 
 Visit the SiliconFlow [Models page](https://cloud.siliconflow.cn/me/models) to select your desired model. Note down the model name for later use.
 
-Open the AstrBot WebUI, click `Service Providers` in the left sidebar -> `Add Provider` -> select `SiliconFlow`.
+Open the AstrBot WebUI, click `Providers` in the left sidebar -> `Add Provider` -> select `SiliconFlow`.
 
 Paste the `API Key` and `Model Name` you obtained earlier, then click Save to complete the setup. You can click the `Refresh` button under `Service Provider Availability` to verify whether the configuration is successful.
 

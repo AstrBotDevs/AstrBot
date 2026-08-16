@@ -20,7 +20,7 @@ lms get deepseek-r1-qwen-7b
 
 在 AstrBot 上：
 
-点击 配置->服务提供商配置->加号->openai
+点击 模型提供商 → 新增模型提供商 → OpenAI
 
 API Base URL 填写 `http://localhost:1234/v1`
 
