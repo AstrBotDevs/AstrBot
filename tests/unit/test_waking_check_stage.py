@@ -148,6 +148,7 @@ async def test_dashboard_webchat_principal_is_kept_separate_from_username():
     assert context.source == "webchat"
     assert context.principal_subject_id == "dashboard-account:account-1"
     assert context.caller_declared_username == "alice"
+    assert context.auth_strength == "password"
     assert context.metadata["dashboard_session_id"] == "session-1"
 
 

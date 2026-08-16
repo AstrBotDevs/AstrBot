@@ -40,20 +40,12 @@ from astrbot.core.utils.totp import (
 )
 from astrbot.core.utils.totp import (
     TotpRuntimeState,
-    TwoFactorCodeType,
     account_totp_enabled,
     generate_recovery_code,
     is_account_totp_trusted_device_valid,
     issue_account_totp_trusted_device,
     revoke_account_totp_trusted_devices,
     verify_recovery_code_hash,
-)
-
-# Compatibility names for migration tools; live authentication uses only the
-# account-scoped helpers above.
-from astrbot.core.utils.totp import is_totp_trusted_device_valid as _legacy_totp_valid
-from astrbot.core.utils.totp import (
-    revoke_user_trusted_devices as _legacy_revoke_devices,
 )
 from astrbot.dashboard.password_state import (
     get_dashboard_password_hash,
@@ -63,16 +55,12 @@ from astrbot.dashboard.password_state import (
     set_dashboard_password_security_state,
 )
 
-is_totp_trusted_device_valid = _legacy_totp_valid
-revoke_user_trusted_devices = _legacy_revoke_devices
-
 DASHBOARD_JWT_COOKIE_NAME = "astrbot_dashboard_jwt"
 DASHBOARD_JWT_COOKIE_MAX_AGE = 7 * 24 * 60 * 60
 DASHBOARD_SESSION_TOKEN_TYPE = "dashboard_session"
 DASHBOARD_SESSION_AUDIENCE = "astrbot-dashboard"
 DASHBOARD_SESSION_ISSUER_PURPOSE = b"dashboard-session-issuer-v1"
 SKIP_DEFAULT_PASSWORD_AUTH_ENV = "ASTRBOT_DASHBOARD_SKIP_DEFAULT_PASSWORD_AUTH"
-SKIP_DEFAULT_PASSWORD_AUTH_ENV_OLD = "DASHBOARD_SKIP_DEFAULT_PASSWORD_AUTH"
 LOCAL_DASHBOARD_HOSTS = {"127.0.0.1", "localhost", "::1"}
 DEFAULT_PASSWORD_LOGIN_FAILURE_MESSAGE = (
     "Login failed. If this is your first time using AstrBot, the old default "
@@ -299,7 +287,6 @@ class AuthService:
                     account = DashboardAccount(
                         username=username,
                         password_hash=password_hash,
-                        totp_migrated=True,
                     )
                     session.add(account)
                     await session.flush()
@@ -333,7 +320,7 @@ class AuthService:
                             )
                         )
                 else:
-                    # A per-account password is authoritative after migration.
+                    # A per-account password is authoritative after setup.
                     # Syncing is only used by the explicit first-account setup.
                     if sync_password:
                         account.password_hash = password_hash
@@ -357,7 +344,7 @@ class AuthService:
     async def validate_dashboard_principal(
         self, principal: DashboardSessionPrincipal
     ) -> bool:
-        """Reject stale, renamed, disabled, or pre-migration Dashboard tokens."""
+        """Reject stale, renamed, or disabled Dashboard tokens."""
 
         if not principal.account_id:
             return False
@@ -463,7 +450,6 @@ class AuthService:
                         username=normalized_username,
                         password_hash=hash_dashboard_password(password),
                         created_by=created_by,
-                        totp_migrated=True,
                     )
                     session.add(account)
                     await session.flush()
@@ -677,20 +663,6 @@ class AuthService:
             ).scalar_one_or_none()
         if account is None:
             return self.error("Dashboard account is unavailable", status_code=401)
-        legacy_totp = self.config.get("dashboard", {}).get("totp", {})
-        if (
-            isinstance(legacy_totp, dict)
-            and legacy_totp.get("enable")
-            and (
-                not account_totp_enabled(account)
-                or account.totp_secret != str(legacy_totp.get("secret", "") or "")
-            )
-        ):
-            account.totp_enabled = True
-            account.totp_secret = str(legacy_totp.get("secret", "") or "")
-            account.totp_recovery_code_hash = str(
-                legacy_totp.get("recovery_code_hash", "") or ""
-            )
         if isinstance(post_data, dict) and post_data.get("secret"):
             secret = post_data["secret"]
             code = post_data.get("code")
@@ -729,7 +701,6 @@ class AuthService:
                     persisted.totp_enabled = True
                     persisted.totp_secret = secret.strip()
                     persisted.totp_recovery_code_hash = recovery_code_hash
-                    persisted.totp_migrated = True
             await revoke_account_totp_trusted_devices(self.db, account_id)
             return AuthServiceResult(
                 data={
@@ -871,11 +842,7 @@ class AuthService:
         *,
         trusted_device_cookie_token: str,
     ) -> AuthServiceResult:
-        if not hasattr(self.db, "get_db"):
-            return await self._legacy_config_login_for_migration_tests(
-                post_data, trusted_device_cookie_token=trusted_device_cookie_token
-            )
-        legacy_username = self.config["dashboard"]["username"]
+        configured_username = self.config["dashboard"]["username"]
         storage_upgraded = await is_password_storage_upgraded(self.config)
         password = get_dashboard_password_hash(self.config, upgraded=storage_upgraded)
 
@@ -895,86 +862,19 @@ class AuthService:
             return self.error("Invalid request payload")
 
         account = await self._find_dashboard_account(req_username)
-        # A config rollback can restore the legacy username after it was
-        # changed in the stable account table. Re-associate only the sole
-        # active account; this fallback is never used for multi-account data.
-        if account is None and req_username == legacy_username:
-            async with self.db.get_db() as session:
-                active_accounts = list(
-                    (
-                        await session.execute(
-                            select(DashboardAccount).where(
-                                col(DashboardAccount.is_active).is_(True)
-                            )
-                        )
-                    ).scalars()
-                )
-                root_subjects = set(
-                    (
-                        await session.execute(
-                            select(AuthRoleBinding.subject_id).where(
-                                col(AuthRoleBinding.role) == Role.ROOT.value,
-                                col(AuthRoleBinding.scope_type) == "global",
-                                col(AuthRoleBinding.scope_id) == "global",
-                                col(AuthRoleBinding.config_id) == GLOBAL_SCOPE_ID,
-                                col(AuthRoleBinding.revoked_at).is_(None),
-                                (col(AuthRoleBinding.expires_at).is_(None))
-                                | (
-                                    col(AuthRoleBinding.expires_at)
-                                    > datetime.datetime.now(datetime.UTC)
-                                ),
-                            )
-                        )
-                    ).scalars()
-                )
-            root_accounts = [
-                candidate
-                for candidate in active_accounts
-                if f"dashboard-account:{candidate.account_id}" in root_subjects
-            ]
-            if len(root_accounts) == 1:
-                account = root_accounts[0]
-                if account.username != legacy_username:
-                    await self.update_dashboard_account(
-                        account_id=account.account_id,
-                        username=legacy_username,
-                    )
-        bootstrap_legacy_account = (
+        bootstrap_account = (
             account is None
-            and req_username == legacy_username
+            and req_username == configured_username
             and not await self.has_dashboard_accounts()
         )
-        if bootstrap_legacy_account:
-            # A fresh deployment has only the legacy config credential.  It is
-            # imported exactly once after successful verification.
+        if bootstrap_account:
+            # A fresh deployment verifies the configured bootstrap credential
+            # once, then persists the account as the authorization principal.
             login_verified = verify_dashboard_password(password, req_password)
         else:
             login_verified = account is not None and verify_dashboard_password(
                 account.password_hash, req_password
             )
-            # During rollback/migration the legacy config hash can temporarily
-            # be newer than the account row.  Accept it only for that original
-            # account username, then repair the stable row below.
-            if (
-                not login_verified
-                and account is not None
-                and req_username == legacy_username
-                and verify_dashboard_password(password, req_password)
-            ):
-                login_verified = True
-                async with self.db.get_db() as session:
-                    async with session.begin():
-                        persisted = (
-                            await session.execute(
-                                select(DashboardAccount).where(
-                                    col(DashboardAccount.account_id)
-                                    == account.account_id,
-                                    col(DashboardAccount.is_active).is_(True),
-                                )
-                            )
-                        ).scalar_one_or_none()
-                        if persisted is not None:
-                            persisted.password_hash = password
 
         if not login_verified:
             await asyncio.sleep(3)
@@ -985,48 +885,9 @@ class AuthService:
             return self.error("用户名或密码错误", status_code=401)
 
         if account is None:
-            account = await self._ensure_dashboard_account(legacy_username, password)
-
-        # A legacy single-account installation may have its TOTP settings
-        # edited in the configuration before the first account-scoped login.
-        # Import that one-way compatibility state without treating the mutable
-        # username as an authorization principal.  Once an account has its own
-        # factor enabled, the account row remains authoritative.
-        legacy_totp = self.config.get("dashboard", {}).get("totp", {})
-        if isinstance(legacy_totp, dict) and req_username == legacy_username:
-            async with self.db.get_db() as session:
-                account_count = len(
-                    list(
-                        (
-                            await session.execute(
-                                select(DashboardAccount.account_id).where(
-                                    col(DashboardAccount.is_active).is_(True)
-                                )
-                            )
-                        ).scalars()
-                    )
-                )
-            if account_count == 1:
-                async with self.db.get_db() as session:
-                    async with session.begin():
-                        persisted = (
-                            await session.execute(
-                                select(DashboardAccount).where(
-                                    col(DashboardAccount.account_id)
-                                    == account.account_id,
-                                    col(DashboardAccount.is_active).is_(True),
-                                )
-                            )
-                        ).scalar_one_or_none()
-                        if persisted is not None:
-                            persisted.totp_enabled = bool(legacy_totp.get("enable"))
-                            persisted.totp_secret = str(
-                                legacy_totp.get("secret", "") or ""
-                            )
-                            persisted.totp_recovery_code_hash = str(
-                                legacy_totp.get("recovery_code_hash", "") or ""
-                            )
-                            account = persisted
+            account = await self._ensure_dashboard_account(
+                configured_username, password
+            )
 
         totp_verified = False
         if account_totp_enabled(account):
@@ -1068,9 +929,8 @@ class AuthService:
                             persisted.totp_enabled = False
                             persisted.totp_secret = ""
                             persisted.totp_recovery_code_hash = ""
-                    # Keep the legacy config snapshot in sync for an
-                    # installation that has not yet moved off the single
-                    # Dashboard credential.
+                    # Keep the persisted configuration snapshot aligned with
+                    # the account-level factor for config export consumers.
                     dashboard_totp = self.config.get("dashboard", {}).get("totp")
                     if isinstance(dashboard_totp, dict):
                         next_config = copy.deepcopy(dict(self.config))
@@ -1098,7 +958,7 @@ class AuthService:
         )
         if (
             storage_upgraded
-            and legacy_username == "astrbot"
+            and configured_username == "astrbot"
             and is_default_dashboard_password(password)
             and not self.demo_mode
         ):
@@ -1148,52 +1008,6 @@ class AuthService:
             )
         return result
 
-    async def _legacy_config_login_for_migration_tests(
-        self,
-        post_data: object,
-        *,
-        trusted_device_cookie_token: str,
-    ) -> AuthServiceResult:
-        """Exercise the pre-database migration contract for isolated callers.
-
-        Production runtimes always provide SQLite and use ``login``'s
-        account-scoped path. This narrow adapter keeps config-save migration
-        tests deterministic without making global config TOTP a live identity
-        source again.
-        """
-
-        _ = trusted_device_cookie_token
-        dashboard = self.config["dashboard"]
-        username = dashboard.get("username")
-        password_hash = get_dashboard_password_hash(self.config, upgraded=True)
-        supplied_password = (
-            post_data.get("password") if isinstance(post_data, dict) else None
-        )
-        if not isinstance(username, str) or not isinstance(supplied_password, str):
-            return self.error("Invalid request payload")
-        if not verify_dashboard_password(password_hash, supplied_password):
-            return self.error("原密码错误", status_code=401)
-        totp = dashboard.get("totp", {})
-        if isinstance(totp, dict) and totp.get("enable"):
-            code = post_data.get("code") if isinstance(post_data, dict) else None
-            verified = await self.totp_runtime_state.verify_configured_2fa_code(
-                self.config, str(code or ""), allow_recovery=True
-            )
-            if verified is TwoFactorCodeType.RECOVERY:
-                next_config = copy.deepcopy(dict(self.config))
-                next_config["dashboard"]["totp"] = {
-                    "enable": False,
-                    "secret": "",
-                    "recovery_code_hash": "",
-                }
-                if not await self.config.save_config_async(next_config):
-                    return self._config_save_superseded_error()
-                await revoke_user_trusted_devices(self.db)
-                await self.totp_runtime_state.clear_all()
-            elif verified is not TwoFactorCodeType.TOTP:
-                return self.error("TOTP 验证码无效", status_code=401)
-        return AuthServiceResult(data={"username": username}, message="登录成功")
-
     async def edit_account(
         self, post_data: object, *, account_id: str | None = None
     ) -> AuthServiceResult:
@@ -1203,34 +1017,8 @@ class AuthService:
         if not isinstance(post_data, dict):
             return self.error("Invalid request payload")
 
-        # This branch is retained solely for isolated callers that have not
-        # been upgraded to the stable account API (for example old migration
-        # tooling). Dashboard HTTP routes always pass account_id and never use
-        # the mutable global username as an authorization principal.
         if not account_id:
-            storage_upgraded = await is_password_storage_upgraded(
-                self.config, persist=False
-            )
-            stored = get_dashboard_password_hash(self.config, upgraded=storage_upgraded)
-            req_password = post_data.get("password")
-            if not isinstance(req_password, str) or not verify_dashboard_password(
-                stored, req_password
-            ):
-                return self.error("原密码错误")
-            new_pwd = post_data.get("new_password")
-            new_username = post_data.get("new_username")
-            if not new_pwd and not new_username:
-                return self.error("新用户名和新密码不能同时为空")
-            next_config = copy.deepcopy(dict(self.config))
-            dashboard = next_config["dashboard"]
-            if new_pwd:
-                set_dashboard_password_hashes(dashboard, new_pwd)
-                set_dashboard_password_security_state(dashboard)
-            if new_username:
-                dashboard["username"] = str(new_username).strip()
-            if not await self.config.save_config_async(next_config):
-                return self._config_save_superseded_error()
-            return AuthServiceResult(message="Updated account successfully")
+            return self.error("Dashboard account id is required")
 
         req_password = post_data.get("password")
         if not isinstance(req_password, str):
@@ -1245,19 +1033,9 @@ class AuthService:
                     )
                 )
             ).scalar_one_or_none()
-        config_hash = get_dashboard_password_hash(
-            self.config,
-            upgraded=await is_password_storage_upgraded(self.config, persist=False),
-        )
         password_ok = account is not None and verify_dashboard_password(
             account.password_hash, req_password
         )
-        if (
-            not password_ok
-            and account is not None
-            and verify_dashboard_password(config_hash, req_password)
-        ):
-            password_ok = True
         if account is None or not password_ok:
             return self.error("原密码错误")
 
@@ -1272,11 +1050,8 @@ class AuthService:
                 return self.error("用户名长度至少3位")
             username_to_save = new_username.strip()
 
-        # Legacy MD5 credentials and generated startup passwords must be
-        # upgraded before an account can be renamed on its own.  Otherwise a
-        # username-only edit would leave the stable account row and the
-        # signed session subject out of sync (and would bypass the mandatory
-        # password-change prompt).
+        # A username-only edit is blocked while the initial password change is
+        # still required, keeping the signed session subject in sync.
         if not new_pwd and (
             not await is_password_storage_upgraded(self.config, persist=False)
             or await is_password_change_required(self.config)
@@ -1364,10 +1139,8 @@ class AuthService:
 
     @staticmethod
     def env_flag_enabled(name: str) -> bool:
-        value = os.environ.get(name)
-        if value is None and name == SKIP_DEFAULT_PASSWORD_AUTH_ENV:
-            value = os.environ.get(SKIP_DEFAULT_PASSWORD_AUTH_ENV_OLD)
-        return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+        value = os.environ.get(name, "")
+        return value.strip().lower() in {"1", "true", "yes", "on"}
 
     @staticmethod
     def error(

@@ -235,8 +235,9 @@ class ToolsService:
                 async def probe() -> None:
                     authorized = False
                     try:
-                        await client.connect_to_server(config, name)
-                        await client.list_tools_and_save()
+                        await client.connect_to_server(
+                            config, name, watch_catalog=False
+                        )
                         authorized = True
                     except asyncio.CancelledError:
                         raise

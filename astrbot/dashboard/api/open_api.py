@@ -92,12 +92,14 @@ async def _build_streaming_chat_response(
     post_data: dict[str, Any],
     *,
     api_key_principal: dict[str, object] | None = None,
+    dashboard_principal: dict[str, str] | None = None,
 ) -> StreamingResponse | JSONResponse:
     try:
         stream = await chat_service.build_chat_stream(
             username,
             post_data,
             api_key_principal=api_key_principal,
+            dashboard_principal=dashboard_principal,
         )
     except ChatServiceError as exc:
         return _open_api_error(str(exc))
@@ -120,10 +122,19 @@ async def _open_api_chat_response(
     chat_service: ChatService,
 ) -> StreamingResponse | JSONResponse:
     if auth.via != "api_key":
+        dashboard_principal = None
+        if auth.account_id and auth.sid:
+            dashboard_principal = {
+                "account_id": auth.account_id,
+                "sid": auth.sid,
+                "username": auth.username,
+                "auth_strength": auth.auth_strength,
+            }
         return await _build_streaming_chat_response(
             chat_service,
             auth.username,
             post_data,
+            dashboard_principal=dashboard_principal,
         )
 
     api_key_principal = {"key_id": auth.api_key_id, "scopes": auth.scopes}

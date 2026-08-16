@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import mcp
 import pytest
 
+from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
@@ -22,6 +23,21 @@ def _tool(name: str = "plugin_tool") -> FunctionTool:
         description="test tool",
         parameters={"type": "object", "properties": {}},
         handler=AsyncMock(return_value="ok"),
+    )
+
+
+def _mcp_tool(*, read_only_hint: bool | None) -> MCPTool:
+    from mcp.types import Tool, ToolAnnotations
+
+    return MCPTool(
+        Tool(
+            name="docs_query",
+            description="Query documentation",
+            inputSchema={"type": "object", "properties": {}},
+            annotations=ToolAnnotations(readOnlyHint=read_only_hint),
+        ),
+        SimpleNamespace(),
+        "context7",
     )
 
 
@@ -47,6 +63,18 @@ def test_get_full_tool_set_returns_original_tools():
 
 def test_unclaimed_plugin_tools_have_no_implicit_authorization_action():
     assert FunctionToolExecutor._required_actions(_tool()) == ()
+
+
+def test_mcp_read_only_hint_uses_read_permission_for_sdk2_annotations():
+    assert FunctionToolExecutor._required_actions(
+        _mcp_tool(read_only_hint=True)
+    ) == ("tool.mcp_read",)
+
+
+def test_mcp_tools_without_read_only_hint_require_write_permission():
+    assert FunctionToolExecutor._required_actions(
+        _mcp_tool(read_only_hint=None)
+    ) == ("tool.mcp_write",)
 
 
 @pytest.mark.asyncio

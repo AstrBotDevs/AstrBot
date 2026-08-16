@@ -166,13 +166,13 @@ async def _authorize_scope_action(
         source = "dashboard"
         api_scopes = ()
         session_id = auth.sid
-    else:
-        # Existing signed JWTs remain valid for their normal lifetime, but are
-        # never treated as a root/operator account in new authorization code.
-        subject = Subject.dashboard_session(auth.sid or "legacy", auth.username)
+    elif auth.sid:
+        subject = Subject.dashboard_session(auth.sid, auth.username)
         source = "dashboard"
         api_scopes = ()
         session_id = auth.sid
+    else:
+        raise ApiError("Invalid Dashboard session", status_code=401)
     config_id = _request_config_id(request)
     resource = Resource.named(
         "dashboard-api",
@@ -222,11 +222,13 @@ def core_authorization_context(request: Request, auth: AuthContext) -> CoreAuthC
         source = "dashboard"
         api_scopes = ()
         session_id = auth.sid
-    else:
-        subject = Subject.dashboard_session(auth.sid or "legacy", auth.username)
+    elif auth.sid:
+        subject = Subject.dashboard_session(auth.sid, auth.username)
         source = "dashboard"
         api_scopes = ()
         session_id = auth.sid
+    else:
+        raise ApiError("Invalid Dashboard session", status_code=401)
     return CoreAuthContext(
         subject=subject,
         source=source,
@@ -311,13 +313,13 @@ def _extract_raw_api_key(request: Request) -> str | None:
 
 
 def _get_dashboard_state_username(request: Request) -> str | None:
-    dashboard_g = getattr(request.state, "dashboard_g", None)
-    if dashboard_g is None:
+    dashboard_state = getattr(request.state, "dashboard_request_state", None)
+    if dashboard_state is None:
         return None
 
-    username = getattr(dashboard_g, "username", None)
-    if username is None and hasattr(dashboard_g, "get"):
-        username = dashboard_g.get("username")
+    username = getattr(dashboard_state, "username", None)
+    if username is None and hasattr(dashboard_state, "get"):
+        username = dashboard_state.get("username")
     if isinstance(username, str) and username.strip():
         return username
     return None

@@ -68,11 +68,15 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return ("agent.manage",)
         if isinstance(tool, MCPTool):
             annotations = getattr(tool, "annotations", {}) or {}
-            is_read_only = bool(
-                getattr(annotations, "readOnlyHint", False)
-                if not isinstance(annotations, dict)
-                else annotations.get("readOnlyHint", False)
-            )
+            if isinstance(annotations, dict):
+                read_only_hint = annotations.get("readOnlyHint")
+                if read_only_hint is None:
+                    read_only_hint = annotations.get("read_only_hint")
+            else:
+                read_only_hint = getattr(annotations, "readOnlyHint", None)
+                if read_only_hint is None:
+                    read_only_hint = getattr(annotations, "read_only_hint", None)
+            is_read_only = bool(read_only_hint)
             return ("tool.mcp_read" if is_read_only else "tool.mcp_write",)
         name = str(getattr(tool, "name", ""))
         if name in {"astrbot_execute_shell", "astrbot_shell_session"}:

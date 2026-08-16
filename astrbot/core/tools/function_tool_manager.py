@@ -674,7 +674,6 @@ class FunctionToolManager:
             nonlocal connect_error
             try:
                 await mcp_client.connect_to_server(cfg, name)
-                await mcp_client.list_tools_and_save()
                 # Connection, initial discovery and registration are one
                 # operation. Any registration error must resolve connect_done
                 # and remove the runtime instead of becoming a fake timeout.
@@ -843,9 +842,11 @@ class FunctionToolManager:
         mcp_client = MCPClient()
         try:
             logger.debug(f"testing MCP server connection with config: {config}")
-            await mcp_client.connect_to_server(config, "test")
-            tools_res = await mcp_client.list_tools_and_save()
-            tool_names = [tool.name for tool in tools_res]
+            # A test connection is short-lived.  The initial catalog is already
+            # fetched by connect_to_server(); opening a subscription here can
+            # race the cleanup and some servers only allow one subscription.
+            await mcp_client.connect_to_server(config, "test", watch_catalog=False)
+            tool_names = [tool.name for tool in mcp_client.tools]
         finally:
             logger.debug("Cleaning up MCP client after testing connection.")
             await mcp_client.cleanup()

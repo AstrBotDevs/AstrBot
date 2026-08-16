@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from mcp import Client
 from mcp.server.mcpserver import MCPServer
+from mcp.shared.exceptions import MCPError
 from mcp.types import Tool
 from mcp.types.version import LATEST_PROTOCOL_VERSION
 
@@ -356,3 +357,24 @@ async def test_mcp_catalog_pagination_is_atomic_and_rejects_repeated_cursors():
     with pytest.raises(RuntimeError, match="repeated"):
         await client.list_tools_and_save()
     assert client.tools is old_tools
+
+
+@pytest.mark.asyncio
+async def test_catalog_subscription_limit_does_not_reconnect_healthy_client():
+    class RejectedSubscription:
+        async def __aenter__(self):
+            raise MCPError(-32603, "Subscription limit reached")
+
+        async def __aexit__(self, *_args):
+            return False
+
+    class RejectingClient:
+        def listen(self, **_kwargs):
+            return RejectedSubscription()
+
+    client = MCPClient()
+    client._server_name = "context7"
+
+    await client._watch_catalog(RejectingClient())  # type: ignore[arg-type]
+
+    assert not client._reconnect_event.is_set()

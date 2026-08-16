@@ -5,19 +5,14 @@ from unittest.mock import AsyncMock
 import pytest
 
 from astrbot.core.provider.catalog import ProviderCatalog
-from astrbot.core.utils.auth_password import (
-    hash_dashboard_password,
-    hash_md5_dashboard_password,
-    verify_dashboard_password,
-)
 from astrbot.core.utils.llm_metadata import LLMMetadataCatalog
-from astrbot.core.utils.totp import TotpRuntimeState, TwoFactorCodeType
+from astrbot.core.utils.totp import TotpRuntimeState
 from astrbot.dashboard.password_state import (
     set_password_change_required,
     set_password_storage_upgraded,
 )
 from astrbot.dashboard.server import initialize_dashboard_jwt_secret
-from astrbot.dashboard.services import auth_service, config_service
+from astrbot.dashboard.services import config_service
 from astrbot.dashboard.services.auth_service import AuthService
 from astrbot.dashboard.services.log_service import LogService, LogServiceError
 from astrbot.dashboard.services.subagent_service import (
@@ -124,131 +119,6 @@ async def test_setup_does_not_issue_a_token_when_config_save_is_superseded() -> 
     assert result.jwt_token is None
     assert config["dashboard"] == initial_dashboard_config
     assert events == ["persist"]
-
-
-@pytest.mark.asyncio
-async def test_account_update_does_not_partially_persist_when_config_save_is_superseded() -> None:
-    events: list[object] = []
-    current_password = "AstrbotCurrent123!"
-    next_password = "AstrbotChanged123!"
-
-    class SupersededConfig(TrackedConfig):
-        async def save_config_async(
-            self,
-            replace_config: dict | None = None,
-            *,
-            indent: int = 2,
-        ) -> bool:
-            _ = replace_config, indent
-            self.events.append("persist")
-            return False
-
-    initial_dashboard_config = {
-        "jwt_secret": "test-jwt-secret",
-        "username": "astrbot",
-        "password": hash_md5_dashboard_password(current_password),
-        "pbkdf2_password": hash_dashboard_password(current_password),
-        "password_storage_upgraded": False,
-        "password_change_required": True,
-    }
-    config = SupersededConfig({"dashboard": initial_dashboard_config}, events)
-    service = AuthService(
-        SimpleNamespace(),
-        config,
-        demo_mode=False,
-        totp_runtime_state=TotpRuntimeState(),
-    )
-
-    result = await service.edit_account(
-        {
-            "password": current_password,
-            "new_password": next_password,
-            "confirm_password": next_password,
-            "new_username": "astrbot-admin",
-        }
-    )
-
-    assert result.status == "error"
-    assert result.status_code == 409
-    assert config["dashboard"] == initial_dashboard_config
-    assert verify_dashboard_password(config["dashboard"]["pbkdf2_password"], current_password)
-    assert not verify_dashboard_password(
-        config["dashboard"]["pbkdf2_password"],
-        next_password,
-    )
-    assert events == ["persist"]
-
-
-@pytest.mark.asyncio
-async def test_recovery_code_does_not_clear_totp_when_config_save_is_superseded(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    events: list[object] = []
-    current_password = "AstrbotCurrent123!"
-
-    class SupersededConfig(TrackedConfig):
-        async def save_config_async(
-            self,
-            replace_config: dict | None = None,
-            *,
-            indent: int = 2,
-        ) -> bool:
-            _ = replace_config, indent
-            self.events.append("persist")
-            return False
-
-    initial_dashboard_config = {
-        "jwt_secret": "test-jwt-secret",
-        "username": "astrbot",
-        "password": hash_md5_dashboard_password(current_password),
-        "pbkdf2_password": hash_dashboard_password(current_password),
-        "password_storage_upgraded": True,
-        "password_change_required": False,
-        "totp": {
-            "enable": True,
-            "secret": "unused-in-test",
-            "recovery_code_hash": "unused-in-test",
-        },
-    }
-    config = SupersededConfig({"dashboard": initial_dashboard_config}, events)
-    runtime_state = TotpRuntimeState()
-    runtime_state.verify_configured_2fa_code = AsyncMock(
-        return_value=TwoFactorCodeType.RECOVERY
-    )
-    runtime_state.clear_all = AsyncMock()
-    revoke_trusted_devices = AsyncMock()
-    monkeypatch.setattr(
-        auth_service,
-        "is_totp_trusted_device_valid",
-        AsyncMock(return_value=False),
-    )
-    monkeypatch.setattr(
-        auth_service,
-        "revoke_user_trusted_devices",
-        revoke_trusted_devices,
-    )
-    service = AuthService(
-        SimpleNamespace(),
-        config,
-        demo_mode=False,
-        totp_runtime_state=runtime_state,
-    )
-
-    result = await service.login(
-        {
-            "username": "astrbot",
-            "password": current_password,
-            "code": "recovery-code",
-        },
-        trusted_device_cookie_token="",
-    )
-
-    assert result.status == "error"
-    assert result.status_code == 409
-    assert config["dashboard"] == initial_dashboard_config
-    assert events == ["persist"]
-    revoke_trusted_devices.assert_not_awaited()
-    runtime_state.clear_all.assert_not_awaited()
 
 
 @pytest.mark.asyncio

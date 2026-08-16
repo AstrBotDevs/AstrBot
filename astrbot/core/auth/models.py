@@ -138,7 +138,7 @@ def _decode_component(value: str) -> str:
 
 
 def canonical_session_resource(config_id: str, umo: str) -> str:
-    """Return a v1 resource wrapper without changing legacy UMO routing."""
+    """Return a v1 resource wrapper without changing platform UMO routing."""
 
     if not isinstance(config_id, str) or not _CONFIG_ID_RE.fullmatch(config_id):
         raise AuthorizationValueError("Invalid config id")

@@ -82,6 +82,7 @@ async def _send_chat(
     *,
     request: Request,
     username: str,
+    auth: AuthContext,
     service: ChatService,
     payload: dict[str, Any] | None = None,
 ):
@@ -90,7 +91,19 @@ async def _send_chat(
         return JSONResponse(error("Missing JSON body"))
 
     try:
-        stream = await service.build_chat_stream(username, post_data)
+        dashboard_principal = None
+        if auth.via == "jwt" and auth.account_id and auth.sid:
+            dashboard_principal = {
+                "account_id": auth.account_id,
+                "sid": auth.sid,
+                "username": auth.username,
+                "auth_strength": auth.auth_strength,
+            }
+        stream = await service.build_chat_stream(
+            username,
+            post_data,
+            dashboard_principal=dashboard_principal,
+        )
     except ChatServiceError as exc:
         return JSONResponse(error(str(exc)))
 
@@ -238,6 +251,7 @@ async def regenerate_chat_message(
     return await _send_chat(
         request=request,
         username=auth.username,
+        auth=auth,
         service=service,
         payload=chat_payload,
     )
@@ -298,6 +312,7 @@ async def send_chat_thread_message(
     return await _send_chat(
         request=request,
         username=auth.username,
+        auth=auth,
         service=service,
         payload=chat_payload,
     )

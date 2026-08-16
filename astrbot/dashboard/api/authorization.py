@@ -43,7 +43,7 @@ def _auth_service(request: Request):
 
 def _principal_context(request: Request, principal) -> tuple[Subject, AuthContext]:
     if principal.account_subject is None:
-        raise ApiError("Dashboard account migration required", status_code=401)
+        raise ApiError("Dashboard account is unavailable", status_code=401)
     subject = principal.account_subject
     context = AuthContext(
         subject=subject,
@@ -319,6 +319,11 @@ async def issue_step_up(
 ):
     subject, context = _principal_context(request, principal)
     resource = _resource(payload)
+    if resource.config_id is not None:
+        # Resource mutations use the resource's config scope as an explicit
+        # authorization context fact. Keep issuance and consumption digests
+        # identical for config-scoped Dashboard actions.
+        context = replace(context, config_id=resource.config_id)
     decision = await _service(request).authorize(
         subject, payload.action, resource, context
     )

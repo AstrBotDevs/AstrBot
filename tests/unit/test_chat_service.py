@@ -12,6 +12,8 @@ import astrbot.dashboard.services.chat_service as chat_service_module
 from astrbot.core.webchat.queue_manager import WebChatQueueManager
 from astrbot.core.webchat.result_reducer import BotMessageAccumulator
 from astrbot.core.webchat.run_coordinator import WebChatRun, WebChatRunCoordinator
+from astrbot.dashboard.api import open_api as open_api_routes
+from astrbot.dashboard.api.auth import AuthContext as DashboardAuthContext
 from astrbot.dashboard.services.chat_service import (
     WEBCHAT_IMAGE_MIME_TYPES,
     ChatRunState,
@@ -77,6 +79,46 @@ async def test_session_running_is_derived_from_non_subscription_runs() -> None:
     await service.webchat_run_coordinator.close_run(request)
     assert service._is_session_running("session-1") is False
     await service.webchat_run_coordinator.close_run(subscription)
+
+
+@pytest.mark.asyncio
+async def test_open_api_chat_forwards_dashboard_principal(monkeypatch):
+    auth = DashboardAuthContext(
+        username="alice",
+        scopes=["*"],
+        subject="dashboard-account:account-1",
+        account_id="account-1",
+        sid="sid-1",
+        auth_strength="password",
+    )
+    expected = object()
+    captured: dict = {}
+
+    async def fake_streaming_response(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return expected
+
+    monkeypatch.setattr(
+        open_api_routes,
+        "_build_streaming_chat_response",
+        fake_streaming_response,
+    )
+
+    result = await open_api_routes._open_api_chat_response(
+        {"message": "hello", "session_id": "session-1"},
+        auth,
+        MagicMock(),
+        MagicMock(),
+    )
+
+    assert result is expected
+    assert captured["kwargs"]["dashboard_principal"] == {
+        "account_id": "account-1",
+        "sid": "sid-1",
+        "username": "alice",
+        "auth_strength": "password",
+    }
 
 
 def _session(
@@ -452,6 +494,12 @@ async def test_build_chat_stream_saves_plain_response_and_emits_saved_events(
     stream = await service.build_chat_stream(
         "alice",
         {"session_id": "session-1", "message": [{"type": "plain", "text": "hi"}]},
+        dashboard_principal={
+            "account_id": "account-1",
+            "sid": "session-1",
+            "username": "alice",
+            "auth_strength": "password",
+        },
     )
     webchat_run = service.webchat_run_coordinator.get_run("mid-1")
     assert webchat_run is not None
@@ -472,6 +520,12 @@ async def test_build_chat_stream_saves_plain_response_and_emits_saved_events(
             "message_id": "mid-1",
             "llm_checkpoint_id": "mid-1",
             "thread_selected_text": None,
+            "_dashboard_principal": {
+                "account_id": "account-1",
+                "sid": "session-1",
+                "username": "alice",
+                "auth_strength": "password",
+            },
         },
     )
     service.platform_history_mgr.insert.assert_awaited_once()

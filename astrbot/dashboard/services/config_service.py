@@ -36,7 +36,6 @@ from astrbot.core.utils.llm_metadata import LLMMetadataCatalog
 from astrbot.core.utils.totp import (
     TotpRuntimeState,
     is_totp_enabled,
-    revoke_user_trusted_devices,
 )
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 from astrbot.dashboard.async_utils import run_maybe_async
@@ -811,8 +810,6 @@ class ConfigProfileService:
             )
         if protected_2fa_changed:
             await self.totp_runtime_state.clear_all()
-            if self.db is not None:
-                await revoke_user_trusted_devices(self.db)
         await self.core_control.reload_pipeline_scheduler(config_id)
         warning = await _validate_neo_connectivity(config)
         if warning:

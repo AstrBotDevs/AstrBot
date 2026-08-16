@@ -961,6 +961,7 @@ class ChatService:
         post_data: dict,
         *,
         api_key_principal: dict[str, object] | None = None,
+        dashboard_principal: dict[str, str] | None = None,
     ) -> AsyncIterator[str]:
         if "message" not in post_data and "files" not in post_data:
             raise ChatServiceError("Missing key: message or files")
@@ -1039,6 +1040,8 @@ class ChatService:
             }
             if isinstance(api_key_principal, dict):
                 queue_payload["_api_key_principal"] = dict(api_key_principal)
+            if isinstance(dashboard_principal, dict):
+                queue_payload["_dashboard_principal"] = dict(dashboard_principal)
             await self.webchat_run_coordinator.dispatch(
                 webchat_run,
                 queue_payload,

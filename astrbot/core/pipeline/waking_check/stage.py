@@ -174,6 +174,7 @@ class WakingCheckStage(Stage):
         scopes: tuple[str, ...] = ()
         principal_subject_id: str | None = None
         dashboard_session_id: str | None = None
+        auth_strength = "none"
         api_key_principal = event.get_extra("_api_key_principal")
         dashboard_principal = event.get_extra("_dashboard_principal")
         if event.get_platform_name() == "webchat" and isinstance(
@@ -205,6 +206,9 @@ class WakingCheckStage(Stage):
                 and isinstance(principal_username, str)
                 and principal_username == event.get_sender_id()
             ):
+                principal_auth_strength = dashboard_principal.get("auth_strength")
+                if principal_auth_strength in {"none", "password", "totp", "step_up"}:
+                    auth_strength = principal_auth_strength
                 subject = Subject.dashboard_account(account_id, principal_username)
                 authenticated = True
                 source = "webchat"
@@ -263,6 +267,7 @@ class WakingCheckStage(Stage):
             platform_role_source=getattr(event, "platform_role_source", "none"),
             platform_role_expires_at=getattr(event, "platform_role_expires_at", None),
             authenticated=authenticated,
+            auth_strength=auth_strength,
             origin_session_resource_id=resource.id,
             caller_declared_username=(
                 event.get_sender_id() if source == "webchat" else None

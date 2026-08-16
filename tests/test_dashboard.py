@@ -14,10 +14,12 @@ import pyotp
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI
+from sqlmodel import col, select
 from werkzeug.datastructures import FileStorage
 
 from astrbot.application import resolve_dashboard_assets
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.db.po import DashboardAccount
 from astrbot.core.desktop_runtime import DESKTOP_MANAGED_RESTART_MESSAGE
 from astrbot.core.log import LogBroker
 from astrbot.core.skills.skill_manager import SkillManager
@@ -413,6 +415,43 @@ async def _set_dashboard_password_change_required(
     )
 
 
+async def _set_dashboard_account_totp(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    secret: str,
+    recovery_code_hash: str,
+) -> None:
+    async with core_lifecycle_td.db.get_db() as session:
+        async with session.begin():
+            account = (
+                await session.execute(
+                    select(DashboardAccount)
+                    .where(col(DashboardAccount.is_active).is_(True))
+                    .limit(1)
+                )
+            ).scalar_one()
+            account.totp_enabled = True
+            account.totp_secret = secret
+            account.totp_recovery_code_hash = recovery_code_hash
+
+
+async def _set_dashboard_account_password(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    username: str,
+    password_hash: str,
+) -> None:
+    async with core_lifecycle_td.db.get_db() as session:
+        async with session.begin():
+            account = (
+                await session.execute(
+                    select(DashboardAccount)
+                    .where(col(DashboardAccount.is_active).is_(True))
+                    .limit(1)
+                )
+            ).scalar_one()
+            account.username = username
+            account.password_hash = password_hash
+
+
 async def _restore_dashboard_password_state(
     core_lifecycle_td: AstrBotCoreLifecycle,
     dashboard_config: dict,
@@ -426,6 +465,31 @@ async def _restore_dashboard_password_state(
         core_lifecycle_td.astrbot_config,
         bool(dashboard_config.get("pbkdf2_password")),
     )
+    async with core_lifecycle_td.db.get_db() as session:
+        async with session.begin():
+            account = (
+                await session.execute(
+                    select(DashboardAccount)
+                    .where(col(DashboardAccount.is_active).is_(True))
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if account is not None:
+                account.username = str(dashboard_config.get("username", "astrbot"))
+                account.password_hash = str(
+                    dashboard_config.get("pbkdf2_password", "")
+                )
+                totp = dashboard_config.get("totp", {})
+                if isinstance(totp, dict):
+                    account.totp_enabled = bool(totp.get("enable"))
+                    account.totp_secret = str(totp.get("secret", "") or "")
+                    account.totp_recovery_code_hash = str(
+                        totp.get("recovery_code_hash", "") or ""
+                    )
+                else:
+                    account.totp_enabled = False
+                    account.totp_secret = ""
+                    account.totp_recovery_code_hash = ""
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -776,6 +840,7 @@ async def test_auth_login_requires_totp_when_enabled_and_not_trusted(
             "secret": secret,
             "recovery_code_hash": recovery_code_hash,
         }
+        await _set_dashboard_account_totp(core_lifecycle_td, secret, recovery_code_hash)
         response = await test_client.post(
             "/api/v1/auth/login",
             json={
@@ -812,6 +877,7 @@ async def test_auth_login_accepts_valid_totp_code(
             "secret": secret,
             "recovery_code_hash": recovery_code_hash,
         }
+        await _set_dashboard_account_totp(core_lifecycle_td, secret, recovery_code_hash)
         response = await test_client.post(
             "/api/v1/auth/login",
             json={
@@ -848,6 +914,7 @@ async def test_auth_login_rejects_invalid_totp_code(
             "secret": secret,
             "recovery_code_hash": recovery_code_hash,
         }
+        await _set_dashboard_account_totp(core_lifecycle_td, secret, recovery_code_hash)
         valid_code = pyotp.TOTP(secret).now()
         invalid_code = str((int(valid_code) + 1) % 1_000_000).zfill(6)
         response = await test_client.post(
@@ -886,6 +953,7 @@ async def test_auth_login_with_recovery_code_disables_totp(
             "secret": secret,
             "recovery_code_hash": recovery_code_hash,
         }
+        await _set_dashboard_account_totp(core_lifecycle_td, secret, recovery_code_hash)
         response = await test_client.post(
             "/api/v1/auth/login",
             json={
@@ -926,6 +994,7 @@ async def test_auth_login_sets_trusted_device_cookie_when_flag_true(
             "secret": secret,
             "recovery_code_hash": recovery_code_hash,
         }
+        await _set_dashboard_account_totp(core_lifecycle_td, secret, recovery_code_hash)
         response = await test_client.post(
             "/api/v1/auth/login",
             json={
@@ -975,6 +1044,7 @@ async def test_auth_login_skips_totp_when_trusted_cookie_valid(
             "secret": secret,
             "recovery_code_hash": recovery_code_hash,
         }
+        await _set_dashboard_account_totp(core_lifecycle_td, secret, recovery_code_hash)
         first_login = await test_client.post(
             "/api/v1/auth/login",
             json={
@@ -1185,6 +1255,9 @@ async def test_totp_rotation_is_scoped_to_the_authenticated_dashboard_session(
             "secret": current_secret,
             "recovery_code_hash": "recovery-hash",
         }
+        await _set_dashboard_account_totp(
+            core_lifecycle_td, current_secret, "recovery-hash"
+        )
         username = core_lifecycle_td.astrbot_config["dashboard"]["username"]
         bootstrap_token = authenticated_header["Authorization"].split(" ", 1)[1]
         account_id = app.state.dashboard_token_validator.validate(
@@ -1228,7 +1301,10 @@ async def test_totp_rotation_is_scoped_to_the_authenticated_dashboard_session(
         assert (await staged.get_json())["status"] == "ok"
     finally:
         await app.state.services.auth.totp_runtime_state.clear_all()
-        core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
         await test_client.aclose()
 
 
@@ -1254,6 +1330,11 @@ async def test_md5_dashboard_password_keeps_md5_auth_until_edit(
         await set_password_storage_upgraded(
             core_lifecycle_td.astrbot_config,
             False,
+        )
+        await _set_dashboard_account_password(
+            core_lifecycle_td,
+            "astrbot",
+            hash_md5_dashboard_password(md5_password),
         )
 
         response = await test_client.post(
@@ -1351,6 +1432,11 @@ async def test_md5_login_failure_includes_upgrade_faq_hint(
             core_lifecycle_td.astrbot_config,
             False,
         )
+        await _set_dashboard_account_password(
+            core_lifecycle_td,
+            "astrbot",
+            hash_md5_dashboard_password(md5_password),
+        )
 
         response = await test_client.post(
             "/api/v1/auth/login",
@@ -1391,6 +1477,11 @@ async def test_password_storage_flag_repairs_after_rollback_clears_pbkdf2(
         await set_password_storage_upgraded(
             core_lifecycle_td.astrbot_config,
             True,
+        )
+        await _set_dashboard_account_password(
+            core_lifecycle_td,
+            "astrbot",
+            hash_md5_dashboard_password(md5_password),
         )
 
         response = await test_client.post(

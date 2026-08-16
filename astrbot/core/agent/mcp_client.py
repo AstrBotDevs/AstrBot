@@ -29,6 +29,7 @@ from mcp.client.session import ClientRequestContext
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.client.streamable_http import streamable_http_client
 from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
+from mcp.shared.exceptions import MCPError
 from mcp.types import (
     ElicitRequest,
     ElicitRequestFormParams,
@@ -1056,7 +1057,9 @@ class MCPClient:
         )
         return await stack.enter_async_context(client)
 
-    async def _run_connection(self, ready: asyncio.Future[None]) -> None:
+    async def _run_connection(
+        self, ready: asyncio.Future[None], *, watch_catalog: bool = True
+    ) -> None:
         assert self._mcp_server_config is not None and self._server_name is not None
         attempts = 0
         try:
@@ -1087,10 +1090,11 @@ class MCPClient:
                     if not ready.done():
                         ready.set_result(None)
                     attempts = 0
-                    self._watcher_task = asyncio.create_task(
-                        self._watch_catalog(client),
-                        name=f"mcp-subscription:{self._server_name}",
-                    )
+                    if watch_catalog:
+                        self._watcher_task = asyncio.create_task(
+                            self._watch_catalog(client),
+                            name=f"mcp-subscription:{self._server_name}",
+                        )
                     await self._wait_for_stop_or_reconnect()
                 except asyncio.CancelledError:
                     raise
@@ -1146,7 +1150,11 @@ class MCPClient:
         await asyncio.gather(*pending, return_exceptions=True)
 
     async def connect_to_server(
-        self, mcp_server_config: dict[str, Any], name: str
+        self,
+        mcp_server_config: dict[str, Any],
+        name: str,
+        *,
+        watch_catalog: bool = True,
     ) -> None:
         validate_mcp_server_config(mcp_server_config)
         await self.cleanup()
@@ -1157,7 +1165,8 @@ class MCPClient:
         self._reconnect_event.clear()
         ready: asyncio.Future[None] = asyncio.get_running_loop().create_future()
         self._connection_task = asyncio.create_task(
-            self._run_connection(ready), name=f"mcp-connection:{name}"
+            self._run_connection(ready, watch_catalog=watch_catalog),
+            name=f"mcp-connection:{name}",
         )
         try:
             await ready
@@ -1271,6 +1280,24 @@ class MCPClient:
                         await self._notify_catalog_changed("resources")
         except asyncio.CancelledError:
             raise
+        except MCPError as exc:
+            if exc.message.casefold() == "subscription limit reached":
+                # A server may support the MCP connection while rejecting the
+                # optional catalog subscription due to a server-side quota.
+                # The initial catalogs remain usable, so do not tear down a
+                # healthy connection and retry in a tight loop.
+                logger.warning(
+                    "MCP catalog subscription for %s unavailable: %s",
+                    self._server_name,
+                    safe_error("", exc),
+                )
+            else:
+                logger.warning(
+                    "MCP catalog subscription for %s ended: %s",
+                    self._server_name,
+                    safe_error("", exc),
+                )
+                self._reconnect_event.set()
         except Exception as exc:
             logger.warning(
                 "MCP catalog subscription for %s ended: %s",

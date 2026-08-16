@@ -94,104 +94,14 @@ class SQLiteDatabase(BaseDatabase):
         )
 
     async def _ensure_authorization_schema(self, conn) -> None:
-        """Normalize auth migration rows and enforce global binding uniqueness.
+        """Enforce one active role binding per subject and scope."""
 
-        SQLite considers NULL values distinct in a unique index. Global
-        bindings therefore use a durable sentinel config id rather than NULL,
-        and old rows are normalized idempotently before the partial index is
-        created.
-        """
-
-        table = await conn.execute(text("PRAGMA table_info(auth_role_bindings)"))
-        if not table.fetchall():
-            return
-        # Older experimental builds could contain multiple NULL-config global
-        # rows. Retain the oldest active row deterministically before changing
-        # NULL to the durable sentinel; otherwise the migration itself would
-        # fail and leave authorization schema initialization incomplete.
-        await conn.execute(
-            text(
-                "DELETE FROM auth_role_bindings WHERE scope_type = 'global' "
-                "AND revoked_at IS NULL AND rowid NOT IN ("
-                "SELECT MIN(rowid) FROM auth_role_bindings "
-                "WHERE scope_type = 'global' AND revoked_at IS NULL "
-                "GROUP BY subject_id, role, scope_type, scope_id"
-                ")"
-            )
-        )
-        await conn.execute(
-            text(
-                "UPDATE auth_role_bindings SET config_id = '__global__' "
-                "WHERE scope_type = 'global' AND config_id IS NULL"
-            )
-        )
-        # The early experimental table did not have the partial active-row
-        # index. Keep the oldest active binding if an interrupted migration or
-        # a manual SQLite edit produced duplicates. Revoked rows remain intact
-        # for audit history.
-        await conn.execute(
-            text(
-                "DELETE FROM auth_role_bindings WHERE revoked_at IS NULL "
-                "AND rowid NOT IN ("
-                "SELECT MIN(rowid) FROM auth_role_bindings "
-                "WHERE revoked_at IS NULL "
-                "GROUP BY subject_id, scope_type, scope_id, config_id"
-                ")"
-            )
-        )
-        # Recreate the partial index with the same scope key as the ORM
-        # constraint.  Older revisions included ``role`` and therefore could
-        # retain two active roles for one subject/scope.
-        await conn.execute(
-            text("DROP INDEX IF EXISTS uix_auth_role_binding_active_scope")
-        )
         await conn.execute(
             text(
                 "CREATE UNIQUE INDEX IF NOT EXISTS "
                 "uix_auth_role_binding_active_scope "
                 "ON auth_role_bindings(subject_id, scope_type, scope_id, config_id) "
                 "WHERE revoked_at IS NULL"
-            )
-        )
-        account_columns_result = await conn.execute(
-            text("PRAGMA table_info(dashboard_accounts)")
-        )
-        account_columns = {str(row[1]) for row in account_columns_result.fetchall()}
-        account_migrations = {
-            "totp_enabled": "BOOLEAN NOT NULL DEFAULT 0",
-            "totp_secret": "TEXT NOT NULL DEFAULT ''",
-            "totp_recovery_code_hash": "TEXT NOT NULL DEFAULT ''",
-            "totp_migrated": "BOOLEAN NOT NULL DEFAULT 0",
-        }
-        for column, definition in account_migrations.items():
-            if column not in account_columns:
-                await conn.execute(
-                    text(
-                        "ALTER TABLE dashboard_accounts "
-                        f"ADD COLUMN {column} {definition}"
-                    )
-                )
-        trusted_columns_result = await conn.execute(
-            text("PRAGMA table_info(dashboard_trusted_devices)")
-        )
-        trusted_columns = {str(row[1]) for row in trusted_columns_result.fetchall()}
-        if "account_id" not in trusted_columns:
-            await conn.execute(
-                text(
-                    "ALTER TABLE dashboard_trusted_devices "
-                    "ADD COLUMN account_id VARCHAR NOT NULL DEFAULT ''"
-                )
-            )
-        # Legacy trusted-device records belonged to one global TOTP secret.
-        # They cannot be attributed safely to a stable account, so drop only
-        # the unscoped rows during the one-time schema migration.
-        await conn.execute(
-            text("DELETE FROM dashboard_trusted_devices WHERE account_id = ''")
-        )
-        await conn.execute(
-            text(
-                "CREATE INDEX IF NOT EXISTS ix_dashboard_trusted_devices_account_expiry "
-                "ON dashboard_trusted_devices (account_id, expires_at)"
             )
         )
 

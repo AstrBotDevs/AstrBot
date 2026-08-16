@@ -24,6 +24,7 @@ from cryptography.x509.oid import NameOID
 HOST = "127.0.0.1"
 BACKEND_PORT = 6185
 SPIKE_PORT = 6190
+DASHBOARD_PORT = 3000
 TEST_DASHBOARD_TOKEN = "plugin-ui-e2e-dashboard-token"
 TEST_DASHBOARD_USER = "plugin-ui-e2e"
 TEST_EXTENSION_ID = "io.github.example.palette"
@@ -187,7 +188,7 @@ root.querySelector('[data-testid="navigate-external"]').onclick = () => {
 
 
 def _test_shell() -> tuple[bytes, str]:
-    dashboard_origin = "http://127.0.0.1:3000"
+    dashboard_origin = f"http://{HOST}:{DASHBOARD_PORT}"
     asset_source = f"{dashboard_origin}{TEST_BUNDLE_PREFIX}"
     sdk_source = f"{dashboard_origin}{TEST_SDK_PATH}"
     csp = "; ".join(
@@ -391,6 +392,26 @@ class SpikeHandler(BaseHTTPRequestHandler):
             self._send(b"ok", content_type="text/plain")
             return
         if self.server.server_port == BACKEND_PORT:
+            if path in {
+                "/api/v1/chat/projects",
+                "/api/v1/chat/sessions",
+                "/api/v1/providers/type/chat_completion",
+            }:
+                if not self._require_authorized():
+                    return
+                self._send_json({"status": "ok", "message": None, "data": []})
+                return
+            if path == "/api/v1/commands":
+                if not self._require_authorized():
+                    return
+                self._send_json(
+                    {
+                        "status": "ok",
+                        "message": None,
+                        "data": {"items": [], "wake_prefix": ["/"]},
+                    }
+                )
+                return
             if path == "/api/v1/plugins":
                 if not self._require_authorized():
                     return
@@ -509,7 +530,7 @@ class SpikeHandler(BaseHTTPRequestHandler):
                     )
                     return
                 origin = self.headers.get("Origin")
-                if origin not in {None, "null", "http://127.0.0.1:3000"}:
+                if origin not in {None, "null", f"http://{HOST}:{DASHBOARD_PORT}"}:
                     self._send(
                         b"Forbidden",
                         content_type="text/plain",
@@ -835,10 +856,16 @@ def _create_tls_context(directory: Path) -> ssl.SSLContext:
 
 
 def main() -> None:
+    global BACKEND_PORT, SPIKE_PORT, DASHBOARD_PORT
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--backend-port", type=int, default=BACKEND_PORT)
     parser.add_argument("--spike-port", type=int, default=SPIKE_PORT)
+    parser.add_argument("--dashboard-port", type=int, default=DASHBOARD_PORT)
     args = parser.parse_args()
+    BACKEND_PORT = args.backend_port
+    SPIKE_PORT = args.spike_port
+    DASHBOARD_PORT = args.dashboard_port
     with tempfile.TemporaryDirectory() as temp_directory:
         os.environ["ASTRBOT_ROOT"] = temp_directory
         os.environ["ASTRBOT_TEST_DASHBOARD_USERNAME"] = TEST_DASHBOARD_USER

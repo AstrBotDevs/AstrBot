@@ -456,6 +456,28 @@ def test_firecrawl_tools_are_registered_as_builtin_tools():
 
 
 @pytest.mark.asyncio
+async def test_mcp_connection_test_uses_initial_catalog_without_subscription(monkeypatch):
+    seen = {}
+
+    async def fake_connect(self, config, name, *, watch_catalog=True):
+        seen["watch_catalog"] = watch_catalog
+        self.tools = [SimpleNamespace(name="demo")]
+
+    async def fake_cleanup(self):
+        return None
+
+    monkeypatch.setattr(ftm.MCPClient, "connect_to_server", fake_connect)
+    monkeypatch.setattr(ftm.MCPClient, "cleanup", fake_cleanup)
+
+    result = await FunctionToolManager.test_mcp_server_connection(
+        {"url": "https://example.com/mcp"}
+    )
+
+    assert result == ["demo"]
+    assert seen == {"watch_catalog": False}
+
+
+@pytest.mark.asyncio
 async def test_mcp_shutdown_cleanup_runs_in_lifecycle_task(monkeypatch):
     """Disabling an MCP server must clean up in the task that connected.
 

@@ -701,13 +701,11 @@ class DashboardAccount(TimestampMixin, SQLModel, table=True):
     is_active: bool = Field(default=True, nullable=False, index=True)
     created_by: str | None = Field(default=None, index=True, max_length=512)
     last_login_at: datetime | None = Field(default=None, index=True)
-    # The legacy Dashboard configuration stored one TOTP credential globally.
-    # TOTP now belongs to this immutable account identity; a username rename
-    # must never transfer a second factor to a different account.
+    # TOTP belongs to this immutable account identity; a username rename must
+    # never transfer a second factor to a different account.
     totp_enabled: bool = Field(default=False, nullable=False)
     totp_secret: str = Field(default="", nullable=False, sa_type=Text)
     totp_recovery_code_hash: str = Field(default="", nullable=False, sa_type=Text)
-    totp_migrated: bool = Field(default=False, nullable=False)
 
 
 class AuthRoleBinding(TimestampMixin, SQLModel, table=True):
@@ -809,38 +807,6 @@ class AuthStepUpCredential(SQLModel, table=True):
     )
 
 
-class AuthElevationRequest(SQLModel, table=True):
-    """Historical elevation-request rows retained for non-destructive migration.
-
-    v1 no longer creates or consumes elevation requests.  The model remains so
-    existing SQLite installations keep their schema and can be inspected or
-    migrated without a destructive drop.
-    """
-
-    __tablename__ = "auth_elevation_requests"  # type: ignore
-
-    request_id: str = Field(primary_key=True, max_length=64)
-    subject_id: str = Field(nullable=False, index=True, max_length=512)
-    requested_action: str = Field(nullable=False, max_length=128)
-    resource_id: str = Field(nullable=False, index=True, max_length=4096)
-    config_id: str | None = Field(default=None, index=True, max_length=128)
-    requested_from: str = Field(nullable=False, max_length=64)
-    approval_channel: str = Field(nullable=False, max_length=32)
-    nonce_hash: str = Field(nullable=False, max_length=128)
-    request_context_digest: str = Field(nullable=False, max_length=128)
-    status: str = Field(default="pending", nullable=False, index=True, max_length=32)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), index=True)
-    expires_at: datetime = Field(nullable=False, index=True)
-    approver_subject_id: str | None = Field(default=None, index=True, max_length=512)
-    approved_at: datetime | None = Field(default=None)
-    consumed_at: datetime | None = Field(default=None)
-
-    __table_args__ = (
-        Index("ix_auth_elevation_status_expiry", "status", "expires_at"),
-        Index("ix_auth_elevation_subject_resource", "subject_id", "resource_id"),
-    )
-
-
 class AuthAuditLog(SQLModel, table=True):
     """Append-only, redacted authorization decision history."""
 
@@ -859,10 +825,6 @@ class AuthAuditLog(SQLModel, table=True):
     decision: str = Field(nullable=False, index=True, max_length=32)
     reason: str = Field(nullable=False, max_length=128)
     step_up_id: str | None = Field(default=None, index=True, max_length=64)
-    # Historical columns retained for schema compatibility.  v1 never writes
-    # or reads cross-channel elevation state.
-    elevation_id: str | None = Field(default=None, index=True, max_length=64)
-    approver_subject_id: str | None = Field(default=None, max_length=512)
     outcome: str | None = Field(default=None, max_length=64)
     latency_ms: int | None = Field(default=None)
     metadata_json: dict = Field(default_factory=dict, sa_type=JSON)

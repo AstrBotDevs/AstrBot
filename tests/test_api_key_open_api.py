@@ -67,15 +67,19 @@ async def _create_step_up(
     action: str,
     resource_type: str,
     resource_id: str,
+    config_id: str | None = None,
 ) -> str:
+    payload = {
+        "action": action,
+        "resource_type": resource_type,
+        "resource_id": resource_id,
+        "password": dashboard_password,
+    }
+    if config_id is not None:
+        payload["config_id"] = config_id
     response = await test_client.post(
         "/api/v1/authorization/step-up",
-        json={
-            "action": action,
-            "resource_type": resource_type,
-            "resource_id": resource_id,
-            "password": dashboard_password,
-        },
+        json=payload,
         headers=authenticated_header,
     )
     assert response.status_code == 200
@@ -224,6 +228,54 @@ async def test_conversation_export_requires_dashboard_step_up(
     assert exported.status_code == 200
     assert exported.headers["content-type"].startswith("application/x-ndjson")
     assert "export regression" in (await exported.get_data()).decode()
+
+
+@pytest.mark.asyncio
+async def test_provider_source_step_up_preserves_config_scope(
+    test_client: DashboardTestClient,
+    authenticated_header: dict,
+    dashboard_password: str,
+):
+    source_id = f"openai-step-up-{uuid.uuid4().hex[:8]}"
+    config = {
+        "id": source_id,
+        "type": "openai_chat_completions",
+        "provider_type": "chat_completion",
+        "provider": "openai",
+        "enable": True,
+        "api_base": "https://api.example.test/v1",
+        "key": ["test-key"],
+    }
+
+    without_step_up = await test_client.put(
+        f"/api/v1/provider-sources/{source_id}",
+        json={"config": config},
+        headers=authenticated_header,
+    )
+    assert without_step_up.status_code == 403
+    assert (await without_step_up.get_json())["data"]["requires_step_up"] is True
+
+    step_up = await _create_step_up(
+        test_client,
+        authenticated_header,
+        dashboard_password,
+        action="provider.credentials.write",
+        resource_type="provider-source",
+        resource_id=source_id,
+        config_id="default",
+    )
+    saved = await test_client.put(
+        f"/api/v1/provider-sources/{source_id}",
+        json={"config": config},
+        headers={**authenticated_header, "X-AstrBot-Step-Up": step_up},
+    )
+    assert saved.status_code == 200
+
+    deleted = await test_client.delete(
+        f"/api/v1/provider-sources/{source_id}",
+        headers=authenticated_header,
+    )
+    assert deleted.status_code == 200
 
 
 @pytest.mark.asyncio
@@ -555,6 +607,7 @@ async def test_open_chat_username_is_not_an_admin_identity(
         post_data: dict,
         *,
         api_key_principal: dict | None = None,
+        **_kwargs,
     ):
         scopes = api_key_principal.get("scopes", ()) if api_key_principal else None
         calls.append((username, None if scopes is None else tuple(scopes)))

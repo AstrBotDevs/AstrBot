@@ -285,7 +285,7 @@ class AstrBotDashboard:
 
         @self.asgi_app.middleware("http")
         async def dashboard_auth_middleware(request_, call_next):
-            request_.state.dashboard_g = DashboardRequestState()
+            request_.state.dashboard_request_state = DashboardRequestState()
             auth_response = await self.auth_middleware(request_)
             if auth_response is not None:
                 return auth_response

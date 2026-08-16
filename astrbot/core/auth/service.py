@@ -1574,8 +1574,8 @@ class AuthorizationService:
                         # Global control-plane roles are tied to the current
                         # Dashboard account state. This check also closes the
                         # race between account deactivation and a concurrent
-                        # binding write, and ignores stale rows from older
-                        # databases without reviving their authority.
+                        # binding write, and ignores bindings that no longer
+                        # correspond to an active account.
                         account_id = binding.subject_id.removeprefix(
                             "dashboard-account:"
                         )
