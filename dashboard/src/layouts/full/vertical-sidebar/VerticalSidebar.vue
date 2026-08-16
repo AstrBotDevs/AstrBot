@@ -410,6 +410,7 @@ function openChangelogDialog() {
   width: 100%;
   height: 40px;
   min-height: 40px;
+  font-size: 16px;
   justify-content: flex-start;
   text-align: left;
 }

@@ -80,14 +80,20 @@ test.describe('Dashboard keyboard and responsive interactions', () => {
       await expect(footerActions.nth(index)).toBeInViewport();
     }
 
-    const [settingsMetrics, changelogMetrics] = await footerActions.evaluateAll(
-      (actions) =>
-        actions.slice(0, 2).map((action) => ({
+    const footerMetrics = await footerActions.evaluateAll((actions) =>
+      actions.map((action) => {
+        const icon = action.querySelector('.v-icon');
+        return {
+          fontSize: getComputedStyle(action).fontSize,
           height: action.clientHeight,
+          iconFontSize: icon ? getComputedStyle(icon).fontSize : null,
           width: action.clientWidth,
-        })),
+        };
+      }),
     );
-    expect(changelogMetrics).toEqual(settingsMetrics);
+    expect(footerMetrics).toHaveLength(3);
+    expect(footerMetrics[1]).toEqual(footerMetrics[0]);
+    expect(footerMetrics[2]).toEqual(footerMetrics[0]);
   });
 
   test('keeps changelog and update dialogs opaque over Dashboard content', async ({
