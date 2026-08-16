@@ -1287,6 +1287,11 @@
             "description": "Max tokens",
             "hint": "Maximum number of generated tokens.",
             "name": "Max Tokens"
+          },
+          "reasoning_effort": {
+            "description": "Reasoning effort",
+            "hint": "Controls the effort used by reasoning models. Supported values depend on the model.",
+            "name": "Reasoning Effort"
           }
         }
       },

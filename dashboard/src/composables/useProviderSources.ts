@@ -340,7 +340,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return {
       modalities: { input: inputs },
       tool_call: inputs.includes("tool_use"),
-      reasoning: Boolean(provider.reasoning),
       ...(Number.isFinite(context) && context > 0
         ? { limit: { context } }
         : {}),

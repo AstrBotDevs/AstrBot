@@ -3,6 +3,7 @@ import DOMPurify from "dompurify";
 import MarkdownIt from "markdown-it";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
+import { useI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
 import axios from "@/utils/request";
 import defaultPluginIcon from "/favicon.svg";
@@ -27,6 +28,7 @@ const props = defineProps({
 });
 
 const { tm, router } = props.state;
+const { locale } = useI18n();
 const { pluginName, pluginDesc: resolvePluginDesc, pluginPageTitle, pluginPageDescription } = usePluginI18n();
 
 const markdown = new MarkdownIt({
@@ -185,6 +187,26 @@ const supportPlatformsDisplay = computed(() => {
   return platforms.filter((platform) => typeof platform === "string");
 });
 
+const updatedAtDisplay = computed(() => {
+  if (!isMarketDetail.value) return "";
+
+  const value = firstPresentValue(pluginData.value?.updated_at, props.marketPlugin?.updated_at);
+  if (!value) return "";
+
+  const updatedAt = new Date(value);
+  if (Number.isNaN(updatedAt.getTime())) return "";
+
+  return new Intl.DateTimeFormat(locale.value, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(updatedAt);
+});
+
 const infoRows = computed(() => {
   const rows = [
     {
@@ -201,6 +223,11 @@ const infoRows = computed(() => {
     {
       label: tm("detail.info.stars"),
       value: starsDisplay.value,
+      optional: true,
+    },
+    {
+      label: tm("detail.info.updatedAt"),
+      value: updatedAtDisplay.value,
       optional: true,
     },
     {

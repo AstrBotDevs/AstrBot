@@ -188,15 +188,12 @@ def verify_dashboard_password(stored_hash: str, candidate_password: str) -> bool
             return False
 
     if _is_legacy_md5_hash(stored_hash):
-        # Keep compatibility with existing md5-based deployments:
-        # new clients send plain password, old clients may send md5 of it.
+        # Keep compatibility with existing MD5-based deployments while
+        # requiring the actual plaintext password.
         candidate_md5 = hashlib.md5(candidate_password.encode("utf-8")).hexdigest()
         return hmac.compare_digest(
             stored_hash.lower(),
             candidate_md5.lower(),
-        ) or hmac.compare_digest(
-            stored_hash.lower(),
-            candidate_password.lower(),
         )
 
     if _is_pbkdf2_hash(stored_hash):
