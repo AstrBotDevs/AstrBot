@@ -176,16 +176,11 @@ onBeforeUnmount(() => {
   background: transparent;
 }
 
-.dashboard-appearance-active .v-main,
-.dashboard-appearance-active .page-wrapper {
+.dashboard-appearance-active .v-main {
   background-color: transparent;
 }
 
-.dashboard-appearance-active .page-wrapper,
-.dashboard-appearance-active .v-card,
-.dashboard-appearance-active .v-app-bar,
-.dashboard-appearance-active .top-header,
-.dashboard-appearance-active .v-navigation-drawer {
+.dashboard-appearance-active .page-wrapper {
   background-color: var(--dashboard-wallpaper-surface);
 }
 </style>

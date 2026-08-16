@@ -45,7 +45,7 @@
                     <v-btn
                       color="primary"
                       variant="flat"
-                      rounded="pill"
+                      rounded="md"
                       class="px-6"
                       @click="openProviderDialog"
                     >
@@ -80,7 +80,7 @@
                     <v-btn
                       color="primary"
                       variant="flat"
-                      rounded="pill"
+                      rounded="md"
                       class="px-6"
                       :loading="loadingPlatformDialog"
                       @click="openPlatformDialog"

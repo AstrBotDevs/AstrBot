@@ -10,14 +10,14 @@ const testState = vi.hoisted(() => ({
     params: {} as Record<string, unknown>,
   },
   customizer: {
-    uiTheme: 'PurpleThemeLight',
+    uiTheme: 'AstrBotLight',
     chatSidebarOpen: true,
     SET_CHAT_SIDEBAR(value: boolean) {
       testState.customizer.chatSidebarOpen = value;
     },
     SET_THEME_MODE(mode: 'light' | 'dark' | 'system') {
       testState.customizer.uiTheme =
-        mode === 'dark' ? 'PurpleThemeDark' : 'PurpleThemeLight';
+        mode === 'dark' ? 'AstrBotDark' : 'AstrBotLight';
     },
   },
   sessions: [] as Array<Record<string, unknown>>,
@@ -278,7 +278,7 @@ describe('Chat view smoke', () => {
     vi.clearAllMocks();
     testState.route.path = '/chat';
     testState.route.params = {};
-    testState.customizer.uiTheme = 'PurpleThemeLight';
+    testState.customizer.uiTheme = 'AstrBotLight';
     testState.customizer.chatSidebarOpen = true;
     testState.sessions = [];
     testState.projects = [];

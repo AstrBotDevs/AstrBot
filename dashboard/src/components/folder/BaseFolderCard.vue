@@ -2,7 +2,7 @@
   <v-card
     class="base-folder-card"
     :class="{ 'drag-over': isDragOver }"
-    rounded="lg"
+    rounded="md"
     elevation="0"
     @click="emit('click')"
     @contextmenu.prevent="emit('contextmenu', $event)"

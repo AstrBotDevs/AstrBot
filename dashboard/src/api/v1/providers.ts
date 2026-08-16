@@ -24,11 +24,12 @@ export const providerApi = {
       openApiV1.listProviderSources(),
     );
   },
-  upsertSource(sourceId: string, config: OpenConfig) {
+  upsertSource(sourceId: string, config: OpenConfig, stepUp?: string) {
     return typed<OpenConfig>(
       openApiV1.upsertProviderSource({
         path: { source_id: sourceId },
         body: { config },
+        headers: stepUp ? { 'X-AstrBot-Step-Up': stepUp } : undefined,
       }),
     );
   },

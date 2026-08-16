@@ -5,17 +5,8 @@ const customizer = useCustomizerStore();
 </script>
 
 <template>
-  <v-app :theme="customizer.uiTheme" style="height: 100%; width: 100%">
-    <div
-      style="
-        height: 100%;
-        width: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-      "
-    >
+  <v-app :theme="customizer.uiTheme" class="chatbox-app">
+    <div class="chatbox-app__content">
       <div id="container">
         <Chat :chatbox-mode="true"></Chat>
       </div>
@@ -24,8 +15,21 @@ const customizer = useCustomizerStore();
 </template>
 
 <style scoped>
+.chatbox-app,
+.chatbox-app__content,
 #container {
   width: 100%;
-  height: 100vh;
+  min-height: 100%;
+}
+
+.chatbox-app__content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+
+#container {
+  height: 100dvh;
 }
 </style>

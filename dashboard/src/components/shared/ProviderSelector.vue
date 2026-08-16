@@ -1,6 +1,6 @@
 <template>
   <div class="d-flex align-center justify-space-between">
-    <span v-if="!hasSelection" style="color: rgb(var(--v-theme-primaryText))">
+    <span v-if="!hasSelection" class="provider-selector__empty-label">
       {{ tm('providerSelector.notSelected') }}
     </span>
     <span v-else class="provider-name-text">
@@ -39,7 +39,7 @@
 
   <!-- Provider Selection Dialog -->
   <v-dialog v-model="dialog" max-width="600px">
-    <v-card class="provider-selector-dialog__card">
+    <v-card class="app-dialog provider-selector-dialog__card">
       <v-card-title
         class="text-h3 pa-4 pb-0 pl-6 d-flex align-center justify-space-between gap-4 flex-wrap"
       >
@@ -56,8 +56,7 @@
       </v-card-title>
 
       <v-card-text
-        class="provider-selector-dialog__content pa-0"
-        style="max-height: 400px; overflow-y: auto"
+        class="provider-selector-dialog__content provider-selector-dialog__list pa-0"
       >
         <v-progress-linear
           v-if="loading"
@@ -241,7 +240,7 @@
           v-else-if="!loading && providerList.length === 0"
           class="text-center py-8"
         >
-          <v-icon size="64" color="grey-lighten-1">mdi-api-off</v-icon>
+          <v-icon size="64" color="on-surface-variant">mdi-api-off</v-icon>
           <p class="text-grey mt-4">{{ tm('providerSelector.noProviders') }}</p>
         </div>
       </v-card-text>
@@ -268,7 +267,7 @@
     :scrim="true"
     @click:outside="closeProviderDrawer"
   >
-    <v-card class="provider-drawer-card" elevation="12">
+    <v-card class="provider-drawer-card" elevation="4">
       <div class="provider-drawer-header">
         <v-btn icon variant="text" @click="closeProviderDrawer">
           <v-icon>mdi-close</v-icon>
@@ -547,6 +546,15 @@ function closeProviderDrawer() {
 </script>
 
 <style scoped>
+.provider-selector__empty-label {
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.provider-selector-dialog__list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
 .provider-name-text {
   overflow: hidden;
   text-overflow: ellipsis;

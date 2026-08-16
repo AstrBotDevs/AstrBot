@@ -114,16 +114,6 @@
             {{ totalChunks }} {{ t('chunks.title') }}
           </v-chip>
           <v-spacer />
-          <!-- <v-text-field
-            v-model="searchQuery"
-            prepend-inner-icon="mdi-magnify"
-            :placeholder="t('chunks.searchPlaceholder')"
-            variant="outlined"
-            density="compact"
-            hide-details
-            clearable
-            style="max-width: 300px"
-          /> -->
         </v-card-title>
 
         <v-card-text class="pa-0">
@@ -191,7 +181,7 @@
 
             <template #no-data>
               <div class="text-center py-8">
-                <v-icon size="64" color="grey-lighten-2"
+                <v-icon size="64" color="on-surface-variant"
                   >mdi-text-box-outline</v-icon
                 >
                 <p class="mt-4 text-medium-emphasis">{{ t('chunks.empty') }}</p>
@@ -215,7 +205,7 @@
                 density="compact"
                 variant="outlined"
                 hide-details
-                style="width: 100px"
+                class="chunk-page-size"
                 @update:model-value="handlePageSizeChange"
               />
               <v-pagination
@@ -232,7 +222,7 @@
 
     <!-- 查看分块对话框 -->
     <v-dialog v-model="showViewDialog" max-width="800px" scrollable>
-      <v-card>
+      <v-card class="app-dialog">
         <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
           <span>{{ t('view.title') }}</span>
           <v-spacer />
@@ -481,7 +471,7 @@ const getFileColor = (fileType?: string) => {
   if (type.includes('epub')) return 'warning';
   if (type.includes('md')) return 'info';
   if (type.includes('txt')) return 'success';
-  return 'grey';
+  return 'on-surface-variant';
 };
 
 const formatFileSize = (bytes?: number) => {
@@ -518,22 +508,6 @@ onMounted(() => {
   padding: 24px;
   max-width: 1040px;
   margin: 0 auto;
-  animation: fadeIn 0.3s ease;
-}
-
-.document-detail-page :deep(.v-card--variant-outlined) {
-  background: rgb(var(--v-theme-surface));
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .page-header {
@@ -555,21 +529,6 @@ onMounted(() => {
   min-height: 400px;
 }
 
-.document-content {
-  animation: slideUp 0.4s ease;
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 .info-item {
   display: flex;
   gap: 12px;
@@ -581,17 +540,21 @@ onMounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 0.875rem;
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.chunk-page-size {
+  width: 100px;
 }
 
 .chunk-content-view {
   padding: 16px;
-  background: rgba(var(--v-theme-surface-variant), 0.3);
+  background: rgb(var(--v-theme-surface-variant));
   border-radius: 8px;
   white-space: pre-wrap;
   word-break: break-word;
-  line-height: 1.6;
+  line-height: 20px;
   font-family: var(--astrbot-font-mono);
 }
 

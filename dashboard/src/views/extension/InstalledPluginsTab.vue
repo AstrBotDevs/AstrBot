@@ -1,5 +1,6 @@
 <script setup>
 import ExtensionCard from '@/components/shared/ExtensionCard.vue';
+import FloatingActionStack from '@/components/ui/FloatingActionStack.vue';
 import { normalizeTextInput } from '@/utils/inputValue';
 import {
   readPinnedExtensions,
@@ -100,32 +101,32 @@ const togglePinnedExtension = (extension) => {
 
 <template>
   <div v-show="activeTab === 'installed'">
-    <div class="mb-4 pt-4 pb-4">
-      <div class="d-flex align-center flex-wrap" style="gap: 12px">
-        <h2 class="text-h2 mb-0">{{ tm('titles.installedAstrBotPlugins') }}</h2>
+    <div class="page-header">
+      <h2 class="page-header__title">
+        {{ tm('titles.installedAstrBotPlugins') }}
+      </h2>
 
-        <div class="d-flex align-center flex-wrap ml-auto" style="gap: 8px">
-          <v-text-field
-            :model-value="pluginSearch"
-            density="compact"
-            :label="tm('search.placeholder')"
-            prepend-inner-icon="mdi-magnify"
-            clearable
-            variant="solo-filled"
-            flat
-            hide-details
-            single-line
-            style="min-width: 220px; max-width: 340px"
-            @update:model-value="pluginSearch = normalizeTextInput($event)"
-          >
-          </v-text-field>
-        </div>
+      <div class="inline-control-row">
+        <v-text-field
+          :model-value="pluginSearch"
+          density="compact"
+          :label="tm('search.placeholder')"
+          prepend-inner-icon="mdi-magnify"
+          clearable
+          variant="solo-filled"
+          flat
+          hide-details
+          single-line
+          class="control-search"
+          @update:model-value="pluginSearch = normalizeTextInput($event)"
+        >
+        </v-text-field>
       </div>
     </div>
 
     <v-card
       v-if="failedPluginItems.length > 0"
-      class="mb-4 rounded-lg"
+      class="mb-4"
       variant="tonal"
       color="warning"
     >
@@ -155,16 +156,9 @@ const togglePinnedExtension = (extension) => {
                   {{ plugin.dir_name }}
                 </div>
               </td>
-              <td style="max-width: 520px">
+              <td class="failed-plugin-error-cell">
                 <div
-                  class="text-caption text-medium-emphasis"
-                  style="
-                    display: -webkit-box;
-                    -webkit-line-clamp: 2;
-                    line-clamp: 2;
-                    -webkit-box-orient: vertical;
-                    overflow: hidden;
-                  "
+                  class="text-caption text-medium-emphasis truncate-two-lines"
                 >
                   {{ plugin.error || tm('status.unknown') }}
                 </div>
@@ -222,8 +216,7 @@ const togglePinnedExtension = (extension) => {
             <ExtensionCard
               :extension="extension"
               :is-pinned="isPinnedExtension(extension)"
-              class="rounded-lg"
-              style="background-color: rgb(var(--v-theme-mcpCardBg))"
+              class="surface--extension"
               @click="openPluginDetail(extension)"
               @toggle-pin="togglePinnedExtension(extension)"
               @configure="openExtensionConfig(extension.name)"
@@ -245,74 +238,39 @@ const togglePinnedExtension = (extension) => {
       </div>
     </v-fade-transition>
 
-    <v-tooltip :text="tm('market.installPlugin')" location="left">
-      <template #activator="{ props: tooltipProps }">
-        <button
-          v-bind="tooltipProps"
-          type="button"
-          class="v-btn v-btn--elevated v-btn--icon v-theme--PurpleThemeDark bg-darkprimary v-btn--density-default v-btn--size-x-large v-btn--variant-elevated fab-button"
-          style="
-            position: fixed;
-            right: 52px;
-            bottom: 52px;
-            z-index: 10000;
-            border-radius: 16px;
-          "
-          @click="openInstallDialog"
-        >
-          <span class="v-btn__overlay"></span>
-          <span class="v-btn__underlay"></span>
-          <span class="v-btn__content" data-no-activator="">
-            <i
-              class="mdi-plus mdi v-icon notranslate v-theme--PurpleThemeDark v-icon--size-default"
-              aria-hidden="true"
-              style="font-size: 32px"
-            ></i>
-          </span>
-        </button>
-      </template>
-    </v-tooltip>
+    <FloatingActionStack :label="tm('buttons.actions')">
+      <v-tooltip :text="tm('market.installPlugin')" location="left">
+        <template #activator="{ props: installTooltipProps }">
+          <v-btn
+            v-bind="installTooltipProps"
+            :aria-label="tm('market.installPlugin')"
+            color="primary"
+            icon="mdi-plus"
+            variant="elevated"
+            @click="openInstallDialog"
+          />
+        </template>
+      </v-tooltip>
 
-    <v-tooltip :text="tm('buttons.updateAll')" location="left">
-      <template #activator="{ props: tooltipProps }">
-        <v-btn
-          v-bind="tooltipProps"
-          color="darkprimary"
-          icon="mdi-update"
-          size="x-large"
-          variant="elevated"
-          class="update-all-fab"
-          :loading="updatingAll"
-          @click="showUpdateAllConfirm"
-        />
-      </template>
-    </v-tooltip>
+      <v-tooltip :text="tm('buttons.updateAll')" location="left">
+        <template #activator="{ props: updateTooltipProps }">
+          <v-btn
+            v-bind="updateTooltipProps"
+            :aria-label="tm('buttons.updateAll')"
+            color="secondary"
+            icon="mdi-update"
+            variant="elevated"
+            :loading="updatingAll"
+            @click="showUpdateAllConfirm"
+          />
+        </template>
+      </v-tooltip>
+    </FloatingActionStack>
   </div>
 </template>
 
 <style scoped>
-.fab-button {
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-.fab-button:hover {
-  transform: translateY(-4px) scale(1.05);
-  box-shadow: 0 12px 20px rgba(var(--v-theme-primary), 0.4);
-}
-
-.update-all-fab {
-  position: fixed;
-  right: 52px;
-  bottom: 124px;
-  z-index: 10000;
-  border-radius: 16px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-}
-
-.update-all-fab:hover {
-  transform: translateY(-4px) scale(1.05);
-  box-shadow: 0 12px 20px rgba(var(--v-theme-primary), 0.4);
+.failed-plugin-error-cell {
+  max-width: 520px;
 }
 </style>

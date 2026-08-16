@@ -10,7 +10,7 @@ vi.mock('@/i18n/composables', () => ({
 }));
 
 vi.mock('@/stores/customizer', () => ({
-  useCustomizerStore: () => ({ uiTheme: 'PurpleThemeLight' }),
+  useCustomizerStore: () => ({ uiTheme: 'AstrBotLight' }),
 }));
 
 vi.mock('@/api/v1', () => ({

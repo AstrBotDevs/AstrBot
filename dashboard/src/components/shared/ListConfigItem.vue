@@ -13,7 +13,7 @@
       <div v-else>
         <span
           v-if="!modelValue || modelValue.length === 0"
-          style="color: rgb(var(--v-theme-primaryText))"
+          class="selector-empty-label"
         >
           {{ t('core.common.list.noItems') }}
         </span>
@@ -31,7 +31,7 @@
             v-if="modelValue.length > maxDisplayItems"
             size="x-small"
             label
-            color="grey-lighten-1"
+            color="secondary"
           >
             +{{ modelValue.length - maxDisplayItems }}
           </v-chip>
@@ -48,8 +48,8 @@
 
     <!-- List Management Dialog -->
     <v-dialog v-model="dialog" max-width="600px" scrollable>
-      <v-card class="list-config-dialog__card">
-        <v-card-title class="text-h3 py-4" style="font-weight: normal">
+      <v-card class="app-dialog list-config-dialog__card">
+        <v-card-title class="app-dialog__title">
           {{ dialogTitle || t('core.common.list.editTitle') }}
         </v-card-title>
 
@@ -142,10 +142,10 @@
           </v-list>
 
           <div v-else class="text-center py-8">
-            <v-icon size="64" color="grey-lighten-1"
+            <v-icon size="64" color="secondary"
               >mdi-format-list-bulleted</v-icon
             >
-            <p class="text-grey mt-4">
+            <p class="text-medium-emphasis mt-4">
               {{ t('core.common.list.noItemsHint') }}
             </p>
           </div>
@@ -165,8 +165,8 @@
 
     <!-- Batch Import Dialog -->
     <v-dialog v-model="showBatchImport" max-width="600px" scrollable>
-      <v-card class="list-config-dialog__card">
-        <v-card-title class="text-h3 py-4" style="font-weight: normal">
+      <v-card class="app-dialog list-config-dialog__card">
+        <v-card-title class="app-dialog__title">
           {{ t('core.common.list.batchImportTitle') }}
         </v-card-title>
 

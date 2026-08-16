@@ -7,8 +7,8 @@
     <v-card
       class="styled-menu-card"
       :class="{ 'styled-menu-card-borderless': noBorder }"
-      elevation="8"
-      rounded="lg"
+      elevation="4"
+      rounded="md"
     >
       <v-list density="compact" class="styled-menu-list pa-1">
         <slot></slot>
@@ -38,58 +38,34 @@ withDefaults(
 .styled-menu-card {
   min-width: 100px;
   width: fit-content;
-  border: 1px solid rgba(var(--v-theme-primary), 0.15) !important;
-  background: rgba(var(--v-theme-surface), 0.98) !important;
-  backdrop-filter: blur(10px);
+  border: 1px solid rgb(var(--v-theme-outline-variant));
+  background: rgb(var(--v-theme-surface));
 }
 
 .styled-menu-card-borderless {
-  border: 0 !important;
+  border: 0;
 }
 
 .styled-menu-list {
-  background: transparent !important;
+  background: transparent;
 }
 
 .styled-menu-item {
-  margin: 2px 0;
-  transition: all 0.2s ease;
+  margin: 4px 0;
   border-radius: 6px;
+  transition: background-color 0.2s ease;
 }
 
 .styled-menu-item:hover {
-  background: rgba(var(--v-theme-primary), 0.08) !important;
+  background: rgb(var(--v-theme-surface-variant));
 }
 
 .styled-menu-item-active {
-  background: rgba(var(--v-theme-primary), 0.15) !important;
+  background: rgb(var(--v-theme-surface-variant));
   font-weight: 500;
 }
 
 .styled-menu-item-active:hover {
-  background: rgba(var(--v-theme-primary), 0.2) !important;
-}
-
-/* 深色模式下的下拉框样式 - 需要全局样式才能检测主题 */
-.v-theme--PurpleThemeDark .styled-menu-card {
-  background: rgba(var(--v-theme-surface), 0.98) !important;
-  border: 1px solid rgba(var(--v-theme-primary), 0.2) !important;
-}
-
-.v-theme--PurpleThemeDark .styled-menu-card-borderless {
-  border: 0 !important;
-}
-
-/* 深色模式下的列表项悬停效果 */
-.v-theme--PurpleThemeDark .styled-menu-item:hover {
-  background: rgba(var(--v-theme-primary), 0.12) !important;
-}
-
-.v-theme--PurpleThemeDark .styled-menu-item-active {
-  background: rgba(var(--v-theme-primary), 0.2) !important;
-}
-
-.v-theme--PurpleThemeDark .styled-menu-item-active:hover {
-  background: rgba(var(--v-theme-primary), 0.25) !important;
+  background: rgb(var(--v-theme-surface-variant));
 }
 </style>

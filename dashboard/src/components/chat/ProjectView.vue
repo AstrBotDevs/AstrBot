@@ -16,7 +16,7 @@
           v-for="session in sessions"
           :key="session.session_id"
           class="project-session-item"
-          rounded="lg"
+          rounded="md"
           @click="$emit('selectSession', session.session_id)"
         >
           <v-list-item-title>
@@ -56,7 +56,7 @@
         <v-icon
           icon="mdi-message-outline"
           size="large"
-          color="grey-lighten-1"
+          color="on-surface-variant"
         ></v-icon>
         <p>{{ tm('project.noSessions') }}</p>
       </div>
@@ -264,7 +264,7 @@ async function handleDeleteSession(session: Session) {
 
 .project-header-description {
   font-size: 14px;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   margin: 0;
 }
 

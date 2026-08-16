@@ -15,7 +15,7 @@
             color="primary"
             prepend-icon="mdi-plus"
             variant="tonal"
-            rounded="xl"
+            rounded="md"
             size="x-large"
             @click="showAddProviderDialog = true"
           >
@@ -80,7 +80,7 @@
                     :loading="savingSource"
                     :disabled="!isSourceModified"
                     variant="tonal"
-                    rounded="xl"
+                    rounded="md"
                     @click="saveProviderSource"
                   >
                     {{ tm('providerSources.save') }}
@@ -151,7 +151,7 @@
             </div>
 
             <div v-else class="provider-empty-state">
-              <v-icon size="48" color="grey-lighten-1"
+              <v-icon size="48" color="on-surface-variant"
                 >mdi-cursor-default-click</v-icon
               >
               <p class="mt-2">{{ tm('providerSources.selectHint') }}</p>
@@ -162,8 +162,8 @@
         <template v-else>
           <v-row v-if="filteredProviders.length === 0">
             <v-col cols="12" class="text-center pa-8">
-              <v-icon size="64" color="grey-lighten-1">mdi-api-off</v-icon>
-              <p class="text-grey mt-4">{{ getEmptyText() }}</p>
+              <v-icon size="64" color="on-surface-variant">mdi-api-off</v-icon>
+              <p class="text-medium-emphasis mt-4">{{ getEmptyText() }}</p>
             </v-col>
           </v-row>
           <v-row v-else>
@@ -229,10 +229,8 @@
 
                 <template #actions="{ item }">
                   <v-btn
-                    style="z-index: 100000"
                     variant="tonal"
                     color="info"
-                    rounded="xl"
                     size="small"
                     :loading="isProviderTesting(item.id)"
                     @click="testSingleProvider(item)"
@@ -255,7 +253,7 @@
     />
 
     <v-dialog v-model="showManualModelDialog" max-width="400">
-      <v-card :title="tm('models.manualDialogTitle')">
+      <v-card class="app-dialog" :title="tm('models.manualDialogTitle')">
         <v-card-text class="py-4">
           <v-text-field
             v-model="manualModelId"
@@ -286,7 +284,7 @@
 
     <v-dialog v-model="showProviderCfg" width="900" persistent scrollable>
       <v-card
-        class="provider-form-dialog__card"
+        class="app-dialog provider-form-dialog__card"
         :title="
           updatingMode
             ? tm('dialogs.config.editTitle')
@@ -324,7 +322,7 @@
 
     <v-dialog v-model="showProviderEditDialog" width="800" scrollable>
       <v-card
-        class="provider-form-dialog__card"
+        class="app-dialog provider-form-dialog__card"
         :title="providerEditDialogTitle"
       >
         <v-card-text class="py-4 provider-form-dialog__content">
@@ -356,6 +354,14 @@
       </v-card>
     </v-dialog>
 
+    <DashboardStepUpDialog
+      v-model="stepUpDialogOpen"
+      :loading="stepUpLoading"
+      :error-message="stepUpErrorMessage"
+      @confirm="submitStepUp"
+      @cancel="cancelStepUp"
+    />
+
     <v-snackbar
       v-model="snackbar.show"
       :color="snackbar.color"
@@ -366,7 +372,7 @@
     </v-snackbar>
 
     <v-dialog v-model="showAgentRunnerDialog" max-width="520" persistent>
-      <v-card>
+      <v-card class="app-dialog">
         <v-card-title class="text-h3 d-flex align-center">
           <v-icon start class="me-2">mdi-information</v-icon>
           请前往「配置文件」页测试 Agent 执行器
@@ -382,10 +388,7 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn
-            color="grey"
-            variant="text"
-            @click="showAgentRunnerDialog = false"
+          <v-btn variant="text" @click="showAgentRunnerDialog = false"
             >好的</v-btn
           >
           <v-btn color="primary" variant="flat" @click="goToConfigPage"
@@ -407,7 +410,9 @@ import ItemCard from '@/components/shared/ItemCard.vue';
 import AddNewProvider from '@/components/provider/AddNewProvider.vue';
 import ProviderModelsPanel from '@/components/provider/ProviderModelsPanel.vue';
 import ProviderSourcesPanel from '@/components/provider/ProviderSourcesPanel.vue';
+import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
 import { useProviderModelConfigDialog } from '@/composables/useProviderModelConfigDialog';
+import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 import { useProviderSources } from '@/composables/useProviderSources';
 import { getProviderIcon } from '@/utils/providerUtils';
 
@@ -420,6 +425,14 @@ const props = defineProps({
 
 const { tm } = useModuleI18n('features/provider');
 const router = useRouter();
+const {
+  dialogOpen: stepUpDialogOpen,
+  loading: stepUpLoading,
+  errorMessage: stepUpErrorMessage,
+  requestStepUp,
+  submitStepUp,
+  cancelStepUp,
+} = useDashboardStepUp();
 
 const snackbar = ref({
   show: false,
@@ -474,6 +487,7 @@ const {
   defaultTab: props.defaultTab,
   tm,
   showMessage,
+  requestStepUp,
 });
 
 const showAddProviderDialog = ref(false);
@@ -828,15 +842,13 @@ function goToConfigPage() {
 <style scoped>
 .provider-page {
   --provider-surface: rgb(var(--v-theme-surface));
-  --provider-border: rgba(var(--v-theme-on-surface), 0.08);
-  padding: 20px;
-  padding-top: 8px;
-  padding-bottom: 40px;
+  --provider-border: rgb(var(--v-theme-outline-variant));
+  padding: var(--astrbot-space-2) var(--astrbot-space-4) var(--astrbot-space-8);
 }
 
 .provider-workbench {
   border: 1px solid var(--provider-border);
-  border-radius: 24px;
+  border-radius: 8px;
   background: var(--provider-surface);
   display: grid;
   grid-template-columns: minmax(280px, 320px) 1px minmax(0, 1fr);
@@ -868,8 +880,8 @@ function goToConfigPage() {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 16px;
-  padding: 18px 22px 14px;
+  gap: var(--astrbot-space-4);
+  padding: var(--astrbot-space-4) var(--astrbot-space-6);
 }
 
 .provider-config-headline {
@@ -877,18 +889,17 @@ function goToConfigPage() {
 }
 
 .provider-config-title {
-  font-size: 21px;
-  line-height: 1.1;
-  font-weight: 680;
-  letter-spacing: -0.03em;
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 
 .provider-config-subtitle {
-  margin-top: 6px;
-  color: rgba(var(--v-theme-on-surface), 0.62);
+  margin-top: var(--astrbot-space-2);
+  color: rgb(var(--v-theme-on-surface-variant));
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 18px;
   overflow-wrap: anywhere;
 }
 
@@ -920,21 +931,21 @@ function goToConfigPage() {
 }
 
 .provider-section {
-  padding: 18px 22px;
+  padding: var(--astrbot-space-4) var(--astrbot-space-6);
 }
 
 .provider-section--models {
-  padding-top: 16px;
+  padding-top: var(--astrbot-space-4);
 }
 
 .provider-section-head {
-  margin-bottom: 10px;
+  margin-bottom: var(--astrbot-space-2);
 }
 
 .provider-section-title {
   font-size: 16px;
-  font-weight: 650;
-  line-height: 1.4;
+  font-weight: 600;
+  line-height: 24px;
 }
 
 .provider-empty-state {
@@ -944,13 +955,13 @@ function goToConfigPage() {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: rgba(var(--v-theme-on-surface), 0.56);
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 
 @media (max-width: 960px) {
   .provider-page {
-    padding: 12px;
-    padding-bottom: 32px;
+    padding: var(--astrbot-space-3) var(--astrbot-space-3)
+      var(--astrbot-space-8);
   }
 
   .provider-workbench {
@@ -966,43 +977,22 @@ function goToConfigPage() {
   .provider-config-header {
     flex-direction: column;
     align-items: stretch;
-    padding: 16px;
-  }
-
-  .provider-config-actions :deep(.v-btn) {
-    width: 100%;
+    padding: var(--astrbot-space-4);
   }
 
   .provider-section {
-    padding: 16px;
+    padding: var(--astrbot-space-4);
   }
 }
 
 @media (max-width: 600px) {
   .provider-page {
-    padding: 8px;
-    padding-bottom: 24px;
-  }
-
-  .provider-page :deep(.v-container) > .v-row:first-child {
-    margin: 0;
-    padding: 8px 4px 16px !important;
-  }
-
-  .provider-page :deep(.v-container) > .v-row:first-child > div {
-    width: 100%;
-  }
-
-  .provider-page :deep(.v-container) > .v-row:first-child .v-btn {
-    width: 100%;
-  }
-
-  .provider-page :deep(.v-tabs) {
-    overflow-x: auto;
+    padding: var(--astrbot-space-2) var(--astrbot-space-2)
+      var(--astrbot-space-6);
   }
 
   .provider-workbench {
-    border-radius: 16px;
+    border-radius: 8px;
     overflow: visible;
   }
 
@@ -1020,7 +1010,7 @@ function goToConfigPage() {
 
   .provider-empty-state {
     min-height: 260px;
-    padding: 24px;
+    padding: var(--astrbot-space-6);
   }
 }
 </style>

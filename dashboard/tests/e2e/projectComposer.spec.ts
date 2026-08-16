@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+const dashboardPort = process.env.ASTRBOT_E2E_DASHBOARD_PORT ?? '3000';
+
 const project = {
   project_id: 'project-1',
   title: 'Planning',
@@ -27,7 +29,7 @@ test('keeps the project composer visible with more than one hundred sessions', a
     localStorage.setItem('token', 'project-composer-e2e');
   });
   await page.route(
-    /^http:\/\/127\.0\.0\.1:3000\/api\/v1(?:\/|$)/,
+    new RegExp(`^http://127\\.0\\.0\\.1:${dashboardPort}/api/v1(?:/|$)`),
     async (route) => {
       const path = new URL(route.request().url()).pathname;
       let data: unknown = {};

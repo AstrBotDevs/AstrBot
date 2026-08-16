@@ -240,7 +240,7 @@ function hideBrokenImage(event: Event): void {
 .ref-item-title {
   font-size: 14px;
   font-weight: 500;
-  color: var(--v-theme-primaryText);
+  color: var(--v-theme-on-surface);
   margin-bottom: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -251,7 +251,7 @@ function hideBrokenImage(event: Event): void {
 
 .ref-item-url {
   font-size: 12px;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   opacity: 0.7;
   margin-bottom: 6px;
   overflow: hidden;
@@ -261,7 +261,7 @@ function hideBrokenImage(event: Event): void {
 
 .ref-item-snippet {
   font-size: 12px;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   opacity: 0.8;
   line-height: 1.5;
   overflow: hidden;
@@ -274,7 +274,7 @@ function hideBrokenImage(event: Event): void {
 .ref-item-arrow {
   flex-shrink: 0;
   margin-top: 4px;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   opacity: 0.5;
   transition: opacity 0.2s ease;
 }

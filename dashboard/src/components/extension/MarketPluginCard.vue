@@ -51,7 +51,7 @@ const handleOpen = () => {
 
 <template>
   <v-card
-    class="rounded-lg d-flex flex-column plugin-card"
+    class="d-flex flex-column plugin-card"
     variant="outlined"
     elevation="0"
     :ripple="false"
@@ -101,45 +101,28 @@ const handleOpen = () => {
           <v-icon
             icon="mdi-account"
             size="x-small"
-            style="color: rgba(var(--v-theme-on-surface), 0.5)"
+            class="plugin-meta-icon"
           ></v-icon>
           <a
             v-if="plugin?.social_link"
             :href="plugin.social_link"
             target="_blank"
-            class="text-subtitle-2 font-weight-medium"
-            style="
-              text-decoration: none;
-              color: rgb(var(--v-theme-primary));
-              white-space: nowrap;
-              overflow: hidden;
-              text-overflow: ellipsis;
-            "
+            class="plugin-author text-subtitle-2 font-weight-medium"
             @click.stop
           >
             {{ plugin.author }}
           </a>
-          <span
-            v-else
-            class="text-subtitle-2 font-weight-medium"
-            style="
-              color: rgb(var(--v-theme-primary));
-              white-space: nowrap;
-              overflow: hidden;
-              text-overflow: ellipsis;
-            "
-          >
+          <span v-else class="plugin-author text-subtitle-2 font-weight-medium">
             {{ plugin.author }}
           </span>
           <div
             v-if="plugin.stars !== undefined"
-            class="d-flex align-center text-subtitle-2 ml-2"
-            style="color: rgba(var(--v-theme-on-surface), 0.7)"
+            class="plugin-stars d-flex align-center text-subtitle-2 ml-2"
           >
             <v-icon
               icon="mdi-star"
               size="x-small"
-              style="margin-right: 2px"
+              class="plugin-stars__icon"
             ></v-icon>
             <span>{{ plugin.stars }}</span>
           </div>
@@ -153,15 +136,11 @@ const handleOpen = () => {
       </div>
     </v-card-text>
 
-    <v-card-actions
-      style="gap: 6px; padding: 8px 12px; padding-top: 0"
-      @click.stop
-    >
+    <v-card-actions class="plugin-card-actions" @click.stop>
       <div v-if="platformDisplayList.length" class="plugin-badges">
         <PluginPlatformChip
           :platforms="plugin.support_platforms"
           size="x-small"
-          :chip-style="{ height: '20px' }"
         />
       </div>
       <v-spacer></v-spacer>
@@ -173,7 +152,6 @@ const handleOpen = () => {
         class="market-action-btn"
         :href="plugin.repo"
         target="_blank"
-        style="height: 32px"
       >
         <v-icon icon="mdi-github" start size="small"></v-icon>
         {{ tm('buttons.viewRepo') }}
@@ -184,7 +162,6 @@ const handleOpen = () => {
         size="small"
         variant="flat"
         class="market-action-btn"
-        style="height: 32px"
         @click="handleInstall(plugin)"
       >
         {{ tm('buttons.install') }}
@@ -196,7 +173,6 @@ const handleOpen = () => {
         variant="flat"
         disabled
         class="market-action-btn"
-        style="height: 32px"
       >
         ✓ {{ tm('status.installed') }}
       </v-btn>
@@ -213,12 +189,7 @@ const handleOpen = () => {
 
 .plugin-card:hover,
 .plugin-card:focus-within {
-  background: rgba(var(--v-theme-on-surface), 0.04);
-}
-
-.plugin-card :deep(.v-card__overlay),
-.plugin-card :deep(.v-ripple__container) {
-  display: none;
+  background: rgb(var(--v-theme-surface-variant));
 }
 
 .plugin-card-content {
@@ -276,8 +247,8 @@ const handleOpen = () => {
 }
 
 .plugin-title {
-  line-height: 1.3;
-  font-size: 1rem;
+  font-size: 16px;
+  line-height: 24px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -289,9 +260,26 @@ const handleOpen = () => {
   flex-wrap: nowrap;
 }
 
+.plugin-meta-icon,
+.plugin-stars {
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+
+.plugin-author {
+  overflow: hidden;
+  color: rgb(var(--v-theme-primary));
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plugin-stars__icon {
+  margin-right: 2px;
+}
+
 .plugin-description {
-  color: rgba(var(--v-theme-on-surface), 0.6);
-  line-height: 1.3;
+  color: rgb(var(--v-theme-on-surface-variant));
+  line-height: 18px;
   margin-bottom: 6px;
   flex: 1;
   overflow: hidden;
@@ -299,8 +287,8 @@ const handleOpen = () => {
   -webkit-line-clamp: 2;
   line-clamp: 2;
   -webkit-box-orient: vertical;
-  min-height: calc(1.3em * 2);
-  max-height: calc(1.3em * 2);
+  min-height: 36px;
+  max-height: 36px;
 }
 
 .plugin-badges {
@@ -310,6 +298,11 @@ const handleOpen = () => {
   gap: 4px;
   margin-top: 4px;
   margin-bottom: 4px;
+}
+
+.plugin-card-actions {
+  gap: var(--astrbot-space-2);
+  padding: var(--astrbot-space-2) var(--astrbot-space-3) 0;
 }
 
 .plugin-stats {
@@ -340,7 +333,7 @@ const handleOpen = () => {
 }
 
 .market-action-btn {
-  font-size: 0.9rem;
+  font-size: 14px;
   font-weight: 600;
 }
 </style>

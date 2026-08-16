@@ -18,6 +18,7 @@
     "test:collection": "node scripts/check-test-collection.mjs",
     "test:vitest": "vitest run --config vitest.config.ts",
     "test:node": "node scripts/run-node-tests.mjs",
+    "test:design-system": "node scripts/check-design-system-source.mjs && vitest run --config vitest.config.ts tests/designSystemSourceGuard.vitest.ts tests/themeSystem.vitest.ts",
     "test:e2e": "playwright test --config=playwright.config.ts",
     "test:smoke": "pnpm test",
     "generate:api": "node -e \"const fs=require('node:fs'); fs.rmSync('src/api/generated/openapi-v1', { recursive: true, force: true }); fs.rmSync('src/api/generated/openapi-v1.ts', { force: true });\" && openapi-ts",

@@ -7,6 +7,10 @@ import {
 } from '@/utils/confirmDialog';
 import { resolveErrorMessage } from '@/utils/errorUtils';
 import { normalizeTextInput } from '@/utils/inputValue';
+import {
+  isDashboardStepUpRequired,
+  type DashboardStepUpTarget,
+} from '@/composables/useDashboardStepUp';
 
 type GenericObject = Record<string, unknown>;
 
@@ -88,6 +92,7 @@ export interface UseProviderSourcesOptions {
   defaultTab?: string;
   tm: (key: string, params?: Record<string, unknown>) => string;
   showMessage: (message: string, color?: string) => void;
+  requestStepUp?: (target: DashboardStepUpTarget) => Promise<string | null>;
 }
 
 export function resolveDefaultTab(value?: string) {
@@ -664,10 +669,27 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     );
     const editableSource = editableProviderSource.value;
     try {
-      const response = await providerApi.upsertSource(
-        originalId,
-        editableSource,
-      );
+      let response;
+      try {
+        response = await providerApi.upsertSource(originalId, editableSource);
+      } catch (error: unknown) {
+        if (!isDashboardStepUpRequired(error) || !options.requestStepUp) {
+          throw error;
+        }
+
+        const stepUp = await options.requestStepUp({
+          action: 'provider.credentials.write',
+          resourceType: 'provider-source',
+          resourceId: originalId,
+          configId: 'default',
+        });
+        if (!stepUp) return false;
+        response = await providerApi.upsertSource(
+          originalId,
+          editableSource,
+          stepUp,
+        );
+      }
 
       if (response.data.status !== 'ok') {
         throw new Error(

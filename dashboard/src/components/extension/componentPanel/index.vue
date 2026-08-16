@@ -167,8 +167,8 @@ watch(viewMode, async (mode) => {
 <template>
   <v-row>
     <v-col cols="12">
-      <v-card variant="flat" style="background-color: transparent">
-        <v-card-text style="padding: 20px 12px; padding-top: 0px">
+      <v-card variant="flat" class="component-panel">
+        <v-card-text class="component-panel__body">
           <div
             class="d-flex justify-space-between align-center mb-6 flex-wrap ga-3"
           >
@@ -192,13 +192,13 @@ watch(viewMode, async (mode) => {
               v-if="viewMode === 'commands' && loading"
               indeterminate
               color="primary"
-              style="max-width: 220px; flex: 1"
+              class="component-panel__progress"
             />
             <v-progress-linear
               v-else-if="viewMode === 'tools' && toolsLoading"
               indeterminate
               color="primary"
-              style="max-width: 220px; flex: 1"
+              class="component-panel__progress"
             />
           </div>
 
@@ -233,7 +233,7 @@ watch(viewMode, async (mode) => {
                     filteredCommands.length
                   }}</span>
                 </div>
-                <v-divider vertical class="mx-1" style="height: 20px" />
+                <v-divider vertical class="component-summary-divider mx-1" />
                 <div class="d-flex align-center">
                   <v-icon size="18" color="error" class="mr-1"
                     >mdi-close-circle-outline</v-icon
@@ -286,7 +286,7 @@ watch(viewMode, async (mode) => {
 
           <div v-else>
             <div class="d-flex flex-wrap align-center ga-4 mb-4">
-              <div style="min-width: 240px; max-width: 380px; flex: 1">
+              <div class="component-panel__tool-search">
                 <v-text-field
                   v-model="toolSearch"
                   prepend-inner-icon="mdi-magnify"
@@ -310,7 +310,7 @@ watch(viewMode, async (mode) => {
                     toolSummary.total
                   }}</span>
                 </div>
-                <v-divider vertical class="mx-1" style="height: 20px" />
+                <v-divider vertical class="component-summary-divider mx-1" />
                 <div class="d-flex align-center">
                   <v-icon size="18" color="success" class="mr-1"
                     >mdi-check-circle-outline</v-icon
@@ -322,7 +322,7 @@ watch(viewMode, async (mode) => {
                     toolSummary.active
                   }}</span>
                 </div>
-                <v-divider vertical class="mx-1" style="height: 20px" />
+                <v-divider vertical class="component-summary-divider mx-1" />
                 <div class="d-flex align-center">
                   <v-icon size="18" color="error" class="mr-1"
                     >mdi-close-circle-outline</v-icon
@@ -335,7 +335,7 @@ watch(viewMode, async (mode) => {
                   }}</span>
                 </div>
 
-                <v-divider vertical class="mx-1" style="height: 20px" />
+                <v-divider vertical class="component-summary-divider mx-1" />
                 <v-checkbox
                   v-model="showBuiltinTools"
                   :label="tmTool('functionTools.filter.showBuiltin')"
@@ -392,7 +392,7 @@ watch(viewMode, async (mode) => {
   <!-- Snackbar -->
   <v-snackbar
     :timeout="2000"
-    elevation="6"
+    elevation="4"
     :color="snackbar.color"
     v-model="snackbar.show"
   >
@@ -405,7 +405,26 @@ watch(viewMode, async (mode) => {
   flex: none;
 }
 
-.builtin-tools-checkbox :deep(.v-selection-control) {
-  min-height: auto;
+.component-panel {
+  background: transparent;
+}
+
+.component-panel__body {
+  padding: 0 var(--astrbot-space-3) var(--astrbot-space-4);
+}
+
+.component-panel__progress {
+  flex: 1;
+  max-width: 220px;
+}
+
+.component-summary-divider {
+  height: 20px;
+}
+
+.component-panel__tool-search {
+  min-width: 240px;
+  max-width: 380px;
+  flex: 1;
 }
 </style>

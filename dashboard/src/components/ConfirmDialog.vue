@@ -5,10 +5,10 @@
       <v-card-text>{{ message }}</v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn color="gray" @click="handleCancel">{{
+        <v-btn @click="handleCancel">{{
           t('core.common.dialog.cancelButton')
         }}</v-btn>
-        <v-btn color="red" @click="handleConfirm">{{
+        <v-btn color="error" @click="handleConfirm">{{
           t('core.common.dialog.confirmButton')
         }}</v-btn>
       </v-card-actions>

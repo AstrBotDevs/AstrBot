@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch, computed } from 'vue';
+import { useDisplay } from 'vuetify';
 import { changelogApi, statsApi } from '@/api/v1';
 import { useI18n } from '@/i18n/composables';
 import { MarkdownRender, enableKatex, enableMermaid } from 'markstream-vue';
@@ -10,6 +11,7 @@ enableKatex();
 enableMermaid();
 
 const { t } = useI18n();
+const { smAndDown, xs } = useDisplay();
 
 const props = defineProps({
   modelValue: {
@@ -165,8 +167,8 @@ void getCurrentVersion();
 <template>
   <v-dialog
     :model-value="dialog"
-    :width="$vuetify.display.smAndDown ? '100%' : '800'"
-    :fullscreen="$vuetify.display.xs"
+    :width="smAndDown ? '100%' : '800'"
+    :fullscreen="xs"
     max-width="1000"
     scrollable
     @update:model-value="dialog = $event"
@@ -244,7 +246,7 @@ void getCurrentVersion();
       </v-card-text>
       <v-card-actions class="changelog-dialog__actions">
         <v-spacer></v-spacer>
-        <v-btn color="blue-darken-1" variant="text" @click="dialog = false">
+        <v-btn color="primary" variant="text" @click="dialog = false">
           {{ t('core.common.close') }}
         </v-btn>
       </v-card-actions>

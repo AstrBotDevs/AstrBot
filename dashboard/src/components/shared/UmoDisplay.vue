@@ -34,7 +34,9 @@
         class="umo-display__edit"
         @click.stop="$emit('edit')"
       >
-        <v-icon size="small" color="grey">mdi-pencil-outline</v-icon>
+        <v-icon size="small" color="on-surface-variant"
+          >mdi-pencil-outline</v-icon
+        >
         <v-tooltip v-if="editTooltip" activator="parent" location="top">
           {{ editTooltip }}
         </v-tooltip>

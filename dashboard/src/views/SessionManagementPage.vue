@@ -8,6 +8,7 @@
             icon="mdi-information-outline"
             size="small"
             variant="text"
+            :aria-label="tm('customRules.title')"
             href="https://docs.astrbot.app/use/custom-rules.html"
             target="_blank"
           ></v-btn>
@@ -71,8 +72,7 @@
             :items="filteredRulesList"
             :loading="loading"
             :items-length="totalItems"
-            class="elevation-0"
-            style="font-size: 12px"
+            class="elevation-0 session-rules-table"
             show-select
             item-value="umo"
             return-object
@@ -162,13 +162,13 @@
             <!-- 空状态 -->
             <template #no-data>
               <div class="text-center py-8">
-                <v-icon size="64" color="grey-400"
+                <v-icon size="64" color="on-surface-variant"
                   >mdi-file-document-edit-outline</v-icon
                 >
-                <div class="text-h6 mt-4 text-grey-600">
+                <div class="text-h6 mt-4">
                   {{ tm('customRules.noRules') }}
                 </div>
-                <div class="text-body-2 text-grey-500">
+                <div class="text-body-2 text-medium-emphasis">
                   {{ tm('customRules.noRulesDesc') }}
                 </div>
                 <v-btn
@@ -336,7 +336,7 @@
                 <div class="d-flex align-center justify-space-between">
                   <div>
                     <div class="font-weight-bold">{{ group.name }}</div>
-                    <div class="text-caption text-grey">
+                    <div class="text-caption text-medium-emphasis">
                       {{
                         tm('groups.sessionsCount', { count: group.umo_count })
                       }}
@@ -366,7 +366,7 @@
             </v-col>
           </v-row>
         </v-card-text>
-        <v-card-text v-else class="text-center text-grey py-6">
+        <v-card-text v-else class="text-center text-medium-emphasis py-6">
           {{ tm('groups.empty') }}
         </v-card-text>
       </v-card>
@@ -378,7 +378,7 @@
         scrollable
         @after-enter="loadAvailableUmos"
       >
-        <v-card class="session-group-dialog__card">
+        <v-card class="app-dialog session-group-dialog__card">
           <v-card-title class="py-3 px-4">
             {{
               groupDialogMode === 'create'
@@ -422,7 +422,9 @@
                     @click="addToGroup(umo)"
                   >
                     <template #prepend>
-                      <v-icon size="small" color="grey">mdi-plus</v-icon>
+                      <v-icon size="small" color="on-surface-variant"
+                        >mdi-plus</v-icon
+                      >
                     </template>
                     <v-list-item-title>
                       <UmoDisplay
@@ -449,7 +451,7 @@
                     v-if="filteredUnselectedUmos.length === 0 && !loadingUmos"
                   >
                     <v-list-item-title
-                      class="text-caption text-grey text-center"
+                      class="text-caption text-medium-emphasis text-center"
                       >{{ tm('groups.noMatch') }}</v-list-item-title
                     >
                   </v-list-item>
@@ -542,7 +544,7 @@
                   </v-list-item>
                   <v-list-item v-if="editingGroup.umos.length === 0">
                     <v-list-item-title
-                      class="text-caption text-grey text-center"
+                      class="text-caption text-medium-emphasis text-center"
                       >{{ tm('groups.noMembers') }}</v-list-item-title
                     >
                   </v-list-item>
@@ -564,11 +566,8 @@
 
       <!-- 添加规则对话框 - 选择 UMO -->
       <v-dialog v-model="addRuleDialog" max-width="600">
-        <v-card>
-          <v-card-title
-            class="py-3 px-4"
-            style="display: flex; align-items: center"
-          >
+        <v-card class="app-dialog">
+          <v-card-title class="d-flex align-center py-3 px-4">
             <span>{{ tm('addRule.title') }}</span>
             <v-spacer></v-spacer>
             <v-btn icon variant="text" @click="addRuleDialog = false">
@@ -943,7 +942,7 @@
 
       <!-- 确认删除对话框 -->
       <v-dialog v-model="deleteDialog" max-width="400">
-        <v-card>
+        <v-card class="app-dialog">
           <v-card-title class="text-h6">{{
             tm('deleteConfirm.title')
           }}</v-card-title>
@@ -978,7 +977,7 @@
             {{
               tm('batchDeleteConfirm.message', { count: selectedItems.length })
             }}
-            <div class="mt-3" style="max-height: 200px; overflow-y: auto">
+            <div class="session-selection-list mt-3">
               <v-chip
                 v-for="item in selectedItems"
                 :key="item.umo"
@@ -1011,7 +1010,7 @@
       <v-snackbar
         v-model="snackbar"
         :timeout="3000"
-        elevation="6"
+        elevation="4"
         :color="snackbarColor"
         location="top"
       >
@@ -2722,14 +2721,13 @@ async function addSelectedToGroup(groupId: string) {
 </script>
 
 <style scoped>
-.v-data-table :deep(.v-data-table__td) {
-  padding: 8px 16px !important;
-  vertical-align: middle !important;
+.session-rules-table {
+  font-size: 12px;
 }
 
 code {
-  background-color: rgba(0, 0, 0, 0.05);
-  padding: 2px 6px;
+  background-color: rgb(var(--v-theme-surface-variant));
+  padding: 2px var(--astrbot-space-2);
   border-radius: 4px;
   font-size: 12px;
 }
@@ -2737,8 +2735,8 @@ code {
 .transfer-list {
   max-height: 280px;
   overflow-y: auto;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 4px;
+  border: 1px solid rgb(var(--v-theme-outline-variant));
+  border-radius: 8px;
   overscroll-behavior: contain;
 }
 
@@ -2761,33 +2759,13 @@ code {
 
 .transfer-item {
   cursor: pointer;
-  transition: background-color 0.15s;
-  min-height: 44px !important;
-  padding-top: 3px !important;
-  padding-bottom: 3px !important;
+  min-height: 44px;
+  padding-top: var(--astrbot-space-1);
+  padding-bottom: var(--astrbot-space-1);
 }
 
 .transfer-item:hover {
-  background-color: rgba(0, 0, 0, 0.04);
-}
-
-.transfer-item :deep(.v-list-item__append) {
-  align-self: center;
-  margin-inline-start: auto;
-  padding-inline-start: 12px;
-}
-
-.transfer-item :deep(.v-list-item__prepend) {
-  align-self: center;
-}
-
-.transfer-item :deep(.v-list-item__content) {
-  min-width: 0;
-  padding-inline-end: 12px;
-}
-
-.transfer-item :deep(.v-list-item-title) {
-  line-height: 1.2;
+  background-color: rgb(var(--v-theme-surface-variant));
 }
 
 .umo-list-platform {
@@ -2800,9 +2778,8 @@ code {
   max-width: 100%;
 }
 
-.umo-selection-chip :deep(.v-chip__content) {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.session-selection-list {
+  max-height: 200px;
+  overflow-y: auto;
 }
 </style>

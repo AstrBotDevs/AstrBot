@@ -1,4 +1,4 @@
-import { generatedQuery, openApiV1, typed } from './shared';
+import { generatedOptions, generatedQuery, openApiV1, typed } from './shared';
 import type {
   CommandPatchRequest,
   CronJobPatchRequest,
@@ -8,6 +8,7 @@ import type {
   ModelScopeSyncRequest,
   T2iTemplateRequest,
 } from './shared';
+import type { AxiosRequestConfig } from './shared';
 import type {
   CommandListData,
   CronJobListParams,
@@ -106,28 +107,52 @@ export const mcpApi = {
   list() {
     return typed<OpenConfig[]>(openApiV1.listMcpServers());
   },
-  create(config: McpServerConfig) {
-    return typed<OpenConfig>(openApiV1.createMcpServer({ body: config }));
-  },
-  update(serverName: string, config: McpServerConfig) {
+  create(config: McpServerConfig, requestConfig?: AxiosRequestConfig) {
     return typed<OpenConfig>(
-      openApiV1.updateMcpServer({
-        path: { server_name: serverName },
-        body: config,
-      }),
+      openApiV1.createMcpServer(
+        generatedOptions({ body: config }, requestConfig),
+      ),
     );
   },
-  delete(serverName: string) {
+  update(
+    serverName: string,
+    config: McpServerConfig,
+    requestConfig?: AxiosRequestConfig,
+  ) {
     return typed<OpenConfig>(
-      openApiV1.deleteMcpServer({ path: { server_name: serverName } }),
+      openApiV1.updateMcpServer(
+        generatedOptions(
+          {
+            path: { server_name: serverName },
+            body: config,
+          },
+          requestConfig,
+        ),
+      ),
     );
   },
-  setEnabled(serverName: string, enabled: boolean) {
+  delete(serverName: string, requestConfig?: AxiosRequestConfig) {
     return typed<OpenConfig>(
-      openApiV1.setMcpServerEnabled({
-        path: { server_name: serverName },
-        body: { enabled },
-      }),
+      openApiV1.deleteMcpServer(
+        generatedOptions({ path: { server_name: serverName } }, requestConfig),
+      ),
+    );
+  },
+  setEnabled(
+    serverName: string,
+    enabled: boolean,
+    requestConfig?: AxiosRequestConfig,
+  ) {
+    return typed<OpenConfig>(
+      openApiV1.setMcpServerEnabled(
+        generatedOptions(
+          {
+            path: { server_name: serverName },
+            body: { enabled },
+          },
+          requestConfig,
+        ),
+      ),
     );
   },
   test(serverName: string, config?: DynamicConfig) {
@@ -202,19 +227,28 @@ export const mcpApi = {
       openApiV1.getMcpOAuthStatus({ path: { server_name: serverName } }),
     );
   },
-  startOAuth(serverName: string) {
+  startOAuth(serverName: string, requestConfig?: AxiosRequestConfig) {
     return typed<OpenConfig>(
-      openApiV1.startMcpOAuth({ path: { server_name: serverName } }),
+      openApiV1.startMcpOAuth(
+        generatedOptions({ path: { server_name: serverName } }, requestConfig),
+      ),
     );
   },
-  revokeOAuth(serverName: string) {
+  revokeOAuth(serverName: string, requestConfig?: AxiosRequestConfig) {
     return typed<OpenConfig>(
-      openApiV1.revokeMcpOAuth({ path: { server_name: serverName } }),
+      openApiV1.revokeMcpOAuth(
+        generatedOptions({ path: { server_name: serverName } }, requestConfig),
+      ),
     );
   },
-  syncModelScope(payload?: ModelScopeSyncRequest) {
+  syncModelScope(
+    payload?: ModelScopeSyncRequest,
+    requestConfig?: AxiosRequestConfig,
+  ) {
     return typed<OpenConfig>(
-      openApiV1.syncModelScopeMcpServers({ body: payload }),
+      openApiV1.syncModelScopeMcpServers(
+        generatedOptions({ body: payload }, requestConfig),
+      ),
     );
   },
 };

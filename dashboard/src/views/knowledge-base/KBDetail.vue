@@ -45,7 +45,7 @@
       </v-tabs>
 
       <!-- 标签页内容 -->
-      <v-window v-model="activeTab" style="padding: 8px">
+      <v-window v-model="activeTab" class="kb-detail-page__tabs-content">
         <!-- 概览 -->
         <v-window-item value="overview">
           <v-row>
@@ -306,10 +306,6 @@ watch(
   width: 100%;
 }
 
-.kb-detail-page :deep(.v-card--variant-outlined) {
-  background: rgb(var(--v-theme-surface));
-}
-
 .loading-container {
   display: flex;
   flex-direction: column;
@@ -322,26 +318,31 @@ watch(
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 24px;
+  padding: var(--astrbot-space-6);
   text-align: center;
-  border-radius: 12px;
-  background: rgba(var(--v-theme-surface-variant), 0.1);
-  transition: all 0.3s ease;
+  border-radius: 8px;
+  background: rgb(var(--v-theme-surface-variant));
 }
 
 .stat-box:hover {
-  background: rgba(var(--v-theme-surface-variant), 0.5);
+  background: rgb(var(--v-theme-surface-variant));
 }
 
 .stat-value {
-  font-size: 2rem;
+  font-size: 24px;
+  line-height: 32px;
   font-weight: 600;
   margin-top: 8px;
 }
 
 .stat-label {
-  font-size: 0.875rem;
+  font-size: 14px;
+  line-height: 20px;
   margin-top: 4px;
+}
+
+.kb-detail-page__tabs-content {
+  padding: var(--astrbot-space-2);
 }
 
 /* 响应式设计 */

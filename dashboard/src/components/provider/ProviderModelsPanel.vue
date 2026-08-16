@@ -26,7 +26,7 @@
           prepend-icon="mdi-download"
           :loading="loadingModels"
           variant="tonal"
-          rounded="xl"
+          rounded="md"
           @click="emit('fetch-models')"
         >
           {{
@@ -40,7 +40,7 @@
           color="primary"
           prepend-icon="mdi-pencil-plus"
           variant="text"
-          rounded="xl"
+          rounded="md"
           @click="emit('open-manual-model')"
         >
           {{ tm('models.manualAddButton') }}
@@ -183,7 +183,7 @@
         </div>
 
         <div v-else class="provider-models-empty">
-          <v-icon size="36" color="grey-lighten-1"
+          <v-icon size="36" color="on-surface-variant"
             >mdi-package-variant-closed</v-icon
           >
           <p>{{ tm('models.empty') }}</p>
@@ -291,7 +291,7 @@
         </div>
 
         <div v-else class="provider-models-empty provider-models-empty--small">
-          <v-icon size="36" color="grey-lighten-1"
+          <v-icon size="36" color="on-surface-variant"
             >mdi-database-search-outline</v-icon
           >
           <p>{{ tm('models.noModelsFound') }}</p>

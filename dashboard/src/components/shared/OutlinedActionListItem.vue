@@ -1,6 +1,6 @@
 <template>
   <v-card
-    class="outlined-action-list-item rounded-lg"
+    class="outlined-action-list-item"
     :class="{ 'outlined-action-list-item--clickable': clickable }"
     variant="outlined"
     :ripple="false"

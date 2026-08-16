@@ -26,7 +26,6 @@ const routerLoadingStore = useRouterLoadingStore();
 const isCurrentChatRoute = computed(
   () => route.path === '/chat' || route.path.startsWith('/chat/'),
 );
-const isFullScreenRoute = computed(() => isCurrentChatRoute.value);
 const shouldMountChat = ref(isCurrentChatRoute.value);
 
 const showSidebar = computed(() => !isCurrentChatRoute.value);
@@ -90,6 +89,7 @@ onMounted(() => {
 <template>
   <v-locale-provider>
     <v-app
+      class="dashboard-app"
       :class="[
         customizer.mini_sidebar ? 'mini-sidebar' : '',
         customizer.inputBg ? 'inputWithbg' : '',
@@ -105,37 +105,24 @@ onMounted(() => {
         height="2"
         fixed
         top
-        style="z-index: 9999; position: absolute; opacity: 0.3"
+        class="router-progress"
       />
       <VerticalHeaderVue />
       <VerticalSidebarVue v-if="showSidebar" />
       <v-main
-        :style="{
-          height: isCurrentChatRoute ? 'calc(100vh - 55px)' : undefined,
-          overflow: isCurrentChatRoute ? 'hidden' : undefined,
-        }"
+        class="dashboard-main"
+        :class="{ 'dashboard-main--chat': isCurrentChatRoute }"
       >
         <v-container
           fluid
           class="page-wrapper"
           :class="{ 'chat-mode-container': isCurrentChatRoute }"
-          :style="{
-            height: isFullScreenRoute ? '100%' : 'calc(100% - 8px)',
-            padding: isFullScreenRoute ? '0' : undefined,
-            minHeight: isFullScreenRoute ? 'unset' : undefined,
-          }"
         >
-          <div
-            :style="{
-              height: '100%',
-              width: '100%',
-              overflow: isCurrentChatRoute ? 'hidden' : undefined,
-            }"
-          >
+          <div class="chat-layout-content">
             <div
               v-if="shouldMountChat"
               v-show="isCurrentChatRoute"
-              style="height: 100%; width: 100%; overflow: hidden"
+              class="chat-layout-panel"
             >
               <Chat :active="isCurrentChatRoute" />
             </div>
@@ -152,11 +139,3 @@ onMounted(() => {
     </v-app>
   </v-locale-provider>
 </template>
-
-<style scoped>
-.chat-mode-container {
-  min-height: unset !important;
-  height: 100% !important;
-  overflow: hidden !important;
-}
-</style>

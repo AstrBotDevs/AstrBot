@@ -1,20 +1,10 @@
 <template>
-  <div class="input-area fade-in" :class="{ 'is-dark': isDark }">
+  <div class="input-area fade-in">
     <div
       class="input-container"
       :class="{
         'is-multiline': inputIsMultiline,
         'has-attachments': hasStagedAttachments,
-      }"
-      :style="{
-        width: 'var(--chat-content-width, 76%)',
-        maxWidth: 'var(--chat-content-max-width, 760px)',
-        margin: '0 auto',
-        border: isDark ? 'none' : '1px solid #e0e0e0',
-        borderRadius: '24px',
-        boxShadow: isDark ? 'none' : '0px 2px 2px rgba(0, 0, 0, 0.1)',
-        position: 'relative',
-        transition: 'min-height 0.2s ease, padding 0.2s ease',
       }"
     >
       <!-- 引用预览区 -->
@@ -30,7 +20,8 @@
             class="remove-reply-btn"
             icon="mdi-close"
             size="x-small"
-            color="grey"
+            color="secondary"
+            aria-label="Clear reply"
             variant="text"
           />
         </div>
@@ -51,6 +42,7 @@
               size="x-small"
               color="error"
               variant="tonal"
+              aria-label="Remove image attachment"
             />
           </div>
 
@@ -66,6 +58,7 @@
               size="x-small"
               color="error"
               variant="tonal"
+              aria-label="Remove audio attachment"
             />
           </div>
 
@@ -91,6 +84,7 @@
               size="x-small"
               color="error"
               variant="tonal"
+              aria-label="Remove file attachment"
             />
           </div>
         </div>
@@ -119,6 +113,7 @@
                 icon="mdi-plus"
                 variant="outlined"
                 class="input-neutral-btn input-outline-control"
+                :aria-label="tm('input.upload')"
               />
             </template>
 
@@ -210,7 +205,7 @@
             type="file"
             ref="imageInputRef"
             @change="handleFileSelect"
-            style="display: none"
+            class="file-input"
             multiple
           />
           <!-- Provider/Model Selector Menu -->
@@ -227,11 +222,7 @@
           />
           <v-tooltip v-if="tokenUsageVisible" location="top" max-width="320">
             <template #activator="{ props: tokenTooltipProps }">
-              <span
-                v-bind="tokenTooltipProps"
-                class="token-usage-indicator"
-                :style="{ '--token-usage-color': tokenUsageColor }"
-              >
+              <span v-bind="tokenTooltipProps" class="token-usage-indicator">
                 <v-progress-circular
                   :model-value="tokenUsagePercent"
                   size="24"
@@ -306,6 +297,7 @@ import {
   onBeforeUnmount,
 } from 'vue';
 import { useDisplay } from 'vuetify';
+import { themeNames } from '@/design/theme';
 import { useModuleI18n } from '@/i18n/composables';
 import { useCustomizerStore } from '@/stores/customizer';
 import { isComposingEnter } from '@/utils/imeInput';
@@ -390,9 +382,7 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n('features/chat');
-const isDark = computed(
-  () => useCustomizerStore().uiTheme === 'PurpleThemeDark',
-);
+const isDark = computed(() => useCustomizerStore().uiTheme === themeNames.dark);
 
 const inputField = ref<HTMLInputElement | HTMLTextAreaElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);
@@ -585,12 +575,6 @@ const tokenUsagePercent = computed(() => {
   if (!Number.isFinite(percent)) return 0;
   return Math.min(100, Math.max(0, percent));
 });
-
-const tokenUsageColor = computed(() =>
-  isDark.value
-    ? 'rgba(var(--v-theme-on-surface), 0.82)'
-    : 'rgba(var(--v-theme-on-surface), 0.72)',
-);
 
 // Auto-resize textarea
 function autoResize() {
@@ -937,49 +921,50 @@ defineExpose({
   padding: 12px 16px 0;
   background-color: transparent;
   position: relative;
-  border-top: 1px solid var(--v-theme-border);
+  border-top: 1px solid rgb(var(--v-theme-outline-variant));
   flex-shrink: 0;
 }
 
 .input-neutral-btn {
-  color: #6f6f6f !important;
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 
 .input-neutral-btn:hover {
-  background: #efefef;
+  background: rgb(var(--v-theme-surface-variant));
 }
 
 .input-neutral-btn--tonal {
-  background: #efefef;
-  color: #4f4f4f !important;
+  background: rgb(var(--v-theme-surface-variant));
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .input-neutral-btn--tonal:hover {
-  background: #e7e7e7;
+  background: rgb(var(--v-theme-surface-variant));
 }
 
 .input-action-btn {
-  background: #5594c6 !important;
-  color: #fff !important;
+  background: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-on-primary));
 }
 
 .input-action-btn:hover {
-  background: #4c86b3 !important;
+  background: rgb(var(--v-theme-primary));
+  filter: brightness(0.92);
 }
 
 .input-action-btn:disabled {
-  background: rgba(85, 148, 198, 0.24) !important;
-  color: rgba(255, 255, 255, 0.72) !important;
+  background: rgb(var(--v-theme-surface-variant));
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 
 .input-icon-btn {
-  background: transparent !important;
-  color: rgb(var(--v-theme-on-surface)) !important;
+  background: transparent;
+  color: rgb(var(--v-theme-on-surface));
   margin-right: 8px;
 }
 
 .input-icon-btn:hover {
-  background: rgba(var(--v-theme-on-surface), 0.04) !important;
+  background: rgb(var(--v-theme-surface-variant));
 }
 
 .token-usage-indicator {
@@ -990,7 +975,7 @@ defineExpose({
   justify-content: center;
   flex: 0 0 24px;
   border-radius: 50%;
-  color: var(--token-usage-color);
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 
 .token-usage-progress {
@@ -1008,87 +993,53 @@ defineExpose({
 }
 
 .input-outline-control {
-  width: 36px !important;
-  height: 36px !important;
-  min-width: 36px !important;
-  border: 0 !important;
-  border-color: transparent !important;
-  background: transparent !important;
-  box-shadow: none !important;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .input-outline-control:hover,
 .input-outline-control:focus-visible {
-  border-color: transparent !important;
-  background: rgba(var(--v-theme-on-surface), 0.04) !important;
-}
-
-.input-area.is-dark .input-neutral-btn {
-  color: rgba(255, 255, 255, 0.78) !important;
-}
-
-.input-area.is-dark .input-neutral-btn:hover,
-.input-area.is-dark .input-neutral-btn--tonal {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.input-area.is-dark .input-outline-control {
-  border-color: transparent !important;
-  background: transparent !important;
-}
-
-.input-area.is-dark .input-outline-control:hover,
-.input-area.is-dark .input-outline-control:focus-visible {
-  border-color: transparent !important;
-  background: rgba(255, 255, 255, 0.06) !important;
-}
-
-.input-area.is-dark .input-action-btn {
-  background: rgb(var(--v-theme-on-surface)) !important;
-  color: rgb(var(--v-theme-surface)) !important;
-}
-
-.input-area.is-dark .input-action-btn:hover {
-  background: rgba(var(--v-theme-on-surface), 0.86) !important;
-}
-
-.input-area.is-dark .input-action-btn:disabled {
-  background: rgba(var(--v-theme-on-surface), 0.14) !important;
-  color: rgba(var(--v-theme-on-surface), 0.4) !important;
+  background: rgb(var(--v-theme-surface-variant));
 }
 
 .input-container {
+  position: relative;
   display: flex;
   flex-direction: column;
   justify-content: center;
+  width: var(--chat-content-width, 76%);
+  max-width: var(--chat-content-max-width, 760px);
   min-height: 64px;
-  padding: 6px 12px 6px 14px !important;
-  border-color: #f0f0f0 !important;
-  border-radius: 999px !important;
-  background: rgb(var(--v-theme-surface)) !important;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.08) !important;
+  margin: 0 auto;
+  padding: 8px 12px;
+  border: 1px solid rgb(var(--v-theme-outline-variant));
+  border-radius: 8px;
+  background: rgb(var(--v-theme-surface));
+  box-shadow: 0 2px 4px rgb(24 33 43 / 10%);
+  transition:
+    min-height 0.2s ease,
+    padding 0.2s ease;
 }
 
 .input-container.is-multiline {
   justify-content: flex-start;
-  padding: 16px 20px 14px !important;
-  border-radius: 34px !important;
+  padding: 16px;
+  border-radius: 8px;
 }
 
 .input-container.has-attachments {
   justify-content: flex-start;
   min-height: 130px;
-  padding: 14px 18px 10px !important;
-  border-radius: 30px !important;
-}
-
-.input-area.is-dark .input-container {
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  box-shadow: none !important;
+  padding: 12px;
+  border-radius: 8px;
 }
 
 :global(.dashboard-appearance-active .input-container) {
-  background: var(--dashboard-wallpaper-surface) !important;
+  background: var(--dashboard-wallpaper-surface);
 }
 
 .reply-preview,
@@ -1134,33 +1085,33 @@ defineExpose({
   width: 100%;
   box-sizing: border-box;
   min-width: 0;
-  min-height: 52px !important;
-  max-height: 72px !important;
+  min-height: 52px;
+  max-height: 72px;
   margin: 0;
-  padding: 0 !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   resize: none;
   outline: none;
   font-family: inherit;
-  font-size: 18px !important;
+  font-size: 18px;
 }
 
 .chat-text-input {
-  height: 52px !important;
-  padding: 0 !important;
-  line-height: normal !important;
+  height: 52px;
+  padding: 0;
+  line-height: normal;
   overflow: hidden;
 }
 
 .chat-textarea {
-  max-height: min(48vh, 420px) !important;
-  padding: 12px 0 !important;
+  max-height: min(48vh, 420px);
+  padding: 12px 0;
   overflow-y: auto;
   overflow-wrap: break-word;
-  line-height: 28px !important;
+  line-height: 28px;
   transition: height 0.16s ease;
 }
 
@@ -1174,12 +1125,12 @@ defineExpose({
   grid-area: left;
   display: flex;
   align-items: center;
-  flex: 0 0 auto !important;
-  justify-content: center !important;
-  gap: 0 !important;
-  min-width: auto !important;
-  margin-top: 0 !important;
-  overflow: visible !important;
+  flex: 0 0 auto;
+  justify-content: center;
+  gap: 0;
+  min-width: auto;
+  margin-top: 0;
+  overflow: visible;
 }
 
 .input-right-actions {
@@ -1189,47 +1140,30 @@ defineExpose({
   justify-content: flex-end;
   flex-shrink: 0;
   gap: 10px;
-  margin-top: 0 !important;
+  margin-top: 0;
 }
 
 .input-outline-control {
-  width: 34px !important;
-  height: 34px !important;
-  min-width: 34px !important;
-  border: 0 !important;
-  border-color: transparent !important;
-  border-radius: 50% !important;
-  box-shadow: none !important;
+  border-radius: 8px;
 }
 
 .input-icon-btn {
-  width: 42px !important;
-  height: 42px !important;
-  min-width: 42px !important;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
   margin-right: 0;
 }
 
 .input-right-actions :deep(.provider-chip) {
-  height: 40px !important;
-  min-height: 40px !important;
-  border-radius: 999px !important;
+  height: 40px;
+  min-height: 40px;
+  border-radius: 8px;
 }
 
-.input-area:not(.is-dark) .input-action-btn {
-  width: 46px !important;
-  height: 46px !important;
-  min-width: 46px !important;
-  background: #8fcfb4 !important;
-  color: #fff !important;
-}
-
-.input-area:not(.is-dark) .input-action-btn:hover {
-  background: #7fc4a8 !important;
-}
-
-.input-area:not(.is-dark) .input-action-btn:disabled {
-  background: #f2f5f3 !important;
-  color: rgba(0, 0, 0, 0.18) !important;
+.input-action-btn {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
 }
 
 .reply-preview {
@@ -1239,7 +1173,7 @@ defineExpose({
   padding: 8px 16px;
   margin: 8px 8px 0 8px;
   background-color: rgba(var(--v-theme-primary), 0.06);
-  border-radius: 12px;
+  border-radius: 8px;
   gap: 8px;
   max-height: 500px;
   overflow: hidden;
@@ -1300,13 +1234,13 @@ defineExpose({
 }
 
 .reply-icon {
-  color: var(--v-theme-secondary);
+  color: rgb(var(--v-theme-secondary));
   flex-shrink: 0;
 }
 
 .reply-text {
   font-size: 13px;
-  color: var(--v-theme-secondaryText);
+  color: rgb(var(--v-theme-on-surface-variant));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1338,7 +1272,7 @@ defineExpose({
 }
 
 .attachment-card {
-  --attachment-color: #607d8b;
+  --attachment-color: rgb(var(--v-theme-secondary));
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -1391,7 +1325,7 @@ defineExpose({
 }
 
 .attachment-icon--audio {
-  color: #00897b;
+  color: rgb(var(--v-theme-success));
 }
 
 .attachment-ext {
@@ -1418,9 +1352,9 @@ defineExpose({
   position: absolute;
   top: 4px;
   right: 4px;
-  width: 22px !important;
-  height: 22px !important;
-  min-width: 22px !important;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
   opacity: 0.8;
   transition: opacity 0.2s;
 }
@@ -1431,6 +1365,10 @@ defineExpose({
 
 .fade-in {
   animation: fadeIn 0.3s ease-in-out;
+}
+
+.file-input {
+  display: none;
 }
 
 .attachments-enter-active,
@@ -1468,42 +1406,37 @@ defineExpose({
 
 @media (max-width: 768px) {
   .input-area {
-    padding: 8px 0 0 !important;
+    padding: 8px 0 0;
     border-top: 0;
   }
 
   .input-container {
-    display: flex !important;
+    display: flex;
     flex-direction: column;
     justify-content: center;
-    width: calc(100% - 20px) !important;
-    max-width: 100% !important;
+    width: calc(100% - 16px);
+    max-width: 100%;
     min-height: 64px;
-    margin: 0 10px calc(8px + env(safe-area-inset-bottom)) !important;
-    padding: 6px 8px 6px 10px !important;
+    margin: 0 8px calc(8px + env(safe-area-inset-bottom));
+    padding: 8px;
     overflow: hidden;
-    border: 1px solid rgba(var(--v-theme-on-surface), 0.14) !important;
-    border-radius: 999px !important;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) !important;
+    border: 1px solid rgb(var(--v-theme-outline-variant));
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgb(24 33 43 / 10%);
   }
 
   .input-container.is-multiline {
     justify-content: flex-start;
     min-height: 128px;
-    padding: 10px !important;
-    border-radius: 26px !important;
+    padding: 12px;
+    border-radius: 8px;
   }
 
   .input-container.has-attachments {
     justify-content: flex-start;
     min-height: 124px;
-    padding: 10px !important;
-    border-radius: 26px !important;
-  }
-
-  .input-area.is-dark .input-container {
-    border-color: rgba(255, 255, 255, 0.16) !important;
-    box-shadow: none !important;
+    padding: 12px;
+    border-radius: 8px;
   }
 
   .composer-row {
@@ -1537,8 +1470,8 @@ defineExpose({
 
   .input-left-actions,
   .input-right-actions {
-    margin-top: 0 !important;
-    align-items: center !important;
+    margin-top: 0;
+    align-items: center;
   }
 
   .input-right-actions {
@@ -1546,36 +1479,35 @@ defineExpose({
   }
 
   .input-outline-control {
-    width: 38px !important;
-    height: 38px !important;
-    min-width: 38px !important;
-    border: 0 !important;
-    border-color: transparent !important;
-    border-radius: 50% !important;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    border: 0;
+    border-radius: 8px;
   }
 
   .chat-text-input,
   .chat-textarea {
-    min-height: 52px !important;
-    max-height: 132px !important;
-    border: 0 !important;
-    border-radius: 0 !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    font-size: 18px !important;
+    min-height: 52px;
+    max-height: 132px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    font-size: 18px;
   }
 
   .chat-text-input {
-    height: 52px !important;
-    padding: 0 2px !important;
-    line-height: normal !important;
+    height: 52px;
+    padding: 0 4px;
+    line-height: normal;
     overflow: hidden;
   }
 
   .chat-textarea {
-    max-height: min(42vh, 220px) !important;
-    padding: 4px 10px 2px !important;
-    line-height: 24px !important;
+    max-height: min(42vh, 220px);
+    padding: 4px 8px;
+    line-height: 24px;
     overflow-y: auto;
   }
 
@@ -1586,37 +1518,27 @@ defineExpose({
   }
 
   .input-icon-btn {
-    width: 38px !important;
-    height: 38px !important;
-    min-width: 38px !important;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
     margin-right: 0;
   }
 
   .input-action-btn {
-    width: 42px !important;
-    height: 42px !important;
-    min-width: 42px !important;
-    border-radius: 50% !important;
-  }
-
-  .input-action-btn:not(:disabled) {
-    background: rgb(var(--v-theme-on-surface)) !important;
-    color: rgb(var(--v-theme-surface)) !important;
-  }
-
-  .input-action-btn:disabled {
-    background: rgba(var(--v-theme-on-surface), 0.04) !important;
-    color: rgba(var(--v-theme-on-surface), 0.18) !important;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    border-radius: 8px;
   }
 
   :deep(.provider-chip) {
-    height: 38px !important;
-    min-height: 38px !important;
-    border-radius: 999px !important;
-    padding: 0 12px !important;
-    font-size: 14px !important;
-    border-color: rgba(var(--v-theme-on-surface), 0.18) !important;
-    background: transparent !important;
+    height: 40px;
+    min-height: 40px;
+    border-radius: 8px;
+    padding: 0 12px;
+    font-size: 14px;
+    border-color: rgb(var(--v-theme-outline-variant));
+    background: transparent;
   }
 
   .attachments-preview {

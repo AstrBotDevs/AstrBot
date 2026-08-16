@@ -376,8 +376,8 @@ async function copyQuickActionResult() {
   margin-top: 8px;
   padding: 12px;
   border-radius: 8px;
-  background-color: #1e1e1e;
-  color: #d4d4d4;
+  background-color: rgb(var(--v-theme-code-surface));
+  color: rgb(var(--v-theme-code-text));
   font-size: 12px;
   line-height: 1.5;
   overflow-x: auto;

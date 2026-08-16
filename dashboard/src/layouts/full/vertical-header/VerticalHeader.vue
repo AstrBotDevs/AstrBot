@@ -8,6 +8,7 @@ import {
   defineAsyncComponent,
 } from 'vue';
 import { useCustomizerStore } from '@/stores/customizer';
+import { useDisplay } from 'vuetify';
 import Logo from '@/components/shared/Logo.vue';
 import { useAuthStore } from '@/stores/auth';
 import { useCommonStore } from '@/stores/common';
@@ -20,7 +21,9 @@ import type { Locale } from '@/i18n/types';
 import { authApi, statsApi, updatesApi } from '@/api/v1';
 import { getDesktopRuntimeInfo } from '@/utils/desktopRuntime';
 import { readSelectedGitHubProxy } from '@/utils/githubProxyStorage';
-import { requestDashboardStepUp, stepUpHeaders } from '@/utils/stepUp';
+import { stepUpHeaders } from '@/utils/stepUp';
+import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
+import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 
 const LazyMarkdownRender = defineAsyncComponent(
   () => import('@/components/shared/LazyMarkdownRender.vue'),
@@ -29,8 +32,17 @@ const AboutPage = defineAsyncComponent(() => import('@/views/AboutPage.vue'));
 const getSelectedGitHubProxy = readSelectedGitHubProxy;
 
 const customizer = useCustomizerStore();
+const { xs, smAndDown } = useDisplay();
 const commonStore = useCommonStore();
 const { t } = useI18n();
+const {
+  dialogOpen: stepUpDialogOpen,
+  loading: stepUpLoading,
+  errorMessage: stepUpErrorMessage,
+  requestStepUp,
+  submitStepUp,
+  cancelStepUp,
+} = useDashboardStepUp();
 const route = useRoute();
 const LAST_BOT_ROUTE_KEY = 'astrbot:last_bot_route';
 const LAST_CHAT_ROUTE_KEY = 'astrbot:last_chat_route';
@@ -728,17 +740,12 @@ function startUpdateProgressPolling(progressId: string) {
 }
 
 async function switchVersion(targetVersion: string) {
-  let stepUp: string;
-  try {
-    stepUp = await requestDashboardStepUp({
-      action: 'system.update',
-      resourceType: 'system',
-      resourceId: 'core-update',
-    });
-  } catch (error) {
-    updateStatus.value = error instanceof Error ? error.message : String(error);
-    return;
-  }
+  const stepUp = await requestStepUp({
+    action: 'system.update',
+    resourceType: 'system',
+    resourceId: 'core-update',
+  });
+  if (!stepUp) return;
   const progressId =
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
@@ -993,11 +1000,12 @@ onMounted(async () => {
     <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
     <v-btn
       v-if="!isChatPath"
-      style="margin-left: 16px"
-      class="hidden-md-and-down"
+      class="top-header__menu-button hidden-md-and-down"
       icon
       rounded="sm"
       variant="flat"
+      :aria-label="t('core.navigation.toggleSidebar')"
+      :title="t('core.navigation.toggleSidebar')"
       @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)"
     >
       <v-icon>mdi-menu</v-icon>
@@ -1006,10 +1014,12 @@ onMounted(async () => {
     <!-- 移动端 menu 按钮 -->
     <v-btn
       v-if="!isChatPath"
-      class="hidden-lg-and-up ms-3"
+      class="top-header__menu-button--mobile hidden-lg-and-up ms-3"
       icon
       rounded="sm"
       variant="flat"
+      :aria-label="t('core.navigation.toggleSidebar')"
+      :title="t('core.navigation.toggleSidebar')"
       @click.stop="customizer.SET_SIDEBAR_DRAWER"
     >
       <v-icon>mdi-menu</v-icon>
@@ -1021,6 +1031,8 @@ onMounted(async () => {
       icon
       rounded="sm"
       variant="flat"
+      :aria-label="t('core.navigation.toggleSidebar')"
+      :title="t('core.navigation.toggleSidebar')"
       @click.stop="customizer.TOGGLE_CHAT_SIDEBAR()"
     >
       <v-icon>mdi-menu</v-icon>
@@ -1029,7 +1041,7 @@ onMounted(async () => {
     <div
       class="logo-container"
       :class="{
-        'mobile-logo': $vuetify.display.xs,
+        'mobile-logo': xs,
         'chat-mode-logo': isChatPath,
       }"
       @click="handleLogoClick"
@@ -1046,8 +1058,7 @@ onMounted(async () => {
       ></span>
       <span
         v-if="isChatPath"
-        class="logo-text logo-text-light"
-        style="color: grey"
+        class="logo-text logo-text-light top-header__chat-label"
         >ChatUI</span
       >
       <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
@@ -1088,7 +1099,7 @@ onMounted(async () => {
           v-bind="activatorProps"
           size="small"
           class="action-btn mr-4"
-          color="var(--v-theme-surface)"
+          color="surface"
           variant="flat"
           rounded="sm"
           icon
@@ -1098,7 +1109,7 @@ onMounted(async () => {
       </template>
 
       <!-- Bot/Chat 模式切换 - 仅在手机端显示 -->
-      <template v-if="$vuetify.display.xs">
+      <template v-if="xs">
         <div class="mobile-mode-toggle-wrapper">
           <v-btn-toggle
             v-model="currentMode"
@@ -1124,10 +1135,10 @@ onMounted(async () => {
       <!-- 语言切换分组 -->
       <v-menu
         open-on-click
-        :open-on-hover="!$vuetify.display.xs"
-        :open-delay="!$vuetify.display.xs ? 60 : 0"
-        :close-delay="!$vuetify.display.xs ? 120 : 0"
-        :location="$vuetify.display.xs ? 'bottom' : 'start center'"
+        :open-on-hover="!xs"
+        :open-delay="!xs ? 60 : 0"
+        :close-delay="!xs ? 120 : 0"
+        :location="xs ? 'bottom' : 'start center'"
         offset="8"
       >
         <template #activator="{ props: languageMenuProps }">
@@ -1155,10 +1166,9 @@ onMounted(async () => {
         </template>
 
         <v-card
-          class="styled-menu-card"
-          style="min-width: 180px"
-          elevation="8"
-          rounded="lg"
+          class="styled-menu-card top-header__language-menu"
+          elevation="4"
+          rounded="md"
         >
           <v-list density="compact" class="styled-menu-list pa-1">
             <v-list-item
@@ -1184,10 +1194,10 @@ onMounted(async () => {
       <!-- 主题切换分组 -->
       <v-menu
         open-on-click
-        :open-on-hover="!$vuetify.display.xs"
-        :open-delay="!$vuetify.display.xs ? 60 : 0"
-        :close-delay="!$vuetify.display.xs ? 120 : 0"
-        :location="$vuetify.display.xs ? 'bottom' : 'start center'"
+        :open-on-hover="!xs"
+        :open-delay="!xs ? 60 : 0"
+        :close-delay="!xs ? 120 : 0"
+        :location="xs ? 'bottom' : 'start center'"
         offset="8"
       >
         <template #activator="{ props: themeMenuProps }">
@@ -1221,10 +1231,9 @@ onMounted(async () => {
         </template>
 
         <v-card
-          class="styled-menu-card"
-          style="min-width: 170px"
-          elevation="8"
-          rounded="lg"
+          class="styled-menu-card top-header__theme-menu"
+          elevation="4"
+          rounded="md"
         >
           <v-list density="compact" class="styled-menu-list pa-1">
             <v-list-item
@@ -1281,8 +1290,8 @@ onMounted(async () => {
     <!-- 更新对话框 -->
     <v-dialog
       v-model="updateStatusDialog"
-      :width="$vuetify.display.smAndDown ? '100%' : '920'"
-      :fullscreen="$vuetify.display.xs"
+      :width="smAndDown ? '100%' : '920'"
+      :fullscreen="xs"
       scrollable
     >
       <v-card class="update-status-dialog">
@@ -1290,11 +1299,7 @@ onMounted(async () => {
           <span class="text-h3 pa-4">{{
             t('core.header.updateDialog.title')
           }}</span>
-          <v-btn
-            v-if="$vuetify.display.xs"
-            icon
-            @click="updateStatusDialog = false"
-          >
+          <v-btn v-if="xs" icon @click="updateStatusDialog = false">
             <v-icon>mdi-close</v-icon>
           </v-btn>
         </v-card-title>
@@ -1536,7 +1541,7 @@ onMounted(async () => {
                   }"
                 >
                   <v-btn
-                    rounded="xl"
+                    rounded="md"
                     variant="tonal"
                     color="primary"
                     size="x-small"
@@ -1564,7 +1569,7 @@ onMounted(async () => {
         <v-card-actions class="update-status-dialog__actions">
           <v-spacer></v-spacer>
           <v-btn
-            color="blue-darken-1"
+            color="primary"
             variant="text"
             @click="updateStatusDialog = false"
           >
@@ -1591,7 +1596,7 @@ onMounted(async () => {
         <v-card-actions class="release-notes-dialog__actions">
           <v-spacer></v-spacer>
           <v-btn
-            color="blue-darken-1"
+            color="primary"
             variant="text"
             @click="releaseNotesDialog = false"
           >
@@ -1636,7 +1641,6 @@ onMounted(async () => {
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn
-            color="grey"
             variant="text"
             :disabled="desktopUpdateInstalling"
             @click="cancelDesktopUpdate"
@@ -1661,11 +1665,7 @@ onMounted(async () => {
     </v-dialog>
 
     <!-- 账户对话框 -->
-    <v-dialog
-      v-model="dialog"
-      persistent
-      :max-width="$vuetify.display.xs ? '90%' : '500'"
-    >
+    <v-dialog v-model="dialog" persistent :max-width="xs ? '90%' : '500'">
       <v-card class="account-dialog">
         <v-card-text class="py-6">
           <div class="d-flex flex-column align-start mb-6">
@@ -1803,16 +1803,44 @@ onMounted(async () => {
 
     <!-- About 对话框 - 仅在 chat mode 下使用 -->
     <v-dialog v-model="aboutDialog" width="600">
-      <v-card>
-        <v-card-text style="overflow-y: auto">
+      <v-card class="app-dialog">
+        <v-card-text class="top-header__about-content">
           <AboutPage />
         </v-card-text>
       </v-card>
     </v-dialog>
+
+    <DashboardStepUpDialog
+      v-model="stepUpDialogOpen"
+      :loading="stepUpLoading"
+      :error-message="stepUpErrorMessage"
+      @confirm="submitStepUp"
+      @cancel="cancelStepUp"
+    />
   </v-app-bar>
 </template>
 
 <style>
+.top-header__menu-button {
+  margin-left: var(--astrbot-space-4);
+}
+
+.top-header__chat-label {
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+
+.top-header__language-menu {
+  min-width: 180px;
+}
+
+.top-header__theme-menu {
+  min-width: 170px;
+}
+
+.top-header__about-content {
+  overflow-y: auto;
+}
+
 .markdown-content h1 {
   font-size: 1.3em;
 }

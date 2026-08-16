@@ -57,8 +57,8 @@
 
       <v-card
         class="styled-menu-card styled-menu-card-borderless regenerate-model-card"
-        elevation="8"
-        rounded="lg"
+        elevation="4"
+        rounded="md"
       >
         <v-list density="compact" class="styled-menu-list pa-1">
           <v-list-item

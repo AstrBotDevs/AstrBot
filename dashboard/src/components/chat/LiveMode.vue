@@ -22,7 +22,7 @@
       />
     </div>
 
-    <span style="color: gray; padding-left: 16px"
+    <span class="live-mode-hint"
       >We're developing Astr Live Mode on ChatUI & Desktop right now. Stay
       tuned!</span
     >
@@ -586,6 +586,13 @@ onBeforeUnmount(() => {
   void stopLiveMode();
 });
 </script>
+
+<style scoped>
+.live-mode-hint {
+  padding-left: var(--astrbot-space-4);
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+</style>
 
 <style scoped>
 .live-mode-container {

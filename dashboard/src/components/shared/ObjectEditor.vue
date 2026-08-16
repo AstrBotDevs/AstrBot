@@ -4,7 +4,7 @@
       <div>
         <span
           v-if="!modelValue || Object.keys(modelValue).length === 0"
-          style="color: rgb(var(--v-theme-primaryText))"
+          class="selector-empty-label"
         >
           {{ t('core.common.objectEditor.noItems') }}
         </span>
@@ -22,7 +22,7 @@
             v-if="Object.keys(modelValue).length > maxDisplayItems"
             size="x-small"
             label
-            color="grey-lighten-1"
+            color="secondary"
           >
             +{{ Object.keys(modelValue).length - maxDisplayItems }}
           </v-chip>
@@ -35,8 +35,8 @@
 
     <!-- Key-Value Management Dialog -->
     <v-dialog v-model="dialog" max-width="600px" scrollable>
-      <v-card class="object-editor-dialog__card">
-        <v-card-title class="text-h3 py-4" style="font-weight: normal">
+      <v-card class="app-dialog object-editor-dialog__card">
+        <v-card-title class="app-dialog__title">
           {{ resolveDialogTitle }}
         </v-card-title>
 
@@ -102,7 +102,9 @@
                       :placeholder="
                         t('core.common.objectEditor.placeholders.numberValue')
                       "
-                      :style="pair.slider ? 'max-width: 120px;' : ''"
+                      :class="{
+                        'selector-number-input--with-slider': pair.slider,
+                      }"
                     ></v-text-field>
                   </div>
                   <v-switch
@@ -143,7 +145,7 @@
           <!-- Template schema fields -->
           <div v-if="hasTemplateSchema" class="mt-4">
             <v-divider class="mb-3"></v-divider>
-            <div class="text-caption text-grey mb-2">
+            <div class="text-caption text-medium-emphasis mb-2">
               {{ t('core.common.objectEditor.presets') }}
             </div>
             <div
@@ -162,8 +164,7 @@
                     }}</span>
                     <span
                       v-if="template.hint"
-                      class="text-caption text-grey"
-                      style="font-size: 0.7rem"
+                      class="object-editor__hint text-caption text-medium-emphasis"
                       >{{
                         resolveTemplateText(templateKey, 'hint', template.hint)
                       }}</span
@@ -215,7 +216,9 @@
                       :placeholder="
                         t('core.common.objectEditor.placeholders.numberValue')
                       "
-                      :style="template.slider ? 'max-width: 120px;' : ''"
+                      :class="{
+                        'selector-number-input--with-slider': template.slider,
+                      }"
                       @update:model-value="
                         updateTemplateValue(templateKey, $event)
                       "
@@ -254,8 +257,8 @@
             v-if="localKeyValuePairs.length === 0 && !hasTemplateSchema"
             class="text-center py-8"
           >
-            <v-icon size="64" color="grey-lighten-1">mdi-code-json</v-icon>
-            <p class="text-grey mt-4">
+            <v-icon size="64" color="secondary">mdi-code-json</v-icon>
+            <p class="text-medium-emphasis mt-4">
               {{ t('core.common.objectEditor.noParams') }}
             </p>
           </div>
@@ -279,7 +282,7 @@
               density="compact"
               variant="outlined"
               hide-details
-              style="max-width: 120px"
+              class="selector-number-input--with-slider"
             ></v-select>
             <v-btn variant="tonal" color="primary" @click="addKeyValuePair">
               <v-icon>mdi-plus</v-icon>

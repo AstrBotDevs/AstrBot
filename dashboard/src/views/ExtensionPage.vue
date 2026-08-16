@@ -4,6 +4,7 @@ import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import ReadmeDialog from '@/components/shared/ReadmeDialog.vue';
 import ProxySelector from '@/components/shared/ProxySelector.vue';
 import UninstallConfirmDialog from '@/components/shared/UninstallConfirmDialog.vue';
+import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
 import McpServersSection from '@/components/extension/McpServersSection.vue';
 import SkillsSection from '@/components/extension/SkillsSection.vue';
 import ComponentPanel from '@/components/extension/componentPanel/index.vue';
@@ -96,6 +97,11 @@ const {
   selectedUpdateDownloadUrl,
   selectedUpdateSourceUrl,
   updateUsesGithubSource,
+  stepUpDialogOpen,
+  stepUpLoading,
+  stepUpErrorMessage,
+  submitStepUp,
+  cancelStepUp,
 } = pageState;
 
 const logLevelItems = computed(() => [
@@ -248,24 +254,20 @@ const updateDialogPluginLogo = computed(() => {
 
   <v-row v-else class="extension-page">
     <v-col cols="12" md="12">
-      <v-card variant="flat" style="background-color: transparent">
+      <v-card variant="flat" class="extension-page__content">
         <!-- 标签页 -->
-        <v-card-text style="padding: 0px 12px">
+        <v-card-text class="extension-page__body">
           <!-- 已安装插件标签页内容 -->
           <InstalledPluginsTab :state="pageState" />
 
           <!-- 指令面板标签页内容 -->
           <div v-if="activeTab === 'components'">
             <div class="mb-4 pt-4 pb-4">
-              <div class="d-flex align-center flex-wrap" style="gap: 12px">
+              <div class="inline-control-row">
                 <h2 class="text-h2 mb-0">{{ tm('tabs.handlersOperation') }}</h2>
               </div>
             </div>
-            <v-card
-              class="rounded-lg"
-              variant="flat"
-              style="background-color: transparent"
-            >
+            <v-card class="extension-page__section" variant="flat">
               <v-card-text class="pa-0">
                 <ComponentPanel :active="activeTab === 'components'" />
               </v-card-text>
@@ -276,7 +278,7 @@ const updateDialogPluginLogo = computed(() => {
           <div v-if="activeTab === 'mcp'">
             <div class="extension-detail-width">
               <div class="mb-4 pt-4 pb-4">
-                <div class="d-flex flex-column" style="gap: 6px">
+                <div class="extension-page__section-heading">
                   <h2 class="text-h2 mb-0">
                     {{ tm('tabs.installedMcpServers') }}
                   </h2>
@@ -285,11 +287,7 @@ const updateDialogPluginLogo = computed(() => {
                   </div>
                 </div>
               </div>
-              <v-card
-                class="rounded-lg"
-                variant="flat"
-                style="background-color: transparent"
-              >
+              <v-card class="extension-page__section" variant="flat">
                 <v-card-text class="pa-0">
                   <McpServersSection />
                 </v-card-text>
@@ -301,18 +299,14 @@ const updateDialogPluginLogo = computed(() => {
           <div v-if="activeTab === 'skills'">
             <div class="extension-detail-width">
               <div class="mb-4 pt-4 pb-4">
-                <div class="d-flex flex-column" style="gap: 6px">
+                <div class="extension-page__section-heading">
                   <h2 class="text-h2 mb-0">{{ tm('tabs.skills') }}</h2>
                   <div class="text-body-2 text-medium-emphasis">
                     {{ tm('skills.runtimeHint') }}
                   </div>
                 </div>
               </div>
-              <v-card
-                class="rounded-lg"
-                variant="flat"
-                style="background-color: transparent"
-              >
+              <v-card class="extension-page__section" variant="flat">
                 <v-card-text class="pa-0">
                   <SkillsSection />
                 </v-card-text>
@@ -339,13 +333,7 @@ const updateDialogPluginLogo = computed(() => {
         >
           {{ tm('market.devDocs') }}
         </v-btn>
-        <div
-          style="
-            height: 24px;
-            width: 1px;
-            background-color: rgba(var(--v-theme-on-surface), 0.12);
-          "
-        ></div>
+        <div class="extension-page__market-divider"></div>
         <v-btn
           variant="text"
           prepend-icon="mdi-github"
@@ -362,7 +350,7 @@ const updateDialogPluginLogo = computed(() => {
 
   <!-- 配置对话框 -->
   <v-dialog v-model="configDialog" max-width="900" scrollable>
-    <v-card class="extension-config-dialog__card">
+    <v-card class="app-dialog extension-config-dialog__card">
       <v-card-title class="text-h2 pa-4 pl-6 pb-0">{{
         tm('dialogs.config.title')
       }}</v-card-title>
@@ -385,7 +373,7 @@ const updateDialogPluginLogo = computed(() => {
             density="compact"
             variant="outlined"
             hide-details
-            style="max-width: 220px; min-width: 180px"
+            class="extension-config-dialog__log-level"
             @update:model-value="updatePluginLogLevel"
           />
         </div>
@@ -405,15 +393,12 @@ const updateDialogPluginLogo = computed(() => {
       </v-card-text>
       <v-card-actions class="extension-config-dialog__actions">
         <v-spacer></v-spacer>
-        <v-btn color="blue-darken-1" variant="text" @click="updateConfig">{{
+        <v-btn color="primary" variant="text" @click="updateConfig">{{
           tm('buttons.saveAndClose')
         }}</v-btn>
-        <v-btn
-          color="blue-darken-1"
-          variant="text"
-          @click="configDialog = false"
-          >{{ tm('buttons.close') }}</v-btn
-        >
+        <v-btn color="primary" variant="text" @click="configDialog = false">{{
+          tm('buttons.close')
+        }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -425,9 +410,9 @@ const updateDialogPluginLogo = computed(() => {
     persistent
     transition="dialog-transition"
   >
-    <v-card>
+    <v-card class="app-dialog">
       <v-card-title class="text-h5">{{ loadingDialog.title }}</v-card-title>
-      <v-card-text style="max-height: calc(100vh - 200px); overflow-y: auto">
+      <v-card-text class="extension-loading-dialog__content">
         <v-progress-linear
           v-if="loadingDialog.statusCode === 0"
           indeterminate
@@ -453,11 +438,11 @@ const updateDialogPluginLogo = computed(() => {
           </div>
         </v-fade-transition>
 
-        <div style="margin-top: 32px">
+        <div class="extension-loading-dialog__logs">
           <h3>{{ tm('dialogs.loading.logs') }}</h3>
           <ConsoleDisplayer
             history-num="10"
-            style="height: 200px; margin-top: 16px; margin-bottom: 24px"
+            class="extension-loading-dialog__console"
           >
           </ConsoleDisplayer>
         </div>
@@ -467,12 +452,9 @@ const updateDialogPluginLogo = computed(() => {
 
       <v-card-actions class="pa-4">
         <v-spacer></v-spacer>
-        <v-btn
-          color="blue-darken-1"
-          variant="text"
-          @click="resetLoadingDialog"
-          >{{ tm('buttons.close') }}</v-btn
-        >
+        <v-btn color="primary" variant="text" @click="resetLoadingDialog">{{
+          tm('buttons.close')
+        }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -480,7 +462,7 @@ const updateDialogPluginLogo = computed(() => {
   <v-snackbar
     v-model="snack_show"
     :timeout="2000"
-    elevation="6"
+    elevation="4"
     :color="snack_success"
     location="bottom center"
   >
@@ -507,9 +489,17 @@ const updateDialogPluginLogo = computed(() => {
     @confirm="handleUninstallConfirm"
   />
 
+  <DashboardStepUpDialog
+    v-model="stepUpDialogOpen"
+    :loading="stepUpLoading"
+    :error-message="stepUpErrorMessage"
+    @confirm="submitStepUp"
+    @cancel="cancelStepUp"
+  />
+
   <!-- 更新全部插件确认对话框 -->
   <v-dialog v-model="updateAllConfirmDialog.show" max-width="420">
-    <v-card class="rounded-lg">
+    <v-card class="app-dialog">
       <v-card-title class="d-flex align-center pa-4">
         <v-icon color="warning" class="mr-2">mdi-update</v-icon>
         {{ tm('dialogs.updateAllConfirm.title') }}
@@ -537,7 +527,7 @@ const updateDialogPluginLogo = computed(() => {
 
   <!-- 指令冲突提示对话框 -->
   <v-dialog v-model="conflictDialog.show" max-width="420">
-    <v-card class="rounded-lg">
+    <v-card class="app-dialog">
       <v-card-title class="d-flex align-center pa-4">
         <v-icon color="warning" class="mr-2">mdi-alert-circle</v-icon>
         {{ tm('conflicts.title') }}
@@ -554,10 +544,7 @@ const updateDialogPluginLogo = computed(() => {
           </v-chip>
           <span class="ml-2 text-body-1">{{ tm('conflicts.pairs') }}</span>
         </div>
-        <p
-          class="text-body-2"
-          style="color: rgba(var(--v-theme-on-surface), 0.7)"
-        >
+        <p class="text-body-2 text-medium-emphasis">
           {{ tm('conflicts.message') }}
         </p>
       </v-card-text>
@@ -585,7 +572,7 @@ const updateDialogPluginLogo = computed(() => {
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn color="grey" @click="cancelDangerInstall">
+        <v-btn @click="cancelDangerInstall">
           {{ tm('dialogs.danger_warning.cancel') }}
         </v-btn>
         <v-btn color="warning" @click="confirmDangerInstall">
@@ -610,7 +597,7 @@ const updateDialogPluginLogo = computed(() => {
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn color="grey" @click="cancelInstallOnVersionWarning">
+        <v-btn @click="cancelInstallOnVersionWarning">
           {{ tm('dialogs.versionSupport.cancel') }}
         </v-btn>
         <v-btn color="warning" @click="continueInstallIgnoringVersionWarning">
@@ -622,9 +609,7 @@ const updateDialogPluginLogo = computed(() => {
 
   <!-- 上传插件对话框 -->
   <v-dialog v-model="dialog" width="500">
-    <div
-      class="v-card v-card--density-default rounded-lg v-card--variant-elevated"
-    >
+    <v-card class="app-dialog">
       <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ tm('dialogs.install.title') }}
       </v-card-title>
@@ -795,7 +780,7 @@ const updateDialogPluginLogo = computed(() => {
                   variant="outlined"
                   prepend-inner-icon="mdi-link"
                   hide-details
-                  class="rounded-lg mb-4"
+                  class="mb-4"
                   placeholder="https://github.com/username/repo"
                 ></v-text-field>
 
@@ -880,7 +865,7 @@ const updateDialogPluginLogo = computed(() => {
 
       <div class="v-card-actions">
         <v-spacer></v-spacer>
-        <v-btn color="grey" variant="text" @click="closeInstallDialog">{{
+        <v-btn variant="text" @click="closeInstallDialog">{{
           tm('buttons.cancel')
         }}</v-btn>
         <v-btn
@@ -892,12 +877,12 @@ const updateDialogPluginLogo = computed(() => {
           >{{ tm('buttons.install') }}</v-btn
         >
       </div>
-    </div>
+    </v-card>
   </v-dialog>
 
   <!-- 插件源管理对话框 -->
   <v-dialog v-model="showSourceManagerDialog" width="640" scrollable>
-    <v-card class="source-manager-dialog__card">
+    <v-card class="app-dialog source-manager-dialog__card">
       <v-card-title class="text-h3 pa-4 pl-6">{{
         tm('market.sourceManagement')
       }}</v-card-title>
@@ -1031,7 +1016,7 @@ const updateDialogPluginLogo = computed(() => {
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn color="grey" variant="text" @click="showSourceDialog = false">{{
+        <v-btn variant="text" @click="showSourceDialog = false">{{
           tm('buttons.cancel')
         }}</v-btn>
         <v-btn color="primary" variant="text" @click="saveCustomSource">{{
@@ -1057,12 +1042,9 @@ const updateDialogPluginLogo = computed(() => {
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn
-          color="grey"
-          variant="text"
-          @click="showRemoveSourceDialog = false"
-          >{{ tm('buttons.cancel') }}</v-btn
-        >
+        <v-btn variant="text" @click="showRemoveSourceDialog = false">{{
+          tm('buttons.cancel')
+        }}</v-btn>
         <v-btn color="error" variant="text" @click="confirmRemoveSource">{{
           tm('buttons.deleteSource')
         }}</v-btn>
@@ -1072,7 +1054,7 @@ const updateDialogPluginLogo = computed(() => {
 
   <!-- Update plugin confirmation dialog -->
   <v-dialog v-model="updateConfirmDialog.show" width="500">
-    <v-card class="rounded-lg">
+    <v-card class="app-dialog">
       <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ tm('dialogs.update.title') }}
       </v-card-title>
@@ -1138,7 +1120,7 @@ const updateDialogPluginLogo = computed(() => {
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn color="grey" variant="text" @click="closeUpdateConfirmDialog">
+        <v-btn variant="text" @click="closeUpdateConfirmDialog">
           {{ tm('buttons.cancel') }}
         </v-btn>
         <v-btn color="primary" variant="flat" @click="confirmUpdatePlugin">
@@ -1150,7 +1132,7 @@ const updateDialogPluginLogo = computed(() => {
 
   <!-- 强制更新确认对话框 -->
   <v-dialog v-model="forceUpdateDialog.show" max-width="420">
-    <v-card class="rounded-lg">
+    <v-card class="app-dialog">
       <v-card-title class="text-h6 d-flex align-center">
         <v-icon color="info" class="mr-2">mdi-information-outline</v-icon>
         {{ tm('dialogs.forceUpdate.title') }}
@@ -1172,21 +1154,25 @@ const updateDialogPluginLogo = computed(() => {
 </template>
 
 <style scoped>
-.plugin-handler-item {
-  margin-bottom: 10px;
-  padding: 5px;
-  border-radius: 5px;
-  background-color: #f5f5f5;
+.extension-page__content,
+.extension-page__section {
+  background: transparent;
 }
 
-.fab-button {
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+.extension-page__body {
+  padding: 0 var(--astrbot-space-3);
 }
 
-.fab-button:hover {
-  transform: translateY(-4px) scale(1.05);
-  box-shadow: 0 12px 20px rgba(var(--v-theme-primary), 0.4);
+.extension-page__section-heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--astrbot-space-2);
+}
+
+.extension-page__market-divider {
+  width: 1px;
+  height: 24px;
+  background: rgb(var(--v-theme-outline-variant));
 }
 
 .extension-detail-width {
@@ -1206,7 +1192,7 @@ const updateDialogPluginLogo = computed(() => {
 }
 
 .market-install-confirm__logo {
-  border-radius: 14px;
+  border-radius: 8px;
   height: 64px;
   object-fit: cover;
   width: 64px;
@@ -1217,10 +1203,10 @@ const updateDialogPluginLogo = computed(() => {
 }
 
 .market-install-confirm__name {
-  color: rgba(var(--v-theme-on-surface), 0.92);
-  font-size: 1.25rem;
-  font-weight: 700;
-  line-height: 1.3;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1228,20 +1214,22 @@ const updateDialogPluginLogo = computed(() => {
 
 .market-install-confirm__author,
 .market-install-confirm__desc {
-  color: rgba(var(--v-theme-on-surface), 0.64);
-  line-height: 1.55;
-  font-size: 0.875rem;
+  color: rgb(var(--v-theme-on-surface-variant));
+  font-size: 14px;
+  line-height: 20px;
 }
 
 .market-install-confirm__section-title {
-  color: rgba(var(--v-theme-on-surface), 0.92);
-  font-weight: 700;
-  margin-bottom: 8px;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+  margin-bottom: var(--astrbot-space-2);
 }
 
 .market-install-alert {
-  font-size: 0.8125rem;
-  line-height: 1.45;
+  font-size: 13px;
+  line-height: 18px;
 }
 
 .market-install-source {
@@ -1277,6 +1265,11 @@ const updateDialogPluginLogo = computed(() => {
   padding-right: 8px;
 }
 
+.extension-config-dialog__log-level {
+  min-width: 180px;
+  max-width: 220px;
+}
+
 .extension-config-dialog__actions {
   flex-shrink: 0;
 }
@@ -1291,10 +1284,18 @@ const updateDialogPluginLogo = computed(() => {
 .source-manager-dialog__actions {
   flex-shrink: 0;
 }
-</style>
 
-<style>
-.v-theme--PurpleThemeDark .extension-page .plugin-handler-item {
-  background-color: rgb(var(--v-theme-mcpCardBg));
+.extension-loading-dialog__content {
+  max-height: calc(100dvh - 200px);
+  overflow-y: auto;
+}
+
+.extension-loading-dialog__logs {
+  margin-top: var(--astrbot-space-8);
+}
+
+.extension-loading-dialog__console {
+  height: 200px;
+  margin: var(--astrbot-space-4) 0 var(--astrbot-space-6);
 }
 </style>

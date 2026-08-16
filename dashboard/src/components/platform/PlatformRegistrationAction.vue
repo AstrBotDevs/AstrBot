@@ -32,7 +32,7 @@
           class="registration-created-overlay"
         >
           <div class="registration-created-mark">
-            <v-icon size="58" color="white">mdi-check</v-icon>
+            <v-icon size="58" color="on-success">mdi-check</v-icon>
           </div>
         </div>
       </div>

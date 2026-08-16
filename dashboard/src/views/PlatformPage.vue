@@ -14,7 +14,6 @@
           color="primary"
           prepend-icon="mdi-plus"
           variant="tonal"
-          rounded="xl"
           size="x-large"
           @click="
             updatingMode = false;
@@ -28,8 +27,8 @@
       <div>
         <v-row v-if="platformList.length === 0">
           <v-col cols="12" class="text-center pa-8">
-            <v-icon size="64" color="grey-lighten-1">mdi-connection</v-icon>
-            <p class="text-grey mt-4">{{ tm('emptyText') }}</p>
+            <v-icon size="64" color="on-surface-variant">mdi-connection</v-icon>
+            <p class="text-medium-emphasis mt-4">{{ tm('emptyText') }}</p>
           </v-col>
         </v-row>
 
@@ -171,9 +170,7 @@
 
         <v-expand-transition>
           <v-card-text v-if="showConsole" class="pa-0">
-            <ConsoleDisplayer
-              style="background-color: #1e1e1e; height: 300px; border-radius: 0"
-            ></ConsoleDisplayer>
+            <ConsoleDisplayer class="platform-console"></ConsoleDisplayer>
           </v-card-text>
         </v-expand-transition>
       </v-card>
@@ -333,7 +330,7 @@
     <!-- 消息提示 -->
     <v-snackbar
       :timeout="3000"
-      elevation="6"
+      elevation="4"
       :color="save_message_success"
       v-model="save_message_snack"
       location="top"
@@ -1066,9 +1063,7 @@ function formatRuntimeErrorTimestamp(
 
 <style scoped>
 .platform-page {
-  padding: 20px;
-  padding-top: 8px;
-  padding-bottom: 40px;
+  padding: var(--astrbot-space-2) var(--astrbot-space-4) var(--astrbot-space-8);
 }
 
 .webhook-info {
@@ -1121,12 +1116,12 @@ function formatRuntimeErrorTimestamp(
 }
 
 .traceback-box {
-  background-color: #1e1e1e;
-  color: #d4d4d4;
-  padding: 12px;
+  background-color: rgb(var(--v-theme-code-surface));
+  color: rgb(var(--v-theme-code-text));
+  padding: var(--astrbot-space-3);
   border-radius: 8px;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 18px;
   overflow-x: auto;
   white-space: pre-wrap;
   word-break: break-word;
@@ -1145,7 +1140,7 @@ function formatRuntimeErrorTimestamp(
 .platform-actions__label {
   margin-bottom: 4px;
   font-size: 12px;
-  color: rgba(var(--v-theme-on-surface), 0.68);
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 
 .platform-actions__chips {
@@ -1160,15 +1155,15 @@ function formatRuntimeErrorTimestamp(
 
 .platform-qr-status {
   font-size: 13px;
-  margin-bottom: 10px;
-  color: rgba(var(--v-theme-on-surface), 0.72);
+  margin-bottom: var(--astrbot-space-2);
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 
 .quick-actions__intro,
 .quick-actions__platform,
 .quick-actions__result-label {
   font-size: 13px;
-  color: rgba(var(--v-theme-on-surface), 0.72);
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 
 .quick-actions__categories-label,
@@ -1181,22 +1176,28 @@ function formatRuntimeErrorTimestamp(
 .quick-actions__summary {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--astrbot-space-2);
   margin-top: 8px;
 }
 
 .quick-actions__result-box {
   margin-top: 8px;
-  padding: 12px;
+  padding: var(--astrbot-space-3);
   border-radius: 8px;
-  background-color: #1e1e1e;
-  color: #d4d4d4;
+  background-color: rgb(var(--v-theme-code-surface));
+  color: rgb(var(--v-theme-code-text));
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 18px;
   overflow-x: auto;
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 260px;
   overflow-y: auto;
+}
+
+.platform-console {
+  height: 300px;
+  border-radius: 0;
+  background: rgb(var(--v-theme-code-surface));
 }
 </style>

@@ -2,7 +2,7 @@
   <div class="folder-item-selector">
     <!-- 触发按钮区域 -->
     <div class="d-flex align-center justify-space-between">
-      <span v-if="!modelValue" style="color: rgb(var(--v-theme-primaryText))">
+      <span v-if="!modelValue" class="folder-item-selector__empty-label">
         {{ labels.notSelected || '未选择' }}
       </span>
       <span v-else>
@@ -19,7 +19,7 @@
       :max-width="isCompactLayout ? '96vw' : '1000px'"
       :min-width="isCompactLayout ? undefined : '800px'"
     >
-      <v-card class="selector-dialog-card">
+      <v-card class="app-dialog selector-dialog-card">
         <v-card-title
           class="dialog-title d-flex align-center"
           :class="isCompactLayout ? 'py-3 px-4' : 'py-4 px-5'"
@@ -51,7 +51,7 @@
                 <!-- 根目录 -->
                 <v-list-item
                   :active="currentFolderId === null"
-                  rounded="lg"
+                  rounded="md"
                   class="mb-1 root-item"
                   @click="navigateToFolder(null)"
                 >
@@ -146,7 +146,9 @@
                     </v-breadcrumbs-item>
                   </template>
                   <template #divider>
-                    <v-icon size="small" color="grey">mdi-chevron-right</v-icon>
+                    <v-icon size="small" color="on-surface-variant"
+                      >mdi-chevron-right</v-icon
+                    >
                   </template>
                 </v-breadcrumbs>
               </div>
@@ -177,7 +179,7 @@
                     <v-list-item
                       v-for="folder in currentSubFolders"
                       :key="'folder-' + folder.folder_id"
-                      rounded="lg"
+                      rounded="md"
                       class="mb-1 folder-item"
                       @click="navigateToFolder(folder.folder_id)"
                     >
@@ -196,7 +198,7 @@
                         folder.name
                       }}</v-list-item-title>
                       <template #append>
-                        <v-icon size="20" color="grey"
+                        <v-icon size="20" color="on-surface-variant"
                           >mdi-chevron-right</v-icon
                         >
                       </template>
@@ -216,7 +218,7 @@
                       :key="'item-' + getItemId(item)"
                       :value="getItemId(item)"
                       :active="selectedItemId === getItemId(item)"
-                      rounded="lg"
+                      rounded="md"
                       class="mb-1 persona-item"
                       :class="{
                         'selected-item': selectedItemId === getItemId(item),
@@ -283,7 +285,7 @@
                     "
                     class="empty-state text-center py-12"
                   >
-                    <v-icon size="64" color="grey-lighten-2"
+                    <v-icon size="64" color="on-surface-variant"
                       >mdi-folder-open-outline</v-icon
                     >
                     <p class="text-grey mt-4 text-body-2">
@@ -590,6 +592,10 @@ function handleEditItem(item: SelectableItem) {
 </script>
 
 <style scoped>
+.folder-item-selector__empty-label {
+  color: rgb(var(--v-theme-on-surface));
+}
+
 .selector-dialog-card {
   border-radius: 12px;
   overflow: hidden;

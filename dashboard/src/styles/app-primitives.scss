@@ -1,0 +1,217 @@
+:root {
+  --astrbot-space-1: 4px;
+  --astrbot-space-2: 8px;
+  --astrbot-space-3: 12px;
+  --astrbot-space-4: 16px;
+  --astrbot-space-6: 24px;
+  --astrbot-space-8: 32px;
+}
+
+.dashboard-app {
+  background: rgb(var(--v-theme-background));
+  color: rgb(var(--v-theme-on-background));
+}
+
+.page-wrapper {
+  min-height: 100%;
+  padding: var(--astrbot-space-4);
+  background: rgb(var(--v-theme-app-surface));
+}
+
+.page {
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--astrbot-space-4);
+  margin-bottom: var(--astrbot-space-6);
+}
+
+.page-header__title {
+  margin: 0;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 32px;
+}
+
+.page-section-title {
+  margin: 0;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.surface {
+  border: 1px solid rgb(var(--v-theme-outline-variant));
+  border-radius: 8px;
+  background: rgb(var(--v-theme-surface));
+}
+
+.surface--extension {
+  background: rgb(var(--v-theme-extension-surface));
+}
+
+.surface--code {
+  background: rgb(var(--v-theme-code-surface));
+  color: rgb(var(--v-theme-code-text));
+}
+
+.empty-state {
+  display: grid;
+  justify-items: center;
+  gap: var(--astrbot-space-2);
+  padding: var(--astrbot-space-8) var(--astrbot-space-4);
+  color: rgb(var(--v-theme-on-surface-variant));
+  text-align: center;
+}
+
+.app-dialog {
+  border: 1px solid rgb(var(--v-theme-outline-variant));
+  border-radius: 8px;
+  background: rgb(var(--v-theme-surface));
+  box-shadow: 0 8px 24px rgb(24 33 43 / 16%);
+}
+
+.app-dialog__title {
+  padding: var(--astrbot-space-4);
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.selector-empty-label {
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+
+.selector-control-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--astrbot-space-2);
+}
+
+.selector-selection {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.selector-scroll-region {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.selector-number-input--with-slider {
+  max-width: 120px;
+}
+
+.auth-page-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100vw;
+  min-height: 100vh;
+  padding: var(--astrbot-space-4);
+  overflow: auto;
+  background: rgb(var(--v-theme-app-surface));
+}
+
+.auth-card {
+  width: min(100%, 420px);
+  padding: var(--astrbot-space-2);
+}
+
+.auth-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--astrbot-space-4);
+}
+
+.auth-header__brand {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.auth-header__title {
+  margin: var(--astrbot-space-2) 0 0;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 32px;
+}
+
+.auth-header__subtitle {
+  margin: var(--astrbot-space-1) 0 0;
+  color: rgb(var(--v-theme-on-surface-variant));
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.dashboard-main {
+  min-height: 0;
+}
+
+.dashboard-main--chat,
+.chat-mode-container,
+.chat-layout-content,
+.chat-layout-panel {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.router-progress {
+  z-index: 8;
+  opacity: 0.3;
+}
+
+.inline-control-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--astrbot-space-2);
+}
+
+.inline-control-row--spaced {
+  justify-content: space-between;
+  gap: var(--astrbot-space-3);
+}
+
+.control-search {
+  min-width: 220px;
+  max-width: 340px;
+}
+
+.truncate-two-lines {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+@media (max-width: 600px) {
+  .page-wrapper {
+    padding: var(--astrbot-space-3);
+  }
+
+  .page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .control-search {
+    width: 100%;
+    max-width: none;
+  }
+}

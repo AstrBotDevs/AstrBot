@@ -32,6 +32,7 @@
   "documentation": "官方文档",
   "faq": "FAQ",
   "github": "GitHub",
+  "toggleSidebar": "切换导航栏",
   "drag": "拖拽",
   "groups": {
     "more": "更多功能"

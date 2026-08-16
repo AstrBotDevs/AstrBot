@@ -18,7 +18,7 @@
         density="compact"
         hide-details
         clearable
-        style="max-width: 300px"
+        class="documents-search"
       />
     </div>
 
@@ -39,7 +39,7 @@
             <v-icon :color="getFileColor(item.file_type)" class="mr-2">
               {{ getFileIcon(item.file_type) }}
             </v-icon>
-            <div class="flex-grow-1" style="padding: 4px 0px">
+            <div class="documents-tab__name flex-grow-1">
               <span class="font-weight-medium">{{ item.doc_name }}</span>
               <!-- 上传进度 -->
               <div v-if="item.uploading" class="mt-1">
@@ -89,7 +89,7 @@
 
         <template #no-data>
           <div class="text-center py-8">
-            <v-icon size="64" color="grey-lighten-2"
+            <v-icon size="64" color="on-surface-variant"
               >mdi-file-document-outline</v-icon
             >
             <p class="mt-4 text-medium-emphasis">{{ t('documents.empty') }}</p>
@@ -1134,43 +1134,35 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.documents-tab {
-  animation: fadeIn 0.3s ease;
+.documents-search {
+  max-width: 300px;
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
+.documents-tab__name {
+  padding: var(--astrbot-space-1) 0;
 }
 
 .action-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  gap: var(--astrbot-space-4);
   flex-wrap: wrap;
 }
 
 .upload-dropzone {
-  border: 2px dashed rgba(var(--v-theme-primary), 0.3);
-  border-radius: 12px;
-  padding: 48px 24px;
+  border: 2px dashed rgb(var(--v-theme-outline));
+  border-radius: 8px;
+  padding: var(--astrbot-space-8) var(--astrbot-space-6);
   text-align: center;
   cursor: pointer;
-  transition: all 0.3s ease;
-  background: rgba(var(--v-theme-surface-variant), 0.3);
+  background: rgb(var(--v-theme-surface-variant));
 }
 
 .upload-dropzone:hover,
 .upload-dropzone.dragover {
   border-color: rgb(var(--v-theme-primary));
-  background: rgba(var(--v-theme-primary), 0.05);
-  transform: scale(1.02);
+  background: rgb(var(--v-theme-surface-variant));
 }
 
 .files-list {
@@ -1178,12 +1170,8 @@ onUnmounted(() => {
   overflow-y: auto;
 }
 
-.file-item {
-  transition: all 0.2s ease;
-}
-
 .file-item:hover {
-  background: rgba(var(--v-theme-surface-variant), 0.8) !important;
+  background: rgb(var(--v-theme-surface-variant));
 }
 
 @media (max-width: 768px) {

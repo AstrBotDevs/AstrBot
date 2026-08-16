@@ -56,7 +56,7 @@ function onSubmit() {
   ></v-text-field>
 
   <div class="mt-2">
-    <small style="color: grey">{{ t('defaultHint') }}</small>
+    <small class="auth-default-hint">{{ t('defaultHint') }}</small>
   </div>
 
   <v-btn
@@ -72,3 +72,9 @@ function onSubmit() {
     <span class="login-btn-text">{{ t('login') }}</span>
   </v-btn>
 </template>
+
+<style scoped>
+.auth-default-hint {
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+</style>

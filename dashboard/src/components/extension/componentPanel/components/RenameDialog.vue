@@ -140,7 +140,7 @@ watch(showAliasEditor, (open) => {
       </v-card-text>
       <v-card-actions>
         <v-spacer />
-        <v-btn color="grey" variant="text" @click="emit('update:show', false)">
+        <v-btn variant="text" @click="emit('update:show', false)">
           {{ tm('dialogs.rename.cancel') }}
         </v-btn>
         <v-btn

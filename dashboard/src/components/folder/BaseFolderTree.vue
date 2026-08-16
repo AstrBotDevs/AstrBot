@@ -16,7 +16,7 @@
     <v-list density="compact" nav class="tree-list" bg-color="transparent">
       <v-list-item
         :active="currentFolderId === null"
-        rounded="lg"
+        rounded="md"
         :class="['root-item', { 'drag-over': isRootDragOver }]"
         @click="handleFolderClick(null)"
         @dragover.prevent="handleRootDragOver"

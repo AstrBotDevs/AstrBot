@@ -32,6 +32,7 @@
   "documentation": "Documentation",
   "faq": "FAQ",
   "github": "GitHub",
+  "toggleSidebar": "Toggle navigation",
   "drag": "Drag",
   "groups": {
     "more": "More Features"

@@ -221,18 +221,13 @@ function shouldShowSection() {
 <template>
   <v-card
     v-if="shouldShowSection()"
-    style="
-      margin-bottom: 16px;
-      padding-bottom: 8px;
-      background-color: rgb(var(--v-theme-background));
-    "
+    class="config-section-card"
     rounded="md"
     variant="outlined"
   >
     <v-card-text
       v-if="metadata[metadataKey]?.type === 'object'"
-      class="config-section"
-      style="padding-bottom: 8px"
+      class="config-section config-section--object"
     >
       <v-list-item-title class="config-title">
         {{ translateIfKey(metadata[metadataKey]?.description) }}
@@ -535,7 +530,7 @@ function shouldShowSection() {
           v-model:value="currentEditingKeyIterable[currentEditingKey]"
           :theme="currentEditingTheme"
           :language="currentEditingLanguage"
-          style="height: calc(100vh - 64px)"
+          class="config-fullscreen-editor"
         >
         </VueMonacoEditor>
       </v-card-text>
@@ -544,6 +539,20 @@ function shouldShowSection() {
 </template>
 
 <style scoped>
+.config-section-card {
+  margin-bottom: var(--astrbot-space-4);
+  padding-bottom: var(--astrbot-space-2);
+  background: rgb(var(--v-theme-background));
+}
+
+.config-section--object {
+  padding-bottom: var(--astrbot-space-2);
+}
+
+.config-fullscreen-editor {
+  height: calc(100dvh - 64px);
+}
+
 .config-section {
   margin-bottom: 4px;
 }
@@ -551,12 +560,12 @@ function shouldShowSection() {
 .config-title {
   /* font-weight: 600; */
   font-size: 1.3rem;
-  color: var(--v-theme-primaryText);
+  color: var(--v-theme-on-surface);
 }
 
 .config-hint {
   font-size: 0.75rem;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   margin-top: 2px;
 }
 
@@ -615,12 +624,12 @@ function shouldShowSection() {
 .property-name {
   font-size: 0.875rem;
   /* font-weight: 600; */
-  color: var(--v-theme-primaryText);
+  color: var(--v-theme-on-surface);
 }
 
 .property-hint {
   font-size: 0.75rem;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   margin-top: 2px;
 }
 

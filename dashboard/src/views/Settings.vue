@@ -545,6 +545,13 @@
     @confirm="handleConfigSave2faConfirm"
     @cancel="handleConfigSave2faCancel"
   />
+  <DashboardStepUpDialog
+    v-model="stepUpDialogOpen"
+    :loading="stepUpLoading"
+    :error-message="stepUpErrorMessage"
+    @confirm="submitStepUp"
+    @cancel="cancelStepUp"
+  />
 </template>
 
 <script setup>
@@ -558,11 +565,14 @@ import DashboardAppearanceSettings from '@/components/appearance/DashboardAppear
 import BackupDialog from '@/components/shared/BackupDialog.vue';
 import StorageCleanupPanel from '@/components/shared/StorageCleanupPanel.vue';
 import DashboardTwoFactorDialog from '@/components/shared/DashboardTwoFactorDialog.vue';
+import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
+import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
+import { stepUpHeaders } from '@/utils/stepUp';
 import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot';
 import { copyToClipboard } from '@/utils/clipboard';
 import { useModuleI18n } from '@/i18n/composables';
 import { useTheme } from 'vuetify';
-import { PurpleTheme } from '@/theme/LightTheme';
+import { applyUserThemeColors, defaultThemeColors } from '@/design/theme';
 import { useToastStore } from '@/stores/toast';
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
 
@@ -571,6 +581,14 @@ const { tm: tmMeta } = useModuleI18n('features/config-metadata');
 const toastStore = useToastStore();
 const confirmDialog = useConfirmDialog();
 const theme = useTheme();
+const {
+  dialogOpen: stepUpDialogOpen,
+  loading: stepUpLoading,
+  errorMessage: stepUpErrorMessage,
+  requestStepUp,
+  submitStepUp,
+  cancelStepUp,
+} = useDashboardStepUp();
 
 const getStoredColor = (key, fallback) => {
   const stored =
@@ -579,10 +597,10 @@ const getStoredColor = (key, fallback) => {
 };
 
 const primaryColor = ref(
-  getStoredColor('themePrimary', PurpleTheme.colors.primary),
+  getStoredColor('themePrimary', defaultThemeColors.primary),
 );
 const secondaryColor = ref(
-  getStoredColor('themeSecondary', PurpleTheme.colors.secondary),
+  getStoredColor('themeSecondary', defaultThemeColors.secondary),
 );
 
 const resolveThemes = () => {
@@ -591,20 +609,8 @@ const resolveThemes = () => {
   return null;
 };
 
-const applyThemeColors = (primary, secondary) => {
-  const themes = resolveThemes();
-  if (!themes) return;
-  ['PurpleTheme', 'PurpleThemeDark'].forEach((name) => {
-    const themeDef = themes[name];
-    if (!themeDef?.colors) return;
-    if (primary) themeDef.colors.primary = primary;
-    if (secondary) themeDef.colors.secondary = secondary;
-    if (primary && themeDef.colors.darkprimary)
-      themeDef.colors.darkprimary = primary;
-    if (secondary && themeDef.colors.darksecondary)
-      themeDef.colors.darksecondary = secondary;
-  });
-};
+const applyThemeColors = (primary, secondary) =>
+  void applyUserThemeColors(resolveThemes(), primary, secondary);
 
 applyThemeColors(primaryColor.value, secondaryColor.value);
 
@@ -1107,6 +1113,13 @@ const loadApiKeys = async () => {
   }
 };
 
+const requestApiKeyStepUp = () =>
+  requestStepUp({
+    action: 'identity.manage',
+    resourceType: 'api-key',
+    resourceId: 'collection',
+  });
+
 const copyCreatedApiKey = async () => {
   if (!createdApiKeyPlaintext.value) return;
   const ok = await copyToClipboard(createdApiKeyPlaintext.value);
@@ -1134,6 +1147,8 @@ const createApiKey = async () => {
   }
   apiKeyCreating.value = true;
   try {
+    const stepUp = await requestApiKeyStepUp();
+    if (!stepUp) return;
     const payload = {
       name: newApiKeyName.value,
       scopes: selectedScopes,
@@ -1141,7 +1156,9 @@ const createApiKey = async () => {
     if (newApiKeyExpiresInDays.value !== 'permanent') {
       payload.expires_in_days = Number(newApiKeyExpiresInDays.value);
     }
-    const res = await apiKeyApi.create(payload);
+    const res = await apiKeyApi.create(payload, {
+      headers: stepUpHeaders(stepUp),
+    });
     if (res.data.status !== 'ok') {
       showToast(
         res.data.message || tm('apiKey.messages.createFailed'),
@@ -1166,7 +1183,11 @@ const createApiKey = async () => {
 
 const revokeApiKey = async (keyId) => {
   try {
-    const res = await apiKeyApi.revoke(keyId);
+    const stepUp = await requestApiKeyStepUp();
+    if (!stepUp) return;
+    const res = await apiKeyApi.revoke(keyId, {
+      headers: stepUpHeaders(stepUp),
+    });
     if (res.data.status !== 'ok') {
       showToast(
         res.data.message || tm('apiKey.messages.revokeFailed'),
@@ -1186,7 +1207,11 @@ const revokeApiKey = async (keyId) => {
 
 const deleteApiKey = async (keyId) => {
   try {
-    const res = await apiKeyApi.delete(keyId);
+    const stepUp = await requestApiKeyStepUp();
+    if (!stepUp) return;
+    const res = await apiKeyApi.delete(keyId, {
+      headers: stepUpHeaders(stepUp),
+    });
     if (res.data.status !== 'ok') {
       showToast(
         res.data.message || tm('apiKey.messages.deleteFailed'),
@@ -1212,7 +1237,7 @@ const restartAstrBot = async () => {
   if (!confirmed) return;
 
   try {
-    await restartAstrBotRuntime(wfr.value);
+    await restartAstrBotRuntime(wfr.value, requestStepUp);
   } catch (error) {
     console.error(error);
   }
@@ -1225,8 +1250,8 @@ const openBackupDialog = () => {
 };
 
 const resetThemeColors = () => {
-  primaryColor.value = PurpleTheme.colors.primary;
-  secondaryColor.value = PurpleTheme.colors.secondary;
+  primaryColor.value = defaultThemeColors.primary;
+  secondaryColor.value = defaultThemeColors.secondary;
   localStorage.removeItem('themePrimary');
   localStorage.removeItem('themeSecondary');
   applyThemeColors(primaryColor.value, secondaryColor.value);

@@ -25,7 +25,7 @@
         icon="mdi-information-outline"
         variant="text"
         size="small"
-        color="grey"
+        :aria-label="t('list.subtitle')"
         href="https://docs.astrbot.app/use/knowledge-base.html"
         target="_blank"
       />
@@ -59,7 +59,7 @@ const goToList = () => {
 .kb-container {
   margin: 0 auto;
   max-width: 1040px;
-  padding: 24px;
+  padding: var(--astrbot-space-6);
   width: 100%;
   height: 100%;
   position: relative;
@@ -76,11 +76,10 @@ const goToList = () => {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  font-size: 1.5rem;
-  font-weight: 700;
-  gap: 2px;
-  letter-spacing: 0;
-  line-height: 1.2;
+  font-size: 24px;
+  font-weight: 600;
+  gap: var(--astrbot-space-1);
+  line-height: 32px;
   margin: 0 0 4px;
   min-width: 0;
 }
@@ -107,7 +106,7 @@ const goToList = () => {
 
 @media (max-width: 768px) {
   .kb-container {
-    padding: 16px;
+    padding: var(--astrbot-space-4);
   }
 }
 </style>

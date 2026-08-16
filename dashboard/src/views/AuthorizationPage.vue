@@ -8,6 +8,7 @@ import {
 import { useI18n } from '@/i18n/composables';
 import { resolveErrorMessage } from '@/utils/errorUtils';
 import { useToast } from '@/utils/toast';
+import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
 
 type AuditRecord = {
   audit_id: string;
@@ -75,8 +76,7 @@ const revokeDialog = ref(false);
 const bindingDialog = ref(false);
 const accountDialog = ref(false);
 const stepUpDialog = ref(false);
-const stepUpPassword = ref('');
-const stepUpCode = ref('');
+const stepUpError = ref('');
 const pendingOperation = ref<ProtectedOperation | null>(null);
 const bindingForm = ref<BindingForm>(emptyBindingForm());
 const accountForm = ref<AccountForm>(emptyAccountForm());
@@ -221,23 +221,26 @@ async function refresh() {
 
 function openProtectedOperation(operation: ProtectedOperation) {
   pendingOperation.value = operation;
-  stepUpPassword.value = '';
-  stepUpCode.value = '';
+  stepUpError.value = '';
   stepUpDialog.value = true;
 }
 
-async function executeProtectedOperation() {
+async function executeProtectedOperation(credentials: {
+  password?: string;
+  code?: string;
+}) {
   const operation = pendingOperation.value;
-  if (!operation || (!stepUpPassword.value && !stepUpCode.value)) return;
+  if (!operation || (!credentials.password && !credentials.code)) return;
 
   submitting.value = true;
+  stepUpError.value = '';
   try {
     let token: string | undefined;
     if (operation.kind === 'batch') {
       const response = await authorizationApi.issueBatchRevokeStepUp({
         binding_ids: operation.bindingIds || [],
-        password: stepUpPassword.value || undefined,
-        code: stepUpCode.value || undefined,
+        password: credentials.password,
+        code: credentials.code,
       });
       token = response.data?.data?.token;
     } else if (operation.resource) {
@@ -246,8 +249,8 @@ async function executeProtectedOperation() {
         resource_type: operation.resource.resourceType,
         resource_id: operation.resource.resourceId,
         config_id: operation.resource.configId || undefined,
-        password: stepUpPassword.value || undefined,
-        code: stepUpCode.value || undefined,
+        password: credentials.password,
+        code: credentials.code,
       });
       token = response.data?.data?.token;
     }
@@ -261,12 +264,20 @@ async function executeProtectedOperation() {
     showSuccess(operation.successMessage);
     await refresh();
   } catch (error) {
-    showError(
-      resolveErrorMessage(error, t('features.authorization.actionFailed')),
+    stepUpError.value = resolveErrorMessage(
+      error,
+      t('features.authorization.actionFailed'),
     );
   } finally {
     submitting.value = false;
   }
+}
+
+function cancelProtectedOperation() {
+  if (submitting.value) return;
+  stepUpDialog.value = false;
+  stepUpError.value = '';
+  pendingOperation.value = null;
 }
 
 function openCreateBinding() {
@@ -722,41 +733,12 @@ onMounted(refresh);
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="stepUpDialog" max-width="460" persistent>
-      <v-card>
-        <v-card-title>{{
-          t('features.authorization.stepUpTitle')
-        }}</v-card-title>
-        <v-card-text>
-          {{ t('features.authorization.stepUpText') }}
-          <v-text-field
-            v-model="stepUpPassword"
-            class="mt-4"
-            type="password"
-            autocomplete="current-password"
-            :label="t('features.authorization.password')"
-          />
-          <v-text-field
-            v-model="stepUpCode"
-            :label="t('features.authorization.totpCode')"
-            autocomplete="one-time-code"
-          />
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn :disabled="submitting" @click="stepUpDialog = false">{{
-            t('features.authorization.cancel')
-          }}</v-btn>
-          <v-btn
-            color="primary"
-            :loading="submitting"
-            :disabled="!stepUpPassword && !stepUpCode"
-            @click="executeProtectedOperation"
-          >
-            {{ t('features.authorization.verify') }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <DashboardStepUpDialog
+      v-model="stepUpDialog"
+      :loading="submitting"
+      :error-message="stepUpError"
+      @confirm="executeProtectedOperation"
+      @cancel="cancelProtectedOperation"
+    />
   </v-container>
 </template>

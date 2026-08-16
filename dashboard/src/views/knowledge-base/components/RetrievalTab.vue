@@ -142,7 +142,7 @@
 
           <!-- 空结果 -->
           <div v-else class="text-center py-12">
-            <v-icon size="80" color="grey-lighten-2"
+            <v-icon size="80" color="on-surface-variant"
               >mdi-text-box-search-outline</v-icon
             >
             <p class="text-h6 mt-4 text-medium-emphasis">

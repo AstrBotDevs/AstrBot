@@ -268,7 +268,7 @@ const messagesContainer = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const imagePreview = reactive({ visible: false, url: '' });
 
-const isDark = computed(() => customizer.uiTheme === 'PurpleThemeDark');
+const isDark = computed(() => customizer.uiTheme === 'AstrBotDark');
 const customMarkdownTags = ['ref'];
 
 const {

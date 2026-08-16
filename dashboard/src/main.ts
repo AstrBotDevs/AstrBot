@@ -10,6 +10,7 @@ import '@/scss/style.scss';
 import '@/assets/fonts/fonts.css';
 import { setupHttpClient } from './api/http';
 import { waitForRouterReadyInBackground } from './utils/routerReadiness';
+import { applyUserThemeColors } from './design/theme';
 
 setupHttpClient();
 
@@ -40,17 +41,11 @@ function setupThemeSync(pinia: ReturnType<typeof createPinia>) {
     const storedPrimary = localStorage.getItem('themePrimary');
     const storedSecondary = localStorage.getItem('themeSecondary');
     if (storedPrimary || storedSecondary) {
-      const themes = vuetify.theme.themes.value;
-      ['PurpleTheme', 'PurpleThemeDark'].forEach((name) => {
-        const theme = themes[name];
-        if (!theme?.colors) return;
-        if (storedPrimary) theme.colors.primary = storedPrimary;
-        if (storedSecondary) theme.colors.secondary = storedSecondary;
-        if (storedPrimary && theme.colors.darkprimary)
-          theme.colors.darkprimary = storedPrimary;
-        if (storedSecondary && theme.colors.darksecondary)
-          theme.colors.darksecondary = storedSecondary;
-      });
+      applyUserThemeColors(
+        vuetify.theme.themes.value,
+        storedPrimary,
+        storedSecondary,
+      );
     }
 
     // 3. 全局唯一 matchMedia 监听器：维护系统主题输入

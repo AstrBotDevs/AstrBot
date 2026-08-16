@@ -1,5 +1,6 @@
 <script setup>
 import MarketPluginCard from '@/components/extension/MarketPluginCard.vue';
+import FloatingActionStack from '@/components/ui/FloatingActionStack.vue';
 import PluginSortControl from '@/components/extension/PluginSortControl.vue';
 import defaultPluginIcon from '/favicon.svg';
 import { computed } from 'vue';
@@ -75,108 +76,72 @@ const openMarketPluginDetail = (plugin) => {
 
 <template>
   <div v-show="activeTab === 'market'">
-    <div class="mb-6 pt-4 pb-4">
-      <div class="d-flex align-center" style="gap: 12px">
-        <div class="d-flex align-center" style="gap: 12px; min-width: 0">
-          <h2 class="text-h2 mb-0">{{ tm('tabs.market') }}</h2>
+    <div class="market-page-header page-header">
+      <div class="market-page-header__title-row">
+        <h2 class="page-header__title">{{ tm('tabs.market') }}</h2>
 
-          <v-tooltip location="top" :text="tm('market.sourceManagement')">
-            <template #activator="{ props: activatorProps }">
-              <v-btn
-                v-bind="activatorProps"
-                variant="tonal"
-                rounded="md"
-                color="primary"
-                class="text-none px-2"
-                @click="openSourceManagerDialog"
-              >
-                <v-icon size="18" class="mr-1">mdi-source-branch</v-icon>
-                <span class="text-truncate" style="max-width: 180px">
-                  {{ currentSourceName }}
-                </span>
-              </v-btn>
-            </template>
-          </v-tooltip>
-        </div>
-
-        <v-text-field
-          :model-value="marketSearch"
-          class="ml-auto"
-          density="compact"
-          :label="tm('search.marketPlaceholder')"
-          prepend-inner-icon="mdi-magnify"
-          clearable
-          variant="solo-filled"
-          flat
-          hide-details
-          single-line
-          style="width: 340px; min-width: 220px; max-width: 340px"
-          @update:model-value="marketSearch = normalizeTextInput($event)"
-        >
-        </v-text-field>
+        <v-tooltip location="top" :text="tm('market.sourceManagement')">
+          <template #activator="{ props: activatorProps }">
+            <v-btn
+              v-bind="activatorProps"
+              variant="tonal"
+              rounded="md"
+              color="primary"
+              class="market-source-button"
+              @click="openSourceManagerDialog"
+            >
+              <v-icon size="18" class="mr-1">mdi-source-branch</v-icon>
+              <span class="market-source-name text-truncate">
+                {{ currentSourceName }}
+              </span>
+            </v-btn>
+          </template>
+        </v-tooltip>
       </div>
 
-      <div
-        class="d-flex align-center text-caption text-medium-emphasis mt-2"
-        style="color: grey; line-height: 1.4"
+      <v-text-field
+        :model-value="marketSearch"
+        class="market-search control-search"
+        density="compact"
+        :label="tm('search.marketPlaceholder')"
+        prepend-inner-icon="mdi-magnify"
+        clearable
+        variant="solo-filled"
+        flat
+        hide-details
+        single-line
+        @update:model-value="marketSearch = normalizeTextInput($event)"
       >
+      </v-text-field>
+
+      <div class="market-safety-note">
         <v-icon size="16" class="mr-1">mdi-alert-outline</v-icon>
         <span>{{ tm('market.sourceSafetyWarning') }}</span>
       </div>
     </div>
 
-    <!-- <small style="color: var(--v-theme-secondaryText);">每个插件都是作者无偿提供的的劳动成果。如果您喜欢某个插件，请 Star！</small> -->
-
-    <!-- FAB Button -->
-    <v-tooltip :text="tm('market.installPlugin')" location="left">
-      <template #activator="{ props: tooltipProps }">
-        <button
-          v-bind="tooltipProps"
-          type="button"
-          class="v-btn v-btn--elevated v-btn--icon v-theme--PurpleThemeDark bg-darkprimary v-btn--density-default v-btn--size-x-large v-btn--variant-elevated fab-button"
-          style="
-            position: fixed;
-            right: 52px;
-            bottom: 52px;
-            z-index: 10000;
-            border-radius: 16px;
-          "
-          @click="openInstallDialog"
-        >
-          <span class="v-btn__overlay"></span>
-          <span class="v-btn__underlay"></span>
-          <span class="v-btn__content" data-no-activator="">
-            <i
-              class="mdi-plus mdi v-icon notranslate v-theme--PurpleThemeDark v-icon--size-default"
-              aria-hidden="true"
-              style="font-size: 32px"
-            ></i>
-          </span>
-        </button>
-      </template>
-    </v-tooltip>
-
     <div class="mt-4">
-      <div
-        class="d-flex align-center mb-2"
-        style="justify-content: space-between; flex-wrap: wrap; gap: 8px"
-      >
-        <div class="d-flex align-center" style="gap: 6px">
-          <h2>
+      <div class="market-section-header">
+        <div class="inline-control-row">
+          <h2 class="page-section-title">
             {{ tm('market.allPlugins') }}
           </h2>
-          <v-btn
-            icon
-            variant="text"
-            :loading="loading_ || refreshingMarket"
-            :disabled="loading_ || refreshingMarket"
-            @click="refreshPluginMarket"
-          >
-            <v-icon>mdi-refresh</v-icon>
-          </v-btn>
+          <v-tooltip :text="tm('buttons.refresh')">
+            <template #activator="{ props: refreshTooltipProps }">
+              <v-btn
+                v-bind="refreshTooltipProps"
+                :aria-label="tm('buttons.refresh')"
+                icon="mdi-refresh"
+                variant="text"
+                :loading="loading_ || refreshingMarket"
+                :disabled="loading_ || refreshingMarket"
+                @click="refreshPluginMarket"
+              />
+            </template>
+          </v-tooltip>
         </div>
 
-        <div class="d-flex align-center" style="gap: 8px; flex-wrap: wrap">
+        <div class="inline-control-row">
           <v-select
             v-if="marketCategoryItems.length > 0"
             v-model="marketCategoryFilter"
@@ -204,7 +169,7 @@ const openMarketPluginDetail = (plugin) => {
         </div>
       </div>
 
-      <v-row style="min-height: 26rem" density="comfortable">
+      <v-row class="market-plugin-grid" density="comfortable">
         <v-col
           v-for="plugin in paginatedPlugins"
           :key="plugin.name"
@@ -234,11 +199,8 @@ const openMarketPluginDetail = (plugin) => {
 
       <v-expand-transition>
         <div v-if="randomPlugins.length > 0">
-          <div
-            class="d-flex align-center mb-2 mt-4"
-            style="justify-content: space-between; flex-wrap: wrap; gap: 8px"
-          >
-            <h2>
+          <div class="market-section-header mt-4 mb-2">
+            <h2 class="page-section-title">
               {{ tm('market.randomPlugins') }}
             </h2>
             <v-btn
@@ -257,7 +219,6 @@ const openMarketPluginDetail = (plugin) => {
               v-for="plugin in randomPlugins"
               :key="`random-${plugin.name}`"
               cols="12"
-              md="6"
               lg="4"
               class="pb-2"
             >
@@ -273,10 +234,66 @@ const openMarketPluginDetail = (plugin) => {
         </div>
       </v-expand-transition>
     </div>
+
+    <FloatingActionStack :label="tm('market.installPlugin')">
+      <v-tooltip :text="tm('market.installPlugin')" location="left">
+        <template #activator="{ props: tooltipProps }">
+          <v-btn
+            v-bind="tooltipProps"
+            :aria-label="tm('market.installPlugin')"
+            color="primary"
+            icon="mdi-plus"
+            variant="elevated"
+            @click="openInstallDialog"
+          />
+        </template>
+      </v-tooltip>
+    </FloatingActionStack>
   </div>
 </template>
 
 <style scoped>
+.market-page-header {
+  align-items: flex-start;
+}
+
+.market-page-header__title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.market-source-button {
+  max-width: 260px;
+}
+
+.market-source-name {
+  max-width: 180px;
+}
+
+.market-safety-note {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  color: rgb(var(--v-theme-on-surface-variant));
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.market-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.market-plugin-grid {
+  min-height: 416px;
+}
+
 .market-filter-control {
   min-width: 190px;
   max-width: 220px;
@@ -287,5 +304,15 @@ const openMarketPluginDetail = (plugin) => {
 .market-filter-control :deep(.v-select__selection-text),
 .market-filter-control :deep(.v-field__prepend-inner) {
   font-size: 0.875rem;
+}
+
+@media (max-width: 600px) {
+  .market-page-header__title-row {
+    width: 100%;
+  }
+
+  .market-search {
+    width: 100%;
+  }
 }
 </style>

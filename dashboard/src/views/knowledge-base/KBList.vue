@@ -106,7 +106,9 @@
 
     <!-- 空状态 -->
     <div v-else class="empty-state">
-      <v-icon size="100" color="grey-lighten-2">mdi-book-open-variant</v-icon>
+      <v-icon size="100" color="on-surface-variant"
+        >mdi-book-open-variant</v-icon
+      >
       <h2 class="mt-4">{{ t('list.empty') }}</h2>
       <v-btn
         class="mt-6"
@@ -120,12 +122,12 @@
       </v-btn>
     </div>
 
-    <div class="kb-fab-stack">
+    <FloatingActionStack :label="t('list.create')">
       <v-tooltip :text="t('list.refresh')" location="left">
         <template #activator="{ props }">
           <v-btn
             v-bind="props"
-            color="darkprimary"
+            color="primary"
             icon="mdi-refresh"
             size="x-large"
             variant="elevated"
@@ -139,7 +141,7 @@
         <template #activator="{ props }">
           <v-btn
             v-bind="props"
-            color="darkprimary"
+            color="primary"
             icon="mdi-plus"
             size="x-large"
             variant="elevated"
@@ -148,7 +150,7 @@
           />
         </template>
       </v-tooltip>
-    </div>
+    </FloatingActionStack>
 
     <!-- 创建/编辑对话框 -->
     <v-dialog
@@ -157,7 +159,7 @@
       persistent
       scrollable
     >
-      <v-card class="kb-dialog-card">
+      <v-card class="app-dialog kb-dialog-card">
         <v-card-title class="d-flex align-center">
           <span class="text-h5">{{
             editingKB ? t('edit.title') : t('create.title')
@@ -283,7 +285,7 @@
 
     <!-- Emoji 选择器对话框 -->
     <v-dialog v-model="showEmojiPicker" max-width="500px" scrollable>
-      <v-card class="kb-emoji-dialog-card">
+      <v-card class="app-dialog kb-emoji-dialog-card">
         <v-card-title class="pa-4">{{ t('emoji.title') }}</v-card-title>
         <v-divider />
         <v-card-text class="pa-4 kb-emoji-dialog-body">
@@ -324,7 +326,7 @@
       persistent
       scrollable
     >
-      <v-card class="kb-delete-dialog-card">
+      <v-card class="app-dialog kb-delete-dialog-card">
         <v-card-title class="pa-4 text-h6">{{
           t('delete.title')
         }}</v-card-title>
@@ -368,6 +370,7 @@ import { useRouter } from 'vue-router';
 import { knowledgeApi, providerApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
 import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue';
+import FloatingActionStack from '@/components/ui/FloatingActionStack.vue';
 
 interface KnowledgeBaseListItem {
   kb_id: string;
@@ -729,7 +732,7 @@ onMounted(() => {
 .kb-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--astrbot-space-3);
 }
 
 .kb-list-emoji {
@@ -746,24 +749,24 @@ onMounted(() => {
 
 .kb-stats {
   display: flex;
-  gap: 16px;
-  margin-top: 6px;
+  gap: var(--astrbot-space-4);
+  margin-top: var(--astrbot-space-2);
 }
 
 .kb-error-panel {
   width: 100%;
   text-align: left;
-  background: rgba(var(--v-theme-error), 0.08);
-  border: 1px solid rgba(var(--v-theme-error), 0.18);
-  border-radius: 10px;
-  padding: 10px 12px;
+  background: rgb(var(--v-theme-surface-variant));
+  border: 1px solid rgb(var(--v-theme-error));
+  border-radius: 8px;
+  padding: var(--astrbot-space-3);
 }
 
 .kb-error-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 0.8rem;
+  gap: var(--astrbot-space-2);
+  font-size: 13px;
   font-weight: 600;
   color: rgb(var(--v-theme-error));
   margin-bottom: 4px;
@@ -772,7 +775,7 @@ onMounted(() => {
 .kb-error-detail {
   font-size: 0.78rem;
   line-height: 1.35;
-  color: rgba(var(--v-theme-on-surface), 0.82);
+  color: rgb(var(--v-theme-on-surface-variant));
   word-break: break-word;
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -783,40 +786,13 @@ onMounted(() => {
 .stat-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.875rem;
-  color: rgba(var(--v-theme-on-surface), 0.62);
+  gap: var(--astrbot-space-2);
+  font-size: 14px;
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 
 .list-action-icon-btn {
-  color: rgba(var(--v-theme-on-surface), 0.78);
-}
-
-.list-action-icon-btn:hover {
-  background: rgba(var(--v-theme-on-surface), 0.08);
-  color: rgb(var(--v-theme-on-surface));
-}
-
-.kb-fab-stack {
-  align-items: center;
-  bottom: 52px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  position: fixed;
-  right: 52px;
-  z-index: 10000;
-}
-
-.kb-fab {
-  border-radius: 16px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-}
-
-.kb-fab:hover {
-  box-shadow: 0 12px 20px rgba(var(--v-theme-primary), 0.4);
-  transform: translateY(-4px) scale(1.05);
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 
 /* 空状态 */
@@ -863,16 +839,14 @@ onMounted(() => {
 .emoji-display {
   font-size: 72px;
   cursor: pointer;
-  transition: transform 0.2s ease;
   display: inline-block;
-  padding: 0px 16px;
-  border-radius: 12px;
-  background: rgba(var(--v-theme-primary), 0.05);
+  padding: 0 var(--astrbot-space-4);
+  border-radius: 8px;
+  background: rgb(var(--v-theme-surface-variant));
 }
 
 .emoji-display:hover {
-  transform: scale(1.1);
-  background: rgba(var(--v-theme-primary), 0.1);
+  background: rgb(var(--v-theme-surface-variant));
 }
 
 .emoji-grid {
@@ -893,8 +867,7 @@ onMounted(() => {
 }
 
 .emoji-item:hover {
-  background: rgba(var(--v-theme-primary), 0.1);
-  transform: scale(1.2);
+  background: rgb(var(--v-theme-surface-variant));
 }
 
 /* 响应式设计 */

@@ -1,35 +1,51 @@
 import { createVuetify } from 'vuetify';
+import 'vuetify/styles';
 import '@/assets/mdi-subset/materialdesignicons-subset.css';
 import * as components from 'vuetify/components';
 import * as directives from 'vuetify/directives';
-import { PurpleTheme } from '@/theme/LightTheme';
-import { PurpleThemeDark } from '@/theme/DarkTheme';
+import { astrBotThemes, themeNames } from '@/design/theme';
 
 export default createVuetify({
   components,
   directives,
 
   theme: {
-    defaultTheme: 'PurpleTheme',
-    themes: {
-      PurpleTheme,
-      PurpleThemeDark,
-    },
+    defaultTheme: themeNames.light,
+    themes: astrBotThemes,
   },
   defaults: {
-    VBtn: {},
+    VBtn: {
+      rounded: 'md',
+    },
     VCard: {
-      rounded: 'lg',
+      elevation: 0,
+      rounded: 'md',
+      variant: 'outlined',
     },
     VSnackbar: {
-      elevation: 6,
-      rounded: 'lg',
+      elevation: 4,
+      rounded: 'md',
     },
     VTextField: {
-      rounded: 'lg',
+      density: 'compact',
+      rounded: 'md',
+      variant: 'outlined',
+    },
+    VSelect: {
+      density: 'compact',
+      rounded: 'md',
+      variant: 'outlined',
+    },
+    VTextarea: {
+      density: 'compact',
+      rounded: 'md',
+      variant: 'outlined',
+    },
+    VListItem: {
+      density: 'compact',
+      rounded: 'sm',
     },
     VTooltip: {
-      // set v-tooltip default location to top
       location: 'top',
     },
   },

@@ -29,7 +29,10 @@
           <template #append>
             <v-tooltip location="top">
               <template #activator="{ props: tooltipProps }">
-                <v-icon v-bind="tooltipProps" size="small" color="grey"
+                <v-icon
+                  v-bind="tooltipProps"
+                  size="small"
+                  color="on-surface-variant"
                   >mdi-information-outline</v-icon
                 >
               </template>
@@ -47,7 +50,10 @@
           <template #append>
             <v-tooltip location="top">
               <template #activator="{ props: tooltipProps }">
-                <v-icon v-bind="tooltipProps" size="small" color="grey"
+                <v-icon
+                  v-bind="tooltipProps"
+                  size="small"
+                  color="on-surface-variant"
                   >mdi-information-outline</v-icon
                 >
               </template>
@@ -72,7 +78,7 @@
 
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn color="grey" variant="text" @click="handleCancel">
+        <v-btn variant="text" @click="handleCancel">
           {{ t('core.common.cancel') }}
         </v-btn>
         <v-btn color="error" variant="elevated" @click="handleConfirm">

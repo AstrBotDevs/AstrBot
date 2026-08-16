@@ -26,7 +26,7 @@
                 <div class="provider-source-select-value">
                   <v-avatar
                     size="22"
-                    rounded="lg"
+                    rounded="md"
                     class="provider-source-avatar"
                   >
                     <v-img
@@ -51,7 +51,7 @@
                   <template #prepend>
                     <v-avatar
                       size="24"
-                      rounded="lg"
+                      rounded="md"
                       class="provider-source-avatar me-2"
                     >
                       <v-img
@@ -89,7 +89,7 @@
               color="primary"
               variant="text"
               size="small"
-              rounded="xl"
+              rounded="md"
             >
               {{ tm('providerSources.add') }}
             </v-btn>
@@ -142,7 +142,7 @@
       >
         <v-avatar
           size="28"
-          rounded="lg"
+          rounded="md"
           class="provider-source-item__avatar provider-source-avatar"
         >
           <v-img
@@ -178,7 +178,7 @@
     </div>
 
     <div v-else class="provider-sources-empty">
-      <v-icon size="44" color="grey-lighten-1">mdi-api-off</v-icon>
+      <v-icon size="44" color="on-surface-variant">mdi-api-off</v-icon>
       <p class="provider-sources-empty__text">
         {{ tm('providerSources.empty') }}
       </p>

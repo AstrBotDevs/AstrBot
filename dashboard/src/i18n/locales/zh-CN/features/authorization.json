@@ -25,7 +25,7 @@
   "cancel": "取消",
   "continue": "继续",
   "stepUpTitle": "确认敏感操作",
-  "stepUpText": "请验证 Dashboard 密码，以签发仅用于本次撤销的一次性凭证。",
+  "stepUpText": "请验证 Dashboard 密码或 TOTP 验证码，以签发仅用于本次敏感操作的一次性凭证。",
   "password": "Dashboard 密码",
   "verify": "验证",
   "stepUpReady": "验证完成，现在可以撤销所选绑定。",

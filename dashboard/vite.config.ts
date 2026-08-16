@@ -11,6 +11,7 @@ const t2iShikiRuntimePath = fileURLToPath(
     import.meta.url,
   ),
 );
+const dashboardApiPort = process.env.ASTRBOT_DASHBOARD_API_PORT ?? '6185';
 
 // Vite plugin: run MDI icon font subsetting (build only)
 function mdiSubset() {
@@ -97,6 +98,9 @@ export default defineConfig(({ command }) => ({
     }),
     vuetify({
       autoImport: true,
+      styles: {
+        configFile: 'src/scss/settings.scss',
+      },
     }),
   ],
   resolve: {
@@ -148,7 +152,7 @@ export default defineConfig(({ command }) => ({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:6185/',
+        target: `http://127.0.0.1:${dashboardApiPort}/`,
         changeOrigin: true,
         ws: true,
       },

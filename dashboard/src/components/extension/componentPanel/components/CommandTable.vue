@@ -117,7 +117,7 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
 </script>
 
 <template>
-  <v-card class="rounded-lg overflow-hidden elevation-1">
+  <v-card class="overflow-hidden elevation-1">
     <v-data-table
       :headers="commandHeaders"
       :items="items"
@@ -178,13 +178,7 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
 
       <template #item.description="{ item }">
         <div
-          class="text-body-2 text-medium-emphasis"
-          style="
-            max-width: 280px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-          "
+          class="command-description text-body-2 text-medium-emphasis"
           :title="item.description"
         >
           {{ item.description || '-' }}
@@ -270,6 +264,13 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
 </template>
 
 <style scoped>
+.command-description {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 code {
   background-color: rgba(var(--v-theme-primary), 0.1);
   padding: 2px 6px;

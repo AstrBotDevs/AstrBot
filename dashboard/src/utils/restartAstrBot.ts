@@ -1,6 +1,7 @@
 import { statsApi } from '@/api/v1';
 import { getDesktopRuntimeInfo } from '@/utils/desktopRuntime';
-import { requestDashboardStepUp, stepUpHeaders } from '@/utils/stepUp';
+import { stepUpHeaders } from '@/utils/stepUp';
+import type { DashboardStepUpTarget } from '@/composables/useDashboardStepUp';
 
 type WaitingForRestartRef = {
   check: (initialStartTime?: number | null) => void | Promise<void>;
@@ -28,12 +29,23 @@ async function fetchCurrentStartTime(): Promise<number | null> {
 
 export async function restartAstrBot(
   waitingRef?: WaitingForRestartRef | null,
+  requestStepUp?: (target: DashboardStepUpTarget) => Promise<string | null>,
 ): Promise<void> {
   const {
     bridge: desktopBridge,
     hasDesktopRestartCapability,
     isDesktopRuntime,
   } = await getDesktopRuntimeInfo();
+
+  if (!requestStepUp) {
+    throw new Error('Reauthentication is required to restart AstrBot.');
+  }
+  const stepUp = await requestStepUp({
+    action: 'system.restart',
+    resourceType: 'system',
+    resourceId: 'restart',
+  });
+  if (!stepUp) return;
 
   if (desktopBridge && hasDesktopRestartCapability && isDesktopRuntime) {
     const authToken = localStorage.getItem('token');
@@ -53,11 +65,6 @@ export async function restartAstrBot(
     return;
   }
 
-  const stepUp = await requestDashboardStepUp({
-    action: 'system.restart',
-    resourceType: 'system',
-    resourceId: 'restart',
-  });
   await statsApi.restart({ headers: stepUpHeaders(stepUp) });
   await triggerWaiting(waitingRef);
 }

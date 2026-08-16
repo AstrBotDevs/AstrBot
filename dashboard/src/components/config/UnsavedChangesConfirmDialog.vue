@@ -17,10 +17,10 @@
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn color="gray" @click="handleCancel">{{
+        <v-btn @click="handleCancel">{{
           t('core.common.dialog.cancelButton')
         }}</v-btn>
-        <v-btn color="red" class="confirm-button" @click="handleConfirm">{{
+        <v-btn color="error" class="confirm-button" @click="handleConfirm">{{
           t('core.common.dialog.confirmButton')
         }}</v-btn>
       </v-card-actions>
@@ -87,7 +87,7 @@ defineExpose({ open });
 }
 
 .hint-item {
-  color: var(--v-theme-secondaryText, #666);
+  color: rgb(var(--v-theme-on-surface-variant));
   font-size: 12px;
   opacity: 0.7;
 }

@@ -1,17 +1,17 @@
 <template>
-  <div :class="$vuetify.display.mobile ? '' : 'd-flex'">
+  <div :class="mobile ? '' : 'd-flex'">
     <v-tabs
       v-model="tab"
-      :direction="$vuetify.display.mobile ? 'horizontal' : 'vertical'"
+      :direction="mobile ? 'horizontal' : 'vertical'"
       :align-tabs="'start'"
-      color="deep-purple-accent-4"
+      color="secondary"
       class="config-tabs"
     >
       <v-tab
         v-for="section in visibleSections"
         :key="section.key"
         :value="section.key"
-        style="font-weight: 1000; font-size: 15px"
+        class="config-tab"
       >
         {{ tm(section.value['name'] || section.key) }}
       </v-tab>
@@ -19,7 +19,7 @@
     <v-tabs-window
       v-model="tab"
       class="config-tabs-window"
-      :style="readonly ? 'pointer-events: none; opacity: 0.6;' : ''"
+      :class="{ 'config-tabs-window--readonly': readonly }"
     >
       <v-tabs-window-item
         v-for="section in visibleSections"
@@ -43,7 +43,7 @@
         </v-container>
       </v-tabs-window-item>
 
-      <div style="margin-left: 16px; padding-bottom: 16px">
+      <div class="config-tabs-help">
         <small
           >{{ tm('help.helpPrefix') }}
           <a href="https://docs.astrbot.app/" target="_blank">{{
@@ -68,6 +68,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useDisplay } from 'vuetify';
 import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
 import { useModuleI18n } from '@/i18n/composables';
 
@@ -104,6 +105,7 @@ const props = withDefaults(
 
 const { tm: tmConfig } = useModuleI18n('features/config');
 const { tm: tmMetadata } = useModuleI18n('features/config-metadata');
+const { mobile } = useDisplay();
 
 const tab = ref<string | null>(null);
 
@@ -207,10 +209,11 @@ watch(
     flex: 1;
   }
 
-  .config-tabs .v-tab {
-    justify-content: flex-start !important;
+  .config-tab {
+    justify-content: flex-start;
     text-align: left;
-    min-height: 48px;
+    font-size: 14px;
+    font-weight: 600;
   }
 }
 
@@ -222,5 +225,15 @@ watch(
   .config-tabs-window {
     margin-top: 16px;
   }
+}
+
+.config-tabs-help {
+  margin-left: var(--astrbot-space-4);
+  padding-bottom: var(--astrbot-space-4);
+}
+
+.config-tabs-window--readonly {
+  pointer-events: none;
+  opacity: 0.6;
 }
 </style>

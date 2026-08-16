@@ -1,10 +1,5 @@
 <template>
-  <v-card
-    class="item-card hover-elevation"
-    style="padding: 4px"
-    :variant="variant"
-    elevation="0"
-  >
+  <v-card class="item-card hover-elevation" :variant="variant" elevation="0">
     <v-card-title class="d-flex justify-space-between align-center pb-1 pt-3">
       <span class="text-h2 text-truncate" :title="getItemTitle()">{{
         getItemTitle()
@@ -34,12 +29,11 @@
       <slot name="item-details" :item="item"></slot>
     </v-card-text>
 
-    <v-card-actions style="margin: 8px">
+    <v-card-actions class="item-card__actions">
       <v-btn
         variant="outlined"
         color="error"
         size="small"
-        rounded="xl"
         :disabled="loading || disableDelete"
         @click="$emit('delete', item)"
       >
@@ -50,7 +44,6 @@
         variant="tonal"
         color="primary"
         size="small"
-        rounded="xl"
         :disabled="loading"
         @click="$emit('edit', item)"
       >
@@ -61,7 +54,6 @@
         variant="tonal"
         color="secondary"
         size="small"
-        rounded="xl"
         :disabled="loading"
         @click="$emit('copy', item)"
       >
@@ -73,8 +65,7 @@
 
     <div
       v-if="bglogo"
-      class="d-flex justify-end align-center"
-      style="position: absolute; bottom: 16px; right: 16px; opacity: 0.2"
+      class="item-card__background d-flex justify-end align-center"
     >
       <v-img :src="bglogo" contain width="120" height="120"></v-img>
     </div>
@@ -139,10 +130,8 @@ function toggleEnabled(): void {
 .item-card {
   background: rgb(var(--v-theme-surface));
   position: relative;
-  border-radius: 18px;
-  transition:
-    background-color 0.16s ease,
-    transform 0.3s ease;
+  padding: var(--astrbot-space-1);
+  border-radius: 8px;
   overflow: hidden;
   min-height: 220px;
   height: 100%;
@@ -152,8 +141,18 @@ function toggleEnabled(): void {
 }
 
 .hover-elevation:hover {
-  background: rgba(var(--v-theme-on-surface), 0.04);
-  transform: translateY(-2px);
+  background: rgb(var(--v-theme-surface-variant));
+}
+
+.item-card__actions {
+  margin: var(--astrbot-space-2);
+}
+
+.item-card__background {
+  position: absolute;
+  right: var(--astrbot-space-4);
+  bottom: var(--astrbot-space-4);
+  opacity: 0.2;
 }
 
 .item-status-indicator {
@@ -163,11 +162,11 @@ function toggleEnabled(): void {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: #ccc;
+  background-color: rgb(var(--v-theme-on-surface-variant));
   z-index: 10;
 }
 
 .item-status-indicator.active {
-  background-color: #4caf50;
+  background-color: rgb(var(--v-theme-success));
 }
 </style>

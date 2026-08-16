@@ -12,7 +12,7 @@ import { resolveErrorMessage } from '@/utils/errorUtils';
 import { readSelectedGitHubProxy } from '@/utils/githubProxyStorage';
 import { getValidHashTab, replaceTabRoute } from '@/utils/hashRouteTabs';
 import { getPlatformDisplayName } from '@/utils/platformUtils';
-import { requestDashboardStepUp } from '@/utils/stepUp';
+import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 import {
   buildSearchQuery,
   matchesPluginSearch,
@@ -147,13 +147,24 @@ export const useExtensionPage = () => {
   const router = useRouter();
   const route = useRoute();
   const getSelectedGitHubProxy = readSelectedGitHubProxy;
+  const {
+    dialogOpen: stepUpDialogOpen,
+    loading: stepUpLoading,
+    errorMessage: stepUpErrorMessage,
+    requestStepUp,
+    submitStepUp,
+    cancelStepUp,
+  } = useDashboardStepUp();
 
-  const requestPluginInstallStepUp = () =>
-    requestDashboardStepUp({
+  const requestPluginInstallStepUp = async (): Promise<string> => {
+    const token = await requestStepUp({
       action: 'extension.plugin_install',
       resourceType: 'dashboard-api',
       resourceId: 'post-plugin',
     });
+    if (!token) throw new Error('Plugin installation authorization cancelled.');
+    return token;
+  };
 
   // 检查指令冲突并提示
   const conflictDialog = reactive({
@@ -2184,6 +2195,11 @@ export const useExtensionPage = () => {
     selectedUpdateDownloadUrl,
     selectedUpdateSourceUrl,
     updateUsesGithubSource,
+    stepUpDialogOpen,
+    stepUpLoading,
+    stepUpErrorMessage,
+    submitStepUp,
+    cancelStepUp,
     checkInstallVersionSupport,
     refreshPluginMarket,
     handleLocaleChange,

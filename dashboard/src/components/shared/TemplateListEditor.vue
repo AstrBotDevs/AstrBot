@@ -592,12 +592,12 @@ function hasVisibleItemsAfter(entries, currentIndex, entry) {
 .config-title {
   font-weight: 600;
   font-size: 1rem;
-  color: var(--v-theme-primaryText);
+  color: var(--v-theme-on-surface);
 }
 
 .config-hint {
   font-size: 0.75rem;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   margin-top: 2px;
 }
 
@@ -623,12 +623,12 @@ function hasVisibleItemsAfter(entries, currentIndex, entry) {
 .property-name {
   font-size: 0.875rem;
   font-weight: 600;
-  color: var(--v-theme-primaryText);
+  color: var(--v-theme-on-surface);
 }
 
 .property-hint {
   font-size: 0.75rem;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   margin-top: 2px;
 }
 

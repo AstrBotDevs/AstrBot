@@ -106,15 +106,7 @@ const statusItems = [
 
   <!-- 搜索栏 + 统计信息行 -->
   <div class="mb-4 d-flex flex-wrap align-center ga-4">
-    <div
-      style="
-        min-width: 200px;
-        max-width: 350px;
-        flex: 1;
-        border: 1px solid #b9b9b9;
-        border-radius: 16px;
-      "
-    >
+    <div class="command-search">
       <v-text-field
         :model-value="searchQuery"
         density="compact"
@@ -132,7 +124,7 @@ const statusItems = [
     </div>
     <div class="d-flex align-center ga-4">
       <slot name="stats"></slot>
-      <v-divider vertical class="mx-1" style="height: 20px" />
+      <v-divider vertical class="command-filters-divider mx-1" />
       <v-checkbox
         :model-value="effectiveShowSystemPlugins"
         :label="tm('filters.showSystemPlugins')"
@@ -167,7 +159,15 @@ const statusItems = [
   flex: none;
 }
 
-.system-plugin-checkbox :deep(.v-selection-control) {
-  min-height: auto;
+.command-search {
+  min-width: 200px;
+  max-width: 350px;
+  flex: 1;
+  border: 1px solid rgb(var(--v-theme-outline-variant));
+  border-radius: 8px;
+}
+
+.command-filters-divider {
+  height: 20px;
 }
 </style>

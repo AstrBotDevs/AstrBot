@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, useAttrs } from 'vue';
-import { useCustomizerStore } from '@/stores/customizer';
+import { useDisplay } from 'vuetify';
 import { useModuleI18n } from '@/i18n/composables';
 import UninstallConfirmDialog from './UninstallConfirmDialog.vue';
 import PluginPlatformChip from './PluginPlatformChip.vue';
@@ -47,6 +47,7 @@ const attrs = useAttrs();
 // 国际化
 const { tm } = useModuleI18n('features/extension');
 const { pluginName, pluginDesc } = usePluginI18n();
+const { xs } = useDisplay();
 
 const supportPlatforms = computed(() => {
   const platforms = props.extension?.support_platforms;
@@ -130,26 +131,12 @@ const togglePin = () => {
 <template>
   <v-card
     v-bind="attrs"
-    class="extension-card mx-auto d-flex flex-column h-100"
+    class="extension-card surface mx-auto d-flex flex-column h-100"
+    :class="{ 'extension-card--market': marketMode }"
     elevation="0"
     height="100%"
     :ripple="false"
     variant="outlined"
-    :style="{
-      position: 'relative',
-      backgroundColor:
-        useCustomizerStore().uiTheme === 'PurpleTheme'
-          ? marketMode
-            ? '#f8f0dd'
-            : '#ffffff'
-          : marketMode
-            ? '#3a3425'
-            : '#282833',
-      color:
-        useCustomizerStore().uiTheme === 'PurpleTheme'
-          ? '#000000dd'
-          : '#ffffffdd',
-    }"
   >
     <v-card-text class="extension-card-text">
       <div class="extension-content-row">
@@ -165,8 +152,8 @@ const togglePin = () => {
         <div class="extension-meta-group">
           <div class="extension-title-row">
             <p
-              class="text-h3 font-weight-black extension-title"
-              :class="{ 'text-h4': $vuetify.display.xs }"
+              class="extension-title"
+              :class="{ 'extension-title--compact': xs }"
             >
               <v-tooltip
                 location="top"
@@ -203,10 +190,9 @@ const togglePin = () => {
                   <v-icon
                     v-bind="tooltipProps"
                     color="warning"
-                    class="ml-2"
+                    class="ml-2 extension-update-action"
                     icon="mdi-update"
                     size="small"
-                    style="cursor: pointer"
                     @click.stop="updateExtension"
                   ></v-icon>
                 </template>
@@ -223,7 +209,7 @@ const togglePin = () => {
                   <div class="extension-switch-wrap" @click.stop>
                     <div
                       v-bind="tooltipProps"
-                      style="display: inline-flex; align-items: center"
+                      class="extension-switch-activator"
                     >
                       <v-switch
                         :model-value="extension.activated"
@@ -251,7 +237,7 @@ const togglePin = () => {
               color="warning"
               label
               size="small"
-              style="cursor: pointer"
+              class="extension-update-chip"
               @click.stop="updateExtension"
             >
               <v-icon icon="mdi-arrow-up-bold" start></v-icon>
@@ -278,10 +264,7 @@ const togglePin = () => {
             </v-chip>
           </div>
 
-          <div
-            class="extension-desc"
-            :class="{ 'text-caption': $vuetify.display.xs }"
-          >
+          <div class="extension-desc" :class="{ 'text-caption': xs }">
             {{ localizedDesc }}
           </div>
         </div>
@@ -410,12 +393,19 @@ const togglePin = () => {
 
 <style scoped>
 .extension-card-text {
-  padding: 12px 14px 8px;
+  padding: 12px 16px 8px;
   width: 100%;
 }
 
 .extension-card {
   cursor: pointer;
+  position: relative;
+  color: rgb(var(--v-theme-on-surface));
+  background: rgb(var(--v-theme-extension-surface));
+}
+
+.extension-card--market {
+  background: rgb(var(--v-theme-surface-variant));
 }
 
 .extension-image-container {
@@ -427,13 +417,13 @@ const togglePin = () => {
 .extension-logo {
   width: 64px;
   height: 64px;
-  border-radius: 10px;
+  border-radius: 8px;
   object-fit: cover;
 }
 
 .extension-content-row {
   display: flex;
-  gap: 14px;
+  gap: 16px;
   align-items: flex-start;
 }
 
@@ -443,12 +433,14 @@ const togglePin = () => {
 }
 
 .extension-chip-group {
-  gap: 6px;
+  gap: 4px;
 }
 
 .extension-desc {
-  margin-top: 6px;
-  font-size: 90%;
+  margin-top: 4px;
+  color: rgb(var(--v-theme-on-surface-variant));
+  font-size: 14px;
+  line-height: 20px;
   display: -webkit-box;
   line-clamp: 2;
   -webkit-line-clamp: 2;
@@ -462,6 +454,15 @@ const togglePin = () => {
   min-width: 0;
   flex: 1;
   margin: 0;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.extension-title--compact {
+  font-size: 14px;
+  line-height: 20px;
 }
 
 .extension-title-row {
@@ -479,11 +480,11 @@ const togglePin = () => {
 }
 
 .extension-version {
-  color: rgba(var(--v-theme-on-surface), 0.48);
+  color: rgb(var(--v-theme-on-surface-variant));
   flex-shrink: 0;
   font-size: 0.875rem;
   font-weight: 500;
-  margin-left: 10px;
+  margin-left: 8px;
   white-space: nowrap;
 }
 
@@ -496,6 +497,16 @@ const togglePin = () => {
   display: flex;
   align-items: center;
   flex-shrink: 0;
+}
+
+.extension-switch-activator {
+  display: inline-flex;
+  align-items: center;
+}
+
+.extension-update-action,
+.extension-update-chip {
+  cursor: pointer;
 }
 
 .extension-pin-btn {

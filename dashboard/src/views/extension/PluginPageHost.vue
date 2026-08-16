@@ -605,7 +605,7 @@ void initialize();
 }
 
 .plugin-page-host__header p {
-  color: rgb(var(--v-theme-secondaryText));
+  color: rgb(var(--v-theme-on-surface-variant));
   font-size: 0.875rem;
 }
 

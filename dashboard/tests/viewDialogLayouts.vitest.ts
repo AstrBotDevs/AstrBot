@@ -102,7 +102,7 @@ vi.mock('@/stores/common', () => ({
 
 vi.mock('@/stores/customizer', () => ({
   useCustomizerStore: () => ({
-    uiTheme: 'PurpleThemeDark',
+    uiTheme: 'AstrBotDark',
   }),
 }));
 
@@ -143,7 +143,8 @@ vi.mock('@/components/shared/OutlinedActionListItem.vue', () => ({
 vi.mock('@/components/chat/MessageList.vue', () => ({
   default: {
     props: ['messages'],
-    template: '<div class="message-list-stub">{{ messages?.length || 0 }}</div>',
+    template:
+      '<div class="message-list-stub">{{ messages?.length || 0 }}</div>',
   },
 }));
 
@@ -326,10 +327,10 @@ describe('view dialog layouts', () => {
     expect(document.body.querySelector('.kb-dialog-card')).not.toBeNull();
     expect(document.body.querySelector('.kb-dialog-body')).not.toBeNull();
     expect(document.body.querySelector('.kb-emoji-dialog-card')).not.toBeNull();
+    expect(document.body.querySelector('.kb-emoji-dialog-body')).not.toBeNull();
     expect(
-      document.body.querySelector('.kb-emoji-dialog-body'),
+      document.body.querySelector('.kb-delete-dialog-card'),
     ).not.toBeNull();
-    expect(document.body.querySelector('.kb-delete-dialog-card')).not.toBeNull();
     expect(
       document.body.querySelector('.kb-delete-dialog-body'),
     ).not.toBeNull();
@@ -422,7 +423,9 @@ describe('view dialog layouts', () => {
     expect(
       document.body.querySelector('.conversation-batch-delete-dialog'),
     ).not.toBeNull();
-    expect(document.body.querySelector('.conversation-modal-body')).not.toBeNull();
+    expect(
+      document.body.querySelector('.conversation-modal-body'),
+    ).not.toBeNull();
     expect(hasCriticalRuntimeWarning(warnSpy.mock.calls)).toBe(false);
     expect(hasCriticalRuntimeWarning(errorSpy.mock.calls)).toBe(false);
 

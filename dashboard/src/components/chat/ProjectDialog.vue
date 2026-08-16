@@ -35,12 +35,12 @@
           variant="solo-filled"
           hide-details
           rows="3"
-          rounded="lg"
+          rounded="md"
         />
       </v-card-text>
       <v-card-actions class="project-dialog-card__actions">
         <v-spacer></v-spacer>
-        <v-btn variant="text" color="grey-darken-1" @click="handleCancel">{{
+        <v-btn variant="text" @click="handleCancel">{{
           t('core.common.cancel')
         }}</v-btn>
         <v-btn

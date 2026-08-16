@@ -43,7 +43,7 @@ const toggleExpanded = () => {
 .tool-call-line {
   font: inherit;
   line-height: inherit;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   opacity: 0.85;
   cursor: pointer;
   user-select: none;

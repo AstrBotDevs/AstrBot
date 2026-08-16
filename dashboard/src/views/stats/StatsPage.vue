@@ -19,7 +19,7 @@
       </v-alert>
 
       <div v-if="loading && !baseStats" class="loading-wrap">
-        <v-progress-circular indeterminate color="grey-darken-1" />
+        <v-progress-circular indeterminate color="on-surface-variant" />
       </div>
 
       <template v-else>
@@ -166,7 +166,7 @@
               </div>
               <div class="token-total-value">
                 {{ formatNumber(providerStats?.range_total_tokens ?? 0) }}
-                <span style="font-size: 18px">{{ t('units.tokens') }}</span>
+                <span class="token-total-unit">{{ t('units.tokens') }}</span>
               </div>
               <div class="card-note">
                 {{
@@ -349,12 +349,14 @@ const themePalette = computed(() => {
     info: colors.info,
     success: colors.success,
     warning: colors.warning,
-    accent: colors.accent,
-    border: colors.border ?? colors.borderLight ?? colors.primary,
-    mutedText: colors.secondaryText ?? colors.primaryText ?? colors.primary,
-    lightPrimary: colors.lightprimary ?? colors.surface ?? colors.background,
+    accent: colors.secondary,
+    border: colors.outline ?? colors['outline-variant'] ?? colors.primary,
+    mutedText:
+      colors['on-surface-variant'] ?? colors['on-surface'] ?? colors.primary,
+    lightPrimary:
+      colors['surface-variant'] ?? colors.surface ?? colors.background,
     lightSecondary:
-      colors.lightsecondary ?? colors.surface ?? colors.background,
+      colors['surface-variant'] ?? colors.surface ?? colors.background,
   };
 });
 
@@ -1218,15 +1220,20 @@ onBeforeUnmount(() => {
 }
 
 .token-total-value {
-  margin-top: 10px;
+  margin-top: var(--astrbot-space-2);
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 8px;
-  font-size: clamp(32px, 3vw, 44px);
-  line-height: 1.02;
+  font-size: 32px;
+  line-height: 32px;
   font-weight: 700;
   overflow-wrap: anywhere;
+}
+
+.token-total-unit {
+  font-size: 18px;
+  line-height: 24px;
 }
 
 .token-meta-list {

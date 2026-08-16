@@ -1,29 +1,12 @@
 <template>
   <div class="config-page-root">
-    <div style="display: flex; flex-direction: column; align-items: center">
-      <div
-        v-if="selectedConfigID || isSystemConfig"
-        class="mt-4 config-panel"
-        style="display: flex; flex-direction: column; align-items: start"
-      >
-        <div
-          class="config-toolbar d-flex flex-row pr-4"
-          style="
-            margin-bottom: 16px;
-            align-items: center;
-            gap: 12px;
-            width: 100%;
-            justify-content: space-between;
-          "
-        >
-          <div
-            class="config-toolbar-controls d-flex flex-row align-center"
-            style="gap: 12px"
-          >
+    <div class="config-page__content">
+      <div v-if="selectedConfigID || isSystemConfig" class="mt-4 config-panel">
+        <div class="config-toolbar">
+          <div class="config-toolbar-controls">
             <v-select
               v-if="!isSystemConfig"
               class="config-select"
-              style="min-width: 130px"
               :model-value="selectedConfigID"
               :items="configSelectItems"
               item-title="name"
@@ -47,10 +30,8 @@
               density="compact"
               rounded="md"
               variant="outlined"
-              style="min-width: 280px"
               @update:model-value="onConfigSearchInput"
             />
-            <!-- <a style="color: inherit;" href="https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6" target="_blank"><v-btn icon="mdi-help-circle" size="small" variant="plain"></v-btn></a> -->
           </div>
         </div>
         <v-slide-y-transition>
@@ -74,7 +55,6 @@
             v-if="(selectedConfigID || isSystemConfig) && fetched"
             :key="configContentKey"
             class="config-content"
-            style="width: 100%"
           >
             <!-- 可视化编辑 -->
             <AstrBotCoreConfigWrapper
@@ -86,15 +66,17 @@
         </v-slide-y-transition>
 
         <!-- 浮动按钮放在 transition 外部 -->
-        <template v-if="(selectedConfigID || isSystemConfig) && fetched">
+        <FloatingActionStack
+          v-if="(selectedConfigID || isSystemConfig) && fetched"
+          :label="tm('actions.save')"
+        >
           <v-tooltip :text="tm('actions.save')" location="left">
             <template #activator="{ props: tooltipProps }">
               <v-btn
                 v-bind="tooltipProps"
                 icon="mdi-content-save"
                 size="x-large"
-                style="position: fixed; right: 52px; bottom: 52px"
-                color="darkprimary"
+                color="primary"
                 @click="updateConfig"
               >
               </v-btn>
@@ -107,7 +89,6 @@
                 v-bind="tooltipProps"
                 icon="mdi-code-json"
                 size="x-large"
-                style="position: fixed; right: 52px; bottom: 124px"
                 color="primary"
                 @click="
                   configToString();
@@ -124,14 +105,13 @@
                 v-bind="tooltipProps"
                 icon="mdi-chat-processing"
                 size="x-large"
-                style="position: fixed; right: 52px; bottom: 196px"
                 color="secondary"
                 @click="openTestChat"
               >
               </v-btn>
             </template>
           </v-tooltip>
-        </template>
+        </FloatingActionStack>
       </div>
     </div>
 
@@ -142,30 +122,25 @@
       transition="dialog-bottom-transition"
       scrollable
     >
-      <v-card>
+      <v-card class="app-dialog config-editor-dialog">
         <v-toolbar color="primary" dark>
           <v-btn icon @click="codeEditorDialog = false">
             <v-icon>mdi-close</v-icon>
           </v-btn>
           <v-toolbar-title>{{ tm('codeEditor.title') }}</v-toolbar-title>
           <v-spacer></v-spacer>
-          <v-toolbar-items style="display: flex; align-items: center">
-            <v-btn
-              style="margin-left: 16px"
-              size="small"
-              @click="configToString()"
-              >{{ tm('editor.revertCode') }}</v-btn
-            >
+          <v-toolbar-items class="config-editor-toolbar-actions">
+            <v-btn class="ms-4" size="small" @click="configToString()">{{
+              tm('editor.revertCode')
+            }}</v-btn>
             <v-btn
               v-if="config_data_has_changed"
-              style="margin-left: 16px"
+              class="ms-4"
               size="small"
               @click="applyStrConfig()"
               >{{ tm('editor.applyConfig') }}</v-btn
             >
-            <small style="margin-left: 16px"
-              >💡 {{ tm('editor.applyTip') }}</small
-            >
+            <small class="ms-4">💡 {{ tm('editor.applyTip') }}</small>
           </v-toolbar-items>
         </v-toolbar>
         <v-card-text class="pa-0">
@@ -173,7 +148,7 @@
             v-model:value="config_data_str"
             language="json"
             theme="vs-dark"
-            style="height: calc(100vh - 64px)"
+            class="config-editor"
           >
           </VueMonacoEditor>
         </v-card-text>
@@ -182,7 +157,7 @@
 
     <!-- Config Management Dialog -->
     <v-dialog v-model="configManageDialog" max-width="800px" scrollable>
-      <v-card class="config-manage-dialog__card">
+      <v-card class="app-dialog config-manage-dialog__card">
         <v-card-title class="d-flex align-center justify-space-between">
           <span class="text-h4">{{ tm('configManagement.title') }}</span>
           <v-btn
@@ -213,7 +188,7 @@
               :title="config.name"
             >
               <template #append>
-                <div class="d-flex align-center" style="gap: 8px">
+                <div class="inline-control-row">
                   <v-btn
                     icon="mdi-content-copy"
                     size="small"
@@ -258,7 +233,7 @@
               hide-details
             ></v-text-field>
 
-            <div class="d-flex justify-end mt-4" style="gap: 8px">
+            <div class="d-flex justify-end mt-4 ga-2">
               <v-btn variant="text" @click="cancelConfigForm">{{
                 tm('buttons.cancel')
               }}</v-btn>
@@ -280,7 +255,7 @@
     <v-snackbar
       v-model="save_message_snack"
       :timeout="3000"
-      elevation="6"
+      elevation="4"
       :color="save_message_success"
     >
       {{ save_message }}
@@ -304,11 +279,14 @@
       :scrim="true"
       @click:outside="closeTestChat"
     >
-      <v-card class="test-chat-card" elevation="12">
+      <v-card class="test-chat-card" elevation="4">
         <div class="test-chat-header">
           <div>
             <span class="text-h6">测试配置</span>
-            <div v-if="selectedConfigInfo.name" class="text-caption text-grey">
+            <div
+              v-if="selectedConfigInfo.name"
+              class="text-caption text-medium-emphasis"
+            >
               {{ selectedConfigInfo.name }} ({{ testConfigId }})
             </div>
           </div>
@@ -349,6 +327,7 @@ import {
   useConfirmDialog,
 } from '@/utils/confirmDialog';
 import UnsavedChangesConfirmDialog from '@/components/config/UnsavedChangesConfirmDialog.vue';
+import FloatingActionStack from '@/components/ui/FloatingActionStack.vue';
 import DashboardTwoFactorDialog from '@/components/shared/DashboardTwoFactorDialog.vue';
 import { normalizeTextInput } from '@/utils/inputValue';
 
@@ -1143,21 +1122,52 @@ function closeTestChat() {
 }
 </script>
 
-<style>
-.v-tab {
-  text-transform: none !important;
+<style scoped>
+.config-page__content,
+.config-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.config-page__content {
+  align-items: center;
+}
+
+.config-panel {
+  align-items: flex-start;
+}
+
+.config-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: var(--astrbot-space-3);
+  margin-bottom: var(--astrbot-space-4);
+  padding-right: var(--astrbot-space-4);
+}
+
+.config-toolbar-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--astrbot-space-3);
+}
+
+.config-select {
+  min-width: 130px;
+}
+
+.config-search-input {
+  min-width: 280px;
+}
+
+.config-content {
+  width: 100%;
 }
 
 .unsaved-changes-banner {
   border-radius: 8px;
-}
-
-.v-theme--light .unsaved-changes-banner {
-  background-color: #f1f4f9 !important;
-}
-
-.v-theme--dark .unsaved-changes-banner {
-  background-color: #2d2d2d !important;
+  background: rgb(var(--v-theme-surface-variant));
 }
 
 .unsaved-changes-banner-wrap {
@@ -1168,37 +1178,31 @@ function closeTestChat() {
   margin-bottom: 6px;
 }
 
-/* 按钮切换样式优化 */
-.v-btn-toggle .v-btn {
-  transition: all 0.3s ease !important;
-}
-
-.v-btn-toggle .v-btn:not(.v-btn--active) {
-  opacity: 0.7;
-}
-
-.v-btn-toggle .v-btn.v-btn--active {
-  opacity: 1;
-  font-weight: 600;
-}
-
-/* 冲突消息样式 */
 .text-warning code {
-  background-color: rgba(255, 193, 7, 0.1);
-  color: #e65100;
-  padding: 2px 4px;
+  padding: 2px var(--astrbot-space-1);
   border-radius: 4px;
-  font-size: 0.8rem;
+  background-color: rgb(var(--v-theme-surface-variant));
+  color: rgb(var(--v-theme-warning));
+  font-size: 13px;
   font-weight: 500;
 }
 
 .text-warning strong {
-  color: #f57c00;
+  color: rgb(var(--v-theme-warning));
 }
 
 .text-warning small {
-  color: #6c757d;
+  color: rgb(var(--v-theme-on-surface-variant));
   font-style: italic;
+}
+
+.config-editor-toolbar-actions {
+  display: flex;
+  align-items: center;
+}
+
+.config-editor {
+  height: calc(100dvh - 64px);
 }
 
 @media (min-width: 768px) {
@@ -1208,16 +1212,12 @@ function closeTestChat() {
 }
 
 @media (max-width: 767px) {
-  .v-container {
-    padding: 4px;
-  }
-
   .config-panel {
     width: 100%;
   }
 
   .config-toolbar {
-    padding-right: 0 !important;
+    padding-right: 0;
   }
 
   .config-toolbar-controls {
@@ -1228,7 +1228,7 @@ function closeTestChat() {
   .config-select,
   .config-search-input {
     width: 100%;
-    min-width: 0 !important;
+    min-width: 0;
   }
 }
 
@@ -1240,7 +1240,7 @@ function closeTestChat() {
 
 .test-chat-card {
   width: clamp(320px, 50vw, 720px);
-  height: calc(100vh - 32px);
+  height: calc(100dvh - 32px);
   display: flex;
   flex-direction: column;
   margin: 16px;
@@ -1270,6 +1270,6 @@ function closeTestChat() {
   flex: 1;
   overflow: hidden;
   padding: 0;
-  border-radius: 0 0 16px 16px;
+  border-radius: 0 0 8px 8px;
 }
 </style>

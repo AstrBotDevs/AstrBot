@@ -42,9 +42,11 @@
         ></v-progress-linear>
 
         <div v-else-if="skills.length === 0" class="text-center pa-8">
-          <v-icon size="64" color="grey-lighten-1">mdi-folder-open</v-icon>
-          <p class="text-grey mt-4">{{ tm('skills.empty') }}</p>
-          <small class="text-grey">{{ tm('skills.emptyHint') }}</small>
+          <v-icon size="64" color="on-surface-variant">mdi-folder-open</v-icon>
+          <p class="text-medium-emphasis mt-4">{{ tm('skills.empty') }}</p>
+          <small class="text-medium-emphasis">{{
+            tm('skills.emptyHint')
+          }}</small>
         </div>
 
         <div v-else class="skills-list pb-3">
@@ -216,7 +218,7 @@
           <v-chip size="small" color="primary" variant="tonal"
             >Candidates: {{ neoCandidates.length }}</v-chip
           >
-          <v-chip size="small" color="indigo" variant="tonal"
+          <v-chip size="small" color="secondary" variant="tonal"
             >Releases: {{ neoReleases.length }}</v-chip
           >
           <v-chip size="small" color="success" variant="tonal"
@@ -359,7 +361,7 @@
         <template #activator="{ props }">
           <v-btn
             v-bind="props"
-            color="darkprimary"
+            color="primary"
             icon="mdi-refresh"
             size="x-large"
             variant="elevated"
@@ -376,7 +378,7 @@
         <template #activator="{ props }">
           <v-btn
             v-bind="props"
-            color="darkprimary"
+            color="primary"
             icon="mdi-upload"
             size="x-large"
             variant="elevated"
@@ -719,7 +721,7 @@
                   :theme="editorTheme"
                   :language="editorLanguage"
                   :options="editorOptions"
-                  style="height: 100%; width: 100%"
+                  class="skill-editor__monaco-editor"
                   @change="editorDialog.fileDirty = true"
                 />
               </div>
@@ -771,7 +773,7 @@
       v-model="snackbar.show"
       :timeout="3500"
       :color="snackbar.color"
-      elevation="6"
+      elevation="4"
     >
       {{ snackbar.message }}
     </v-snackbar>
@@ -1114,7 +1116,7 @@ const editorLanguage = computed(() => {
 });
 
 const editorTheme = computed(() =>
-  customizer.uiTheme === 'PurpleThemeDark' ? 'vs-dark' : 'vs-light',
+  customizer.uiTheme === 'AstrBotDark' ? 'vs-dark' : 'vs-light',
 );
 
 const editorOptions = computed(() => ({
@@ -2070,6 +2072,11 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.skill-editor__monaco-editor {
+  width: 100%;
+  height: 100%;
+}
+
 .skills-list {
   display: flex;
   flex-direction: column;
@@ -2283,7 +2290,7 @@ onMounted(async () => {
 
 .skills-upload-dialog__description {
   max-width: 100%;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   line-height: 1.7;
   word-break: break-word;
   white-space: normal;
@@ -2333,7 +2340,7 @@ onMounted(async () => {
   border-radius: 16px;
   border: 1px solid rgba(var(--v-theme-primary), 0.18);
   background: rgba(var(--v-theme-surface), 0.96);
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   line-height: 1.6;
 }
 
@@ -2353,7 +2360,7 @@ onMounted(async () => {
   border-radius: 16px;
   border: 1px solid rgba(var(--v-theme-primary), 0.16);
   background: rgba(var(--v-theme-surface), 0.96);
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
 }
 
 .skills-upload-capability__icon {
@@ -2401,13 +2408,13 @@ onMounted(async () => {
 
 .skills-dropzone__subtitle {
   margin-top: 10px;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
 }
 
 .skills-dropzone__hint {
   margin-top: 8px;
   font-size: 13px;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   opacity: 0.82;
 }
 
@@ -2421,22 +2428,22 @@ onMounted(async () => {
 .skills-upload-summary__chip {
   background: rgba(var(--v-theme-surface), 0.96);
   border: 1px solid rgba(var(--v-theme-primary), 0.16);
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
 }
 
 .skills-upload-summary__chip--success {
   background: rgba(var(--v-theme-primary), 0.18);
-  color: var(--v-theme-primaryText);
+  color: var(--v-theme-on-surface);
 }
 
 .skills-upload-summary__chip--error {
-  background: #f2e6e2;
-  color: #8b5d54;
+  background: rgb(var(--v-theme-surface-variant));
+  color: rgb(var(--v-theme-error));
 }
 
 .skills-upload-list {
   margin-top: 16px;
-  border-radius: 20px;
+  border-radius: 8px;
   border: 1px solid rgba(var(--v-theme-primary), 0.2);
   background: rgba(var(--v-theme-surface), 0.94);
   overflow: hidden;
@@ -2445,7 +2452,7 @@ onMounted(async () => {
 .skills-upload-list__header {
   padding: 14px 18px;
   border-bottom: 1px solid rgba(var(--v-theme-primary), 0.14);
-  color: var(--v-theme-primaryText);
+  color: var(--v-theme-on-surface);
   font-weight: 600;
 }
 
@@ -2467,14 +2474,14 @@ onMounted(async () => {
 
 .skills-upload-row__name {
   font-weight: 600;
-  color: var(--v-theme-primaryText);
+  color: var(--v-theme-on-surface);
   word-break: break-all;
 }
 
 .skills-upload-row__size {
   margin-top: 4px;
   font-size: 12px;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   opacity: 0.82;
 }
 
@@ -2482,7 +2489,7 @@ onMounted(async () => {
   margin-top: 8px;
   font-size: 13px;
   line-height: 1.5;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
 }
 
 .skills-upload-row__actions {
@@ -2500,46 +2507,46 @@ onMounted(async () => {
 .skills-status-chip--waiting {
   background: rgba(var(--v-theme-surface), 0.96);
   border: 1px solid rgba(var(--v-theme-primary), 0.16);
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
 }
 
 .skills-status-chip--uploading {
   background: rgba(var(--v-theme-primary), 0.14);
-  color: var(--v-theme-primaryText);
+  color: var(--v-theme-on-surface);
 }
 
 .skills-status-chip--success {
   background: rgba(var(--v-theme-primary), 0.2);
-  color: var(--v-theme-primaryText);
+  color: var(--v-theme-on-surface);
 }
 
 .skills-status-chip--error {
-  background: #f2e6e2;
-  color: #8a5a50;
+  background: rgb(var(--v-theme-surface-variant));
+  color: rgb(var(--v-theme-error));
 }
 
 .skills-status-chip--skipped {
   background: rgba(var(--v-theme-surface), 0.96);
   border: 1px solid rgba(var(--v-theme-primary), 0.16);
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
 }
 
 .skills-upload-empty {
   margin-top: 16px;
   padding: 20px 18px;
-  border-radius: 20px;
+  border-radius: 8px;
   border: 1px dashed rgba(var(--v-theme-primary), 0.24);
   background: rgba(var(--v-theme-surface), 0.94);
   text-align: center;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
 }
 
 .payload-preview {
   margin: 0;
   min-height: 0;
   overflow: auto;
-  background: #111;
-  color: #ececec;
+  background: rgb(var(--v-theme-code-surface));
+  color: rgb(var(--v-theme-code-text));
   padding: 12px;
   border-radius: 8px;
   font-size: 12px;

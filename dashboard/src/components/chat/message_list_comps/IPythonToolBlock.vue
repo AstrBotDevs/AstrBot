@@ -174,11 +174,11 @@ onMounted(async () => {
   overflow-x: auto;
   font-size: 12px;
   line-height: 1.5;
-  background-color: #f5f5f5;
+  background-color: rgb(var(--v-theme-code-surface));
 }
 
 .code-fallback.dark-theme {
-  background-color: rgb(var(--v-theme-codeBg));
+  background-color: rgb(var(--v-theme-code-surface));
 }
 
 .result-section {
@@ -188,7 +188,7 @@ onMounted(async () => {
 .result-label {
   font-size: 12px;
   font-weight: 600;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   margin-bottom: 6px;
   opacity: 0.8;
 }
@@ -200,13 +200,13 @@ onMounted(async () => {
   overflow-x: auto;
   font-size: 12px;
   line-height: 1.5;
-  background-color: #f5f5f5;
+  background-color: rgb(var(--v-theme-code-surface));
   max-height: 300px;
   overflow-y: auto;
 }
 
 .result-content.dark-theme {
-  background-color: rgb(var(--v-theme-codeBg));
+  background-color: rgb(var(--v-theme-code-surface));
 }
 
 .animate-fade-in {

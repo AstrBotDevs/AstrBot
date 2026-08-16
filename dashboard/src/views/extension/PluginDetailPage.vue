@@ -810,7 +810,7 @@ onBeforeUnmount(() => {
       </h2>
     </div>
 
-    <v-card class="plugin-summary-card rounded-lg" variant="outlined">
+    <v-card class="plugin-summary-card" variant="outlined">
       <v-card-text class="plugin-summary-card__body">
         <img
           :src="logoSrc"
@@ -845,7 +845,7 @@ onBeforeUnmount(() => {
               group.components.length
             }}</span>
           </div>
-          <v-card class="rounded-lg handler-card" variant="outlined">
+          <v-card class="handler-card" variant="outlined">
             <v-table
               v-if="group.key === 'command'"
               class="detail-info-table detail-handler-table"
@@ -972,7 +972,7 @@ onBeforeUnmount(() => {
 
     <section class="detail-section">
       <h3 class="detail-section__title">{{ tm('detail.info.title') }}</h3>
-      <v-card class="rounded-lg" variant="outlined">
+      <v-card variant="outlined">
         <v-table class="detail-info-table">
           <tbody>
             <tr v-for="row in infoRows" :key="row.label">
@@ -1022,7 +1022,7 @@ onBeforeUnmount(() => {
 
     <section v-if="showDocsSection" class="detail-section">
       <h3 class="detail-section__title">{{ tm('detail.docsTitle') }}</h3>
-      <v-card class="rounded-lg docs-card" variant="outlined">
+      <v-card class="docs-card" variant="outlined">
         <v-card-text>
           <div v-if="readmeLoading" class="docs-state">
             <v-progress-circular indeterminate color="primary" />
@@ -1043,7 +1043,7 @@ onBeforeUnmount(() => {
       <h3 class="detail-section__title">
         {{ tm('detail.changelogTitle') }}
       </h3>
-      <v-card class="rounded-lg docs-card" variant="outlined">
+      <v-card class="docs-card" variant="outlined">
         <v-card-text>
           <div v-if="changelogLoading" class="docs-state">
             <v-progress-circular indeterminate color="primary" />

@@ -3,14 +3,9 @@
     <v-container fluid class="dashboard-shell pa-4 pa-md-6">
       <div class="dashboard-header">
         <div class="dashboard-header-main">
-          <div class="d-flex align-center flex-wrap" style="gap: 8px">
+          <div class="subagent-page__title-row">
             <h1 class="dashboard-title">{{ tm('page.title') }}</h1>
-            <v-chip
-              size="x-small"
-              color="orange-darken-2"
-              variant="tonal"
-              label
-            >
+            <v-chip size="x-small" color="warning" variant="tonal" label>
               {{ tm('page.beta') }}
             </v-chip>
           </div>
@@ -142,7 +137,7 @@
               <div class="agent-summary-top">
                 <v-badge
                   dot
-                  :color="agent.enabled ? 'success' : 'grey'"
+                  :color="agent.enabled ? 'success' : 'on-surface-variant'"
                   inline
                 />
                 <span class="agent-name">{{
@@ -558,28 +553,35 @@ onBeforeRouteLeave(async () => {
 @import '@/styles/dashboard-shell.css';
 
 .subagent-page {
-  padding-bottom: 40px;
+  padding-bottom: var(--astrbot-space-8);
+}
+
+.subagent-page__title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--astrbot-space-2);
 }
 
 .unsaved-banner {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  margin-bottom: 18px;
-  border: 1px solid rgba(var(--v-theme-warning), 0.22);
-  border-radius: 12px;
-  background: rgba(var(--v-theme-warning), 0.08);
+  gap: var(--astrbot-space-2);
+  padding: var(--astrbot-space-3);
+  margin-bottom: var(--astrbot-space-4);
+  border: 1px solid rgb(var(--v-theme-warning));
+  border-radius: 8px;
+  background: rgb(var(--v-theme-surface-variant));
   color: var(--dashboard-text);
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 18px;
 }
 
 .setting-card {
   border: 1px solid var(--dashboard-border);
-  border-radius: 14px;
-  padding: 18px;
-  background: rgba(var(--v-theme-primary), 0.02);
+  border-radius: 8px;
+  padding: var(--astrbot-space-4);
+  background: var(--dashboard-surface);
 }
 
 .setting-card-head {
@@ -590,16 +592,16 @@ onBeforeRouteLeave(async () => {
 }
 
 .setting-title {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
-  line-height: 1.5;
+  line-height: 24px;
 }
 
 .setting-subtitle {
-  margin-top: 6px;
+  margin-top: var(--astrbot-space-2);
   color: var(--dashboard-muted);
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 18px;
 }
 
 .empty-card {
@@ -617,8 +619,8 @@ onBeforeRouteLeave(async () => {
 }
 
 .empty-title {
-  font-size: 20px;
-  font-weight: 650;
+  font-size: 18px;
+  font-weight: 600;
   color: var(--dashboard-text);
   margin-bottom: 8px;
 }
@@ -630,7 +632,7 @@ onBeforeRouteLeave(async () => {
 
 .agent-panel {
   display: grid;
-  gap: 18px;
+  gap: var(--astrbot-space-4);
 }
 
 .agent-summary {
@@ -649,7 +651,7 @@ onBeforeRouteLeave(async () => {
 .agent-summary-top {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--astrbot-space-2);
   min-width: 0;
 }
 
@@ -659,27 +661,28 @@ onBeforeRouteLeave(async () => {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 18px;
-  font-weight: 650;
+  font-weight: 600;
+  line-height: 24px;
 }
 
 .agent-summary-desc {
   margin-top: 8px;
   color: var(--dashboard-muted);
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 18px;
 }
 
 .agent-summary-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--astrbot-space-2);
   flex-shrink: 0;
 }
 
 .agent-edit-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
+  gap: var(--astrbot-space-4);
 }
 
 .inner-card {
@@ -687,7 +690,7 @@ onBeforeRouteLeave(async () => {
 }
 
 .section-mini-title {
-  margin-bottom: 10px;
+  margin-bottom: var(--astrbot-space-2);
 }
 
 .selector-wrap {
@@ -703,9 +706,9 @@ onBeforeRouteLeave(async () => {
 
 .selector-card {
   border: 1px solid var(--dashboard-border);
-  border-radius: 12px;
-  padding: 14px;
-  background: transparent;
+  border-radius: 8px;
+  padding: var(--astrbot-space-3);
+  background: var(--dashboard-surface);
 }
 
 .persona-preview-wrap {

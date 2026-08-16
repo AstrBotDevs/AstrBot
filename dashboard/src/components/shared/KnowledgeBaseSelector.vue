@@ -1,13 +1,13 @@
 <template>
   <div class="knowledge-base-selector">
-    <div class="d-flex align-center justify-space-between" style="gap: 8px">
-      <div style="flex: 1; min-width: 0; overflow: hidden">
+    <div class="selector-control-row">
+      <div class="selector-selection">
         <span
           v-if="
             !modelValue ||
             (Array.isArray(modelValue) && modelValue.length === 0)
           "
-          style="color: rgb(var(--v-theme-primaryText))"
+          class="selector-empty-label"
         >
           {{ tm('knowledgeBaseSelector.notSelected') }}
         </span>
@@ -19,10 +19,10 @@
             color="primary"
             variant="tonal"
             closable
-            style="max-width: 100%"
+            class="knowledge-base-selector__chip"
             @click:close="removeKnowledgeBase(name)"
           >
-            <span class="text-truncate" style="max-width: 200px">{{
+            <span class="knowledge-base-selector__chip-label text-truncate">{{
               name
             }}</span>
           </v-chip>
@@ -32,7 +32,7 @@
         size="small"
         color="primary"
         variant="tonal"
-        style="flex-shrink: 0"
+        class="knowledge-base-selector__button"
         @click="openDialog"
       >
         {{ buttonText || tm('knowledgeBaseSelector.buttonText') }}
@@ -41,8 +41,8 @@
 
     <!-- Knowledge Base Selection Dialog -->
     <v-dialog v-model="dialog" max-width="600px" scrollable>
-      <v-card class="selector-dialog__card">
-        <v-card-title class="text-h3 py-4" style="font-weight: normal">
+      <v-card class="app-dialog selector-dialog__card">
+        <v-card-title class="app-dialog__title">
           {{ tm('knowledgeBaseSelector.dialogTitle') }}
         </v-card-title>
 
@@ -62,7 +62,10 @@
               :value="kb.kb_name"
               :active="isSelected(kb.kb_name)"
               rounded="md"
-              class="ma-1"
+              class="ma-1 selector-list__item"
+              :class="{
+                'selector-list__item--active': isSelected(kb.kb_name),
+              }"
               @click="selectKnowledgeBase(kb.kb_name)"
             >
               <template #prepend>
@@ -95,7 +98,7 @@
                 <v-icon v-if="isSelected(kb.kb_name)" color="primary">
                   mdi-checkbox-marked
                 </v-icon>
-                <v-icon v-else color="grey-lighten-1">
+                <v-icon v-else color="secondary">
                   mdi-checkbox-blank-outline
                 </v-icon>
               </template>
@@ -103,8 +106,8 @@
 
             <!-- 当没有知识库时显示创建提示 -->
             <div v-if="knowledgeBaseList.length === 0" class="text-center py-8">
-              <v-icon size="64" color="grey-lighten-1">mdi-database-off</v-icon>
-              <p class="text-grey mt-4 mb-4">
+              <v-icon size="64" color="secondary">mdi-database-off</v-icon>
+              <p class="text-medium-emphasis mt-4 mb-4">
                 {{ tm('knowledgeBaseSelector.noKnowledgeBases') }}
               </p>
               <v-btn
@@ -121,7 +124,7 @@
         <v-card-actions class="pa-4 selector-dialog__actions">
           <div
             v-if="selectedKnowledgeBases.length > 0"
-            class="text-caption text-grey"
+            class="text-caption text-medium-emphasis"
           >
             {{
               tm('knowledgeBaseSelector.selectedCount', {
@@ -253,15 +256,15 @@ function goToKnowledgeBasePage() {
 </script>
 
 <style scoped>
-.v-list-item {
+.selector-list__item {
   transition: all 0.2s ease;
 }
 
-.v-list-item:hover {
+.selector-list__item:hover {
   background-color: rgba(var(--v-theme-primary), 0.04);
 }
 
-.v-list-item.v-list-item--active {
+.selector-list__item--active {
   background-color: rgba(var(--v-theme-primary), 0.08);
 }
 
@@ -300,6 +303,19 @@ function goToKnowledgeBasePage() {
 }
 
 .selector-dialog__actions {
+  flex-shrink: 0;
+}
+
+.knowledge-base-selector__chip {
+  max-width: 100%;
+}
+
+.knowledge-base-selector__chip-label {
+  display: inline-block;
+  max-width: 200px;
+}
+
+.knowledge-base-selector__button {
   flex-shrink: 0;
 }
 </style>

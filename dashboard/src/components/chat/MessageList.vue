@@ -682,7 +682,7 @@ function formatDuration(seconds: number) {
 }
 
 .message-bubble.user {
-  color: var(--v-theme-primaryText);
+  color: var(--v-theme-on-surface);
   padding: 12px 18px;
   font-size: 15px;
   border-radius: 1.5rem;

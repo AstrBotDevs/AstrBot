@@ -4,8 +4,9 @@ import config, {
   type ThemeMode,
   resolveUiTheme,
 } from '@/config';
+import { themeNames } from '@/design/theme';
 
-const DARK_THEMES: ReadonlySet<string> = new Set(['PurpleThemeDark']);
+const DARK_THEMES: ReadonlySet<string> = new Set([themeNames.dark]);
 
 export const useCustomizerStore = defineStore('customizer', {
   state: () => ({
@@ -23,7 +24,7 @@ export const useCustomizerStore = defineStore('customizer', {
       if (state.themeMode !== 'system') {
         return resolveUiTheme(state.themeMode);
       }
-      return state.systemPrefersDark ? 'PurpleThemeDark' : 'PurpleTheme';
+      return state.systemPrefersDark ? themeNames.dark : themeNames.light;
     },
     isDark(): boolean {
       return DARK_THEMES.has(this.uiTheme);

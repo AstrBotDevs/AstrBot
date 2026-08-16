@@ -45,7 +45,7 @@
               v-for="config in configOptions"
               :key="config.id"
               :active="tempSelectedConfig === config.id"
-              rounded="lg"
+              rounded="md"
               variant="text"
               @click="tempSelectedConfig = config.id"
             >

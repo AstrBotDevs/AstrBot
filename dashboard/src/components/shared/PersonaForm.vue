@@ -1,13 +1,13 @@
 <template>
   <v-dialog
     v-model="showDialog"
-    :max-width="$vuetify.display.smAndDown ? undefined : '1200px'"
+    :max-width="smAndDown ? undefined : '1200px'"
     scrollable
     persistent
   >
     <v-card
       class="persona-form-card"
-      :class="{ 'persona-form-card-mobile': $vuetify.display.smAndDown }"
+      :class="{ 'persona-form-card-mobile': smAndDown }"
     >
       <v-card-title class="persona-form-title text-h2 px-6 pt-6 pl-6">
         {{
@@ -223,7 +223,10 @@
                         v-else-if="!loadingTools && availableTools.length === 0"
                         class="text-center pa-4"
                       >
-                        <v-icon size="48" color="grey-lighten-2" class="mb-2"
+                        <v-icon
+                          size="48"
+                          color="on-surface-variant"
+                          class="mb-2"
                           >mdi-tools</v-icon
                         >
                         <p class="text-body-2 text-medium-emphasis">
@@ -235,7 +238,10 @@
                         v-else-if="!loadingTools && filteredTools.length === 0"
                         class="text-center pa-4"
                       >
-                        <v-icon size="48" color="grey-lighten-2" class="mb-2"
+                        <v-icon
+                          size="48"
+                          color="on-surface-variant"
+                          class="mb-2"
                           >mdi-magnify</v-icon
                         >
                         <p class="text-body-2 text-medium-emphasis">
@@ -270,8 +276,7 @@
                             Array.isArray(personaForm.tools) &&
                             personaForm.tools.length > 0
                           "
-                          class="d-flex flex-wrap ga-1"
-                          style="max-height: 100px; overflow-y: auto"
+                          class="persona-form__selected-list d-flex flex-wrap ga-1"
                         >
                           <v-tooltip
                             v-for="toolName in personaForm.tools"
@@ -398,7 +403,10 @@
                         "
                         class="text-center pa-4"
                       >
-                        <v-icon size="48" color="grey-lighten-2" class="mb-2"
+                        <v-icon
+                          size="48"
+                          color="on-surface-variant"
+                          class="mb-2"
                           >mdi-lightning-bolt</v-icon
                         >
                         <p class="text-body-2 text-medium-emphasis">
@@ -412,7 +420,10 @@
                         "
                         class="text-center pa-4"
                       >
-                        <v-icon size="48" color="grey-lighten-2" class="mb-2"
+                        <v-icon
+                          size="48"
+                          color="on-surface-variant"
+                          class="mb-2"
                           >mdi-magnify</v-icon
                         >
                         <p class="text-body-2 text-medium-emphasis">
@@ -445,8 +456,7 @@
                             Array.isArray(personaForm.skills) &&
                             personaForm.skills.length > 0
                           "
-                          class="d-flex flex-wrap ga-1"
-                          style="max-height: 100px; overflow-y: auto"
+                          class="persona-form__selected-list d-flex flex-wrap ga-1"
                         >
                           <v-chip
                             v-for="skillName in personaForm.skills"
@@ -546,7 +556,7 @@
           {{ tm('buttons.delete') }}
         </v-btn>
         <v-spacer />
-        <v-btn color="grey" variant="text" @click="closeDialog">
+        <v-btn variant="text" @click="closeDialog">
           {{ tm('buttons.cancel') }}
         </v-btn>
         <v-btn
@@ -1315,6 +1325,11 @@ function isServerSelected(server: McpServerItem) {
 .persona-form-card {
   border-radius: 12px;
   overflow: hidden;
+}
+
+.persona-form__selected-list {
+  max-height: 100px;
+  overflow-y: auto;
 }
 
 .persona-form-content {

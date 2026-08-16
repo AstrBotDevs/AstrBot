@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test';
 
+const spikeOrigin = `https://127.0.0.1:${
+  process.env.ASTRBOT_E2E_SPIKE_PORT ?? '6190'
+}`;
+
 test('plugin page transport spike', async ({ page }) => {
   const consoleErrors: string[] = [];
   page.on('console', (message) => {
@@ -8,7 +12,7 @@ test('plugin page transport spike', async ({ page }) => {
     }
   });
 
-  await page.goto('https://127.0.0.1:6190/spike');
+  await page.goto(`${spikeOrigin}/spike`);
   await expect(page.getByTestId('spike-status')).toHaveText('complete');
 
   const messages = await page.evaluate(
@@ -26,9 +30,7 @@ test('plugin page transport spike', async ({ page }) => {
     ]),
   );
 
-  const resultResponse = await page.request.get(
-    'https://127.0.0.1:6190/spike/results',
-  );
+  const resultResponse = await page.request.get(`${spikeOrigin}/spike/results`);
   expect(resultResponse.ok()).toBeTruthy();
   const results = (await resultResponse.json()) as {
     requests: Array<{
@@ -43,7 +45,7 @@ test('plugin page transport spike', async ({ page }) => {
   expect(bundleAssets.length).toBeGreaterThanOrEqual(6);
   for (const request of bundleAssets) {
     expect(request.hasSessionCookie).toBe(false);
-    expect([null, 'null', 'https://127.0.0.1:6190']).toContain(request.origin);
+    expect([null, 'null', spikeOrigin]).toContain(request.origin);
   }
 
   expect(

@@ -6,17 +6,14 @@
         <div class="flex-grow-1">
           <span
             v-if="!modelValue || modelValue.length === 0"
-            style="color: rgb(var(--v-theme-primaryText))"
+            class="selector-empty-label"
           >
             {{ tm('pluginSetSelector.notSelected') }}
           </span>
-          <span
-            v-else-if="isAllPlugins"
-            style="color: rgb(var(--v-theme-primaryText))"
-          >
+          <span v-else-if="isAllPlugins" class="selector-empty-label">
             {{ tm('pluginSetSelector.allPlugins') }}
           </span>
-          <span v-else style="color: rgb(var(--v-theme-primaryText))">
+          <span v-else class="selector-empty-label">
             {{
               tm('pluginSetSelector.selectedCount', {
                 count: modelValue.length,
@@ -32,8 +29,8 @@
 
     <!-- Plugin Set Selection Dialog -->
     <v-dialog v-model="dialog" max-width="700px" scrollable>
-      <v-card class="plugin-set-dialog__card">
-        <v-card-title class="text-h3 py-4" style="font-weight: normal">
+      <v-card class="app-dialog plugin-set-dialog__card">
+        <v-card-title class="app-dialog__title">
           {{ tm('pluginSetSelector.dialogTitle') }}
         </v-card-title>
 
@@ -67,7 +64,7 @@
             <!-- 自定义选择时显示插件列表 -->
             <div
               v-if="selectionMode === 'custom'"
-              style="max-height: 300px; overflow-y: auto"
+              class="selector-scroll-region"
             >
               <v-list v-if="pluginList.length > 0" density="compact">
                 <v-list-item
@@ -96,7 +93,7 @@
                     <v-chip
                       v-if="!plugin.activated"
                       size="x-small"
-                      color="grey"
+                      color="secondary"
                       class="ml-1"
                     >
                       {{ tm('pluginSetSelector.notActivated') }}
@@ -110,10 +107,8 @@
               </v-list>
 
               <div v-else class="text-center py-8">
-                <v-icon size="64" color="grey-lighten-1"
-                  >mdi-puzzle-outline</v-icon
-                >
-                <p class="text-grey mt-4">
+                <v-icon size="64" color="secondary">mdi-puzzle-outline</v-icon>
+                <p class="text-medium-emphasis mt-4">
                   {{ tm('pluginSetSelector.noPlugins') }}
                 </p>
               </div>

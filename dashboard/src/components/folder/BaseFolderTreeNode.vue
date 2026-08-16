@@ -2,7 +2,7 @@
   <div class="base-folder-tree-node">
     <v-list-item
       :active="currentFolderId === folder.folder_id"
-      rounded="lg"
+      rounded="md"
       :style="{ paddingLeft: `${(depth + 1) * 16}px` }"
       :class="['folder-item', { 'drag-over': isDragOver }]"
       @click.stop="emit('folder-click', folder.folder_id)"

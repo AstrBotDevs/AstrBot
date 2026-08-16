@@ -50,21 +50,13 @@ const itemTitle = computed(() => {
         <template #activator="{ props: tooltipProps }">
           <v-list-item
             v-bind="{ ...activatorProps, ...tooltipProps }"
-            rounded
-            class="mb-1"
+            rounded="sm"
+            class="nav-item mb-1"
             color="secondary"
             :prepend-icon="item.icon"
-            :style="{ '--indent-padding': '0px' }"
             :aria-label="itemTitle"
           >
-            <v-list-item-title
-              style="
-                font-size: 14px;
-                font-weight: 500;
-                line-height: 1.2;
-                word-break: break-word;
-              "
-            >
+            <v-list-item-title class="nav-item-title">
               {{ itemTitle }}
             </v-list-item-title>
           </v-list-item>
@@ -73,20 +65,12 @@ const itemTitle = computed(() => {
       <v-list-item
         v-else
         v-bind="activatorProps"
-        rounded
-        class="mb-1"
+        rounded="sm"
+        class="nav-item mb-1"
         color="secondary"
         :prepend-icon="item.icon"
-        :style="{ '--indent-padding': '0px' }"
       >
-        <v-list-item-title
-          style="
-            font-size: 14px;
-            font-weight: 500;
-            line-height: 1.2;
-            word-break: break-word;
-          "
-        >
+        <v-list-item-title class="nav-item-title">
           {{ itemTitle }}
         </v-list-item-title>
       </v-list-item>
@@ -113,8 +97,8 @@ const itemTitle = computed(() => {
         :to="item.type === 'external' ? '' : item.to"
         :href="item.type === 'external' ? item.to : ''"
         :active="isItemActive"
-        rounded
-        class="mb-1"
+        rounded="sm"
+        class="nav-item mb-1"
         color="secondary"
         :disabled="item.disabled"
         :target="item.type === 'external' ? '_blank' : ''"
@@ -129,7 +113,7 @@ const itemTitle = computed(() => {
             :icon="item.icon"
           ></v-icon>
         </template>
-        <v-list-item-title style="font-size: 14px">{{
+        <v-list-item-title class="nav-item-title">{{
           itemTitle
         }}</v-list-item-title>
       </v-list-item>
@@ -141,8 +125,8 @@ const itemTitle = computed(() => {
     :to="item.type === 'external' ? '' : item.to"
     :href="item.type === 'external' ? item.to : ''"
     :active="isItemActive"
-    rounded
-    class="mb-1"
+    rounded="sm"
+    class="nav-item mb-1"
     color="secondary"
     :disabled="item.disabled"
     :target="item.type === 'external' ? '_blank' : ''"
@@ -156,7 +140,7 @@ const itemTitle = computed(() => {
         :icon="item.icon"
       ></v-icon>
     </template>
-    <v-list-item-title style="font-size: 14px">{{
+    <v-list-item-title class="nav-item-title">{{
       itemTitle
     }}</v-list-item-title>
     <v-list-item-subtitle
@@ -180,16 +164,14 @@ const itemTitle = computed(() => {
 </template>
 
 <style>
-.rail-group {
-  border-radius: 12px;
-  transition: background-color 0.18s ease;
+.nav-item-title {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  overflow-wrap: anywhere;
 }
 
-.rail-group.v-list-group--open {
-  background: rgba(var(--v-theme-primary), 0.06);
-}
-
-.rail-group.v-list-group--open > .v-list-group__items {
-  padding-bottom: 2px;
+.nav-item {
+  --indent-padding: 0;
 }
 </style>

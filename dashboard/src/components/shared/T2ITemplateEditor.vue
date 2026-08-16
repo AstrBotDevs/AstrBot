@@ -16,11 +16,13 @@
       </div>
     </template>
 
-    <v-card class="t2i-template-editor">
+    <v-card class="app-dialog t2i-template-editor">
       <v-card-title class="d-flex align-center justify-space-between">
         <span>{{ tm('t2iTemplateEditor.dialogTitle') }}</span>
         <v-spacer></v-spacer>
-        <div class="d-flex align-center gap-2" style="width: 60%">
+        <div
+          class="t2i-template-editor__header-controls d-flex align-center gap-2"
+        >
           <v-text-field
             v-if="isCreatingNew"
             v-model="editingName"
@@ -79,7 +81,7 @@
       </v-card-title>
 
       <v-card-text class="pa-0">
-        <v-row no-gutters style="height: 70vh">
+        <v-row no-gutters class="t2i-template-editor__workspace">
           <!-- 左侧编辑器 -->
           <v-col cols="6" class="d-flex flex-column">
             <v-toolbar density="compact" color="surface-variant">
@@ -87,10 +89,7 @@
                 tm('t2iTemplateEditor.templateEditor')
               }}</v-toolbar-title>
               <v-spacer></v-spacer>
-              <div
-                class="d-flex align-center pa-1"
-                style="border: 1px solid rgba(0, 0, 0, 0.1); border-radius: 8px"
-              >
+              <div class="t2i-template-editor__toolbar-actions">
                 <v-btn
                   variant="text"
                   size="small"
@@ -139,16 +138,13 @@
                 </v-btn>
               </div>
             </v-toolbar>
-            <div
-              class="flex-grow-1"
-              style="border-right: 1px solid rgba(0, 0, 0, 0.1)"
-            >
+            <div class="t2i-template-editor__editor flex-grow-1">
               <VueMonacoEditor
                 v-model:value="templateContent"
                 :theme="editorTheme"
                 language="html"
                 :options="editorOptions"
-                style="height: 100%"
+                class="t2i-template-editor__monaco"
               />
             </div>
           </v-col>
@@ -173,7 +169,7 @@
               <iframe
                 ref="previewFrame"
                 :srcdoc="previewContent"
-                style="width: 100%; height: 100%; border: none; zoom: 0.6"
+                class="t2i-template-editor__preview-frame"
               />
             </div>
           </v-col>
@@ -183,7 +179,7 @@
       <v-card-actions class="px-6 py-4">
         <v-row no-gutters class="align-center">
           <v-col>
-            <div class="text-caption text-grey">
+            <div class="text-caption text-medium-emphasis">
               <v-icon size="16" class="mr-1">mdi-information</v-icon>
               {{ tm('t2iTemplateEditor.syntaxHint') }}
             </div>
@@ -208,7 +204,7 @@
 
     <!-- 确认重置对话框 -->
     <v-dialog v-model="resetDialog" max-width="400px">
-      <v-card>
+      <v-card class="app-dialog">
         <v-card-title>{{ tm('t2iTemplateEditor.confirmReset') }}</v-card-title>
         <v-card-text>
           {{ tm('t2iTemplateEditor.confirmResetMessage') }}
@@ -231,7 +227,7 @@
 
     <!-- 删除确认对话框 -->
     <v-dialog v-model="deleteDialog" max-width="400px">
-      <v-card>
+      <v-card class="app-dialog">
         <v-card-title>{{ tm('t2iTemplateEditor.confirmDelete') }}</v-card-title>
         <v-card-text>
           {{
@@ -686,49 +682,51 @@ defineExpose({
 }
 
 .t2i-template-editor-button {
-  min-height: 36px;
-  border-radius: 10px;
-  font-size: 0.86rem;
-  font-weight: 650;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.t2i-template-editor__header-controls {
+  width: 60%;
+}
+
+.t2i-template-editor__workspace {
+  height: 70dvh;
+}
+
+.t2i-template-editor__toolbar-actions {
+  display: flex;
+  align-items: center;
+  padding: var(--astrbot-space-1);
+  border: 1px solid rgb(var(--v-theme-outline-variant));
+  border-radius: 8px;
+}
+
+.t2i-template-editor__editor {
+  border-right: 1px solid rgb(var(--v-theme-outline-variant));
+}
+
+.t2i-template-editor__monaco {
+  height: 100%;
+}
+
+.t2i-template-editor__preview-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  zoom: 0.6;
 }
 
 .preview-container {
-  background-color: #f5f5f5;
+  background-color: rgb(var(--v-theme-surface-variant));
   position: relative;
 }
 
-.preview-container::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-image:
-    linear-gradient(45deg, #ccc 25%, transparent 25%),
-    linear-gradient(-45deg, #ccc 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #ccc 75%),
-    linear-gradient(-45deg, transparent 75%, #ccc 75%);
-  background-size: 20px 20px;
-  background-position:
-    0 0,
-    0 10px,
-    10px -10px,
-    -10px 0px;
-  opacity: 0.1;
-  pointer-events: none;
-}
-
 code {
-  background-color: rgba(0, 0, 0, 0.05);
-  padding: 2px 4px;
-  border-radius: 3px;
-  font-size: 0.875em;
-}
-</style>
-
-<style>
-.v-theme--PurpleThemeDark .t2i-template-editor .preview-container {
-  background-color: rgb(var(--v-theme-surface));
+  background-color: rgb(var(--v-theme-code-surface));
+  color: rgb(var(--v-theme-code-text));
+  padding: 2px var(--astrbot-space-1);
+  border-radius: 4px;
+  font-size: 13px;
 }
 </style>

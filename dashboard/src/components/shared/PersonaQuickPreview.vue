@@ -330,7 +330,7 @@ onBeforeUnmount(() => {
 
 .section-title {
   font-size: 0.75rem;
-  color: rgb(var(--v-theme-primaryText));
+  color: rgb(var(--v-theme-on-surface));
   opacity: 0.85;
 }
 

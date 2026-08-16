@@ -99,7 +99,7 @@
                 <v-icon class="mr-2">mdi-download</v-icon>
                 {{ t('features.settings.backup.export.download') }}
               </v-btn>
-              <v-btn color="grey" variant="text" @click="resetExport">
+              <v-btn variant="text" @click="resetExport">
                 {{ t('features.settings.backup.export.another') }}
               </v-btn>
             </div>
@@ -227,7 +227,7 @@
                     >
                     {{ formatISODate(checkResult?.backup_time) }}
                   </div>
-                  <div class="mt-3" style="white-space: pre-line">
+                  <div class="backup-version-alert mt-3">
                     {{ versionAlertMessage }}
                   </div>
                 </div>
@@ -305,15 +305,9 @@
               </v-alert>
 
               <div
-                class="d-flex justify-center align-center mt-4"
-                style="gap: 16px"
+                class="backup-dialog__actions d-flex justify-center align-center mt-4"
               >
-                <v-btn
-                  color="grey-darken-1"
-                  variant="outlined"
-                  size="large"
-                  @click="resetImport"
-                >
+                <v-btn variant="outlined" size="large" @click="resetImport">
                   <v-icon class="mr-2">mdi-close</v-icon>
                   {{ t('core.common.cancel') }}
                 </v-btn>
@@ -375,7 +369,7 @@
                 <v-icon class="mr-2">mdi-restart</v-icon>
                 {{ t('features.settings.backup.import.restartNow') }}
               </v-btn>
-              <v-btn color="grey" variant="text" @click="resetImport">
+              <v-btn variant="text" @click="resetImport">
                 {{ t('core.common.close') }}
               </v-btn>
             </div>
@@ -406,7 +400,7 @@
             </div>
 
             <div v-else-if="backupList.length === 0" class="text-center py-8">
-              <v-icon size="64" color="grey" class="mb-4"
+              <v-icon size="64" color="on-surface-variant" class="mb-4"
                 >mdi-folder-open-outline</v-icon
               >
               <p class="text-grey">
@@ -441,7 +435,7 @@
                   <v-chip
                     v-if="backup.type === 'uploaded'"
                     size="x-small"
-                    color="orange"
+                    color="warning"
                     variant="tonal"
                     class="ml-1"
                   >
@@ -500,12 +494,7 @@
 
       <v-card-actions class="px-6 py-4">
         <v-spacer></v-spacer>
-        <v-btn
-          color="grey"
-          variant="text"
-          :disabled="isProcessing"
-          @click="handleClose"
-        >
+        <v-btn variant="text" :disabled="isProcessing" @click="handleClose">
           {{ t('core.common.close') }}
         </v-btn>
       </v-card-actions>
@@ -540,7 +529,7 @@
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn color="grey" variant="text" @click="closeRenameDialog">
+        <v-btn variant="text" @click="closeRenameDialog">
           {{ t('core.common.cancel') }}
         </v-btn>
         <v-btn
@@ -557,6 +546,13 @@
   </v-dialog>
 
   <WaitingForRestart ref="wfr"></WaitingForRestart>
+  <DashboardStepUpDialog
+    v-model="stepUpDialogOpen"
+    :loading="stepUpLoading"
+    :error-message="stepUpErrorMessage"
+    @confirm="submitStepUp"
+    @cancel="cancelStepUp"
+  />
 </template>
 
 <script setup>
@@ -566,6 +562,8 @@ import { useI18n } from '@/i18n/composables';
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
 import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot';
 import WaitingForRestart from './WaitingForRestart.vue';
+import DashboardStepUpDialog from './DashboardStepUpDialog.vue';
+import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 
 const { t } = useI18n();
 
@@ -574,6 +572,14 @@ const confirmDialog = useConfirmDialog();
 const isOpen = ref(false);
 const activeTab = ref('export');
 const wfr = ref(null);
+const {
+  dialogOpen: stepUpDialogOpen,
+  loading: stepUpLoading,
+  errorMessage: stepUpErrorMessage,
+  requestStepUp,
+  submitStepUp,
+  cancelStepUp,
+} = useDashboardStepUp();
 
 // 导出状态
 const exportStatus = ref('idle'); // idle, processing, completed, failed
@@ -1170,7 +1176,7 @@ const formatISODate = (isoString) => {
 // 重启 AstrBot
 const restartAstrBot = async () => {
   try {
-    await restartAstrBotRuntime(wfr.value);
+    await restartAstrBotRuntime(wfr.value, requestStepUp);
   } catch (error) {
     console.error(error);
   }
@@ -1198,6 +1204,14 @@ defineExpose({ open });
 </script>
 
 <style scoped>
+.backup-version-alert {
+  white-space: pre-line;
+}
+
+.backup-dialog__actions {
+  gap: var(--astrbot-space-4);
+}
+
 .v-list-item {
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }

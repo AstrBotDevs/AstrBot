@@ -1,8 +1,14 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const spikePort = 6190;
-const dashboardPort = 3000;
-const backendPort = 6185;
+const spikePort = Number(process.env.ASTRBOT_E2E_SPIKE_PORT ?? 6190);
+const dashboardPort = Number(process.env.ASTRBOT_E2E_DASHBOARD_PORT ?? 3000);
+const backendPort = Number(process.env.ASTRBOT_E2E_BACKEND_PORT ?? 6185);
+const useIsolatedPorts = [
+  'ASTRBOT_E2E_SPIKE_PORT',
+  'ASTRBOT_E2E_DASHBOARD_PORT',
+  'ASTRBOT_E2E_BACKEND_PORT',
+].some((name) => process.env[name] !== undefined);
+const reuseExistingServer = !process.env.CI && !useIsolatedPorts;
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -33,15 +39,18 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: `uv run python ../tests/e2e/plugin_ui_test_server.py --backend-port ${backendPort} --spike-port ${spikePort}`,
+      command: `uv run python ../tests/e2e/plugin_ui_test_server.py --backend-port ${backendPort} --spike-port ${spikePort} --dashboard-port ${dashboardPort}`,
       url: `http://127.0.0.1:${backendPort}/health`,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer,
       timeout: 30_000,
     },
     {
       command: `pnpm exec vite --host 127.0.0.1 --port ${dashboardPort} --strictPort`,
       url: `http://127.0.0.1:${dashboardPort}/auth/login`,
-      reuseExistingServer: !process.env.CI,
+      env: {
+        ASTRBOT_DASHBOARD_API_PORT: String(backendPort),
+      },
+      reuseExistingServer,
       timeout: 60_000,
     },
   ],

@@ -99,7 +99,7 @@ const enabledConfigTags = (tool: ToolItem): BuiltinToolConfigTag[] => {
 </script>
 
 <template>
-  <v-card class="rounded-lg overflow-hidden elevation-1">
+  <v-card class="overflow-hidden elevation-1">
     <v-data-table
       :headers="toolHeaders"
       :items="items"
@@ -155,13 +155,7 @@ const enabledConfigTags = (tool: ToolItem): BuiltinToolConfigTag[] => {
 
       <template #item.description="{ item }">
         <div
-          class="text-body-2 text-medium-emphasis"
-          style="
-            max-width: 320px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-          "
+          class="tool-description text-body-2 text-medium-emphasis"
           :title="item.description"
         >
           {{ item.description || '-' }}
@@ -181,13 +175,7 @@ const enabledConfigTags = (tool: ToolItem): BuiltinToolConfigTag[] => {
 
       <template #item.origin_name="{ item }">
         <div
-          class="text-body-2 text-medium-emphasis"
-          style="
-            max-width: 180px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-          "
+          class="tool-origin text-body-2 text-medium-emphasis"
           :title="item.origin_name"
         >
           {{ item.origin_name || '-' }}
@@ -264,8 +252,7 @@ const enabledConfigTags = (tool: ToolItem): BuiltinToolConfigTag[] => {
                       {{ tmTool('functionTools.table.paramName') }}
                     </th>
                     <th
-                      class="text-left text-caption text-medium-emphasis"
-                      style="width: 140px"
+                      class="tool-parameter-type text-left text-caption text-medium-emphasis"
                     >
                       {{ tmTool('functionTools.table.type') }}
                     </th>
@@ -306,6 +293,25 @@ const enabledConfigTags = (tool: ToolItem): BuiltinToolConfigTag[] => {
 </template>
 
 <style scoped>
+.tool-description,
+.tool-origin {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-description {
+  max-width: 320px;
+}
+
+.tool-origin {
+  max-width: 180px;
+}
+
+.tool-parameter-type {
+  width: 140px;
+}
+
 .param-table {
   border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 8px;

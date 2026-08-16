@@ -190,7 +190,7 @@
                 </v-list-item>
               </template>
 
-              <v-card class="styled-menu-card" elevation="8" rounded="lg">
+              <v-card class="styled-menu-card" elevation="4" rounded="md">
                 <v-list density="compact" class="styled-menu-list pa-1">
                   <v-list-item
                     v-for="item in transportOptions"
@@ -242,7 +242,7 @@
                 </v-list-item>
               </template>
 
-              <v-card class="styled-menu-card" elevation="8" rounded="lg">
+              <v-card class="styled-menu-card" elevation="4" rounded="md">
                 <v-list density="compact" class="styled-menu-list pa-1">
                   <v-list-item
                     v-for="lang in languageOptions"
@@ -818,7 +818,7 @@ watch(transportMode, (mode) => {
   localStorage.setItem('chat.transportMode', mode);
 });
 
-const isDark = computed(() => customizer.uiTheme === 'PurpleThemeDark');
+const isDark = computed(() => customizer.uiTheme === 'AstrBotDark');
 const canSend = computed(
   () =>
     Boolean(draft.value.trim() || stagedFiles.value.length) && !sending.value,
@@ -1590,11 +1590,11 @@ function toggleTheme() {
 
 <style scoped>
 .chat-ui {
-  --chat-sidebar-bg: #fbfbfb;
-  --chat-session-active-bg: #efefef;
+  --chat-sidebar-bg: rgb(var(--v-theme-surface));
+  --chat-session-active-bg: rgb(var(--v-theme-surface-variant));
   --chat-page-bg: rgb(var(--v-theme-background));
-  --chat-border: rgba(var(--v-border-color), 0.16);
-  --chat-muted: rgba(var(--v-theme-on-surface), 0.62);
+  --chat-border: rgb(var(--v-theme-outline-variant));
+  --chat-muted: rgb(var(--v-theme-on-surface-variant));
   display: flex;
   height: 100%;
   min-height: 0;
@@ -1602,12 +1602,6 @@ function toggleTheme() {
   background: var(--chat-page-bg);
   color: rgb(var(--v-theme-on-surface));
   font-family: var(--astrbot-font-ui);
-}
-
-.chat-ui.is-dark {
-  --chat-sidebar-bg: #2d2d2d;
-  --chat-session-active-bg: rgba(255, 255, 255, 0.08);
-  --chat-border: rgba(255, 255, 255, 0.1);
 }
 
 :global(.dashboard-appearance-active .chat-ui) {

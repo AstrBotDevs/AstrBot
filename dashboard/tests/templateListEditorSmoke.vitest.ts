@@ -14,8 +14,14 @@ vi.mock('@guolao/vue-monaco-editor', () => ({
 
 vi.mock('axios', () => ({
   default: {
+    defaults: {
+      headers: {},
+    },
     get: vi.fn(),
     create: vi.fn(() => ({
+      defaults: {
+        headers: {},
+      },
       interceptors: {
         request: { use: vi.fn() },
         response: { use: vi.fn() },

@@ -44,7 +44,7 @@
             <v-btn
               variant="outlined"
               prepend-icon="mdi-upload"
-              rounded="lg"
+              rounded="md"
               @click="triggerImport"
             >
               {{ tm('buttons.import') }}
@@ -53,7 +53,7 @@
               color="primary"
               variant="tonal"
               prepend-icon="mdi-plus"
-              rounded="lg"
+              rounded="md"
               @click="openCreatePersonaDialog"
             >
               {{ tm('buttons.create') }}
@@ -68,7 +68,7 @@
             <v-btn
               variant="outlined"
               prepend-icon="mdi-folder-plus"
-              rounded="lg"
+              rounded="md"
               @click="showCreateFolderDialog = true"
             >
               {{ tm('folder.createButton') }}
@@ -81,7 +81,7 @@
           <div v-if="showSkeleton" class="loading-container">
             <v-row>
               <v-col v-for="n in 6" :key="n" cols="12" sm="6" lg="6" xl="4">
-                <v-skeleton-loader type="card" rounded="lg" />
+                <v-skeleton-loader type="card" rounded="md" />
               </v-col>
             </v-row>
           </div>
@@ -150,7 +150,7 @@
             class="empty-state"
           >
             <v-card class="text-center pa-8" elevation="0">
-              <v-icon size="64" color="grey-lighten-1" class="mb-4"
+              <v-icon size="64" color="on-surface-variant" class="mb-4"
                 >mdi-folder-open-outline</v-icon
               >
               <h3 class="text-h5 mb-2">{{ tm('empty.folderEmpty') }}</h3>
@@ -435,7 +435,7 @@
     <v-snackbar
       v-model="showMessage"
       :timeout="3000"
-      elevation="6"
+      elevation="4"
       :color="messageType"
       location="top"
     >

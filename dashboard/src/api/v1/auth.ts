@@ -46,19 +46,25 @@ export const apiKeyApi = {
   list() {
     return typed<OpenConfig[]>(openApiV1.listApiKeys());
   },
-  create(payload: CreateApiKeyRequest) {
+  create(payload: CreateApiKeyRequest, requestConfig?: AxiosRequestConfig) {
     return typed<{ api_key?: string }>(
-      openApiV1.createApiKey({ body: payload }),
+      openApiV1.createApiKey(
+        generatedOptions({ body: payload }, requestConfig),
+      ),
     );
   },
-  revoke(keyId: string) {
+  revoke(keyId: string, requestConfig?: AxiosRequestConfig) {
     return typed<OpenConfig>(
-      openApiV1.revokeApiKey({ path: { key_id: keyId } }),
+      openApiV1.revokeApiKey(
+        generatedOptions({ path: { key_id: keyId } }, requestConfig),
+      ),
     );
   },
-  delete(keyId: string) {
+  delete(keyId: string, requestConfig?: AxiosRequestConfig) {
     return typed<OpenConfig>(
-      openApiV1.deleteApiKey({ path: { key_id: keyId } }),
+      openApiV1.deleteApiKey(
+        generatedOptions({ path: { key_id: keyId } }, requestConfig),
+      ),
     );
   },
 };

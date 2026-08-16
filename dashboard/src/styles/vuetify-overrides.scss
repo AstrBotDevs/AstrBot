@@ -1,0 +1,49 @@
+/* Required component internals that cannot be expressed through Vuetify defaults. */
+.v-btn {
+  min-height: 40px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.v-btn--icon.v-btn--density-default {
+  min-width: 40px;
+  width: 40px;
+  height: 40px;
+}
+
+.v-card--variant-outlined,
+.v-card--variant-outlined .v-divider,
+.v-divider {
+  border-color: rgb(var(--v-theme-outline-variant));
+}
+
+.v-overlay__content > .v-card {
+  border-radius: 8px;
+  /* Outlined cards are transparent by default; overlay content must remain legible. */
+  background: rgb(var(--v-theme-surface));
+}
+
+.v-snackbar__wrapper {
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(24 33 43 / 16%);
+}
+
+.v-list-item {
+  min-height: 40px;
+}
+
+/* The resize handle needs the drawer content to establish its containing block. */
+.leftSidebar .v-navigation-drawer__content {
+  position: relative;
+}
+
+/* A rail group needs an inset before its nested Vuetify items. */
+.rail-group.v-list-group--open > .v-list-group__items {
+  padding-bottom: 4px;
+}
+
+/* A selected drawer group needs a subtle state independent of theme names. */
+.rail-group.v-list-group--open {
+  border-radius: 8px;
+  background: rgb(var(--v-theme-surface-variant));
+}

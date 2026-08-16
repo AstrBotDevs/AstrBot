@@ -48,10 +48,10 @@
           />
 
           <div v-else-if="!jobs.length" class="text-center pa-8">
-            <v-icon size="64" color="grey-lighten-1">
+            <v-icon size="64" color="on-surface-variant">
               mdi-calendar-blank-outline
             </v-icon>
-            <p class="text-grey mt-4">{{ tm('table.empty') }}</p>
+            <p class="text-medium-emphasis mt-4">{{ tm('table.empty') }}</p>
           </div>
 
           <template v-else>
@@ -62,6 +62,7 @@
                 prepend-inner-icon="mdi-magnify"
                 variant="solo-filled"
                 density="compact"
+                class="cron-search"
                 clearable
                 hide-details
               />
@@ -74,6 +75,7 @@
                 prepend-inner-icon="mdi-send-outline"
                 variant="solo-filled"
                 density="compact"
+                class="cron-umo-filter"
                 clearable
                 hide-details
                 :no-data-text="tm('filters.noUmos')"
@@ -81,10 +83,12 @@
             </div>
 
             <div v-if="!sortedJobs.length" class="text-center pa-8">
-              <v-icon size="64" color="grey-lighten-1">
+              <v-icon size="64" color="on-surface-variant">
                 mdi-file-search-outline
               </v-icon>
-              <p class="text-grey mt-4">{{ tm('filters.noMatches') }}</p>
+              <p class="text-medium-emphasis mt-4">
+                {{ tm('filters.noMatches') }}
+              </p>
             </div>
 
             <div v-else class="task-list pb-3">
@@ -98,7 +102,7 @@
                 <template #title-extra>
                   <v-chip
                     size="x-small"
-                    :color="item.run_once ? 'orange' : 'primary'"
+                    :color="item.run_once ? 'warning' : 'primary'"
                     variant="tonal"
                   >
                     {{ scheduleProductLabel(item) }}
@@ -1474,19 +1478,16 @@ onMounted(() => {
   margin-bottom: 14px;
 }
 
-.task-filter-bar :deep(.v-field) {
-  box-shadow: none;
-}
-
-.task-filter-bar :deep(.v-input) {
+.cron-search,
+.cron-umo-filter {
   flex: 0 1 auto;
 }
 
-.task-filter-bar :deep(.v-text-field) {
+.cron-search {
   width: 260px;
 }
 
-.task-filter-bar :deep(.v-autocomplete) {
+.cron-umo-filter {
   width: 300px;
 }
 
@@ -1537,18 +1538,12 @@ onMounted(() => {
   max-width: 100%;
 }
 
-.umo-selection-chip :deep(.v-chip__content) {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .list-action-icon-btn {
-  color: rgba(var(--v-theme-on-surface), 0.78);
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 
 .list-action-icon-btn:hover {
-  background: rgba(var(--v-theme-on-surface), 0.08);
+  background: rgb(var(--v-theme-surface-variant));
   color: rgb(var(--v-theme-on-surface));
 }
 

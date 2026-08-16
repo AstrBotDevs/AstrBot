@@ -2,7 +2,7 @@
   <v-card
     class="persona-card"
     :class="{ dragging: isDragging }"
-    rounded="lg"
+    rounded="md"
     variant="outlined"
     elevation="0"
     draggable="true"
@@ -279,7 +279,6 @@ async function exportPersona() {
   background: rgb(var(--v-theme-surface));
   padding: 12px 20px;
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   display: flex;
   align-items: center;
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));

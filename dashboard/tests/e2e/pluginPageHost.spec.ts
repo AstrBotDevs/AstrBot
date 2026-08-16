@@ -1,6 +1,8 @@
 import { expect, request as requestFactory, test } from '@playwright/test';
 
-const dashboardOrigin = 'http://127.0.0.1:3000';
+const dashboardOrigin = `http://127.0.0.1:${
+  process.env.ASTRBOT_E2E_DASHBOARD_PORT ?? '3000'
+}`;
 const dashboardToken = 'plugin-ui-e2e-dashboard-token';
 
 async function authenticate(page: import('@playwright/test').Page) {

@@ -44,7 +44,7 @@
             v-for="provider in filteredProviders"
             :key="provider.id"
             :active="selectedProviderId === provider.id"
-            rounded="lg"
+            rounded="md"
             class="provider-menu-item"
             @click="selectProvider(provider)"
           >

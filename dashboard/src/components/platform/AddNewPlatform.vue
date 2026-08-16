@@ -7,7 +7,7 @@
     @after-enter="prepareData"
   >
     <v-card
-      class="platform-dialog__card"
+      class="app-dialog platform-dialog__card"
       :title="
         updatingMode
           ? `${tm('dialog.edit')} ${updatingPlatformConfig.id} ${tm(
@@ -20,15 +20,15 @@
         ref="dialogScrollContainer"
         class="pa-4 ml-2 platform-dialog__content"
       >
-        <div class="d-flex align-start" style="width: 100%">
+        <div class="platform-dialog__step">
           <div>
             <v-icon icon="mdi-numeric-1-circle" class="mr-3"></v-icon>
           </div>
-          <div style="flex: 1">
+          <div class="platform-dialog__step-content">
             <h3>
               {{ tm('createDialog.step1Title') }}
             </h3>
-            <small style="color: grey">{{
+            <small class="text-medium-emphasis">{{
               tm('createDialog.step1Hint')
             }}</small>
             <div>
@@ -43,20 +43,14 @@
                   rounded="md"
                   density="comfortable"
                   hide-details
-                  class="mt-6"
-                  style="max-width: 30%; min-width: 300px"
+                  class="mt-6 platform-type-field"
                 >
                   <template #item="{ props: itemProps, item }">
                     <v-list-item v-bind="itemProps">
                       <template #prepend>
                         <img
                           :src="getPlatformTemplateIcon(item)"
-                          style="
-                            width: 32px;
-                            height: 32px;
-                            object-fit: contain;
-                            margin-right: 16px;
-                          "
+                          class="platform-template-icon"
                         />
                       </template>
                       <v-tooltip
@@ -329,8 +323,7 @@
                   rounded="md"
                   density="comfortable"
                   hide-details
-                  class="mt-6"
-                  style="max-width: 30%; min-width: 300px"
+                  class="mt-6 platform-type-field"
                   disabled
                 ></v-text-field>
                 <div class="mt-3">
@@ -347,11 +340,11 @@
           </div>
         </div>
 
-        <div class="d-flex align-start mt-6">
+        <div class="platform-dialog__step mt-6">
           <div>
             <v-icon icon="mdi-numeric-2-circle" class="mr-3"></v-icon>
           </div>
-          <div style="flex: 1">
+          <div class="platform-dialog__step-content">
             <div class="d-flex align-center justify-space-between">
               <div>
                 <div class="d-flex align-center">
@@ -368,10 +361,10 @@
                     >{{ tm('createDialog.optional') }}</v-chip
                   >
                 </div>
-                <small style="color: grey">{{
+                <small class="text-medium-emphasis">{{
                   tm('createDialog.configHint')
                 }}</small>
-                <small v-if="!updatingMode" style="color: grey">{{
+                <small v-if="!updatingMode" class="text-medium-emphasis">{{
                   tm('createDialog.configDefaultHint')
                 }}</small>
               </div>
@@ -415,7 +408,7 @@
                       rounded="md"
                       density="comfortable"
                       hide-details
-                      style="max-width: 30%; min-width: 200px"
+                      class="platform-config-select"
                     >
                     </v-select>
                     <v-btn
@@ -445,8 +438,7 @@
                       rounded="md"
                       density="comfortable"
                       hide-details
-                      style="max-width: 30%; min-width: 200px"
-                      class="ml-10 my-2"
+                      class="ml-10 my-2 platform-config-select"
                     >
                     </v-text-field>
                   </div>
@@ -475,7 +467,7 @@
                       :config-data="newConfigData"
                     />
                   </div>
-                  <div v-else class="text-center py-4 text-grey">
+                  <div v-else class="text-center py-4 text-medium-emphasis">
                     <v-icon>mdi-information-outline</v-icon>
                     <p class="mt-2">
                       {{ tm('createDialog.newConfigLoadFailed') }}
@@ -499,7 +491,7 @@
                     </v-btn>
                   </div>
                   <v-btn
-                    :color="isEditingRoutes ? 'grey' : 'primary'"
+                    :color="isEditingRoutes ? 'on-surface-variant' : 'primary'"
                     variant="tonal"
                     size="small"
                     @click="toggleEditMode"
@@ -532,7 +524,6 @@
                         :class="{
                           'route-source-input-row--editing': isEditingRoutes,
                         }"
-                        style="min-width: 250px"
                       >
                         <v-autocomplete
                           v-if="
@@ -551,7 +542,7 @@
                             tm('createDialog.routeSource.selectPlaceholder')
                           "
                           :no-data-text="tm('createDialog.routeSource.noData')"
-                          style="min-width: 260px"
+                          class="route-source-autocomplete"
                           @update:model-value="
                             applyKnownRouteSource(item, $event)
                           "
@@ -597,7 +588,7 @@
                             variant="outlined"
                             density="compact"
                             hide-details
-                            style="max-width: 140px"
+                            class="route-message-type-field"
                           >
                           </v-select>
                           <small v-else>{{
@@ -622,13 +613,14 @@
                           }}</small>
                         </template>
                       </div>
-                      <span
+                      <button
                         v-if="updatingMode && isEditingRoutes"
                         class="route-source-mode-link"
+                        type="button"
                         @click="toggleRouteSourceMode(item)"
                       >
                         {{ getRouteSourceModeLinkText(item) }}
-                      </span>
+                      </button>
                     </div>
                   </template>
 
@@ -642,7 +634,7 @@
                         item-value="id"
                         variant="outlined"
                         density="compact"
-                        style="min-width: 200px"
+                        class="route-config-select"
                         hide-details
                       >
                       </v-select>
@@ -666,8 +658,7 @@
                           (c) => c.id === item.configId,
                         ) === -1
                       "
-                      style="color: red"
-                      class="ml-2"
+                      class="route-config-missing ml-2"
                       >{{ tm('createDialog.configMissing') }}</small
                     >
                   </template>
@@ -702,10 +693,10 @@
                         <v-icon>mdi-delete</v-icon>
                       </v-btn>
                     </div>
-                    <span v-else class="text-grey">-</span>
+                    <span v-else class="text-medium-emphasis">-</span>
                   </template>
                 </v-data-table>
-                <small class="ml-2 mt-2 d-block" style="color: grey">{{
+                <small class="ml-2 mt-2 d-block text-medium-emphasis">{{
                   tm('createDialog.routeHint')
                 }}</small>
               </div>
@@ -739,7 +730,7 @@
 
   <!-- ID冲突确认对话框 -->
   <v-dialog v-model="showIdConflictDialog" max-width="450" persistent>
-    <v-card>
+    <v-card class="app-dialog">
       <v-card-title class="text-h6 bg-warning d-flex align-center">
         <v-icon start class="me-2">mdi-alert-circle-outline</v-icon>
         {{ tm('dialog.idConflict.title') }}
@@ -749,19 +740,16 @@
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn
-          color="grey"
-          variant="text"
-          @click="handleIdConflictConfirm(false)"
-          >{{ tm('dialog.idConflict.confirm') }}</v-btn
-        >
+        <v-btn variant="text" @click="handleIdConflictConfirm(false)">{{
+          tm('dialog.idConflict.confirm')
+        }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
 
   <!-- 安全警告对话框 -->
   <v-dialog v-model="showOneBotEmptyTokenWarnDialog" max-width="600" persistent>
-    <v-card>
+    <v-card class="app-dialog">
       <v-card-title>
         {{ tm('dialog.securityWarning.title') }}
       </v-card-title>
@@ -799,13 +787,16 @@
     :scrim="true"
     @click:outside="closeConfigDrawer"
   >
-    <v-card class="config-drawer-card" elevation="12">
+    <v-card class="app-dialog config-drawer-card">
       <div class="config-drawer-header">
         <div>
           <span class="text-h6">{{
             tm('createDialog.configDrawerTitle')
           }}</span>
-          <div v-if="configDrawerTargetId" class="text-caption text-grey">
+          <div
+            v-if="configDrawerTargetId"
+            class="text-caption text-medium-emphasis"
+          >
             {{ tm('createDialog.configDrawerIdLabel') }}:
             {{ configDrawerTargetId }}
           </div>
@@ -2116,11 +2107,7 @@ function scrollDialogToBottom() {
 }
 </script>
 
-<style>
-.v-select__selection-text {
-  font-size: 12px;
-}
-
+<style scoped>
 .platform-dialog__card {
   display: flex;
   flex-direction: column;
@@ -2132,11 +2119,38 @@ function scrollDialogToBottom() {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding-right: 20px;
+  padding-right: var(--astrbot-space-4);
 }
 
 .platform-dialog__actions {
   flex-shrink: 0;
+}
+
+.platform-dialog__step {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.platform-dialog__step-content {
+  flex: 1;
+}
+
+.platform-type-field {
+  min-width: 300px;
+  max-width: 30%;
+}
+
+.platform-template-icon {
+  width: 32px;
+  height: 32px;
+  margin-right: var(--astrbot-space-4);
+  object-fit: contain;
+}
+
+.platform-config-select {
+  min-width: 200px;
+  max-width: 30%;
 }
 
 .config-drawer-overlay {
@@ -2146,7 +2160,7 @@ function scrollDialogToBottom() {
 
 .config-drawer-card {
   width: clamp(320px, 60vw, 820px);
-  height: calc(100vh - 32px);
+  height: calc(100dvh - 32px);
   display: flex;
   flex-direction: column;
   margin: 16px;
@@ -2156,13 +2170,13 @@ function scrollDialogToBottom() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px 12px 20px;
+  padding: var(--astrbot-space-4) var(--astrbot-space-6) var(--astrbot-space-3);
 }
 
 .config-drawer-content {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 16px 24px 16px;
+  padding: var(--astrbot-space-4) var(--astrbot-space-4) var(--astrbot-space-6);
 }
 
 .platform-action-row {
@@ -2172,34 +2186,36 @@ function scrollDialogToBottom() {
   gap: 8px;
 }
 
-.creation-mode-group .v-label {
-  opacity: 0.9;
-}
-
 .creation-mode-title {
   font-size: 14px;
   font-weight: 600;
-  color: rgba(var(--v-theme-on-surface), 0.88);
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .route-source-cell {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
+  gap: var(--astrbot-space-1);
   min-width: 260px;
 }
 
+.route-source-input-row {
+  min-width: 250px;
+}
+
 .route-source-input-row--editing {
-  padding-top: 20px;
+  padding-top: var(--astrbot-space-4);
 }
 
 .route-source-mode-link {
-  color: #0000ee;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: rgb(var(--v-theme-primary));
   cursor: pointer;
   font-size: 12px;
   line-height: 1;
-  padding: 2px 0;
   text-decoration: underline;
 }
 
@@ -2211,10 +2227,20 @@ function scrollDialogToBottom() {
   max-width: 100%;
 }
 
-.umo-selection-chip .v-chip__content {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.route-source-autocomplete {
+  min-width: 260px;
+}
+
+.route-message-type-field {
+  max-width: 140px;
+}
+
+.route-config-select {
+  min-width: 200px;
+}
+
+.route-config-missing {
+  color: rgb(var(--v-theme-error));
 }
 
 .registration-inline {

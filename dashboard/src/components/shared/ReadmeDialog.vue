@@ -460,8 +460,7 @@ const showActionArea = computed(() => {
 
         <div
           v-if="loading"
-          class="d-flex flex-column align-center justify-center"
-          style="height: 100%"
+          class="readme-dialog__state d-flex flex-column align-center justify-center"
         >
           <v-progress-circular
             indeterminate
@@ -483,8 +482,7 @@ const showActionArea = computed(() => {
 
         <div
           v-else-if="error"
-          class="d-flex flex-column align-center justify-center"
-          style="height: 100%"
+          class="readme-dialog__state d-flex flex-column align-center justify-center"
         >
           <v-icon size="64" color="error" class="mb-4"
             >mdi-alert-circle-outline</v-icon
@@ -499,8 +497,7 @@ const showActionArea = computed(() => {
 
         <div
           v-else-if="isEmpty"
-          class="d-flex flex-column align-center justify-center"
-          style="height: 100%"
+          class="readme-dialog__state d-flex flex-column align-center justify-center"
         >
           <v-icon size="64" color="warning" class="mb-4"
             >mdi-file-question-outline</v-icon
@@ -524,6 +521,10 @@ const showActionArea = computed(() => {
 </template>
 
 <style scoped>
+.readme-dialog__state {
+  height: 100%;
+}
+
 .readme-dialog-card {
   display: flex;
   flex-direction: column;
@@ -542,7 +543,7 @@ const showActionArea = computed(() => {
   font-family: var(--astrbot-font-ui);
   line-height: 1.6;
   padding: 8px 0;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
 }
 
 :deep(.markdown-body [align='center']) {
@@ -680,7 +681,7 @@ const showActionArea = computed(() => {
 
 :deep(.markdown-body blockquote) {
   padding: 0 1em;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   border-left: 0.25em solid var(--v-theme-border);
   margin-bottom: 16px;
 }
@@ -728,7 +729,7 @@ const showActionArea = computed(() => {
   height: 0.25em;
   padding: 0;
   margin: 24px 0;
-  background-color: var(--v-theme-containerBg);
+  background-color: var(--v-theme-app-surface);
   border: 0;
 }
 

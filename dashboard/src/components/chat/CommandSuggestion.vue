@@ -2,7 +2,6 @@
   <div
     v-if="visible && filteredCommands.length > 0"
     class="command-suggestion-panel"
-    :class="{ 'is-dark': isDark }"
     :style="panelStyle"
   >
     <div class="command-suggestion-list">
@@ -37,12 +36,7 @@
   </div>
   <!-- Tooltip: 鼠标悬停时显示完整用途 -->
   <Teleport to="body">
-    <div
-      v-if="tooltip.visible"
-      class="command-tooltip"
-      :class="{ 'is-dark': isDark }"
-      :style="tooltipStyle"
-    >
+    <div v-if="tooltip.visible" class="command-tooltip" :style="tooltipStyle">
       {{ tooltip.text }}
     </div>
   </Teleport>
@@ -145,21 +139,15 @@ function handleMouseLeave() {
 
 <style scoped>
 .command-suggestion-panel {
-  background: #ffffff;
-  border: 1px solid #e0e0e0;
-  border-radius: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgb(var(--v-theme-outline-variant));
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(24 33 43 / 16%);
   max-height: 280px;
   width: 320px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-.command-suggestion-panel.is-dark {
-  background: #1e1e1e;
-  border-color: #404040;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
 .command-suggestion-list {
@@ -178,11 +166,6 @@ function handleMouseLeave() {
 .command-suggestion-item:hover,
 .command-suggestion-item.active {
   background-color: rgba(var(--v-theme-primary), 0.1);
-}
-
-.is-dark .command-suggestion-item:hover,
-.is-dark .command-suggestion-item.active {
-  background-color: rgba(255, 255, 255, 0.08);
 }
 
 .command-suggestion-main {
@@ -204,45 +187,31 @@ function handleMouseLeave() {
 
 .command-plugin {
   font-size: 11px;
-  color: #888;
-  background: rgba(0, 0, 0, 0.05);
+  color: rgb(var(--v-theme-on-surface-variant));
+  background: rgb(var(--v-theme-surface-variant));
   padding: 1px 6px;
   border-radius: 4px;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
-.is-dark .command-plugin {
-  color: #aaa;
-  background: rgba(255, 255, 255, 0.08);
-}
-
 .command-description {
   font-size: 12px;
-  color: #666;
+  color: rgb(var(--v-theme-on-surface-variant));
   margin-top: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.is-dark .command-description {
-  color: #999;
-}
-
 .command-suggestion-hint {
   display: flex;
   gap: 12px;
   padding: 6px 12px;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid rgb(var(--v-theme-outline-variant));
   font-size: 11px;
-  color: #aaa;
+  color: rgb(var(--v-theme-on-surface-variant));
   flex-shrink: 0;
-}
-
-.is-dark .command-suggestion-hint {
-  border-top-color: #333;
-  color: #666;
 }
 
 .command-suggestion-hint span {
@@ -255,22 +224,15 @@ function handleMouseLeave() {
 .command-tooltip {
   max-width: 360px;
   padding: 8px 12px;
-  background: #ffffff;
-  border: 1px solid #e0e0e0;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgb(var(--v-theme-outline-variant));
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   font-size: 13px;
-  color: #333;
-  line-height: 1.5;
+  color: rgb(var(--v-theme-on-surface));
+  line-height: 18px;
   word-break: break-word;
   pointer-events: none;
   white-space: normal;
-}
-
-.command-tooltip.is-dark {
-  background: #2d2d2d;
-  border-color: #404040;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-  color: #e0e0e0;
 }
 </style>

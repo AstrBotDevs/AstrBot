@@ -3,7 +3,7 @@
     <v-list-item
       :active="selectedFolderId === folder.folder_id"
       :disabled="isDisabled"
-      rounded="lg"
+      rounded="md"
       :style="{ paddingLeft: `${(depth + 1) * 16}px` }"
       class="folder-item"
       @click.stop="!isDisabled && emit('select', folder.folder_id)"

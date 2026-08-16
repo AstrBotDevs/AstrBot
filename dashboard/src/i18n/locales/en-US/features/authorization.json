@@ -25,7 +25,7 @@
   "cancel": "Cancel",
   "continue": "Continue",
   "stepUpTitle": "Confirm sensitive action",
-  "stepUpText": "Verify your Dashboard password to issue a one-time credential for this revocation.",
+  "stepUpText": "Verify your Dashboard password or TOTP code to issue a one-time credential for this sensitive operation.",
   "password": "Dashboard password",
   "verify": "Verify",
   "stepUpReady": "Verification complete. You can now revoke the selected bindings.",

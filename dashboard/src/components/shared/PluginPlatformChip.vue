@@ -12,10 +12,6 @@ const props = defineProps({
     type: String,
     default: 'small',
   },
-  chipStyle: {
-    type: Object,
-    default: () => ({}),
-  },
 });
 
 const { tm } = useModuleI18n('features/extension');
@@ -35,95 +31,96 @@ const platformDetails = computed(() => {
 
 <template>
   <div class="d-inline-block">
-    <v-chip
-      v-if="platformDetails.length"
-      color="info"
-      variant="outlined"
-      label
-      :size="size"
-      class="plugin-platform-chip"
-      :style="{ cursor: 'pointer', ...chipStyle }"
-      @click.stop="showMenu = !showMenu"
+    <v-menu
+      v-model="showMenu"
+      location="top"
+      :close-on-content-click="false"
+      transition="scale-transition"
+      open-on-hover
+      elevation="4"
     >
-      <div class="d-flex align-center" style="gap: 2px">
-        <!-- 显示图标，最多 5 个 -->
-        <div
-          v-if="platformDetails.some((p) => p.icon)"
-          class="d-flex align-center mr-1"
+      <template #activator="{ props: menuProps }">
+        <v-chip
+          v-if="platformDetails.length"
+          v-bind="menuProps"
+          color="info"
+          variant="outlined"
+          label
+          :size="size"
+          class="plugin-platform-chip"
         >
-          <v-avatar
-            v-for="(platform, index) in platformDetails.slice(0, 5)"
-            :key="index"
-            :size="size === 'x-small' ? 12 : 14"
-            class="platform-mini-icon"
-            :style="{
-              marginLeft: index > 0 ? '-4px' : '0',
-              zIndex: 10 - index,
-            }"
-          >
-            <v-img v-if="platform.icon" :src="platform.icon"></v-img>
-            <v-icon
-              v-else
-              icon="mdi-circle-small"
-              :size="size === 'x-small' ? 8 : 10"
-            ></v-icon>
-          </v-avatar>
-        </div>
-
-        <span class="text-caption font-weight-bold">
-          {{
-            tm('card.status.supportPlatformsCount', {
-              count: platformDetails.length,
-            })
-          }}
-        </span>
-
-        <v-icon
-          :icon="showMenu ? 'mdi-chevron-up' : 'mdi-chevron-down'"
-          :size="size === 'x-small' ? 14 : 16"
-          class="ml-n1"
-        ></v-icon>
-      </div>
-
-      <v-menu
-        v-model="showMenu"
-        activator="parent"
-        location="top"
-        :close-on-content-click="false"
-        transition="scale-transition"
-        open-on-hover
-      >
-        <v-list density="compact" border elevation="12" class="rounded-lg pa-1">
-          <v-list-item
-            v-for="platform in platformDetails"
-            :key="platform.name"
-            min-height="24"
-            class="px-2"
-          >
-            <template #prepend>
-              <v-avatar v-if="platform.icon" size="14" class="mr-2">
-                <v-img :src="platform.icon"></v-img>
-              </v-avatar>
-              <v-icon v-else icon="mdi-apps" size="12" class="mr-2"></v-icon>
-            </template>
-            <v-list-item-title
-              class="text-caption font-weight-bold"
-              style="font-size: 0.75rem !important"
+          <div class="plugin-platform-chip__content d-flex align-center">
+            <!-- 显示图标，最多 5 个 -->
+            <div
+              v-if="platformDetails.some((p) => p.icon)"
+              class="d-flex align-center mr-1"
             >
-              {{ platform.name }}
-            </v-list-item-title>
-          </v-list-item>
-        </v-list>
-      </v-menu>
-    </v-chip>
+              <v-avatar
+                v-for="(platform, index) in platformDetails.slice(0, 5)"
+                :key="index"
+                :size="size === 'x-small' ? 12 : 14"
+                class="platform-mini-icon"
+                :style="{
+                  marginLeft: index > 0 ? '-4px' : '0',
+                  zIndex: 10 - index,
+                }"
+              >
+                <v-img v-if="platform.icon" :src="platform.icon"></v-img>
+                <v-icon
+                  v-else
+                  icon="mdi-circle-small"
+                  :size="size === 'x-small' ? 8 : 10"
+                ></v-icon>
+              </v-avatar>
+            </div>
+
+            <span class="text-caption font-weight-bold">
+              {{
+                tm('card.status.supportPlatformsCount', {
+                  count: platformDetails.length,
+                })
+              }}
+            </span>
+
+            <v-icon
+              :icon="showMenu ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+              :size="size === 'x-small' ? 14 : 16"
+              class="ml-n1"
+            ></v-icon>
+          </div>
+        </v-chip>
+      </template>
+      <v-list density="compact" border class="plugin-platform-menu pa-1">
+        <v-list-item
+          v-for="platform in platformDetails"
+          :key="platform.name"
+          min-height="24"
+          class="px-2"
+        >
+          <template #prepend>
+            <v-avatar v-if="platform.icon" size="14" class="mr-2">
+              <v-img :src="platform.icon"></v-img>
+            </v-avatar>
+            <v-icon v-else icon="mdi-apps" size="12" class="mr-2"></v-icon>
+          </template>
+          <v-list-item-title class="plugin-platform-menu__title">
+            {{ platform.name }}
+          </v-list-item-title>
+        </v-list-item>
+      </v-list>
+    </v-menu>
   </div>
 </template>
 
 <style scoped>
 .plugin-platform-chip {
-  padding-left: 6px !important;
-  padding-right: 4px !important;
-  transition: all 0.2s ease;
+  padding-left: var(--astrbot-space-2);
+  padding-right: var(--astrbot-space-1);
+  cursor: pointer;
+}
+
+.plugin-platform-chip__content {
+  gap: 2px;
 }
 
 .platform-mini-icon {
@@ -132,6 +129,15 @@ const platformDetails = computed(() => {
 }
 
 .plugin-platform-chip:hover {
-  background: rgba(var(--v-theme-info), 0.08);
+  background: rgb(var(--v-theme-surface-variant));
+}
+
+.plugin-platform-menu {
+  border-radius: 8px;
+}
+
+.plugin-platform-menu__title {
+  font-size: 12px;
+  font-weight: 600;
 }
 </style>

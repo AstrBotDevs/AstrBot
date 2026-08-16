@@ -557,7 +557,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
             v-model:value="currentEditingKeyIterable[currentEditingKey]"
             :theme="currentEditingTheme"
             :language="currentEditingLanguage"
-            style="height: calc(100vh - 64px)"
+            class="config-fullscreen-editor"
           >
           </VueMonacoEditor>
         </v-card-text>
@@ -567,6 +567,10 @@ function hasVisibleItemsAfter(items, currentIndex) {
 </template>
 
 <style scoped>
+.config-fullscreen-editor {
+  height: calc(100dvh - 64px);
+}
+
 .config-section {
   margin-bottom: 12px;
 }
@@ -574,12 +578,12 @@ function hasVisibleItemsAfter(items, currentIndex) {
 .config-title {
   font-weight: 600;
   font-size: 1rem;
-  color: var(--v-theme-primaryText);
+  color: var(--v-theme-on-surface);
 }
 
 .config-hint {
   font-size: 0.75rem;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   margin-top: 2px;
 }
 
@@ -636,7 +640,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
 .property-name {
   font-size: 0.875rem;
   font-weight: 600;
-  color: var(--v-theme-primaryText);
+  color: var(--v-theme-on-surface);
 }
 
 .property-link {
@@ -660,7 +664,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
 
 .property-hint {
   font-size: 0.75rem;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   margin-top: 2px;
 }
 

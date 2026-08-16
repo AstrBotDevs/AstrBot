@@ -1,20 +1,12 @@
 <template>
-  <div style="display: flex; flex-direction: column; height: 100%">
-    <div
-      style="
-        flex-grow: 1;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-direction: column;
-      "
-    >
-      <div style="text-align: center; max-width: 600px">
+  <div class="about-page">
+    <div class="about-page__content">
+      <div class="about-page__hero">
         <h1 class="font-weight-bold">{{ tm('hero.title') }}</h1>
-        <p class="text-subtitle-1" style="color: var(--v-theme-secondaryText)">
+        <p class="text-subtitle-1 text-medium-emphasis">
           {{ tm('hero.subtitle') }}
         </p>
-        <div style="margin-top: 20px; display: flex; justify-content: center">
+        <div class="about-page__actions">
           <v-btn
             color="primary"
             variant="tonal"
@@ -49,3 +41,30 @@ function open(url: string): void {
   window.open(url, '_blank');
 }
 </script>
+
+<style scoped>
+.about-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.about-page__content {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+}
+
+.about-page__hero {
+  max-width: 600px;
+  text-align: center;
+}
+
+.about-page__actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--astrbot-space-4);
+  margin-top: var(--astrbot-space-6);
+}
+</style>

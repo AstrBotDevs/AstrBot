@@ -1,3 +1,5 @@
+import { resolveThemeName, themeNames } from '@/design/theme';
+
 export type ThemeMode = 'light' | 'dark' | 'system';
 
 export type ConfigProps = {
@@ -17,8 +19,7 @@ function checkThemeMode(): ThemeMode {
 }
 
 export function resolveUiTheme(mode: ThemeMode): string {
-  if (mode === 'dark') return 'PurpleThemeDark';
-  if (mode === 'light') return 'PurpleTheme';
+  if (mode === 'dark' || mode === 'light') return resolveThemeName(mode);
   return getSystemUiTheme();
 }
 
@@ -26,11 +27,11 @@ export function getSystemUiTheme(): string {
   const prefersDark =
     typeof window !== 'undefined' &&
     window.matchMedia('(prefers-color-scheme: dark)').matches;
-  return prefersDark ? 'PurpleThemeDark' : 'PurpleTheme';
+  return prefersDark ? themeNames.dark : themeNames.light;
 }
 
 export function getInitialSystemPrefersDark(): boolean {
-  return getSystemUiTheme() === 'PurpleThemeDark';
+  return getSystemUiTheme() === themeNames.dark;
 }
 
 const themeMode = checkThemeMode();

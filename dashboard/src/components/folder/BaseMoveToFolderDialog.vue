@@ -16,7 +16,7 @@
             <!-- 根目录选项 -->
             <v-list-item
               :active="selectedFolderId === null"
-              rounded="lg"
+              rounded="md"
               class="mb-1"
               @click="selectFolder(null)"
             >

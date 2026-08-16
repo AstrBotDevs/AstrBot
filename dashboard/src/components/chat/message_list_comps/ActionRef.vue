@@ -151,7 +151,7 @@ function handleClick(): void {
 .refs-more {
   margin-left: 6px;
   font-size: 11px;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   opacity: 0.7;
   font-weight: 500;
 }

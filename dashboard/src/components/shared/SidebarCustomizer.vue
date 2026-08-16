@@ -1,17 +1,17 @@
 <template>
-  <div style="margin-top: 16px">
+  <div class="sidebar-customizer">
     <v-btn
       color="primary"
       variant="tonal"
       size="small"
-      style="margin-bottom: 8px"
+      class="sidebar-customizer__trigger"
       @click="openDialog"
     >
       {{ t('features.settings.sidebar.customize.title') }}
     </v-btn>
 
     <v-dialog v-model="dialog" max-width="700px" scrollable>
-      <v-card class="sidebar-customizer-dialog">
+      <v-card class="app-dialog sidebar-customizer-dialog">
         <v-card-title
           class="text-h3 pa-4 pb-0 pl-6 d-flex justify-space-between align-center"
         >
@@ -253,6 +253,14 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.sidebar-customizer {
+  margin-top: var(--astrbot-space-4);
+}
+
+.sidebar-customizer__trigger {
+  margin-bottom: var(--astrbot-space-2);
+}
+
 .sidebar-customizer-dialog {
   display: flex;
   flex-direction: column;

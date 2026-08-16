@@ -59,6 +59,13 @@
       </v-card-actions>
     </v-card>
   </v-dialog>
+  <DashboardStepUpDialog
+    v-model="stepUpDialogOpen"
+    :loading="stepUpLoading"
+    :error-message="stepUpErrorMessage"
+    @confirm="submitStepUp"
+    @cancel="cancelStepUp"
+  />
 </template>
 
 <script setup lang="ts">
@@ -74,6 +81,9 @@ import {
   type VersionData,
 } from '@/api/v1';
 import { useI18n } from '@/i18n/composables';
+import DashboardStepUpDialog from './DashboardStepUpDialog.vue';
+import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
+import { stepUpHeaders } from '@/utils/stepUp';
 
 type RecoveryEventDetail = VersionData & {
   blocking?: boolean;
@@ -81,6 +91,14 @@ type RecoveryEventDetail = VersionData & {
 
 const { t } = useI18n();
 const route = useRoute();
+const {
+  dialogOpen: stepUpDialogOpen,
+  loading: stepUpLoading,
+  errorMessage: stepUpErrorMessage,
+  requestStepUp,
+  submitStepUp,
+  cancelStepUp,
+} = useDashboardStepUp();
 
 const visible = ref(false);
 const restarting = ref(false);
@@ -187,12 +205,25 @@ function waitForRestart() {
 }
 
 async function restartCore() {
+  const stepUp = await requestStepUp({
+    action: 'system.restart',
+    resourceType: 'system',
+    resourceId: 'restart',
+  });
+  if (!stepUp) return;
   restarting.value = true;
   statusMessage.value = t('core.common.upgradeRecovery.restarting');
   try {
     initialStartTime.value =
       initialStartTime.value ?? (await fetchLegacyStartTime());
-    await statsApi.restart(recoveryRequestConfig());
+    const recoveryConfig = recoveryRequestConfig();
+    await statsApi.restart({
+      ...recoveryConfig,
+      headers: {
+        ...(recoveryConfig.headers as Record<string, string>),
+        ...stepUpHeaders(stepUp),
+      },
+    });
     statusMessage.value = t('core.common.upgradeRecovery.waiting');
     waitForRestart();
   } catch (_error) {

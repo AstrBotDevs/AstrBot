@@ -384,14 +384,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="trace-cell umo">{{ event.umo }}</div>
           <div class="trace-cell sender">
-            <div
-              class="event-sub"
-              style="
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-              "
-            >
+            <div class="event-sub trace-sender">
               {{ event.sender_name || '-' }}
             </div>
           </div>
@@ -445,6 +438,12 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.trace-sender {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .trace-wrapper {
   height: 100%;
 }
