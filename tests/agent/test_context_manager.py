@@ -412,6 +412,37 @@ class TestContextManager:
         assert len(result) == 20
         assert result == messages
 
+    @pytest.mark.asyncio
+    async def test_process_fixes_incomplete_tool_history_without_limits(self):
+        """Provider-facing history is valid even when no size limit is enabled."""
+        config = ContextConfig(max_context_tokens=0, enforce_max_turns=-1)
+        manager = ContextManager(config)
+        messages = [
+            self.create_message("user", "Run both tools"),
+            Message(
+                role="assistant",
+                content="Calling tools",
+                tool_calls=[
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "first", "arguments": "{}"},
+                    },
+                    {
+                        "id": "call_2",
+                        "type": "function",
+                        "function": {"name": "second", "arguments": "{}"},
+                    },
+                ],
+            ),
+            Message(role="tool", content="first result", tool_call_id="call_1"),
+            self.create_message("user", "Continue"),
+        ]
+
+        result = await manager.process(messages)
+
+        assert result == [messages[0], messages[-1]]
+
     # ==================== Enforce Max Turns Tests ====================
 
     @pytest.mark.asyncio
@@ -655,12 +686,47 @@ class TestContextManager:
 
         # Make compressor raise an exception
         with patch.object(
-            manager.compressor, "__call__", side_effect=Exception("Test error")
+            manager, "_run_compression", side_effect=Exception("Test error")
         ):
             result = await manager.process(messages)
 
             # Should return original messages despite error
             assert result == messages
+
+    @pytest.mark.asyncio
+    async def test_error_handling_keeps_tool_history_sanitized(self):
+        """Compression errors must not restore an invalid tool history block."""
+        config = ContextConfig(max_context_tokens=1)
+        manager = ContextManager(config)
+        manager.compressor.should_compress = MagicMock(return_value=True)
+        messages = [
+            self.create_message("user", "Run both tools"),
+            Message(
+                role="assistant",
+                content="Calling tools",
+                tool_calls=[
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "first", "arguments": "{}"},
+                    },
+                    {
+                        "id": "call_2",
+                        "type": "function",
+                        "function": {"name": "second", "arguments": "{}"},
+                    },
+                ],
+            ),
+            Message(role="tool", content="first result", tool_call_id="call_1"),
+            self.create_message("user", "Continue"),
+        ]
+
+        with patch.object(
+            manager, "_run_compression", side_effect=Exception("Test error")
+        ):
+            result = await manager.process(messages)
+
+        assert result == [messages[0], messages[-1]]
 
     @pytest.mark.asyncio
     async def test_error_handling_logs_exception(self):
