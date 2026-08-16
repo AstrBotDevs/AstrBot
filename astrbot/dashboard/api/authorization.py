@@ -180,9 +180,7 @@ def _resource(payload) -> Resource:
             # platform IDs never become resource keys. Keep step-up issuance
             # on the same canonical resource as bot mutation requests.
             if payload.resource_id == "collection":
-                return Resource.named(
-                    "bot", "collection", config_id=payload.config_id
-                )
+                return Resource.named("bot", "collection", config_id=payload.config_id)
             return object_resource(
                 "bot", payload.resource_id, config_id=payload.config_id
             )
