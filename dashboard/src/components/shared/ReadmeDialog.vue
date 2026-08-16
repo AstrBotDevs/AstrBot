@@ -434,7 +434,12 @@ const showActionArea = computed(() => {
     <v-card class="readme-dialog-card">
       <v-card-title class="d-flex justify-space-between align-center">
         <span class="text-h2 pa-2">{{ modeConfig.title }}</span>
-        <v-btn icon variant="text" @click="_show = false">
+        <v-btn
+          icon
+          variant="text"
+          :aria-label="t('core.common.close')"
+          @click="_show = false"
+        >
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>

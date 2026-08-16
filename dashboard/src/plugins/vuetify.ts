@@ -5,9 +5,13 @@ import * as components from 'vuetify/components';
 import * as directives from 'vuetify/directives';
 import { astrBotThemes, themeNames } from '@/design/theme';
 
+const testComponentRegistry =
+  import.meta.env.MODE === 'test' ? { components, directives } : {};
+
 export default createVuetify({
-  components,
-  directives,
+  // Vitest does not run vite-plugin-vuetify's SFC transform. Register the
+  // components there while production keeps tree-shaken auto-imports.
+  ...testComponentRegistry,
 
   theme: {
     defaultTheme: themeNames.light,

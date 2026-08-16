@@ -437,7 +437,12 @@ onMounted(refresh);
         </p>
       </div>
       <v-spacer />
-      <v-btn icon="mdi-refresh" :loading="loading" @click="refresh" />
+      <v-btn
+        icon="mdi-refresh"
+        :loading="loading"
+        :aria-label="t('features.authorization.refresh')"
+        @click="refresh"
+      />
     </div>
 
     <v-tabs v-model="tab" color="primary">

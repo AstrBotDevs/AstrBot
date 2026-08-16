@@ -1,7 +1,13 @@
 <template>
   <div class="live-mode-container">
     <div class="header-controls">
-      <v-btn icon="mdi-close" flat variant="text" @click="handleClose" />
+      <v-btn
+        icon="mdi-close"
+        flat
+        variant="text"
+        :aria-label="t('core.common.close')"
+        @click="handleClose"
+      />
       <v-btn
         :icon="isCodeMode ? 'mdi-code-tags-check' : 'mdi-code-tags'"
         flat
@@ -99,6 +105,7 @@
 <script setup lang="ts">
 import { ref, computed, onBeforeUnmount, watch } from 'vue';
 import { useTheme } from 'vuetify';
+import { useI18n } from '@/i18n/composables';
 import { chatApi } from '@/api/v1';
 import { useVADRecording } from '@/composables/useVADRecording';
 import SiriOrb from './LiveOrb.vue';
@@ -106,6 +113,8 @@ import SiriOrb from './LiveOrb.vue';
 const emit = defineEmits<{
   close: [];
 }>();
+
+const { t } = useI18n();
 
 const theme = useTheme();
 const isDark = computed(() => theme.global.current.value.dark);

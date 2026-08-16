@@ -80,6 +80,7 @@
     "newConfig": "New Configuration",
     "copyConfig": "Copy Configuration",
     "editConfig": "Edit Configuration",
+    "deleteConfig": "Delete Configuration",
     "manageConfigs": "Manage Configurations...",
     "configName": "Name",
     "fillConfigName": "Enter configuration name",
@@ -93,6 +94,7 @@
   },
   "buttons": {
     "cancel": "Cancel",
+    "close": "Close",
     "create": "Create",
     "update": "Update"
   },

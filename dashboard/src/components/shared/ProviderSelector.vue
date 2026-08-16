@@ -269,7 +269,12 @@
   >
     <v-card class="provider-drawer-card" elevation="4">
       <div class="provider-drawer-header">
-        <v-btn icon variant="text" @click="closeProviderDrawer">
+        <v-btn
+          icon
+          variant="text"
+          :aria-label="tm('providerSelector.cancelSelection')"
+          @click="closeProviderDrawer"
+        >
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </div>

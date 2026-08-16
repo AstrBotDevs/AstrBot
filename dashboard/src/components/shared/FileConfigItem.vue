@@ -19,7 +19,12 @@
         <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
           <span>{{ tm('fileUpload.dialogTitle') }}</span>
           <v-spacer />
-          <v-btn icon="mdi-close" variant="text" @click="dialog = false" />
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            :aria-label="tm('fileUpload.dialogTitle')"
+            @click="dialog = false"
+          />
         </v-card-title>
 
         <v-card-text class="file-dialog-body">

@@ -5,7 +5,12 @@
         class="dialog-title d-flex align-center justify-space-between"
       >
         <span>{{ title }}</span>
-        <v-btn icon="mdi-close" variant="text" @click="handleClose"></v-btn>
+        <v-btn
+          icon="mdi-close"
+          variant="text"
+          :aria-label="t('core.common.close')"
+          @click="handleClose"
+        ></v-btn>
       </v-card-title>
       <v-card-text>
         <div class="message-text">{{ message }}</div>

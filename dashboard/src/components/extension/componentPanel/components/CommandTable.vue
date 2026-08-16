@@ -242,7 +242,12 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
               }}</v-tooltip>
             </v-btn>
 
-            <v-btn icon size="small" @click="emit('view-details', item)">
+            <v-btn
+              icon
+              size="small"
+              :aria-label="tm('tooltips.viewDetails')"
+              @click="emit('view-details', item)"
+            >
               <v-icon size="22">mdi-information</v-icon>
               <v-tooltip activator="parent" location="top">{{
                 tm('tooltips.viewDetails')

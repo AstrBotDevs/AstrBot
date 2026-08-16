@@ -76,6 +76,7 @@
             variant="text"
             size="small"
             color="info"
+            :aria-label="t('documents.view')"
             @click="viewDocument(item)"
           />
           <v-btn
@@ -83,6 +84,7 @@
             variant="text"
             size="small"
             color="error"
+            :aria-label="t('documents.delete')"
             @click="confirmDelete(item)"
           />
         </template>
@@ -109,7 +111,12 @@
         <v-card-title class="pa-4 d-flex align-center">
           <span class="text-h5">{{ t('upload.title') }}</span>
           <v-spacer />
-          <v-btn icon="mdi-close" variant="text" @click="closeUploadDialog" />
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            :aria-label="t('upload.cancel')"
+            @click="closeUploadDialog"
+          />
         </v-card-title>
 
         <v-tabs v-model="uploadMode" grow class="mb-4">
@@ -185,6 +192,7 @@
                         icon="mdi-close"
                         variant="text"
                         size="small"
+                        :aria-label="t('documents.delete')"
                         @click="removeFile(index)"
                       />
                     </div>

@@ -4,6 +4,7 @@
   "bindings": "Bindings",
   "accounts": "Accounts",
   "audit": "Audit",
+  "refresh": "Refresh authorization data",
   "filter": "Filter bindings",
   "revokeSelected": "Revoke selected",
   "subject": "Subject",

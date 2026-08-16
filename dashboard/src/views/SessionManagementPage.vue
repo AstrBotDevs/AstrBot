@@ -139,6 +139,7 @@
                 variant="tonal"
                 color="primary"
                 class="mr-1"
+                :aria-label="tm('buttons.editRule')"
                 @click="openRuleEditor(item)"
               >
                 <v-icon>mdi-pencil</v-icon>
@@ -150,6 +151,7 @@
                 size="small"
                 variant="tonal"
                 color="error"
+                :aria-label="tm('buttons.deleteAllRules')"
                 @click="confirmDeleteRules(item)"
               >
                 <v-icon>mdi-delete</v-icon>
@@ -347,6 +349,7 @@
                       icon
                       size="small"
                       variant="text"
+                      :aria-label="tm('buttons.edit')"
                       @click="openEditGroupDialog(group)"
                     >
                       <v-icon size="small">mdi-pencil</v-icon>
@@ -356,6 +359,7 @@
                       size="small"
                       variant="text"
                       color="error"
+                      :aria-label="tm('buttons.delete')"
                       @click="deleteGroup(group)"
                     >
                       <v-icon size="small">mdi-delete</v-icon>
@@ -477,6 +481,7 @@
                   color="primary"
                   class="mb-2"
                   :disabled="unselectedUmos.length === 0"
+                  :aria-label="tm('groups.addToGroup')"
                   @click="addAllToGroup"
                 >
                   <v-icon>mdi-chevron-double-right</v-icon>
@@ -487,6 +492,7 @@
                   variant="tonal"
                   color="error"
                   :disabled="editingGroup.umos.length === 0"
+                  :aria-label="tm('buttons.clear')"
                   @click="removeAllFromGroup"
                 >
                   <v-icon>mdi-chevron-double-left</v-icon>
@@ -570,7 +576,12 @@
           <v-card-title class="d-flex align-center py-3 px-4">
             <span>{{ tm('addRule.title') }}</span>
             <v-spacer></v-spacer>
-            <v-btn icon variant="text" @click="addRuleDialog = false">
+            <v-btn
+              icon
+              variant="text"
+              :aria-label="tm('buttons.cancel')"
+              @click="addRuleDialog = false"
+            >
               <v-icon>mdi-close</v-icon>
             </v-btn>
           </v-card-title>

@@ -103,8 +103,8 @@ onMounted(() => {
         :model-value="routerLoadingStore.progress"
         color="primary"
         height="2"
-        fixed
-        top
+        absolute
+        location="top"
         class="router-progress"
       />
       <VerticalHeaderVue />

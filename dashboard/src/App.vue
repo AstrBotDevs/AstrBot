@@ -9,7 +9,6 @@
     v-model="snackbarShow"
     :color="toastStore.current.color"
     :timeout="toastStore.current.timeout"
-    :multi-line="toastStore.current.multiLine"
     :location="toastStore.current.location"
     close-on-back
   >

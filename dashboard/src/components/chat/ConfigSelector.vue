@@ -28,7 +28,12 @@
       <v-card class="config-selector-dialog">
         <v-card-title class="d-flex align-center justify-space-between">
           <span>选择配置文件</span>
-          <v-btn icon variant="text" @click="closeDialog">
+          <v-btn
+            icon
+            variant="text"
+            :aria-label="tm('commandSuggestion.close')"
+            @click="closeDialog"
+          >
             <v-icon>mdi-close</v-icon>
           </v-btn>
         </v-card-title>

@@ -178,7 +178,12 @@ void getCurrentVersion();
         <span class="text-h3">{{
           t('core.navigation.changelogDialog.title')
         }}</span>
-        <v-btn icon flat @click="dialog = false">
+        <v-btn
+          icon
+          flat
+          :aria-label="t('core.common.close')"
+          @click="dialog = false"
+        >
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>

@@ -40,7 +40,8 @@
   "actions": {
     "view": "查看",
     "edit": "编辑",
-    "delete": "删除"
+    "delete": "删除",
+    "copy": "复制"
   },
   "messageTypes": {
     "group": "群聊",

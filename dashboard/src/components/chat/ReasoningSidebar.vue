@@ -4,7 +4,13 @@
       <aside v-if="modelValue" class="reasoning-sidebar">
         <div class="reasoning-sidebar-header">
           <div class="reasoning-sidebar-title">{{ reasoningTitle }}</div>
-          <v-btn icon="mdi-close" size="small" variant="text" @click="close" />
+          <v-btn
+            icon="mdi-close"
+            size="small"
+            variant="text"
+            aria-label="Close reasoning sidebar"
+            @click="close"
+          />
         </div>
 
         <div class="reasoning-sidebar-body">

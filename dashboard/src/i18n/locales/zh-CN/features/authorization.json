@@ -4,6 +4,7 @@
   "bindings": "角色绑定",
   "accounts": "账户",
   "audit": "审计",
+  "refresh": "刷新授权数据",
   "filter": "筛选绑定",
   "revokeSelected": "撤销所选绑定",
   "subject": "主体",

@@ -123,8 +123,12 @@
       scrollable
     >
       <v-card class="app-dialog config-editor-dialog">
-        <v-toolbar color="primary" dark>
-          <v-btn icon @click="codeEditorDialog = false">
+        <v-toolbar color="primary">
+          <v-btn
+            icon
+            :aria-label="tm('buttons.close')"
+            @click="codeEditorDialog = false"
+          >
             <v-icon>mdi-close</v-icon>
           </v-btn>
           <v-toolbar-title>{{ tm('codeEditor.title') }}</v-toolbar-title>
@@ -163,6 +167,7 @@
           <v-btn
             icon="mdi-close"
             variant="text"
+            :aria-label="tm('buttons.close')"
             @click="configManageDialog = false"
           ></v-btn>
         </v-card-title>
@@ -194,6 +199,7 @@
                     size="small"
                     variant="text"
                     color="primary"
+                    :aria-label="tm('configManagement.copyConfig')"
                     @click="startCopyConfig(config)"
                   ></v-btn>
                   <v-btn
@@ -202,6 +208,7 @@
                     size="small"
                     variant="text"
                     color="warning"
+                    :aria-label="tm('configManagement.editConfig')"
                     @click="startEditConfig(config)"
                   ></v-btn>
                   <v-btn
@@ -210,6 +217,7 @@
                     size="small"
                     variant="text"
                     color="error"
+                    :aria-label="tm('configManagement.deleteConfig')"
                     @click="confirmDeleteConfig(config)"
                   ></v-btn>
                 </div>
@@ -290,7 +298,12 @@
               {{ selectedConfigInfo.name }} ({{ testConfigId }})
             </div>
           </div>
-          <v-btn icon variant="text" @click="closeTestChat">
+          <v-btn
+            icon
+            variant="text"
+            :aria-label="tm('buttons.close')"
+            @click="closeTestChat"
+          >
             <v-icon>mdi-close</v-icon>
           </v-btn>
         </div>

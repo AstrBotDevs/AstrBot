@@ -9,10 +9,10 @@
           filter
           variant="flat"
           size="small"
-          :text-color="
-            level === 'DEBUG' || level === 'INFO' ? 'black' : 'white'
-          "
-          class="font-weight-medium"
+          :class="[
+            'font-weight-medium',
+            level === 'DEBUG' || level === 'INFO' ? 'text-black' : 'text-white',
+          ]"
         >
           {{ level }}
         </v-chip>
@@ -23,6 +23,9 @@
         variant="text"
         density="compact"
         class="me-4 fullscreen-btn"
+        :aria-label="
+          isFullscreen ? 'Exit console fullscreen' : 'Enter console fullscreen'
+        "
         @click="toggleFullscreen"
       ></v-btn>
     </div>

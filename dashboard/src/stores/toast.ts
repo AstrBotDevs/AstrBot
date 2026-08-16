@@ -8,7 +8,6 @@ export interface ToastItem {
   color: ToastColor;
   timeout: number;
   closable: boolean;
-  multiLine: boolean;
   location: string;
 }
 
@@ -17,7 +16,6 @@ export interface ToastPayload {
   color?: ToastColor;
   timeout?: number;
   closable?: boolean;
-  multiLine?: boolean;
   location?: string;
 }
 
@@ -30,7 +28,6 @@ export const useToastStore = defineStore('toast', () => {
     color = 'info',
     timeout = 3000,
     closable = true,
-    multiLine = false,
     location = 'top center',
   }: ToastPayload): void {
     queue.value.push({
@@ -38,7 +35,6 @@ export const useToastStore = defineStore('toast', () => {
       color,
       timeout,
       closable,
-      multiLine,
       location,
     });
   }

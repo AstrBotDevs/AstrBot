@@ -510,8 +510,12 @@ function shouldShowSection() {
     scrollable
   >
     <v-card>
-      <v-toolbar color="primary" dark>
-        <v-btn icon @click="dialog = false">
+      <v-toolbar color="primary">
+        <v-btn
+          icon
+          :aria-label="t('core.common.close')"
+          @click="dialog = false"
+        >
           <v-icon>mdi-close</v-icon>
         </v-btn>
         <v-toolbar-title

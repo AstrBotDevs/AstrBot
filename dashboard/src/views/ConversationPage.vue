@@ -151,6 +151,7 @@
                     :ripple="false"
                     class="conversation-inline-edit"
                     :disabled="loading"
+                    :aria-label="tm('actions.edit')"
                     @click.stop="editConversation(item)"
                   >
                     <v-icon size="14">mdi-pencil</v-icon>
@@ -208,6 +209,7 @@
                   variant="plain"
                   size="x-small"
                   class="umo-copy-button"
+                  :aria-label="tm('actions.copy')"
                   @click.stop="copyUmoSource(item)"
                 >
                   <v-icon size="16">mdi-content-copy</v-icon>
@@ -231,6 +233,7 @@
                   size="x-small"
                   class="action-button"
                   :disabled="loading"
+                  :aria-label="tm('actions.view')"
                   @click="viewConversation(item)"
                 >
                   <v-icon>mdi-eye</v-icon>
@@ -242,6 +245,7 @@
                   size="x-small"
                   class="action-button"
                   :disabled="loading"
+                  :aria-label="tm('actions.delete')"
                   @click="confirmDeleteConversation(item)"
                 >
                   <v-icon>mdi-delete</v-icon>

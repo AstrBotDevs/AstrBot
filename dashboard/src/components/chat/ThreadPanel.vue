@@ -14,7 +14,13 @@
             :disabled="sending || deleting"
             @click="emit('delete', thread)"
           />
-          <v-btn icon="mdi-close" size="small" variant="text" @click="close" />
+          <v-btn
+            icon="mdi-close"
+            size="small"
+            variant="text"
+            :aria-label="tm('commandSuggestion.close')"
+            @click="close"
+          />
         </div>
       </div>
 

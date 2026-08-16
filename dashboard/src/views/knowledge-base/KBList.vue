@@ -165,7 +165,12 @@
             editingKB ? t('edit.title') : t('create.title')
           }}</span>
           <v-spacer />
-          <v-btn icon="mdi-close" variant="text" @click="closeCreateDialog" />
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            :aria-label="t('create.cancel')"
+            @click="closeCreateDialog"
+          />
         </v-card-title>
 
         <v-divider />
@@ -228,10 +233,8 @@
                   <template #subtitle>
                     {{
                       t('create.providerInfo', {
-                        id: providerSelectItem(item).raw.id,
-                        dimensions:
-                          providerSelectItem(item).raw.embedding_dimensions ||
-                          'N/A',
+                        id: item.id,
+                        dimensions: item.embedding_dimensions || 'N/A',
                       })
                     }}
                   </template>
@@ -254,7 +257,7 @@
                   <template #subtitle>
                     {{
                       t('create.rerankProviderInfo', {
-                        id: providerSelectItem(item).raw.id,
+                        id: item.id,
                       })
                     }}
                   </template>
@@ -392,10 +395,6 @@ interface ProviderItem {
   embedding_dimensions?: number | null;
 }
 
-interface ProviderSelectItem {
-  raw: ProviderItem;
-}
-
 interface KnowledgeBaseFormData {
   kb_name: string;
   description: string;
@@ -406,10 +405,6 @@ interface KnowledgeBaseFormData {
 
 function asProviderItems(data: unknown): ProviderItem[] {
   return Array.isArray(data) ? data : [];
-}
-
-function providerSelectItem(item: unknown): ProviderSelectItem {
-  return item as ProviderSelectItem;
 }
 
 const { tm: t } = useModuleI18n('features/knowledge-base/index');

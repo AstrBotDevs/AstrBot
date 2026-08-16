@@ -48,10 +48,10 @@
             :loading="loading"
           >
             <template #item="{ props, item }">
-              <v-list-item v-bind="props" :title="item.raw.name">
+              <v-list-item v-bind="props" :title="item.name">
                 <template #append>
                   <v-chip
-                    v-if="item.raw.name === activeTemplate"
+                    v-if="item.name === activeTemplate"
                     color="success"
                     variant="tonal"
                     size="small"
@@ -66,7 +66,7 @@
                     size="small"
                     class="ml-2"
                     :loading="applyLoading"
-                    @click.stop="setActiveTemplate(item.raw.name)"
+                    @click.stop="setActiveTemplate(item.name)"
                   >
                     {{ tm('t2iTemplateEditor.apply') }}
                   </v-btn>
@@ -74,7 +74,12 @@
               </v-list-item>
             </template>
           </v-select>
-          <v-btn variant="text" icon @click="closeDialog">
+          <v-btn
+            variant="text"
+            icon
+            :aria-label="t('core.common.close')"
+            @click="closeDialog"
+          >
             <v-icon>mdi-close</v-icon>
           </v-btn>
         </div>
@@ -96,7 +101,7 @@
                   color="success"
                   @click="newTemplate"
                 >
-                  <v-icon left>mdi-plus</v-icon>
+                  <v-icon start>mdi-plus</v-icon>
                   {{ tm('t2iTemplateEditor.new') }}
                 </v-btn>
                 <v-divider vertical class="mx-1"></v-divider>

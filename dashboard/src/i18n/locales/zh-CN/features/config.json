@@ -80,6 +80,7 @@
     "newConfig": "新建配置文件",
     "copyConfig": "复制配置文件",
     "editConfig": "编辑配置文件",
+    "deleteConfig": "删除配置文件",
     "manageConfigs": "管理配置文件...",
     "configName": "名称",
     "fillConfigName": "填写配置文件名称",
@@ -93,6 +94,7 @@
   },
   "buttons": {
     "cancel": "取消",
+    "close": "关闭",
     "create": "创建",
     "update": "更新"
   },

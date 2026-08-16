@@ -40,7 +40,8 @@
   "actions": {
     "view": "View",
     "edit": "Edit",
-    "delete": "Delete"
+    "delete": "Delete",
+    "copy": "Copy"
   },
   "messageTypes": {
     "group": "Group Chat",
