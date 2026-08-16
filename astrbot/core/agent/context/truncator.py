@@ -79,16 +79,18 @@ class ContextTruncator:
                         break
                     expected_ids.append(tool_call_id)
                 result_ids = [tool.tool_call_id for tool in pending_tools]
-                if (
+                has_valid_expected_ids = bool(expected_ids) and len(
                     expected_ids
-                    and len(expected_ids) == len(set(expected_ids))
-                    and len(result_ids) == len(expected_ids)
+                ) == len(set(expected_ids))
+                has_valid_result_ids = (
+                    len(result_ids) == len(expected_ids)
                     and all(
                         isinstance(tool_id, str) and tool_id for tool_id in result_ids
                     )
                     and len(result_ids) == len(set(result_ids))
-                    and set(result_ids) == set(expected_ids)
-                ):
+                )
+                ids_match = set(result_ids) == set(expected_ids)
+                if has_valid_expected_ids and has_valid_result_ids and ids_match:
                     fixed_messages.append(pending_assistant)
                     fixed_messages.extend(pending_tools)
             pending_assistant = None

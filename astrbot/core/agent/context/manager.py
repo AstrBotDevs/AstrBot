@@ -57,7 +57,7 @@ class ContextManager:
         try:
             result = self.truncator.fix_messages(messages)
             if len(result) != len(messages):
-                logger.warning(
+                logger.debug(
                     f"Removed {len(messages) - len(result)} invalid tool history "
                     "message(s) before context processing."
                 )
