@@ -53,6 +53,8 @@ venv/
 /.pnpm-store/
 /dashboard/node_modules/
 /dashboard/dist/
+/dashboard/test-results/
+/dashboard/tests/e2e/*.spec.ts-snapshots/
 /astrbot/dashboard/dist/
 /dashboard/bun.lock
 /yarn.lock
