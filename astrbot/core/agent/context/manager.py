@@ -56,7 +56,8 @@ class ContextManager:
         result = messages
         try:
             result = self.truncator.fix_messages(messages)
-            if len(result) != len(messages):
+            history_was_sanitized = result != messages
+            if history_was_sanitized:
                 logger.debug(
                     f"Removed {len(messages) - len(result)} invalid tool history "
                     "message(s) before context processing."
@@ -73,7 +74,7 @@ class ContextManager:
             # 2. 基于 token 的压缩
             if self.config.max_context_tokens > 0:
                 total_tokens = self.token_counter.count_tokens(
-                    result, trusted_token_usage
+                    result, 0 if history_was_sanitized else trusted_token_usage
                 )
 
                 if self.compressor.should_compress(

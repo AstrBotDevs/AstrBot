@@ -578,6 +578,44 @@ class TestContextManager:
         assert result == compressed
 
     @pytest.mark.asyncio
+    async def test_sanitized_history_does_not_reuse_stale_trusted_usage(self):
+        config = ContextConfig(max_context_tokens=100, truncate_turns=1)
+        manager = ContextManager(config)
+        messages = [
+            self.create_message("user", "old request"),
+            Message(
+                role="assistant",
+                content="Calling tools",
+                tool_calls=[
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "first", "arguments": "{}"},
+                    },
+                    {
+                        "id": "call_2",
+                        "type": "function",
+                        "function": {"name": "second", "arguments": "{}"},
+                    },
+                ],
+            ),
+            Message(role="tool", content="first result", tool_call_id="call_1"),
+            self.create_message("user", "current request"),
+        ]
+        sanitized = [messages[0], messages[-1]]
+        mock_compressor = AsyncMock()
+        mock_compressor.should_compress = MagicMock(return_value=False)
+        manager.compressor = mock_compressor
+
+        result = await manager.process(messages, trusted_token_usage=83)
+
+        first_check = mock_compressor.should_compress.call_args_list[0]
+        expected_tokens = manager.token_counter.count_tokens(sanitized)
+        assert first_check.args == (sanitized, expected_tokens, 100)
+        mock_compressor.assert_not_awaited()
+        assert result == sanitized
+
+    @pytest.mark.asyncio
     async def test_token_compression_with_zero_max_tokens(self):
         """Test that compression is skipped when max_context_tokens is 0."""
         config = ContextConfig(max_context_tokens=0)
