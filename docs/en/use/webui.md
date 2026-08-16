@@ -25,9 +25,13 @@ The login page now also shows public version information before authentication:
 
 If the login page detects a WebUI/runtime mismatch or runtime/code mismatch, it shows a warning dialog so you can fix stale static assets before signing in.
 
+## Layout and appearance
+
+Dashboard uses a responsive sidebar and main content area. On desktop, you can collapse and resize the sidebar; on narrow screens it becomes an overlay navigation panel. The appearance menu on login, setup, and signed-in pages selects light, dark, or system appearance. This preference is stored only in the current browser and does not change the AstrBot configuration.
+
 ## Two-Factor Authentication
 
-AstrBot WebUI supports TOTP (Time-based One-Time Password) based two-factor authentication.
+AstrBot WebUI supports TOTP (Time-based One-Time Password) based two-factor authentication. The second factor and trusted devices belong to the current Dashboard account. Each account must configure its own factor; it is not inherited from a username or global configuration.
 
 ### Enabling Two-Factor Authentication
 
@@ -43,12 +47,13 @@ To replace the TOTP secret, you can do so in the TOTP management window, where y
 
 - Each recovery code can be used only once. After logging in with a recovery code, two-factor authentication will be automatically disabled, and you will need to set it up again.
 - Recovery codes can be regenerated in the TOTP management window.
-- If you lose the recovery codes, you will not be able to regain account access through normal means. You will need to manually edit `data/cmd_config.json`, set `dashboard.totp.enable` to `false`, and manually clear `dashboard.totp.secret` and `dashboard.totp.recovery_code_hash` to disable two-factor authentication.
+- If you lose the recovery codes, `data/cmd_config.json` is not an account-factor recovery mechanism. Ask the deployment administrator to perform account-level recovery; do not bypass verification by editing `dashboard.totp`, copying a TOTP secret, or modifying the database.
 
 ### Security Related
 
-- Once two-factor authentication is enabled, modifying TOTP-related configurations requires verifying the current TOTP code to prevent unauthorized changes.
-- Changing the admin panel password will revoke all trusted devices.
+- Once two-factor authentication is enabled, replacing the secret requires verification of the current TOTP code to prevent unauthorized changes.
+- Changing the admin-panel password revokes all trusted devices for the current account.
+- High-risk operations, including plugin installation, credential writes, data exports, and restarts, ask you to re-enter the current password or TOTP. The resulting proof is single-use and applies only to that operation; cancelling or failing verification performs no change.
 
 ## Settings
 

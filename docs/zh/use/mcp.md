@@ -43,7 +43,7 @@ AstrBot 使用 MCP Python SDK 2.x，以固定的 MCP `2026-07-28` 协议连接�
 
 ## 目录与调用
 
-AstrBot 分页获取 tools、resources、resource templates 和 prompts；遇到重复 cursor 或过多页会拒绝该次更新，保留原子目录快照。`subscriptions/listen` 的目录变更会完整刷新对应目录，工具的启用/禁用状态会保留。
+AstrBot 分页获取 tools、resources、resource templates 和 prompts；遇到重复 cursor 或过多页会拒绝该次更新，保留原子目录快照。`subscriptions/listen` 的目录变更会完整刷新对应目录，工具的启用/禁用状态会保留。目录订阅是可选的：服务端因配额拒绝订阅时，初始发现到的目录和连接仍可继续使用；Dashboard 的连接测试不会打开目录订阅。
 
 工具调用受每服务器并发限制，读取超时传给 SDK。连接中断时会重建 Client 并刷新目录，但**绝不会自动重放**可能已在远端执行的工具调用。
 

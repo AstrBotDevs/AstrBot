@@ -43,7 +43,7 @@ Remote MCP performs DNS/IP checks for every new connection and request. It rejec
 
 ## Catalogs and calls
 
-AstrBot pages through tools, resources, resource templates, and prompts. A repeated cursor or excessive page count rejects that refresh and preserves the previous atomic catalog snapshot. `subscriptions/listen` catalog notifications fully refresh the relevant catalog while retaining each Dashboard tool enable/disable state.
+AstrBot pages through tools, resources, resource templates, and prompts. A repeated cursor or excessive page count rejects that refresh and preserves the previous atomic catalog snapshot. `subscriptions/listen` catalog notifications fully refresh the relevant catalog while retaining each Dashboard tool enable/disable state. Catalog subscription is optional: if a server rejects it because of a quota, the initial catalog and connection remain usable; a Dashboard connection test does not open a catalog subscription.
 
 Calls use a per-server concurrency limit and pass the configured read timeout to the SDK. If a connection is interrupted, AstrBot rebuilds the Client and refreshes catalogs, but **never automatically replays** a tool call that might already have run remotely.
 

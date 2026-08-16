@@ -145,6 +145,8 @@ X-API-Key: abk_xxx
 
 `username` 是调用方声明的 WebChat 用户标识，仅用于兼容现有接口，不会因此获得 Dashboard 或管理员权限。若需要面向终端用户开放，请在自己的服务端将外部用户映射到受控的 `username`。
 
+使用已登录 Dashboard 的 session 调用 `/api/v1/chat` 时，服务端会额外传递已签名的账户、session 和当前认证强度，以便按实际 Dashboard 权限执行授权；它不会信任 `username` 来提升权限。使用 API Key 时仍只按该 Key 的 scope 授权，绝不会继承 Dashboard 角色或高风险权限。
+
 ```json
 {
   "username": "alice",

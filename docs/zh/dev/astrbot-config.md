@@ -28,20 +28,20 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 ## 顶层结构
 
-| 键                                                | 用途                                                                           |
-| ------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `config_version`                                  | 当前核心配置结构版本，默认 `2`，不要手动降级。                                 |
-| `platform_settings`                               | 所有消息平台共用的收发、白名单、限流和分段回复行为。                           |
-| `provider_sources`                                | API 端点和凭据等 Provider 来源。由“提供商”页面维护。                           |
-| `provider`                                        | 具体聊天、STT、TTS、Embedding、Rerank 等模型实例。                             |
-| `provider_settings`                               | 当前配置档的 Agent、默认模型、Persona、检索、上下文和工具行为。                |
-| `subagent_orchestrator`                           | 子代理 handoff 编排。                                                          |
-| `provider_stt_settings` / `provider_tts_settings` | 语音转文本和文本转语音默认模型及开关。                                         |
-| `provider_ltm_settings`                           | 旧名称下的群聊上下文、图片转述和主动回复设置；不是 Alkaid 长期记忆的数据开关。 |
-| `content_safety`                                  | 内置关键词和可选外部内容安全检查。                                             |
-| `dashboard`                                       | WebUI 监听、认证、限流、TOTP 和 TLS。                                          |
-| `platform` / `platform_specific`                  | 平台实例，以及 Lark、Telegram、Discord 等平台特异行为。                        |
-| 其他顶层键                                        | 管理员、T2I、代理、日志、时区、插件、知识库、Trace 和指标等。                  |
+| 键                                                | 用途                                                                            |
+| ------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `config_version`                                  | 当前核心配置结构版本，默认 `2`，不要手动降级。                                  |
+| `platform_settings`                               | 所有消息平台共用的收发、白名单、限流和分段回复行为。                            |
+| `provider_sources`                                | API 端点和凭据等 Provider 来源。由“提供商”页面维护。                            |
+| `provider`                                        | 具体聊天、STT、TTS、Embedding、Rerank 等模型实例。                              |
+| `provider_settings`                               | 当前配置档的 Agent、默认模型、Persona、检索、上下文和工具行为。                 |
+| `subagent_orchestrator`                           | 子代理 handoff 编排。                                                           |
+| `provider_stt_settings` / `provider_tts_settings` | 语音转文本和文本转语音默认模型及开关。                                          |
+| `provider_ltm_settings`                           | 旧名称下的群聊上下文、图片转述和主动回复设置；不是 Alkaid 长期记忆的数据开关。  |
+| `content_safety`                                  | 内置关键词和可选外部内容安全检查。                                              |
+| `dashboard`                                       | WebUI 监听、认证、限流和 TLS；账户身份及 TOTP 权威状态由 Dashboard 数据库保存。 |
+| `platform` / `platform_specific`                  | 平台实例，以及 Lark、Telegram、Discord 等平台特异行为。                         |
+| 其他顶层键                                        | 管理员、T2I、代理、日志、时区、插件、知识库、Trace 和指标等。                   |
 
 `provider_sources`、`provider` 和 `platform` 中的对象结构由各类型注册的当前模板决定。不要从旧文档复制对象；在 WebUI 创建后再检查保存结果。模型通过 `provider_source_id` 引用来源，重命名或删除来源时应让 WebUI 同步引用。
 
@@ -163,16 +163,16 @@ Alkaid [长期记忆](../use/long-term-memory) 当前没有对应的启停配置
 
 `dashboard` 的关键默认值：
 
-| 键                       | 默认值      | 说明                                                                                    |
-| ------------------------ | ----------- | --------------------------------------------------------------------------------------- |
-| `enable`                 | `true`      | 启用 WebUI/API。                                                                        |
-| `username`               | `astrbot`   | 初始用户名。                                                                            |
-| `host`                   | `127.0.0.1` | 默认只监听 loopback。远程访问必须显式改为 `0.0.0.0` 或指定接口，并配置防火墙/反向代理。 |
-| `port`                   | `6185`      | HTTP(S) 监听端口。                                                                      |
-| `trust_proxy_headers`    | `false`     | 是否信任 `X-Forwarded-For` / `X-Real-IP`；只应在受控反向代理后启用。                    |
-| `auth_rate_limit.enable` | `true`      | 登录、TOTP 等认证端点限流。                                                             |
-| `totp.enable`            | `false`     | WebUI TOTP 双因素认证。                                                                 |
-| `ssl.enable`             | `false`     | 由 AstrBot 直接终止 TLS；证书、私钥和可选 CA 使用对应路径字段。                         |
+| 键                       | 默认值        | 说明                                                                                    |
+| ------------------------ | ------------- | --------------------------------------------------------------------------------------- |
+| `enable`                 | `true`        | 启用 WebUI/API。                                                                        |
+| `username`               | `astrbot`     | 初始用户名。                                                                            |
+| `host`                   | `127.0.0.1`   | 默认只监听 loopback。远程访问必须显式改为 `0.0.0.0` 或指定接口，并配置防火墙/反向代理。 |
+| `port`                   | `6185`        | HTTP(S) 监听端口。                                                                      |
+| `trust_proxy_headers`    | `false`       | 是否信任 `X-Forwarded-For` / `X-Real-IP`；只应在受控反向代理后启用。                    |
+| `auth_rate_limit.enable` | `true`        | 登录、TOTP 等认证端点限流。                                                             |
+| `totp.*`                 | 由 WebUI 管理 | 为配置导出保留的 Dashboard TOTP 快照，不是账户认证的权威来源。                          |
+| `ssl.enable`             | `false`       | 由 AstrBot 直接终止 TLS；证书、私钥和可选 CA 使用对应路径字段。                         |
 
 密码以 PBKDF2 哈希存放在 `pbkdf2_password`。`password` 是迁移期使用的哈希字段，不要在 JSON 中写明文，也不要手工生成或交换哈希。忘记密码时使用：
 
@@ -181,6 +181,8 @@ uv run astrbot run --reset-password
 ```
 
 源码入口也支持 `uv run main.py --reset-password`。启动日志会输出新生成的临时密码，并要求登录后修改。
+
+Dashboard 账户有稳定的 `account_id`，其 TOTP 密钥、恢复码哈希和受信任设备均按账户保存。安全页面会同步 `dashboard.totp` 快照，供配置导出和界面使用，但登录和高风险操作只验证账户记录。不要手工编辑该快照、在账户之间复制 TOTP 字段，或把它当作丢失恢复码后的绕过方式。
 
 ## 系统、日志与输出装饰
 

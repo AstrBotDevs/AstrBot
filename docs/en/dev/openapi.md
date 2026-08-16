@@ -145,6 +145,8 @@ Notes:
 
 `username` is a caller-declared WebChat identity. It is compatibility data only and never grants Dashboard or administrator authority. If you expose chat access to end users, proxy requests through your own service and map each external user to an allowed `username`.
 
+When an authenticated Dashboard session calls `/api/v1/chat`, the server separately carries the signed account, session, and current authentication strength so authorization uses the real Dashboard principal. It never trusts `username` to elevate permissions. API-key calls remain authorized only by that key's scopes and never inherit Dashboard roles or high-risk permissions.
+
 ```json
 {
   "username": "alice",
