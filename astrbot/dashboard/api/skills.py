@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from astrbot.core import logger
@@ -21,7 +21,7 @@ from astrbot.dashboard.services.skills_service import (
     SkillsServiceError,
 )
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, ScopeDependency, require_dashboard_user
 from .multipart import multipart_parts, single_upload
 
 router = APIRouter(tags=["Skills"])
@@ -36,8 +36,7 @@ def get_service(request: Request) -> SkillsService:
     return request.app.state.services.skills
 
 
-async def require_skill_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "skill")
+require_skill_scope = ScopeDependency("skill")
 
 
 async def _json_or_empty(request: Request) -> dict[str, Any]:
@@ -94,10 +93,14 @@ async def _download_skill(service: SkillsService, name: str):
     try:
         return _archive_response(service.prepare_skill_archive(name))
     except SkillsServiceError as exc:
-        return error(str(exc))
+        message = str(exc)
+        raise HTTPException(status_code=exc.status_code, detail=message) from exc
     except Exception as exc:
         logger.error(str(exc), exc_info=True)
-        return error(str(exc))
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to prepare skill archive",
+        ) from exc
 
 
 @router.get("/skills")

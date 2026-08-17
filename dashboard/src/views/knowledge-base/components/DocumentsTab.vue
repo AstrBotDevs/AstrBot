@@ -86,7 +86,6 @@
                 <p class="mt-4 text-h6">{{ t('upload.dropzone') }}</p>
                 <p class="text-caption text-medium-emphasis mt-2">{{ t('upload.supportedFormats') }}</p>
                 <p class="text-caption text-medium-emphasis">{{ t('upload.maxSize') }}</p>
-                <p class="text-caption text-medium-emphasis">最多可上传 10 个文件</p>
                 <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.markdown,.rst,.adoc,.pdf,.docx,.epub,.xls,.xlsx"
                   @change="handleFileSelect" />
               </div>
@@ -275,6 +274,7 @@ const uploadingTasks = ref<Map<string, any>>(new Map())
 const progressPollingInterval = ref<number | null>(null)
 const tavilyConfigStatus = ref('loading') // 'loading', 'configured', 'not_configured', 'error'
 const showTavilyDialog = ref(false)
+let documentsRequestId = 0
 
 const snackbar = ref({
   show: false,
@@ -333,16 +333,17 @@ const isUploadDisabled = computed(() => {
 
 // 表格列
 const headers = [
-  { title: t('documents.name'), key: 'doc_name', sortable: true },
-  { title: t('documents.type'), key: 'file_type', sortable: true },
-  { title: t('documents.size'), key: 'file_size', sortable: true },
-  { title: t('documents.chunks'), key: 'chunk_count', sortable: true },
-  { title: t('documents.createdAt'), key: 'created_at', sortable: true },
+  { title: t('documents.name'), key: 'doc_name', sortable: false },
+  { title: t('documents.type'), key: 'file_type', sortable: false },
+  { title: t('documents.size'), key: 'file_size', sortable: false },
+  { title: t('documents.chunks'), key: 'chunk_count', sortable: false },
+  { title: t('documents.createdAt'), key: 'created_at', sortable: false },
   { title: t('documents.actions'), key: 'actions', sortable: false, align: 'end' as const }
 ]
 
 // 加载文档列表
 const loadDocuments = async () => {
+  const requestId = ++documentsRequestId
   loading.value = true
   try {
     const response = await knowledgeApi.documents(props.kbId, {
@@ -350,16 +351,20 @@ const loadDocuments = async () => {
       page_size: pageSize.value,
       search: searchQuery.value.trim() || undefined,
     })
+    if (requestId !== documentsRequestId) return
     if (response.data.status === 'ok') {
       const data = response.data.data
       documents.value = data.items || []
       total.value = data.total || 0
     }
   } catch (error) {
+    if (requestId !== documentsRequestId) return
     console.error('Failed to load documents:', error)
     showSnackbar('加载文档列表失败', 'error')
   } finally {
-    loading.value = false
+    if (requestId === documentsRequestId) {
+      loading.value = false
+    }
   }
 }
 
@@ -385,13 +390,8 @@ const handleFileSelect = (event: Event) => {
   target.value = ''
 }
 
-// 添加文件（检查数量限制）
+// Add files
 const addFiles = (files: File[]) => {
-  const totalFiles = selectedFiles.value.length + files.length
-  if (totalFiles > 10) {
-    showSnackbar('最多只能选择 10 个文件', 'warning')
-    return
-  }
   selectedFiles.value.push(...files)
 }
 
@@ -810,9 +810,11 @@ const onTavilyKeySet = () => {
 }
 
 // Reset to page 1 and reload when search text changes
-watch(searchQuery, () => {
+watch(searchQuery, (_value, _oldValue, onCleanup) => {
   page.value = 1
-  loadDocuments()
+  documentsRequestId += 1
+  const timeoutId = window.setTimeout(loadDocuments, 300)
+  onCleanup(() => window.clearTimeout(timeoutId))
 })
 
 onMounted(() => {
@@ -822,6 +824,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  documentsRequestId += 1
   stopProgressPolling()
 })
 </script>

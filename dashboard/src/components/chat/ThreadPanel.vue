@@ -61,6 +61,7 @@ import { fetchWithAuth } from "@/api/http";
 import {
   appendPlain,
   appendReasoningPart,
+  buildChatRequestFlags,
   extractReasoningText,
   finishToolCall,
   hasPlainText,
@@ -70,6 +71,7 @@ import {
   payloadText,
   upsertToolCall,
   type ChatRecord,
+  type MessagePart,
   type ChatThread,
 } from "@/composables/useMessages";
 import { useModuleI18n } from "@/i18n/composables";
@@ -159,7 +161,7 @@ async function send() {
       },
       body: JSON.stringify({
         message: [{ type: "plain", text }],
-        enable_streaming: true,
+        flags: buildChatRequestFlags(),
       }),
       signal: abort.signal,
     });
@@ -274,7 +276,18 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
   if (type === "complete" || type === "break") {
     markMessageStarted(botRecord);
     const finalText = payloadText(data);
-    if (finalText && !hasPlainText(botRecord)) {
+    const existingText = botRecord.content.message
+      .filter((part) => part.type === "plain")
+      .map((part) => part.text || "")
+      .join("");
+    const missingText = finalText.slice(existingText.length);
+    if (
+      type === "complete" &&
+      missingText &&
+      finalText.startsWith(existingText)
+    ) {
+      appendPlain(botRecord, missingText);
+    } else if (finalText && !hasPlainText(botRecord)) {
       appendPlain(botRecord, finalText, false);
     }
     return;
@@ -305,13 +318,22 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
 
   if (["image", "record", "file", "video"].includes(type)) {
     markMessageStarted(botRecord);
-    const filename = String(data)
+    const rawFilename = String(data)
       .replace("[IMAGE]", "")
       .replace("[RECORD]", "")
       .replace("[FILE]", "")
-      .replace("[VIDEO]", "")
-      .split("|", 1)[0];
-    botRecord.content.message.push({ type, filename });
+      .replace("[VIDEO]", "");
+    const separatorIndex = rawFilename.indexOf("|");
+    const storedFilename =
+      separatorIndex >= 0 ? rawFilename.slice(0, separatorIndex) : rawFilename;
+    const displayFilename =
+      separatorIndex >= 0 ? rawFilename.slice(separatorIndex + 1) : storedFilename;
+    const filename = displayFilename || storedFilename;
+    const mediaPart: MessagePart = { type, filename };
+    if (storedFilename && storedFilename !== filename) {
+      mediaPart.stored_filename = storedFilename;
+    }
+    botRecord.content.message.push(mediaPart);
   }
 }
 

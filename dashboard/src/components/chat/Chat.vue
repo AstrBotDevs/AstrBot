@@ -328,7 +328,16 @@
     <main
       class="chat-main"
       :class="{ 'empty-chat': isEmptyChat }"
+      v-on="dragEvents"
     >
+      <transition name="drop-fade">
+        <div v-if="isDragging && !isProviderWorkspace" class="chat-drop-overlay">
+          <div class="chat-drop-overlay-content">
+            <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
+            <span class="chat-drop-text">{{ tm("input.dropToUpload") }}</span>
+          </div>
+        </div>
+      </transition>
       <section v-if="isProviderWorkspace" class="provider-workspace-shell">
         <ProviderChatCompletionPanel
           class="provider-workspace-page"
@@ -357,11 +366,13 @@
             :is-running="
               Boolean(currSessionId && isSessionRunning(currSessionId))
             "
+            :token-usage="tokenUsageIndicator"
             :session-id="currSessionId || null"
             :current-session="currentSession"
             :reply-to="chatInputReplyTarget"
             :send-shortcut="sendShortcut"
             :show-provider-selector="false"
+            :placeholder="tm('input.projectPlaceholder')"
             @send="sendCurrentMessage"
             @stop="stopCurrentSession"
             @toggle-streaming="toggleStreaming"
@@ -427,7 +438,7 @@
           </div>
         </section>
 
-        <section class="composer-shell">
+        <section ref="composerShell" class="composer-shell">
           <ChatInput
             ref="inputRef"
             v-model:prompt="draft"
@@ -440,11 +451,15 @@
             :is-running="
               Boolean(currSessionId && isSessionRunning(currSessionId))
             "
+            :token-usage="tokenUsageIndicator"
             :session-id="currSessionId || null"
             :current-session="currentSession"
             :reply-to="chatInputReplyTarget"
             :send-shortcut="sendShortcut"
             :show-provider-selector="false"
+            :placeholder="
+              activeProject ? tm('input.projectPlaceholder') : undefined
+            "
             @send="sendCurrentMessage"
             @stop="stopCurrentSession"
             @toggle-streaming="toggleStreaming"
@@ -530,6 +545,12 @@
       :is-dark="isDark"
     />
     <RefsSidebar v-model="refsSidebarOpen" :refs="selectedRefs" />
+    <WorkspaceFilesPanel
+      :model-value="chatHeader.workspaceFilesOpen"
+      :project-id="activeProject?.project_id || ''"
+      :project-title="activeProject?.title || ''"
+      @update:model-value="chatHeader.SET_WORKSPACE_FILES_OPEN"
+    />
   </div>
 </template>
 
@@ -561,7 +582,7 @@ import {
   Sun,
   Trash2,
 } from "@lucide/vue";
-import { chatApi } from "@/api/v1";
+import { chatApi, providerApi } from "@/api/v1";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import ProjectDialog, {
   type ProjectFormData,
@@ -574,6 +595,7 @@ import ChatUILogo from "@/components/chat/ChatUILogo.vue";
 import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
 import ReasoningSidebar from "@/components/chat/ReasoningSidebar.vue";
 import ThreadPanel from "@/components/chat/ThreadPanel.vue";
+import WorkspaceFilesPanel from "@/components/chat/WorkspaceFilesPanel.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import { useSessions, type Session } from "@/composables/useSessions";
 import {
@@ -587,6 +609,7 @@ import {
 import { useMediaHandling } from "@/composables/useMediaHandling";
 import { useRecording } from "@/composables/useRecording";
 import { useProjects } from "@/composables/useProjects";
+import { useDragUpload } from "@/composables/useDragUpload";
 import { useChatHeaderStore } from "@/stores/chatHeader";
 import { useCustomizerStore } from "@/stores/customizer";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
@@ -597,6 +620,12 @@ import {
 } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
+import {
+  contextLimit,
+  formatTokenCount,
+  type ProviderModelMetadata,
+  type ProviderMetadataSource,
+} from "@/utils/providerMetadata";
 import { useToast } from "@/utils/toast";
 
 const props = withDefaults(defineProps<{ chatboxMode?: boolean; active?: boolean }>(), {
@@ -650,7 +679,17 @@ const {
   cleanupMediaCache,
 } = useMediaHandling();
 
+const { isDragging, dragEvents } = useDragUpload((files) => {
+  if (isProviderWorkspace.value) return;
+  handleFilesSelected(files);
+});
+
 type WorkspaceView = "chat" | "providers";
+
+interface TokenProviderConfig extends ProviderMetadataSource {
+  id: string;
+  enable?: boolean;
+}
 
 const activeWorkspace = ref<WorkspaceView>("chat");
 const projectDialogOpen = ref(false);
@@ -670,7 +709,11 @@ const projectSessionsById = ref<Record<string, Session[]>>({});
 const loadingProjectSessionIds = ref<string[]>([]);
 const loadingSessions = ref(false);
 const draft = ref("");
+const tokenProviderConfigs = ref<TokenProviderConfig[]>([]);
+const tokenModelMetadata = ref<Record<string, ProviderModelMetadata>>({});
+const selectedTokenProviderId = ref("");
 const messagesContainer = ref<HTMLElement | null>(null);
+const composerShell = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const shouldStickToBottom = ref(true);
 const replyTarget = ref<ChatRecord | null>(null);
@@ -699,6 +742,7 @@ const threadSelection = reactive<{
 });
 const enableStreaming = ref(true);
 const sendShortcut = ref<"enter" | "shift_enter">("enter");
+let composerResizeObserver: ResizeObserver | null = null;
 const {
   isRecording,
   startRecording: startRecorder,
@@ -818,6 +862,14 @@ const selectedProject = computed(
       (project) => project.project_id === selectedProjectId.value,
     ) || null,
 );
+const activeProject = computed(() => {
+  if (isProviderWorkspace.value) return null;
+  if (selectedProject.value) return selectedProject.value;
+  const projectId = sessionProject.value?.project_id;
+  return (
+    projects.value.find((project) => project.project_id === projectId) || null
+  );
+});
 const isEmptyChat = computed(
   () =>
     !isProviderWorkspace.value &&
@@ -841,15 +893,63 @@ const chatInputReplyTarget = computed(() =>
         selectedText: replyPreview(replyTarget.value.id, ""),
       },
 );
+const currentTokenProvider = computed(() => {
+  const selectedProvider = tokenProviderConfigs.value.find(
+    (provider) => provider.id === selectedTokenProviderId.value,
+  );
+  return selectedProvider || tokenProviderConfigs.value[0] || null;
+});
+const currentTokenMetadata = computed(() => {
+  const model = currentTokenProvider.value?.model;
+  return model ? tokenModelMetadata.value[model] || null : null;
+});
+const latestContextTokens = computed(() => {
+  for (let index = activeMessages.value.length - 1; index >= 0; index -= 1) {
+    const message = activeMessages.value[index];
+    if (isUserMessage(message)) continue;
+    const stats = message.content?.agentStats;
+    if (!stats) continue;
+    if (stats.current_context_tokens != null) {
+      return readTokenCount(stats.current_context_tokens);
+    }
+    const usage = stats.token_usage;
+    if (!usage) continue;
+    return (
+      readTokenCount(usage.input_other) +
+      readTokenCount(usage.input_cached) +
+      readTokenCount(usage.output)
+    );
+  }
+  return 0;
+});
+const tokenUsageIndicator = computed(() => {
+  const used = latestContextTokens.value;
+  const limit = contextLimit(currentTokenProvider.value, currentTokenMetadata.value);
+  if (used <= 0 || limit <= 0) return null;
+
+  const percent = (used / limit) * 100;
+  return {
+    used,
+    limit,
+    percent: Math.min(100, Math.max(0, percent)),
+    tooltip: tm("tokenUsage.tooltip", {
+      used: formatTokenCount(used),
+      limit: formatTokenCount(limit),
+      percent: formatUsagePercent(percent),
+    }),
+  };
+});
 
 function getSelectedProviderSelection() {
   const inputSelection = inputRef.value?.getCurrentSelection();
   if (inputSelection?.providerId) {
+    selectedTokenProviderId.value = inputSelection.providerId;
     return inputSelection;
   }
   if (typeof window === "undefined") {
     return { providerId: "", modelName: "" };
   }
+  syncSelectedTokenProvider();
   return {
     providerId: localStorage.getItem("selectedProvider") || "",
     modelName: localStorage.getItem("selectedProviderModel") || "",
@@ -859,17 +959,48 @@ function getSelectedProviderSelection() {
 provide("isDark", isDark);
 
 watch(
-  [chatHeaderTitle, chatHeaderSubtitle],
-  ([title, subtitle]) => {
-    chatHeader.SET_CONTEXT({ title, subtitle });
+  [chatHeaderTitle, chatHeaderSubtitle, activeProject],
+  ([title, subtitle, project]) => {
+    chatHeader.SET_CONTEXT({
+      title,
+      subtitle,
+      projectId: project?.project_id,
+    });
   },
   { immediate: true },
 );
 
+watch(
+  () => chatHeader.workspaceFilesOpen,
+  (open) => {
+    if (!open) return;
+    threadSelection.visible = false;
+    threadPanelOpen.value = false;
+    activeThread.value = null;
+    reasoningPanelOpen.value = false;
+    activeReasoningTarget.value = null;
+    refsSidebarOpen.value = false;
+    selectedRefs.value = null;
+  },
+);
+
 onMounted(async () => {
+  if (typeof ResizeObserver !== "undefined") {
+    composerResizeObserver = new ResizeObserver(([entry]) => {
+      const container = messagesContainer.value;
+      if (!entry || !container) return;
+      const height = Math.ceil(entry.target.getBoundingClientRect().height);
+      container.style.setProperty("--chat-composer-height", `${height}px`);
+      if (shouldStickToBottom.value) scrollToBottom();
+    });
+    if (composerShell.value) {
+      composerResizeObserver.observe(composerShell.value);
+    }
+  }
+
   loadingSessions.value = true;
   try {
-    await Promise.all([getSessions(), getProjects()]);
+    await Promise.all([getSessions(), getProjects(), loadTokenProviders()]);
     const routeSessionId = getRouteSessionId();
     if (routeSessionId === "models") {
       activeWorkspace.value = "providers";
@@ -882,8 +1013,15 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  composerResizeObserver?.disconnect();
   chatHeader.CLEAR_CONTEXT();
   cleanupMediaCache();
+});
+
+watch(composerShell, (element, previousElement) => {
+  if (!composerResizeObserver) return;
+  if (previousElement) composerResizeObserver.unobserve(previousElement);
+  if (element) composerResizeObserver.observe(element);
 });
 
 watch(
@@ -934,6 +1072,7 @@ function closeSecondaryPanels() {
   activeReasoningTarget.value = null;
   refsSidebarOpen.value = false;
   selectedRefs.value = null;
+  chatHeader.SET_WORKSPACE_FILES_OPEN(false);
 }
 
 function showChatWorkspace() {
@@ -952,6 +1091,40 @@ async function openProviderWorkspace() {
 
 function sessionTitle(session: Session) {
   return session.display_name?.trim() || tm("conversation.newConversation");
+}
+
+function syncSelectedTokenProvider() {
+  if (typeof window === "undefined") return;
+  selectedTokenProviderId.value = localStorage.getItem("selectedProvider") || "";
+}
+
+async function loadTokenProviders() {
+  syncSelectedTokenProvider();
+  try {
+    const response = await providerApi.listByProviderType("chat_completion");
+    if (response.data.status === "ok") {
+      tokenModelMetadata.value = (
+        (response.data as any).model_metadata || {}
+      ) as Record<string, ProviderModelMetadata>;
+      tokenProviderConfigs.value = (
+        (response.data.data || []) as unknown as TokenProviderConfig[]
+      ).filter((provider) => provider.enable !== false);
+    }
+  } catch (error) {
+    console.error("Failed to load provider context metadata:", error);
+  }
+}
+
+function readTokenCount(value: unknown) {
+  const count = Number(value || 0);
+  return Number.isFinite(count) && count > 0 ? count : 0;
+}
+
+function formatUsagePercent(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "0";
+  if (value >= 10) return String(Math.round(value));
+  if (value >= 1) return String(Math.round(value * 10) / 10);
+  return String(Math.round(value * 100) / 100);
 }
 
 async function startNewChat() {
@@ -1188,6 +1361,8 @@ async function sendCurrentMessage() {
         await loadProjectSessions(targetProjectId);
         selectedProjectId.value = null;
       }
+      // 关联项目后再刷新，否则新会话会短暂出现在"对话"列表
+      await getSessions();
     }
 
     const text = draft.value.trim();
@@ -1361,11 +1536,13 @@ async function handleRegenerateMessage(
 ) {
   if (!currSessionId.value || isUserMessage(message)) return;
   message.threads = [];
+  const effectiveSelection = selection ?? getSelectedProviderSelection();
   await regenerateMessage(
     currSessionId.value,
     message,
-    selection?.providerId || "",
-    selection?.modelName || "",
+    effectiveSelection?.providerId || "",
+    effectiveSelection?.modelName || "",
+    enableStreaming.value,
   );
 }
 
@@ -1437,6 +1614,7 @@ async function createThreadFromSelection() {
 }
 
 function openThreadPanel(thread: ChatThread) {
+  chatHeader.SET_WORKSPACE_FILES_OPEN(false);
   reasoningPanelOpen.value = false;
   activeReasoningTarget.value = null;
   refsSidebarOpen.value = false;
@@ -1445,6 +1623,7 @@ function openThreadPanel(thread: ChatThread) {
 }
 
 function openRefsSidebar(refs: unknown) {
+  chatHeader.SET_WORKSPACE_FILES_OPEN(false);
   threadPanelOpen.value = false;
   activeThread.value = null;
   reasoningPanelOpen.value = false;
@@ -1458,6 +1637,7 @@ function openReasoningPanel(payload: {
   message: ChatRecord;
   blockIndex: number;
 }) {
+  chatHeader.SET_WORKSPACE_FILES_OPEN(false);
   threadPanelOpen.value = false;
   activeThread.value = null;
   refsSidebarOpen.value = false;
@@ -1493,7 +1673,7 @@ function removeThreadFromMessages(threadId: string) {
   }
 }
 
-async function handleFilesSelected(files: FileList) {
+async function handleFilesSelected(files: FileList | File[]) {
   const selectedFiles = Array.from(files || []);
   for (const file of selectedFiles) {
     if (file.type.startsWith("image/")) {
@@ -2041,6 +2221,46 @@ function toggleTheme() {
   position: relative;
 }
 
+/* 全区域拖拽上传遮罩 */
+.chat-drop-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(var(--v-theme-primary), 0.12);
+  border: 2px dashed rgba(var(--v-theme-primary), 0.45);
+  border-radius: 16px;
+}
+
+.chat-drop-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-drop-text {
+  font-size: 16px;
+  font-weight: 500;
+  color: rgb(var(--v-theme-primary));
+}
+
+.drop-fade-enter-active,
+.drop-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.drop-fade-enter-from,
+.drop-fade-leave-to {
+  opacity: 0;
+}
+
 .conversation-stack.is-empty {
   display: flex;
   flex-direction: column;
@@ -2052,8 +2272,8 @@ function toggleTheme() {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 24px 0 116px;
-  scroll-padding-bottom: 116px;
+  padding: 24px 0 calc(var(--chat-composer-height, 82px) + 34px);
+  scroll-padding-bottom: calc(var(--chat-composer-height, 82px) + 34px);
 }
 
 .conversation-stack.is-empty .messages-panel {
@@ -2195,8 +2415,8 @@ kbd {
   }
 
   .messages-panel {
-    padding: 18px 0 92px;
-    scroll-padding-bottom: 92px;
+    padding: 18px 0 calc(var(--chat-composer-height, 72px) + 20px);
+    scroll-padding-bottom: calc(var(--chat-composer-height, 72px) + 20px);
   }
 
   .conversation-stack.is-empty .messages-panel {

@@ -11,6 +11,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_workspaces_path
 WORKSPACE_TYPE_SESSION = "session"
 WORKSPACE_TYPE_PROJECT = "project"
 WORKSPACE_TYPE_CUSTOM = "custom"
+API_KEY_USERNAME_PREFIX = "api_key:"
 WORKSPACE_TYPES = {
     WORKSPACE_TYPE_SESSION,
     WORKSPACE_TYPE_PROJECT,
@@ -95,24 +96,24 @@ def workspace_path_to_root(path: str) -> Path:
 
     Args:
         path: Stored workspace path. Relative values are rooted under AstrBot
-            workspaces. Absolute values must also stay within AstrBot workspaces.
+            workspaces. Absolute values are allowed and resolved as provided.
 
     Returns:
         Absolute resolved path.
 
     Raises:
-        ValueError: If the path escapes or targets the AstrBot workspaces root.
+        ValueError: If a relative path escapes or targets the AstrBot workspaces
+            root.
     """
     workspaces_root = Path(get_astrbot_workspaces_path()).resolve(strict=False)
     candidate = Path(path).expanduser()
-    resolved = (
-        candidate.resolve(strict=False)
-        if candidate.is_absolute()
-        else (workspaces_root / candidate).resolve(strict=False)
-    )
+    if candidate.is_absolute():
+        return candidate.resolve(strict=False)
+
+    resolved = (workspaces_root / candidate).resolve(strict=False)
     if resolved == workspaces_root or not resolved.is_relative_to(workspaces_root):
         raise ValueError(
-            "Custom workspace path must stay within a subdirectory of AstrBot workspaces"
+            "Relative workspace path must stay within a subdirectory of AstrBot workspaces"
         )
     return resolved
 
@@ -126,22 +127,42 @@ def resolve_project_workspace_root(project: Any, *, fallback_umo: str) -> Path:
 
     Returns:
         Workspace root used as cwd.
+
+    Raises:
+        ValueError: If an API key project resolves outside AstrBot workspaces.
     """
+    workspaces_root = Path(get_astrbot_workspaces_path()).resolve(strict=False)
     fallback = default_workspace_root(fallback_umo)
     workspace_type = normalize_project_workspace_type(
         getattr(project, "workspace_type", WORKSPACE_TYPE_SESSION)
     )
+    creator = str(getattr(project, "creator", ""))
     if workspace_type == WORKSPACE_TYPE_SESSION:
-        return fallback
-    if workspace_type == WORKSPACE_TYPE_PROJECT:
-        return project_workspace_root(str(project.project_id))
-    if workspace_type == WORKSPACE_TYPE_CUSTOM:
+        resolved = fallback
+    elif workspace_type == WORKSPACE_TYPE_PROJECT:
+        resolved = project_workspace_root(str(project.project_id))
+    elif workspace_type == WORKSPACE_TYPE_CUSTOM and creator.startswith(
+        API_KEY_USERNAME_PREFIX
+    ):
+        resolved = project_workspace_root(str(project.project_id))
+    elif workspace_type == WORKSPACE_TYPE_CUSTOM:
         workspace_path = normalize_workspace_path(
             getattr(project, "workspace_path", None)
         )
         if workspace_path:
-            return workspace_path_to_root(workspace_path)
-    return fallback
+            resolved = workspace_path_to_root(workspace_path)
+        else:
+            resolved = fallback
+    else:
+        resolved = fallback
+
+    if creator.startswith(API_KEY_USERNAME_PREFIX) and (
+        resolved == workspaces_root or not resolved.is_relative_to(workspaces_root)
+    ):
+        raise ValueError(
+            "API key project workspace must stay within AstrBot workspaces"
+        )
+    return resolved
 
 
 def parse_webchat_umo(umo: str) -> tuple[str, str] | None:

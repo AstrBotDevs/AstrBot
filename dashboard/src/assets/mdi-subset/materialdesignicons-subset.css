@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 279 icons */
+/* Auto-generated MDI subset – 268 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -24,20 +24,12 @@
   content: "\F0004";
 }
 
-.mdi-account-circle::before {
-  content: "\F0009";
-}
-
 .mdi-account-edit::before {
   content: "\F06BC";
 }
 
 .mdi-account-edit-outline::before {
   content: "\F0FFB";
-}
-
-.mdi-account-heart::before {
-  content: "\F0899";
 }
 
 .mdi-account-voice::before {
@@ -160,6 +152,10 @@
   content: "\F0B79";
 }
 
+.mdi-chat-outline::before {
+  content: "\F0EDE";
+}
+
 .mdi-chat-processing::before {
   content: "\F0B7B";
 }
@@ -256,10 +252,6 @@
   content: "\F0167";
 }
 
-.mdi-code-braces::before {
-  content: "\F0169";
-}
-
 .mdi-code-json::before {
   content: "\F0626";
 }
@@ -326,10 +318,6 @@
 
 .mdi-cursor-default-click::before {
   content: "\F0CFD";
-}
-
-.mdi-cursor-move::before {
-  content: "\F01BE";
 }
 
 .mdi-database::before {
@@ -408,10 +396,6 @@
   content: "\F0209";
 }
 
-.mdi-eye-outline::before {
-  content: "\F06D0";
-}
-
 .mdi-eyedropper::before {
   content: "\F020A";
 }
@@ -450,6 +434,10 @@
 
 .mdi-file-excel-box::before {
   content: "\F021C";
+}
+
+.mdi-file-image::before {
+  content: "\F021F";
 }
 
 .mdi-file-music-outline::before {
@@ -492,20 +480,8 @@
   content: "\F0234";
 }
 
-.mdi-folder::before {
-  content: "\F024B";
-}
-
-.mdi-folder-cog-outline::before {
-  content: "\F1080";
-}
-
 .mdi-folder-move::before {
   content: "\F0252";
-}
-
-.mdi-folder-multiple::before {
-  content: "\F0253";
 }
 
 .mdi-folder-open::before {
@@ -580,6 +556,10 @@
   content: "\F02DC";
 }
 
+.mdi-home-outline::before {
+  content: "\F06A1";
+}
+
 .mdi-hook::before {
   content: "\F06E2";
 }
@@ -628,36 +608,12 @@
   content: "\F0318";
 }
 
-.mdi-language-css3::before {
-  content: "\F031C";
-}
-
-.mdi-language-html5::before {
-  content: "\F031D";
-}
-
-.mdi-language-java::before {
-  content: "\F0B37";
-}
-
-.mdi-language-javascript::before {
-  content: "\F031E";
-}
-
 .mdi-language-markdown::before {
   content: "\F0354";
 }
 
 .mdi-language-markdown-outline::before {
   content: "\F0F5B";
-}
-
-.mdi-language-python::before {
-  content: "\F0320";
-}
-
-.mdi-language-typescript::before {
-  content: "\F06E6";
 }
 
 .mdi-layers-outline::before {
@@ -670,6 +626,10 @@
 
 .mdi-lightning-bolt::before {
   content: "\F140B";
+}
+
+.mdi-lightning-bolt-outline::before {
+  content: "\F140C";
 }
 
 .mdi-link::before {
@@ -928,10 +888,6 @@
   content: "\F1165";
 }
 
-.mdi-server::before {
-  content: "\F048B";
-}
-
 .mdi-server-network::before {
   content: "\F048D";
 }
@@ -1008,12 +964,12 @@
   content: "\F0666";
 }
 
-.mdi-store::before {
-  content: "\F04DC";
-}
-
 .mdi-subdirectory-arrow-right::before {
   content: "\F060D";
+}
+
+.mdi-svg::before {
+  content: "\F0721";
 }
 
 .mdi-sync::before {

@@ -5,17 +5,27 @@ import shutil
 import time
 import zipfile
 from pathlib import Path
-from typing import NoReturn
 
 import certifi
 import httpx
 
 from astrbot.core import logger
+from astrbot.core.repository import GitHubRepository
 from astrbot.core.utils.io import ensure_dir, on_error
 from astrbot.core.utils.version_comparator import VersionComparator
 
+__all__ = ["ReleaseInfo"]
+
 
 class ReleaseInfo:
+    """Describe a repository release exposed by an updater.
+
+    Args:
+        version: Release tag used as an update target.
+        published_at: Publication timestamp supplied by the release source.
+        body: Release notes supplied by the release source.
+    """
+
     version: str
     published_at: str
     body: str
@@ -31,21 +41,33 @@ class ReleaseInfo:
         self.body = body
 
     def __str__(self) -> str:
-        return f"\n{self.body}\n\n版本: {self.version} | 发布于: {self.published_at}"
+        return (
+            f"\n{self.body}\n\nVersion: {self.version} | "
+            f"Published at: {self.published_at}"
+        )
 
 
-class RepoZipUpdator:
-    def __init__(self, repo_mirror: str = "", verify: str | bool | None = None) -> None:
-        self.repo_mirror = repo_mirror
-        self.rm_on_error = on_error
-        self.httpx_verify = certifi.where() if verify is None else verify
+class _RepoZipUpdater:
+    """Download and apply ZIP updates from repository hosting providers."""
+
+    def __init__(
+        self,
+        verify: str | bool | None = None,
+    ) -> None:
+        """Initialize the shared repository update workflow.
+
+        Args:
+            verify: TLS certificate verification configuration for HTTPX.
+        """
+        self._rm_on_error = on_error
+        self._httpx_verify = certifi.where() if verify is None else verify
 
     def _create_httpx_client(self, timeout: float = 30.0) -> httpx.AsyncClient:
         return httpx.AsyncClient(
             follow_redirects=True,
             timeout=timeout,
             trust_env=True,
-            verify=self.httpx_verify,
+            verify=self._httpx_verify,
         )
 
     @staticmethod
@@ -54,54 +76,71 @@ class RepoZipUpdator:
             return body
         return body[:max_len] + "...[truncated]"
 
-    async def fetch_github_default_branch(self, author: str, repo: str) -> str | None:
-        """Fetch the default branch for a GitHub repository.
+    async def _fetch_repository_default_branch(
+        self,
+        repository: GitHubRepository,
+    ) -> str | None:
+        """Fetch the default branch for a repository.
 
         Args:
-            author: GitHub repository owner.
-            repo: GitHub repository name.
+            repository: Parsed GitHub repository.
 
         Returns:
             The default branch name, or None if it cannot be resolved.
         """
-        url = f"https://api.github.com/repos/{author}/{repo}"
+        url = repository.default_branch_api_url
         try:
             async with self._create_httpx_client(timeout=10.0) as client:
                 response = await client.get(url)
                 response.raise_for_status()
                 repo_info = response.json()
         except Exception as exc:
-            logger.debug("获取 GitHub 默认分支失败 %s/%s: %s", author, repo, exc)
+            logger.debug(
+                "Failed to get the default %s branch for %s/%s: %s",
+                "github",
+                repository.owner,
+                repository.name,
+                exc,
+            )
             return None
 
         default_branch = str(repo_info.get("default_branch") or "").strip()
         return default_branch or None
 
-    async def resolve_github_source_branch(
+    async def _resolve_repository_source(
         self,
         repo_url: str,
-    ) -> tuple[str, str, str]:
-        """Resolve the GitHub branch used for repository source downloads.
+    ) -> GitHubRepository:
+        """Resolve a repository URL to a downloadable source archive.
 
         Args:
-            repo_url: GitHub repository URL, optionally with a tree branch.
+            repo_url: Repository URL, optionally with an explicit tree branch.
 
         Returns:
-            Repository owner, name, and resolved source branch.
+            Resolved provider adapter and repository branch.
 
         Raises:
-            ValueError: If the repository URL is invalid.
+            ValueError: If the repository URL is unsupported or invalid.
         """
-        author, repo, branch = self.parse_github_url(repo_url)
-        if branch:
-            return author, repo, branch
+        repository = GitHubRepository.parse(repo_url)
+        if repository.branch:
+            return repository
 
-        default_branch = await self.fetch_github_default_branch(author, repo)
-        if default_branch:
-            return author, repo, default_branch
-
-        logger.info("未能获取 %s/%s 的默认分支，将尝试 main 分支", author, repo)
-        return author, repo, "main"
+        default_branch = await self._fetch_repository_default_branch(repository)
+        branch = default_branch or "main"
+        if not default_branch:
+            logger.info(
+                "Could not get the default %s branch for %s/%s; trying %s.",
+                "github",
+                repository.owner,
+                repository.name,
+                branch,
+            )
+        return GitHubRepository(
+            repository.owner,
+            repository.name,
+            branch,
+        )
 
     async def _download_file(
         self,
@@ -163,12 +202,12 @@ class RepoZipUpdator:
                         },
                     )
         except Exception as e:
-            logger.error(f"下载文件失败: {url} -> {target_path}, 错误: {e}")
-            if self.rm_on_error and target_path.exists():
+            logger.error(f"Failed to download file: {url} -> {target_path}: {e}")
+            if self._rm_on_error and target_path.exists():
                 target_path.unlink()
             raise
 
-    async def fetch_release_info(self, url: str, latest: bool = True) -> list:
+    async def _fetch_release_info(self, url: str, latest: bool = True) -> list:
         """请求版本信息。
         返回一个列表，每个元素是一个字典，包含版本号、发布时间、更新内容、commit hash等信息。
         """
@@ -179,10 +218,6 @@ class RepoZipUpdator:
                 result = response.json()
             if not result:
                 return []
-            # if latest:
-            #     ret = self.github_api_release_parser([result[0]])
-            # else:
-            #     ret = self.github_api_release_parser(result)
             ret = []
             for release in result:
                 ret.append(
@@ -199,48 +234,26 @@ class RepoZipUpdator:
             if e.response is not None:
                 response_body = self._truncate_response_body(e.response.text)
                 logger.error(
-                    f"请求 {url} 失败，状态码: {e.response.status_code}, 内容: {response_body}",
+                    f"Request to {url} failed with status "
+                    f"{e.response.status_code}; response: {response_body}",
                 )
-            raise Exception("解析版本信息失败") from e
+            raise Exception("Failed to parse release information.") from e
         except Exception as e:
-            logger.error(f"解析版本信息时发生异常: {e}")
-            raise Exception("解析版本信息失败") from e
+            logger.error(f"An error occurred while parsing release information: {e}")
+            raise Exception("Failed to parse release information.") from e
         return ret
 
-    def github_api_release_parser(self, releases: list) -> list:
-        """解析 GitHub API 返回的 releases 信息。
-        返回一个列表，每个元素是一个字典，包含版本号、发布时间、更新内容、commit hash等信息。
-        """
-        ret = []
-        for release in releases:
-            ret.append(
-                {
-                    "version": release["name"],
-                    "published_at": release["published_at"],
-                    "body": release["body"],
-                    "tag_name": release["tag_name"],
-                    "zipball_url": release["zipball_url"],
-                },
-            )
-        return ret
-
-    def unzip(self) -> NoReturn:
-        raise NotImplementedError
-
-    async def update(self) -> NoReturn:
-        raise NotImplementedError
-
-    def compare_version(self, v1: str, v2: str) -> int:
+    def _compare_version(self, v1: str, v2: str) -> int:
         """Semver 版本比较"""
         return VersionComparator.compare_version(v1, v2)
 
-    async def check_update(
+    async def _check_update(
         self,
         url: str,
         current_version: str,
         consider_prerelease: bool = True,
     ) -> ReleaseInfo | None:
-        update_data = await self.fetch_release_info(url)
+        update_data = await self._fetch_release_info(url)
 
         sel_release_data = None
         if consider_prerelease:
@@ -260,62 +273,50 @@ class RepoZipUpdator:
                 break
 
         if not sel_release_data or not tag_name:
-            logger.error("未找到合适的发布版本")
+            logger.error("No suitable release was found.")
             return None
 
-        if self.compare_version(current_version, tag_name) >= 0:
+        if self._compare_version(current_version, tag_name) >= 0:
             return None
         return ReleaseInfo(
             version=tag_name,
             published_at=sel_release_data["published_at"],
-            body=f"{tag_name}\n\n{sel_release_data['body']}",
+            body=sel_release_data["body"],
         )
 
-    async def download_from_repo_url(
+    async def _download_repository(
         self, target_path: str, repo_url: str, proxy=""
     ) -> None:
-        author, repo, branch = await self.resolve_github_source_branch(repo_url)
+        repository = await self._resolve_repository_source(repo_url)
 
-        logger.info(f"正在下载更新 {repo} ...")
-        logger.info(f"正在从分支 {branch} 下载 {author}/{repo}")
-        release_url = (
-            f"https://github.com/{author}/{repo}/archive/refs/heads/{branch}.zip"
+        logger.info(f"Downloading update for {repository.name} ...")
+        logger.info(
+            "Downloading %s/%s from %s branch %s",
+            repository.owner,
+            repository.name,
+            "github",
+            repository.branch,
         )
+        release_url = repository.archive_url
 
         if proxy:
             proxy = proxy.rstrip("/")
             release_url = f"{proxy}/{release_url}"
             logger.info(
-                f"检查到设置了镜像站，将使用镜像站下载 {author}/{repo} 仓库源码: {release_url}",
+                f"A mirror is configured; downloading the {repository.owner}/"
+                f"{repository.name} source "
+                f"from the mirror: {release_url}",
             )
 
         await self._download_file(release_url, target_path + ".zip")
 
-    def parse_github_url(self, url: str):
-        """使用正则表达式解析 GitHub 仓库 URL，支持 `.git` 后缀和 `tree/branch` 结构
-        Returns:
-            tuple[str, str, str]: 返回作者名、仓库名和分支名
-        Raises:
-            ValueError: 如果 URL 格式不正确
-        """
-        cleaned_url = url.rstrip("/")
-        pattern = r"^https://github\.com/([a-zA-Z0-9_-]+)/([a-zA-Z0-9_-]+)(\.git)?(?:/tree/([a-zA-Z0-9_-]+))?$"
-        match = re.match(pattern, cleaned_url)
-
-        if match:
-            author = match.group(1)
-            repo = match.group(2)
-            branch = match.group(4)
-            return author, repo, branch
-        raise ValueError("无效的 GitHub URL")
-
-    def unzip_file(self, zip_path: str, target_dir: str) -> None:
+    def _extract_archive(self, zip_path: str, target_dir: str) -> None:
         """解压缩文件, 并将压缩包内**第一个**文件夹内的文件移动到 target_dir"""
         ensure_dir(target_dir)
         with zipfile.ZipFile(zip_path, "r") as z:
             update_dir = self._resolve_archive_root_dir(z.namelist())
             z.extractall(target_dir)
-        logger.debug(f"解压文件完成: {zip_path}")
+        logger.debug(f"Finished extracting archive: {zip_path}")
 
         self._finalize_extracted_archive(zip_path, target_dir, update_dir)
 
@@ -370,7 +371,9 @@ class RepoZipUpdator:
             try:
                 os.remove(zip_path)
             except Exception:
-                logger.warning(f"删除更新文件失败，可以手动删除 {zip_path}")
+                logger.warning(
+                    f"Failed to delete the update file; delete it manually: {zip_path}"
+                )
             return
 
         update_root_path = _join_under_root(target_root_path, update_dir)
@@ -387,13 +390,16 @@ class RepoZipUpdator:
             shutil.move(update_item_path, target_root_path)
 
         try:
-            logger.debug(f"删除临时更新文件: {zip_path} 和 {update_root_path}")
+            logger.debug(
+                f"Deleting temporary update files: {zip_path} and {update_root_path}"
+            )
             shutil.rmtree(update_root_path, onerror=on_error)
             os.remove(zip_path)
         except Exception:
             logger.warning(
-                f"删除更新文件失败，可以手动删除 {zip_path} 和 {update_root_path}"
+                "Failed to delete the update files; delete them manually: "
+                f"{zip_path} and {update_root_path}"
             )
 
-    def format_name(self, name: str) -> str:
+    def _format_name(self, name: str) -> str:
         return name.replace("-", "_").lower()

@@ -1,19 +1,22 @@
 import copy
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
+from unittest.mock import Mock
 
 import httpx
 import jwt
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 
 import astrbot.dashboard.services.config_service as config_service
 from astrbot.core import file_token_service
+from astrbot.core.utils import llm_metadata
 from astrbot.dashboard.api.app import create_dashboard_asgi_app
+from astrbot.dashboard.api.backups import download_backup as download_backup_route
 from astrbot.dashboard.asgi_runtime import (
     FastAPIAppAdapter,
     g,
@@ -24,11 +27,12 @@ from astrbot.dashboard.asgi_runtime import (
 from astrbot.dashboard.responses import ok
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
+from astrbot.dashboard.services.backup_service import BackupDownload
 from astrbot.dashboard.services.plugin_service import (
     PLUGIN_UPDATE_SOURCE_REQUIRED_MESSAGE,
     PluginServiceError,
 )
-from astrbot.dashboard.services.skills_service import SkillArchive
+from astrbot.dashboard.services.skills_service import SkillArchive, SkillsServiceError
 
 JWT_SECRET = "fastapi-v1-test-secret-with-32-bytes"
 
@@ -162,7 +166,13 @@ class FakeLlmTools:
     def activate_llm_tool(self, _tool_name: str, *, star_map) -> bool:
         return True
 
+    async def activate_llm_tool_async(self, _tool_name: str, *, star_map) -> bool:
+        return True
+
     def deactivate_llm_tool(self, _tool_name: str) -> bool:
+        return True
+
+    async def deactivate_llm_tool_async(self, _tool_name: str) -> bool:
         return True
 
 
@@ -289,6 +299,7 @@ class FakeConversation:
     title: str = "Demo conversation"
     persona_id: str | None = "persona/foo"
     history: str = "[]"
+    token_usage: int = 0
     created_at: str = "2026-01-01T00:00:00"
     updated_at: str = "2026-01-01T00:00:00"
 
@@ -296,6 +307,8 @@ class FakeConversation:
 class FakeConversationManager:
     def __init__(self) -> None:
         user_id = "webchat:FriendMessage:webchat!user!session-1"
+        self.last_filter_args: dict[str, list[str]] = {}
+        self.last_include_history = True
         self.conversations: dict[tuple[str, str], FakeConversation] = {
             (user_id, "conversation/with/slash"): FakeConversation(
                 cid="conversation/with/slash",
@@ -313,7 +326,15 @@ class FakeConversationManager:
         search_query: str,
         exclude_ids: list[str],
         exclude_platforms: list[str],
+        include_history: bool = True,
     ):
+        self.last_include_history = include_history
+        self.last_filter_args = {
+            "platforms": platforms,
+            "message_types": message_types,
+            "exclude_ids": exclude_ids,
+            "exclude_platforms": exclude_platforms,
+        }
         conversations = list(self.conversations.values())
         if platforms:
             conversations = [
@@ -540,7 +561,7 @@ class FakeUmopConfigRouter:
         self.umop_to_conf_id.pop(umo, None)
 
 
-class FakeAstrBotUpdator:
+class FakeAstrBotUpdater:
     async def check_update(self, *_args, **_kwargs):
         return None
 
@@ -550,11 +571,8 @@ class FakeAstrBotUpdator:
     async def update(self, *_args, **_kwargs) -> None:
         return None
 
-    async def download_update_package(self, *_args, **kwargs):
-        return kwargs.get("path", "temp.zip")
-
-    def apply_update_package(self, *_args, **_kwargs) -> None:
-        return None
+    async def ensure_dashboard(self) -> Path:
+        return Path("data/dist")
 
 
 class FakeAstrBotConfig(dict):
@@ -914,7 +932,7 @@ def fake_core_lifecycle():
 
     return SimpleNamespace(
         astrbot_config=config,
-        astrbot_updator=FakeAstrBotUpdator(),
+        astrbot_updater=FakeAstrBotUpdater(),
         start_time=1234567890,
         astrbot_config_mgr=SimpleNamespace(
             confs={"default": config}, default_conf=config
@@ -1069,6 +1087,42 @@ async def test_v1_openapi_is_served_by_fastapi(asgi_client: httpx.AsyncClient):
     assert "/api/v1/skills" in spec["paths"]
     assert "/api/v1/file" in spec["paths"]
 
+    bot_list = spec["paths"]["/api/v1/bots"]["get"]
+    assert bot_list["x-astrbot-scope"] == "bot"
+    assert "**Required scope:** `bot`" in bot_list["description"]
+
+    conversation_list = spec["paths"]["/api/v1/conversations"]["get"]
+    assert conversation_list["x-astrbot-scope"] == "data"
+    assert "**Required scope:** `data`" in conversation_list["description"]
+
+    chat_send = spec["paths"]["/api/v1/chat"]["post"]
+    assert chat_send["x-astrbot-scope"] == "chat"
+    assert chat_send["x-astrbot-sensitive-scopes"] == ["chat:admin"]
+    assert "**Required scope:** `chat`" in chat_send["description"]
+    assert (
+        "**Conditional sensitive scope:** `chat:admin`" in chat_send["description"]
+    )
+
+    public_spec_path = (
+        Path(__file__).resolve().parents[1] / "docs" / "public" / "openapi.json"
+    )
+    public_spec = json.loads(public_spec_path.read_text(encoding="utf-8"))
+    runtime_scope_map = {
+        (method, path): operation["x-astrbot-scope"]
+        for path, methods in spec["paths"].items()
+        for method, operation in methods.items()
+        if isinstance(operation, dict) and "x-astrbot-scope" in operation
+    }
+    public_scope_map = {
+        (method, path): operation["x-astrbot-scope"]
+        for path, methods in public_spec["paths"].items()
+        for method, operation in methods.items()
+        if isinstance(operation, dict)
+        and "x-astrbot-scope" in operation
+        and not operation.get("x-websocket")
+    }
+    assert public_scope_map == runtime_scope_map
+
 
 def test_static_openapi_v1_paths_include_api_version():
     spec_path = Path(__file__).resolve().parents[1] / "openspec" / "openapi-v1.yaml"
@@ -1134,6 +1188,43 @@ async def test_dashboard_static_dist_files_are_served(
     assert missing_response.status_code == 404
     assert traversal_response.status_code == 404
     assert api_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_v1_backup_download_accepts_bearer_token(
+    tmp_path: Path,
+):
+    filename = "desktop-backup.zip"
+    backup_path = tmp_path / filename
+    backup_path.write_bytes(b"PK\x03\x04desktop-backup-content")
+    prepare_download = Mock(
+        return_value=BackupDownload(path=str(backup_path), filename=filename)
+    )
+    service = SimpleNamespace(
+        config={"dashboard": {"jwt_secret": JWT_SECRET}},
+        prepare_download=prepare_download,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "headers": [(b"authorization", b"bEaReR   desktop-session-token")],
+        }
+    )
+
+    response = await download_backup_route(
+        filename=filename,
+        request=request,
+        token=None,
+        service=service,
+    )
+
+    assert isinstance(response, FileResponse)
+    assert response.path == str(backup_path)
+    prepare_download.assert_called_once_with(
+        filename=filename,
+        token="desktop-session-token",
+        jwt_secret=JWT_SECRET,
+    )
 
 
 @pytest.mark.asyncio
@@ -1215,8 +1306,7 @@ async def test_v1_knowledge_base_create_validation_uses_api_error_shape(
     assert missing_provider_response.status_code == 200
     assert missing_provider_response.json()["status"] == "error"
     assert (
-        missing_provider_response.json()["message"]
-        == "缺少参数 embedding_provider_id"
+        missing_provider_response.json()["message"] == "缺少参数 embedding_provider_id"
     )
 
 
@@ -1232,6 +1322,102 @@ async def test_v1_conversation_path_id_allows_slash(asgi_client: httpx.AsyncClie
     payload = response.json()
     assert payload["status"] == "ok"
     assert payload["data"]["cid"] == "conversation/with/slash"
+
+
+@pytest.mark.asyncio
+async def test_v1_conversation_list_preserves_history_by_default(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    response = await asgi_client.get(
+        "/api/v1/conversations",
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    conversation = payload["data"]["conversations"][0]
+    assert conversation["cid"] == "conversation/with/slash"
+    assert conversation["history"] == "[]"
+    assert fake_core_lifecycle.conversation_manager.last_include_history is True
+
+
+@pytest.mark.asyncio
+async def test_v1_conversation_list_returns_summary_without_history(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    response = await asgi_client.get(
+        "/api/v1/conversations",
+        params={"include_history": "false"},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    conversation = payload["data"]["conversations"][0]
+    assert conversation["cid"] == "conversation/with/slash"
+    assert "history" not in conversation
+    assert fake_core_lifecycle.conversation_manager.last_include_history is False
+
+
+@pytest.mark.asyncio
+async def test_legacy_conversation_list_preserves_history_by_default(
+    asgi_client: httpx.AsyncClient,
+):
+    response = await asgi_client.get(
+        "/api/conversation/list",
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["data"]["conversations"][0]["history"] == "[]"
+
+
+@pytest.mark.asyncio
+async def test_legacy_conversation_list_returns_summary_without_history(
+    asgi_client: httpx.AsyncClient,
+):
+    response = await asgi_client.get(
+        "/api/conversation/list",
+        params={"include_history": "false"},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert "history" not in payload["data"]["conversations"][0]
+
+
+@pytest.mark.asyncio
+async def test_conversation_list_normalizes_comma_separated_filters(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    response = await asgi_client.get(
+        "/api/v1/conversations",
+        params={
+            "platforms": ", webchat-main ,",
+            "message_types": ", FriendMessage ,",
+            "exclude_ids": "astrbot, ,",
+            "exclude_platforms": ", webchat ,",
+        },
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert fake_core_lifecycle.conversation_manager.last_filter_args == {
+        "platforms": ["webchat-main"],
+        "message_types": ["FriendMessage"],
+        "exclude_ids": ["astrbot"],
+        "exclude_platforms": ["webchat"],
+    }
 
 
 @pytest.mark.asyncio
@@ -1423,6 +1609,41 @@ async def test_v1_providers_matches_dashboard_provider_alias_list(
 
 
 @pytest.mark.asyncio
+async def test_v1_provider_schema_keeps_reasoning_in_model_metadata(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    fake_core_lifecycle.astrbot_config["provider"][0]["reasoning"] = True
+    model_metadata = {
+        "id": "gpt-4o-mini",
+        "reasoning": True,
+        "tool_call": True,
+        "knowledge": "2023-10",
+        "release_date": "2024-07-18",
+        "modalities": {"input": ["text"], "output": ["text"]},
+        "open_weights": False,
+        "limit": {"context": 128000, "output": 16384},
+    }
+    monkeypatch.setattr(
+        llm_metadata,
+        "LLM_METADATAS",
+        {"gpt-4o-mini": model_metadata},
+    )
+
+    response = await asgi_client.get(
+        "/api/v1/providers/schema",
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    provider = next(item for item in data["providers"] if item["id"] == "gpt-mini")
+    assert "reasoning" not in provider
+    assert data["model_metadata"]["gpt-4o-mini"] == model_metadata
+
+
+@pytest.mark.asyncio
 async def test_v1_provider_source_rename_updates_provider_refs(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
@@ -1474,6 +1695,7 @@ async def test_v1_provider_update_keeps_dashboard_id_rename_behavior(
                 "provider_source_id": "openai-source",
                 "model": "gpt-4o-mini",
                 "enable": True,
+                "reasoning": True,
             }
         },
         headers=_jwt_headers(),
@@ -1483,9 +1705,36 @@ async def test_v1_provider_update_keeps_dashboard_id_rename_behavior(
     assert response.json()["status"] == "ok"
     config = fake_core_lifecycle.astrbot_config
     assert config["provider"][0]["id"] == "gpt-renamed"
+    assert "reasoning" not in config["provider"][0]
     assert fake_core_lifecycle.provider_manager.reloaded_providers == [
         config["provider"][0]
     ]
+
+
+@pytest.mark.asyncio
+async def test_v1_create_source_provider_strips_reasoning_metadata(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    response = await asgi_client.post(
+        "/api/v1/providers",
+        json={
+            "config": {
+                "id": "gpt-source-model",
+                "provider_source_id": "openai-source",
+                "model": "gpt-4o-mini",
+                "enable": True,
+                "reasoning": True,
+            }
+        },
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    provider = fake_core_lifecycle.astrbot_config["provider"][-1]
+    assert provider["id"] == "gpt-source-model"
+    assert "reasoning" not in provider
 
 
 @pytest.mark.asyncio
@@ -1501,6 +1750,7 @@ async def test_v1_create_standalone_provider_matches_dashboard_alias_capability(
                 "type": "edge_tts",
                 "provider_type": "text_to_speech",
                 "enable": True,
+                "reasoning": True,
             }
         },
         headers=_jwt_headers(),
@@ -1513,6 +1763,7 @@ async def test_v1_create_standalone_provider_matches_dashboard_alias_capability(
         "type": "edge_tts",
         "provider_type": "text_to_speech",
         "enable": True,
+        "reasoning": True,
     }
 
 
@@ -1599,7 +1850,12 @@ async def test_v1_safe_provider_routes_accept_slash_ids(
     assert get_response.status_code == 200
     assert get_response.json()["data"]["provider"]["id"] == provider_id
     assert schema_response.status_code == 200
-    assert "config_schema" in schema_response.json()["data"]
+    config_schema = schema_response.json()["data"]["config_schema"]
+    reasoning_effort_preset = config_schema["provider"]["items"][
+        "custom_extra_body"
+    ]["template_schema"]["reasoning_effort"]
+    assert reasoning_effort_preset["type"] == "string"
+    assert reasoning_effort_preset["default"] == "high"
     assert path_test_response.status_code == 200
     assert path_test_response.json()["data"]["status"] == "available"
     assert safe_test_response.status_code == 200
@@ -1867,6 +2123,43 @@ async def test_v1_plugin_url_install_accepts_download_url_and_missing_body(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("transport", "repository"),
+    [
+        ("github", "AstrBotDevs/astrbot-plugin-demo"),
+        ("git", "https://gitee.com/AstrBotDevs/astrbot-plugin-demo.git"),
+        ("git", "git@github.com:AstrBotDevs/astrbot-plugin-demo.git"),
+    ],
+)
+async def test_v1_plugin_repository_install_uses_transport_route(
+    transport: str,
+    repository: str,
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    plugin_service = asgi_app.state.services.plugins
+    captured = {}
+
+    async def fake_install_plugin(payload):
+        captured.update(payload)
+        return {"name": "astrbot_plugin_demo"}, "安装成功。"
+
+    monkeypatch.setattr(plugin_service, "install_plugin", fake_install_plugin)
+
+    response = await asgi_client.post(
+        f"/api/v1/plugins/install/{transport}",
+        json={"repository": repository},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert captured["url"] == repository
+    assert captured["repository_transport"] == transport
+
+
+@pytest.mark.asyncio
 async def test_plugin_service_market_install_uses_registry_entry(
     asgi_app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
@@ -1956,7 +2249,7 @@ async def test_plugin_service_market_install_uses_registry_entry(
     assert captured["download_url"] == "https://cdn.example/market-plugin.zip"
     assert captured["proxy"] == "https://proxy.example"
     assert captured["ignore_version_check"] is True
-    assert captured["persist_fallback_method"] == "github"
+    assert captured["persist_fallback_method"] == "repository"
     assert (
         captured["persist_repo_url"]
         == "https://github.com/AstrBotDevs/astrbot-plugin-demo"
@@ -1978,83 +2271,25 @@ async def test_plugin_service_validate_plugin_repo_fetches_metadata_file(
     asgi_app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    import astrbot.dashboard.services.plugin_service as plugin_service_module
-    from astrbot.core.star.updator import PluginUpdator
-
     plugin_service = asgi_app.state.services.plugins
-    captured: dict[str, object] = {"urls": []}
-    updater = PluginUpdator.__new__(PluginUpdator)
+    captured: dict[str, object] = {}
 
-    async def fake_resolve_github_source_branch(repo_url: str):
+    async def fake_inspect_plugin_repository(repo_url: str, proxy: str):
         assert repo_url == "https://github.com/AstrBotDevs/astrbot-plugin-demo"
-        return "AstrBotDevs", "astrbot-plugin-demo", "trunk"
-
-    plugin_service.plugin_manager.updator = SimpleNamespace(
-        parse_github_url=updater.parse_github_url,
-        resolve_github_source_branch=fake_resolve_github_source_branch,
-        validate_plugin_metadata=PluginUpdator.validate_plugin_metadata,
-    )
-
-    class FakeContent:
-        def __init__(self, text: str):
-            self._text = text
-
-        async def read(self, size: int) -> bytes:
-            return self._text.encode("utf-8")[:size]
-
-    class FakeResponse:
-        def __init__(self, status: int, *, text: str = "", payload=None):
-            self.status = status
-            self._text = text
-            self._payload = payload or {}
-            self.headers = {}
-            self.content = FakeContent(text)
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb) -> None:
-            return None
-
-        async def json(self):
-            return self._payload
-
-        async def text(self):
-            return self._text
-
-    class FakeClientSession:
-        def __init__(self, **kwargs):
-            captured["session_kwargs"] = kwargs
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb) -> None:
-            return None
-
-        def get(self, url: str):
-            cast(list[str], captured["urls"]).append(url)
-            if url.endswith("/metadata.yaml"):
-                return FakeResponse(404)
-            if url.endswith("/metadata.yml"):
-                return FakeResponse(
-                    200,
-                    text="\n".join(
-                        [
-                            "name: astrbot_plugin_demo",
-                            "description: Demo plugin",
-                            "version: 2.0.0",
-                            "author: AstrBotDevs",
-                            "repo: https://github.com/AstrBotDevs/astrbot-plugin-demo",
-                        ]
-                    ),
-                )
-            return FakeResponse(404)
+        captured["proxy"] = proxy
+        return {
+            "name": "astrbot_plugin_demo",
+            "desc": "Demo plugin",
+            "version": "2.0.0",
+            "author": "AstrBotDevs",
+            "repo": repo_url,
+        }
 
     monkeypatch.setattr(
-        plugin_service_module.aiohttp,
-        "ClientSession",
-        FakeClientSession,
+        plugin_service.plugin_manager,
+        "inspect_plugin_repository",
+        fake_inspect_plugin_repository,
+        raising=False,
     )
 
     result, message = await plugin_service.validate_plugin_repo(
@@ -2065,17 +2300,96 @@ async def test_plugin_service_validate_plugin_repo_fetches_metadata_file(
     )
 
     assert message == "插件校验通过。"
-    assert result["metadata_entry"] == "metadata.yml"
-    assert result["metadata_branch"] == "trunk"
     assert result["desc"] == "Demo plugin"
     assert result["version"] == "2.0.0"
-    assert (
-        "https://proxy.example/https://raw.githubusercontent.com/"
-        "AstrBotDevs/astrbot-plugin-demo/trunk/metadata.yml"
-        in cast(list[str], captured["urls"])
+    assert captured["proxy"] == "https://proxy.example/"
+
+
+@pytest.mark.asyncio
+async def test_plugin_service_validate_plugin_repo_preserves_ssh_locator(
+    asgi_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    plugin_service = asgi_app.state.services.plugins
+    captured = {}
+
+    async def fake_inspect_plugin_repository(repo_url: str, proxy: str):
+        captured["repo_url"] = repo_url
+        captured["proxy"] = proxy
+        return {
+            "name": "astrbot_plugin_demo",
+            "desc": "Demo plugin",
+            "version": "2.0.0",
+            "author": "AstrBotDevs",
+            "repo": repo_url,
+        }
+
+    monkeypatch.setattr(
+        plugin_service.plugin_manager,
+        "inspect_plugin_repository",
+        fake_inspect_plugin_repository,
+        raising=False,
     )
-    session_kwargs = cast(dict[str, object], captured["session_kwargs"])
-    assert "timeout" in session_kwargs
+
+    await plugin_service.validate_plugin_repo(
+        {"url": "git@github.com:AstrBotDevs/astrbot-plugin-demo.git"}
+    )
+
+    assert captured["repo_url"] == "git@github.com:AstrBotDevs/astrbot-plugin-demo.git"
+    assert captured["proxy"] == ""
+
+
+@pytest.mark.asyncio
+async def test_plugin_service_enforces_repository_transport_route(
+    asgi_app: FastAPI,
+):
+    plugin_service = asgi_app.state.services.plugins
+
+    with pytest.raises(PluginServiceError, match="non-GitHub"):
+        await plugin_service.install_plugin(
+            {
+                "url": "https://gitee.com/AstrBotDevs/demo.git",
+                "repository_transport": "github",
+            }
+        )
+
+    with pytest.raises(PluginServiceError, match="GitHub archive"):
+        await plugin_service.install_plugin(
+            {
+                "url": "https://github.com/AstrBotDevs/demo",
+                "repository_transport": "git",
+            }
+        )
+
+
+@pytest.mark.asyncio
+async def test_plugin_service_exposes_missing_git_error(
+    asgi_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.repository import GitUnavailableError
+
+    plugin_service = asgi_app.state.services.plugins
+
+    async def fail_install(*_args, **_kwargs):
+        raise GitUnavailableError("Git is required for this repository.")
+
+    monkeypatch.setattr(
+        plugin_service.plugin_manager,
+        "install_plugin",
+        fail_install,
+        raising=False,
+    )
+
+    with pytest.raises(PluginServiceError) as exc_info:
+        await plugin_service.install_plugin(
+            {
+                "url": "git@github.com:AstrBotDevs/demo.git",
+                "repository_transport": "git",
+            }
+        )
+
+    assert exc_info.value.public_message == "Git is required for this repository."
 
 
 @pytest.mark.asyncio
@@ -2083,54 +2397,16 @@ async def test_plugin_service_validate_plugin_repo_rejects_large_metadata_file(
     asgi_app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    import astrbot.dashboard.services.plugin_service as plugin_service_module
-    from astrbot.core.star.updator import PluginUpdator
-
     plugin_service = asgi_app.state.services.plugins
 
-    async def fake_resolve_github_source_branch(repo_url: str):
-        assert repo_url == "https://github.com/AstrBotDevs/astrbot-plugin-demo"
-        return "AstrBotDevs", "astrbot-plugin-demo", "main"
-
-    plugin_service.plugin_manager.updator = SimpleNamespace(
-        resolve_github_source_branch=fake_resolve_github_source_branch,
-        validate_plugin_metadata=PluginUpdator.validate_plugin_metadata,
-    )
-
-    class FakeContent:
-        async def read(self, size: int) -> bytes:  # noqa: ARG002
-            raise AssertionError("metadata body should not be read when too large")
-
-    class FakeResponse:
-        status = 200
-        headers = {
-            "Content-Length": str(plugin_service_module.PLUGIN_METADATA_MAX_BYTES + 1)
-        }
-        content = FakeContent()
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb) -> None:
-            return None
-
-    class FakeClientSession:
-        def __init__(self, **kwargs):  # noqa: ARG002
-            return None
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb) -> None:
-            return None
-
-        def get(self, url: str):  # noqa: ARG002
-            return FakeResponse()
+    async def fake_inspect_plugin_repository(repo_url: str, proxy: str):  # noqa: ARG001
+        raise ValueError("metadata.yaml 超过 1MB。")
 
     monkeypatch.setattr(
-        plugin_service_module.aiohttp,
-        "ClientSession",
-        FakeClientSession,
+        plugin_service.plugin_manager,
+        "inspect_plugin_repository",
+        fake_inspect_plugin_repository,
+        raising=False,
     )
 
     with pytest.raises(PluginServiceError, match="超过 1MB"):
@@ -2144,37 +2420,16 @@ async def test_plugin_service_validate_plugin_repo_hides_internal_errors(
     asgi_app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    import astrbot.dashboard.services.plugin_service as plugin_service_module
-    from astrbot.core.star.updator import PluginUpdator
-
     plugin_service = asgi_app.state.services.plugins
 
-    async def fake_resolve_github_source_branch(repo_url: str):
-        assert repo_url == "https://github.com/AstrBotDevs/astrbot-plugin-demo"
-        return "AstrBotDevs", "astrbot-plugin-demo", "main"
-
-    plugin_service.plugin_manager.updator = SimpleNamespace(
-        resolve_github_source_branch=fake_resolve_github_source_branch,
-        validate_plugin_metadata=PluginUpdator.validate_plugin_metadata,
-    )
-
-    class FakeClientSession:
-        def __init__(self, **kwargs):  # noqa: ARG002
-            return None
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb) -> None:
-            return None
-
-        def get(self, url: str):  # noqa: ARG002
-            raise RuntimeError("secret stack trace")
+    async def fake_inspect_plugin_repository(repo_url: str, proxy: str):  # noqa: ARG001
+        raise RuntimeError("secret stack trace")
 
     monkeypatch.setattr(
-        plugin_service_module.aiohttp,
-        "ClientSession",
-        FakeClientSession,
+        plugin_service.plugin_manager,
+        "inspect_plugin_repository",
+        fake_inspect_plugin_repository,
+        raising=False,
     )
 
     with pytest.raises(PluginServiceError) as exc_info:
@@ -2288,12 +2543,12 @@ async def test_plugin_service_bind_repo_source_persists_github_method(
     record, message = await plugin_service.bind_plugin_market_source(
         {
             "name": "astrbot_plugin_demo",
-            "install_method": "github",
+            "install_method": "repository",
         }
     )
 
     assert message == "插件源已更新。"
-    assert record["install_method"] == "github"
+    assert record["install_method"] == "repository"
     assert record["registry_url"] is None
     assert record["registry_name"] == "Repository"
     assert record["repo"] == "https://github.com/AstrBotDevs/astrbot-plugin-demo"
@@ -2347,6 +2602,19 @@ def test_plugin_service_repo_identifier_accepts_github_url_without_scheme(
 
     assert (
         plugin_service.repo_identifier_from_url("github.com/AstrBotDevs/demo.git")
+        == "AstrBotDevs/demo"
+    )
+
+
+def test_plugin_service_repo_identifier_accepts_gitee_url(
+    asgi_app: FastAPI,
+):
+    plugin_service = asgi_app.state.services.plugins
+
+    assert (
+        plugin_service.repo_identifier_from_url(
+            "https://gitee.com/AstrBotDevs/demo.git"
+        )
         == "AstrBotDevs/demo"
     )
 
@@ -2505,7 +2773,7 @@ async def test_plugin_service_update_github_source_uses_plugin_repo(
     async def fake_get_plugin_install_sources():
         return {
             "astrbot_plugin_demo": {
-                "install_method": "github",
+                "install_method": "repository",
                 "repo": "https://github.com/AstrBotDevs/astrbot-plugin-demo",
             }
         }
@@ -2521,7 +2789,7 @@ async def test_plugin_service_update_github_source_uses_plugin_repo(
 
     assert update_info["repo"] == "https://github.com/AstrBotDevs/astrbot-plugin-demo"
     assert update_info["download_url"] == ""
-    assert update_info["record"]["install_method"] == "github"
+    assert update_info["record"]["install_method"] == "repository"
 
 
 @pytest.mark.asyncio
@@ -2844,6 +3112,11 @@ async def test_v1_safe_plugin_routes_accept_slash_ids(
         params={"plugin_id": plugin_id},
         headers=headers,
     )
+    config_response = await asgi_client.get(
+        "/api/v1/plugins/config",
+        params={"plugin_id": plugin_id},
+        headers=headers,
+    )
     config_files_response = await asgi_client.get(
         "/api/v1/plugins/config-files",
         params={"plugin_id": plugin_id, "config_key": "assets/path"},
@@ -2864,6 +3137,12 @@ async def test_v1_safe_plugin_routes_accept_slash_ids(
     }
     assert readme_response.status_code == 200
     assert readme_response.json()["data"]["name"] == plugin_id
+    assert config_response.status_code == 200
+    assert config_response.json()["data"] == {
+        "plugin_name": plugin_id,
+        "log_level": None,
+        "schema": {"name": plugin_id},
+    }
     assert schema_response.status_code == 200
     assert schema_response.json()["data"]["plugin_name"] == plugin_id
     assert config_files_response.status_code == 200
@@ -3088,7 +3367,38 @@ async def test_v1_mcp_scope_accepts_api_key(
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
-    assert any(server["name"] == "demo-server" for server in data["data"])
+    demo_server = next(
+        server for server in data["data"] if server["name"] == "demo-server"
+    )
+    assert demo_server["connected"] is False
+
+
+@pytest.mark.asyncio
+async def test_v1_mcp_list_reports_connected_runtime(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    fake_tools = fake_core_lifecycle.provider_manager.llm_tools
+    fake_tools.mcp_server_runtime_view["demo-server"] = SimpleNamespace(
+        client=SimpleNamespace(
+            tools=[SimpleNamespace(name="demo_tool")],
+            server_errlogs=[],
+        ),
+    )
+
+    response = await asgi_client.get(
+        "/api/v1/mcp/servers",
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    demo_server = next(
+        server
+        for server in response.json()["data"]
+        if server["name"] == "demo-server"
+    )
+    assert demo_server["connected"] is True
+    assert demo_server["tools"] == ["demo_tool"]
 
 
 @pytest.mark.asyncio
@@ -3098,10 +3408,13 @@ async def test_v1_skill_scope_accepts_api_key_and_rejects_plural_scope(
     fake_db: FakeDb,
     monkeypatch: pytest.MonkeyPatch,
 ):
+    def fake_get_skills():
+        return {"skills": [{"name": "demo_skill"}]}
+
     monkeypatch.setattr(
         asgi_app.state.services.skills,
         "get_skills",
-        lambda: {"skills": [{"name": "demo_skill"}]},
+        fake_get_skills,
     )
 
     plural_key = "abk_fastapi_v1_skills"
@@ -3228,6 +3541,83 @@ async def test_v1_safe_skill_routes_accept_slash_names(
 
 
 @pytest.mark.asyncio
+async def test_v1_skill_archive_errors_return_http_status(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    skill_service = asgi_app.state.services.skills
+
+    def fake_prepare_skill_archive_404(_name: str):
+        raise SkillsServiceError("Local skill not found", status_code=404)
+
+    monkeypatch.setattr(
+        skill_service,
+        "prepare_skill_archive",
+        fake_prepare_skill_archive_404,
+    )
+
+    by_name_response = await asgi_client.get(
+        "/api/v1/skills/archive",
+        params={"skill_name": "missing_skill"},
+        headers=_jwt_headers(),
+    )
+    path_response = await asgi_client.get(
+        "/api/v1/skills/missing_skill/archive",
+        headers=_jwt_headers(),
+    )
+
+    assert by_name_response.status_code == 404
+    assert by_name_response.headers["content-type"].startswith("application/json")
+    assert by_name_response.json()["status"] == "error"
+    assert by_name_response.json()["message"] == "Local skill not found"
+    assert path_response.status_code == 404
+    assert path_response.headers["content-type"].startswith("application/json")
+    assert path_response.json()["message"] == "Local skill not found"
+
+    def fake_prepare_skill_archive_400(_name: str):
+        raise SkillsServiceError("Invalid skill name")
+
+    monkeypatch.setattr(
+        skill_service,
+        "prepare_skill_archive",
+        fake_prepare_skill_archive_400,
+    )
+
+    bad_request_response = await asgi_client.get(
+        "/api/v1/skills/archive",
+        params={"skill_name": "invalid_skill"},
+        headers=_jwt_headers(),
+    )
+
+    assert bad_request_response.status_code == 400
+    assert bad_request_response.headers["content-type"].startswith("application/json")
+    assert bad_request_response.json()["status"] == "error"
+    assert bad_request_response.json()["message"] == "Invalid skill name"
+
+    def fake_prepare_skill_archive_500(_name: str):
+        raise RuntimeError("Unexpected database error")
+
+    monkeypatch.setattr(
+        skill_service,
+        "prepare_skill_archive",
+        fake_prepare_skill_archive_500,
+    )
+
+    server_error_response = await asgi_client.get(
+        "/api/v1/skills/archive",
+        params={"skill_name": "error_skill"},
+        headers=_jwt_headers(),
+    )
+
+    assert server_error_response.status_code == 500
+    assert server_error_response.headers["content-type"].startswith("application/json")
+    assert server_error_response.json()["status"] == "error"
+    assert server_error_response.json()["message"] == "Failed to prepare skill archive"
+    assert "Unexpected database error" not in server_error_response.text
+
+
+@pytest.mark.asyncio
 async def test_v1_safe_persona_routes_accept_slash_ids(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
@@ -3283,6 +3673,30 @@ async def test_v1_persona_by_id_update_preserves_explicit_null_tools_and_skills(
     assert response.json()["data"] == {"message": "人格更新成功"}
     assert persona.tools is None
     assert persona.skills is None
+
+
+@pytest.mark.asyncio
+async def test_v1_persona_create_preserves_explicit_empty_tools_and_skills(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    persona_id = "persona-empty-capabilities"
+
+    response = await asgi_client.post(
+        "/api/v1/personas",
+        json={
+            "persona_id": persona_id,
+            "system_prompt": "A persona with no optional capabilities.",
+            "tools": [],
+            "skills": [],
+        },
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    persona = fake_core_lifecycle.persona_mgr.personas[persona_id]
+    assert persona.tools == []
+    assert persona.skills == []
 
 
 @pytest.mark.asyncio

@@ -21,6 +21,7 @@ from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
 from astrbot.core.astr_agent_run_util import AgentRunner
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.astr_main_agent_resources import (
+    CHATUI_INLINE_GENUI_SYSTEM_PROMPT,
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
     LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
@@ -28,6 +29,7 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
+from astrbot.core.computer.booters.local import resolve_windows_shell
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.db import BaseDatabase
 from astrbot.core.message.components import File, Image, Record, Reply, Video
@@ -36,6 +38,7 @@ from astrbot.core.persona_error_reply import (
     set_persona_custom_error_message_on_event,
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.provider.register import llm_tools
@@ -68,11 +71,13 @@ from astrbot.core.tools.computer_tools import (
     GrepTool,
     ListSkillCandidatesTool,
     ListSkillReleasesTool,
+    LocalExecuteShellTool,
     LocalPythonTool,
     PromoteSkillCandidateTool,
     PythonTool,
     RollbackSkillReleaseTool,
     RunBrowserSkillTool,
+    ShellSessionTool,
     SyncSkillReleaseTool,
 )
 from astrbot.core.tools.cron_tools import FutureTaskTool
@@ -80,7 +85,10 @@ from astrbot.core.tools.knowledge_base_tools import (
     KnowledgeBaseQueryTool,
     retrieve_knowledge_base,
 )
-from astrbot.core.tools.message_tools import SendMessageToUserTool
+from astrbot.core.tools.message_tools import (
+    GetGroupMessageHistoryTool,
+    SendMessageToUserTool,
+)
 from astrbot.core.tools.web_search_tools import (
     BaiduWebSearchTool,
     BochaWebSearchTool,
@@ -219,10 +227,18 @@ def _set_llm_error_message(event: AstrMessageEvent, message: str) -> None:
     event.set_extra(LLM_ERROR_MESSAGE_EXTRA_KEY, message)
 
 
-def _select_provider(
+async def _select_provider(
     event: AstrMessageEvent, plugin_context: Context
 ) -> Provider | None:
-    """Select chat provider for the event."""
+    """Select the chat provider for an event.
+
+    Args:
+        event: Message event that may contain an explicit provider selection.
+        plugin_context: Plugin context used to resolve configured providers.
+
+    Returns:
+        Selected chat provider, or None if selection fails.
+    """
     sel_provider = event.get_extra("selected_provider")
     if sel_provider and isinstance(sel_provider, str):
         provider = plugin_context.get_provider_by_id(sel_provider)
@@ -244,7 +260,9 @@ def _select_provider(
             return None
         return provider
     try:
-        return plugin_context.get_using_provider(umo=event.unified_msg_origin)
+        return await plugin_context.get_using_provider_async(
+            umo=event.unified_msg_origin
+        )
     except ValueError as exc:
         logger.error("Error occurred while selecting provider: %s", exc)
         _set_llm_error_message(event, f"LLM 请求失败：{exc}")
@@ -421,11 +439,15 @@ async def _apply_workspace_extra_prompt(
     )
 
 
-def _apply_local_env_tools(req: ProviderRequest, plugin_context: Context) -> None:
+def _apply_local_env_tools(
+    req: ProviderRequest,
+    plugin_context: Context,
+) -> None:
     if req.func_tool is None:
         req.func_tool = ToolSet()
     tool_mgr = plugin_context.get_llm_tool_manager()
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
+    req.func_tool.add_tool(LocalExecuteShellTool())
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ShellSessionTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(LocalPythonTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileReadTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
@@ -436,16 +458,32 @@ def _apply_local_env_tools(req: ProviderRequest, plugin_context: Context) -> Non
 
 def _build_local_mode_prompt() -> str:
     system_name = platform.system() or "Unknown"
-    shell_hint = (
-        "The runtime shell is Windows Command Prompt (cmd.exe). "
-        "Use cmd-compatible commands and do not assume Unix commands like cat/ls/grep are available."
-        if system_name.lower() == "windows"
-        else "The runtime shell is Unix-like. Use POSIX-compatible shell commands."
-    )
+    if system_name.lower() != "windows":
+        shell_hint = (
+            "The runtime shell is Unix-like. Use POSIX-compatible shell commands."
+        )
+    elif resolve_windows_shell() == "pwsh.exe":
+        shell_hint = (
+            "The runtime shell is PowerShell 7 (pwsh.exe). "
+            "Use PowerShell 7-compatible syntax and cmdlets, and do not "
+            "assume a full Unix userland or GNU utilities are available."
+        )
+    else:
+        shell_hint = (
+            "The runtime shell is Windows PowerShell 5.1 (powershell.exe). "
+            "Use Windows PowerShell 5.1-compatible syntax and cmdlets; do not use "
+            "PowerShell 7-only syntax or assume Unix commands like cat/ls/grep are available."
+        )
     return (
         "You have access to the host local environment and can execute shell commands and Python code. "
         f"Current operating system: {system_name}. "
-        f"{shell_hint}"
+        f"{shell_hint} "
+        "Local shell commands automatically return a managed session when they "
+        "outlive the initial wait. Use `astrbot_shell_session` to list, poll, "
+        "write raw text or complete lines to, interrupt, or terminate those sessions. "
+        "Use its `write_line` action for line-oriented programs so the session receives "
+        "a real line feed. Do not add `&`, `nohup`, or another detachment wrapper for "
+        "ordinary long-running commands."
     )
 
 
@@ -488,6 +526,12 @@ async def _ensure_persona_and_skills(
     event: AstrMessageEvent,
 ) -> None:
     """Ensure persona and skills are applied to the request's system prompt or user prompt."""
+    if req.system_prompt is None:
+        req.system_prompt = ""
+
+    if event.get_extra("enable_inline_genui"):
+        req.system_prompt += CHATUI_INLINE_GENUI_SYSTEM_PROMPT
+
     if not req.conversation:
         return
 
@@ -507,16 +551,16 @@ async def _ensure_persona_and_skills(
         event, extract_persona_custom_error_message_from_persona(persona)
     )
 
-    if req.system_prompt is None:
-        req.system_prompt = ""
-
     if persona:
         # Inject persona system prompt
         if prompt := persona["prompt"]:
             req.system_prompt += f"\n# Persona Instructions\n\n{prompt}\n"
         if begin_dialogs := copy.deepcopy(persona.get("_begin_dialogs_processed")):
             req.contexts[:0] = begin_dialogs
-    elif use_webchat_special_default:
+    elif (
+        use_webchat_special_default
+        and event.get_extra("enable_default_system_prompt") is not False
+    ):
         req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
 
     # Inject skills prompt
@@ -882,7 +926,9 @@ async def _process_quote_message(
                 compress_path = None
                 prov = plugin_context.get_provider_by_id(img_cap_prov_id)
                 if prov is None:
-                    prov = plugin_context.get_using_provider(event.unified_msg_origin)
+                    prov = await plugin_context.get_using_provider_async(
+                        event.unified_msg_origin
+                    )
 
                 if prov and isinstance(prov, Provider):
                     path = await image_seg.convert_to_file_path()
@@ -986,9 +1032,9 @@ async def _decorate_llm_request(
     img_cap_prov_id: str = cfg.get("default_image_caption_provider_id") or ""
     quote_images_already_captioned = False
 
-    if req.conversation:
-        await _ensure_persona_and_skills(req, cfg, plugin_context, event)
+    await _ensure_persona_and_skills(req, cfg, plugin_context, event)
 
+    if req.conversation:
         if img_cap_prov_id and req.image_urls and not main_provider_supports_image:
             await _ensure_img_caption(
                 event,
@@ -1258,11 +1304,21 @@ def _apply_web_search_citation_prompt(
     req.system_prompt = f"{system_prompt}\n{WEB_SEARCH_CITATION_PROMPT}\n"
 
 
-def _get_compress_provider(
+async def _get_compress_provider(
     config: MainAgentBuildConfig,
     plugin_context: Context,
     event: AstrMessageEvent | None = None,
 ) -> Provider | None:
+    """Resolve the provider used for context compression.
+
+    Args:
+        config: Main agent build configuration.
+        plugin_context: Plugin context used to resolve providers.
+        event: Optional event used for session-specific fallback selection.
+
+    Returns:
+        Compression provider, or None if compression is disabled or unavailable.
+    """
     if config.context_limit_reached_strategy != "llm_compress":
         return None
     if config.llm_compress_provider_id:
@@ -1276,7 +1332,9 @@ def _get_compress_provider(
     # fallback: use current chat provider for this session
     if event:
         try:
-            return plugin_context.get_using_provider(umo=event.unified_msg_origin)
+            return await plugin_context.get_using_provider_async(
+                umo=event.unified_msg_origin
+            )
         except ValueError:
             pass
     return None
@@ -1364,7 +1422,7 @@ async def build_main_agent(
 
     If apply_reset is False, will not call reset on the agent runner.
     """
-    provider = provider or _select_provider(event, plugin_context)
+    provider = provider or await _select_provider(event, plugin_context)
     if provider is None:
         logger.info("未找到任何对话模型（提供商），跳过 LLM 请求处理。")
         if not event.get_extra(LLM_ERROR_MESSAGE_EXTRA_KEY):
@@ -1583,6 +1641,21 @@ async def build_main_agent(
             )
         )
 
+    ltm_settings = plugin_context.get_config(umo=event.unified_msg_origin).get(
+        "provider_ltm_settings",
+        {},
+    )
+    if event.get_message_type() == MessageType.GROUP_MESSAGE and ltm_settings.get(
+        "group_message_history_enable", False
+    ):
+        if req.func_tool is None:
+            req.func_tool = ToolSet()
+        req.func_tool.add_tool(
+            plugin_context.get_llm_tool_manager().get_builtin_tool(
+                GetGroupMessageHistoryTool
+            )
+        )
+
     fallback_providers = _get_fallback_chat_providers(
         provider, plugin_context, config.provider_settings
     )
@@ -1620,11 +1693,14 @@ async def build_main_agent(
                 event.unified_msg_origin,
                 plugin_context,
             )
-            workspace_prompt = f"\nCurrent workspace you can use: `{workspace_root}`\n"
             tool_prompt += (
-                workspace_prompt
-                + "Unless the user explicitly specifies a different directory, "
-                "perform all file-related operations in this workspace.\n"
+                f"\nCurrent workspace: `{workspace_root}`. "
+                "`astrbot_execute_shell` and `astrbot_execute_python` use it as "
+                "their working directory. `astrbot_file_read_tool`, "
+                "`astrbot_file_write_tool`, `astrbot_file_edit_tool`, and "
+                "`astrbot_grep_tool` resolve relative paths from it. Prefer relative "
+                "paths within the workspace; do not assume this behavior for other "
+                "tools.\n"
             )
 
         req.system_prompt += f"\n{tool_prompt}\n"
@@ -1647,7 +1723,11 @@ async def build_main_agent(
         streaming=config.streaming_response,
         llm_compress_instruction=config.llm_compress_instruction,
         llm_compress_keep_recent_ratio=config.llm_compress_keep_recent_ratio,
-        llm_compress_provider=_get_compress_provider(config, plugin_context, event),
+        llm_compress_provider=await _get_compress_provider(
+            config,
+            plugin_context,
+            event,
+        ),
         truncate_turns=config.dequeue_context_length,
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,

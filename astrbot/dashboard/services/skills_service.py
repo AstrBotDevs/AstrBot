@@ -39,7 +39,9 @@ _EDITABLE_SKILL_FILENAMES = {"Dockerfile", "Makefile"}
 
 
 class SkillsServiceError(Exception):
-    pass
+    def __init__(self, message: str, *, status_code: int = 400) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 @dataclass
@@ -242,6 +244,11 @@ class SkillsService:
             return SkillsOperationResult(ok=False, message=str(exc))
 
     def get_skills(self) -> dict:
+        """Return the Skill inventory for Dashboard consumers.
+
+        Returns:
+            The serialized Skill inventory and current runtime metadata.
+        """
         provider_settings = self.core_lifecycle.astrbot_config.get(
             "provider_settings", {}
         )
@@ -252,8 +259,35 @@ class SkillsService:
             runtime=runtime,
             show_sandbox_path=False,
         )
+        plugin_display_names = {}
+        plugin_activation_by_root_name = {}
+        for plugin in self.core_lifecycle.plugin_manager.context.get_all_stars():
+            display_name = str(plugin.display_name or plugin.name or "").strip()
+            for plugin_name in (plugin.name, plugin.root_dir_name):
+                if plugin_name:
+                    plugin_display_names[str(plugin_name)] = display_name
+            if plugin.root_dir_name:
+                plugin_activation_by_root_name[str(plugin.root_dir_name)] = bool(
+                    plugin.activated
+                )
+
+        serialized_skills = []
+        for skill in skills:
+            skill_data = dict(skill.__dict__)
+            if skill.source_type == "plugin":
+                plugin_active = plugin_activation_by_root_name.get(
+                    skill.plugin_name,
+                    False,
+                )
+                skill_data["plugin_active"] = plugin_active
+                skill_data["plugin_display_name"] = plugin_display_names.get(
+                    skill.plugin_name,
+                    "",
+                )
+            serialized_skills.append(skill_data)
+
         return {
-            "skills": [skill.__dict__ for skill in skills],
+            "skills": serialized_skills,
             "runtime": runtime,
             "sandbox_cache": skill_mgr.get_sandbox_skills_cache_status(),
         }
@@ -436,12 +470,16 @@ class SkillsService:
         skill_dir = Path(skill_mgr.skills_root) / skill_name
         skill_md = skill_dir / "SKILL.md"
         if not skill_dir.is_dir() or not skill_md.exists():
-            raise SkillsServiceError("Local skill not found")
+            raise SkillsServiceError("Local skill not found", status_code=404)
 
         export_dir = Path(get_astrbot_temp_path()) / "skill_exports"
         export_dir.mkdir(parents=True, exist_ok=True)
         zip_base = export_dir / skill_name
-        zip_path = zip_base.with_suffix(".zip")
+        # with_suffix(".zip") replaces only the last suffix (e.g. ".0" in
+        # "skill-writing-1.0.0"), producing "skill-writing-1.0.zip" —
+        # which mismatches shutil.make_archive's "skill-writing-1.0.0.zip".
+        # Append ".zip" to the full name instead.
+        zip_path = zip_base.with_name(zip_base.name + ".zip")
         if zip_path.exists():
             zip_path.unlink()
 

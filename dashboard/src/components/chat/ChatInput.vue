@@ -2,9 +2,6 @@
   <div
     class="input-area fade-in"
     :class="{ 'is-dark': isDark }"
-    @dragover.prevent="handleDragOver"
-    @dragleave.prevent="handleDragLeave"
-    @drop.prevent="handleDrop"
   >
     <div
       class="input-container"
@@ -24,15 +21,6 @@
         transition: 'min-height 0.2s ease, padding 0.2s ease',
       }"
     >
-      <!-- 拖拽上传遮罩 -->
-      <transition name="fade">
-        <div v-if="isDragging" class="drop-overlay">
-          <div class="drop-overlay-content">
-            <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
-            <span class="drop-text">{{ tm("input.dropToUpload") }}</span>
-          </div>
-        </div>
-      </transition>
       <!-- 引用预览区 -->
       <transition name="slideReply" @after-leave="handleReplyAfterLeave">
         <div class="reply-preview" v-if="props.replyTo && !isReplyClosing">
@@ -92,7 +80,7 @@
           >
             <div
               class="attachment-icon"
-              :style="{ color: filePresentation(file).color }"
+              :style="{ '--attachment-color': filePresentation(file).color }"
             >
               <v-icon :icon="filePresentation(file).icon" size="24"></v-icon>
               <span class="attachment-ext">{{
@@ -194,7 +182,7 @@
             @blur="handleBlur"
             @paste="handlePaste"
             :disabled="disabled"
-            :placeholder="tm('input.placeholder')"
+            :placeholder="props.placeholder || tm('input.placeholder')"
             class="chat-text-input"
             autocomplete="off"
             autocorrect="off"
@@ -214,7 +202,7 @@
             @blur="handleBlur"
             @paste="handlePaste"
             :disabled="disabled"
-            :placeholder="tm('input.placeholder')"
+            :placeholder="props.placeholder || tm('input.placeholder')"
             class="chat-textarea"
             autocomplete="off"
             autocorrect="off"
@@ -242,6 +230,27 @@
             class="mr-1"
             width="1.5"
           />
+          <v-tooltip
+            v-if="tokenUsageVisible"
+            location="top"
+            max-width="320"
+          >
+            <template #activator="{ props: tokenTooltipProps }">
+              <span
+                v-bind="tokenTooltipProps"
+                class="token-usage-indicator"
+                :style="{ '--token-usage-color': tokenUsageColor }"
+              >
+                <v-progress-circular
+                  :model-value="tokenUsagePercent"
+                  size="24"
+                  width="2.5"
+                  class="token-usage-progress"
+                />
+              </span>
+            </template>
+            <span>{{ props.tokenUsage?.tooltip }}</span>
+          </v-tooltip>
           <!-- <v-btn @click="$emit('openLiveMode')"
                         icon
                         variant="text"
@@ -315,6 +324,7 @@ import ConfigSelector from "./ConfigSelector.vue";
 import ProviderModelMenu from "./ProviderModelMenu.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import CommandSuggestion from "./CommandSuggestion.vue";
+import { attachmentPresentation } from "./attachmentPresentation";
 import type { Session } from "@/composables/useSessions";
 import type { SuggestionCommand } from "./CommandSuggestion.vue";
 
@@ -329,6 +339,13 @@ interface StagedFileInfo {
 interface ReplyInfo {
   messageId: string | number;
   selectedText?: string;
+}
+
+interface TokenUsageInfo {
+  used: number;
+  limit: number;
+  percent: number;
+  tooltip: string;
 }
 
 interface Props {
@@ -346,6 +363,8 @@ interface Props {
   replyTo?: ReplyInfo | null;
   sendShortcut?: "enter" | "shift_enter";
   showProviderSelector?: boolean;
+  tokenUsage?: TokenUsageInfo | null;
+  placeholder?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -356,6 +375,7 @@ const props = withDefaults(defineProps<Props>(), {
   replyTo: null,
   sendShortcut: "shift_enter",
   showProviderSelector: true,
+  tokenUsage: null,
 });
 
 const emit = defineEmits<{
@@ -369,7 +389,7 @@ const emit = defineEmits<{
   startRecording: [];
   stopRecording: [];
   pasteImage: [event: ClipboardEvent];
-  fileSelect: [files: FileList];
+  fileSelect: [files: FileList | File[]];
   clearReply: [];
   openLiveMode: [];
 }>();
@@ -386,11 +406,10 @@ const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(
 );
 const providerSelectorAvailable = ref(true);
 const isReplyClosing = ref(false);
-const isDragging = ref(false);
 const isComposing = ref(false);
 const inputIsMultiline = ref(false);
 const lastCompositionEndAt = ref<number | null>(null);
-let dragLeaveTimeout: number | null = null;
+const longPasteThreshold = 10_000;
 
 // 命令提示相关状态
 const allCommands = ref<CommandItem[]>([]);
@@ -546,62 +565,8 @@ const hasStagedAttachments = computed(() => {
   );
 });
 
-const fileTypeStyles: Record<
-  string,
-  { color: string; icon: string; label: string }
-> = {
-  pdf: { color: "#d32f2f", icon: "mdi-file-pdf-box", label: "PDF" },
-  txt: { color: "#1976d2", icon: "mdi-file-document-outline", label: "TXT" },
-  md: { color: "#1976d2", icon: "mdi-language-markdown-outline", label: "MD" },
-  markdown: {
-    color: "#1976d2",
-    icon: "mdi-language-markdown-outline",
-    label: "MD",
-  },
-  doc: { color: "#2b579a", icon: "mdi-file-word-box", label: "DOC" },
-  docx: { color: "#2b579a", icon: "mdi-file-word-box", label: "DOCX" },
-  xls: { color: "#217346", icon: "mdi-file-excel-box", label: "XLS" },
-  xlsx: { color: "#217346", icon: "mdi-file-excel-box", label: "XLSX" },
-  csv: { color: "#217346", icon: "mdi-file-delimited-outline", label: "CSV" },
-  ppt: { color: "#d24726", icon: "mdi-file-powerpoint-box", label: "PPT" },
-  pptx: { color: "#d24726", icon: "mdi-file-powerpoint-box", label: "PPTX" },
-  zip: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "ZIP" },
-  rar: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "RAR" },
-  "7z": { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "7Z" },
-  tar: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "TAR" },
-  gz: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "GZ" },
-  json: { color: "#6a1b9a", icon: "mdi-code-json", label: "JSON" },
-  yaml: { color: "#6a1b9a", icon: "mdi-code-braces", label: "YAML" },
-  yml: { color: "#6a1b9a", icon: "mdi-code-braces", label: "YML" },
-  js: { color: "#b8860b", icon: "mdi-language-javascript", label: "JS" },
-  ts: { color: "#3178c6", icon: "mdi-language-typescript", label: "TS" },
-  html: { color: "#e34c26", icon: "mdi-language-html5", label: "HTML" },
-  css: { color: "#264de4", icon: "mdi-language-css3", label: "CSS" },
-  py: { color: "#3776ab", icon: "mdi-language-python", label: "PY" },
-  java: { color: "#b07219", icon: "mdi-language-java", label: "JAVA" },
-  mp3: { color: "#00897b", icon: "mdi-file-music-outline", label: "MP3" },
-  wav: { color: "#00897b", icon: "mdi-file-music-outline", label: "WAV" },
-  flac: { color: "#00897b", icon: "mdi-file-music-outline", label: "FLAC" },
-  mp4: { color: "#5e35b1", icon: "mdi-file-video-outline", label: "MP4" },
-  mov: { color: "#5e35b1", icon: "mdi-file-video-outline", label: "MOV" },
-  webm: { color: "#5e35b1", icon: "mdi-file-video-outline", label: "WEBM" },
-};
-
-function fileExtension(file: StagedFileInfo) {
-  const name = file.original_name || file.filename || "";
-  const extension = name.split(".").pop()?.toLowerCase() || "";
-  return extension === name.toLowerCase() ? "" : extension;
-}
-
 function filePresentation(file: StagedFileInfo) {
-  const extension = fileExtension(file);
-  return (
-    fileTypeStyles[extension] || {
-      color: "#607d8b",
-      icon: "mdi-file-document-outline",
-      label: extension ? extension.slice(0, 4).toUpperCase() : "FILE",
-    }
-  );
+  return attachmentPresentation(file);
 }
 
 // Ctrl+B 长按录音相关
@@ -621,6 +586,29 @@ function handleReplyAfterLeave() {
 }
 
 const { mobile } = useDisplay();
+
+const tokenUsageVisible = computed(() => {
+  const usage = props.tokenUsage;
+  return Boolean(
+    usage &&
+      Number.isFinite(usage.used) &&
+      Number.isFinite(usage.limit) &&
+      usage.used > 0 &&
+      usage.limit > 0,
+  );
+});
+
+const tokenUsagePercent = computed(() => {
+  const percent = props.tokenUsage?.percent || 0;
+  if (!Number.isFinite(percent)) return 0;
+  return Math.min(100, Math.max(0, percent));
+});
+
+const tokenUsageColor = computed(() =>
+  isDark.value
+    ? "rgba(var(--v-theme-on-surface), 0.82)"
+    : "rgba(var(--v-theme-on-surface), 0.72)",
+);
 
 // Auto-resize textarea
 function autoResize() {
@@ -656,9 +644,19 @@ function autoResize() {
     return;
   }
   el.style.height = "auto";
+  el.style.setProperty("min-height", "0", "important");
   const measuredHeight = el.scrollHeight;
+  el.style.removeProperty("min-height");
+  const computed = getComputedStyle(el);
+  let lineHeight = parseFloat(computed.lineHeight);
+  if (!Number.isFinite(lineHeight)) {
+    lineHeight = parseFloat(computed.fontSize) * 1.2;
+  }
+  const paddingVertical =
+    parseFloat(computed.paddingTop) + parseFloat(computed.paddingBottom);
   const shouldUseMultiline =
-    localPrompt.value.includes("\n") || measuredHeight > minHeight + 8;
+    localPrompt.value.includes("\n") ||
+    measuredHeight > lineHeight + paddingVertical + 0.5;
   if (inputIsMultiline.value !== shouldUseMultiline) {
     const cursor = el.selectionStart ?? localPrompt.value.length;
     inputIsMultiline.value = shouldUseMultiline;
@@ -885,6 +883,16 @@ function handleKeyUp(e: KeyboardEvent) {
 
 function handlePaste(e: ClipboardEvent) {
   const pastedText = e.clipboardData?.getData("text/plain") || "";
+  if (pastedText.length > longPasteThreshold) {
+    e.preventDefault();
+    emit("fileSelect", [
+      new File([pastedText], `pasted-text-${Date.now()}.txt`, {
+        type: "text/plain;charset=utf-8",
+      }),
+    ]);
+    return;
+  }
+
   if (!inputIsMultiline.value && pastedText.includes("\n")) {
     e.preventDefault();
     const target = e.target as HTMLInputElement;
@@ -903,35 +911,6 @@ function handlePaste(e: ClipboardEvent) {
     });
   }
   emit("pasteImage", e);
-}
-
-function handleDragOver(e: DragEvent) {
-  // 清除之前的 leave timeout
-  if (dragLeaveTimeout) {
-    clearTimeout(dragLeaveTimeout);
-    dragLeaveTimeout = null;
-  }
-
-  // 检查是否有文件
-  if (e.dataTransfer?.types.includes("Files")) {
-    isDragging.value = true;
-  }
-}
-
-function handleDragLeave(e: DragEvent) {
-  // 使用 timeout 避免在子元素间移动时闪烁
-  dragLeaveTimeout = window.setTimeout(() => {
-    isDragging.value = false;
-  }, 50);
-}
-
-function handleDrop(e: DragEvent) {
-  isDragging.value = false;
-
-  const files = e.dataTransfer?.files;
-  if (files && files.length > 0) {
-    emit("fileSelect", files);
-  }
 }
 
 function triggerImageInput() {
@@ -1001,7 +980,7 @@ defineExpose({
 
 <style scoped>
 .input-area {
-  padding: 12px 16px 0;
+  padding: 0 16px;
   background-color: transparent;
   position: relative;
   border-top: 1px solid var(--v-theme-border);
@@ -1047,6 +1026,31 @@ defineExpose({
 
 .input-icon-btn:hover {
   background: rgba(var(--v-theme-on-surface), 0.04) !important;
+}
+
+.token-usage-indicator {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 24px;
+  border-radius: 50%;
+  color: var(--token-usage-color);
+}
+
+.token-usage-progress {
+  color: currentColor;
+}
+
+.token-usage-progress :deep(.v-progress-circular__underlay) {
+  color: rgba(var(--v-theme-on-surface), 0.18);
+  stroke: currentColor;
+  opacity: 0.24;
+}
+
+.token-usage-progress :deep(.v-progress-circular__overlay) {
+  stroke: currentColor;
 }
 
 .input-outline-control {
@@ -1108,7 +1112,7 @@ defineExpose({
   border-color: #f0f0f0 !important;
   border-radius: 999px !important;
   background: #fff !important;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06) !important;
 }
 
 .input-container.is-multiline {
@@ -1271,47 +1275,6 @@ defineExpose({
   color: rgba(0, 0, 0, 0.18) !important;
 }
 
-/* 拖拽上传遮罩 */
-.drop-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(var(--v-theme-primary), 0.12);
-  border: 2px dashed rgba(var(--v-theme-primary), 0.45);
-  border-radius: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  pointer-events: none;
-}
-
-.drop-overlay-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.drop-text {
-  font-size: 16px;
-  font-weight: 500;
-  color: rgb(var(--v-theme-primary));
-}
-
-/* Fade transition for drop overlay */
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-
 .reply-preview {
   display: flex;
   align-items: center;
@@ -1418,6 +1381,7 @@ defineExpose({
 }
 
 .attachment-card {
+  --attachment-color: #607d8b;
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -1430,9 +1394,18 @@ defineExpose({
   padding: 7px 32px 7px 10px;
   overflow: hidden;
   color: rgb(var(--v-theme-on-surface));
-  background: rgba(var(--v-theme-on-surface), 0.035);
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  border-radius: 14px;
+  background: rgba(var(--v-theme-on-surface), 0.055);
+  border: 0;
+  border-radius: 8px;
+}
+
+.file-preview {
+  background: rgba(var(--v-theme-on-surface), 0.055);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--attachment-color) 14%, transparent),
+    rgba(var(--v-theme-on-surface), 0.055) 62%
+  );
 }
 
 .image-preview {
@@ -1446,7 +1419,7 @@ defineExpose({
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 13px;
+  border-radius: 8px;
 }
 
 .attachment-icon {
@@ -1457,6 +1430,7 @@ defineExpose({
   gap: 1px;
   flex-shrink: 0;
   min-width: 34px;
+  color: var(--attachment-color);
 }
 
 .attachment-icon--audio {
@@ -1471,6 +1445,7 @@ defineExpose({
   font-size: 10px;
   font-weight: 700;
   line-height: 12px;
+  color: var(--attachment-color);
 }
 
 .attachment-name {
@@ -1587,10 +1562,10 @@ defineExpose({
   }
 
   .input-container.is-multiline .composer-row {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     grid-template-areas:
-      "field field"
-      "left right";
+      "field field field"
+      "left . right";
     min-height: auto;
     row-gap: 4px;
   }

@@ -47,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive } from "vue";
+import { computed, reactive, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 
 export interface SuggestionCommand {
@@ -87,6 +87,15 @@ const tooltip = reactive({
   x: 0,
   y: 0,
 });
+
+watch(
+  () => props.visible,
+  (visible) => {
+    if (!visible) {
+      tooltip.visible = false;
+    }
+  },
+);
 
 const tooltipStyle = computed(() => ({
   position: "fixed" as const,

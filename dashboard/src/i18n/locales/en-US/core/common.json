@@ -38,6 +38,7 @@
   "no": "No",
   "imagePreview": "Image Preview",
   "autoDetect": "Auto Detect",
+  "restoreDefault": "Restore default",
   "dialog": {
     "confirmTitle": "Confirm Action",
     "confirmMessage": "Are you sure you want to perform this action?",
