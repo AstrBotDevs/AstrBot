@@ -7,6 +7,7 @@ import hashlib
 import secrets
 import uuid
 from collections.abc import Iterable, Mapping
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -1277,6 +1278,7 @@ class AuthorizationService:
     ) -> Decision:
         """Authorize exactly one normalized action/resource/context tuple."""
 
+        context = self._resource_scoped_dashboard_context(context, resource)
         audit_id = str(uuid.uuid4())
         try:
             decision = await self._authorize(
@@ -1325,6 +1327,27 @@ class AuthorizationService:
                     audit_id=audit_id,
                 )
         return decision
+
+    @staticmethod
+    def _resource_scoped_dashboard_context(
+        context: AuthContext, resource: Resource
+    ) -> AuthContext:
+        """Add a trusted resource config scope to an unscoped Dashboard context.
+
+        Dashboard principals start unscoped, while routes resolve the actual
+        protected resource.  Step-up credentials include the context scope in
+        their digest, so issuance and consumption must derive the same scope
+        from that trusted resource.  Do not replace an explicit context scope:
+        the normal cross-config check must still reject a mismatch.
+        """
+
+        if (
+            context.source != "dashboard"
+            or context.config_id is not None
+            or resource.config_id is None
+        ):
+            return context
+        return replace(context, config_id=resource.config_id)
 
     async def _authorize(
         self,
@@ -1676,6 +1699,7 @@ class AuthorizationService:
     ) -> tuple[str, str]:
         """Issue a short-lived, one-time Dashboard credential after reauthentication."""
 
+        context = self._resource_scoped_dashboard_context(context, resource)
         if (
             context.source != "dashboard"
             or not _requires_step_up(action, resource, context)

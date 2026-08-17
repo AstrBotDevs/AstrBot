@@ -159,6 +159,60 @@ async def test_step_up_consumption_is_atomic(authorization):
     assert sum(decision.allowed for decision in decisions) == 1
 
 
+@pytest.mark.asyncio
+async def test_dashboard_step_up_uses_the_resource_config_scope(authorization):
+    account = DashboardAccount(
+        account_id="dashboard-root",
+        username="dashboard-root",
+        password_hash="hash",
+    )
+    async with authorization._db.get_db() as session:
+        async with session.begin():
+            session.add(account)
+
+    subject = Subject.dashboard_account(account.account_id, account.username)
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=subject.id,
+        role=Role.ROOT,
+        scope_type="global",
+        scope_id="global",
+        config_id=None,
+        enforce_actor=False,
+    )
+    resource = Resource.session("default", "napcat:GroupMessage:room-a")
+    issued_context = AuthContext(
+        subject=subject,
+        source="dashboard",
+        config_id="default",
+        authenticated=True,
+        metadata={"dashboard_session_id": "session-1"},
+    )
+    _credential_id, token = await authorization.issue_step_up(
+        subject=subject,
+        dashboard_session_id="session-1",
+        action="identity.manage",
+        resource=resource,
+        context=issued_context,
+        verified_method="password",
+    )
+
+    decision = await authorization.authorize(
+        subject,
+        "identity.manage",
+        resource,
+        AuthContext(
+            subject=subject,
+            source="dashboard",
+            authenticated=True,
+            step_up_token=token,
+            metadata={"dashboard_session_id": "session-1"},
+        ),
+    )
+
+    assert decision.allowed
+
+
 def test_api_key_scopes_are_capabilities_not_roles():
     assert api_key_scopes_allow_action(["provider"], "provider.use")
     assert not api_key_scopes_allow_action(["provider"], "provider.manage")

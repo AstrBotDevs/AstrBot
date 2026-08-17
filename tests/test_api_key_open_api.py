@@ -10,6 +10,8 @@ import pytest_asyncio
 from fastapi import FastAPI
 from werkzeug.datastructures import FileStorage
 
+from astrbot.core.auth.models import AuthContext as CoreAuthContext
+from astrbot.core.auth.models import Resource, Subject
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.log import LogBroker
 from astrbot.core.utils.auth_password import (
@@ -276,6 +278,205 @@ async def test_provider_source_step_up_preserves_config_scope(
         headers=authenticated_header,
     )
     assert deleted.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_session_role_binding_step_up_preserves_config_scope(
+    test_client: DashboardTestClient,
+    authenticated_header: dict,
+    dashboard_password: str,
+):
+    subject_id = f"im:napcat:bot:{uuid.uuid4().hex[:8]}"
+    umo = f"napcat:GroupMessage:step-up-{uuid.uuid4().hex[:8]}"
+    payload = {
+        "subject_id": subject_id,
+        "role": "session_admin",
+        "scope_type": "session",
+        "scope_id": umo,
+        "config_id": "default",
+    }
+    step_up = await _create_step_up(
+        test_client,
+        authenticated_header,
+        dashboard_password,
+        action="identity.manage",
+        resource_type="session",
+        resource_id=umo,
+        config_id="default",
+    )
+
+    granted = await test_client.post(
+        "/api/v1/authorization/role-bindings",
+        json=payload,
+        headers={**authenticated_header, "X-AstrBot-Step-Up": step_up},
+    )
+
+    assert granted.status_code == 200
+    binding = (await granted.get_json())["data"]
+    assert binding["subject_id"] == subject_id
+    assert binding["config_id"] == "default"
+
+    revoke_step_up = await _create_step_up(
+        test_client,
+        authenticated_header,
+        dashboard_password,
+        action="identity.manage",
+        resource_type="session",
+        resource_id=umo,
+        config_id="default",
+    )
+    revoked = await test_client.post(
+        f"/api/v1/authorization/role-bindings/{binding['binding_id']}/revoke",
+        headers={**authenticated_header, "X-AstrBot-Step-Up": revoke_step_up},
+    )
+
+    assert revoked.status_code == 200
+
+    second_payload = {
+        **payload,
+        "subject_id": f"im:napcat:bot:{uuid.uuid4().hex[:8]}",
+    }
+    second_step_up = await _create_step_up(
+        test_client,
+        authenticated_header,
+        dashboard_password,
+        action="identity.manage",
+        resource_type="session",
+        resource_id=umo,
+        config_id="default",
+    )
+    second_granted = await test_client.post(
+        "/api/v1/authorization/role-bindings",
+        json=second_payload,
+        headers={**authenticated_header, "X-AstrBot-Step-Up": second_step_up},
+    )
+    assert second_granted.status_code == 200
+    second_binding_id = (await second_granted.get_json())["data"]["binding_id"]
+
+    batch_step_up = await test_client.post(
+        "/api/v1/authorization/role-bindings/batch-revoke/step-up",
+        json={"binding_ids": [second_binding_id], "password": dashboard_password},
+        headers=authenticated_header,
+    )
+    assert batch_step_up.status_code == 200
+    batch_token = (await batch_step_up.get_json())["data"]["token"]
+    batch_revoked = await test_client.post(
+        "/api/v1/authorization/role-bindings/batch-revoke",
+        json={"binding_ids": [second_binding_id]},
+        headers={**authenticated_header, "X-AstrBot-Step-Up": batch_token},
+    )
+
+    assert batch_revoked.status_code == 200
+    assert (await batch_revoked.get_json())["data"]["revoked_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_napcat_instance_operator_role_binding_crud(
+    test_client: DashboardTestClient,
+    authenticated_header: dict,
+    dashboard_password: str,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    """Exercise Dashboard CRUD and runtime authorization for a NapCat identity."""
+
+    subject_id = "im:napcat:3013138453:3656185279"
+    payload = {
+        "subject_id": subject_id,
+        "role": "instance_operator",
+        "scope_type": "instance",
+        "scope_id": "default",
+        "config_id": "default",
+    }
+
+    create_step_up = await _create_step_up(
+        test_client,
+        authenticated_header,
+        dashboard_password,
+        action="identity.manage",
+        resource_type="instance",
+        resource_id="default",
+        config_id="default",
+    )
+    created = await test_client.post(
+        "/api/v1/authorization/role-bindings",
+        json=payload,
+        headers={**authenticated_header, "X-AstrBot-Step-Up": create_step_up},
+    )
+    assert created.status_code == 200
+    binding = (await created.get_json())["data"]
+    assert binding["role"] == "instance_operator"
+    assert binding["scope_type"] == "instance"
+
+    listed = await test_client.get(
+        "/api/v1/authorization/role-bindings", headers=authenticated_header
+    )
+    assert listed.status_code == 200
+    assert any(
+        item["binding_id"] == binding["binding_id"]
+        for item in (await listed.get_json())["data"]
+    )
+
+    napcat_subject = Subject.im(
+        platform_instance="napcat",
+        bot_account_id="3013138453",
+        sender_id="3656185279",
+    )
+    authorization = core_lifecycle_td.runtime.services.authorization
+    decision = await authorization.authorize(
+        napcat_subject,
+        "provider.manage",
+        Resource.instance("default"),
+        CoreAuthContext(
+            subject=napcat_subject,
+            source="im",
+            config_id="default",
+            authenticated=True,
+        ),
+    )
+    assert decision.allowed
+
+    update_step_up = await _create_step_up(
+        test_client,
+        authenticated_header,
+        dashboard_password,
+        action="identity.manage",
+        resource_type="instance",
+        resource_id="default",
+        config_id="default",
+    )
+    updated = await test_client.post(
+        "/api/v1/authorization/role-bindings",
+        json={**payload, "expires_at": "2030-01-01T00:00:00Z"},
+        headers={**authenticated_header, "X-AstrBot-Step-Up": update_step_up},
+    )
+    assert updated.status_code == 200
+    updated_binding = (await updated.get_json())["data"]
+    assert updated_binding["binding_id"] == binding["binding_id"]
+    assert updated_binding["expires_at"].startswith("2030-01-01T00:00:00")
+
+    revoke_step_up = await _create_step_up(
+        test_client,
+        authenticated_header,
+        dashboard_password,
+        action="identity.manage",
+        resource_type="instance",
+        resource_id="default",
+        config_id="default",
+    )
+    revoked = await test_client.post(
+        f"/api/v1/authorization/role-bindings/{binding['binding_id']}/revoke",
+        headers={**authenticated_header, "X-AstrBot-Step-Up": revoke_step_up},
+    )
+    assert revoked.status_code == 200
+
+    listed_after_revoke = await test_client.get(
+        "/api/v1/authorization/role-bindings", headers=authenticated_header
+    )
+    assert listed_after_revoke.status_code == 200
+    assert all(
+        item["binding_id"] != binding["binding_id"]
+        for item in (await listed_after_revoke.get_json())["data"]
+    )
 
 
 @pytest.mark.asyncio
