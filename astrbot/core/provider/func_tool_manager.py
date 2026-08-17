@@ -12,6 +12,7 @@ from types import MappingProxyType
 from typing import Any
 
 import aiohttp
+from deprecated import deprecated
 
 from astrbot import logger
 from astrbot.core import sp
@@ -245,7 +246,7 @@ class _PermissionGuardedTool(FunctionTool):
     async def call(self, context: Any, **kwargs: Any) -> Any:
         import inspect as _inspect
 
-        error = self._mgr._check_tool_permission(self.name, context)
+        error = await self._mgr._check_tool_permission(self.name, context)
         if error is not None:
             return error
 
@@ -328,6 +329,7 @@ class FunctionToolManager:
         return self._mcp_server_runtime_view
 
     @property
+    @deprecated(reason="Use mcp_server_runtime_view instead.")
     def mcp_server_runtime(self) -> Mapping[str, _MCPServerRuntime]:
         """Backward-compatible read-only view (deprecated). Do not mutate.
 
@@ -455,7 +457,7 @@ class FunctionToolManager:
         Builtin tools are never routed through this method."""
         return "member"
 
-    def _check_tool_permission(
+    async def _check_tool_permission(
         self,
         tool_name: str,
         context: Any,
@@ -467,9 +469,7 @@ class FunctionToolManager:
         no explicit entry exists the tool inherits the fallback
         ``_default_permission``."""
         try:
-            perms_raw = sp.get(
-                "tool_permissions", {}, scope="global", scope_id="global"
-            )
+            perms_raw = await sp.global_get("tool_permissions", {})
         except Exception:
             perms_raw = {}
         defaults = perms_raw.get("_default", {}) if isinstance(perms_raw, dict) else {}
@@ -666,25 +666,56 @@ class FunctionToolManager:
         if shutdown_event is None:
             shutdown_event = asyncio.Event()
 
-        mcp_client: MCPClient | None = None
-        try:
-            mcp_client = await asyncio.wait_for(
-                self._init_mcp_client(name, cfg),
-                timeout=timeout,
-            )
-        except asyncio.TimeoutError as exc:
-            raise MCPInitTimeoutError(
-                f"Connected to MCP server {name} timeout ({timeout:g} seconds)"
-            ) from exc
-        except Exception:
-            logger.error(f"Failed to initialize MCP client {name}", exc_info=True)
-            raise
-        finally:
-            if mcp_client is None:
-                async with self._runtime_lock:
-                    self._mcp_starting.discard(name)
+        mcp_client = MCPClient()
+        mcp_client.name = name
 
-        async def lifecycle() -> None:
+        connect_done = asyncio.Event()
+        connect_error: BaseException | None = None
+
+        async def connect_and_lifecycle() -> None:
+            # Single task that handles connect, lifecycle, and cleanup.
+
+            nonlocal connect_error
+            try:
+                await mcp_client.connect_to_server(cfg, name)
+                await mcp_client.list_tools_and_save()
+            except asyncio.CancelledError:
+                # cleanup on cancellation
+                try:
+                    await mcp_client.cleanup()
+                except BaseException:
+                    pass
+                raise
+            except Exception as e:
+                connect_error = e
+                try:
+                    await mcp_client.cleanup()
+                except Exception:
+                    pass
+                connect_done.set()
+                return
+
+            # Register tools
+            self.func_list = [
+                f
+                for f in self.func_list
+                if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
+            ]
+            for tool in mcp_client.tools:
+                func_tool = MCPTool(
+                    mcp_tool=tool,
+                    mcp_client=mcp_client,
+                    mcp_server_name=name,
+                )
+                self.func_list.append(func_tool)
+
+            logger.info(
+                f"Connected to MCP server {name}, "
+                f"Tools: {[t.name for t in mcp_client.tools]}"
+            )
+
+            connect_done.set()
+
             try:
                 await shutdown_event.wait()
                 logger.info(f"Received shutdown signal for MCP client {name}")
@@ -692,9 +723,25 @@ class FunctionToolManager:
                 logger.debug(f"MCP client {name} task was cancelled")
                 raise
             finally:
-                await self._terminate_mcp_client(name)
+                # Cleanup in the same task that entered the anyio contexts:
+                # asyncio.shield() would schedule the coroutine as a separate
+                # Task, and anyio cancel scopes cannot exit across tasks (#9068).
+                # Absorb late cancellations so a forced shutdown cannot abort
+                # the cleanup halfway.
+                task = asyncio.current_task()
+                while True:
+                    try:
+                        await self._terminate_mcp_client(name)
+                        break
+                    except asyncio.CancelledError:
+                        # Task.uncancel() is 3.11+; on 3.10 absorbing the
+                        # cancellation is sufficient.
+                        if task is not None and hasattr(task, "uncancel"):
+                            task.uncancel()
 
-        lifecycle_task = asyncio.create_task(lifecycle(), name=f"mcp-client:{name}")
+        lifecycle_task = asyncio.create_task(
+            connect_and_lifecycle(), name=f"mcp-client:{name}"
+        )
         async with self._runtime_lock:
             self._mcp_server_runtime[name] = _MCPServerRuntime(
                 name=name,
@@ -703,6 +750,26 @@ class FunctionToolManager:
                 lifecycle_task=lifecycle_task,
             )
             self._mcp_starting.discard(name)
+
+        try:
+            await asyncio.wait_for(connect_done.wait(), timeout=timeout)
+        except (asyncio.TimeoutError, asyncio.CancelledError) as e:
+            lifecycle_task.cancel()
+            await asyncio.gather(lifecycle_task, return_exceptions=True)
+            async with self._runtime_lock:
+                self._mcp_starting.discard(name)
+                self._mcp_server_runtime.pop(name, None)
+            if isinstance(e, asyncio.TimeoutError):
+                raise MCPInitTimeoutError(
+                    f"Connected to MCP server {name} timeout ({timeout:g} seconds)"
+                ) from e
+            raise
+
+        if connect_error is not None:
+            async with self._runtime_lock:
+                self._mcp_starting.discard(name)
+                self._mcp_server_runtime.pop(name, None)
+            raise connect_error
 
     async def _shutdown_runtimes(
         self,
@@ -767,41 +834,6 @@ class FunctionToolManager:
             logger.error(
                 f"Failed to cleanup MCP client resources {name}: {cleanup_exc}"
             )
-
-    async def _init_mcp_client(self, name: str, config: dict) -> MCPClient:
-        """初始化单个MCP客户端"""
-        mcp_client = MCPClient()
-        mcp_client.name = name
-        try:
-            await mcp_client.connect_to_server(config, name)
-            tools_res = await mcp_client.list_tools_and_save()
-        except asyncio.CancelledError:
-            await self._cleanup_mcp_client_safely(mcp_client, name)
-            raise
-        except Exception:
-            await self._cleanup_mcp_client_safely(mcp_client, name)
-            raise
-        logger.debug(f"MCP server {name} list tools response: {tools_res}")
-        tool_names = [tool.name for tool in tools_res.tools]
-
-        # 移除该MCP服务之前的工具（如有）
-        self.func_list = [
-            f
-            for f in self.func_list
-            if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
-        ]
-
-        # 将 MCP 工具转换为 FuncTool 并添加到 func_list
-        for tool in mcp_client.tools:
-            func_tool = MCPTool(
-                mcp_tool=tool,
-                mcp_client=mcp_client,
-                mcp_server_name=name,
-            )
-            self.func_list.append(func_tool)
-
-        logger.info(f"Connected to MCP server {name}, Tools: {tool_names}")
-        return mcp_client
 
     async def _terminate_mcp_client(self, name: str) -> None:
         """关闭并清理MCP客户端"""
@@ -951,6 +983,7 @@ class FunctionToolManager:
         toolset = ToolSet(tools)
         return toolset.google_schema()
 
+    @deprecated(reason="Use deactivate_llm_tool_async() instead.")
     def deactivate_llm_tool(self, name: str) -> bool:
         """停用一个已经注册的函数调用工具。
 
@@ -980,7 +1013,39 @@ class FunctionToolManager:
             return True
         return False
 
+    async def deactivate_llm_tool_async(self, name: str) -> bool:
+        """Asynchronously deactivate a registered function-calling tool.
+
+        Args:
+            name: Tool name.
+
+        Returns:
+            True when the tool was deactivated, or False when it was not found.
+        """
+        func_tool = self.get_func(name)
+        if func_tool is not None:
+            func_tool.active = False
+
+            inactivated_llm_tools: list = await sp.get_async(
+                "global",
+                "global",
+                "inactivated_llm_tools",
+                [],
+            )
+            if name not in inactivated_llm_tools:
+                inactivated_llm_tools.append(name)
+                await sp.put_async(
+                    "global",
+                    "global",
+                    "inactivated_llm_tools",
+                    inactivated_llm_tools,
+                )
+
+            return True
+        return False
+
     # 因为不想解决循环引用，所以这里直接传入 star_map 先了...
+    @deprecated(reason="Use activate_llm_tool_async() instead.")
     def activate_llm_tool(self, name: str, star_map: dict) -> bool:
         func_tool = self.get_func(name)
         if func_tool is not None:
@@ -1005,6 +1070,47 @@ class FunctionToolManager:
                     inactivated_llm_tools,
                     scope="global",
                     scope_id="global",
+                )
+
+            return True
+        return False
+
+    async def activate_llm_tool_async(self, name: str, star_map: dict) -> bool:
+        """Asynchronously activate a registered function-calling tool.
+
+        Args:
+            name: Tool name.
+            star_map: Loaded plugins indexed by module path.
+
+        Returns:
+            True when the tool was activated, or False when it was not found.
+
+        Raises:
+            ValueError: If the plugin that owns the tool is disabled.
+        """
+        func_tool = self.get_func(name)
+        if func_tool is not None:
+            if func_tool.handler_module_path in star_map:
+                if not star_map[func_tool.handler_module_path].activated:
+                    raise ValueError(
+                        f"此函数调用工具所属的插件 {star_map[func_tool.handler_module_path].name} 已被禁用，请先在管理面板启用再激活此工具。",
+                    )
+
+            func_tool.active = True
+
+            inactivated_llm_tools: list = await sp.get_async(
+                "global",
+                "global",
+                "inactivated_llm_tools",
+                [],
+            )
+            if name in inactivated_llm_tools:
+                inactivated_llm_tools.remove(name)
+                await sp.put_async(
+                    "global",
+                    "global",
+                    "inactivated_llm_tools",
+                    inactivated_llm_tools,
                 )
 
             return True
@@ -1057,11 +1163,14 @@ class FunctionToolManager:
                             "mcp_server_list",
                             [],
                         )
-                        local_mcp_config = self.load_mcp_config()
+                        local_mcp_config = copy.deepcopy(self.load_mcp_config())
 
-                        synced_count = 0
+                        mcp_servers = local_mcp_config.setdefault("mcpServers", {})
+                        synced_servers: list[tuple[str, dict]] = []
                         for server in mcp_server_list:
-                            server_name = server["name"]
+                            server_name = server.get("name")
+                            if not server_name:
+                                continue
                             operational_urls = server.get("operational_urls", [])
                             if not operational_urls:
                                 continue
@@ -1070,28 +1179,28 @@ class FunctionToolManager:
                             if not server_url:
                                 continue
                             # 添加到配置中(同名会覆盖)
-                            local_mcp_config["mcpServers"][server_name] = {
+                            server_config = {
                                 "url": server_url,
                                 "transport": "sse",
                                 "active": True,
                                 "provider": "modelscope",
                             }
-                            synced_count += 1
+                            mcp_servers[server_name] = server_config
+                            synced_servers.append((server_name, server_config))
 
-                        if synced_count > 0:
+                        if synced_servers:
                             self.save_mcp_config(local_mcp_config)
                             tasks = []
-                            for server in mcp_server_list:
-                                name = server["name"]
+                            for name, config in synced_servers:
                                 tasks.append(
                                     self.enable_mcp_server(
                                         name=name,
-                                        config=local_mcp_config["mcpServers"][name],
+                                        config=config,
                                     ),
                                 )
                             await asyncio.gather(*tasks)
                             logger.info(
-                                f"从 ModelScope 同步了 {synced_count} 个 MCP 服务器",
+                                f"从 ModelScope 同步了 {len(synced_servers)} 个 MCP 服务器",
                             )
                         else:
                             logger.warning("没有找到可用的 ModelScope MCP 服务器")

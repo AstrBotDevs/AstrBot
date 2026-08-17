@@ -158,11 +158,11 @@
 
       <v-dialog v-model="showFactDialog" max-width="550" scrollable>
         <v-card class="fact-detail-card">
-          <v-card-title class="d-flex align-center bg-primary text-white px-4 py-3">
-            <v-icon class="mr-2" color="white">mdi-memory</v-icon>
+          <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
+            <v-icon class="mr-2" color="primary">mdi-memory</v-icon>
             {{ tm('factDialog.title') }}
             <v-spacer></v-spacer>
-            <v-btn icon variant="text" color="white" @click="showFactDialog = false">
+            <v-btn icon variant="text" @click="showFactDialog = false">
               <v-icon>mdi-close</v-icon>
             </v-btn>
           </v-card-title>

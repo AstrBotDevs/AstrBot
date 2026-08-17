@@ -79,11 +79,13 @@ def log_connection_failure(
 
     if effective_proxy:
         logger.error(
-            f"[{provider_label}] 网络/代理连接失败 ({error_type})。"
-            f"代理地址: {effective_proxy}，错误: {error}"
+            f"[{provider_label}] Network or proxy connection failed ({error_type}). "
+            f"Proxy: {effective_proxy}; error: {error}"
         )
     else:
-        logger.error(f"[{provider_label}] 网络连接失败 ({error_type})。错误: {error}")
+        logger.error(
+            f"[{provider_label}] Network connection failed ({error_type}): {error}"
+        )
 
 
 def create_proxy_client(
@@ -117,7 +119,7 @@ def create_proxy_client(
     """
     resolved_verify = _SYSTEM_SSL_CTX if verify is None else verify
     if proxy:
-        logger.info(f"[{provider_label}] 使用代理: {proxy}")
+        logger.info(f"[{provider_label}] Using proxy: {proxy}")
         return httpx_module.AsyncClient(
             proxy=proxy, verify=resolved_verify, headers=headers
         )

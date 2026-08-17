@@ -6,7 +6,7 @@
     @click:outside="onCancel"
   >
     <v-card>
-      <v-card-title class="d-flex align-center pa-4">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
         {{ tm('system_group.system.dashboard.totp.configSaveTitle') }}
         <v-spacer></v-spacer>
         <v-btn icon variant="text" size="small" @click="onCancel">

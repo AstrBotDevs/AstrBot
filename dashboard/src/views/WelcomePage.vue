@@ -14,7 +14,7 @@
 
       <v-row class="px-4">
         <v-col cols="12">
-          <v-card class="welcome-card pa-6" elevation="0" border>
+          <v-card class="welcome-card pa-6" elevation="0">
             <div class="mb-4 text-h3 font-weight-bold">
               {{ tm('onboard.title') }}
             </div>
@@ -97,7 +97,7 @@
 
       <v-row class="px-4 mt-4">
         <v-col cols="12">
-          <v-card class="welcome-card pa-6" elevation="0" border>
+          <v-card class="welcome-card pa-6" elevation="0">
             <div class="mb-4 text-h3 font-weight-bold">
               {{ tm('resources.title') }}
             </div>
@@ -151,7 +151,7 @@
 
       <v-row v-if="showAnnouncement" class="px-4 mb-4">
         <v-col cols="12">
-          <v-card class="welcome-card pa-6" elevation="0" border>
+          <v-card class="welcome-card pa-6" elevation="0">
             <div class="mb-4 text-h3 font-weight-bold">
               {{ tm('announcement.title') }}
             </div>
@@ -170,7 +170,7 @@
     <ProviderConfigDialog v-model="showProviderDialog" />
     <v-dialog v-model="showComputerAccessHelpDialog" max-width="640">
       <v-card>
-        <v-card-title class="text-h3 font-weight-bold pa-4">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           {{ tm('onboard.step3HelpTitle') }}
         </v-card-title>
         <v-card-text>
@@ -557,6 +557,7 @@ watch(computerAccessRuntime, async (value, oldValue) => {
 
 .welcome-card {
   border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .welcome-announcement-markdown {

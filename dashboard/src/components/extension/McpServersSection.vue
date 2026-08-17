@@ -15,6 +15,23 @@
           clickable
           @click="editServer(server)"
         >
+          <template #title-extra>
+            <v-chip
+              :color="server.connected ? 'success' : 'default'"
+              :prepend-icon="
+                server.connected ? 'mdi-lan-connect' : 'mdi-close-circle-outline'
+              "
+              size="x-small"
+              variant="tonal"
+            >
+              {{
+                server.connected
+                  ? tm('mcpServers.status.connected')
+                  : tm('mcpServers.status.disconnected')
+              }}
+            </v-chip>
+          </template>
+
           <div
             class="mcp-server-config text-body-2 text-medium-emphasis"
             :title="getServerConfigSummary(server)"
@@ -48,7 +65,7 @@
                 </template>
                 <template v-slot:default="{ isActive }">
                   <v-card style="padding: 16px;">
-                    <v-card-title class="d-flex align-center">
+                    <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
                       <span>{{ tm('mcpServers.status.availableTools') }}</span>
                     </v-card-title>
                     <v-card-text>
@@ -114,7 +131,12 @@
                   density="compact"
                   hide-details
                   inset
-                  :model-value="server.active"
+                  :model-value="server.connected"
+                  :aria-label="
+                    server.connected
+                      ? tm('mcpServers.buttons.disconnect')
+                      : tm('mcpServers.buttons.connect')
+                  "
                   :loading="mcpServerUpdateLoaders[server.name] || false"
                   :disabled="mcpServerUpdateLoaders[server.name] || false"
                   @click.stop
@@ -122,9 +144,9 @@
                 />
               </template>
               <span>{{
-                server.active
-                  ? t('core.common.itemCard.enabled')
-                  : t('core.common.itemCard.disabled')
+                server.connected
+                  ? tm('mcpServers.buttons.disconnect')
+                  : tm('mcpServers.buttons.connect')
               }}</span>
             </v-tooltip>
           </template>
@@ -164,7 +186,7 @@
     <!-- 添加/编辑 MCP 服务器对话框 -->
     <v-dialog v-model="showMcpServerDialog" max-width="750px">
       <v-card>
-        <v-card-title class="pa-4 pl-6">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           <v-icon class="me-2">{{ isEditMode ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
           <span>{{ isEditMode ? tm('dialogs.addServer.editTitle') : tm('dialogs.addServer.title') }}</span>
         </v-card-title>
@@ -228,7 +250,7 @@
           <v-btn variant="text" @click="testServerConnection" :disabled="loading">
             {{ tm('dialogs.addServer.buttons.testConnection') }}
           </v-btn>
-          <v-btn color="primary" @click="saveServer" :loading="loading" :disabled="!isServerFormValid">
+          <v-btn color="primary" variant="tonal" @click="saveServer" :loading="loading" :disabled="!isServerFormValid">
             {{ tm('dialogs.addServer.buttons.save') }}
           </v-btn>
         </v-card-actions>
@@ -238,7 +260,7 @@
     <!-- 同步 MCP 服务器对话框 -->
     <v-dialog v-model="showSyncMcpServerDialog" max-width="500px" persistent>
       <v-card>
-        <v-card-title class="bg-primary text-white py-3">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           <span>同步外部平台 MCP 服务器</span>
         </v-card-title>
 
@@ -284,7 +306,7 @@
           <v-btn variant="text" @click="showSyncMcpServerDialog = false" :disabled="loading">
             {{ tm('dialogs.addServer.buttons.cancel') }}
           </v-btn>
-          <v-btn color="primary" @click="syncMcpServers" :loading="loading" :disabled="loading">
+          <v-btn color="primary" variant="tonal" @click="syncMcpServers" :loading="loading" :disabled="loading">
             {{ tm('dialogs.addServer.buttons.sync') }}
           </v-btn>
         </v-card-actions>
@@ -292,7 +314,7 @@
     </v-dialog>
 
     <!-- 消息提示 -->
-    <v-snackbar :timeout="3000" elevation="24" :color="save_message_success" v-model="save_message_snack" location="top">
+    <v-snackbar :timeout="3000" elevation="6" :color="save_message_success" v-model="save_message_snack" location="top">
       {{ save_message }}
     </v-snackbar>
   </div>
@@ -360,7 +382,7 @@ export default {
           return `${server.command} ${(server.args || []).join(' ')}`;
         }
         const configKeys = Object.keys(server).filter(key =>
-          !['name', 'active', 'tools'].includes(key)
+          !['name', 'active', 'connected', 'tools', 'errlogs'].includes(key)
         );
         if (configKeys.length > 0) {
           return this.tm('mcpServers.status.configSummary', { keys: configKeys.join(', ') });
@@ -521,6 +543,7 @@ export default {
       const configCopy = { ...server };
       delete configCopy.name;
       delete configCopy.active;
+      delete configCopy.connected;
       delete configCopy.tools;
       delete configCopy.errlogs;
       this.currentServer = {
@@ -535,7 +558,8 @@ export default {
     },
     updateServerStatus(server) {
       this.mcpServerUpdateLoaders[server.name] = true;
-      server.active = !server.active;
+      const previousActive = server.active;
+      server.active = !server.connected;
       mcpApi.setEnabled(server.name, server.active)
         .then(response => {
           this.getServers();
@@ -543,7 +567,7 @@ export default {
         })
         .catch(error => {
           this.showError(this.tm('messages.updateError', { error: error.response?.data?.message || error.message }));
-          server.active = !server.active;
+          server.active = previousActive;
         })
         .finally(() => {
           this.mcpServerUpdateLoaders[server.name] = false;
