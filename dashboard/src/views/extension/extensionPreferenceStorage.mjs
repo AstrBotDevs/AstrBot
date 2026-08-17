@@ -1,4 +1,5 @@
 export const PINNED_EXTENSIONS_STORAGE_KEY = "astrbot.pinnedExtensions";
+export const PLUGIN_CARD_DENSITY_STORAGE_KEY = "astrbot.pluginCardDensity";
 
 const getStorageForRead = (storageOverride) => {
   if (storageOverride === null) {
@@ -82,6 +83,55 @@ export const writePinnedExtensions = (names, storage) => {
     targetStorage.setItem(
       PINNED_EXTENSIONS_STORAGE_KEY,
       JSON.stringify(normalizePinnedExtensions(names)),
+    );
+  } catch {
+    // Ignore restricted storage environments.
+  }
+};
+
+/**
+ * Read the saved plugin card density.
+ *
+ * Args:
+ *   storage: Optional storage override used by tests or restricted runtimes.
+ *
+ * Returns:
+ *   The saved density, or "detailed" when the value is unavailable or invalid.
+ */
+export const readPluginCardDensity = (storage) => {
+  const targetStorage = getStorageForRead(storage);
+  if (!targetStorage) {
+    return "detailed";
+  }
+
+  try {
+    const saved = targetStorage.getItem(PLUGIN_CARD_DENSITY_STORAGE_KEY);
+    return ["detailed", "compact"].includes(saved) ? saved : "detailed";
+  } catch {
+    return "detailed";
+  }
+};
+
+/**
+ * Persist the plugin card density.
+ *
+ * Args:
+ *   density: Density value to store. Unsupported values use "detailed".
+ *   storage: Optional storage override used by tests or restricted runtimes.
+ *
+ * Returns:
+ *   Nothing.
+ */
+export const writePluginCardDensity = (density, storage) => {
+  const targetStorage = getStorageForWrite(storage);
+  if (!targetStorage) {
+    return;
+  }
+
+  try {
+    targetStorage.setItem(
+      PLUGIN_CARD_DENSITY_STORAGE_KEY,
+      ["detailed", "compact"].includes(density) ? density : "detailed",
     );
   } catch {
     // Ignore restricted storage environments.

@@ -3,7 +3,9 @@ import ExtensionCard from "@/components/shared/ExtensionCard.vue";
 import { normalizeTextInput } from "@/utils/inputValue";
 import {
   readPinnedExtensions,
+  readPluginCardDensity,
   writePinnedExtensions,
+  writePluginCardDensity,
 } from "./extensionPreferenceStorage.mjs";
 import { computed, ref, watch } from "vue";
 
@@ -168,6 +170,7 @@ const openPluginWebui = (extension) => {
 };
 
 const pinnedExtensionNames = ref(readPinnedExtensions());
+const pluginCardDensity = ref(readPluginCardDensity());
 
 const pinnedExtensionOrder = computed(() => {
   const order = new Map();
@@ -201,6 +204,10 @@ watch(
   },
   { deep: true },
 );
+
+watch(pluginCardDensity, (density) => {
+  writePluginCardDensity(density);
+});
 
 const isPinnedExtension = (extension) => {
   const name = extension?.name;
@@ -247,7 +254,7 @@ const togglePinnedExtension = (extension) => {
           </v-tab>
         </v-tabs>
 
-        <div class="installed-search-wrap d-flex align-center ml-auto">
+        <div class="installed-controls d-flex align-center ml-auto">
           <v-text-field
             :model-value="pluginSearch"
             @update:model-value="pluginSearch = normalizeTextInput($event)"
@@ -262,6 +269,30 @@ const togglePinnedExtension = (extension) => {
             class="plugin-search-field"
           >
           </v-text-field>
+
+          <v-btn-toggle
+            v-model="pluginCardDensity"
+            mandatory
+            divided
+            density="compact"
+            variant="outlined"
+            color="primary"
+            class="plugin-density-toggle"
+            :aria-label="tm('views.displayDensity')"
+          >
+            <v-btn value="detailed" icon :aria-label="tm('views.detailed')">
+              <v-icon>mdi-view-grid-outline</v-icon>
+              <v-tooltip activator="parent" location="top">
+                {{ tm("views.detailed") }}
+              </v-tooltip>
+            </v-btn>
+            <v-btn value="compact" icon :aria-label="tm('views.compact')">
+              <v-icon>mdi-view-grid-compact</v-icon>
+              <v-tooltip activator="parent" location="top">
+                {{ tm("views.compact") }}
+              </v-tooltip>
+            </v-btn>
+          </v-btn-toggle>
         </div>
       </div>
     </div>
@@ -341,7 +372,7 @@ const togglePinnedExtension = (extension) => {
     </v-card>
 
     <v-fade-transition hide-on-leave>
-      <div>
+      <div class="installed-plugin-list-container">
         <v-row v-if="sortedInstalledPlugins.length === 0" class="text-center">
           <v-col cols="12" class="pa-2">
             <v-icon size="64" color="info" class="mb-4"
@@ -354,39 +385,31 @@ const togglePinnedExtension = (extension) => {
           </v-col>
         </v-row>
 
-        <v-row>
-          <v-col
-            cols="12"
-            md="6"
+        <div v-else class="installed-plugin-grid">
+          <ExtensionCard
             v-for="extension in sortedInstalledPlugins"
             :key="extension.name"
-            class="pb-2"
-          >
-            <ExtensionCard
-              :extension="extension"
-              :is-pinned="isPinnedExtension(extension)"
-              class="rounded-lg"
-              style="background-color: rgb(var(--v-theme-mcpCardBg))"
-              @click="openPluginDetail(extension)"
-              @toggle-pin="togglePinnedExtension(extension)"
-              @configure="openExtensionConfig(extension.name)"
-              @uninstall="
-                (ext, options) => uninstallExtension(ext.name, options)
-              "
-              @update="updateExtension(extension.name)"
-              @reload="reloadPlugin(extension.name)"
-              @toggle-activation="
-                extension.activated ? pluginOff(extension) : pluginOn(extension)
-              "
-              @view-handlers="showPluginInfo(extension)"
-              @view-readme="viewReadme(extension)"
-              @view-changelog="viewChangelog(extension)"
-              @open-webui="openPluginWebui(extension)"
-              @change-source="openPluginSourceBindingDialog(extension)"
-            >
-            </ExtensionCard>
-          </v-col>
-        </v-row>
+            :extension="extension"
+            :is-pinned="isPinnedExtension(extension)"
+            :compact="pluginCardDensity === 'compact'"
+            class="rounded-lg"
+            style="background-color: rgb(var(--v-theme-mcpCardBg))"
+            @click="openPluginDetail(extension)"
+            @toggle-pin="togglePinnedExtension(extension)"
+            @configure="openExtensionConfig(extension.name)"
+            @uninstall="(ext, options) => uninstallExtension(ext.name, options)"
+            @update="updateExtension(extension.name)"
+            @reload="reloadPlugin(extension.name)"
+            @toggle-activation="
+              extension.activated ? pluginOff(extension) : pluginOn(extension)
+            "
+            @view-handlers="showPluginInfo(extension)"
+            @view-readme="viewReadme(extension)"
+            @view-changelog="viewChangelog(extension)"
+            @open-webui="openPluginWebui(extension)"
+            @change-source="openPluginSourceBindingDialog(extension)"
+          />
+        </div>
       </div>
     </v-fade-transition>
 
@@ -596,13 +619,35 @@ const togglePinnedExtension = (extension) => {
   gap: 12px;
 }
 
-.installed-search-wrap {
-  flex: 0 1 340px;
-  min-width: 220px;
+.installed-controls {
+  flex: 0 1 440px;
+  gap: 8px;
+  min-width: 300px;
 }
 
 .plugin-search-field {
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.plugin-density-toggle {
+  flex: 0 0 auto;
+}
+
+.installed-plugin-list-container {
+  container-type: inline-size;
+}
+
+.installed-plugin-grid {
+  display: grid;
+  gap: 8px 12px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container (min-width: 760px) {
+  .installed-plugin-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 700px) {
@@ -611,7 +656,7 @@ const togglePinnedExtension = (extension) => {
     flex-direction: column;
   }
 
-  .installed-search-wrap {
+  .installed-controls {
     flex: none;
     margin-left: 0 !important;
     min-width: 0;
