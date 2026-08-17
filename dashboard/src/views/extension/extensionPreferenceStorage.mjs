@@ -1,5 +1,9 @@
 export const PINNED_EXTENSIONS_STORAGE_KEY = "astrbot.pinnedExtensions";
 export const PLUGIN_CARD_DENSITY_STORAGE_KEY = "astrbot.pluginCardDensity";
+export const PLUGIN_CARD_DENSITY = Object.freeze({
+  DETAILED: "detailed",
+  COMPACT: "compact",
+});
 
 const getStorageForRead = (storageOverride) => {
   if (storageOverride === null) {
@@ -96,19 +100,21 @@ export const writePinnedExtensions = (names, storage) => {
  *   storage: Optional storage override used by tests or restricted runtimes.
  *
  * Returns:
- *   The saved density, or "detailed" when the value is unavailable or invalid.
+ *   The saved density, or the detailed density when unavailable or invalid.
  */
 export const readPluginCardDensity = (storage) => {
   const targetStorage = getStorageForRead(storage);
   if (!targetStorage) {
-    return "detailed";
+    return PLUGIN_CARD_DENSITY.DETAILED;
   }
 
   try {
     const saved = targetStorage.getItem(PLUGIN_CARD_DENSITY_STORAGE_KEY);
-    return ["detailed", "compact"].includes(saved) ? saved : "detailed";
+    return Object.values(PLUGIN_CARD_DENSITY).includes(saved)
+      ? saved
+      : PLUGIN_CARD_DENSITY.DETAILED;
   } catch {
-    return "detailed";
+    return PLUGIN_CARD_DENSITY.DETAILED;
   }
 };
 
@@ -116,7 +122,7 @@ export const readPluginCardDensity = (storage) => {
  * Persist the plugin card density.
  *
  * Args:
- *   density: Density value to store. Unsupported values use "detailed".
+ *   density: Density value to store. Unsupported values use the detailed mode.
  *   storage: Optional storage override used by tests or restricted runtimes.
  *
  * Returns:
@@ -131,7 +137,9 @@ export const writePluginCardDensity = (density, storage) => {
   try {
     targetStorage.setItem(
       PLUGIN_CARD_DENSITY_STORAGE_KEY,
-      ["detailed", "compact"].includes(density) ? density : "detailed",
+      Object.values(PLUGIN_CARD_DENSITY).includes(density)
+        ? density
+        : PLUGIN_CARD_DENSITY.DETAILED,
     );
   } catch {
     // Ignore restricted storage environments.

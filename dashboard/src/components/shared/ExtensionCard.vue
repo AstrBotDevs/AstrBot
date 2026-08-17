@@ -3,6 +3,7 @@ import { ref, computed, watch, useAttrs } from "vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from "@/i18n/composables";
 import UninstallConfirmDialog from "./UninstallConfirmDialog.vue";
+import PluginActivationSwitch from "./PluginActivationSwitch.vue";
 import PluginPlatformChip from "./PluginPlatformChip.vue";
 import StyledMenu from "./StyledMenu.vue";
 import defaultPluginIcon from "/favicon.svg";
@@ -300,35 +301,12 @@ const openWebui = () => {
               </v-tooltip>
             </p>
 
-            <template v-if="!marketMode && !compact">
-              <v-tooltip location="left">
-                <template v-slot:activator="{ props: tooltipProps }">
-                  <div class="extension-switch-wrap" @click.stop>
-                    <div
-                      v-bind="tooltipProps"
-                      style="display: inline-flex; align-items: center"
-                    >
-                      <v-switch
-                        :model-value="extension.activated"
-                        :aria-label="
-                          extension.activated
-                            ? tm('buttons.stop')
-                            : tm('buttons.load')
-                        "
-                        color="success"
-                        density="compact"
-                        hide-details
-                        inset
-                        @update:model-value="toggleActivation"
-                      ></v-switch>
-                    </div>
-                  </div>
-                </template>
-                <span>{{
-                  extension.activated ? tm("buttons.stop") : tm("buttons.load")
-                }}</span>
-              </v-tooltip>
-            </template>
+            <PluginActivationSwitch
+              v-if="!marketMode && !compact"
+              :activated="extension.activated"
+              tooltip-location="left"
+              @toggle="toggleActivation"
+            />
           </div>
 
           <div v-if="!compact" class="extension-chip-group d-flex flex-wrap">
@@ -528,29 +506,11 @@ const openWebui = () => {
           </v-list-item>
         </StyledMenu>
 
-        <v-tooltip v-if="compact" location="top">
-          <template v-slot:activator="{ props: tooltipProps }">
-            <div class="extension-switch-wrap" @click.stop>
-              <div
-                v-bind="tooltipProps"
-                style="display: inline-flex; align-items: center"
-              >
-                <v-switch
-                  :model-value="extension.activated"
-                  :aria-label="
-                    extension.activated ? tm('buttons.stop') : tm('buttons.load')
-                  "
-                  color="success"
-                  density="compact"
-                  hide-details
-                  inset
-                  @update:model-value="toggleActivation"
-                ></v-switch>
-              </div>
-            </div>
-          </template>
-          <span>{{ extension.activated ? tm("buttons.stop") : tm("buttons.load") }}</span>
-        </v-tooltip>
+        <PluginActivationSwitch
+          v-if="compact"
+          :activated="extension.activated"
+          @toggle="toggleActivation"
+        />
       </template>
       <template v-else>
         <v-btn color="primary" size="small" @click.stop="viewReadme">
@@ -651,18 +611,8 @@ const openWebui = () => {
   margin-left: 8px;
 }
 
-.extension-switch-wrap {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-
 .extension-pin-btn {
   flex-shrink: 0;
-}
-
-.extension-switch-wrap :deep(.v-switch) {
-  margin: 0;
 }
 
 @media (max-width: 600px) {

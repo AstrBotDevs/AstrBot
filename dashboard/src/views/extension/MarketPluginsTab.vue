@@ -45,9 +45,6 @@ const {
   forceUpdateDialog,
   updateAllConfirmDialog,
   changelogDialog,
-  // Legacy table-view bindings remain inactive after the plugin detail refactor.
-  // getInitialListViewMode,
-  // isListView,
   pluginSearch,
   loading_,
   currentPage,

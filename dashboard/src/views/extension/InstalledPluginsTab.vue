@@ -2,6 +2,7 @@
 import ExtensionCard from "@/components/shared/ExtensionCard.vue";
 import { normalizeTextInput } from "@/utils/inputValue";
 import {
+  PLUGIN_CARD_DENSITY,
   readPinnedExtensions,
   readPluginCardDensity,
   writePinnedExtensions,
@@ -280,13 +281,21 @@ const togglePinnedExtension = (extension) => {
             class="plugin-density-toggle"
             :aria-label="tm('views.displayDensity')"
           >
-            <v-btn value="detailed" icon :aria-label="tm('views.detailed')">
+            <v-btn
+              :value="PLUGIN_CARD_DENSITY.DETAILED"
+              icon
+              :aria-label="tm('views.detailed')"
+            >
               <v-icon>mdi-view-grid-outline</v-icon>
               <v-tooltip activator="parent" location="top">
                 {{ tm("views.detailed") }}
               </v-tooltip>
             </v-btn>
-            <v-btn value="compact" icon :aria-label="tm('views.compact')">
+            <v-btn
+              :value="PLUGIN_CARD_DENSITY.COMPACT"
+              icon
+              :aria-label="tm('views.compact')"
+            >
               <v-icon>mdi-view-grid-compact</v-icon>
               <v-tooltip activator="parent" location="top">
                 {{ tm("views.compact") }}
@@ -391,7 +400,7 @@ const togglePinnedExtension = (extension) => {
             :key="extension.name"
             :extension="extension"
             :is-pinned="isPinnedExtension(extension)"
-            :compact="pluginCardDensity === 'compact'"
+            :compact="pluginCardDensity === PLUGIN_CARD_DENSITY.COMPACT"
             class="rounded-lg"
             style="background-color: rgb(var(--v-theme-mcpCardBg))"
             @click="openPluginDetail(extension)"

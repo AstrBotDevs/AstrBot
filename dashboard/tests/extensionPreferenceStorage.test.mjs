@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   PINNED_EXTENSIONS_STORAGE_KEY,
+  PLUGIN_CARD_DENSITY,
   PLUGIN_CARD_DENSITY_STORAGE_KEY,
   readPinnedExtensions,
   readPluginCardDensity,
@@ -59,11 +60,13 @@ test('writePinnedExtensions ignores unavailable storage', () => {
 test('readPluginCardDensity restores a saved compact mode', () => {
   const storage = {
     getItem(key) {
-      return key === PLUGIN_CARD_DENSITY_STORAGE_KEY ? 'compact' : null;
+      return key === PLUGIN_CARD_DENSITY_STORAGE_KEY
+        ? PLUGIN_CARD_DENSITY.COMPACT
+        : null;
     },
   };
 
-  assert.equal(readPluginCardDensity(storage), 'compact');
+  assert.equal(readPluginCardDensity(storage), PLUGIN_CARD_DENSITY.COMPACT);
 });
 
 test('readPluginCardDensity falls back for invalid or unavailable storage', () => {
@@ -73,16 +76,16 @@ test('readPluginCardDensity falls back for invalid or unavailable storage', () =
         return 'unsupported';
       },
     }),
-    'detailed',
+    PLUGIN_CARD_DENSITY.DETAILED,
   );
-  assert.equal(readPluginCardDensity(null), 'detailed');
+  assert.equal(readPluginCardDensity(null), PLUGIN_CARD_DENSITY.DETAILED);
   assert.equal(
     readPluginCardDensity({
       getItem() {
         throw new Error('SecurityError');
       },
     }),
-    'detailed',
+    PLUGIN_CARD_DENSITY.DETAILED,
   );
 });
 
@@ -94,9 +97,11 @@ test('writePluginCardDensity stores a supported mode', () => {
     },
   };
 
-  writePluginCardDensity('compact', storage);
+  writePluginCardDensity(PLUGIN_CARD_DENSITY.COMPACT, storage);
 
-  assert.deepEqual(writes, [[PLUGIN_CARD_DENSITY_STORAGE_KEY, 'compact']]);
+  assert.deepEqual(writes, [
+    [PLUGIN_CARD_DENSITY_STORAGE_KEY, PLUGIN_CARD_DENSITY.COMPACT],
+  ]);
 });
 
 test('writePluginCardDensity normalizes invalid values and storage failures', () => {
@@ -109,6 +114,10 @@ test('writePluginCardDensity normalizes invalid values and storage failures', ()
   };
 
   assert.doesNotThrow(() => writePluginCardDensity('unsupported', storage));
-  assert.deepEqual(writes, [[PLUGIN_CARD_DENSITY_STORAGE_KEY, 'detailed']]);
-  assert.doesNotThrow(() => writePluginCardDensity('compact', null));
+  assert.deepEqual(writes, [
+    [PLUGIN_CARD_DENSITY_STORAGE_KEY, PLUGIN_CARD_DENSITY.DETAILED],
+  ]);
+  assert.doesNotThrow(() =>
+    writePluginCardDensity(PLUGIN_CARD_DENSITY.COMPACT, null),
+  );
 });
