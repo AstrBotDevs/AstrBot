@@ -133,7 +133,7 @@ class LinePlatformAdapter(Platform):
             return "invalid signature", 400
 
         try:
-            payload = await request.get_json(force=True, silent=False)
+            payload = await request.get_json(silent=False)
         except Exception as e:
             logger.warning("[LINE] invalid webhook body: %s", e)
             return "bad request", 400

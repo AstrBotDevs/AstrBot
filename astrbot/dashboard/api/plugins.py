@@ -10,12 +10,13 @@ from fastapi.responses import PlainTextResponse, Response
 
 from astrbot.api.web import PluginRequest, bind_request_context
 from astrbot.core import logger
+from astrbot.core.log import LogManager
 from astrbot.dashboard.asgi_runtime import (
     DashboardRequestState,
     call_request_view,
 )
 from astrbot.dashboard.async_utils import run_maybe_async
-from astrbot.dashboard.responses import ok
+from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.schemas import (
     EnabledPatch,
     PluginByIdRequest,
@@ -24,6 +25,7 @@ from astrbot.dashboard.schemas import (
     PluginConfigUpdateRequest,
     PluginEnabledRequest,
     PluginInstallRequest,
+    PluginLogLevelPayload,
     PluginSourceBindRequest,
     PluginSourceRequest,
     PluginUninstallRequest,
@@ -47,15 +49,14 @@ from astrbot.dashboard.services.plugin_service import (
     PluginServiceWarning,
 )
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, ScopeDependency, require_dashboard_user
 from .multipart import multipart_parts
 
 router = APIRouter(tags=["Plugins"])
 legacy_router = APIRouter(tags=["Dashboard Plugins"], include_in_schema=False)
 
 
-async def require_plugin_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "plugin")
+require_plugin_scope = ScopeDependency("plugin")
 
 
 def get_service(request: Request) -> PluginService:
@@ -498,20 +499,30 @@ async def validate_plugin_repo(
     )
 
 
-@router.post("/plugins/install/github")
-async def install_plugin_from_github(
+@router.post(
+    "/plugins/install/github",
+    summary="Install a plugin from GitHub",
+    operation_id="installPluginFromGithub",
+)
+@router.post(
+    "/plugins/install/git",
+    summary="Install a plugin with a shallow Git clone",
+    operation_id="installPluginFromGit",
+)
+async def install_plugin_from_repository(
+    request: Request,
     payload: PluginInstallRequest,
     _auth: AuthContext = Depends(require_plugin_scope),
     service: PluginService = Depends(get_service),
 ):
     body = _model_dict(payload)
     repository = str(body.get("repository") or body.get("url") or "").strip()
-    if repository and not repository.startswith(("http://", "https://")):
-        repository = f"https://github.com/{repository}"
+    repository_transport = request.url.path.rsplit("/", 1)[-1]
     install_payload = {
         "url": repository,
         "proxy": body.get("proxy"),
         "ignore_version_check": body.get("ignore_version_check", False),
+        "repository_transport": repository_transport,
         **{
             key: body[key]
             for key in (
@@ -712,7 +723,13 @@ async def get_plugin_config_by_id(
     _auth: AuthContext = Depends(require_plugin_scope),
     service: ConfigDisplayService = Depends(get_config_display_service),
 ):
-    return ok({"plugin_name": plugin_id, **await service.get_configs(plugin_id)})
+    return ok(
+        {
+            "plugin_name": plugin_id,
+            "log_level": LogManager.get_plugin_log_level(plugin_id),
+            **await service.get_configs(plugin_id),
+        }
+    )
 
 
 @router.put("/plugins/config")
@@ -956,7 +973,30 @@ async def get_plugin_config(
     _auth: AuthContext = Depends(require_plugin_scope),
     service: ConfigDisplayService = Depends(get_config_display_service),
 ):
-    return ok({"plugin_name": plugin_id, **await service.get_configs(plugin_id)})
+    return ok(
+        {
+            "plugin_name": plugin_id,
+            "log_level": LogManager.get_plugin_log_level(plugin_id),
+            **await service.get_configs(plugin_id),
+        }
+    )
+
+
+@router.put("/plugins/{plugin_id}/log-level")
+async def update_plugin_log_level(
+    plugin_id: str,
+    payload: PluginLogLevelPayload,
+    _auth: AuthContext = Depends(require_plugin_scope),
+):
+    try:
+        LogManager.set_plugin_log_level(plugin_id, payload.level)
+    except ValueError as e:
+        return error(str(e))
+    level_desc = payload.level.upper() if payload.level else "global"
+    return ok(
+        message=f"Log level of plugin {plugin_id} set to {level_desc}.",
+        data={"log_level": LogManager.get_plugin_log_level(plugin_id)},
+    )
 
 
 @router.put("/plugins/{plugin_id}/config")

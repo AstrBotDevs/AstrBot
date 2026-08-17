@@ -5,6 +5,15 @@
       <p class="mt-4 text-medium-emphasis">{{ t('list.loading') }}</p>
     </div>
 
+    <div v-else-if="loadError && kbList.length === 0" class="empty-state">
+      <v-icon size="72" color="error">mdi-alert-circle-outline</v-icon>
+      <h2 class="mt-4">{{ t('messages.loadError') }}</h2>
+      <v-btn class="mt-6" prepend-icon="mdi-refresh" color="primary" variant="tonal"
+        @click="loadKnowledgeBases()">
+        {{ t('list.retry') }}
+      </v-btn>
+    </div>
+
     <div v-else-if="kbList.length > 0" class="kb-list">
       <OutlinedActionListItem
         v-for="kb in kbList"
@@ -161,7 +170,9 @@
 
             <v-select v-model="formData.embedding_provider_id" :items="embeddingProviders"
               :item-title="item => item.embedding_model || item.id" :item-value="'id'"
-              :label="t('create.embeddingModelLabel')" variant="outlined" class="mb-4" :disabled="editingKB !== null" hint="嵌入模型选择后无法修改，如需更换请创建新的知识库。" persistent-hint>
+              :label="t('create.embeddingModelLabel')" variant="outlined" class="mb-4" :disabled="editingKB !== null"
+              :rules="[v => editingKB !== null || !!v || t('create.embeddingModelRequired')]" required
+              hint="嵌入模型选择后无法修改，如需更换请创建新的知识库。" persistent-hint>
               <template #item="{ props, item }">
                 <v-list-item v-bind="props">
                   <template #subtitle>
@@ -275,6 +286,7 @@ const router = useRouter()
 
 // 状态
 const loading = ref(false)
+const loadError = ref(false)
 const saving = ref(false)
 const deleting = ref(false)
 const kbList = ref<any[]>([])
@@ -335,6 +347,7 @@ const emojiCategories = [
 // 加载知识库列表
 const loadKnowledgeBases = async (refreshStats = false) => {
   loading.value = true
+  loadError.value = false
   try {
     if (refreshStats) {
       page.value = 1
@@ -348,11 +361,14 @@ const loadKnowledgeBases = async (refreshStats = false) => {
       const data = response.data.data
       kbList.value = data.items || []
       total.value = data.total || 0
+      loadError.value = false
     } else {
+      loadError.value = true
       showSnackbar(response.data.message || t('messages.loadError'), 'error')
     }
   } catch (error) {
     console.error('Failed to load knowledge bases:', error)
+    loadError.value = true
     showSnackbar(t('messages.loadError'), 'error')
   } finally {
     loading.value = false
@@ -455,7 +471,10 @@ const submitForm = async () => {
     if (editingKB.value) {
       response = await knowledgeApi.update(editingKB.value.kb_id, payload)
     } else {
-      response = await knowledgeApi.create(payload)
+      response = await knowledgeApi.create({
+        ...payload,
+        embedding_provider_id: formData.value.embedding_provider_id!
+      })
     }
 
     if (response.data.status === 'ok') {

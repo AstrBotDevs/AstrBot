@@ -121,7 +121,7 @@ class WecomAIBotAdapter(Platform):
             name="wecom_ai_bot",
             description="企业微信智能机器人适配器，支持 HTTP 回调和长连接模式",
             id=self.config.get("id", "wecom_ai_bot"),
-            support_proactive_message=bool(self.msg_push_webhook_url),
+            support_proactive_message=True,
         )
 
         self.api_client: WecomAIBotAPIClient | None = None
@@ -568,21 +568,18 @@ class WecomAIBotAdapter(Platform):
     ) -> None:
         """通过消息推送 webhook 发送消息。"""
         if not self.webhook_client:
-            logger.warning(
-                "主动消息发送失败: 未配置企业微信消息推送 Webhook URL，请前往配置添加。session_id=%s",
-                session.session_id,
+            raise RuntimeError(
+                "主动消息发送失败: 未配置企业微信消息推送 Webhook URL，请前往配置添加。"
+                "详见文档: https://docs.astrbot.app/platform/wecom_ai_bot.html#%E9%85%8D%E7%BD%AE-astrbot。"
+                f"session_id={session.session_id}"
             )
-            await super().send_by_session(session, message_chain)
-            return
 
         try:
             await self.webhook_client.send_message_chain(message_chain)
         except Exception as e:
-            logger.error(
-                "企业微信消息推送失败(session=%s): %s",
-                session.session_id,
-                e,
-            )
+            raise RuntimeError(
+                f"企业微信消息推送失败: session_id={session.session_id}, error={e}"
+            ) from e
         await super().send_by_session(session, message_chain)
 
     def run(self) -> Awaitable[Any]:

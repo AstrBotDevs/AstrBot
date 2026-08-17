@@ -83,6 +83,79 @@ def _build_context() -> MagicMock:
 
 
 @pytest.mark.asyncio
+async def test_telegram_partial_quote_uses_exact_quote_text():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    original_text = "😀 prefix target suffix"
+    quoted_text = "target"
+    reply_update = create_mock_update(
+        message_text=original_text,
+        message_id=42,
+        user_id=1001,
+        username="original_sender",
+    )
+    quote = MagicMock(text=quoted_text, position=10)
+    update = create_mock_update(
+        message_text="What does this mean?",
+        reply_to_message=reply_update.message,
+        quote=quote,
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    reply = result.message[0]
+    assert isinstance(reply, Comp.Reply)
+    assert reply.id == "42"
+    assert reply.message_str == quoted_text
+    assert reply.text == quoted_text
+    assert reply.chain is not None
+    assert len(reply.chain) == 1
+    assert isinstance(reply.chain[0], Comp.Plain)
+    assert reply.chain[0].text == quoted_text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quote_text", [None, ""])
+async def test_telegram_reply_without_quote_text_uses_full_message(quote_text):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    original_text = "Use the complete replied message"
+    reply_update = create_mock_update(
+        message_text=original_text,
+        message_id=43,
+        user_id=1002,
+        username="original_sender",
+    )
+    quote = MagicMock(text=quote_text) if quote_text is not None else None
+    update = create_mock_update(
+        message_text="Follow-up question",
+        reply_to_message=reply_update.message,
+        quote=quote,
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    reply = result.message[0]
+    assert isinstance(reply, Comp.Reply)
+    assert reply.message_str == original_text
+    assert reply.text == original_text
+    assert reply.chain is not None
+    assert len(reply.chain) == 1
+    assert isinstance(reply.chain[0], Comp.Plain)
+    assert reply.chain[0].text == original_text
+
+
+@pytest.mark.asyncio
 async def test_telegram_document_caption_populates_message_text_and_plain():
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(
@@ -140,6 +213,101 @@ async def test_telegram_video_caption_populates_message_text_and_plain():
         isinstance(component, Comp.Plain) and component.text == "这段视频讲了什么"
         for component in result.message
     )
+
+
+_STICKER_URL = "https://api.telegram.org/file/test/sticker_1.webp"
+_ANIMATED_URL = "https://api.telegram.org/file/test/sticker_1.tgs"
+_VIDEO_URL = "https://api.telegram.org/file/test/sticker_1.webm"
+_THUMBNAIL_URL = "https://api.telegram.org/file/test/thumb_1.webp"
+
+
+def _make_sticker(
+    file_path: str,
+    *,
+    is_animated: bool = False,
+    is_video: bool = False,
+    thumbnail_path: str | None = None,
+):
+    sticker = create_mock_file(file_path)
+    sticker.emoji = "🙄"
+    sticker.is_animated = is_animated
+    sticker.is_video = is_video
+    sticker.thumbnail = (
+        create_mock_file(thumbnail_path) if thumbnail_path is not None else None
+    )
+    return sticker
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("file_path", "flags", "expected_url"),
+    [
+        (_STICKER_URL, {}, _STICKER_URL),
+        (_ANIMATED_URL, {"is_animated": True}, _THUMBNAIL_URL),
+        (_VIDEO_URL, {"is_video": True}, _THUMBNAIL_URL),
+    ],
+    ids=["static", "animated", "video"],
+)
+async def test_telegram_sticker_uses_thumbnail_only_when_animated(
+    file_path, flags, expected_url
+):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    sticker = _make_sticker(file_path, thumbnail_path=_THUMBNAIL_URL, **flags)
+    update = create_mock_update(message_text=None, sticker=sticker)
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    images = [c for c in result.message if isinstance(c, Comp.Image)]
+    assert len(images) == 1
+    assert images[0].url == expected_url
+    assert result.message_str == "Sticker: 🙄"
+
+
+@pytest.mark.asyncio
+async def test_telegram_animated_sticker_without_thumbnail_skips_image():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    sticker = _make_sticker(_ANIMATED_URL, is_animated=True, thumbnail_path=None)
+    update = create_mock_update(message_text=None, sticker=sticker)
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert not any(isinstance(c, Comp.Image) for c in result.message)
+    assert result.message_str == "Sticker: 🙄"
+
+
+@pytest.mark.asyncio
+async def test_telegram_video_note_becomes_video_component():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    file_path = "https://api.telegram.org/file/test/note.mp4"
+    update = create_mock_update(
+        message_text=None,
+        video_note=create_mock_file(file_path),
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert len(result.message) == 1
+    assert isinstance(result.message[0], Comp.Video)
+    assert result.message[0].file == file_path
+    assert result.message[0].path == file_path
 
 
 @pytest.mark.asyncio

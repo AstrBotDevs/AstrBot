@@ -36,9 +36,13 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
         "astrbot.core.tools.computer_tools.python.get_local_booter",
         lambda: SimpleNamespace(python=SimpleNamespace(exec=python_exec)),
     )
+
+    async def fake_workspace_root_for_context(context):
+        return tmp_path / context.context.event.unified_msg_origin.replace(":", "_")
+
     monkeypatch.setattr(
-        "astrbot.core.tools.computer_tools.python.workspace_root",
-        lambda umo: tmp_path / umo.replace(":", "_"),
+        "astrbot.core.tools.computer_tools.python.workspace_root_for_context",
+        fake_workspace_root_for_context,
     )
 
     event = SimpleNamespace(

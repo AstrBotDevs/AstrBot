@@ -32,6 +32,8 @@ import {
   type DynamicConfig,
   type EnabledPatch,
   type GhproxyTestRequest,
+  type KnowledgeBaseCreateRequest,
+  type KnowledgeBaseRequest,
   type LoginRequest,
   type ListConversationsData,
   type McpServerConfig,
@@ -54,7 +56,7 @@ import {
   type UpdateAccountRequest,
   type UpdateRequest,
 } from './generated/openapi-v1';
-import { apiV1Client, httpClient } from './http';
+import { apiV1Client, fetchWithAuth, httpClient } from './http';
 
 openApiV1Client.setConfig({
   axios: httpClient,
@@ -76,6 +78,21 @@ export interface ProviderSchemaData {
   config_schema?: OpenConfig;
   providers?: OpenConfig[];
   provider_sources?: OpenConfig[];
+  model_metadata?: Record<string, unknown>;
+}
+
+export interface ProviderListData {
+  providers?: OpenConfig[];
+  model_metadata?: Record<string, unknown>;
+}
+
+export interface ProviderByTypeEnvelope extends ApiEnvelope<OpenConfig[]> {
+  model_metadata?: Record<string, unknown>;
+}
+
+export interface ProviderByIdData {
+  provider?: OpenConfig;
+  model_metadata?: Record<string, unknown>;
 }
 
 export interface ProviderSourceModelsData {
@@ -142,6 +159,11 @@ export interface ProviderListParams {
 export interface ToolListParams {
   origin?: 'builtin' | 'plugin' | 'mcp';
   enabled?: boolean;
+}
+
+export interface SkillListParams extends Record<string, unknown> {
+  enabled?: boolean;
+  source?: string;
 }
 
 export interface BackupListParams {
@@ -494,11 +516,13 @@ export const providerApi = {
     );
   },
   list(params?: ProviderListParams) {
-    return typed<{ providers: OpenConfig[] }>(
+    return typed<ProviderListData>(
       openApiV1.listProviders({ query: generatedQuery(params) }),
     );
   },
-  async listByProviderType(providerType: string): Promise<AxiosResponse<ApiEnvelope<OpenConfig[]>>> {
+  async listByProviderType(
+    providerType: string,
+  ): Promise<AxiosResponse<ProviderByTypeEnvelope>> {
     const capabilities = providerTypeToCapabilities(providerType);
     if (capabilities.length === 0) {
       const response = await providerApi.list();
@@ -507,6 +531,7 @@ export const providerApi = {
         data: {
           ...response.data,
           data: response.data.data.providers || [],
+          model_metadata: response.data.data.model_metadata || {},
         },
       };
     }
@@ -515,11 +540,21 @@ export const providerApi = {
       capabilities.map((capability) => providerApi.list({ capability })),
     );
     const first = responses[0];
+    const modelMetadata = responses.reduce<Record<string, unknown>>(
+      (acc, response) => ({
+        ...acc,
+        ...(response.data.data.model_metadata || {}),
+      }),
+      {},
+    );
     return {
       ...first,
       data: {
         ...first.data,
-        data: responses.flatMap((response) => response.data.data.providers || []),
+        data: responses.flatMap(
+          (response) => response.data.data.providers || [],
+        ),
+        model_metadata: modelMetadata,
       },
     };
   },
@@ -543,7 +578,7 @@ export const providerApi = {
     );
   },
   get(providerId: string, merged = false) {
-    return typed<{ provider: OpenConfig }>(
+    return typed<ProviderByIdData>(
       openApiV1.getProviderById({
         query: { provider_id: providerId, merged },
       }),
@@ -765,6 +800,9 @@ export const chatApi = {
   sendStreamUrl() {
     return '/api/v1/chat';
   },
+  resumeRunStreamUrl(runId: string) {
+    return `/api/v1/chat/runs/${encodeURIComponent(runId)}/stream`;
+  },
   liveWebSocketUrl(token: string, host = window.location.host) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${host}/api/v1/live-chat/ws?token=${encodeURIComponent(token)}`;
@@ -890,6 +928,29 @@ export const chatApi = {
     return typed<any>(
       openApiV1.listChatProjectSessions({ path: { project_id: projectId } }),
     );
+  },
+  listProjectWorkspaceFiles(projectId: string, path = '') {
+    return typed<any>(
+      openApiV1.listChatProjectWorkspaceFiles({
+        path: { project_id: projectId },
+        query: path ? { path } : undefined,
+      }),
+    );
+  },
+  getProjectWorkspaceFile(projectId: string, path: string) {
+    return typed<any>(
+      openApiV1.getChatProjectWorkspaceFile({
+        path: { project_id: projectId },
+        query: { path },
+      }),
+    );
+  },
+  downloadProjectWorkspaceFile(projectId: string, path: string) {
+    return openApiV1.downloadChatProjectWorkspaceFile({
+      path: { project_id: projectId },
+      query: { path },
+      responseType: 'blob',
+    }) as Promise<AxiosResponse<Blob>>;
   },
   addProjectSession(projectId: string, sessionId: string) {
     return typed<any>(
@@ -1226,6 +1287,17 @@ export const pluginApi = {
       }),
     );
   },
+  updateLogLevel(
+    pluginId: string,
+    level: "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL" | null,
+  ) {
+    return typed<OpenConfig>(
+      openApiV1.updatePluginLogLevel({
+        path: { plugin_id: pluginId },
+        body: { level },
+      }),
+    );
+  },
   listConfigFiles(pluginId: string, configKey: string) {
     return typed<any>(
       openApiV1.listPluginConfigFilesById({
@@ -1278,16 +1350,27 @@ export const pluginApi = {
       openApiV1.replacePluginSources({ body: { sources: sources as any } }),
     );
   },
-  installUpload(formData: FormData) {
-    return typed<OpenConfig>(
-      openApiV1.installPluginFromUpload({
-        body: generatedFormData(formData),
-      }),
-    );
+  async installUpload(formData: FormData) {
+    const response = await fetchWithAuth('/api/v1/plugins/install/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(
+        data?.message || `Plugin upload failed (${response.status})`,
+      );
+    }
+    return { data } as AxiosResponse<ApiEnvelope<OpenConfig>>;
   },
   installGithub(body: OpenConfig) {
     return typed<OpenConfig>(
       openApiV1.installPluginFromGithub({ body: body as any }),
+    );
+  },
+  installGit(body: OpenConfig) {
+    return typed<OpenConfig>(
+      openApiV1.installPluginFromGit({ body: body as any }),
     );
   },
   installUrl(body: OpenConfig) {
@@ -1366,16 +1449,16 @@ export const knowledgeApi = {
       openApiV1.getKnowledgeBase({ path: { kb_id: kbId } }),
     );
   },
-  create(config: OpenConfig) {
+  create(config: KnowledgeBaseCreateRequest) {
     return typed<OpenConfig>(
-      openApiV1.createKnowledgeBase({ body: config as any }),
+      openApiV1.createKnowledgeBase({ body: config }),
     );
   },
-  update(kbId: string, config: OpenConfig) {
+  update(kbId: string, config: KnowledgeBaseRequest) {
     return typed<OpenConfig>(
       openApiV1.updateKnowledgeBase({
         path: { kb_id: kbId },
-        body: config as any,
+        body: config,
       }),
     );
   },
@@ -1457,7 +1540,7 @@ export const knowledgeApi = {
 };
 
 export const skillApi = {
-  list(params?: { enabled?: boolean; source?: string }) {
+  list(params?: SkillListParams) {
     return typed<any>(openApiV1.listSkills({ query: params }));
   },
   uploadBatch(files: File[]) {

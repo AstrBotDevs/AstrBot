@@ -67,6 +67,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const modelSearch = ref('')
 
   let suppressSourceWatch = false
+  const unsavedProviderSourceMarker = Symbol('unsavedProviderSource')
 
   const providerTypes = computed(() => [
     { value: 'chat_completion', label: tm('providers.tabs.chatCompletion'), icon: 'mdi-message-text' },
@@ -144,17 +145,20 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return {
       modalities: { input },
       tool_call: mods.includes('tool_use'),
-      reasoning: Boolean(provider.reasoning),
       limit: { context: provider.max_context_tokens || 0 }
     }
   }
 
   const mergedModelEntries = computed(() => {
-    const configuredEntries = (sourceProviders.value || []).map((provider: any) => ({
-      type: 'configured',
-      provider,
-      metadata: getModelMetadata(provider.model) || buildMetadataFromProvider(provider)
-    }))
+    const configuredEntries = (sourceProviders.value || []).map((provider: any) => {
+      const metadata = getModelMetadata(provider.model)
+      return {
+        type: 'configured',
+        provider,
+        metadata: metadata || buildMetadataFromProvider(provider),
+        hasModelMetadata: Boolean(metadata)
+      }
+    })
 
     const availableEntries = (sortedAvailableModels.value || [])
       .filter((item: any) => {
@@ -166,7 +170,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         return {
           type: 'available',
           model: name,
-          metadata: typeof item === 'object' ? item?.metadata : getModelMetadata(name)
+          metadata: typeof item === 'object' ? item?.metadata : getModelMetadata(name),
+          hasModelMetadata: Boolean(typeof item === 'object' ? item?.metadata : getModelMetadata(name))
         }
       })
 
@@ -293,6 +298,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   function getSourceDisplayName(source: any) {
     if (!source) return ''
     if (source.isPlaceholder) return source.templateKey || source.id || ''
+    if (source.id === 'ssycloud') return 'ssycloud(胜算云)'
     return source.id
   }
 
@@ -417,6 +423,27 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return candidate
   }
 
+  function removeProviderSourceFromLocalState(sourceId: string) {
+    providers.value = providers.value.filter(
+      (p) => p.provider_source_id == null || String(p.provider_source_id) !== sourceId
+    )
+    providerSources.value = providerSources.value.filter(
+      (s) => s.id == null || String(s.id) !== sourceId
+    )
+
+    if (
+      selectedProviderSource.value?.id != null &&
+      String(selectedProviderSource.value.id) === sourceId
+    ) {
+      selectedProviderSource.value = null
+      selectedProviderSourceOriginalId.value = null
+      editableProviderSource.value = null
+      availableModels.value = []
+      modelMetadata.value = {}
+      isSourceModified.value = false
+    }
+  }
+
   function addProviderSource(templateKey: string) {
     const template = providerTemplates.value[templateKey]
     if (!template) {
@@ -434,6 +461,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       enable: true
     })
 
+    newSource[unsavedProviderSourceMarker] = true
     providerSources.value.push(newSource)
     selectedProviderSource.value = newSource
     selectedProviderSourceOriginalId.value = newId
@@ -449,18 +477,16 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     )
     if (!confirmed) return
 
+    const sourceId = String(source.id)
+    if (source[unsavedProviderSourceMarker]) {
+      removeProviderSourceFromLocalState(sourceId)
+      showMessage(tm('providerSources.deleteSuccess'))
+      return
+    }
+
     try {
-      await providerApi.deleteSource(source.id)
-
-      providers.value = providers.value.filter((p) => p.provider_source_id !== source.id)
-      providerSources.value = providerSources.value.filter((s) => s.id !== source.id)
-
-      if (selectedProviderSource.value?.id === source.id) {
-        selectedProviderSource.value = null
-        selectedProviderSourceOriginalId.value = null
-        editableProviderSource.value = null
-      }
-
+      await providerApi.deleteSource(sourceId)
+      removeProviderSourceFromLocalState(sourceId)
       showMessage(tm('providerSources.deleteSuccess'))
     } catch (error: any) {
       showMessage(error.message || tm('providerSources.deleteError'), 'error')
@@ -473,7 +499,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     if (!selectedProviderSource.value) return
 
     savingSource.value = true
-    const originalId = String(selectedProviderSourceOriginalId.value || selectedProviderSource.value.id || '')
+    const sourceBeingSaved = selectedProviderSource.value
+    const originalId = String(selectedProviderSourceOriginalId.value || sourceBeingSaved.id || '')
     try {
       const response = await providerApi.upsertSource(originalId, editableProviderSource.value)
 
@@ -502,6 +529,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         suppressSourceWatch = false
       })
 
+      delete sourceBeingSaved[unsavedProviderSourceMarker]
       isSourceModified.value = false
       showMessage(response.data.message || tm('providerSources.saveSuccess'))
       return true
@@ -585,8 +613,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       model: modelName,
       modalities,
       custom_extra_body: {},
-      max_context_tokens: max_context_tokens,
-      reasoning: supportsReasoning(metadata)
+      max_context_tokens: max_context_tokens
     }
   }
 
@@ -686,6 +713,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
           providerTemplates.value = configSchema.value.provider.config_template
         }
         providerSources.value = response.data.data.provider_sources || []
+        modelMetadata.value = (response.data.data.model_metadata || {}) as Record<string, any>
         providers.value = response.data.data.providers || []
       }
     } catch (error) {

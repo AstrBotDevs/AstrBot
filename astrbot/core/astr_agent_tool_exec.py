@@ -41,8 +41,10 @@ from astrbot.core.tools.computer_tools import (
     FileUploadTool,
     FileWriteTool,
     GrepTool,
+    LocalExecuteShellTool,
     LocalPythonTool,
     PythonTool,
+    ShellSessionTool,
 )
 from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -224,7 +226,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 )
             return tools
         if runtime == "local":
-            shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
+            shell_tool = LocalExecuteShellTool()
+            shell_session_tool = tool_mgr.get_builtin_tool(ShellSessionTool)
             python_tool = tool_mgr.get_builtin_tool(LocalPythonTool)
             read_tool = tool_mgr.get_builtin_tool(FileReadTool)
             write_tool = tool_mgr.get_builtin_tool(FileWriteTool)
@@ -232,6 +235,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             grep_tool = tool_mgr.get_builtin_tool(GrepTool)
             return {
                 shell_tool.name: shell_tool,
+                shell_session_tool.name: shell_session_tool,
                 python_tool.name: python_tool,
                 read_tool.name: read_tool,
                 write_tool.name: write_tool,
@@ -543,11 +547,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             message_type=session.message_type,
         )
         cron_event.role = event.role
+        cfg = ctx.get_config(umo=event.unified_msg_origin) or {}
+        provider_settings = cfg.get("provider_settings") or {}
         config = MainAgentBuildConfig(
             tool_call_timeout=run_context.tool_call_timeout,
-            streaming_response=ctx.get_config()
-            .get("provider_settings", {})
-            .get("stream", False),
+            streaming_response=provider_settings.get("stream", False),
+            provider_settings=provider_settings,
         )
 
         req = ProviderRequest()

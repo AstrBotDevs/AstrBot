@@ -101,6 +101,7 @@
     "save": "保存配置",
     "saveAndFetchModels": "保存并获取模型",
     "fetchModels": "获取模型列表",
+    "getApiKey": "获取 API Key",
     "saveSuccess": "提供商源保存成功",
     "saveError": "提供商源保存失败",
     "deleteConfirm": "确定要删除提供商源 {id} 吗？这将同时删除关联的所有模型配置。",
@@ -147,6 +148,17 @@
     "manualModelRequired": "请输入模型 ID",
     "manualModelExists": "该模型已存在",
     "configure": "配置",
+    "testButton": "测试模型",
+    "metadata": {
+      "image": "图像输入",
+      "audio": "音频输入",
+      "toolUse": "工具使用",
+      "reasoning": "推理",
+      "context": "{tokens} 上下文窗口",
+      "available": "模型 metadata 支持{capability}",
+      "enabled": "已启用{capability}",
+      "supportedDisabled": "模型 metadata 支持{capability}，但当前提供商的模型能力未启用。"
+    },
     "tooltips": {
       "providerId": "提供商 ID",
       "modelId": "模型 ID"

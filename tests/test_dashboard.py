@@ -12,6 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
+import jwt
 import pyotp
 import pytest
 import pytest_asyncio
@@ -20,6 +21,7 @@ from werkzeug.datastructures import FileStorage
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.desktop_runtime import DESKTOP_MANAGED_RESTART_MESSAGE
 from astrbot.core.star.star import StarMetadata, star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.auth_password import (
@@ -44,6 +46,7 @@ from astrbot.dashboard.server import AstrBotDashboard
 from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 from astrbot.dashboard.services.plugin_page_service import PluginPageService
 from astrbot.dashboard.services.plugin_service import PluginService
+from astrbot.dashboard.services.skills_service import SkillsService
 from tests.fixtures.helpers import (
     MockPluginBuilder,
     create_mock_updater_install,
@@ -53,6 +56,66 @@ from tests.fixtures.helpers import (
 _TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
 PLUGIN_PAGE_DEMO_NAME = "astrbot_plugin_page_demo"
 PLUGIN_PAGE_DEMO_PAGE_NAME = "bridge-demo"
+
+
+def test_skills_service_marks_inactive_plugin_skills(monkeypatch):
+    skills = [
+        SimpleNamespace(
+            name="local-skill",
+            source_type="local_only",
+            plugin_name="",
+        ),
+        SimpleNamespace(
+            name="active-plugin-skill",
+            source_type="plugin",
+            plugin_name="astrbot_plugin_active",
+        ),
+        SimpleNamespace(
+            name="inactive-plugin-skill",
+            source_type="plugin",
+            plugin_name="astrbot_plugin_inactive",
+        ),
+    ]
+    skill_manager = SimpleNamespace(
+        list_skills=lambda **_kwargs: skills,
+        get_sandbox_skills_cache_status=lambda: {},
+    )
+    plugins = [
+        StarMetadata(
+            name="active",
+            display_name="Active Plugin",
+            root_dir_name="astrbot_plugin_active",
+            activated=True,
+        ),
+        StarMetadata(
+            name="inactive",
+            display_name="Inactive Plugin",
+            root_dir_name="astrbot_plugin_inactive",
+            activated=False,
+        ),
+    ]
+    core_lifecycle = SimpleNamespace(
+        astrbot_config={"provider_settings": {}},
+        plugin_manager=SimpleNamespace(
+            context=SimpleNamespace(get_all_stars=lambda: plugins)
+        ),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.skills_service.SkillManager",
+        lambda: skill_manager,
+    )
+
+    result = SkillsService(core_lifecycle).get_skills()
+
+    assert [skill["name"] for skill in result["skills"]] == [
+        "local-skill",
+        "active-plugin-skill",
+        "inactive-plugin-skill",
+    ]
+    assert result["skills"][1]["plugin_display_name"] == "Active Plugin"
+    assert result["skills"][1]["plugin_active"] is True
+    assert result["skills"][2]["plugin_display_name"] == "Inactive Plugin"
+    assert result["skills"][2]["plugin_active"] is False
 
 
 def _removed_md5_hint_alias_key() -> str:
@@ -268,24 +331,27 @@ def test_dashboard_uses_bundled_dist_when_data_dist_is_stale(
     monkeypatch,
     tmp_path,
 ):
+    from astrbot.core.config.default import VERSION
+
     data_dir = tmp_path / "data"
     user_dist = data_dir / "dist"
     bundled_dist = tmp_path / "bundled-dist"
     user_dist.mkdir(parents=True)
     bundled_dist.mkdir()
     (bundled_dist / "index.html").write_text("bundled", encoding="utf-8")
+    (bundled_dist / "assets").mkdir()
+    (bundled_dist / "assets" / "version").write_text(
+        f"v{VERSION}",
+        encoding="utf-8",
+    )
 
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_astrbot_data_path",
+        "astrbot.core.dashboard_assets.get_astrbot_data_path",
         lambda: str(data_dir),
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_bundled_dashboard_dist_path",
+        "astrbot.core.dashboard_assets._get_bundled_dist_path",
         lambda: bundled_dist,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.server.should_use_bundled_dashboard_dist",
-        lambda *_args, **_kwargs: True,
     )
 
     shutdown_event = asyncio.Event()
@@ -307,11 +373,11 @@ def test_dashboard_falls_back_to_mismatched_data_dist_without_bundled(
     (user_dist / "index.html").write_text("stale", encoding="utf-8")
 
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_astrbot_data_path",
+        "astrbot.core.dashboard_assets.get_astrbot_data_path",
         lambda: str(data_dir),
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_bundled_dashboard_dist_path",
+        "astrbot.core.dashboard_assets._get_bundled_dist_path",
         lambda: bundled_dist,
     )
 
@@ -333,11 +399,11 @@ def test_dashboard_ignores_incomplete_mismatched_data_dist_without_bundled(
     (user_dist / "assets" / "version").write_text("v0.0.1", encoding="utf-8")
 
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_astrbot_data_path",
+        "astrbot.core.dashboard_assets.get_astrbot_data_path",
         lambda: str(data_dir),
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.server.get_bundled_dashboard_dist_path",
+        "astrbot.core.dashboard_assets._get_bundled_dist_path",
         lambda: bundled_dist,
     )
 
@@ -429,6 +495,120 @@ async def test_auth_login(
     assert "HttpOnly" in jwt_cookie_header
     _assert_cookie_samesite_strict(jwt_cookie_header)
     assert "Secure" not in jwt_cookie_header
+
+
+@pytest.mark.asyncio
+async def test_desktop_session_issues_jwt_without_password(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    secret = "desktop-session-secret-" * 2
+    monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
+    monkeypatch.setenv("ASTRBOT_DESKTOP_SESSION_SECRET", secret)
+    app._dashboard_server._rate_limiter_registry.clear()
+
+    response = await app.test_client().post(
+        "/api/v1/auth/desktop-session",
+        headers={"X-AstrBot-Desktop-Session": secret},
+        json={},
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["username"] == core_lifecycle_td.astrbot_config[
+        "dashboard"
+    ]["username"]
+    token = data["data"]["token"]
+    payload = jwt.decode(
+        token,
+        core_lifecycle_td.astrbot_config["dashboard"]["jwt_secret"],
+        algorithms=["HS256"],
+    )
+    assert payload["auth_source"] == "desktop"
+
+
+@pytest.mark.asyncio
+async def test_desktop_session_rejects_wrong_secret(
+    app: FastAPIAppAdapter,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
+    monkeypatch.setenv("ASTRBOT_DESKTOP_SESSION_SECRET", "a" * 64)
+    app._dashboard_server._rate_limiter_registry.clear()
+
+    response = await app.test_client().post(
+        "/api/v1/auth/desktop-session",
+        headers={"X-AstrBot-Desktop-Session": "b" * 64},
+        json={},
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 401
+    assert data["status"] == "error"
+    assert "token" not in (data.get("data") or {})
+
+
+@pytest.mark.asyncio
+async def test_desktop_session_endpoint_is_hidden_when_not_managed(
+    app: FastAPIAppAdapter,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.delenv("ASTRBOT_DESKTOP_MANAGED", raising=False)
+    monkeypatch.delenv("ASTRBOT_DESKTOP_SESSION_SECRET", raising=False)
+    app._dashboard_server._rate_limiter_registry.clear()
+
+    response = await app.test_client().post(
+        "/api/v1/auth/desktop-session",
+        headers={"X-AstrBot-Desktop-Session": "a" * 64},
+        json={},
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 404
+    assert data["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_desktop_session_suppresses_password_setup_and_warnings(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    secret = "desktop-session-secret-" * 2
+    monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
+    monkeypatch.setenv("ASTRBOT_DESKTOP_SESSION_SECRET", secret)
+    app._dashboard_server._rate_limiter_registry.clear()
+    await _set_dashboard_password_change_required(core_lifecycle_td, True)
+
+    try:
+        client = app.test_client()
+        setup_response = await client.get("/api/v1/auth/setup-status")
+        setup_data = await setup_response.get_json()
+        assert setup_data["data"] == {
+            "setup_required": False,
+            "skip_default_password_auth": False,
+            "password_upgrade_required": False,
+        }
+
+        session_response = await client.post(
+            "/api/v1/auth/desktop-session",
+            headers={"X-AstrBot-Desktop-Session": secret},
+            json={},
+        )
+        session_data = await session_response.get_json()
+        token = session_data["data"]["token"]
+        version_response = await client.get(
+            "/api/v1/stats/version",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        version_data = await version_response.get_json()
+        assert version_data["data"]["change_pwd_hint"] is False
+        assert version_data["data"]["md5_pwd_hint"] is False
+        assert version_data["data"]["password_upgrade_required"] is False
+    finally:
+        await _set_dashboard_password_change_required(core_lifecycle_td, False)
 
 
 @pytest.mark.asyncio
@@ -1360,6 +1540,105 @@ async def test_generated_password_requires_password_change_until_changed(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("endpoint", "method"),
+    [
+        ("/api/auth/account/edit", "post"),
+        ("/api/v1/auth/account", "patch"),
+    ],
+)
+@pytest.mark.parametrize("new_username", ["ab", "   "])
+async def test_account_edit_rejects_invalid_username(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    endpoint: str,
+    method: str,
+    new_username: str,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    current_username = core_lifecycle_td.astrbot_config["dashboard"]["username"]
+    current_password = _resolve_dashboard_password(core_lifecycle_td)
+
+    try:
+        login_response = await test_client.post(
+            "/api/auth/login",
+            json={"username": current_username, "password": current_password},
+        )
+        login_data = await login_response.get_json()
+        assert login_data["status"] == "ok"
+        headers = {"Authorization": f"Bearer {login_data['data']['token']}"}
+
+        payload = {
+            "password": current_password,
+            "new_password": "",
+            "confirm_password": "",
+            "new_username": new_username,
+        }
+        request = getattr(test_client, method)
+        response = await request(endpoint, headers=headers, json=payload)
+        data = await response.get_json()
+
+        assert data["status"] == "error"
+        assert data["message"] == "用户名长度至少3位"
+        assert (
+            core_lifecycle_td.astrbot_config["dashboard"]["username"]
+            == (original_dashboard_config["username"])
+        )
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_account_edit_trims_valid_username(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    current_username = core_lifecycle_td.astrbot_config["dashboard"]["username"]
+    current_password = _resolve_dashboard_password(core_lifecycle_td)
+
+    try:
+        login_response = await test_client.post(
+            "/api/auth/login",
+            json={"username": current_username, "password": current_password},
+        )
+        login_data = await login_response.get_json()
+        assert login_data["status"] == "ok"
+        headers = {"Authorization": f"Bearer {login_data['data']['token']}"}
+
+        response = await test_client.post(
+            "/api/auth/account/edit",
+            headers=headers,
+            json={
+                "password": current_password,
+                "new_password": "",
+                "confirm_password": "",
+                "new_username": "  astrbot-admin  ",
+            },
+        )
+        data = await response.get_json()
+
+        assert data["status"] == "ok"
+        assert core_lifecycle_td.astrbot_config["dashboard"]["username"] == (
+            "astrbot-admin"
+        )
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
 async def test_local_setup_can_skip_default_password_auth(
     app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
@@ -2217,6 +2496,51 @@ async def test_batch_delete_sessions_uses_batch_lookup(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path_template",
+    [
+        "/api/chat/get_session?session_id={session_id}",
+        "/api/v1/chat/sessions/{session_id}",
+    ],
+)
+async def test_get_chat_session_rejects_session_owned_by_another_user(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    path_template: str,
+):
+    test_client = app.test_client()
+    session_id = f"foreign_get_session_{uuid.uuid4().hex[:8]}"
+    await core_lifecycle_td.db.create_platform_session(
+        creator="not_dashboard_user",
+        platform_id="webchat",
+        session_id=session_id,
+        display_name="Foreign Session",
+        is_group=0,
+    )
+    await core_lifecycle_td.platform_message_history_manager.insert(
+        platform_id="webchat",
+        user_id=session_id,
+        content={
+            "type": "user",
+            "message": [{"type": "text", "text": "foreign session secret"}],
+        },
+        sender_id="not_dashboard_user",
+        sender_name="not_dashboard_user",
+    )
+
+    response = await test_client.get(
+        path_template.format(session_id=session_id),
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == "Permission denied"
+
+
+@pytest.mark.asyncio
 async def test_plugins(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
@@ -2266,9 +2590,11 @@ async def test_plugins(
 
     # 设置 Mock
     monkeypatch.setattr(
-        core_lifecycle_td.plugin_manager.updator, "install", mock_install
+        core_lifecycle_td.plugin_manager._updater, "install", mock_install
     )
-    monkeypatch.setattr(core_lifecycle_td.plugin_manager.updator, "update", mock_update)
+    monkeypatch.setattr(
+        core_lifecycle_td.plugin_manager._updater, "update", mock_update
+    )
 
     try:
         # 插件安装
@@ -2300,7 +2626,7 @@ async def test_plugins(
         installed_at = target["installed_at"]
         assert installed_at is not None
         datetime.fromisoformat(installed_at)
-        assert target["install_source"]["install_method"] == "github"
+        assert target["install_source"]["install_method"] == "repository"
         assert target["install_source"]["repo"] == test_repo_url
         assert target["updates_enabled"] is True
         assert target["update_disabled_reason"] == ""
@@ -2646,7 +2972,7 @@ async def test_check_update(
         return f"v{VERSION}"  # 返回当前版本
 
     monkeypatch.setattr(
-        core_lifecycle_td.astrbot_updator,
+        core_lifecycle_td.astrbot_updater,
         "check_update",
         mock_check_update,
     )
@@ -2663,69 +2989,110 @@ async def test_check_update(
 
 
 @pytest.mark.asyncio
+async def test_get_releases_serializes_release_info_at_api_boundary(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    from astrbot.core.zip_updater import ReleaseInfo
+
+    async def mock_get_releases():
+        return [
+            ReleaseInfo(
+                version="v99.0.0",
+                published_at="2026-08-01T00:00:00Z",
+                body="release notes",
+            )
+        ]
+
+    monkeypatch.setattr(
+        core_lifecycle_td.astrbot_updater,
+        "get_releases",
+        mock_get_releases,
+    )
+
+    response = await app.test_client().get(
+        "/api/update/releases",
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["data"] == [
+        {
+            "tag_name": "v99.0.0",
+            "published_at": "2026-08-01T00:00:00Z",
+            "body": "release notes",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_restart_core_rejects_desktop_managed_backend(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    test_client = app.test_client()
+    restart_called = False
+
+    async def mock_restart():
+        nonlocal restart_called
+        restart_called = True
+
+    monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
+    monkeypatch.setattr(core_lifecycle_td, "restart", mock_restart)
+
+    response = await test_client.post(
+        "/api/stat/restart-core",
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 400
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == DESKTOP_MANAGED_RESTART_MESSAGE
+    assert restart_called is False
+
+
+@pytest.mark.asyncio
 async def test_do_update(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
-    tmp_path_factory,
 ):
     test_client = app.test_client()
-
-    # Use a temporary path for the mock update to avoid side effects
-    temp_release_dir = tmp_path_factory.mktemp("release")
-    release_path = temp_release_dir / "astrbot"
     calls = []
 
-    async def mock_download_core(*args, **kwargs):
-        calls.append("download-core")
+    async def mock_update(*args, **kwargs):
+        from astrbot.core.updater import UpdateProgress
+
+        calls.append((args, kwargs))
         callback = kwargs.get("progress_callback")
         if callback:
-            callback({"downloaded": 10, "total": 10, "percent": 1, "speed": 1})
-        zip_path = kwargs["path"]
-        with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr("AstrBot-main/README.md", "core")
-        return zip_path
-
-    def mock_apply_core(*args, **kwargs):
-        del args, kwargs
-        calls.append("apply-core")
-        os.makedirs(release_path, exist_ok=True)
-
-    async def mock_download_dashboard(*args, **kwargs):
-        calls.append("download-dashboard")
-        callback = kwargs.get("progress_callback")
-        if callback:
-            callback({"downloaded": 10, "total": 10, "percent": 1, "speed": 1})
-        with zipfile.ZipFile(kwargs["path"], "w") as zf:
-            zf.writestr("dist/index.html", "dashboard")
-        return
-
-    def mock_extract_dashboard(*args, **kwargs):
-        del args, kwargs
-        calls.append("apply-dashboard")
+            await callback(
+                UpdateProgress(
+                    stage="core",
+                    status="done",
+                    message="prepared",
+                    overall_percent=92,
+                    downloaded_bytes=10,
+                    total_bytes=10,
+                    speed_kib_per_second=1,
+                )
+            )
 
     async def mock_pip_install(*args, **kwargs):
         """Mocks pip install to prevent actual installation."""
         return
 
     monkeypatch.setattr(
-        core_lifecycle_td.astrbot_updator,
-        "download_update_package",
-        mock_download_core,
-    )
-    monkeypatch.setattr(
-        core_lifecycle_td.astrbot_updator,
-        "apply_update_package",
-        mock_apply_core,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.download_dashboard",
-        mock_download_dashboard,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.extract_dashboard",
-        mock_extract_dashboard,
+        core_lifecycle_td.astrbot_updater,
+        "update",
+        mock_update,
     )
     monkeypatch.setattr(
         "astrbot.dashboard.services.update_service.pip_installer.install",
@@ -2747,13 +3114,10 @@ async def test_do_update(
         authenticated_header,
         "test-progress",
     )
-    assert os.path.exists(release_path)
-    assert calls[:4] == [
-        "download-dashboard",
-        "download-core",
-        "apply-core",
-        "apply-dashboard",
-    ]
+    assert len(calls) == 1
+    assert calls[0][0] == ()
+    assert calls[0][1]["version"] == "v3.4.0"
+    assert callable(calls[0][1]["progress_callback"])
 
     assert progress_data["status"] == "ok"
     assert progress_data["data"]["status"] == "success"
@@ -2761,7 +3125,7 @@ async def test_do_update(
 
 
 @pytest.mark.asyncio
-async def test_do_update_does_not_apply_files_when_core_download_fails(
+async def test_do_update_reports_updater_failure(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
@@ -2770,42 +3134,15 @@ async def test_do_update_does_not_apply_files_when_core_download_fails(
     test_client = app.test_client()
     calls = []
 
-    async def mock_download_dashboard(*args, **kwargs):
-        calls.append("download-dashboard")
-        callback = kwargs.get("progress_callback")
-        if callback:
-            callback({"downloaded": 10, "total": 10, "percent": 1, "speed": 1})
-
-    async def mock_download_core(*args, **kwargs):
+    async def mock_update(*args, **kwargs):
         del args, kwargs
-        calls.append("download-core")
-        raise RuntimeError("core download failed")
-
-    def mock_apply_core(*args, **kwargs):
-        del args, kwargs
-        calls.append("apply-core")
-
-    def mock_extract_dashboard(*args, **kwargs):
-        del args, kwargs
-        calls.append("apply-dashboard")
+        calls.append("update")
+        raise RuntimeError("update failed")
 
     monkeypatch.setattr(
-        core_lifecycle_td.astrbot_updator,
-        "download_update_package",
-        mock_download_core,
-    )
-    monkeypatch.setattr(
-        core_lifecycle_td.astrbot_updator,
-        "apply_update_package",
-        mock_apply_core,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.download_dashboard",
-        mock_download_dashboard,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.extract_dashboard",
-        mock_extract_dashboard,
+        core_lifecycle_td.astrbot_updater,
+        "update",
+        mock_update,
     )
 
     response = await test_client.post(
@@ -2823,11 +3160,11 @@ async def test_do_update_does_not_apply_files_when_core_download_fails(
         "atomic-fail",
     )
     assert progress_data["data"]["status"] == "error"
-    assert calls == ["download-dashboard", "download-core"]
+    assert calls == ["update"]
 
 
 @pytest.mark.asyncio
-async def test_do_update_does_not_apply_files_when_package_verification_fails(
+async def test_do_update_rejects_desktop_managed_backend(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
@@ -2836,66 +3173,36 @@ async def test_do_update_does_not_apply_files_when_package_verification_fails(
     test_client = app.test_client()
     calls = []
 
-    async def mock_download_dashboard(*args, **kwargs):
-        del args
-        calls.append("download-dashboard")
-        Path(kwargs["path"]).write_bytes(b"not a zip")
-
-    async def mock_download_core(*args, **kwargs):
-        del args
-        calls.append("download-core")
-        zip_path = kwargs["path"]
-        with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr("AstrBot-main/README.md", "core")
-        return zip_path
-
-    def mock_apply_core(*args, **kwargs):
+    async def mock_update(*args, **kwargs):
         del args, kwargs
-        calls.append("apply-core")
+        calls.append("update")
 
-    def mock_extract_dashboard(*args, **kwargs):
-        del args, kwargs
-        calls.append("apply-dashboard")
+    async def mock_restart():
+        calls.append("restart")
 
+    monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
     monkeypatch.setattr(
-        core_lifecycle_td.astrbot_updator,
-        "download_update_package",
-        mock_download_core,
+        core_lifecycle_td.astrbot_updater,
+        "update",
+        mock_update,
     )
-    monkeypatch.setattr(
-        core_lifecycle_td.astrbot_updator,
-        "apply_update_package",
-        mock_apply_core,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.download_dashboard",
-        mock_download_dashboard,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.extract_dashboard",
-        mock_extract_dashboard,
-    )
+    monkeypatch.setattr(core_lifecycle_td, "restart", mock_restart)
 
     response = await test_client.post(
         "/api/update/do",
         headers=authenticated_header,
-        json={"version": "v3.4.0", "reboot": False, "progress_id": "invalid-zip"},
+        json={"version": "v3.4.0", "progress_id": "desktop-progress"},
     )
-    data = await response.get_json()
 
     assert response.status_code == 200
-    assert data["status"] == "ok"
-    progress_data = await _wait_for_update_progress(
-        test_client,
-        authenticated_header,
-        "invalid-zip",
-    )
-    assert progress_data["data"]["status"] == "error"
-    assert calls == ["download-dashboard", "download-core"]
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == DESKTOP_MANAGED_RESTART_MESSAGE
+    assert calls == []
 
 
 def test_extract_dashboard_rejects_zip_path_traversal(tmp_path: Path):
-    from astrbot.core.utils.io import extract_dashboard
+    from astrbot.core.dashboard_assets import _extract_package
 
     archive_path = tmp_path / "dashboard.zip"
     extract_path = tmp_path / "data"
@@ -2903,7 +3210,7 @@ def test_extract_dashboard_rejects_zip_path_traversal(tmp_path: Path):
         zf.writestr("../evil.txt", "unsafe")
 
     with pytest.raises(ValueError, match="Unsafe dashboard archive path"):
-        extract_dashboard(archive_path, extract_path)
+        _extract_package(archive_path, extract_path)
 
     assert not (tmp_path / "evil.txt").exists()
 
@@ -2912,17 +3219,19 @@ def test_extract_dashboard_rejects_zip_path_traversal(tmp_path: Path):
 async def test_do_update_hides_internal_error_message_in_response_and_progress(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
     test_client = app.test_client()
 
-    async def mock_download_dashboard(*args, **kwargs):
+    async def mock_update(*args, **kwargs):
         del args, kwargs
         raise RuntimeError("secret stack trace")
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.update_service.download_dashboard",
-        mock_download_dashboard,
+        core_lifecycle_td.astrbot_updater,
+        "update",
+        mock_update,
     )
 
     response = await test_client.post(
