@@ -42,10 +42,10 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 ### 会话信息
 
 - `/session info`：显示 UMO、用户 ID、平台 ID、消息类型和会话 ID。
-- `/session name`：显示当前自动名称和已保存别名，需要管理员权限。
-- `/session name <名称>`：设置当前 UMO 的展示别名，需要管理员权限。名称由 `GreedyStr` 接收，可以包含空格。
+- `/session name`：显示当前自动名称和已保存别名，需要 `session.manage`。
+- `/session name <名称>`：设置当前 UMO 的展示别名，需要 `session.manage`。名称由 `GreedyStr` 接收，可以包含空格。
 
-使用 `/session info` 得到的用户 ID 可以通过 `/admin grant` 授予当前会话范围的管理员绑定。群聊开启 `unique_session` 时，该指令也会显示可用于白名单的群 ID。
+使用 `/session info` 得到的用户 ID 可以通过 `/admin grant` 授予当前会话的 `session_admin`。这不是全局 operator。群聊开启 `unique_session` 时，该指令也会显示可用于白名单的群 ID。
 
 ### 对话
 
@@ -57,9 +57,9 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 - `/conversation switch <序号>`：切换到列表中的对话。
 - `/conversation rename <新标题>`：重命名当前对话，标题可以包含空格。
 - `/conversation delete`：删除当前对话。
-- `/conversation create-for <会话 ID>`：为指定群会话创建新对话，需要管理员权限。
+- `/conversation create-for <会话 ID>`：为指定群会话创建新对话，需要 `session.assign` 和 `session.manage`。
 
-`reset` 和 `delete` 在未开启群聊会话隔离时可能要求管理员权限；Dashboard 中的指令权限配置优先于默认行为。
+`reset` 和 `delete` 在未开启群聊会话隔离时可能要求 `session.manage`；Dashboard 中的指令权限配置优先于默认行为。
 
 ### 运行任务
 
@@ -74,7 +74,7 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 - `/model list`：列出当前 LLM Provider 可用模型。
 - `/model set <名称或序号>`：切换模型；名称也可以解析到其他已配置 Provider。
 
-这些指令需要管理员权限。
+这些指令需要 `provider.use`；跨会话指定时还需要 `session.assign`。
 
 ### 会话变量
 
@@ -87,7 +87,7 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 - `/chat enable`：启用当前会话的 LLM 聊天。
 - `/chat disable`：停用当前会话的 LLM 聊天。
 
-这些指令需要管理员权限。`enable` 和 `disable` 都是幂等操作。`/chat` 只控制是否启用 LLM，与流式模式无关。
+这些指令需要 `session.manage`。`enable` 和 `disable` 都是幂等操作。`/chat` 只控制是否启用 LLM，与流式模式无关。
 
 ### 会话流式输出
 
@@ -98,13 +98,13 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 
 这些指令需要 `session.manage`。没有无参数切换，避免跨平台解析歧义。
 
-### 管理员
+### 会话管理员
 
-- `/admin list`：列出当前配置中生效的管理员用户 ID。
-- `/admin grant <用户 ID>`：授予 AstrBot 管理员权限。
-- `/admin revoke <用户 ID>`：撤销 AstrBot 管理员权限。
+- `/admin list`：列出当前会话可见的角色绑定。
+- `/admin grant <用户 ID>`：授予当前会话的 `session_admin`，不是全局 operator。
+- `/admin revoke <用户 ID>`：撤销当前会话的 `session_admin`。
 
-三个子指令都需要管理员权限。
+三个子指令都需要 `identity.manage`。当前会话的 owner 只能管理本会话的 `session_admin` / `member`，不能委派 owner。
 
 ### Persona
 
@@ -114,14 +114,14 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 - `/persona set <persona_id>`：为当前对话选择 Persona。
 - `/persona unset`：让当前对话显式不使用 Persona。
 
-Persona 子指令需要管理员权限。仅输入 `/persona` 会显示子指令树。
+Persona 子指令需要 `agent.manage`。仅输入 `/persona` 会显示子指令树。
 
 ### 插件
 
 - `/plugin list`：列出已加载插件。
 - `/plugin show <插件名>`：显示插件版本、作者和已注册指令。
-- `/plugin enable <插件名>`：启用插件，需要管理员权限。
-- `/plugin disable <插件名>`：停用插件，需要管理员权限。
-- `/plugin install <仓库 URL>`：安装插件，需要管理员权限。
+- `/plugin enable <插件名>`：启用插件，需要 `extension.manage`。
+- `/plugin disable <插件名>`：停用插件，需要 `extension.manage`。
+- `/plugin install <仓库 URL>`：安装插件，需要 `extension.plugin_install` 和 Dashboard step-up。
 
 插件加载、卸载、重载或启禁后，AstrBot 会立即重建指令 catalog，并刷新已启用的 Telegram/Discord 原生命令入口。

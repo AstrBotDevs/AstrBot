@@ -20,6 +20,12 @@ Command Syntax: use lowercase explicit command names, typed scalar parameters,
 `GreedyStr` for trailing free text, and `filter.option()` for named options.
 Never re-split `event.message_str` or implement shell expansion in a handler.
 
+For a privileged command, declare `@filter.permission("session.manage")` or
+another stable action. Plugin-owned actions use
+`plugin:<plugin-id>:<action>` and `await self.context.authz.authorize(...)`.
+Do not use the removed `PermissionType` or `@filter.permission_type`.
+`event.is_admin()` is always false and is not authorization.
+
 Source: [events and Orbit commands](https://github.com/Xero-Team/AstrBot/blob/master/docs/zh/dev/star/guides/listen-message-event.md).
 
 ## Messages and sessions

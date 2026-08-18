@@ -64,19 +64,18 @@ data/workspaces/{normalized_umo}/notes/todo.txt
 
 ### 权限模型
 
-电脑能力还有一个独立开关：
+电脑能力走统一授权服务，不再使用“需要 AstrBot 管理员权限”开关。常见动作包括：
 
-- `需要 AstrBot 管理员权限`
+- `tool.computer_use`
+- `tool.local_exec`
+- `tool.python_exec`
+- `tool.file_read`
+- `tool.file_write`
+- `tool.browser_control`
 
-默认情况下这个开关是开启的。
+`tool.file_read` 对当前会话的 member 及以上开放，但仍受路径约束。`tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.browser_control` 和 `tool.computer_use` 是高风险动作：只允许 Dashboard 控制面在一次性 step-up 后执行，IM、插件、Agent 和 API Key 一律拒绝。跨平台 IM elevation 尚未实现，不要把它当成已经存在的审批通道。
 
-开启后：
-
-- 管理员可以使用 `local` 模式下的 Shell、Python、文件读取、文件写入、文件编辑和 Grep 搜索。
-- 非管理员不能使用 Shell 和 Python。
-- 非管理员只能在受限目录内使用文件读取、写入、编辑和搜索。插件内置 Skills 只允许读取和搜索，不允许写入或编辑。
-
-非管理员在 `local` 模式下允许访问的目录包括：
+`local` 模式下，普通会话成员可以读取：
 
 - `data/skills`
 - `data/plugins/*/skills`（只读，用于插件内置 Skills）
@@ -84,9 +83,7 @@ data/workspaces/{normalized_umo}/notes/todo.txt
 - AstrBot 的临时目录
 - 系统临时目录中的 `.astrbot`
 
-关闭“需要 AstrBot 管理员权限”后，普通用户在电脑能力工具上的行为会接近管理员。除非你非常清楚风险，否则不建议关闭。
-
-请通过 Dashboard 权限页面或 `/admin grant` 授予当前会话范围的管理员绑定。用户可通过 `/session info` 获取自己的 ID。
+写入和编辑仍限制在当前会话 workspace 和临时目录。请通过 Dashboard 权限页面授予匹配动作的绑定；`/admin grant` 只授予当前会话 `session_admin`，不能把 IM 用户变成全局 operator。
 
 ## Sandbox 模式
 
@@ -122,7 +119,7 @@ result.txt
 沙盒部署、驱动器选择、CUA 配置、profile、TTL、数据持久化、浏览器能力等内容请参考：[Agent 沙盒环境](/use/astrbot-agent-sandbox)。
 
 > [!NOTE]
-> 即使在 `sandbox` 模式下，“需要 AstrBot 管理员权限”仍会影响 Shell、Python、浏览器、上传下载等工具的调用权限。具体权限取决于你的配置。
+> 即使在 `sandbox` 模式下，Shell、Python、浏览器和上传下载仍按 `tool.local_exec`、`tool.python_exec`、`tool.browser_control` 和 `tool.file_write` 等动作授权。沙箱只隔离执行，不改变授权。
 
 ## Skills
 

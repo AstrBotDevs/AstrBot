@@ -58,4 +58,4 @@ Currently, AstrBot provides two execution environments:
 You can select the default execution environment on the `Config` page under "Computer Use".
 
 > [!NOTE]
-> Please note: if you select `Local` as the execution environment, AstrBot currently only allows **AstrBot administrators** to request that the Agent operate on your local environment. Regular users are prohibited from doing so. The Agent will be prevented from executing code locally via Shell, Python, or other tools and will receive a permission restriction message such as `Sorry, I cannot execute code on your local environment due to permission restrictions.`.
+> Please note: if you select `Local` as the execution environment, Shell, Python, and local file writes are authorized as `tool.local_exec`, `tool.python_exec`, and `tool.file_write`. These high-risk actions require Dashboard step-up. IM, plugins, agents, and API keys are denied. Regular users receive a restriction message such as `Sorry, I cannot execute code on your local environment due to permission restrictions.`.

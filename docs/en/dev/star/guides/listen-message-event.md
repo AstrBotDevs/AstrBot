@@ -350,16 +350,36 @@ async def on_aiocqhttp(self, event: AstrMessageEvent):
 
 In the current version, `PlatformAdapterType` supports the following values: `AIOCQHTTP`, `QQOFFICIAL`, `QQOFFICIAL_WEBHOOK`, `TELEGRAM`, `WECOM`, `WECOM_AI_BOT`, `LARK`, `DINGTALK`, `DISCORD`, `SLACK`, `KOOK`, `VOCECHAT`, `WEIXIN_OFFICIAL_ACCOUNT`, `SATORI`, `MISSKEY`, `LINE`, `MATRIX`, `WEIXIN_OC`, `MATTERMOST`, `WEBCHAT`, `ALL`.
 
-#### Admin Commands
+#### Permissions and actions
 
 ```python
-@filter.permission_type(filter.PermissionType.ADMIN)
+@filter.permission("session.manage")
 @filter.command("test")
 async def test(self, event: AstrMessageEvent):
     pass
 ```
 
-Only admins can use the `test` command.
+`@filter.permission("session.manage")` is resolved by the pipeline through
+`AuthorizationService.authorize()`. It allows the current session's
+`session_admin` / `session_owner`, or a scoped `instance_operator` /
+Dashboard `operator` / `root`. A platform group owner or administrator only
+affects the current `(config_id, UMO)` and never becomes a global operator.
+
+Plugin-owned actions must use the plugin namespace and call the core
+authorization service:
+
+```python
+decision = await self.context.authz.authorize(
+    event,
+    "plugin:example:publish",
+    self.context.authz.session_resource(event),
+)
+if not decision.allowed:
+    return
+```
+
+Do not use the removed `PermissionType` enum or `@filter.permission_type`.
+`event.is_admin()` is always `False` and is not an authorization check.
 
 ### Multiple Filters
 
@@ -375,7 +395,7 @@ async def helloworld(self, event: AstrMessageEvent):
 ### Event Hooks
 
 > [!TIP]
-> Event hooks do not support being used together with @filter.command, @filter.command_group, @filter.event_message_type, @filter.platform_adapter_type, or @filter.permission_type.
+> Event hooks do not support being used together with @filter.command, @filter.command_group, @filter.event_message_type, @filter.platform_adapter_type, or @filter.permission.
 
 #### On Bot Initialization Complete
 

@@ -106,7 +106,7 @@ To avoid flooding group chats, the default behavior requires mentioning the bot 
 
 ### An administrator command says permission denied
 
-Use `/session info` to inspect the current user ID, then grant it a session-scoped administrator binding through the Dashboard authorization page or `/admin grant`. Profiles can be bound separately to platforms, groups, or direct messages, so editing the default profile may not affect the current session.
+Use `/session info` to inspect the current user ID, then grant current-session `session_admin` through the Dashboard authorization page or `/admin grant`. That is not a global operator. Profiles can be bound separately to platforms, groups, or direct messages, so editing the default profile may not affect the current session.
 
 ### How do I enable Computer Use?
 
@@ -116,7 +116,7 @@ Under **Config → Agent Computer Use**, select:
 - `sandbox` to use the configured Shipyard Neo or CUA sandbox;
 - `none` to disable it, which is the default.
 
-Computer capabilities are now checked through the unified action-based authorization service (for example `tool.computer_use`, `tool.local_exec`, and `tool.file_write`), with fresh step-up/elevation required for high-risk actions. Sandboxing isolates execution but does not change authorization. See [Computer Use](./use/computer) and [Agent Sandbox](./use/astrbot-agent-sandbox).
+Computer capabilities are now checked through the unified action-based authorization service (for example `tool.computer_use`, `tool.local_exec`, and `tool.file_write`). High-risk actions require a one-time Dashboard step-up. IM elevation is not implemented. Sandboxing isolates execution but does not change authorization. See [Computer Use](./use/computer) and [Agent Sandbox](./use/astrbot-agent-sandbox).
 
 ### CJK text is garbled in T2I output
 

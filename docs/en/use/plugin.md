@@ -6,9 +6,9 @@ Plugin management uses a native command group:
 
 - `/plugin list`: List loaded plugins.
 - `/plugin show <plugin-name>`: Show the selected plugin's version, author, and registered commands.
-- `/plugin disable <plugin-name>`: Disable a plugin; admin permission is required.
-- `/plugin enable <plugin-name>`: Enable a plugin; admin permission is required.
-- `/plugin install <repository-url>`: Install a plugin; admin permission is required.
+- `/plugin disable <plugin-name>`: Disable a plugin; requires `extension.manage`.
+- `/plugin enable <plugin-name>`: Enable a plugin; requires `extension.manage`.
+- `/plugin install <repository-url>`: Install a plugin; requires `extension.plugin_install` and Dashboard step-up.
 
 Entering `/plugin` alone displays the available subcommand tree. Quote repository URLs containing special characters such as `&` or `#`:
 

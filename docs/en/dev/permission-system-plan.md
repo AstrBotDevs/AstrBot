@@ -39,14 +39,27 @@ The Chinese implementation and migration guide is the normative reference:
 [统一权限系统实现计划](../../zh/dev/permission-system-plan.md). The runtime now
 uses normalized `Subject`, `Resource`, `AuthContext`, and fail-closed
 `AuthorizationService` decisions for commands, Dashboard/API principals,
-plugins, agents, and tools. Dashboard requests use stable account principals;
+plugins, agents, and tools.
+
+Platform group roles are wired only from inbound payload facts: NapCat and
+aiocqhttp use OneBot `sender.role` on group messages; Discord uses
+`guild.owner_id` and `member.guild_permissions.administrator` already on the
+message; Telegram maps `ChatMember.status` only when it is already present;
+Misskey maps `toRoom.ownerId` only when it matches the current room and
+sender. Lark, DingTalk, Kook, Slack, Mattermost, and Satori stay
+`member`/`unknown` because they have no stable inbound owner/admin field.
+WebChat, QQ Official, WeChat Official Account, WeCom, WeCom AI, individual
+WeChat, and Line never elevate. These facts never create `instance_operator`,
+`operator`, or `root`. Dashboard requests use stable account principals;
 account CRUD is protected by root bindings and step-up. This fork has no existing
 users to migrate. It performs no legacy permission migration or configuration
 cleanup: Dashboard config writes explicitly reject `admins_id`, `tool_permissions`,
 and `disable_builtin_commands`, and runtime authorization never reads them.
 
 WebChat/Open API `username` remains a compatibility field and is never treated
-as an authenticated root/operator identity. High-risk Dashboard writes,
+as an authenticated root/operator identity. Dashboard-authenticated WebChat
+uses that account's role bindings, including root and operator; anonymous
+WebChat stays guest. High-risk Dashboard writes,
 credentials, identity changes, system operations, and sensitive tools require
 fresh Dashboard step-up proof and produce redacted audit records. Cross-platform
 IM elevation is a later design and has no runtime endpoint in v1.
@@ -56,14 +69,13 @@ one-time step-up credentials for `system.update` / `system:core-update`,
 `system.pip_install` / `system:pip-install`, and `system.restart` /
 `system:restart`, respectively. API keys cannot invoke these actions.
 
-## Unified authorization v2 proposal (not implemented)
+## Unified authorization v2 proposal (switched)
 
 ### 19.1 Position, scope, and non-goals
 
-v2 is an incremental design proposal built on the current authorization
-invariants. It keeps AuthorizationService.authorize(subject, action, resource,
-context), canonical resources, step-up, redacted audit, and fail-closed
-behavior. It is not a claim that the v2 model is already implemented.
+v2 is now the live decision path. `authorize()` allows by relationship or
+an explicit API-key capability. Runtime authorization no longer expands
+`*` or NULL scopes. Cross-platform elevation remains unimplemented.
 
 **Review conclusion:** adopt the finite-relationship, structured-context, and
 explicit-capability model incrementally. It addresses v1's object-scope,
@@ -291,8 +303,10 @@ v2.0 retains Dashboard-only step-up for high-risk operations. The credential is
 bound to the account/session, action, exact resource, config, source, and
 policy version; it is short-lived, single-use, and atomically consumed. The
 narrow current-session IM member-management exception remains limited to its
-origin session. Plugins, agents, MCP, and API keys cannot execute high-risk
-actions, and executable credentials are never sent to public groups.
+origin session. Dashboard-authenticated WebChat uses the signed-in account's
+role bindings; anonymous WebChat remains guest. Plugins, agents, MCP, and API
+keys cannot execute high-risk actions, and executable credentials are never
+sent to public groups.
 
 ### 19.11 Implementation and release gates
 

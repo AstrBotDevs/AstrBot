@@ -42,10 +42,10 @@ Declared options can appear before or after positional arguments and support `--
 ### Session Information
 
 - `/session info`: Show the UMO, user ID, platform ID, message type, and session ID.
-- `/session name`: Show the current auto name and saved alias; admin permission is required.
-- `/session name <name>`: Set the current UMO display alias; admin permission is required. `GreedyStr` allows spaces.
+- `/session name`: Show the current auto name and saved alias; requires `session.manage`.
+- `/session name <name>`: Set the current UMO display alias; requires `session.manage`. `GreedyStr` allows spaces.
 
-The user ID from `/session info` can be granted a session-scoped administrator binding with `/admin grant`. With group `unique_session` enabled, the command also reports the group ID used for allowlists.
+The user ID from `/session info` can be granted current-session `session_admin` with `/admin grant`. That is not a global operator. With group `unique_session` enabled, the command also reports the group ID used for allowlists.
 
 ### Conversations
 
@@ -57,9 +57,9 @@ The user ID from `/session info` can be granted a session-scoped administrator b
 - `/conversation switch <index>`: Switch to a listed conversation.
 - `/conversation rename <new-title>`: Rename the current conversation; spaces are accepted.
 - `/conversation delete`: Delete the current conversation.
-- `/conversation create-for <session-id>`: Create a conversation for another group session; admin permission is required.
+- `/conversation create-for <session-id>`: Create a conversation for another group session; requires `session.assign` and `session.manage`.
 
-`reset` and `delete` may require admin permission in groups without session isolation. Dashboard command permissions take precedence over defaults.
+`reset` and `delete` may require `session.manage` in groups without session isolation. Dashboard command permissions take precedence over defaults.
 
 ### Running Tasks
 
@@ -74,7 +74,7 @@ The user ID from `/session info` can be granted a session-scoped administrator b
 - `/model list`: List models available from the current LLM Provider.
 - `/model set <name-or-index>`: Select a model; a name can also resolve to another configured Provider.
 
-These commands require admin permission.
+These commands require `provider.use`. Cross-session assignment also requires `session.assign`.
 
 ### Session Variables
 
@@ -87,7 +87,7 @@ These commands require admin permission.
 - `/chat enable`: Enable LLM chat for the current session.
 - `/chat disable`: Disable LLM chat for the current session.
 
-These commands require admin permission. Both `enable` and `disable` are idempotent. `/chat` only controls whether the LLM is enabled; it does not change streaming mode.
+These commands require `session.manage`. Both `enable` and `disable` are idempotent. `/chat` only controls whether the LLM is enabled; it does not change streaming mode.
 
 ### Session streaming
 
@@ -98,13 +98,13 @@ These commands require admin permission. Both `enable` and `disable` are idempot
 
 These commands require `session.manage`. There is no argument-less toggle.
 
-### Administrators
+### Session administrators
 
-- `/admin list`: List the administrator user IDs active in the current configuration.
-- `/admin grant <user-id>`: Grant AstrBot administrator permission.
-- `/admin revoke <user-id>`: Revoke AstrBot administrator permission.
+- `/admin list`: List role bindings visible in the current session.
+- `/admin grant <user-id>`: Grant `session_admin` for the current session, not a global operator.
+- `/admin revoke <user-id>`: Revoke `session_admin` for the current session.
 
-All three subcommands require admin permission.
+All three subcommands require `identity.manage`. A current session owner may manage `session_admin` and `member` in that session only and cannot delegate ownership.
 
 ### Personas
 
@@ -114,14 +114,14 @@ All three subcommands require admin permission.
 - `/persona set <persona_id>`: Select a Persona for the current conversation.
 - `/persona unset`: Explicitly select no Persona for the current conversation.
 
-Persona subcommands require admin permission. Entering `/persona` alone displays the subcommand tree.
+Persona subcommands require `agent.manage`. Entering `/persona` alone displays the subcommand tree.
 
 ### Plugins
 
 - `/plugin list`: List loaded plugins.
 - `/plugin show <plugin-name>`: Show plugin version, author, and registered commands.
-- `/plugin enable <plugin-name>`: Enable a plugin; admin permission is required.
-- `/plugin disable <plugin-name>`: Disable a plugin; admin permission is required.
-- `/plugin install <repository-url>`: Install a plugin; admin permission is required.
+- `/plugin enable <plugin-name>`: Enable a plugin; requires `extension.manage`.
+- `/plugin disable <plugin-name>`: Disable a plugin; requires `extension.manage`.
+- `/plugin install <repository-url>`: Install a plugin; requires `extension.plugin_install` and Dashboard step-up.
 
 Plugin load, unload, reload, enable, and disable operations immediately rebuild the command catalog and refresh enabled Telegram/Discord native command surfaces.

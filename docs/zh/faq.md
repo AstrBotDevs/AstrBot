@@ -106,7 +106,7 @@ uv run python scripts/sync_dashboard_dist.py
 
 ### 管理员指令提示无权限
 
-使用 `/session info` 查看当前用户 ID，然后通过 Dashboard 权限页面或 `/admin grant` 授予当前会话范围的管理员绑定。配置档可能按平台、群或私聊分别绑定，修改默认配置档不一定影响当前会话。
+使用 `/session info` 查看当前用户 ID，然后通过 Dashboard 权限页面或 `/admin grant` 授予当前会话的 `session_admin`。这不是全局 operator。配置档可能按平台、群或私聊分别绑定，修改默认配置档不一定影响当前会话。
 
 ### 如何使用电脑能力
 
@@ -116,7 +116,7 @@ uv run python scripts/sync_dashboard_dist.py
 - `sandbox`：使用配置的 Shipyard Neo 或 CUA 沙箱；
 - `none`：关闭，默认值。
 
-电脑能力现在按工具动作经过统一授权服务检查（例如 `tool.computer_use`、`tool.local_exec` 和 `tool.file_write`），高风险动作还需要新鲜的 step-up/elevation。沙箱只提供运行隔离，不会改变授权策略。详见 [使用电脑能力](./use/computer) 和 [Agent 沙箱](./use/astrbot-agent-sandbox)。
+电脑能力现在按工具动作经过统一授权服务检查（例如 `tool.computer_use`、`tool.local_exec` 和 `tool.file_write`），高风险动作只允许 Dashboard 一次性 step-up。IM elevation 尚未实现。沙箱只提供运行隔离，不会改变授权策略。详见 [使用电脑能力](./use/computer) 和 [Agent 沙箱](./use/astrbot-agent-sandbox)。
 
 ### T2I 中文乱码
 

@@ -66,29 +66,26 @@ The local Shell tool includes basic blocking for dangerous commands such as `rm 
 
 ### Permission Model
 
-Computer Use has a separate option:
+Computer Use uses the unified authorization service. There is no “Require AstrBot admin permission” switch. Typical actions include:
 
-- `Require AstrBot admin permission`
+- `tool.computer_use`
+- `tool.local_exec`
+- `tool.python_exec`
+- `tool.file_read`
+- `tool.file_write`
+- `tool.browser_control`
 
-This option is enabled by default.
+`tool.file_read` is available to current-session members and above, still subject to path limits. `tool.local_exec`, `tool.python_exec`, `tool.file_write`, `tool.browser_control`, and `tool.computer_use` are high-risk: only the Dashboard control plane may execute them after a one-time step-up. IM, plugins, agents, and API keys are denied. Cross-platform IM elevation is not implemented; do not treat it as an existing approval channel.
 
-When enabled:
-
-- Admin users can use Shell, Python, file read, file write, file edit, and Grep search in `local` mode.
-- Non-admin users cannot use Shell or Python.
-- Non-admin users can only use file read, write, edit, and search inside restricted directories. Plugin-provided Skills are read/search-only and cannot be written or edited.
-
-Allowed directories for non-admin users in `local` mode include:
+In `local` mode, ordinary session members may read:
 
 - `data/skills`
 - `data/plugins/*/skills` (read-only, for plugin-provided Skills)
-- Current session's `data/workspaces/{normalized_umo}`
+- the current session's `data/workspaces/{normalized_umo}`
 - AstrBot temporary directories
 - `.astrbot` under the system temporary directory
 
-If `Require AstrBot admin permission` is disabled, regular users behave much closer to admins for Computer Use tools. Do not disable it unless you understand the risk.
-
-Use the Dashboard authorization page or `/admin grant` to grant a session-scoped administrator binding. Users can get their own ID with `/session info`.
+Writes and edits remain limited to the current session workspace and temporary directories. Grant matching actions from the Dashboard authorization page. `/admin grant` only creates current-session `session_admin`; it does not turn an IM user into a global operator.
 
 ## Sandbox Mode
 
@@ -117,7 +114,7 @@ instead of:
 For sandbox deployment, profiles, TTL, persistence, and browser capabilities, see [Agent Sandbox Environment](/en/use/astrbot-agent-sandbox).
 
 > [!NOTE]
-> Even in `sandbox` mode, `Require AstrBot admin permission` still affects access to Shell, Python, browser, upload/download, and related tools. The exact behavior depends on your configuration.
+> Even in `sandbox` mode, Shell, Python, browser, and upload/download tools are still authorized as `tool.local_exec`, `tool.python_exec`, `tool.browser_control`, and `tool.file_write`. Sandboxing isolates execution but does not change authorization.
 
 ## Skills
 

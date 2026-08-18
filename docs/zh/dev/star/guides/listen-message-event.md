@@ -350,16 +350,35 @@ async def on_aiocqhttp(self, event: AstrMessageEvent):
 
 当前版本下，`PlatformAdapterType` 支持以下值：`AIOCQHTTP`、`QQOFFICIAL`、`QQOFFICIAL_WEBHOOK`、`TELEGRAM`、`WECOM`、`WECOM_AI_BOT`、`LARK`、`DINGTALK`、`DISCORD`、`SLACK`、`KOOK`、`VOCECHAT`、`WEIXIN_OFFICIAL_ACCOUNT`、`SATORI`、`MISSKEY`、`LINE`、`MATRIX`、`WEIXIN_OC`、`MATTERMOST`、`WEBCHAT`、`ALL`。
 
-#### 管理员指令
+#### 权限与动作
 
 ```python
-@filter.permission_type(filter.PermissionType.ADMIN)
+@filter.permission("session.manage")
 @filter.command("test")
 async def test(self, event: AstrMessageEvent):
     pass
 ```
 
-仅管理员才能使用 `test` 指令。
+`@filter.permission("session.manage")` 会在管道里调用统一授权入口
+`AuthorizationService.authorize()`。只有当前会话的 `session_admin` /
+`session_owner`，或作用域匹配的 `instance_operator` / Dashboard
+`operator` / `root`，才能执行该指令。平台群主/群管理员只影响当前
+`(config_id, UMO)`，不会变成全局 operator。
+
+插件自定义动作必须使用自己的命名空间，并再次调用核心授权：
+
+```python
+decision = await self.context.authz.authorize(
+    event,
+    "plugin:example:publish",
+    self.context.authz.session_resource(event),
+)
+if not decision.allowed:
+    return
+```
+
+不要再使用已删除的 `PermissionType` 或 `@filter.permission_type`。
+`event.is_admin()` 恒为 `False`，不能当作授权依据。
 
 ### 多个过滤器
 
@@ -375,7 +394,7 @@ async def helloworld(self, event: AstrMessageEvent):
 ### 事件钩子
 
 > [!TIP]
-> 事件钩子不支持与上面的 @filter.command, @filter.command_group, @filter.event_message_type, @filter.platform_adapter_type, @filter.permission_type 一起使用。
+> 事件钩子不支持与上面的 @filter.command, @filter.command_group, @filter.event_message_type, @filter.platform_adapter_type, @filter.permission 一起使用。
 
 #### Bot 初始化完成时
 

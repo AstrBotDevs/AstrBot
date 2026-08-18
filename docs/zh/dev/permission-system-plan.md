@@ -76,20 +76,17 @@ guest                                 未认证或受限作用域
 
 ## 2. 当前实现审计
 
-| 位置                                                              | 当前行为                                                                   | 主要问题                                                       | 迁移要求                                                                                  |
-| ----------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `astrbot/core/star/filter/permission.py`                          | 只有 `PermissionType.ADMIN` 和 `PermissionType.MEMBER`                     | 无动作、资源和作用域信息                                       | 替换为动作授权过滤器；移除二元判断作为核心模型                                            |
-| `astrbot/core/pipeline/waking_check/stage.py`                     | 历史实现曾根据 `admins_id` 设置 `event.role`                               | 配置档管理员身份依赖消息事件字段                               | 当前实现只挂载规范化 `subject`，由授权服务读取显式绑定                                    |
-| `astrbot/core/platform/astr_message_event.py`                     | `is_admin()` 只判断 `event.role == "admin"`                                | 无法区分平台群管理员和 AstrBot operator                        | 改为 `event.authz.require(...)` 或 `event.has_capability(...)`                            |
-| `astrbot/core/platform/sources/napcat/napcat_platform_adapter.py` | 将 QQ 的 `sender.role` 直接写入 `event.role`                               | QQ 群管理员可能被当成 AstrBot 管理员                           | 保存到带来源和 TTL 的平台成员事实，禁止写入全局角色字段                                   |
-| `astrbot/core/config/default.py`、`commands/admin.py`             | 历史配置曾保存 `admins_id`                                                 | 不能表达会话范围和过期时间；直接升级为全局 operator 会扩大权限 | 当前分支不读取、迁移或清理该字段；配置档级管理员只能通过显式绑定授予                      |
-| `builtin_stars/builtin_commands/main.py`                          | Provider、Model、Chat、Persona、Plugin、Admin 等大量命令要求 `ADMIN`       | 管理能力过粗，无法区分当前会话与全局配置                       | 按能力域映射到 `session.*`、`provider.*` 等动作                                           |
-| `astrbot/core/tools/function_tool_manager.py`                     | 历史非内置工具默认要求 admin，可由 `tool_permissions` 降为 member          | 配置粒度和统一授权服务不一致                                   | 当前工具声明所需动作并统一调用授权服务                                                    |
-| `astrbot/core/tools/computer_tools/*`                             | `computer_use_require_admin` 控制 Computer Use                             | 只支持全局 admin，无法绑定会话/操作者                          | 映射到 `tool.local_exec` 等高风险动作                                                     |
-| `astrbot/dashboard/api/auth.py`                                   | Dashboard JWT、Cookie、账户级 TOTP、限流和 API Key scope                   | 高风险操作必须绑定账户和 step-up                               | 使用稳定 `account_id` 与 Dashboard session 主体；账户和 root/operator 绑定由授权 API 管理 |
-| `astrbot/dashboard/services/api_key_scopes.py`                    | API Key 使用固定基础 scope                                                 | scope 是接口访问能力，不应直接当作角色                         | 建立 scope 到 action 的显式映射，禁止隐式扩权                                             |
-| `astrbot/core/platform/sources/webchat/webchat_adapter.py`        | WebChat `username` 作为 sender 和 session owner；Open API 也公开接受该字段 | 这是现有公开契约，不能把它当认证主体                           | 保留兼容字段，但不赋予 Dashboard 或管理员权限；新接口使用不可伪造的认证主体               |
-| Persona/子 Agent 工具选择                                         | 部分路径可能绕过非内置工具权限包装                                         | 模型或插件可能间接获得高风险工具                               | 所有工具执行前再次经过核心授权检查                                                        |
+- `ActionPermissionFilter` + `@filter.permission("session.manage")`：二元 `PermissionType` 已删除。
+- `WakingCheckStage` 只挂载规范化 `subject` / `resource` / `AuthContext`，并 `record_platform_membership()`。不读取 `admins_id`，不写 `event.role`。
+- `is_admin()` 恒为 `False`。平台角色只经 `set_platform_member_role()`。授权必须走 `authorize()`。
+- NapCat / aiocqhttp：群消息 `sender.role` 归一化为当前会话 `owner`/`admin`/`member`/`unknown`。私聊、notice、request 不提升。
+- Discord：只用消息对象上的 `guild.owner_id` 与 `member.guild_permissions.administrator`。缺 member/permissions 时 `unknown`，不打 REST。
+- Telegram：仅当 Update/ChatMember 已带 `status` 时映射。不调用 `getChatMember`。
+- Misskey：仅当入站 `toRoom.ownerId` 与当前房间、发送者一致时映射 `owner`。
+- Lark / DingTalk / Kook / Slack / Mattermost / Satori：入站无稳定群主/管理员字段，保持默认 `member`，测试锁住不提升。
+- WebChat / QQ Official / 微信公众号 / 企业微信 / WeCom AI / 个微 / Line：明确不接线。WebChat `username` 仍是 caller-declared。
+- Computer Use：`tool.computer_use` / `tool.local_exec` / `tool.file_write` 等统一授权。`computer_use_require_admin` 无运行时语义；高风险仅 Dashboard step-up。
+- API Key：scope 显式映射到 action。`NULL` 按冻结的 `DEFAULT_API_KEY_SCOPES` 展开，`*` 是历史 wildcard。高风险动作对 API Key 一律拒绝。
 
 当前命令和 Dashboard API 的数量较多，不应为每一条 URL 或命令创建一个角色。稳定的授权边界应由能力域表达，命令和路由只是能力的调用入口。
 
@@ -296,14 +293,14 @@ provider.credentials.write
 
 - Dashboard JWT session 解析为 `DashboardPrincipal(username, sid, jti, account_id, auth_strength, issued_at)`；业务代码不能凭 `username == "astrbot"` 推断 root。
 - Dashboard 控制面身份来自受保护的账户表和角色绑定；账户 CRUD 由 root 权限和 step-up 保护。
-- Dashboard 驱动的 WebChat 请求保留控制面认证主体与 caller-declared username 两个字段，不能把后者当成普通 IM 身份或授权依据。
+- Dashboard 驱动的 WebChat 请求保留控制面认证主体与 caller-declared username 两个字段，不能把后者当成普通 IM 身份或授权依据。已认证请求按该 `dashboard-account` 的角色绑定授权（含 root/operator）；高风险动作仍仅限 Dashboard 控制面并要求 step-up。
 - 需要 step-up 的操作要求最近一次 TOTP/密码重新验证，不能只依赖仍未过期的长时 JWT。
 
 ### 8.2 WebChat
 
 - WebChat 继续使用现有 `webchat!<username>!<conversation-id>` 会话编码；授权资源另行包装为 `(config_id, umo)`，不直接修改历史和路由数据。
 - 现有 WebChat/Open API 的 `username` 请求字段在兼容版本中继续存在，但仅作为 caller-declared identity；不能把它当作 JWT/API Key 的认证主体，也不能凭它获得管理员权限。
-- Dashboard 支持多个账户；匿名 WebChat 为 `guest`，已认证请求同时保留 `dashboard-session:<sid>` 和 `dashboard-account:<account_id>` 两个主体层次。
+- Dashboard 支持多个账户；匿名 WebChat 为 `guest`，已认证请求同时保留 `dashboard-session:<sid>` 和 `dashboard-account:<account_id>` 两个主体层次，并使用该账户的完整角色绑定。匿名或未挂上已验证 principal 的请求不得因同名 username 获得账户权限。
 - WebChat 内的提权批准应在同一已认证 Dashboard 会话或专用私聊会话完成，不能通过公开群消息确认。
 - 项目、会话、文件等现有 owner 校验保留，但改为授权服务的资源检查，避免“项目 owner 校验”和“系统权限校验”产生冲突。
 
@@ -583,7 +580,7 @@ root/operator/session_owner/session_admin/member/guest
 
 - Dashboard 控制面按显式账户绑定和 step-up 执行高风险动作；instance_operator 受配置档作用域限制。
 - JWT、Cookie、TOTP、API Key scope 与 action 映射正确；无 scope 不因历史 key 获得新敏感能力。
-- 兼容 WebChat/Open API 的 `username` 只能作为 caller-declared identity，不产生管理员身份；新接口主体来自认证会话。
+- 兼容 WebChat/Open API 的 `username` 只能作为 caller-declared identity，不产生管理员身份；新接口主体来自认证会话。已登录 Dashboard WebChat 使用该账户绑定，匿名 WebChat 保持 guest。
 - 角色绑定和审计 API 使用标准 response envelope，未授权返回 401/403 且不泄露策略细节。
 
 ### 15.4 插件和工具测试
@@ -643,14 +640,12 @@ root/operator/session_owner/session_admin/member/guest
 
 每个任务都必须同时提交对应的单元/集成测试；涉及 Dashboard 路由时同步更新 `openspec/openapi-v1.yaml`、生成客户端和公开 OpenAPI 文档。
 
-## 19. 统一权限系统 v2 设计提案（未实现）
+## 19. 统一权限系统 v2 设计提案（已切正）
 
 ### 19.1 定位、范围与非目标
 
-v2 是在当前 v1 授权入口、资源规范化、step-up、脱敏审计和
-fail-closed 行为上的增量设计，不是立即替换运行时的完整授权引擎。当前实现的
-事实来源仍是 AuthorizationService.authorize()、ACTIONS、高风险动作表以及
-现有 Dashboard/API/插件契约；本节不会把提案描述成已实现功能。
+v2 已切正：authorize() 按关系/capability 放行。API Key 只认显式 capability，
+运行时不再读取 `*` / NULL scope 扩权。跨平台 elevation 仍未实现。
 
 目标是让授权能表达“谁通过什么关系访问哪个对象”，同时把 API Key、插件、Agent
 和工具的附加限制显式化：
@@ -940,8 +935,8 @@ API Key 从 scope 迁移为显式 capability：
 ### 19.10 WebChat、Dashboard 与 Step-up
 
 WebChat 的 username 仍可作为协议兼容字段，但永远不等于认证主体。匿名请求使用
-guest；Dashboard 驱动的 WebChat 同时传递已认证 account/session 上下文，修改
-username 不能改变权限。
+guest；Dashboard 驱动的 WebChat 同时传递已认证 account/session 上下文，并按该
+账户的角色绑定授权。修改 username 不能改变权限。
 
 v2.0 只保留 Dashboard step-up：
 
