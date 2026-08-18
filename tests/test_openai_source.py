@@ -1764,6 +1764,54 @@ async def test_parse_openai_completion_reads_nested_data_choices():
 
 
 @pytest.mark.asyncio
+async def test_parse_openai_completion_recovers_textual_send_message_tool_call():
+    provider = _make_provider()
+    try:
+        completion = ChatCompletion.model_validate(
+            {
+                "id": "chatcmpl-text-tool-call",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "gpt-4o-mini",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": (
+                                "<tool_call>\n"
+                                "<function=astrbot_tool_internal_send_message_to_user>\n"
+                                "<parameter=session>Gray:FriendMessage:6092543661\n"
+                                '<parameter=messages>[{"type":"plain","text":"晚安"}]\n'
+                                "</tool_call>"
+                            ),
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+            }
+        )
+        tools = SimpleNamespace(
+            get_tool=lambda name: object() if name == "send_message_to_user" else None,
+        )
+
+        response = await provider._parse_openai_completion(completion, tools)
+
+        assert response.role == "tool"
+        assert response.completion_text == ""
+        assert response.tools_call_name == ["send_message_to_user"]
+        assert response.tools_call_args == [
+            {
+                "session": "Gray:FriendMessage:6092543661",
+                "messages": [{"type": "plain", "text": "晚安"}],
+            }
+        ]
+        assert response.tools_call_ids == ["text-tool-call-0"]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_query_stream_extracts_usage_from_empty_choices_chunk(monkeypatch):
     provider = _make_provider()
     try:

@@ -886,6 +886,7 @@ class ProviderOpenAIOfficial(Provider):
                 f"OpenAI completion has no choices. response_id={completion.id}"
             )
         choice = completion.choices[0]
+        textual_tool_calls = None
 
         # parse the text completion
         if choice.message.content is not None:
@@ -902,6 +903,7 @@ class ProviderOpenAIOfficial(Provider):
             # Also clean up orphan </think> tags that may leak from some models
             completion_text = re.sub(r"</think>\s*$", "", completion_text).strip()
             llm_response.result_chain = MessageChain().message(completion_text)
+            textual_tool_calls = self._parse_textual_tool_calls(completion_text, tools)
         elif refusal := getattr(choice.message, "refusal", None):
             refusal_text = self._normalize_content(refusal)
             if refusal_text:
@@ -955,6 +957,15 @@ class ProviderOpenAIOfficial(Provider):
             llm_response.tools_call_name = func_name_ls
             llm_response.tools_call_ids = tool_call_ids
             llm_response.tools_call_extra_content = tool_call_extra_content_dict
+        elif textual_tool_calls:
+            (
+                llm_response.tools_call_name,
+                llm_response.tools_call_args,
+                llm_response.tools_call_ids,
+            ) = textual_tool_calls
+            llm_response.role = "tool"
+            llm_response.result_chain = None
+            llm_response.completion_text = ""
         # specially handle finish reason
         if choice.finish_reason == "content_filter":
             raise Exception(
@@ -981,6 +992,72 @@ class ProviderOpenAIOfficial(Provider):
         )
 
         return llm_response
+
+    def _parse_textual_tool_calls(
+        self,
+        text: str,
+        tools: ToolSet | None,
+    ) -> tuple[list[str], list[dict[str, Any]], list[str]] | None:
+        """Recover complete XML-like tool calls emitted as plain text.
+
+        Args:
+            text: The provider's plain-text completion.
+            tools: The tool set available for the current request.
+
+        Returns:
+            Parsed tool names, arguments, and synthetic IDs, or None when the
+            text is not a complete call or references an unavailable tool.
+        """
+        if tools is None or not text.lstrip().startswith("<tool_call>"):
+            return None
+
+        blocks = list(
+            re.finditer(
+                r"<tool_call>\s*<function=([^>\s]+)>(.*?)</tool_call>",
+                text,
+                re.DOTALL,
+            )
+        )
+        if (
+            not blocks
+            or any(
+                text[previous_end : block.start()].strip()
+                for previous_end, block in zip(
+                    [0, *[block.end() for block in blocks[:-1]]],
+                    blocks,
+                )
+            )
+            or text[blocks[-1].end() :].strip()
+        ):
+            return None
+
+        names: list[str] = []
+        args: list[dict[str, Any]] = []
+        ids: list[str] = []
+        for index, block in enumerate(blocks):
+            name = block.group(1)
+            if name.startswith("astrbot_tool_internal_"):
+                name = name.removeprefix("astrbot_tool_internal_")
+            get_tool = getattr(tools, "get_tool", None)
+            if not callable(get_tool) or get_tool(name) is None:
+                return None
+
+            call_args: dict[str, Any] = {}
+            for parameter in re.finditer(
+                r"<parameter=([^>\s]+)>(.*?)(?=<parameter=|$)",
+                block.group(2),
+                re.DOTALL,
+            ):
+                value = parameter.group(2).strip()
+                try:
+                    call_args[parameter.group(1)] = json.loads(value)
+                except json.JSONDecodeError:
+                    call_args[parameter.group(1)] = value
+            names.append(name)
+            args.append(call_args)
+            ids.append(f"text-tool-call-{index}")
+
+        return names, args, ids
 
     async def _prepare_chat_payload(
         self,
