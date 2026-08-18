@@ -332,8 +332,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         response_tools = self._build_response_tools(tools)
         if response_tools:
             payloads["tools"] = response_tools
-            if tools:
-                payloads["tool_choice"] = payloads.get("tool_choice", "auto")
+            payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
         extra_body: dict[str, Any] = {}
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
@@ -398,8 +397,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         response_tools = self._build_response_tools(tools)
         if response_tools:
             payloads["tools"] = response_tools
-            if tools:
-                payloads["tool_choice"] = payloads.get("tool_choice", "auto")
+            payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
         extra_body: dict[str, Any] = {}
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
