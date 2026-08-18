@@ -46,7 +46,7 @@ def test_anthropic_provider_passes_custom_headers_via_default_headers(monkeypatc
         "User-Agent": "custom-agent/1.0",
         "X-Test-Header": "123",
     }
-    assert provider.client.kwargs["http_client"] is None
+    assert provider.client.kwargs["http_client"] is not None
 
 
 def test_kimi_code_provider_sets_defaults_and_preserves_custom_headers(monkeypatch):
@@ -92,18 +92,25 @@ def test_kimi_code_provider_restores_required_user_agent_when_blank(monkeypatch)
     }
 
 
-def test_create_http_client_returns_none_when_no_proxy(monkeypatch):
-    def fail_if_called(*args, **kwargs):
-        raise AssertionError("create_proxy_client should not be called without a proxy")
+def test_create_http_client_always_uses_explicit_route(monkeypatch):
+    captured = {}
 
-    monkeypatch.setattr(anthropic_source, "create_proxy_client", fail_if_called)
+    def fake_create_proxy_client(provider_label, provider_config=None, **kwargs):
+        captured["provider_config"] = provider_config
+        captured["kwargs"] = kwargs
+        return object()
+
+    monkeypatch.setattr(
+        anthropic_source, "create_proxy_client", fake_create_proxy_client
+    )
 
     provider = anthropic_source.ProviderAnthropic.__new__(
         anthropic_source.ProviderAnthropic
     )
     provider.custom_headers = {"X-Trace-Id": "abc"}
 
-    assert provider._create_http_client({"proxy": ""}) is None
+    assert provider._create_http_client({"proxy_mode": "inherit"}) is not None
+    assert captured["provider_config"]["proxy_mode"] == "inherit"
 
 
 def test_create_http_client_uses_anthropic_httpx_module(monkeypatch):
@@ -111,13 +118,13 @@ def test_create_http_client_uses_anthropic_httpx_module(monkeypatch):
 
     def fake_create_proxy_client(
         provider_label: str,
-        proxy: str | None = None,
+        provider_config: dict | None = None,
         headers: dict[str, str] | None = None,
         verify=None,
         httpx_module=None,
     ):
         captured["provider_label"] = provider_label
-        captured["proxy"] = proxy
+        captured["provider_config"] = provider_config
         captured["headers"] = headers
         captured["httpx_module"] = httpx_module
         return object()
@@ -130,12 +137,14 @@ def test_create_http_client_uses_anthropic_httpx_module(monkeypatch):
         anthropic_source.ProviderAnthropic
     )
     provider.custom_headers = {"X-Trace-Id": "trace-1"}
-    provider._create_http_client({"proxy": "http://127.0.0.1:7890"})
+    provider._create_http_client(
+        {"proxy_mode": "custom", "proxy_url": "http://127.0.0.1:7890"}
+    )
 
     from anthropic import _base_client as anthropic_base_client
 
     assert captured["provider_label"] == "Anthropic"
-    assert captured["proxy"] == "http://127.0.0.1:7890"
+    assert captured["provider_config"]["proxy_url"] == "http://127.0.0.1:7890"
     assert captured["headers"] == {"X-Trace-Id": "trace-1"}
     assert captured["httpx_module"] is anthropic_base_client.httpx
 
@@ -145,7 +154,7 @@ def test_create_http_client_falls_back_to_global_httpx_module(monkeypatch):
 
     def fake_create_proxy_client(
         provider_label: str,
-        proxy: str | None = None,
+        provider_config: dict | None = None,
         headers: dict[str, str] | None = None,
         verify=None,
         httpx_module=None,

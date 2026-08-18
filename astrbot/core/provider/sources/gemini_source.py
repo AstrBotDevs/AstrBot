@@ -83,7 +83,6 @@ class ProviderGoogleGenAI(Provider):
 
     def _init_client(self) -> None:
         """初始化Gemini客户端"""
-        proxy = self.provider_config.get("proxy", "")
         http_options = types.HttpOptions(
             base_url=self.api_base,
             timeout=self.timeout * 1000,  # 毫秒
@@ -91,15 +90,14 @@ class ProviderGoogleGenAI(Provider):
 
         # 强制使用 httpx 作为异步 HTTP 后端，避免 aiohttp 响应类型兼容问题 (#7564)
         # httpx.AsyncClient 的 timeout 单位为秒（与 HttpOptions 的毫秒不同）
+        from astrbot.core.utils.proxy_route import httpx_client_kwargs
+
+        route = self.get_network_route()
         async_client_kwargs: dict = {
             "base_url": self.api_base,
             "timeout": self.timeout,
+            **httpx_client_kwargs(route),
         }
-        if proxy:
-            async_client_kwargs["proxy"] = proxy
-            async_client_kwargs["trust_env"] = False
-        else:
-            async_client_kwargs["trust_env"] = True
 
         # Track the previous client so it can be closed in terminate() instead
         # of leaking when _init_client is called again (e.g. via set_key).

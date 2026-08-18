@@ -2,7 +2,6 @@ import asyncio
 import hashlib
 import json
 import os
-import ssl
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -10,8 +9,6 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-import aiohttp
-import certifi
 from starlette.datastructures import UploadFile
 
 from astrbot import logger
@@ -30,6 +27,12 @@ from astrbot.core.star.plugin_runtime_loader import PluginRuntimeLoader
 from astrbot.core.star.star import PluginRegistry, StarMetadata
 from astrbot.core.star.star_handler import EventType, HandlerRegistry
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
+from astrbot.core.utils.outbound_http import (
+    PLUGIN_REGISTRY,
+    OutboundRequestError,
+    fetch_json,
+    reject_unsafe_plugin_fetch,
+)
 from astrbot.core.utils.shared_preferences import SharedPreferences
 from astrbot.dashboard.upload_utils import save_upload_to_path
 
@@ -923,44 +926,28 @@ class PluginService:
                 return cached_data, None
 
         remote_data = None
-        ssl_context = ssl.create_default_context(cafile=certifi.where())
-        connector = aiohttp.TCPConnector(ssl=ssl_context)
-
         for url in source.urls:
             try:
-                async with (
-                    aiohttp.ClientSession(
-                        trust_env=True,
-                        connector=connector,
-                    ) as session,
-                    session.get(url) as response,
+                remote_data = await fetch_json(url, PLUGIN_REGISTRY)
+                if not remote_data or (
+                    isinstance(remote_data, dict) and len(remote_data) == 0
                 ):
-                    if response.status == 200:
-                        try:
-                            remote_data = await response.json()
-                        except aiohttp.ContentTypeError:
-                            remote_text = await response.text()
-                            remote_data = json.loads(remote_text)
+                    logger.warning("远程插件市场数据为空")
+                    continue
 
-                        if not remote_data or (
-                            isinstance(remote_data, dict) and len(remote_data) == 0
-                        ):
-                            logger.warning(f"远程插件市场数据为空: {url}")
-                            continue
-
-                        logger.info(
-                            f"成功获取远程插件市场数据，包含 {len(remote_data)} 个插件"
-                        )
-                        current_md5 = await self.fetch_remote_md5(source.md5_url)
-                        self.save_plugin_cache(
-                            source.cache_file,
-                            remote_data,
-                            current_md5,
-                        )
-                        return remote_data, None
-                    logger.error(f"请求 {url} 失败，状态码：{response.status}")
+                logger.info(
+                    "成功获取远程插件市场数据，包含 %s 个插件",
+                    len(remote_data),
+                )
+                current_md5 = await self.fetch_remote_md5(source.md5_url)
+                self.save_plugin_cache(
+                    source.cache_file,
+                    remote_data,
+                    current_md5,
+                )
+                return remote_data, None
             except Exception as exc:
-                logger.error(f"请求 {url} 失败，错误：{exc}")
+                logger.error("请求插件市场失败: %s", exc)
 
         if not cached_data:
             cached_data = self.load_plugin_cache(source.cache_file)
@@ -975,6 +962,9 @@ class PluginService:
     def build_registry_source(custom_url: str | None) -> RegistrySource:
         data_dir = get_astrbot_data_path()
         if custom_url:
+            from astrbot.core.utils.outbound_http import validate_outbound_url
+
+            validate_outbound_url(custom_url, PLUGIN_REGISTRY)
             url_hash = hashlib.md5(
                 custom_url.encode(),
                 usedforsecurity=False,
@@ -1014,21 +1004,11 @@ class PluginService:
             return None
 
         try:
-            ssl_context = ssl.create_default_context(cafile=certifi.where())
-            connector = aiohttp.TCPConnector(ssl=ssl_context)
-
-            async with (
-                aiohttp.ClientSession(
-                    trust_env=True,
-                    connector=connector,
-                ) as session,
-                session.get(md5_url) as response,
-            ):
-                if response.status == 200:
-                    data = await response.json()
-                    return data.get("md5", "")
+            data = await fetch_json(md5_url, PLUGIN_REGISTRY)
+            if isinstance(data, dict):
+                return data.get("md5", "")
         except Exception as exc:
-            logger.debug(f"Failed to fetch remote MD5: {exc}")
+            logger.debug("Failed to fetch remote MD5: %s", exc)
         return None
 
     async def is_cache_valid(self, source: RegistrySource) -> bool:
@@ -1506,6 +1486,13 @@ class PluginService:
         proxy: str | None = payload.get("proxy", None)
         if proxy:
             proxy = proxy.removesuffix("/")
+        try:
+            reject_unsafe_plugin_fetch(download_url=download_url, proxy=proxy or "")
+        except OutboundRequestError as exc:
+            raise PluginServiceError(
+                str(exc),
+                public_message="插件下载地址不安全",
+            ) from exc
 
         try:
             logger.info(f"正在安装插件 {repo_url}")
@@ -1625,6 +1612,13 @@ class PluginService:
         proxy: str | None = payload.get("proxy", None)
         update_info = await self.resolve_market_update_info(plugin_name)
         download_url = str(update_info.get("download_url") or "").strip()
+        try:
+            reject_unsafe_plugin_fetch(download_url=download_url, proxy=proxy or "")
+        except OutboundRequestError as exc:
+            raise PluginServiceError(
+                str(exc),
+                public_message="插件下载地址不安全",
+            ) from exc
         logger.info(f"正在更新插件 {plugin_name}")
         await self.plugin_lifecycle.update_plugin(
             plugin_name, proxy or "", download_url=download_url
@@ -1653,6 +1647,16 @@ class PluginService:
                     logger.info(f"批量更新插件 {name}")
                     update_info = await self.resolve_market_update_info(name)
                     download_url = str(update_info.get("download_url") or "").strip()
+                    try:
+                        reject_unsafe_plugin_fetch(
+                            download_url=download_url,
+                            proxy=proxy or "",
+                        )
+                    except OutboundRequestError as exc:
+                        raise PluginServiceError(
+                            str(exc),
+                            public_message="插件下载地址不安全",
+                        ) from exc
                     await self.plugin_lifecycle.update_plugin(
                         name, proxy, download_url=download_url
                     )

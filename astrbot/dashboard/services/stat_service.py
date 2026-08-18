@@ -10,7 +10,6 @@ from functools import cmp_to_key
 from pathlib import Path
 from typing import Any, Literal
 
-import aiohttp
 import psutil
 from sqlmodel import col, func, select
 
@@ -532,29 +531,39 @@ class StatService:
             if not proxy_url:
                 raise StatServiceError("proxy_url is required")
 
-            proxy_url = proxy_url.rstrip("/")
-            test_url = f"{proxy_url}/https://github.com/AstrBotDevs/AstrBot/raw/refs/heads/master/.python-version"
-            start_time = time.time()
+            from astrbot.core.utils.outbound_http import (
+                GITHUB_MIRROR_TEST,
+                OutboundRequestError,
+                compose_github_mirror_url,
+                fetch_text,
+                validate_github_mirror_origin,
+            )
 
-            async with (
-                aiohttp.ClientSession() as session,
-                session.get(
-                    test_url,
-                    timeout=aiohttp.ClientTimeout(total=10),
-                ) as response,
-            ):
-                if response.status == 200:
-                    end_time = time.time()
-                    _ = await response.text()
-                    return {
-                        "latency": round((end_time - start_time) * 1000, 2),
-                    }
-                raise StatServiceError(f"Failed. Status code: {response.status}")
+            try:
+                validate_github_mirror_origin(proxy_url)
+                test_url = compose_github_mirror_url(
+                    proxy_url,
+                    "https://github.com/AstrBotDevs/AstrBot/raw/refs/heads/master/.python-version",
+                )
+            except OutboundRequestError as exc:
+                raise StatServiceError("镜像测试失败") from exc
+
+            start_time = time.time()
+            try:
+                status, _body, _headers = await fetch_text(test_url, GITHUB_MIRROR_TEST)
+            except OutboundRequestError as exc:
+                raise StatServiceError("镜像测试失败") from exc
+            if status == 200:
+                end_time = time.time()
+                return {
+                    "latency": round((end_time - start_time) * 1000, 2),
+                }
+            raise StatServiceError("镜像测试失败")
         except StatServiceError:
             raise
         except Exception as exc:
             logger.error(traceback.format_exc())
-            raise StatServiceError(f"Error: {exc!s}") from exc
+            raise StatServiceError("镜像测试失败") from exc
 
     def get_changelog(self, version: str | None) -> dict:
         try:

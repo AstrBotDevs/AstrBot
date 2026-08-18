@@ -65,9 +65,10 @@ class ProviderFishAudioTTSAPI(TTSProvider):
             self.timeout: int = int(provider_config.get("timeout", 20))
         except ValueError:
             self.timeout = 20
-        self.proxy: str = provider_config.get("proxy", "")
-        if self.proxy:
-            logger.info("[FishAudio TTS] Using configured proxy")
+        from astrbot.core.utils.proxy_route import resolve_proxy_route
+
+        self._route = resolve_proxy_route(local_config=provider_config)
+        self.proxy = self._route.proxy_url or ""
         self.headers = {
             "Authorization": f"Bearer {self.chosen_api_key}",
         }

@@ -8,12 +8,10 @@ import asyncio
 import contextvars
 import copy
 import hashlib
-import ipaddress
 import json
 import logging
 import os
 import re
-import socket
 import sys
 from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack, contextmanager
@@ -226,6 +224,14 @@ def _allow_private_network_access(config: dict[str, Any]) -> bool:
 
 def _validate_remote_url(url: str, *, allow_private_network: bool = False) -> None:
     """Validate an MCP endpoint before every new HTTP connection/request."""
+    from dataclasses import replace
+
+    from astrbot.core.utils.outbound_http import (
+        MCP_REMOTE,
+        OutboundRequestError,
+        validate_outbound_url,
+    )
+
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise ValueError(
@@ -233,38 +239,19 @@ def _validate_remote_url(url: str, *, allow_private_network: bool = False) -> No
         )
     if parsed.username or parsed.password:
         raise ValueError("MCP remote connection URL must not contain credentials.")
-    if allow_private_network:
-        return
-    hostname = parsed.hostname
-    if hostname.lower() in {"localhost", "localhost.localdomain"}:
-        raise ValueError(
-            "MCP remote connection URL cannot target private or local IP addresses."
-        )
-    resolved: set[ipaddress.IPv4Address | ipaddress.IPv6Address] = set()
+    policy = replace(MCP_REMOTE, allow_private_network=allow_private_network)
     try:
-        resolved.add(ipaddress.ip_address(hostname))
-    except ValueError:
-        try:
-            for record in socket.getaddrinfo(
-                hostname, parsed.port or 443, proto=socket.IPPROTO_TCP
-            ):
-                resolved.add(ipaddress.ip_address(record[4][0]))
-        except socket.gaierror as exc:
+        validate_outbound_url(url, policy)
+    except OutboundRequestError as exc:
+        message = str(exc)
+        if "resolved" in message:
+            hostname = parsed.hostname or ""
             raise ValueError(
                 f"MCP remote connection URL hostname could not be resolved: {hostname}"
             ) from exc
-    if not resolved or any(
-        address.is_private
-        or address.is_loopback
-        or address.is_link_local
-        or address.is_multicast
-        or address.is_reserved
-        or address.is_unspecified
-        for address in resolved
-    ):
         raise ValueError(
             "MCP remote connection URL cannot target private or local IP addresses."
-        )
+        ) from exc
 
 
 def _create_mcp_http_client_without_redirects(
@@ -289,6 +276,7 @@ def _create_mcp_http_client_without_redirects(
 
     kwargs: dict[str, Any] = {
         "follow_redirects": False,
+        "trust_env": False,
         "event_hooks": {"request": [validate_request]},
     }
     if headers is not None:

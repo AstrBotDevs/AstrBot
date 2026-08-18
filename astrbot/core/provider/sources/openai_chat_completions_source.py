@@ -448,8 +448,7 @@ class ProviderOpenAIChatCompletions(Provider):
 
     def _create_http_client(self, provider_config: dict) -> httpx2.AsyncClient:
         """创建带代理的 HTTP 客户端"""
-        proxy = provider_config.get("proxy", "")
-        return create_proxy_client("OpenAI", proxy, httpx_module=httpx2)
+        return create_proxy_client("OpenAI", provider_config, httpx_module=httpx2)
 
     def __init__(self, provider_config, provider_settings) -> None:
         super().__init__(provider_config, provider_settings)

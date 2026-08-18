@@ -11,6 +11,7 @@ from astrbot.core.agent.runners.deerflow.constants import (
 )
 from astrbot.core.agent.runners.deerflow.deerflow_api_client import DeerFlowAPIClient
 from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.utils.proxy_route import resolve_proxy_route
 
 THIRD_PARTY_AGENT_RUNNER_KEY = {
     "dify": "dify_conversation_id",
@@ -60,7 +61,8 @@ async def _cleanup_deerflow_thread_if_present(
             ),
             api_key=merged_provider_config.get("deerflow_api_key", ""),
             auth_header=merged_provider_config.get("deerflow_auth_header", ""),
-            proxy=merged_provider_config.get("proxy", ""),
+            proxy=resolve_proxy_route(local_config=merged_provider_config).proxy_url
+            or "",
         )
         try:
             await client.delete_thread(thread_id)

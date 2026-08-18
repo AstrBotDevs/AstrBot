@@ -152,7 +152,7 @@ class DeerFlowAPIClient:
         if self._closed:
             raise RuntimeError("DeerFlowAPIClient is already closed.")
         if self._session is None or self._session.closed:
-            self._session = ClientSession(trust_env=True)
+            self._session = ClientSession(trust_env=False)
         return self._session
 
     async def __aenter__(self) -> DeerFlowAPIClient:

@@ -6,6 +6,7 @@ import yaml
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_path
 from astrbot.core.utils.io import ensure_dir, extract_zip_safely, remove_dir
+from astrbot.core.utils.outbound_http import PLUGIN_DOWNLOAD_URL
 
 from ..star.star import StarMetadata
 from ..updator import RepoZipUpdator
@@ -27,8 +28,12 @@ class PluginUpdator(RepoZipUpdator):
         repo_name = self.format_name(repo_name)
         plugin_path = os.path.join(self.plugin_store_path, repo_name)
         if download_url:
-            logger.info(f"Downloading plugin archive for {repo_name}: {download_url}")
-            await self._download_file(download_url, plugin_path + ".zip")
+            logger.info("Downloading plugin archive for %s", repo_name)
+            await self._download_file(
+                download_url,
+                plugin_path + ".zip",
+                policy=PLUGIN_DOWNLOAD_URL,
+            )
         else:
             await self.download_from_repo_url(plugin_path, repo_url, proxy)
         self.unzip_file(plugin_path + ".zip", plugin_path)
@@ -56,10 +61,12 @@ class PluginUpdator(RepoZipUpdator):
             f"Updating plugin at path: {plugin_path}, repository URL: {repo_url}",
         )
         if download_url:
-            logger.info(
-                f"Downloading plugin update archive for {plugin.name}: {download_url}"
+            logger.info("Downloading plugin update archive for %s", plugin.name)
+            await self._download_file(
+                download_url,
+                plugin_path + ".zip",
+                policy=PLUGIN_DOWNLOAD_URL,
             )
-            await self._download_file(download_url, plugin_path + ".zip")
         elif repo_url:
             await self.download_from_repo_url(plugin_path, repo_url, proxy=proxy)
 

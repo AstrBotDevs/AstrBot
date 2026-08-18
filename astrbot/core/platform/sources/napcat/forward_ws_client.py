@@ -209,12 +209,7 @@ class NapCatForwardWebSocketClient:
     async def _connect_and_listen(self) -> None:
         ssl_context: ssl.SSLContext | bool | None = None
         if self.ws_url.startswith("wss://"):
-            if self.verify_ssl:
-                ssl_context = True
-            else:
-                ssl_context = ssl.create_default_context()
-                ssl_context.check_hostname = False
-                ssl_context.verify_mode = ssl.CERT_NONE
+            ssl_context = True
 
         headers: dict[str, str] = {}
         if self.token:

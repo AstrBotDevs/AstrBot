@@ -255,9 +255,13 @@ class InternalAgentSubStage:
         follow_up_activated = False
         typing_requested = False
         try:
-            streaming_response = self.streaming_response
-            if (enable_streaming := event.get_extra("enable_streaming")) is not None:
-                streaming_response = bool(enable_streaming)
+            from astrbot.core.streaming_override import resolve_streaming_response
+
+            streaming_response = await resolve_streaming_response(
+                event,
+                self.ctx.astrbot_config,
+                getattr(self.ctx, "preferences", None),
+            )
 
             provider_manager = getattr(
                 self.ctx.execution_context, "provider_manager", None

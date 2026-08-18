@@ -71,53 +71,67 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 message_count=len(message.chain),
             )
 
-        kwargs = {}
-        if content:
-            kwargs["content"] = content
-        if files:
-            kwargs["files"] = files
-        if view:
-            kwargs["view"] = view
-        if embeds:
-            kwargs["embeds"] = embeds
-        if reference_message_id and not self.interaction_followup_webhook:
-            kwargs["reference"] = self._client.get_message(int(reference_message_id))
-        if not kwargs:
+        from astrbot.core.platform.message_limits import (
+            DISCORD_TEXT_LIMIT,
+            split_platform_text,
+        )
+
+        chunks = split_platform_text(content, DISCORD_TEXT_LIMIT)
+        text_parts = list(chunks.parts) or ([""] if (files or view or embeds) else [])
+        if not text_parts:
             logger.debug("[Discord] 尝试发送空消息，已忽略。")
             return self._failure_send_result(
                 "empty Discord outbound payload",
                 message_count=len(message.chain),
             )
 
-        # 根据上下文执行发送/回复操作
+        sent = 0
         try:
-            # -- 斜杠指令/交互上下文 --
-            if self.interaction_followup_webhook:
-                await self.interaction_followup_webhook.send(**kwargs)
-
-            # -- 常规消息上下文 --
-            else:
-                channel = await self._get_channel()
-                if not channel:
-                    return self._failure_send_result(
-                        f"channel unavailable for target {self.route_identity.target_id}",
-                        message_count=len(message.chain),
-                    )
-                if not isinstance(channel, discord.abc.Messageable):
-                    logger.error(f"[Discord] 频道 {channel.id} 不是可发送消息的类型")
-                    return self._failure_send_result(
-                        f"channel {channel.id} is not messageable",
-                        message_count=len(message.chain),
-                    )
-                await channel.send(**kwargs)
-
+            for index, part in enumerate(text_parts):
+                kwargs = {}
+                if part:
+                    kwargs["content"] = part
+                if index == 0:
+                    if files:
+                        kwargs["files"] = files
+                    if view:
+                        kwargs["view"] = view
+                    if embeds:
+                        kwargs["embeds"] = embeds
+                    if reference_message_id and not self.interaction_followup_webhook:
+                        kwargs["reference"] = self._client.get_message(
+                            int(reference_message_id)
+                        )
+                if not kwargs:
+                    continue
+                if self.interaction_followup_webhook:
+                    await self.interaction_followup_webhook.send(**kwargs)
+                else:
+                    channel = await self._get_channel()
+                    if not channel:
+                        return self._failure_send_result(
+                            f"channel unavailable for target {self.route_identity.target_id}",
+                            message_count=sent,
+                        )
+                    if not isinstance(channel, discord.abc.Messageable):
+                        logger.error(
+                            f"[Discord] 频道 {channel.id} 不是可发送消息的类型"
+                        )
+                        return self._failure_send_result(
+                            f"channel {channel.id} is not messageable",
+                            message_count=sent,
+                        )
+                    await channel.send(**kwargs)
+                sent += 1
         except Exception as e:
             logger.error(f"[Discord] 发送消息时发生未知错误: {e}", exc_info=True)
             return self._failure_send_result(
                 str(e),
-                message_count=len(message.chain),
+                message_count=sent,
             )
 
+        if chunks.truncated:
+            logger.warning("[Discord] Reached the maximum number of hard-limit chunks.")
         return await super().send(message)
 
     async def send_streaming(
@@ -279,9 +293,6 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 logger.debug(f"[Discord] 忽略了不支持的消息组件: {i.type}")
 
         content = "".join(content_parts)
-        if len(content) > 2000:
-            logger.warning("[Discord] 消息内容超过2000字符，将被截断。")
-            content = content[:2000]
         return content, files, view, embeds, reference_message_id
 
     async def react(self, emoji: str) -> None:

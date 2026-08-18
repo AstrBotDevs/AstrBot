@@ -43,8 +43,7 @@ export function readGitHubProxyState(): GitHubProxyState {
 }
 
 export function readSelectedGitHubProxy(): string {
-  const state = readGitHubProxyState();
-  return state.radioValue === '1' ? state.selectedProxy : '';
+  return '';
 }
 
 export function writeSelectedGitHubProxy(value: string): void {

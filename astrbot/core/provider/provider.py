@@ -45,6 +45,19 @@ class AbstractProvider(abc.ABC):
         """Get the current model name"""
         return self.model_name
 
+    def get_network_route(self, destination_host: str | None = None):
+        """Return the explicit proxy route for this provider."""
+        from astrbot.core.utils.proxy_route import (
+            destination_host_from_url,
+            resolve_proxy_route,
+        )
+
+        return resolve_proxy_route(
+            local_config=self.provider_config,
+            destination_host=destination_host
+            or destination_host_from_url(self.provider_config.get("api_base")),
+        )
+
     def meta(self) -> ProviderMeta:
         """Get the provider metadata"""
         provider_type_name = self.provider_config["type"]

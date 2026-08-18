@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import json
 import random
+import time
 import uuid
 from collections import defaultdict, deque
 
@@ -38,6 +39,9 @@ GROUP_HISTORY_HEADER = (
 )
 GROUP_HISTORY_FOOTER = "\n--- END CONTEXT ---\n</system_reminder>"
 DEFAULT_GROUP_MESSAGE_MAX_CNT = 300
+DEFAULT_CAPTION_CONCURRENCY = 2
+MAX_CAPTION_INTERVAL_ENTRIES = 2048
+_VALID_CAPTION_SCOPES = frozenset({"all", "allowlist", "denylist"})
 
 
 class GroupChatContext:
@@ -46,6 +50,10 @@ class GroupChatContext:
         self._locks: dict[str, asyncio.Lock] = {}
         self.raw_records: dict[str, deque[str]] = defaultdict(deque)
         self._record_ids: dict[str, deque[str]] = defaultdict(deque)
+        self._caption_sema = asyncio.Semaphore(DEFAULT_CAPTION_CONCURRENCY)
+        self._caption_sema_bound = DEFAULT_CAPTION_CONCURRENCY
+        self._caption_claim_lock = asyncio.Lock()
+        self._caption_last_claim: dict[str, float] = {}
 
     def _get_lock(self, umo: str) -> asyncio.Lock:
         lock = self._locks.get(umo)
@@ -61,6 +69,25 @@ class GroupChatContext:
         image_caption_provider_id = group_context_cfg.get("image_caption_provider_id")
         image_caption = group_context_cfg["image_caption"] and bool(
             image_caption_provider_id
+        )
+        scope = str(group_context_cfg.get("image_caption_scope") or "all").strip()
+        if scope not in _VALID_CAPTION_SCOPES:
+            scope = "all"
+        groups = [
+            str(item)
+            for item in (group_context_cfg.get("image_caption_groups") or [])
+            if isinstance(item, str) and item
+        ]
+        min_interval = _non_negative_float(
+            group_context_cfg.get("image_caption_min_interval", 0),
+            0.0,
+        )
+        max_concurrency = _positive_int(
+            group_context_cfg.get(
+                "image_caption_max_concurrency",
+                DEFAULT_CAPTION_CONCURRENCY,
+            ),
+            DEFAULT_CAPTION_CONCURRENCY,
         )
         active_reply = group_context_cfg["active_reply"]
         enable_active_reply = active_reply.get("enable", False)
@@ -79,12 +106,60 @@ class GroupChatContext:
             "image_caption": image_caption,
             "image_caption_prompt": image_caption_prompt,
             "image_caption_provider_id": image_caption_provider_id,
+            "image_caption_scope": scope,
+            "image_caption_groups": groups,
+            "image_caption_min_interval": min_interval,
+            "image_caption_max_concurrency": max_concurrency,
             "enable_active_reply": enable_active_reply,
             "ar_method": ar_method,
             "ar_possibility": ar_possibility,
             "ar_prompt": ar_prompt,
             "ar_whitelist": ar_whitelist,
         }
+
+    def _sync_caption_semaphore(self, max_concurrency: int) -> None:
+        if max_concurrency == self._caption_sema_bound:
+            return
+        self._caption_sema = asyncio.Semaphore(max_concurrency)
+        self._caption_sema_bound = max_concurrency
+
+    def allows_group_image_caption(self, umo: str, cfg: dict) -> bool:
+        if not cfg["image_caption"]:
+            return False
+        scope = cfg["image_caption_scope"]
+        groups: list[str] = cfg["image_caption_groups"]
+        if scope == "allowlist":
+            return umo in groups
+        if scope == "denylist":
+            return umo not in groups
+        return True
+
+    async def _claim_caption_slot(self, umo: str, min_interval: float) -> bool:
+        if min_interval <= 0:
+            return True
+        now = time.monotonic()
+        async with self._caption_claim_lock:
+            last = self._caption_last_claim.get(umo)
+            if last is not None and now - last < min_interval:
+                return False
+            self._caption_last_claim[umo] = now
+            self._prune_caption_claims(now, min_interval)
+            return True
+
+    def _prune_caption_claims(self, now: float, min_interval: float) -> None:
+        expired = [
+            key
+            for key, claimed_at in self._caption_last_claim.items()
+            if now - claimed_at >= min_interval
+        ]
+        for key in expired:
+            self._caption_last_claim.pop(key, None)
+        overflow = len(self._caption_last_claim) - MAX_CAPTION_INTERVAL_ENTRIES
+        if overflow <= 0:
+            return
+        oldest = sorted(self._caption_last_claim.items(), key=lambda item: item[1])
+        for key, _claimed_at in oldest[:overflow]:
+            self._caption_last_claim.pop(key, None)
 
     async def get_image_caption(
         self,
@@ -138,6 +213,8 @@ class GroupChatContext:
             self.raw_records.pop(umo, None)
             self._record_ids.pop(umo, None)
         self._locks.pop(umo, None)
+        async with self._caption_claim_lock:
+            self._caption_last_claim.pop(umo, None)
         return cnt
 
     async def handle_message(self, event: AstrMessageEvent) -> None:
@@ -200,25 +277,44 @@ class GroupChatContext:
     async def _format_message(self, event: AstrMessageEvent, cfg: dict) -> str:
         datetime_str = datetime.datetime.now().strftime("%H:%M:%S")
         parts = [f"[{event.message_obj.sender.nickname}/{datetime_str}]: "]
+        caption_claimed = False
 
         for comp in event.get_messages():
             if isinstance(comp, Plain):
                 parts.append(f" {comp.text}")
             elif isinstance(comp, Image):
-                if cfg["image_caption"]:
-                    try:
-                        url = comp.url if comp.url else comp.file
-                        if not url:
-                            raise Exception("图片 URL 为空")
-                        caption = await self.get_image_caption(
-                            url,
-                            cfg["image_caption_provider_id"],
-                            cfg["image_caption_prompt"],
+                captioned = False
+                if self.allows_group_image_caption(event.unified_msg_origin, cfg):
+                    if not caption_claimed:
+                        caption_claimed = await self._claim_caption_slot(
+                            event.unified_msg_origin,
+                            cfg["image_caption_min_interval"],
                         )
-                        parts.append(f" [Image: {caption}]")
-                    except Exception as e:
-                        logger.error(f"获取图片描述失败: {e}")
-                else:
+                    if caption_claimed:
+                        self._sync_caption_semaphore(
+                            cfg["image_caption_max_concurrency"]
+                        )
+                        try:
+                            url = comp.url if comp.url else comp.file
+                            if not url:
+                                raise Exception("图片 URL 为空")
+                            await self._caption_sema.acquire()
+                            try:
+                                caption = await self.get_image_caption(
+                                    url,
+                                    cfg["image_caption_provider_id"],
+                                    cfg["image_caption_prompt"],
+                                )
+                            finally:
+                                self._caption_sema.release()
+                            if caption:
+                                parts.append(f" [Image: {caption}]")
+                                captioned = True
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception as e:
+                            logger.error("获取图片描述失败: %s", e)
+                if not captioned:
                     parts.append(" [Image]")
             elif isinstance(comp, Json):
                 card_data = comp.data
@@ -323,6 +419,14 @@ def _positive_int(value, fallback: int) -> int:
     except TypeError, ValueError:
         return fallback
     return parsed if parsed > 0 else fallback
+
+
+def _non_negative_float(value, fallback: float) -> float:
+    try:
+        parsed = float(value)
+    except TypeError, ValueError:
+        return fallback
+    return parsed if parsed >= 0 else fallback
 
 
 def _trim_left(

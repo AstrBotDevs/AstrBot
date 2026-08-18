@@ -757,7 +757,7 @@ async def test_discord_parse_to_discord_skips_record_without_file_or_url():
 
 
 @pytest.mark.asyncio
-async def test_discord_parse_to_discord_truncates_long_content_and_keeps_reply_id():
+async def test_discord_parse_to_discord_keeps_long_content_and_reply_id():
     event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
     long_text = "A" * 2100
 
@@ -771,8 +771,8 @@ async def test_discord_parse_to_discord_truncates_long_content_and_keeps_reply_i
         )
     )
 
-    assert len(content) == 2000
     assert content.startswith("<@123>A")
+    assert len(content) == len("<@123>") + 2100
     assert files == []
     assert view is None
     assert embeds == []

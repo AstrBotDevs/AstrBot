@@ -48,15 +48,13 @@ def get_temp_dir() -> Path:
     return temp_dir
 
 
-def create_http_client(timeout: int | None, proxy: str) -> httpx.AsyncClient:
-    client_kwargs: dict = {
-        "timeout": timeout,
-        "follow_redirects": True,
-    }
-    if proxy:
-        logger.info("[MiMo API] Using proxy: %s", proxy)
-        client_kwargs["proxy"] = proxy
-    return httpx.AsyncClient(**client_kwargs)
+def create_http_client(timeout: int | None, provider_config: dict) -> httpx.AsyncClient:
+    from astrbot.core.utils.network_utils import create_proxy_client
+
+    client = create_proxy_client("MiMo API", provider_config)
+    if timeout is not None:
+        client.timeout = timeout
+    return client
 
 
 def build_api_url(api_base: str) -> str:

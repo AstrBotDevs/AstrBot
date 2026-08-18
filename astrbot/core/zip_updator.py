@@ -2,16 +2,24 @@ import inspect
 import os
 import re
 import shutil
-import time
 import zipfile
 from pathlib import Path
 from typing import NoReturn
 
-import certifi
-import httpx
-
 from astrbot import logger
 from astrbot.core.utils.io import ensure_dir, on_error
+from astrbot.core.utils.outbound_http import (
+    JSON_FETCH,
+    PLUGIN_DOWNLOAD_URL,
+    PLUGIN_REPOSITORY,
+    OutboundRequestError,
+    compose_github_mirror_url,
+    download_to_path,
+    fetch_json,
+    policy_for_github_mirror_download,
+    redact_outbound_url,
+    validate_github_mirror_origin,
+)
 from astrbot.utils.version_comparator import VersionComparator
 
 
@@ -38,15 +46,7 @@ class RepoZipUpdator:
     def __init__(self, repo_mirror: str = "", verify: str | bool | None = None) -> None:
         self.repo_mirror = repo_mirror
         self.rm_on_error = on_error
-        self.httpx_verify = certifi.where() if verify is None else verify
-
-    def _create_httpx_client(self, timeout: float = 30.0) -> httpx.AsyncClient:
-        return httpx.AsyncClient(
-            follow_redirects=True,
-            timeout=timeout,
-            trust_env=True,
-            verify=self.httpx_verify,
-        )
+        self.httpx_verify = verify
 
     @staticmethod
     def _truncate_response_body(body: str, max_len: int = 1000) -> str:
@@ -66,12 +66,14 @@ class RepoZipUpdator:
         """
         url = f"https://api.github.com/repos/{author}/{repo}"
         try:
-            async with self._create_httpx_client(timeout=10.0) as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                repo_info = response.json()
+            repo_info = await fetch_json(url, JSON_FETCH)
         except Exception as exc:
-            logger.debug("获取 GitHub 默认分支失败 %s/%s: %s", author, repo, exc)
+            logger.debug(
+                "获取 GitHub 默认分支失败 %s/%s: %s",
+                author,
+                repo,
+                redact_outbound_url(str(exc)),
+            )
             return None
 
         default_branch = str(repo_info.get("default_branch") or "").strip()
@@ -109,7 +111,9 @@ class RepoZipUpdator:
         path: str,
         timeout_seconds: float = 1800.0,
         progress_callback=None,
+        policy=PLUGIN_DOWNLOAD_URL,
     ) -> None:
+        del timeout_seconds
         target_path = Path(path)
         ensure_dir(target_path.parent)
 
@@ -121,49 +125,19 @@ class RepoZipUpdator:
                 await result
 
         try:
-            async with self._create_httpx_client(timeout=timeout_seconds) as client:
-                async with client.stream("GET", url) as response:
-                    response.raise_for_status()
-                    headers = getattr(response, "headers", {})
-                    total_size = int(headers.get("content-length", 0))
-                    downloaded_size = 0
-                    start_time = time.time()
-                    await _emit_progress(
-                        {
-                            "url": url,
-                            "downloaded": 0,
-                            "total": total_size,
-                            "percent": 0,
-                            "speed": 0,
-                        },
-                    )
-                    with target_path.open("wb") as file:
-                        async for chunk in response.aiter_bytes(8192):
-                            file.write(chunk)
-                            downloaded_size += len(chunk)
-                            elapsed_time = max(time.time() - start_time, 1)
-                            await _emit_progress(
-                                {
-                                    "url": url,
-                                    "downloaded": downloaded_size,
-                                    "total": total_size,
-                                    "percent": downloaded_size / total_size
-                                    if total_size > 0
-                                    else 0,
-                                    "speed": downloaded_size / 1024 / elapsed_time,
-                                },
-                            )
-                    await _emit_progress(
-                        {
-                            "url": url,
-                            "downloaded": downloaded_size,
-                            "total": total_size,
-                            "percent": 1,
-                            "speed": 0,
-                        },
-                    )
+            await download_to_path(
+                url,
+                target_path,
+                policy,
+                progress_callback=_emit_progress,
+            )
         except Exception as e:
-            logger.error(f"下载文件失败: {url} -> {target_path}, 错误: {e}")
+            logger.error(
+                "下载文件失败: %s -> %s, 错误: %s",
+                redact_outbound_url(url),
+                target_path,
+                e,
+            )
             if self.rm_on_error and target_path.exists():
                 target_path.unlink()
             raise
@@ -173,16 +147,9 @@ class RepoZipUpdator:
         返回一个列表，每个元素是一个字典，包含版本号、发布时间、更新内容、commit hash等信息。
         """
         try:
-            async with self._create_httpx_client() as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                result = response.json()
+            result = await fetch_json(url, JSON_FETCH)
             if not result:
                 return []
-            # if latest:
-            #     ret = self.github_api_release_parser([result[0]])
-            # else:
-            #     ret = self.github_api_release_parser(result)
             ret = []
             for release in result:
                 ret.append(
@@ -194,19 +161,15 @@ class RepoZipUpdator:
                         "zipball_url": release["zipball_url"],
                     },
                 )
-        except httpx.TimeoutException as e:
-            logger.error(f"请求版本信息超时: {url}, 错误: {e!r}")
-            raise Exception("请求版本信息超时") from e
-        except httpx.HTTPStatusError as e:
-            response_body = ""
-            if e.response is not None:
-                response_body = self._truncate_response_body(e.response.text)
-                logger.error(
-                    f"请求 {url} 失败，状态码: {e.response.status_code}, 内容: {response_body}",
-                )
+        except OutboundRequestError as e:
+            logger.error(
+                "请求版本信息失败: %s, 错误: %s",
+                redact_outbound_url(url),
+                e,
+            )
             raise Exception("解析版本信息失败") from e
         except Exception as e:
-            logger.error(f"解析版本信息时发生异常: {e}")
+            logger.error("解析版本信息时发生异常: %s", e)
             raise Exception("解析版本信息失败") from e
         return ret
 
@@ -285,14 +248,23 @@ class RepoZipUpdator:
             f"https://github.com/{author}/{repo}/archive/refs/heads/{branch}.zip"
         )
 
+        policy = PLUGIN_REPOSITORY
         if proxy:
-            proxy = proxy.rstrip("/")
-            release_url = f"{proxy}/{release_url}"
+            mirror = validate_github_mirror_origin(proxy)
+            policy = policy_for_github_mirror_download(mirror.hostname)
+            release_url = compose_github_mirror_url(proxy, release_url)
             logger.info(
-                f"检查到设置了镜像站，将使用镜像站下载 {author}/{repo} 仓库源码: {release_url}",
+                "检查到设置了镜像站，将使用镜像站下载 %s/%s 仓库源码: %s",
+                author,
+                repo,
+                redact_outbound_url(release_url),
             )
 
-        await self._download_file(release_url, target_path + ".zip")
+        await self._download_file(
+            release_url,
+            target_path + ".zip",
+            policy=policy,
+        )
 
     def parse_github_url(self, url: str):
         """使用正则表达式解析 GitHub 仓库 URL，支持 `.git` 后缀和 `tree/branch` 结构

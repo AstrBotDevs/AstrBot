@@ -66,21 +66,30 @@ def _resolve_download_url(url: str, proxy: str | None = None) -> str:
 
     Args:
         url: Repository URL or direct archive URL.
-        proxy: Optional proxy prefix or HTTP proxy address.
+        proxy: Optional GitHub URL-prefix mirror origin.
 
     Returns:
         The archive URL to download.
     """
+    from astrbot.core.utils.outbound_http import (
+        JSON_FETCH,
+        validate_github_mirror_origin,
+        validate_outbound_url,
+    )
+
+    if proxy:
+        validate_github_mirror_origin(proxy)
     repo_namespace = url.split("/")[-2:]
     if len(repo_namespace) != 2:
         return url
 
     author, repo = repo_namespace
     release_url = f"https://api.github.com/repos/{author}/{repo}/releases"
+    validate_outbound_url(release_url, JSON_FETCH)
     try:
         with httpx.Client(
-            proxy=proxy if proxy else None,
-            follow_redirects=True,
+            trust_env=False,
+            follow_redirects=False,
         ) as client:
             resp = client.get(release_url)
             resp.raise_for_status()
@@ -109,20 +118,51 @@ def _download_plugin_archive(
     Returns:
         Downloaded archive bytes wrapped in ``BytesIO``.
     """
-    if proxy:
-        download_url = f"{proxy}/{download_url}"
+    import asyncio
+    import tempfile
 
-    with httpx.Client(
-        proxy=proxy if proxy else None,
-        follow_redirects=True,
-    ) as client:
-        resp = client.get(download_url)
-        if resp.status_code == 404 and "archive/refs/heads/master.zip" in download_url:
-            alt_url = download_url.replace("master.zip", "main.zip")
-            click.echo("Branch 'master' not found, trying 'main' branch")
-            resp = client.get(alt_url)
-        resp.raise_for_status()
-        return BytesIO(resp.content)
+    from astrbot.core.utils.outbound_http import (
+        PLUGIN_DOWNLOAD_URL,
+        PLUGIN_REPOSITORY,
+        compose_github_mirror_url,
+        download_to_path,
+        policy_for_github_mirror_download,
+        validate_github_mirror_origin,
+        validate_outbound_url,
+    )
+
+    policy = PLUGIN_DOWNLOAD_URL
+    if proxy:
+        mirror = validate_github_mirror_origin(proxy)
+        if download_url.startswith("https://github.com/") or download_url.startswith(
+            "https://codeload.github.com/"
+        ):
+            policy = policy_for_github_mirror_download(mirror.hostname)
+            download_url = compose_github_mirror_url(proxy, download_url)
+        else:
+            validate_outbound_url(download_url, PLUGIN_DOWNLOAD_URL)
+    else:
+        try:
+            validate_outbound_url(download_url, PLUGIN_REPOSITORY)
+            policy = PLUGIN_REPOSITORY
+        except Exception:
+            validate_outbound_url(download_url, PLUGIN_DOWNLOAD_URL)
+
+    with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as handle:
+        temp_path = Path(handle.name)
+    try:
+        try:
+            asyncio.run(download_to_path(download_url, temp_path, policy))
+        except Exception:
+            if "archive/refs/heads/master.zip" in download_url:
+                alt_url = download_url.replace("master.zip", "main.zip")
+                click.echo("Branch 'master' not found, trying 'main' branch")
+                asyncio.run(download_to_path(alt_url, temp_path, policy))
+            else:
+                raise
+        return BytesIO(temp_path.read_bytes())
+    finally:
+        temp_path.unlink(missing_ok=True)
 
 
 def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:

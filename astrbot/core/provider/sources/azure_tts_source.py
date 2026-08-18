@@ -42,9 +42,10 @@ class OTTSProvider:
         self.last_sync_time = 0
         self.timeout = Timeout(10.0)
         self.retry_count = 3
-        self.proxy = config.get("proxy", "")
-        if self.proxy:
-            logger.info("[Azure TTS] Proxy configured")
+        from astrbot.core.utils.proxy_route import resolve_proxy_route
+
+        self._route = resolve_proxy_route(local_config=config)
+        self.proxy = self._route.proxy_url or ""
         self._client: AsyncClient | None = None
 
     @property
@@ -188,9 +189,10 @@ class AzureNativeProvider(TTSProvider):
             "rate": provider_config.get("azure_tts_rate", "1"),
             "volume": provider_config.get("azure_tts_volume", "100"),
         }
-        self.proxy = provider_config.get("proxy", "")
-        if self.proxy:
-            logger.info("[Azure TTS Native] Proxy configured")
+        from astrbot.core.utils.proxy_route import resolve_proxy_route
+
+        self._route = resolve_proxy_route(local_config=provider_config)
+        self.proxy = self._route.proxy_url or ""
 
     @property
     def client(self) -> AsyncClient:

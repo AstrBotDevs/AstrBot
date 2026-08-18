@@ -19,7 +19,7 @@ class CozeAPIClient:
         """确保HTTP session存在"""
         if self.session is None:
             connector = aiohttp.TCPConnector(
-                ssl=False if self.api_base.startswith("http://") else True,
+                ssl=True,
                 limit=100,
                 limit_per_host=30,
                 keepalive_timeout=30,

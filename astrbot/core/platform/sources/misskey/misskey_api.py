@@ -734,16 +734,7 @@ class MisskeyAPI:
                 ssl_verify=True,
             ) or await self._download_with_temp_session(url, ssl_verify=True)
         except Exception as ssl_error:
-            if not self.allow_insecure_downloads:
-                raise ssl_error
-            logger.debug(
-                "[Misskey API] SSL 验证下载失败: %s，按配置重试不验证 SSL",
-                ssl_error,
-            )
-            return await self._download_with_existing_session(
-                url,
-                ssl_verify=False,
-            ) or await self._download_with_temp_session(url, ssl_verify=False)
+            raise ssl_error
 
     async def upload_and_find_file(
         self,

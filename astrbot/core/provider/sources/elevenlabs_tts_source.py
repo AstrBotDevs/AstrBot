@@ -119,15 +119,14 @@ class ProviderElevenLabsTTSAPI(TTSProvider):
 
         timeout = _normalize_timeout(provider_config.get("timeout", 20))
 
-        proxy = provider_config.get("proxy", "")
-        if proxy:
-            logger.info("[ElevenLabs TTS] Using configured proxy")
+        from astrbot.core.utils.network_utils import create_proxy_client
+
         try:
-            self.client: httpx.AsyncClient | None = httpx.AsyncClient(
-                timeout=timeout,
-                proxy=proxy or None,
-                trust_env=False,
+            self.client: httpx.AsyncClient | None = create_proxy_client(
+                "ElevenLabs TTS",
+                provider_config,
             )
+            self.client.timeout = timeout
         except Exception as exc:
             logger.error(
                 "ElevenLabs TTS client initialization failed: %s",

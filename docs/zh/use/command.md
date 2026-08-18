@@ -87,7 +87,16 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 - `/chat enable`：启用当前会话的 LLM 聊天。
 - `/chat disable`：停用当前会话的 LLM 聊天。
 
-这些指令需要管理员权限。`enable` 和 `disable` 都是幂等操作。
+这些指令需要管理员权限。`enable` 和 `disable` 都是幂等操作。`/chat` 只控制是否启用 LLM，与流式模式无关。
+
+### 会话流式输出
+
+- `/flow on`：当前会话强制流式。
+- `/flow off`：当前会话强制非流式。
+- `/flow unset`：删除会话覆盖，重新跟随全局 `provider_settings.streaming_response`。
+- `/flow status`：查看覆盖值和当前有效模式。
+
+这些指令需要 `session.manage`。没有无参数切换，避免跨平台解析歧义。
 
 ### 管理员
 

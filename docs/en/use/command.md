@@ -87,7 +87,16 @@ These commands require admin permission.
 - `/chat enable`: Enable LLM chat for the current session.
 - `/chat disable`: Disable LLM chat for the current session.
 
-These commands require admin permission. Both `enable` and `disable` are idempotent.
+These commands require admin permission. Both `enable` and `disable` are idempotent. `/chat` only controls whether the LLM is enabled; it does not change streaming mode.
+
+### Session streaming
+
+- `/flow on`: Force streaming for the current session.
+- `/flow off`: Force non-streaming for the current session.
+- `/flow unset`: Remove the session override and follow global `provider_settings.streaming_response`.
+- `/flow status`: Show the override and effective mode.
+
+These commands require `session.manage`. There is no argument-less toggle.
 
 ### Administrators
 

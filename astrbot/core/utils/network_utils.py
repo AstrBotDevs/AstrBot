@@ -97,37 +97,43 @@ def log_connection_failure(
 
 def create_proxy_client(
     provider_label: str,
-    proxy: str | None = None,
+    provider_config: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
     verify: ssl.SSLContext | str | bool | None = None,
     httpx_module: Any = httpx,
+    *,
+    route: Any | None = None,
+    destination_host: str | None = None,
 ) -> Any:
-    """Create an httpx AsyncClient with proxy configuration if provided.
-
-    Uses a hybrid SSL context that combines the system SSL certificate store
-    with certifi as a fallback, ensuring compatibility across different
-    environments including Windows where the system store may be incomplete.
-
-    Note: The caller is responsible for closing the client when done.
-    Consider using the client as a context manager or calling aclose() explicitly.
+    """Create an httpx AsyncClient from an explicit ProxyRoute.
 
     Args:
         provider_label: The provider name for log prefix (e.g., "OpenAI", "Gemini")
-        proxy: The proxy address (e.g., "http://127.0.0.1:7890"), or None/empty
+        provider_config: Provider config containing ``proxy_mode`` and ``proxy_url``.
         headers: Optional custom headers to include in every request
-        verify: Optional override for TLS verification. Defaults to the hybrid
-                SSL context (system store + certifi) when not provided.
-        httpx_module: Optional httpx module to construct AsyncClient from. This is
-            useful when a provider SDK performs isinstance checks against its own
-            httpx import.
+        verify: Optional override for TLS verification.
+        httpx_module: Optional httpx module to construct AsyncClient from.
+        route: Pre-resolved route. When omitted, it is resolved from config.
+        destination_host: Optional host used for ``no_proxy`` matching.
 
     Returns:
-        An async client created with the hybrid SSL context (system store + certifi); the proxy is applied only if one is provided.
+        An async client with ``trust_env=False`` and the resolved proxy.
     """
-    resolved_verify = _SYSTEM_SSL_CTX if verify is None else verify
-    if proxy:
-        logger.info(f"[{provider_label}] 使用代理: {proxy}")
-        return httpx_module.AsyncClient(
-            proxy=proxy, verify=resolved_verify, headers=headers
-        )
-    return httpx_module.AsyncClient(verify=resolved_verify, headers=headers)
+    from astrbot.core.utils.proxy_route import (
+        create_routed_client,
+        destination_host_from_url,
+        resolve_proxy_route,
+    )
+
+    resolved_route = route or resolve_proxy_route(
+        local_config=provider_config or {},
+        destination_host=destination_host
+        or destination_host_from_url((provider_config or {}).get("api_base")),
+    )
+    return create_routed_client(
+        provider_label,
+        resolved_route,
+        headers=headers,
+        verify=verify,
+        httpx_module=httpx_module,
+    )

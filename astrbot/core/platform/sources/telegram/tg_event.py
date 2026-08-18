@@ -82,28 +82,12 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
     @classmethod
     def _split_message(cls, text: str) -> list[str]:
-        if len(text) <= cls.MAX_MESSAGE_LENGTH:
-            return [text]
+        from astrbot.core.platform.message_limits import (
+            TELEGRAM_TEXT_LIMIT,
+            split_platform_text,
+        )
 
-        chunks = []
-        while text:
-            if len(text) <= cls.MAX_MESSAGE_LENGTH:
-                chunks.append(text)
-                break
-
-            split_point = cls.MAX_MESSAGE_LENGTH
-            segment = text[: cls.MAX_MESSAGE_LENGTH]
-
-            for _, pattern in cls.SPLIT_PATTERNS.items():
-                if matches := list(pattern.finditer(segment)):
-                    last_match = matches[-1]
-                    split_point = last_match.end()
-                    break
-
-            chunks.append(text[:split_point])
-            text = text[split_point:].lstrip()
-
-        return chunks
+        return list(split_platform_text(text, TELEGRAM_TEXT_LIMIT).parts)
 
     @classmethod
     async def _send_text_chunks(

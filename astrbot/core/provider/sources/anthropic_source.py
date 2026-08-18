@@ -123,9 +123,6 @@ class ProviderAnthropic(Provider):
         different ``httpx`` module makes that check fail. We therefore prefer
         the SDK's own ``httpx`` module when available.
         """
-        proxy = provider_config.get("proxy", "")
-        if not proxy:
-            return None
         httpx_module: Any = httpx
         try:
             from anthropic import _base_client as anthropic_base_client
@@ -135,7 +132,7 @@ class ProviderAnthropic(Provider):
             pass
         return create_proxy_client(
             "Anthropic",
-            proxy,
+            provider_config,
             headers=self.custom_headers,
             httpx_module=httpx_module,
         )

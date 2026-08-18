@@ -417,10 +417,6 @@
         "description": "Register Discord slash commands",
         "hint": "When enabled, AstrBot will automatically register plugin commands as Discord slash commands"
       },
-      "discord_proxy": {
-        "description": "Discord Proxy URL",
-        "hint": "Optional proxy URL: http://ip:port"
-      },
       "discord_token": {
         "description": "Discord Bot Token",
         "hint": "Enter your Discord Bot Token here."
@@ -1678,9 +1674,13 @@
       "api_base": {
         "description": "API Base URL"
       },
-      "proxy": {
-        "description": "Proxy address",
-        "hint": "HTTP/HTTPS proxy URL, e.g. http://127.0.0.1:7890. Applies only to this provider's API requests and does not affect Docker internal networking."
+      "proxy_mode": {
+        "description": "Proxy mode",
+        "hint": "inherit uses the global http_proxy; direct connects without environment proxies; custom uses only this item's proxy_url."
+      },
+      "proxy_url": {
+        "description": "Custom proxy URL",
+        "hint": "Used only when proxy_mode is custom, e.g. http://127.0.0.1:7890."
       },
       "model": {
         "description": "Model ID",

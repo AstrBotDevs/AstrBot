@@ -277,9 +277,10 @@ class WebChatAdapter(Platform):
                     "selected_provider", payload.get("selected_provider")
                 )
                 message_event.set_extra("selected_model", payload.get("selected_model"))
-                message_event.set_extra(
-                    "enable_streaming", payload.get("enable_streaming", True)
-                )
+                if "enable_streaming" in payload:
+                    message_event.set_extra(
+                        "enable_streaming", payload.get("enable_streaming")
+                    )
                 message_event.set_extra("action_type", payload.get("action_type"))
                 message_event.set_extra(
                     "llm_checkpoint_id", payload.get("llm_checkpoint_id")

@@ -1,6 +1,5 @@
 import asyncio
 import importlib
-import os
 import subprocess
 import uuid
 from pathlib import Path
@@ -45,7 +44,9 @@ class ProviderEdgeTTS(TTSProvider):
         self.pitch = provider_config.get("pitch")
         self.timeout = self._get_timeout(provider_config.get("timeout", 30))
 
-        self.proxy = os.getenv("https_proxy", None)
+        from astrbot.core.utils.proxy_route import resolve_proxy_route
+
+        self.proxy = resolve_proxy_route(local_config=provider_config).proxy_url
 
         self.set_model("edge_tts")
 

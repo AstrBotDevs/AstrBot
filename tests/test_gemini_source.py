@@ -629,7 +629,8 @@ def test_gemini_init_client_tracks_previous_http_client_on_set_key(monkeypatch):
     assert created_http_clients[0].kwargs == {
         "base_url": "https://gemini.example",
         "timeout": 30,
-        "trust_env": True,
+        "trust_env": False,
+        "follow_redirects": False,
     }
     assert provider._stale_http_clients[0] is not provider._http_client
     assert provider.client.api_key == "key-b"

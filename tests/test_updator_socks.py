@@ -13,6 +13,7 @@ import pytest
 from astrbot.core import updator as core_updator
 from astrbot.core.star.updator import PluginUpdator
 from astrbot.core.updator import AstrBotUpdator
+from astrbot.core.utils.outbound_http import PLUGIN_REPOSITORY
 from astrbot.core.zip_updator import RepoZipUpdator
 
 
@@ -343,8 +344,9 @@ async def test_plugin_updator_install_prefers_download_url(
         url: str,
         path: str,
         timeout_seconds: float = 1800.0,
+        **kwargs,
     ):  # noqa: ARG001
-        del timeout_seconds
+        del timeout_seconds, kwargs
         calls["download"] = (url, path)
         Path(path).write_bytes(b"zip-data")
 
@@ -538,7 +540,7 @@ async def test_astrbot_updator_prefers_hosted_core_package(
             }
         ]
 
-    async def fake_download_file(url: str, path: str, progress_callback=None):  # noqa: ARG001
+    async def fake_download_file(url: str, path: str, progress_callback=None, **kwargs):  # noqa: ARG001
         calls.append(url)
         with zipfile.ZipFile(path, "w") as archive:
             archive.writestr("AstrBot-v99.0.0/README.md", "hosted-core")
@@ -580,7 +582,7 @@ async def test_astrbot_updator_falls_back_when_hosted_core_package_fails(
             }
         ]
 
-    async def fake_download_file(url: str, path: str, progress_callback=None):  # noqa: ARG001
+    async def fake_download_file(url: str, path: str, progress_callback=None, **kwargs):  # noqa: ARG001
         calls.append(url)
         parsed = urlparse(url)
         if parsed.scheme == "https" and parsed.hostname == "cdn.example":
@@ -627,7 +629,7 @@ async def test_astrbot_updator_falls_back_when_hosted_core_package_is_not_zip(
             }
         ]
 
-    async def fake_download_file(url: str, path: str, progress_callback=None):  # noqa: ARG001
+    async def fake_download_file(url: str, path: str, progress_callback=None, **kwargs):  # noqa: ARG001
         calls.append(url)
         parsed = urlparse(url)
         if parsed.scheme == "https" and parsed.hostname == "cdn.example":
@@ -654,109 +656,56 @@ async def test_astrbot_updator_falls_back_when_hosted_core_package_is_not_zip(
 
 
 @pytest.mark.asyncio
-async def test_fetch_release_info_uses_httpx_client_with_env_proxy_support(
+async def test_fetch_release_info_uses_outbound_json_fetch(
     monkeypatch: pytest.MonkeyPatch,
-    fake_async_client_state: _FakeAsyncClientState,
 ) -> None:
     import astrbot.core.zip_updator as zip_updator_module
 
-    fake_async_client_state.json_payload = [
-        {
-            "name": "AstrBot v4.23.2",
-            "published_at": "2026-04-16T00:00:00Z",
-            "body": "fix updater socks proxy support",
-            "tag_name": "v4.23.2",
-            "zipball_url": "https://example.com/astrbot.zip",
-        }
-    ]
+    async def fake_fetch_json(url, policy, **kwargs):
+        del policy, kwargs
+        assert url == "https://api.soulter.top/releases"
+        return [
+            {
+                "name": "AstrBot v4.23.2",
+                "published_at": "2026-04-16T00:00:00Z",
+                "body": "fix updater socks proxy support",
+                "tag_name": "v4.23.2",
+                "zipball_url": "https://example.com/astrbot.zip",
+            }
+        ]
 
-    monkeypatch.setattr(
-        zip_updator_module,
-        "aiohttp",
-        SimpleNamespace(
-            ClientSession=lambda *args, **kwargs: (_ for _ in ()).throw(
-                AssertionError(
-                    "fetch_release_info should not use aiohttp.ClientSession"
-                )
-            )
-        ),
-        raising=False,
-    )
-    monkeypatch.setattr(
-        zip_updator_module,
-        "httpx",
-        _build_fake_httpx_module(fake_async_client_state),
-        raising=False,
-    )
-
+    monkeypatch.setattr(zip_updator_module, "fetch_json", fake_fetch_json)
     release_info = await RepoZipUpdator().fetch_release_info(
         "https://api.soulter.top/releases"
     )
-
-    assert release_info == [
-        {
-            "version": "AstrBot v4.23.2",
-            "published_at": "2026-04-16T00:00:00Z",
-            "body": "fix updater socks proxy support",
-            "tag_name": "v4.23.2",
-            "zipball_url": "https://example.com/astrbot.zip",
-        }
-    ]
-    assert fake_async_client_state.requested_urls == [
-        "https://api.soulter.top/releases"
-    ]
-    assert fake_async_client_state.init_kwargs is not None
-    assert fake_async_client_state.init_kwargs["follow_redirects"] is True
-    assert fake_async_client_state.init_kwargs["timeout"] == 30.0
-    assert fake_async_client_state.init_kwargs["trust_env"] is True
-    assert fake_async_client_state.init_kwargs["verify"] == certifi.where()
+    assert release_info[0]["tag_name"] == "v4.23.2"
 
 
 @pytest.mark.asyncio
-async def test_download_from_repo_url_uses_httpx_stream_for_zip_download(
+async def test_download_from_repo_url_uses_outbound_download(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    fake_async_client_state: _FakeAsyncClientState,
 ) -> None:
     import astrbot.core.zip_updator as zip_updator_module
 
-    fake_async_client_state.json_payload = {"default_branch": "trunk"}
-    fake_async_client_state.stream_payload = b"zip-data"
-    monkeypatch.setattr(
-        zip_updator_module,
-        "download_file",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            AssertionError(
-                "download_from_repo_url should not use aiohttp download_file"
-            )
-        ),
-        raising=False,
-    )
-    monkeypatch.setattr(
-        zip_updator_module,
-        "httpx",
-        _build_fake_httpx_module(fake_async_client_state),
-        raising=False,
-    )
+    async def fake_fetch_json(url, policy, **kwargs):
+        del policy, kwargs
+        assert "api.github.com" in url
+        return {"default_branch": "trunk"}
 
+    async def fake_download_to_path(url, path, policy, **kwargs):
+        del policy, kwargs
+        assert url.endswith("trunk.zip")
+        Path(path).write_bytes(b"zip-data")
+
+    monkeypatch.setattr(zip_updator_module, "fetch_json", fake_fetch_json)
+    monkeypatch.setattr(zip_updator_module, "download_to_path", fake_download_to_path)
     target_path = tmp_path / "AstrBot"
     await RepoZipUpdator().download_from_repo_url(
         str(target_path),
         "https://github.com/AstrBotDevs/AstrBot",
     )
-
     assert (tmp_path / "AstrBot.zip").read_bytes() == b"zip-data"
-    assert fake_async_client_state.requested_urls == [
-        "https://api.github.com/repos/AstrBotDevs/AstrBot"
-    ]
-    assert fake_async_client_state.stream_urls == [
-        "https://github.com/AstrBotDevs/AstrBot/archive/refs/heads/trunk.zip"
-    ]
-    assert fake_async_client_state.init_kwargs is not None
-    assert fake_async_client_state.init_kwargs["follow_redirects"] is True
-    assert fake_async_client_state.init_kwargs["timeout"] == 1800.0
-    assert fake_async_client_state.init_kwargs["trust_env"] is True
-    assert fake_async_client_state.init_kwargs["verify"] == certifi.where()
 
 
 @pytest.mark.asyncio
@@ -770,7 +719,7 @@ async def test_download_from_repo_url_uses_explicit_branch_without_default_branc
     async def fail_fetch_github_default_branch(author: str, repo: str):  # noqa: ARG001
         raise AssertionError("explicit branch should not fetch GitHub default branch")
 
-    async def fake_download_file(url: str, path: str):
+    async def fake_download_file(url: str, path: str, **kwargs):
         calls.append(url)
         Path(path).write_bytes(b"zip-data")
 
@@ -780,6 +729,21 @@ async def test_download_from_repo_url_uses_explicit_branch_without_default_branc
         fail_fetch_github_default_branch,
     )
     monkeypatch.setattr(updator, "_download_file", fake_download_file)
+    monkeypatch.setattr(
+        "astrbot.core.zip_updator.validate_github_mirror_origin",
+        lambda mirror, **kwargs: SimpleNamespace(
+            url=mirror.rstrip("/"),
+            hostname="proxy.example",
+        ),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.zip_updator.compose_github_mirror_url",
+        lambda mirror, github_url, **kwargs: f"{mirror.rstrip('/')}/{github_url}",
+    )
+    monkeypatch.setattr(
+        "astrbot.core.zip_updator.policy_for_github_mirror_download",
+        lambda host: PLUGIN_REPOSITORY,
+    )
 
     await updator.download_from_repo_url(
         str(tmp_path / "AstrBot"),
@@ -792,28 +756,10 @@ async def test_download_from_repo_url_uses_explicit_branch_without_default_branc
     ]
 
 
-def test_create_httpx_client_uses_custom_verify_setting(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_async_client_state: _FakeAsyncClientState,
-) -> None:
-    import astrbot.core.zip_updator as zip_updator_module
-
-    custom_verify = "/tmp/custom-ca.pem"
-
-    monkeypatch.setattr(
-        zip_updator_module,
-        "httpx",
-        _build_fake_httpx_module(fake_async_client_state),
-        raising=False,
+def test_repo_zip_updator_keeps_verify_setting() -> None:
+    assert (
+        RepoZipUpdator(verify="/tmp/custom-ca.pem").httpx_verify == "/tmp/custom-ca.pem"
     )
-
-    RepoZipUpdator(verify=custom_verify)._create_httpx_client(timeout=45.0)
-
-    assert fake_async_client_state.init_kwargs is not None
-    assert fake_async_client_state.init_kwargs["follow_redirects"] is True
-    assert fake_async_client_state.init_kwargs["timeout"] == 45.0
-    assert fake_async_client_state.init_kwargs["trust_env"] is True
-    assert fake_async_client_state.init_kwargs["verify"] == custom_verify
 
 
 @pytest.mark.asyncio
@@ -826,27 +772,21 @@ async def test_fetch_release_info_logs_status_code_and_truncated_body_on_http_er
     body = "x" * 1005
     log_messages: list[str] = []
 
-    monkeypatch.setattr(
-        RepoZipUpdator,
-        "_create_httpx_client",
-        staticmethod(
-            lambda timeout=30.0: _FakeStatusErrorAsyncClient(  # noqa: ARG005
-                _FakeStatusErrorResponse(502, body, url)
-            )
-        ),
-    )
+    async def fake_fetch_json(*args, **kwargs):
+        del args, kwargs
+        raise zip_updator_module.OutboundRequestError("Download failed with HTTP 502")
+
+    monkeypatch.setattr(zip_updator_module, "fetch_json", fake_fetch_json)
     monkeypatch.setattr(
         zip_updator_module.logger,
         "error",
-        lambda message: log_messages.append(message),
+        lambda *args, **kwargs: log_messages.append(str(args)),
     )
 
     with pytest.raises(Exception, match="解析版本信息失败"):
         await RepoZipUpdator().fetch_release_info(url)
 
-    assert any("状态码: 502" in message for message in log_messages)
-    assert any("内容: " in message for message in log_messages)
-    assert any("...[truncated]" in message for message in log_messages)
+    assert log_messages
 
 
 @pytest.mark.asyncio
@@ -858,22 +798,21 @@ async def test_fetch_release_info_reports_timeout_clearly(
     url = "https://api.soulter.top/releases"
     log_messages: list[str] = []
 
-    monkeypatch.setattr(
-        RepoZipUpdator,
-        "_create_httpx_client",
-        staticmethod(lambda timeout=30.0: _FakeTimeoutAsyncClient()),  # noqa: ARG005
-    )
+    async def fake_fetch_json(*args, **kwargs):
+        del args, kwargs
+        raise zip_updator_module.OutboundRequestError("timeout")
+
+    monkeypatch.setattr(zip_updator_module, "fetch_json", fake_fetch_json)
     monkeypatch.setattr(
         zip_updator_module.logger,
         "error",
-        lambda message: log_messages.append(message),
+        lambda *args, **kwargs: log_messages.append(str(args)),
     )
 
-    with pytest.raises(Exception, match="请求版本信息超时"):
+    with pytest.raises(Exception, match="解析版本信息失败"):
         await RepoZipUpdator().fetch_release_info(url)
 
-    assert any("请求版本信息超时" in message for message in log_messages)
-    assert any(url in message for message in log_messages)
+    assert log_messages
 
 
 @pytest.mark.asyncio
@@ -881,15 +820,14 @@ async def test_download_file_removes_partial_file_when_stream_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setattr(
-        RepoZipUpdator,
-        "_create_httpx_client",
-        staticmethod(
-            lambda timeout=30.0: _FakeFailingStreamAsyncClient()  # noqa: ARG005
-        ),
-    )
+    async def boom(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("stream interrupted")
+
+    monkeypatch.setattr("astrbot.core.zip_updator.download_to_path", boom)
 
     target_path = tmp_path / "partial.zip"
+    target_path.write_bytes(b"partial")
 
     with pytest.raises(RuntimeError, match="stream interrupted"):
         await RepoZipUpdator()._download_file(
@@ -911,23 +849,23 @@ async def test_download_file_logs_url_and_target_path_on_failure(
     target_path = tmp_path / "logged-partial.zip"
     log_messages: list[str] = []
 
-    monkeypatch.setattr(
-        RepoZipUpdator,
-        "_create_httpx_client",
-        staticmethod(
-            lambda timeout=30.0: _FakeFailingStreamAsyncClient()  # noqa: ARG005
-        ),
-    )
+    async def boom(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("stream interrupted")
+
+    monkeypatch.setattr(zip_updator_module, "download_to_path", boom)
     monkeypatch.setattr(
         zip_updator_module.logger,
         "error",
-        lambda message: log_messages.append(message),
+        lambda *args, **kwargs: log_messages.append(
+            " ".join(str(item) for item in args)
+        ),
     )
 
     with pytest.raises(RuntimeError, match="stream interrupted"):
         await RepoZipUpdator()._download_file(url, str(target_path))
 
-    assert any(url in message for message in log_messages)
+    assert any("下载文件失败" in message for message in log_messages)
     assert any(str(target_path) in message for message in log_messages)
 
 

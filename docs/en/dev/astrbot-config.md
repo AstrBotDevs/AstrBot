@@ -83,7 +83,8 @@ This is a partial illustration and must not replace the complete file. Because W
 - `fallback_chat_models` lists chat-model IDs tried in order after the primary model fails.
 - `request_max_retries` is the per-model maximum retry count and defaults to `5`. Fallback and retries are separate layers.
 - `provider_pool` limits Providers available to this profile; `["*"]` means all.
-- `default_image_caption_provider_id` and `image_caption_prompt` create descriptions for flows that cannot consume images directly.
+- `default_image_caption_provider_id` and `image_caption_prompt` caption images in the current main-agent request and quoted messages. They are not affected by group-history caption limits.
+- `provider_ltm_settings.image_caption_*` applies only to group-history captions. `image_caption_scope` is `all`, `allowlist`, or `denylist`; `image_caption_groups` accepts full UMOs only; `image_caption_min_interval` and `image_caption_max_concurrency` bound interval and global concurrency.
 
 API keys are sensitive configuration. Never commit a real `cmd_config.json`, screenshots, logs, or backups. Logs and Trace data can also contain Provider IDs, request errors, and tool output.
 
@@ -128,6 +129,7 @@ See [Automatic Context Compression](../use/context-compress) for the full behavi
 
 - `streaming_response` enables Provider streaming.
 - `unsupported_streaming_strategy` uses `realtime_segmenting` on platforms without native streaming or `turn_off` to disable streaming for that response.
+- Session `/flow on|off|unset|status` can override the global value. Priority is `event.extra["enable_streaming"]` > session override > `provider_settings.streaming_response`. The effective value is pinned when a request starts.
 
 The old `provider_settings.streaming_segmented` field has been removed. Do not add it back.
 
@@ -186,7 +188,10 @@ Dashboard accounts have stable `account_id` values. Their TOTP secret, recovery-
 
 - `t2i` and `t2i_word_threshold` render long **output results** as images. `t2i_active_template` is maintained by the template manager.
 - `t2i_use_file_service` publishes rendered output through a file-token URL and requires a correct `callback_api_base`.
-- `http_proxy` / `no_proxy` configure outbound HTTP proxying and bypasses.
+- `http_proxy` / `no_proxy` are the global outbound proxy and bypass list. They are no longer exported as process `HTTP_PROXY`.
+- Providers and platforms use three-state `proxy_mode`: `inherit` follows the global config, `direct` disables environment proxies, and `custom` uses only that item's `proxy_url`. An empty string no longer means both inherit and direct.
+- No GitHub mirrors are provided by default. Plugin `download_url` values and prefix mirrors must be public HTTPS origins; private and non-HTTPS targets are rejected.
+- `platform_settings.segmented_reply` remains a UX feature and stays off by default. Telegram, Discord, and WeCom hard-limit splitting is handled by the send path.
 - `log_level` and `log_file_*` control console and rotating file logs.
 - `trace_enable` is the Trace collection switch; `trace_log_*` controls its separate rotating file.
 - `temp_dir_max_size` limits `data/temp` in MiB and defaults to `1024`; a background task removes older files when the limit is exceeded.

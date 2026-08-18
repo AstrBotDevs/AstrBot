@@ -115,11 +115,11 @@ Editable mode depends on operating-system symlink support and permissions. Do no
 
 ### Proxy
 
-Marketplace installs and updates accept a GitHub proxy:
+Marketplace installs and updates accept a GitHub URL-prefix mirror. It must be a validated public HTTPS origin, not a generic HTTP forward proxy:
 
 ```bash
-uv run astrbot plug install example-plugin --proxy https://gh-proxy.example.com/
-uv run astrbot plug update --proxy https://gh-proxy.example.com/
+uv run astrbot plug install example-plugin --proxy https://gh-proxy.example.com
+uv run astrbot plug update --proxy https://gh-proxy.example.com
 ```
 
 ## Help

@@ -113,21 +113,18 @@ class TestAstrBotCoreLifecycleInit:
 
         assert lifecycle.log_broker == mock_log_broker
         assert lifecycle.db == mock_db.db
-        assert os.environ.get("http_proxy") == "http://proxy.example.com:8080"
-        assert os.environ.get("https_proxy") == "http://proxy.example.com:8080"
-        assert "localhost" in os.environ.get("no_proxy", "")
-        assert "127.0.0.1" in os.environ.get("no_proxy", "")
+        assert "http_proxy" not in os.environ
+        assert "https_proxy" not in os.environ
 
-    def test_init_clears_proxy(
+    def test_init_does_not_inherit_or_clear_host_proxy(
         self,
         mock_log_broker,
         mock_db,
         mock_astrbot_config,
         monkeypatch: pytest.MonkeyPatch,
     ):
-        """Test initialization clears proxy settings when configured."""
+        """Empty global proxy must not inherit or rewrite the host environment."""
         mock_astrbot_config.get = MagicMock(return_value="")
-        # Set proxy in environment to test clearing
         monkeypatch.setenv("http_proxy", "http://old-proxy:8080")
         monkeypatch.setenv("https_proxy", "http://old-proxy:8080")
 
@@ -135,9 +132,8 @@ class TestAstrBotCoreLifecycleInit:
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
 
         assert lifecycle.log_broker == mock_log_broker
-        assert "http_proxy" not in os.environ
-        assert "https_proxy" not in os.environ
-        assert os.environ["no_proxy"] == "localhost,127.0.0.1,::1"
+        assert os.environ["http_proxy"] == "http://old-proxy:8080"
+        assert os.environ["https_proxy"] == "http://old-proxy:8080"
 
     @pytest.mark.asyncio
     async def test_stop_restores_proxy_environment(
@@ -147,7 +143,7 @@ class TestAstrBotCoreLifecycleInit:
         mock_astrbot_config,
         monkeypatch: pytest.MonkeyPatch,
     ):
-        """A stopped runtime must not leave its proxy settings in the host."""
+        """A stopped runtime must not rewrite the host proxy environment."""
         mock_astrbot_config.get = MagicMock(
             side_effect=lambda key, default="": {
                 "http_proxy": "http://runtime-proxy.example:8080",
@@ -161,9 +157,9 @@ class TestAstrBotCoreLifecycleInit:
 
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
 
-        assert os.environ["http_proxy"] == "http://runtime-proxy.example:8080"
-        assert os.environ["https_proxy"] == "http://runtime-proxy.example:8080"
-        assert os.environ["no_proxy"] == "localhost"
+        assert os.environ["http_proxy"] == "http://host-proxy.example:8080"
+        assert os.environ["https_proxy"] == "http://host-proxy.example:8443"
+        assert os.environ["no_proxy"] == "host.internal"
 
         await lifecycle.stop()
 

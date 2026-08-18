@@ -39,7 +39,7 @@ class ProviderMiMoTTSAPI(TTSProvider):
         super().__init__(provider_config, provider_settings)
         self.chosen_api_key = provider_config.get("api_key", "")
         self.api_base = provider_config.get("api_base", DEFAULT_MIMO_API_BASE)
-        self.proxy = provider_config.get("proxy", "")
+        self.provider_config = provider_config
         self.timeout = normalize_timeout(provider_config.get("timeout", 20))
         self.voice = provider_config.get("mimo-tts-voice", DEFAULT_MIMO_TTS_VOICE)
         self.audio_format = provider_config.get("mimo-tts-format", "wav")
@@ -49,7 +49,7 @@ class ProviderMiMoTTSAPI(TTSProvider):
             "mimo-tts-seed-text", DEFAULT_MIMO_TTS_SEED_TEXT
         )
         self.set_model(provider_config.get("model", DEFAULT_MIMO_TTS_MODEL))
-        self.client = create_http_client(self.timeout, self.proxy)
+        self.client = create_http_client(self.timeout, provider_config)
 
     def _build_user_prompt(self) -> str | None:
         seed_text = self.seed_text.strip()

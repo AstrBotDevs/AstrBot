@@ -34,10 +34,13 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         if api_base:
             api_base = api_base.removesuffix("/")
             http_options.base_url = api_base
-        proxy = provider_config.get("proxy", "")
-        if proxy:
-            http_options.async_client_args = {"proxy": proxy}
-            logger.info("[Gemini Embedding] Proxy configured")
+        from astrbot.core.utils.proxy_route import (
+            httpx_client_kwargs,
+            resolve_proxy_route,
+        )
+
+        route = resolve_proxy_route(local_config=provider_config)
+        http_options.async_client_args = httpx_client_kwargs(route)
 
         self.client = genai.Client(api_key=api_key, http_options=http_options).aio
 

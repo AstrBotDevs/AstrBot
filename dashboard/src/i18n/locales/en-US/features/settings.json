@@ -63,7 +63,7 @@
     "title": "Network",
     "githubProxy": {
       "title": "GitHub Proxy Address",
-      "subtitle": "Set the GitHub proxy address used when downloading plugins or updating AstrBot. This is effective in mainland China's network environment. Can be customized, input takes effect in real time. All addresses do not guarantee stability. If errors occur when updating plugins/projects, please first check if the proxy address is working properly.",
+      "subtitle": "No GitHub mirrors are provided by default. Plugin and core updates use official GitHub or validated public HTTPS origins.",
       "label": "Select GitHub Proxy Address"
     },
     "proxySelector": {
@@ -73,7 +73,8 @@
       "testConnection": "Test Connection",
       "available": "Available",
       "unavailable": "Unavailable",
-      "custom": "Custom"
+      "custom": "Custom",
+      "disabledHint": "No GitHub mirrors are provided by default. Downloads use official GitHub or backend-validated public HTTPS origins."
     }
   },
   "theme": {

@@ -38,10 +38,10 @@ class NvidiaEmbeddingProvider(EmbeddingProvider):
         )
         self.input_type = provider_config.get("input_type", "passage")
 
-        proxy = provider_config.get("proxy", "")
-        self.proxy = proxy
-        if proxy:
-            logger.info("[NVIDIA Embedding] Using configured proxy")
+        from astrbot.core.utils.proxy_route import resolve_proxy_route
+
+        self._route = resolve_proxy_route(local_config=provider_config)
+        self.proxy = self._route.proxy_url or ""
 
         self.client = None
         self.set_model(self.model)
@@ -57,6 +57,7 @@ class NvidiaEmbeddingProvider(EmbeddingProvider):
             self.client = aiohttp.ClientSession(
                 headers=headers,
                 timeout=timeout,
+                trust_env=False,
             )
         return self.client
 

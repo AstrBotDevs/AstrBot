@@ -115,11 +115,11 @@ editable 模式依赖操作系统的符号链接能力和权限；发布或迁�
 
 ### 代理
 
-市场安装或更新可以传入 GitHub 代理：
+市场安装或更新可以传入 GitHub **URL 前缀镜像**。该值必须是已校验的公开 HTTPS origin，不是普通 HTTP 正向代理：
 
 ```bash
-uv run astrbot plug install example-plugin --proxy https://gh-proxy.example.com/
-uv run astrbot plug update --proxy https://gh-proxy.example.com/
+uv run astrbot plug install example-plugin --proxy https://gh-proxy.example.com
+uv run astrbot plug update --proxy https://gh-proxy.example.com
 ```
 
 ## 帮助

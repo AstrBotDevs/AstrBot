@@ -42,23 +42,15 @@ class WecomAIBotWebhookClient:
 
     @staticmethod
     def _split_markdown_v2_content(content: str, max_bytes: int = 4096) -> list[str]:
-        if not content:
-            return []
-        chunks: list[str] = []
-        buffer: list[str] = []
-        current_size = 0
-        for char in content:
-            char_size = len(char.encode("utf-8"))
-            if current_size + char_size > max_bytes and buffer:
-                chunks.append("".join(buffer))
-                buffer = [char]
-                current_size = char_size
-            else:
-                buffer.append(char)
-                current_size += char_size
-        if buffer:
-            chunks.append("".join(buffer))
-        return chunks
+        from dataclasses import replace
+
+        from astrbot.core.platform.message_limits import (
+            WECOM_TEXT_LIMIT,
+            split_platform_text,
+        )
+
+        limit = replace(WECOM_TEXT_LIMIT, max_length=max_bytes)
+        return list(split_platform_text(content, limit).parts)
 
     async def send_payload(self, payload: dict[str, Any]) -> None:
         timeout = aiohttp.ClientTimeout(total=self.timeout_seconds)

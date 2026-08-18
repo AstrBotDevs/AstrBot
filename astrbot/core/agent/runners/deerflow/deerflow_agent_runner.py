@@ -162,8 +162,10 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                 "DeerFlow API Base URL format is invalid. It must start with http:// or https://.",
             )
 
-        proxy = provider_config.get("proxy", "")
-        normalized_proxy = proxy.strip() if isinstance(proxy, str) else ""
+        from astrbot.core.utils.proxy_route import resolve_proxy_route
+
+        route = resolve_proxy_route(local_config=provider_config)
+        normalized_proxy = route.proxy_url or ""
 
         return self._RunnerConfig(
             api_base=api_base,

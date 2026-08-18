@@ -14,7 +14,6 @@ from collections.abc import AsyncGenerator, AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 
-import httpx2
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai.types.responses.response import Response
 
@@ -186,8 +185,7 @@ class ProviderOpenAIResponses(Provider):
             "timeout": self.timeout,
             "http_client": create_proxy_client(
                 "OpenAI Responses",
-                provider_config.get("proxy", ""),
-                httpx_module=httpx2,
+                provider_config,
             ),
         }
         api_base = provider_config.get("api_base")

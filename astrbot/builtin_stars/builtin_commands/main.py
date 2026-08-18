@@ -8,6 +8,7 @@ from .commands import (
     AdminCommands,
     ChatCommands,
     ConversationCommands,
+    FlowCommands,
     HelpCommand,
     PersonaCommands,
     PluginCommands,
@@ -24,6 +25,7 @@ class Main(star.Star):
         self.admin_c = AdminCommands(self.context)
         self.chat_c = ChatCommands(self.context)
         self.conversation_c = ConversationCommands(self.context)
+        self.flow_c = FlowCommands(self.context)
         self.help_c = HelpCommand(self.context)
         self.persona_c = PersonaCommands(self.context)
         self.plugin_c = PluginCommands(self.context)
@@ -224,6 +226,34 @@ class Main(star.Star):
     async def chat_disable(self, event: AstrMessageEvent) -> None:
         """Disable LLM chat for the current session"""
         await self.chat_c.set_enabled(event, False)
+
+    @filter.command_group("flow")
+    def flow(self) -> None:
+        """Manage session streaming override"""
+
+    @filter.permission("session.manage")
+    @flow.command("on")
+    async def flow_on(self, event: AstrMessageEvent) -> None:
+        """Force streaming for the current session"""
+        await self.flow_c.set_override(event, True)
+
+    @filter.permission("session.manage")
+    @flow.command("off")
+    async def flow_off(self, event: AstrMessageEvent) -> None:
+        """Force non-streaming for the current session"""
+        await self.flow_c.set_override(event, False)
+
+    @filter.permission("session.manage")
+    @flow.command("unset")
+    async def flow_unset(self, event: AstrMessageEvent) -> None:
+        """Remove the session streaming override"""
+        await self.flow_c.unset(event)
+
+    @filter.permission("session.manage")
+    @flow.command("status")
+    async def flow_status(self, event: AstrMessageEvent) -> None:
+        """Show the session streaming override"""
+        await self.flow_c.status(event)
 
     @filter.command_group("admin")
     def admin(self) -> None:

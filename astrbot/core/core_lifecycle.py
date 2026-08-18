@@ -45,7 +45,7 @@ from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.updator import AstrBotUpdator
 from astrbot.core.utils.astrbot_path import get_astrbot_path
-from astrbot.core.utils.error_redaction import redact_sensitive_text, safe_error
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.event_loop_diagnostics import (
     create_event_loop_diagnostic_tasks,
 )
@@ -127,31 +127,22 @@ class AstrBotCoreLifecycle:
         self._proxy_environment_after[name] = value
 
     def _apply_proxy_environment(self) -> None:
-        """Apply the configured proxy values without logging credentials."""
-        proxy_config = self.astrbot_config.get("http_proxy", "")
-        if proxy_config:
-            proxy_value = str(proxy_config)
-            self._set_proxy_environment_value("https_proxy", proxy_value)
-            self._set_proxy_environment_value("http_proxy", proxy_value)
+        """Do not publish configured proxies through process environment variables.
 
-            no_proxy_config = self.astrbot_config.get("no_proxy", [])
-            if isinstance(no_proxy_config, str):
-                no_proxy_value = no_proxy_config
-            elif isinstance(no_proxy_config, list | tuple):
-                no_proxy_value = ",".join(str(item) for item in no_proxy_config)
-            else:
-                no_proxy_value = ""
-            self._set_proxy_environment_value("no_proxy", no_proxy_value)
-            logger.debug("Using proxy: %s", redact_sensitive_text(proxy_value))
-            return
+        Provider and platform clients now receive an explicit ``ProxyRoute``.
+        Leaving the host ``HTTP_PROXY`` untouched avoids leaking AstrBot's
+        route into unrelated libraries, and an empty global proxy no longer
+        inherits the developer's shell proxy.
+        """
+        from astrbot.core.utils.proxy_route import set_global_network_config
 
-        for name in _PROXY_ENVIRONMENT_KEYS:
-            self._set_proxy_environment_value(name, None)
-        # Several local service clients intentionally use ``trust_env=True``.
-        # Preserve a loopback bypass even if the embedding host also exposes
-        # uppercase proxy variables that this lifecycle does not own.
-        self._set_proxy_environment_value("no_proxy", "localhost,127.0.0.1,::1")
-        logger.debug("HTTP proxy cleared; loopback hosts bypass environment proxies")
+        set_global_network_config(
+            http_proxy=str(self.astrbot_config.get("http_proxy", "") or ""),
+            no_proxy=self.astrbot_config.get("no_proxy", []),
+        )
+        logger.debug(
+            "Skipping process HTTP_PROXY export; clients use explicit ProxyRoute"
+        )
 
     async def _restore_proxy_environment(self) -> None:
         """Restore proxy variables only when they still hold our values."""

@@ -413,10 +413,6 @@
         "description": "注册 Discord 指令",
         "hint": "启用后，自动将插件指令注册为 Discord 斜杠指令"
       },
-      "discord_proxy": {
-        "description": "Discord 代理地址",
-        "hint": "可选的代理地址：http://ip:port"
-      },
       "discord_token": {
         "description": "Discord Bot Token",
         "hint": "在此处填入你的 Discord Bot Token"
@@ -1670,9 +1666,13 @@
       "api_base": {
         "description": "API Base URL"
       },
-      "proxy": {
-        "description": "代理地址",
-        "hint": "HTTP/HTTPS 代理地址，格式如 http://127.0.0.1:7890。仅对该提供商的 API 请求生效，不影响 Docker 内网通信。"
+      "proxy_mode": {
+        "description": "代理模式",
+        "hint": "inherit 跟随全局 http_proxy；direct 明确直连并忽略环境变量；custom 仅使用本项 proxy_url。"
+      },
+      "proxy_url": {
+        "description": "自定义代理 URL",
+        "hint": "仅在 proxy_mode=custom 时使用，例如 http://127.0.0.1:7890。"
       },
       "model": {
         "description": "模型 ID",
