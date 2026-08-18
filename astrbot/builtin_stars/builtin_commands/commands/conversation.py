@@ -221,13 +221,37 @@ class ConversationCommands:
 
     async def new_conv(self, message: AstrMessageEvent) -> None:
         """创建新对话"""
-        cfg = self.context.get_config(umo=message.unified_msg_origin)
+        umo = message.unified_msg_origin
+        cfg = self.context.get_config(umo=umo)
+        is_unique_session = cfg["platform_settings"]["unique_session"]
+        is_group = bool(message.get_group_id())
+
+        scene = RstScene.get_scene(is_group, is_unique_session)
+
+        alter_cmd_cfg = await sp.get_async("global", "global", "alter_cmd", {})
+        plugin_config = alter_cmd_cfg.get("astrbot", {})
+        new_cfg = plugin_config.get("new", {})
+
+        required_perm = new_cfg.get(
+            scene.key,
+            "admin" if is_group and not is_unique_session else "member",
+        )
+
+        if required_perm == "admin" and message.role != "admin":
+            message.set_result(
+                MessageEventResult().message(
+                    f"New conversation command requires admin permission in {scene.name} scenario, "
+                    f"you (ID {message.get_sender_id()}) are not admin, cannot perform this action.",
+                ),
+            )
+            return
+
         agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
-            active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
+            active_event_registry.stop_all(umo, exclude=message)
             await _clear_third_party_agent_runner_state(
                 self.context,
-                message.unified_msg_origin,
+                umo,
                 agent_runner_type,
             )
             message.set_result(
@@ -235,10 +259,10 @@ class ConversationCommands:
             )
             return
 
-        active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
-        cpersona = await self._get_current_persona_id(message.unified_msg_origin)
+        active_event_registry.stop_all(umo, exclude=message)
+        cpersona = await self._get_current_persona_id(umo)
         cid = await self.context.conversation_manager.new_conversation(
-            message.unified_msg_origin,
+            umo,
             message.get_platform_id(),
             persona_id=cpersona,
         )
