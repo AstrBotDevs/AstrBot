@@ -29,6 +29,7 @@ from astrbot.dashboard.services.auth_service import (
 from astrbot.dashboard.services.chat_service import (
     BotMessageAccumulator,
     collect_plain_text_from_message_parts,
+    parse_web_search_sources,
 )
 
 SendJson = Callable[[dict], Awaitable[None]]
@@ -486,16 +487,7 @@ class OpenApiService:
                     continue
 
                 if chain_type == "web_search_sources":
-                    try:
-                        parsed = json.loads(result_text)
-                        sources = (
-                            parsed.get("sources", [])
-                            if isinstance(parsed, dict)
-                            else []
-                        )
-                        refs = {"used": sources} if isinstance(sources, list) else {}
-                    except Exception:
-                        refs = {}
+                    refs = parse_web_search_sources(result_text)
                     continue
 
                 await send_json(result)
@@ -530,7 +522,7 @@ class OpenApiService:
                     plain_text = collect_plain_text_from_message_parts(
                         message_parts_to_save
                     )
-                    pending_xai_refs = refs
+                    fallback_refs = refs
                     try:
                         refs = chat_bridge.extract_web_search_refs(
                             plain_text,
@@ -541,8 +533,8 @@ class OpenApiService:
                             f"Open API WS failed to extract web search refs: {exc}",
                             exc_info=True,
                         )
-                    if not refs and pending_xai_refs:
-                        refs = pending_xai_refs
+                    if not refs and fallback_refs:
+                        refs = fallback_refs
 
                     saved_record = await chat_bridge.save_bot_message(
                         session_id,

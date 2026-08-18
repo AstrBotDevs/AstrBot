@@ -33,6 +33,7 @@ from astrbot.dashboard.services.chat_service import (
     BotMessageAccumulator,
     build_bot_history_content,
     collect_plain_text_from_message_parts,
+    parse_web_search_sources,
 )
 
 SendJson = Callable[[dict], Awaitable[None]]
@@ -704,16 +705,7 @@ class LiveChatService:
                     continue
 
                 if chain_type == "web_search_sources":
-                    try:
-                        parsed = json.loads(result_text)
-                        sources = (
-                            parsed.get("sources", [])
-                            if isinstance(parsed, dict)
-                            else []
-                        )
-                        refs = {"used": sources} if isinstance(sources, list) else {}
-                    except Exception:
-                        refs = {}
+                    refs = parse_web_search_sources(result_text)
                     continue
 
                 outgoing = {"ct": "chat", **result}

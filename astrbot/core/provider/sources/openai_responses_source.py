@@ -295,6 +295,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         return payloads, context_query
 
     def _build_response_tools(self, tools: ToolSet | None) -> list[dict]:
+        """Build the Responses tools list, appending xAI's native web_search when enabled."""
         response_tools: list[dict] = []
         if tools:
             for tool in tools.openai_schema():
@@ -331,7 +332,8 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         response_tools = self._build_response_tools(tools)
         if response_tools:
             payloads["tools"] = response_tools
-            payloads["tool_choice"] = payloads.get("tool_choice", "auto")
+            if tools:
+                payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
         extra_body: dict[str, Any] = {}
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
@@ -396,7 +398,8 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         response_tools = self._build_response_tools(tools)
         if response_tools:
             payloads["tools"] = response_tools
-            payloads["tool_choice"] = payloads.get("tool_choice", "auto")
+            if tools:
+                payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
         extra_body: dict[str, Any] = {}
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
@@ -546,7 +549,11 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                                 continue
                             title = self._field(annotation, "title")
                             web_search_sources.append(
-                                {"index": title, "url": url, "title": title}
+                                {
+                                    "index": str(len(web_search_sources) + 1),
+                                    "url": url,
+                                    "title": title,
+                                }
                             )
                     elif content_type == "refusal":
                         text_parts.append(str(self._field(content, "refusal", "")))

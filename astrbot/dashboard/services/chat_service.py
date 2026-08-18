@@ -272,6 +272,21 @@ def extract_web_search_refs(accumulated_text: str, accumulated_parts: list) -> d
     return {"used": used_refs} if used_refs else {}
 
 
+def parse_web_search_sources(result_text: str) -> dict:
+    """Parse a web_search_sources back-queue payload into a refs dict.
+
+    The payload is ``{"sources": [...]}``; the refs shape mirrors
+    ``extract_web_search_refs`` so the frontend renders native search
+    sources as the same clickable cards.
+    """
+    try:
+        parsed = json.loads(result_text)
+        sources = parsed.get("sources", []) if isinstance(parsed, dict) else []
+        return {"used": sources} if isinstance(sources, list) else {}
+    except (TypeError, json.JSONDecodeError):
+        return {}
+
+
 def sanitize_message_content(content: dict) -> dict:
     if not isinstance(content, dict):
         raise ValueError("Missing key: content")
@@ -972,18 +987,7 @@ class ChatService:
                     continue
 
                 if chain_type == "web_search_sources":
-                    try:
-                        parsed = json.loads(result_text)
-                        sources = (
-                            parsed.get("sources", [])
-                            if isinstance(parsed, dict)
-                            else []
-                        )
-                        pending_refs = (
-                            {"used": sources} if isinstance(sources, list) else {}
-                        )
-                    except (TypeError, json.JSONDecodeError):
-                        pending_refs = {}
+                    pending_refs = parse_web_search_sources(result_text)
                     run.refs = pending_refs
                     continue
 
