@@ -485,6 +485,19 @@ class OpenApiService:
                         pass
                     continue
 
+                if chain_type == "web_search_sources":
+                    try:
+                        parsed = json.loads(result_text)
+                        sources = (
+                            parsed.get("sources", [])
+                            if isinstance(parsed, dict)
+                            else []
+                        )
+                        refs = {"used": sources} if isinstance(sources, list) else {}
+                    except Exception:
+                        refs = {}
+                    continue
+
                 await send_json(result)
 
                 if msg_type == "plain":
@@ -517,6 +530,7 @@ class OpenApiService:
                     plain_text = collect_plain_text_from_message_parts(
                         message_parts_to_save
                     )
+                    pending_xai_refs = refs
                     try:
                         refs = chat_bridge.extract_web_search_refs(
                             plain_text,
@@ -527,6 +541,8 @@ class OpenApiService:
                             f"Open API WS failed to extract web search refs: {exc}",
                             exc_info=True,
                         )
+                    if not refs and pending_xai_refs:
+                        refs = pending_xai_refs
 
                     saved_record = await chat_bridge.save_bot_message(
                         session_id,

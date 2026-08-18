@@ -529,6 +529,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         text_parts: list[str] = []
         reasoning_parts: list[str] = []
         serialized_reasoning_items: list[dict] = []
+        web_search_sources: list[dict[str, Any]] = []
 
         for item in self._field(response, "output", []) or []:
             item_type = self._field(item, "type")
@@ -537,6 +538,16 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                     content_type = self._field(content, "type")
                     if content_type == "output_text":
                         text_parts.append(str(self._field(content, "text", "")))
+                        for annotation in self._field(content, "annotations", []) or []:
+                            if self._field(annotation, "type") != "url_citation":
+                                continue
+                            url = self._field(annotation, "url")
+                            if not url:
+                                continue
+                            title = self._field(annotation, "title")
+                            web_search_sources.append(
+                                {"index": title, "url": url, "title": title}
+                            )
                     elif content_type == "refusal":
                         text_parts.append(str(self._field(content, "refusal", "")))
                 continue
@@ -596,6 +607,8 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             )
         if llm_response.tools_call_args:
             llm_response.role = "tool"
+
+        llm_response.web_search_sources = web_search_sources
 
         usage = self._field(response, "usage")
         if usage is not None:

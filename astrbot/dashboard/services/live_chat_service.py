@@ -630,6 +630,8 @@ class LiveChatService:
                         exc_info=True,
                     )
                     extracted_refs = refs
+                if not extracted_refs and refs:
+                    extracted_refs = refs
 
                 saved_record = await self.save_bot_message(
                     session_id,
@@ -699,6 +701,19 @@ class LiveChatService:
                         )
                     except Exception:
                         pass
+                    continue
+
+                if chain_type == "web_search_sources":
+                    try:
+                        parsed = json.loads(result_text)
+                        sources = (
+                            parsed.get("sources", [])
+                            if isinstance(parsed, dict)
+                            else []
+                        )
+                        refs = {"used": sources} if isinstance(sources, list) else {}
+                    except Exception:
+                        refs = {}
                     continue
 
                 outgoing = {"ct": "chat", **result}

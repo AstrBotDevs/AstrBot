@@ -921,6 +921,8 @@ class ChatService:
                     plain_text,
                     message_parts_to_save,
                 )
+                if not extracted_refs and pending_refs:
+                    extracted_refs = pending_refs
             except Exception as exc:
                 logger.exception(
                     f"Failed to extract web search refs: {exc}",
@@ -967,6 +969,22 @@ class ChatService:
                         run,
                         {"type": "agent_stats", "data": run.agent_stats},
                     )
+                    continue
+
+                if chain_type == "web_search_sources":
+                    try:
+                        parsed = json.loads(result_text)
+                        sources = (
+                            parsed.get("sources", [])
+                            if isinstance(parsed, dict)
+                            else []
+                        )
+                        pending_refs = (
+                            {"used": sources} if isinstance(sources, list) else {}
+                        )
+                    except (TypeError, json.JSONDecodeError):
+                        pending_refs = {}
+                    run.refs = pending_refs
                     continue
 
                 attachment_saved_payload = None
@@ -1036,6 +1054,7 @@ class ChatService:
                                         saved_record.created_at
                                     ),
                                     "llm_checkpoint_id": run.llm_checkpoint_id,
+                                    "refs": run.refs,
                                 },
                             },
                         )
@@ -1063,6 +1082,7 @@ class ChatService:
                                 "id": saved_record.id,
                                 "created_at": to_utc_isoformat(saved_record.created_at),
                                 "llm_checkpoint_id": run.llm_checkpoint_id,
+                                "refs": run.refs,
                             },
                         },
                     )
