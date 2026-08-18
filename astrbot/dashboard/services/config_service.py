@@ -615,7 +615,10 @@ async def _validate_neo_connectivity(post_config: dict) -> str | None:
 
     import aiohttp
 
-    from astrbot.core.utils.proxy_route import create_aiohttp_session, current_aiohttp_proxy
+    from astrbot.core.utils.proxy_route import (
+        create_aiohttp_session,
+        current_aiohttp_proxy,
+    )
 
     health_url = f"{endpoint}/health"
     try:

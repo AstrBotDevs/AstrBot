@@ -53,7 +53,10 @@ async def _post_registration(
     payload: dict[str, str],
 ) -> tuple[int, dict[str, Any]]:
     timeout = aiohttp.ClientTimeout(total=15)
-    from astrbot.core.utils.proxy_route import create_aiohttp_session, current_aiohttp_proxy
+    from astrbot.core.utils.proxy_route import (
+        create_aiohttp_session,
+        current_aiohttp_proxy,
+    )
 
     async with create_aiohttp_session(timeout=timeout) as session:
         async with session.post(
