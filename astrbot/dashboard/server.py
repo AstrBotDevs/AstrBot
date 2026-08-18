@@ -32,9 +32,7 @@ from .api.app import create_dashboard_asgi_app
 from .plugin_page_auth import PluginPageAuth
 from .services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 
-# Windows 下 Python mimetypes 会按系统注册表将 .svg 映射为 image/svg,
-# 导致 WebUI 静态资源(favicon.svg 等)返回非标准 MIME 类型,Chrome 无法渲染。
-# 显式覆盖为标准类型,使其在任意平台上行为一致。
+# Windows 的 mimetypes 会把 .svg 映射成非标准的 image/svg,这里强制覆盖为标准类型
 mimetypes.add_type("image/svg+xml", ".svg", strict=True)
 
 _RATE_LIMITED_ENDPOINTS: frozenset = frozenset(
