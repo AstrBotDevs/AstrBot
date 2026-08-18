@@ -122,11 +122,12 @@ class ProviderElevenLabsTTSAPI(TTSProvider):
         from astrbot.core.utils.network_utils import create_proxy_client
 
         try:
-            self.client: httpx.AsyncClient | None = create_proxy_client(
+            client = create_proxy_client(
                 "ElevenLabs TTS",
                 provider_config,
             )
-            self.client.timeout = timeout
+            client.timeout = timeout
+            self.client: httpx.AsyncClient | None = client
         except Exception as exc:
             logger.error(
                 "ElevenLabs TTS client initialization failed: %s",
