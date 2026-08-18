@@ -1082,8 +1082,14 @@ class FunctionToolManager:
         }
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers) as response:
+            request_kwargs = {"headers": headers}
+            from astrbot.core.utils.proxy_route import current_aiohttp_proxy
+
+            proxy = current_aiohttp_proxy()
+            if proxy:
+                request_kwargs["proxy"] = proxy
+            async with aiohttp.ClientSession(trust_env=False) as session:
+                async with session.get(url, **request_kwargs) as response:
                     if response.status == 200:
                         data = await response.json()
                         mcp_server_list = data.get("data", {}).get(

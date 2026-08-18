@@ -34,8 +34,12 @@ async def _post_json(
     payload: dict[str, str],
 ) -> dict[str, Any]:
     timeout = aiohttp.ClientTimeout(total=15)
-    async with aiohttp.ClientSession(timeout=timeout, trust_env=True) as session:
-        async with session.post(endpoint, json=payload) as response:
+    from astrbot.core.utils.proxy_route import create_aiohttp_session, current_aiohttp_proxy
+
+    async with create_aiohttp_session(timeout=timeout) as session:
+        async with session.post(
+            endpoint, json=payload, proxy=current_aiohttp_proxy()
+        ) as response:
             data = await response.json(content_type=None)
     if not isinstance(data, dict):
         raise RuntimeError("飞书接口响应格式异常")
@@ -48,8 +52,12 @@ async def _get_json(
     headers: dict[str, str],
 ) -> dict[str, Any]:
     timeout = aiohttp.ClientTimeout(total=15)
-    async with aiohttp.ClientSession(timeout=timeout, trust_env=True) as session:
-        async with session.get(endpoint, headers=headers) as response:
+    from astrbot.core.utils.proxy_route import create_aiohttp_session, current_aiohttp_proxy
+
+    async with create_aiohttp_session(timeout=timeout) as session:
+        async with session.get(
+            endpoint, headers=headers, proxy=current_aiohttp_proxy()
+        ) as response:
             data = await response.json(content_type=None)
     if not isinstance(data, dict):
         raise RuntimeError("飞书接口响应格式异常")

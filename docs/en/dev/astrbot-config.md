@@ -84,7 +84,7 @@ This is a partial illustration and must not replace the complete file. Because W
 - `request_max_retries` is the per-model maximum retry count and defaults to `5`. Fallback and retries are separate layers.
 - `provider_pool` limits Providers available to this profile; `["*"]` means all.
 - `default_image_caption_provider_id` and `image_caption_prompt` caption images in the current main-agent request and quoted messages. They are not affected by group-history caption limits.
-- `provider_ltm_settings.image_caption_*` applies only to group-history captions. `image_caption_scope` is `all`, `allowlist`, or `denylist`; `image_caption_groups` accepts full UMOs only; `image_caption_min_interval` and `image_caption_max_concurrency` bound interval and global concurrency.
+- `provider_ltm_settings.image_caption_*` applies only to group-history captions. `image_caption_scope` is `all`, `allowlist`, or `denylist`; `image_caption_groups` accepts full UMOs only; `image_caption_min_interval` and `image_caption_max_concurrency` bound interval and global concurrency. `image_caption_cache_ttl` defaults to `0` (off) and is scoped by UMO plus content id. `image_caption_lazy` defaults to off.
 
 API keys are sensitive configuration. Never commit a real `cmd_config.json`, screenshots, logs, or backups. Logs and Trace data can also contain Provider IDs, request errors, and tool output.
 

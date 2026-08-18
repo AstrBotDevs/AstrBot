@@ -855,6 +855,68 @@ async def fetch_text(
         await resolver.close()
 
 
+class PinnedAsyncNetworkBackend:
+    """httpcore/httpx2 backend that dials a validated address, not a second DNS lookup."""
+
+    def __init__(self, inner: Any, policy: OutboundRequestPolicy) -> None:
+        self._inner = inner
+        self._policy = policy
+
+    async def connect_tcp(self, host: str, port: int = 0, **kwargs: Any) -> Any:
+        hostname = _normalize_hostname(host)
+        if hostname in _LOCAL_HOSTNAMES and not self._policy.allow_private_network:
+            raise OutboundRequestError(
+                "The destination URL cannot target a local host."
+            )
+        if hostname in _METADATA_HOSTS:
+            raise OutboundRequestError(
+                "The destination URL cannot target a metadata service."
+            )
+        if (
+            self._policy.allowed_hosts is not None
+            and hostname not in self._policy.allowed_hosts
+        ):
+            raise OutboundRequestError("The destination host is not allowed.")
+        addresses = resolve_host_addresses(hostname, port or 443)
+        if any(
+            _is_disallowed_address(
+                address,
+                allow_private_network=self._policy.allow_private_network,
+            )
+            for address in addresses
+        ):
+            raise OutboundRequestError(
+                "The destination URL cannot target a private or reserved address."
+            )
+        return await self._inner.connect_tcp(str(addresses[0]), port, **kwargs)
+
+    async def connect_unix_socket(self, path: str, **kwargs: Any) -> Any:
+        del path, kwargs
+        raise OutboundRequestError("Unix sockets are not allowed.")
+
+    async def sleep(self, seconds: float) -> None:
+        await self._inner.sleep(seconds)
+
+
+def pin_httpx_transport(transport: Any, policy: OutboundRequestPolicy) -> Any:
+    """Replace a transport's network backend with a pinned validating backend.
+
+    Args:
+        transport: httpx or httpx2 ``AsyncHTTPTransport``.
+        policy: Address policy used for every TCP connect.
+
+    Returns:
+        The same transport instance.
+    """
+
+    pool = getattr(transport, "_pool", None)
+    backend = getattr(pool, "_network_backend", None) if pool is not None else None
+    if backend is None:
+        return transport
+    pool._network_backend = PinnedAsyncNetworkBackend(backend, policy)
+    return transport
+
+
 async def fetch_json(
     url: str,
     policy: OutboundRequestPolicy,

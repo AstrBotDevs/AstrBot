@@ -12,6 +12,8 @@ async def resolve_streaming_response(
     event: Any,
     config: dict[str, Any] | None,
     preferences: Any | None = None,
+    *,
+    default: bool | None = None,
 ) -> bool:
     """Resolve and pin streaming mode for one in-flight request.
 
@@ -28,18 +30,19 @@ async def resolve_streaming_response(
         Whether this request should stream.
     """
 
-    pinned = event.get_extra(RESOLVED_STREAMING_EXTRA)
+    pinned = _event_extra(event, RESOLVED_STREAMING_EXTRA)
     if pinned is not None:
         return bool(pinned)
 
-    extra = event.get_extra("enable_streaming")
+    extra = _event_extra(event, "enable_streaming")
     if extra is not None:
         value = bool(extra)
     else:
         override = None
         if preferences is not None:
+            umo = getattr(event, "unified_msg_origin", "") or ""
             override = await preferences.session_get(
-                event.unified_msg_origin,
+                umo,
                 STREAMING_OVERRIDE_KEY,
                 None,
             )
@@ -47,7 +50,46 @@ async def resolve_streaming_response(
             value = bool(override)
         else:
             settings = (config or {}).get("provider_settings", {})
-            value = bool(settings.get("streaming_response", False))
+            if "streaming_response" in settings:
+                value = bool(settings.get("streaming_response", False))
+            elif default is not None:
+                value = bool(default)
+            else:
+                value = False
 
-    event.set_extra(RESOLVED_STREAMING_EXTRA, value)
+    _event_set_extra(event, RESOLVED_STREAMING_EXTRA, value)
     return value
+
+
+def _event_extra(event: Any, key: str, default: Any = None) -> Any:
+    getter = getattr(event, "get_extra", None)
+    if callable(getter):
+        try:
+            return getter(key, default)
+        except TypeError:
+            try:
+                value = getter(key)
+            except Exception:
+                return default
+            return default if value is None else value
+        except Exception:
+            return default
+    extra = getattr(event, "_extra", None)
+    if isinstance(extra, dict):
+        return extra.get(key, default)
+    return default
+
+
+def _event_set_extra(event: Any, key: str, value: Any) -> None:
+    setter = getattr(event, "set_extra", None)
+    if callable(setter):
+        setter(key, value)
+        return
+    extra = getattr(event, "_extra", None)
+    if isinstance(extra, dict):
+        extra[key] = value
+        return
+    try:
+        event._extra = {key: value}
+    except Exception:
+        return

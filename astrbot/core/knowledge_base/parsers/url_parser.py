@@ -59,7 +59,12 @@ class URLExtractor:
         }
 
         try:
-            async with aiohttp.ClientSession(trust_env=True) as session:
+            from astrbot.core.utils.proxy_route import (
+                create_aiohttp_session,
+                current_aiohttp_proxy,
+            )
+
+            async with create_aiohttp_session() as session:
                 async with session.post(
                     api_url,
                     json=payload,
@@ -67,6 +72,7 @@ class URLExtractor:
                     timeout=aiohttp.ClientTimeout(
                         total=30.0
                     ),  # 增加超时时间，因为内容提取可能需要更长时间
+                    proxy=current_aiohttp_proxy(),
                 ) as response:
                     if response.status != 200:
                         reason = await response.text()

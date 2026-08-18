@@ -256,17 +256,40 @@ def httpx_client_kwargs(route: ProxyRoute) -> dict[str, Any]:
     return kwargs
 
 
-def apply_aiohttp_session_kwargs(route: ProxyRoute) -> dict[str, Any]:
+def apply_aiohttp_session_kwargs(route: ProxyRoute | None = None) -> dict[str, Any]:
     """Return ClientSession kwargs that honor an explicit route.
 
     Args:
-        route: Resolved proxy route.
+        route: Resolved proxy route. When omitted, the current global route is used.
 
     Returns:
         Keyword arguments for ``aiohttp.ClientSession``.
     """
 
+    del route
     return {"trust_env": False}
+
+
+def current_aiohttp_proxy() -> str | None:
+    """Return the explicit proxy URL for one aiohttp request."""
+
+    return resolve_proxy_route().proxy_url
+
+
+def create_aiohttp_session(**kwargs: Any):
+    """Create an aiohttp session that never inherits process proxy env.
+
+    Args:
+        **kwargs: Extra ``ClientSession`` arguments.
+
+    Returns:
+        Session with ``trust_env=False``.
+    """
+
+    import aiohttp
+
+    kwargs["trust_env"] = False
+    return aiohttp.ClientSession(**kwargs)
 
 
 def aiohttp_request_proxy(route: ProxyRoute) -> str | None:

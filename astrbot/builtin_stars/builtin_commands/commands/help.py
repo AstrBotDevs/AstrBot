@@ -16,10 +16,16 @@ class HelpCommand:
 
     async def _query_astrbot_notice(self):
         try:
-            async with aiohttp.ClientSession(trust_env=True) as session:
+            from astrbot.core.utils.proxy_route import (
+                create_aiohttp_session,
+                current_aiohttp_proxy,
+            )
+
+            async with create_aiohttp_session() as session:
                 async with session.get(
                     "https://astrbot.app/notice.json",
                     timeout=aiohttp.ClientTimeout(total=2),
+                    proxy=current_aiohttp_proxy(),
                 ) as resp:
                     return (await resp.json())["notice"]
         except Exception:

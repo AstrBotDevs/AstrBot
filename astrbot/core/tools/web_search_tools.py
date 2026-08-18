@@ -51,25 +51,27 @@ _DEFAULT_HTTP_TIMEOUT = aiohttp.ClientTimeout(total=20, connect=10, sock_read=20
 
 
 def _client_session() -> aiohttp.ClientSession:
-    return aiohttp.ClientSession(trust_env=True)
+    from astrbot.core.utils.proxy_route import create_aiohttp_session
+
+    return create_aiohttp_session()
+
+
+def _request_kwargs() -> dict:
+    from astrbot.core.utils.proxy_route import current_aiohttp_proxy
+
+    kwargs: dict = {"timeout": _DEFAULT_HTTP_TIMEOUT}
+    proxy = current_aiohttp_proxy()
+    if proxy:
+        kwargs["proxy"] = proxy
+    return kwargs
 
 
 def _post(session, url: str, *, json: dict, headers: dict):
-    return session.post(
-        url,
-        json=json,
-        headers=headers,
-        timeout=_DEFAULT_HTTP_TIMEOUT,
-    )
+    return session.post(url, json=json, headers=headers, **_request_kwargs())
 
 
 def _get(session, url: str, *, params: dict, headers: dict):
-    return session.get(
-        url,
-        params=params,
-        headers=headers,
-        timeout=_DEFAULT_HTTP_TIMEOUT,
-    )
+    return session.get(url, params=params, headers=headers, **_request_kwargs())
 
 
 @std_dataclass
@@ -696,7 +698,7 @@ async def _baidu_search(
         "X-Appbuilder-Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    async with aiohttp.ClientSession(trust_env=True) as session:
+    async with _client_session() as session:
         async with _post(
             session,
             "https://qianfan.baidubce.com/v2/ai_search/web_search",

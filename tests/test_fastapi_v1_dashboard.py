@@ -2434,6 +2434,10 @@ async def test_plugin_service_market_install_uses_registry_entry(
     async def fake_sync_skills_after_plugin_change():
         captured["synced"] = True
 
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.plugin_service.reject_unsafe_plugin_fetch",
+        lambda **kwargs: None,
+    )
     monkeypatch.setattr(plugin_service, "get_online_plugins", fake_get_online_plugins)
     monkeypatch.setattr(
         plugin_service.plugin_lifecycle,

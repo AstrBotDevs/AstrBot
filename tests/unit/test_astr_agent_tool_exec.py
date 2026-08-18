@@ -22,7 +22,10 @@ class _DummyEvent:
         self.message_obj = SimpleNamespace(message=message_components or [])
         self.role = "member"
 
-    def get_extra(self, _key: str):
+    def get_extra(self, _key: str, default=None):
+        return default
+
+    def set_extra(self, _key: str, _value) -> None:
         return None
 
 

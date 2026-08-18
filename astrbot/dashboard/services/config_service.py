@@ -615,12 +615,15 @@ async def _validate_neo_connectivity(post_config: dict) -> str | None:
 
     import aiohttp
 
+    from astrbot.core.utils.proxy_route import create_aiohttp_session, current_aiohttp_proxy
+
     health_url = f"{endpoint}/health"
     try:
-        async with aiohttp.ClientSession() as session:
+        async with create_aiohttp_session() as session:
             async with session.get(
                 health_url,
                 timeout=aiohttp.ClientTimeout(total=5),
+                proxy=current_aiohttp_proxy(),
             ) as resp:
                 if resp.status != 200:
                     return (

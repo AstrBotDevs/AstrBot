@@ -29,6 +29,16 @@ os.environ.setdefault("ASTRBOT_TEST_MODE", "true")
 os.environ.setdefault("ASTRBOT_DISABLE_METRICS", "1")
 
 
+@pytest.fixture(autouse=True)
+def reset_global_network_config():
+    """Keep explicit proxy routing isolated between tests."""
+    from astrbot.core.utils.proxy_route import set_global_network_config
+
+    set_global_network_config(http_proxy="", no_proxy=[])
+    yield
+    set_global_network_config(http_proxy="", no_proxy=[])
+
+
 # ============================================================
 # 测试收集和排序
 # ============================================================

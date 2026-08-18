@@ -1,4 +1,3 @@
-import socket
 from contextlib import AsyncExitStack
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -274,18 +273,11 @@ async def test_streamable_http_connection_uses_sdk2_client_without_initialize(
             return None
 
     monkeypatch.setattr(mcp_client_module, "Client", FakeClient)
+    import ipaddress
+
     monkeypatch.setattr(
-        mcp_client_module.socket,
-        "getaddrinfo",
-        lambda *args, **kwargs: [
-            (
-                socket.AF_INET,
-                socket.SOCK_STREAM,
-                socket.IPPROTO_TCP,
-                "",
-                ("93.184.216.34", 443),
-            )
-        ],
+        "astrbot.core.utils.outbound_http.resolve_host_addresses",
+        lambda hostname, port: [ipaddress.ip_address("93.184.216.34")],
     )
 
     stack = AsyncExitStack()

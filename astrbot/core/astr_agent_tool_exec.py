@@ -466,6 +466,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             event,
             ctx.get_config(umo=umo),
             getattr(ctx, "preferences", None),
+            default=bool(prov_settings.get("streaming_response", False)),
         )
         llm_resp = await ctx.tool_loop_agent(
             event=event,

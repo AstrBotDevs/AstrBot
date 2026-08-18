@@ -447,6 +447,12 @@ class MockEvent:
     def get_sender_id(self):
         return self._sender_id
 
+    def get_extra(self, _key: str, default=None):
+        return default
+
+    def set_extra(self, _key: str, _value) -> None:
+        return None
+
 
 class MockAgentContext:
     def __init__(self, event):

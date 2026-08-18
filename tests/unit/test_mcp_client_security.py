@@ -60,6 +60,10 @@ async def test_create_mcp_http_client_without_redirects_disables_redirects() -> 
     try:
         assert client.follow_redirects is False
         assert client.headers["X-Test"] == "1"
+        transport = getattr(client, "_transport", None)
+        pool = getattr(transport, "_pool", None)
+        backend = getattr(pool, "_network_backend", None)
+        assert type(backend).__name__ == "PinnedAsyncNetworkBackend"
     finally:
         await client.aclose()
 

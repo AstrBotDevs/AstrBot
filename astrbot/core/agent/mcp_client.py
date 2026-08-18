@@ -274,9 +274,18 @@ def _create_mcp_http_client_without_redirects(
             str(request.url), allow_private_network=allow_private_network
         )
 
+    from dataclasses import replace
+
+    from astrbot.core.utils.outbound_http import MCP_REMOTE, pin_httpx_transport
+
+    transport = pin_httpx_transport(
+        httpx2.AsyncHTTPTransport(),
+        replace(MCP_REMOTE, allow_private_network=allow_private_network),
+    )
     kwargs: dict[str, Any] = {
         "follow_redirects": False,
         "trust_env": False,
+        "transport": transport,
         "event_hooks": {"request": [validate_request]},
     }
     if headers is not None:

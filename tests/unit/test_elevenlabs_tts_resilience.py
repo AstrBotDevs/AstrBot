@@ -102,7 +102,8 @@ def test_elevenlabs_constructor_does_not_log_proxy_contents(
             {
                 "type": "elevenlabs_tts_api",
                 "api_base": "https://internal.example/private/tts",
-                "proxy": _SENSITIVE_ERROR,
+                "proxy_mode": "custom",
+                "proxy_url": _SENSITIVE_ERROR,
             },
             {},
         )

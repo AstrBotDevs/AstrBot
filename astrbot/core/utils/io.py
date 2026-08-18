@@ -197,11 +197,18 @@ async def download_image_by_url(
         cafile=certifi.where(),
     )  # 使用 certifi 提供的 CA 证书
     connector = aiohttp.TCPConnector(ssl=ssl_context)  # 使用 certifi 的根证书
+    from astrbot.core.utils.proxy_route import current_aiohttp_proxy
+
     async with aiohttp.ClientSession(
-        trust_env=True,
+        trust_env=False,
         connector=connector,
     ) as session:
-        request = session.post(url, json=post_data) if post else session.get(url)
+        proxy = current_aiohttp_proxy()
+        request = (
+            session.post(url, json=post_data, proxy=proxy)
+            if post
+            else session.get(url, proxy=proxy)
+        )
         async with request as resp:
             _raise_for_download_status(resp, url)
             content = await resp.read()
@@ -338,13 +345,16 @@ async def download_file(
         cafile=certifi.where(),
     )  # 使用 certifi 提供的 CA 证书
     connector = aiohttp.TCPConnector(ssl=ssl_context)
+    from astrbot.core.utils.proxy_route import current_aiohttp_proxy
+
     async with aiohttp.ClientSession(
-        trust_env=True,
+        trust_env=False,
         connector=connector,
     ) as session:
         async with session.get(
             url,
             timeout=aiohttp.ClientTimeout(total=1800),
+            proxy=current_aiohttp_proxy(),
         ) as resp:
             _raise_for_download_status(resp, url)
             with open(path, "wb") as f:

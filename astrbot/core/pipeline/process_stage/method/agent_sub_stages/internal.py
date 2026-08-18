@@ -259,8 +259,9 @@ class InternalAgentSubStage:
 
             streaming_response = await resolve_streaming_response(
                 event,
-                self.ctx.astrbot_config,
+                getattr(self.ctx, "astrbot_config", None),
                 getattr(self.ctx, "preferences", None),
+                default=self.streaming_response,
             )
 
             provider_manager = getattr(

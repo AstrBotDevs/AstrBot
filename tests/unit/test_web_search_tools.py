@@ -210,7 +210,7 @@ async def test_firecrawl_search_uses_session_context(monkeypatch):
         {"query": "AstrBot"},
     )
 
-    assert session.trust_env is True
+    assert session.trust_env is False
     assert session.entered is True
     assert session.exited is True
     assert session.posted == {
@@ -245,7 +245,7 @@ async def test_firecrawl_search_raises_error_for_http_errors(monkeypatch):
             {"query": "AstrBot"},
         )
 
-    assert session.trust_env is True
+    assert session.trust_env is False
     assert session.entered is True
     assert session.exited is True
 
@@ -274,7 +274,7 @@ async def test_firecrawl_scrape_uses_request_setup(monkeypatch):
     )
 
     assert result == {"url": "https://example.com", "markdown": "# Example"}
-    assert session.trust_env is True
+    assert session.trust_env is False
     assert session.entered is True
     assert session.exited is True
     assert session.posted == {
@@ -309,7 +309,7 @@ async def test_firecrawl_scrape_raises_error_for_http_errors(monkeypatch):
             {"url": "https://example.com", "formats": ["markdown"]},
         )
 
-    assert session.trust_env is True
+    assert session.trust_env is False
     assert session.entered is True
     assert session.exited is True
 

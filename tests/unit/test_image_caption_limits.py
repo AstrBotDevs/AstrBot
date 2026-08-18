@@ -120,6 +120,87 @@ async def test_different_umos_do_not_share_interval() -> None:
     assert await ctx._claim_caption_slot("b", 30) is True
 
 
+@pytest.mark.asyncio
+async def test_singleflight_shares_success() -> None:
+    ctx = _context()
+    calls = 0
+
+    async def fake_caption(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        await asyncio.sleep(0.01)
+        return "cat"
+
+    ctx.get_image_caption = fake_caption
+    cfg = _cfg()
+    first, second = await asyncio.gather(
+        ctx.caption_with_singleflight("umo-a", "https://cdn.example/a.png", cfg),
+        ctx.caption_with_singleflight("umo-a", "https://cdn.example/a.png", cfg),
+    )
+    assert first == second == "cat"
+    assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_singleflight_exception_clears_inflight() -> None:
+    ctx = _context()
+    calls = 0
+
+    async def boom(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        raise RuntimeError("vlm failed")
+
+    ctx.get_image_caption = boom
+    cfg = _cfg()
+    with pytest.raises(RuntimeError, match="vlm failed"):
+        await ctx.caption_with_singleflight("umo-a", "https://cdn.example/a.png", cfg)
+    assert ctx._caption_inflight == {}
+    with pytest.raises(RuntimeError, match="vlm failed"):
+        await ctx.caption_with_singleflight("umo-a", "https://cdn.example/a.png", cfg)
+    assert calls == 2
+
+
+@pytest.mark.asyncio
+async def test_cache_is_umo_scoped_and_disabled_by_default() -> None:
+    ctx = _context()
+    calls = 0
+
+    async def fake_caption(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return "dog"
+
+    ctx.get_image_caption = fake_caption
+    await ctx.caption_with_singleflight("umo-a", "https://cdn.example/a.png", _cfg())
+    await ctx.caption_with_singleflight("umo-b", "https://cdn.example/a.png", _cfg())
+    assert calls == 2
+    calls = 0
+    cached_cfg = _cfg(image_caption_cache_ttl=30)
+    await ctx.caption_with_singleflight(
+        "umo-a", "https://cdn.example/a.png", cached_cfg
+    )
+    await ctx.caption_with_singleflight(
+        "umo-a", "https://cdn.example/a.png", cached_cfg
+    )
+    assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_lazy_caption_resolves_placeholder() -> None:
+    ctx = _context()
+
+    async def fake_caption(*args, **kwargs):
+        return "bird"
+
+    ctx.get_image_caption = fake_caption
+    token = ctx._remember_lazy_image("umo-a", "https://cdn.example/a.png")
+    records = [f"user [Image:__LAZY__:{token}]"]
+    resolved = await ctx._resolve_lazy_captions(records, _cfg(), "umo-a")
+    assert resolved == ["user [Image: bird]"]
+    assert token not in ctx._pending_images
+
+
 def test_caption_failure_keeps_image_placeholder() -> None:
     # Covered by format path: empty/exception yields [Image]
     from astrbot.api.message_components import Image

@@ -53,10 +53,13 @@ async def _post_registration(
     payload: dict[str, str],
 ) -> tuple[int, dict[str, Any]]:
     timeout = aiohttp.ClientTimeout(total=15)
-    async with aiohttp.ClientSession(timeout=timeout, trust_env=True) as session:
+    from astrbot.core.utils.proxy_route import create_aiohttp_session, current_aiohttp_proxy
+
+    async with create_aiohttp_session(timeout=timeout) as session:
         async with session.post(
             f"{dingtalk_registration_base_url()}{path}",
             json=payload,
+            proxy=current_aiohttp_proxy(),
         ) as response:
             status = response.status
             data = await response.json(content_type=None)

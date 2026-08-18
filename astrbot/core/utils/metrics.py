@@ -249,11 +249,17 @@ class MetricsRuntime:
         payload = {"metrics_data": payload_metrics}
 
         try:
-            async with aiohttp.ClientSession(trust_env=True) as session:
+            from astrbot.core.utils.proxy_route import (
+                create_aiohttp_session,
+                current_aiohttp_proxy,
+            )
+
+            async with create_aiohttp_session() as session:
                 async with session.post(
                     base_url,
                     json=payload,
                     timeout=aiohttp.ClientTimeout(total=3),
+                    proxy=current_aiohttp_proxy(),
                 ) as response:
                     if response.status != 200:
                         return

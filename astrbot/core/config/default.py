@@ -235,6 +235,8 @@ DEFAULT_CONFIG = {
         "image_caption_groups": [],
         "image_caption_min_interval": 0,
         "image_caption_max_concurrency": 2,
+        "image_caption_cache_ttl": 0,
+        "image_caption_lazy": False,
         "active_reply": {
             "enable": False,
             "method": "possibility_reply",
@@ -3150,6 +3152,12 @@ CONFIG_METADATA_2 = {
                     "image_caption_max_concurrency": {
                         "type": "int",
                     },
+                    "image_caption_cache_ttl": {
+                        "type": "float",
+                    },
+                    "image_caption_lazy": {
+                        "type": "bool",
+                    },
                     "image_caption_prompt": {
                         "type": "string",
                     },
@@ -4368,6 +4376,22 @@ CONFIG_METADATA_3 = {
                         "description": "群聊图片转述最大并发",
                         "type": "int",
                         "hint": "限制群聊历史图片转述的全局并发，不影响主 Agent 当前请求或引用图片。",
+                        "condition": {
+                            "provider_ltm_settings.image_caption": True,
+                        },
+                    },
+                    "provider_ltm_settings.image_caption_cache_ttl": {
+                        "description": "群聊图片转述缓存 TTL（秒）",
+                        "type": "float",
+                        "hint": "按 UMO+图片内容缓存转述结果。0 表示关闭，默认关闭且不同会话不共享。",
+                        "condition": {
+                            "provider_ltm_settings.image_caption": True,
+                        },
+                    },
+                    "provider_ltm_settings.image_caption_lazy": {
+                        "description": "延迟群聊图片转述",
+                        "type": "bool",
+                        "hint": "开启后先记录占位，仅在真正唤醒 LLM 时转述。默认关闭。",
                         "condition": {
                             "provider_ltm_settings.image_caption": True,
                         },

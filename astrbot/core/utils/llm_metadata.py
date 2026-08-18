@@ -1,8 +1,6 @@
 from collections.abc import Mapping
 from typing import Literal, TypedDict
 
-import aiohttp
-
 from astrbot import logger
 from astrbot.core.utils.http_ssl import build_tls_connector
 
@@ -46,10 +44,15 @@ class LLMMetadataCatalog:
         """Fetch and publish the latest model metadata without sharing global state."""
         url = "https://models.dev/api.json"
         try:
-            async with aiohttp.ClientSession(
-                trust_env=True, connector=build_tls_connector()
+            from astrbot.core.utils.proxy_route import (
+                create_aiohttp_session,
+                current_aiohttp_proxy,
+            )
+
+            async with create_aiohttp_session(
+                connector=build_tls_connector()
             ) as session:
-                async with session.get(url) as response:
+                async with session.get(url, proxy=current_aiohttp_proxy()) as response:
                     data = await response.json()
             models: dict[str, LLMMetadata] = {}
             for info in data.values():

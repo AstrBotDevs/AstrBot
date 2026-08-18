@@ -3,6 +3,14 @@ import ssl
 import pytest
 
 from astrbot.core.utils import network_utils
+from astrbot.core.utils.proxy_route import set_global_network_config
+
+
+@pytest.fixture(autouse=True)
+def _reset_global_network_config():
+    set_global_network_config(http_proxy="", no_proxy=[])
+    yield
+    set_global_network_config(http_proxy="", no_proxy=[])
 
 
 def test_create_proxy_client_reuses_shared_ssl_context(
