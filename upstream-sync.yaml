@@ -5,19 +5,14 @@ upstream:
   branch: master
 
 last_synced:
-  commit: b9e565f3ba44cef54800bfd962fcea2f9b6d2671
-  synced_at_utc: 2026-08-15T12:47:06Z
-  sync_method: manual-adaptation
-  source_pr: '9690, 9688, 9698, 9665, 9699, 9701'
+  commit: c4616578d610c237766a5d497f9db4b607d1c75b
+  synced_at_utc: 2026-08-18T21:28:15Z
+  sync_method: reviewed-skip
+  source_pr: '9720'
   note: >-
-    Reviewed the interval from 70b95e0185ddac9a993e615302ecd51c2ec4b0e7
-    through b9e565f3ba44cef54800bfd962fcea2f9b6d2671. Adapted marketplace
-    update timestamps (#9690), plugin attribution guidance, Trace theme colors
-    (#9688), dashboard password stability (#9665), source-provider reasoning
-    metadata separation (#9699), and unlimited knowledge-base uploads (#9701)
-    against the fork's bilingual, runtime-ownership, and security policies.
-    Skipped the medium-width chat sidebar change (#9698) because the existing
-    hidden-lg-and-up layout is behaviorally equivalent. Validation passed:
-    focused pytest/Vitest coverage, make check, make quality, and
-    docs/pnpm run docs:build. No upstream version bump occurred in this
-    interval, so the existing 4.27.3 changelog remains unchanged.
+    Reviewed c4616578d610c237766a5d497f9db4b607d1c75b, the self-hosted T2I
+    setup instructions (#9720). Skipped it because this fork removed the
+    remote T2I strategy, endpoint, and matching pages in 824c6cdc in favor of
+    local Playwright rendering. Validation passed: upstream interval inspection
+    and ledger validation. No upstream version bump occurred, so 4.27.3 and
+    its changelog remain unchanged.
