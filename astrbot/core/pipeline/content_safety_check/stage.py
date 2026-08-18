@@ -3,11 +3,11 @@ from collections.abc import AsyncGenerator
 from astrbot.core import logger
 from astrbot.core.message.components import Reply
 from astrbot.core.message.message_event_result import MessageEventResult
+from astrbot.core.pipeline.context import PipelineContext
+from astrbot.core.pipeline.stage import Stage, register_stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.utils.quoted_message.chain_parser import ReplyChainParser
 
-from ..context import PipelineContext
-from ..stage import Stage, register_stage
 from .strategies.strategy import StrategySelector
 
 
@@ -15,7 +15,7 @@ from .strategies.strategy import StrategySelector
 class ContentSafetyCheckStage(Stage):
     """检查内容安全
 
-    当前只会检查文本的。
+    当前只会检查文本的｡
     """
 
     async def initialize(self, ctx: PipelineContext) -> None:
@@ -26,6 +26,14 @@ class ContentSafetyCheckStage(Stage):
         self,
         event: AstrMessageEvent,
         check_text: str | None = None,
+    ) -> AsyncGenerator[None, None]:
+        async for item in self.process_text(event, check_text):
+            yield item
+
+    async def process_text(
+        self,
+        event: AstrMessageEvent,
+        check_text: str | None,
     ) -> AsyncGenerator[None, None]:
         """检查内容安全"""
         if check_text is None:
@@ -50,7 +58,7 @@ class ContentSafetyCheckStage(Stage):
                         "content and has been blocked.",
                     ),
                 )
-                yield
+                yield None
             event.stop_event()
             logger.info(f"Content safety check failed: {info}")
             return

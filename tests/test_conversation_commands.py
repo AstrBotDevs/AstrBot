@@ -191,3 +191,16 @@ async def test_clear_third_party_agent_runner_state_removes_local_state_when_dee
         "umo-3",
         conversation_module.DEERFLOW_THREAD_ID_KEY,
     ) in calls
+
+
+def test_conversation_commands_imported():
+    assert conversation_module.ConversationCommands is not None
+
+
+def test_conversation_commands_class():
+    assert issubclass(conversation_module.ConversationCommands, object)
+
+
+def test_conversation_commands_constants():
+    assert isinstance(conversation_module.THIRD_PARTY_AGENT_RUNNER_KEY, dict)
+    assert "dify" in conversation_module.THIRD_PARTY_AGENT_RUNNER_KEY

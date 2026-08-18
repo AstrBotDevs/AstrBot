@@ -89,7 +89,7 @@ def _extract_image_refs_from_component_chain(
                     seg,
                     depth=depth + 1,
                     settings=settings,
-                )
+                ),
             )
         elif isinstance(seg, Node):
             image_refs.extend(
@@ -97,7 +97,7 @@ def _extract_image_refs_from_component_chain(
                     seg.content,
                     depth=depth + 1,
                     settings=settings,
-                )
+                ),
             )
         elif isinstance(seg, Nodes):
             for node in seg.nodes:
@@ -106,7 +106,7 @@ def _extract_image_refs_from_component_chain(
                         node.content,
                         depth=depth + 1,
                         settings=settings,
-                    )
+                    ),
                 )
 
     return normalize_and_dedupe_strings(image_refs)
@@ -308,7 +308,7 @@ def _parse_onebot_segments(
                 isinstance(candidate_file, str)
                 and candidate_file.strip()
                 and looks_like_image_file_name(
-                    seg_data.get("name") or seg_data.get("file_name") or candidate_file
+                    seg_data.get("name") or seg_data.get("file_name") or candidate_file,
                 )
             ):
                 image_refs.append(candidate_file.strip())

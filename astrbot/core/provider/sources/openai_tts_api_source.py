@@ -1,15 +1,15 @@
 import os
 
+import aiofiles
 import httpx
 from openai import NOT_GIVEN, AsyncOpenAI
 
 from astrbot import logger
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import TTSProvider
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
-
-from ..entities import ProviderType
-from ..provider import TTSProvider
-from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -47,16 +47,21 @@ class ProviderOpenAITTSAPI(TTSProvider):
 
     async def get_audio(self, text: str) -> str:
         temp_dir = get_astrbot_temp_path()
-        path = os.path.join(temp_dir, f"openai_tts_api_{generate_timestamp_id()}.wav")
-        async with self.client.audio.speech.with_streaming_response.create(
-            model=self.model_name,
-            voice=self.voice,
-            response_format="wav",
-            input=text,
-        ) as response:
-            with open(path, "wb") as f:
-                async for chunk in response.iter_bytes(chunk_size=1024):
-                    f.write(chunk)
+        path = os.path.join(
+            temp_dir,
+            f"openai_tts_api_{generate_timestamp_id()}.wav",
+        )
+        async with (
+            self.client.audio.speech.with_streaming_response.create(
+                model=self.model_name,
+                voice=self.voice,
+                response_format="wav",
+                input=text,
+            ) as response,
+            aiofiles.open(path, "wb") as f,
+        ):
+            async for chunk in response.iter_bytes(chunk_size=1024):
+                await f.write(chunk)
         return path
 
     async def terminate(self):

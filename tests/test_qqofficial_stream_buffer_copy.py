@@ -140,6 +140,21 @@ def test_append_stream_delta_old_reference_style_loses_first_char() -> None:
 
 
 @pytest.mark.asyncio
+async def test_event_contract_uses_only_current_group_metadata() -> None:
+    group_event = _make_group_event()
+    current_group = group_event.message_obj.group
+
+    await group_event.send_typing()
+    await group_event.stop_typing()
+    assert await group_event.get_group() is current_group
+    assert await group_event.get_group("group-1") is current_group
+    assert await group_event.get_group("different-group") is None
+
+    private_event = _make_c2c_event()
+    assert await private_event.get_group() is None
+
+
+@pytest.mark.asyncio
 async def test_group_stream_keeps_first_character_when_delta_reused() -> None:
     """End-to-end group send_streaming with reused/mutated MessageChain."""
     event = _make_group_event()

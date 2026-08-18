@@ -1,9 +1,9 @@
 <script setup>
+import { computed } from "vue";
 import MarketPluginCard from "@/components/extension/MarketPluginCard.vue";
 import PluginSortControl from "@/components/extension/PluginSortControl.vue";
-import defaultPluginIcon from "/favicon.svg";
-import { computed } from "vue";
 import { normalizeTextInput } from "@/utils/inputValue";
+import defaultPluginIcon from "/favicon.svg";
 
 const props = defineProps({
   state: {
@@ -153,9 +153,7 @@ const currentSourceName = computed(() => {
   if (!selectedSource.value) {
     return tm("market.defaultSource");
   }
-  const matched = customSources.value.find(
-    (s) => s.url === selectedSource.value,
-  );
+  const matched = customSources.value.find((s) => s.url === selectedSource.value);
   return matched?.name || tm("market.defaultSource");
 });
 

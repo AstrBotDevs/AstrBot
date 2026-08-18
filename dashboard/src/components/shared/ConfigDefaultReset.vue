@@ -1,37 +1,31 @@
 <script setup>
-import { computed } from 'vue'
-import { useI18n } from '@/i18n/composables'
-import {
-  getPluginConfigDefaultValue,
-  isPluginConfigValueModified
-} from '@/utils/pluginConfigDefaults.mjs'
+import { computed } from "vue";
+import { useI18n } from "@/i18n/composables";
+import { getPluginConfigDefaultValue, isPluginConfigValueModified } from "@/utils/pluginConfigDefaults.mjs";
 
 const props = defineProps({
   modelValue: {
     type: [String, Number, Boolean, Array, Object],
-    default: null
+    default: null,
   },
   itemMeta: {
     type: Object,
-    default: null
+    default: null,
   },
   enabled: {
     type: Boolean,
-    default: false
-  }
-})
+    default: false,
+  },
+});
 
-const emit = defineEmits(['reset'])
-const { t } = useI18n()
+const emit = defineEmits(["reset"]);
+const { t } = useI18n();
 const showReset = computed(
-  () =>
-    props.enabled &&
-    !props.itemMeta?.readonly &&
-    isPluginConfigValueModified(props.modelValue, props.itemMeta)
-)
+  () => props.enabled && !props.itemMeta?.readonly && isPluginConfigValueModified(props.modelValue, props.itemMeta),
+);
 
 function resetToDefault() {
-  emit('reset', getPluginConfigDefaultValue(props.itemMeta))
+  emit("reset", getPluginConfigDefaultValue(props.itemMeta));
 }
 </script>
 

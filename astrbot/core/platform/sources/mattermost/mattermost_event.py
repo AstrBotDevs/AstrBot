@@ -44,10 +44,10 @@ class MattermostMessageEvent(AstrMessageEvent):
                 else:
                     message_buffer.chain.extend(chain.chain)
             if not message_buffer:
-                return None
+                return
             message_buffer.squash_plain()
             await self.send(message_buffer)
-            return None
+            return
 
         text_buffer = ""
 
@@ -67,7 +67,7 @@ class MattermostMessageEvent(AstrMessageEvent):
 
         if text_buffer.strip():
             await self.send(MessageChain([Plain(text_buffer)]))
-        return None
+        return
 
     async def get_group(self, group_id=None, **kwargs):
         channel_id = group_id or self.get_group_id()
@@ -83,6 +83,6 @@ class MattermostMessageEvent(AstrMessageEvent):
                 MessageMember(
                     user_id=self.get_sender_id(),
                     nickname=self.get_sender_name(),
-                )
+                ),
             ],
         )

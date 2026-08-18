@@ -25,22 +25,7 @@ _WAV_PATH = "/tmp/discord_voice.wav"
 
 
 @pytest.mark.asyncio
-async def test_discord_audio_attachment_resolves_to_wav_record(monkeypatch):
-    class FakeMediaResolver:
-        def __init__(self, media_ref: str, **kwargs) -> None:
-            assert media_ref == "https://cdn.example/voice.ogg"
-            assert kwargs["media_type"] == "audio"
-
-        async def to_path(self, **kwargs) -> str:
-            assert kwargs["target_format"] == "wav"
-            return _WAV_PATH
-
-    monkeypatch.setattr(
-        discord_platform_adapter,
-        "MediaResolver",
-        FakeMediaResolver,
-    )
-
+async def test_discord_audio_attachment_defers_conversion_to_preprocess():
     adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
     adapter.bot_self_id = "1"
     adapter.client = SimpleNamespace(user=SimpleNamespace(id=1))
@@ -65,9 +50,8 @@ async def test_discord_audio_attachment_resolves_to_wav_record(monkeypatch):
 
     assert len(abm.message) == 1
     assert isinstance(abm.message[0], Record)
-    assert abm.message[0].file == _WAV_PATH
-    assert abm.message[0].url == _WAV_PATH
-    assert abm.message[0].path == _WAV_PATH
+    assert abm.message[0].file == "https://cdn.example/voice.ogg"
+    assert abm.message[0].url == "https://cdn.example/voice.ogg"
 
 
 @pytest.mark.asyncio

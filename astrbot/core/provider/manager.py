@@ -2,7 +2,7 @@ import asyncio
 import copy
 import os
 import traceback
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Protocol, runtime_checkable
 
 from deprecated import deprecated
@@ -10,9 +10,9 @@ from deprecated import deprecated
 from astrbot.core import astrbot_config, logger, sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
+from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.utils.error_redaction import safe_error
 
-from ..persona_mgr import PersonaManager
 from .entities import ProviderType
 from .provider import (
     EmbeddingProvider,
@@ -28,6 +28,11 @@ from .register import llm_tools, provider_cls_map
 @runtime_checkable
 class HasInitialize(Protocol):
     async def initialize(self) -> None: ...
+
+
+@runtime_checkable
+class SupportsTerminate(Protocol):
+    def terminate(self) -> Awaitable[object]: ...
 
 
 class ProviderManager:
@@ -48,7 +53,7 @@ class ProviderManager:
         self.provider_stt_settings: dict = config.get("provider_stt_settings", {})
         self.provider_tts_settings: dict = config.get("provider_tts_settings", {})
 
-        # 人格相关属性，v4.0.0 版本后被废弃，推荐使用 PersonaManager
+        # 人格相关属性,v4.0.0 版本后被废弃,推荐使用 PersonaManager
         self.default_persona_name = persona_mgr.default_persona
 
         self.provider_insts: list[Provider] = []
@@ -98,6 +103,13 @@ class ProviderManager:
         if hook not in self._provider_change_hooks:
             self._provider_change_hooks.append(hook)
 
+    def unregister_provider_change_hook(
+        self,
+        hook: Callable[[str, ProviderType, str | None], None],
+    ) -> None:
+        if hook in self._provider_change_hooks:
+            self._provider_change_hooks.remove(hook)
+
     def _notify_provider_changed(
         self,
         provider_id: str,
@@ -140,7 +152,7 @@ class ProviderManager:
     @property
     @deprecated(reason="Use persona_mgr.get_default_persona_v3() instead.")
     def selected_default_persona(self):
-        """动态获取最新的默认选中 persona。已弃用，请使用 context.persona_mgr.get_default_persona_v3()"""
+        """动态获取最新的默认选中 persona｡已弃用,请使用 context.persona_mgr.get_default_persona_v3()"""
         return self.persona_mgr.selected_default_persona_v3
 
     async def set_provider(
@@ -149,12 +161,12 @@ class ProviderManager:
         provider_type: ProviderType,
         umo: str | None = None,
     ) -> None:
-        """设置提供商。
+        """设置提供商｡
 
         Args:
-            provider_id (str): 提供商 ID。
-            provider_type (ProviderType): 提供商类型。
-            umo (str, optional): 用户会话 ID，用于提供商会话隔离。
+            provider_id (str): 提供商 ID｡
+            provider_type (ProviderType): 提供商类型｡
+            umo (str, optional): 用户会话 ID,用于提供商会话隔离｡
 
         Version 4.0.0: 这个版本下已经默认隔离提供商
 
@@ -221,20 +233,7 @@ class ProviderManager:
         umo: str | None,
         provider_id: str | None,
     ) -> Providers | None:
-        """Resolve a provider preference with configuration fallbacks.
-
-        Args:
-            provider_type: Provider type to resolve.
-            umo: User message origin used to load session configuration.
-            provider_id: Preferred provider ID, if one is configured.
-
-        Returns:
-            Resolved provider instance, or None when the provider type is disabled
-            or no provider is available.
-
-        Raises:
-            ValueError: If provider_type is unsupported.
-        """
+        """Resolve a provider preference with configuration fallbacks."""
         provider = self.inst_map.get(provider_id) if provider_id else None
         if not provider:
             # default setting
@@ -283,15 +282,7 @@ class ProviderManager:
         provider_type: ProviderType,
         umo: str | None = None,
     ) -> Providers | None:
-        """获取正在使用的提供商实例。
-
-        Args:
-            provider_type: 提供商类型。
-            umo: 用户会话 ID，用于提供商会话隔离。
-
-        Returns:
-            正在使用的提供商实例。
-        """
+        """Get the provider currently in use through the legacy sync API."""
         provider_id = None
         if umo:
             provider_id = sp.get(
@@ -307,15 +298,7 @@ class ProviderManager:
         provider_type: ProviderType,
         umo: str | None = None,
     ) -> Providers | None:
-        """Asynchronously get the provider currently in use.
-
-        Args:
-            provider_type: Provider type to resolve.
-            umo: User message origin used for session-specific preferences.
-
-        Returns:
-            Provider instance currently in use, or None if unavailable.
-        """
+        """Asynchronously get the provider currently in use."""
         provider_id = None
         if umo:
             provider_id = await sp.get_async(
@@ -403,10 +386,11 @@ class ProviderManager:
         """动态导入提供商适配器模块
 
         Args:
-            type (str): 提供商请求类型。
+            type (str): 提供商请求类型｡
 
         Raises:
-            ImportError: 如果提供商类型未知或无法导入对应模块，则抛出异常。
+            ImportError: 如果提供商类型未知或无法导入对应模块,则抛出异常｡
+
         """
         match type:
             case "openai_chat_completion":
@@ -576,7 +560,8 @@ class ProviderManager:
         """获取 provider 配置和 provider_source 配置合并后的结果
 
         Returns:
-            dict: 合并后的 provider 配置，key 为 provider id，value 为合并后的配置字典
+            dict: 合并后的 provider 配置,key 为 provider id,value 为合并后的配置字典
+
         """
         pc = copy.deepcopy(provider_config)
         provider_source_id = pc.get("provider_source_id", "")
@@ -588,9 +573,9 @@ class ProviderManager:
                     break
 
             if provider_source:
-                # 合并配置，provider 的配置优先级更高
+                # 合并配置,provider 的配置优先级更高
                 merged_config = {**provider_source, **pc}
-                # 保持 id 为 provider 的 id，而不是 source 的 id
+                # 保持 id 为 provider 的 id,而不是 source 的 id
                 merged_config["id"] = pc["id"]
                 pc = merged_config
         return pc
@@ -606,6 +591,7 @@ class ProviderManager:
         Args:
             provider_id: Provider id to resolve.
             merged: Whether to merge provider_source config into the provider config.
+
         """
         for provider_config in self.providers_config:
             if provider_config.get("id") != provider_id:
@@ -645,7 +631,7 @@ class ProviderManager:
         return provider_config
 
     async def load_provider(self, provider_config: dict) -> None:
-        # 如果 provider_source_id 存在且不为空，则从 provider_sources 中找到对应的配置并合并
+        # 如果 provider_source_id 存在且不为空,则从 provider_sources 中找到对应的配置并合并
         provider_config = self.get_merged_provider_config(provider_config)
 
         if provider_config.get("provider_type", "") == "chat_completion":
@@ -703,7 +689,7 @@ class ProviderManager:
                     # STT 任务
                     if not issubclass(cls_type, STTProvider):
                         raise TypeError(
-                            f"Provider class {cls_type} is not a subclass of STTProvider"
+                            f"Provider class {cls_type} is not a subclass of STTProvider",
                         )
                     inst = cls_type(provider_config, self.provider_settings)
 
@@ -726,7 +712,7 @@ class ProviderManager:
                     # TTS 任务
                     if not issubclass(cls_type, TTSProvider):
                         raise TypeError(
-                            f"Provider class {cls_type} is not a subclass of TTSProvider"
+                            f"Provider class {cls_type} is not a subclass of TTSProvider",
                         )
                     inst = cls_type(provider_config, self.provider_settings)
 
@@ -749,7 +735,7 @@ class ProviderManager:
                     # 文本生成任务
                     if not issubclass(cls_type, Provider):
                         raise TypeError(
-                            f"Provider class {cls_type} is not a subclass of Provider"
+                            f"Provider class {cls_type} is not a subclass of Provider",
                         )
                     inst = cls_type(
                         provider_config,
@@ -774,7 +760,7 @@ class ProviderManager:
                 case ProviderType.EMBEDDING:
                     if not issubclass(cls_type, EmbeddingProvider):
                         raise TypeError(
-                            f"Provider class {cls_type} is not a subclass of EmbeddingProvider"
+                            f"Provider class {cls_type} is not a subclass of EmbeddingProvider",
                         )
                     inst = cls_type(provider_config, self.provider_settings)
                     if isinstance(inst, HasInitialize):
@@ -783,14 +769,14 @@ class ProviderManager:
                 case ProviderType.RERANK:
                     if not issubclass(cls_type, RerankProvider):
                         raise TypeError(
-                            f"Provider class {cls_type} is not a subclass of RerankProvider"
+                            f"Provider class {cls_type} is not a subclass of RerankProvider",
                         )
                     inst = cls_type(provider_config, self.provider_settings)
                     if isinstance(inst, HasInitialize):
                         await inst.initialize()
                     self.rerank_provider_insts.append(inst)
                 case _:
-                    # 未知供应商抛出异常，确保inst初始化
+                    # 未知供应商抛出异常,确保inst初始化
                     # Should be unreachable
                     raise Exception(
                         f"Unknown provider type: {provider_metadata.provider_type}"
@@ -863,29 +849,31 @@ class ProviderManager:
                 f"({len(self.provider_insts)}, {len(self.stt_provider_insts)}, "
                 f"{len(self.tts_provider_insts)}) ...",
             )
+            provider_inst = self.inst_map[provider_id]
 
-            if self.inst_map[provider_id] in self.provider_insts:
-                prov_inst = self.inst_map[provider_id]
+            if provider_inst in self.provider_insts:
+                prov_inst = provider_inst
                 if isinstance(prov_inst, Provider):
                     self.provider_insts.remove(prov_inst)
-            if self.inst_map[provider_id] in self.stt_provider_insts:
-                prov_inst = self.inst_map[provider_id]
+            if provider_inst in self.stt_provider_insts:
+                prov_inst = provider_inst
                 if isinstance(prov_inst, STTProvider):
                     self.stt_provider_insts.remove(prov_inst)
-            if self.inst_map[provider_id] in self.tts_provider_insts:
-                prov_inst = self.inst_map[provider_id]
+            if provider_inst in self.tts_provider_insts:
+                prov_inst = provider_inst
                 if isinstance(prov_inst, TTSProvider):
                     self.tts_provider_insts.remove(prov_inst)
 
-            if self.inst_map[provider_id] == self.curr_provider_inst:
+            if provider_inst == self.curr_provider_inst:
                 self.curr_provider_inst = None
-            if self.inst_map[provider_id] == self.curr_stt_provider_inst:
+            if provider_inst == self.curr_stt_provider_inst:
                 self.curr_stt_provider_inst = None
-            if self.inst_map[provider_id] == self.curr_tts_provider_inst:
+            if provider_inst == self.curr_tts_provider_inst:
                 self.curr_tts_provider_inst = None
 
-            if getattr(self.inst_map[provider_id], "terminate", None):
-                await self.inst_map[provider_id].terminate()  # type: ignore
+            inst = self.inst_map[provider_id]
+            if isinstance(inst, SupportsTerminate):
+                await inst.terminate()
 
             logger.info(
                 f"Provider adapter {provider_id} terminated "
@@ -895,7 +883,9 @@ class ProviderManager:
             del self.inst_map[provider_id]
 
     async def delete_provider(
-        self, provider_id: str | None = None, provider_source_id: str | None = None
+        self,
+        provider_id: str | None = None,
+        provider_source_id: str | None = None,
     ) -> None:
         """Delete provider and/or provider source from config and terminate the instances. Config will be saved after deletion."""
         async with self.resource_lock:
@@ -921,7 +911,7 @@ class ProviderManager:
     async def update_provider(self, origin_provider_id: str, new_config: dict) -> None:
         """Update provider config and reload the instance. Config will be saved after update."""
         async with self.resource_lock:
-            npid = new_config.get("id", None)
+            npid = new_config.get("id")
             if not npid:
                 raise ValueError("New provider config must have an 'id' field")
             config = self.acm.default_conf
@@ -945,7 +935,7 @@ class ProviderManager:
     async def create_provider(self, new_config: dict) -> None:
         """Add new provider config and load the instance. Config will be saved after addition."""
         async with self.resource_lock:
-            npid = new_config.get("id", None)
+            npid = new_config.get("id")
             if not npid:
                 raise ValueError("New provider config must have an 'id' field")
             config = self.acm.default_conf
@@ -960,6 +950,35 @@ class ProviderManager:
             # sync in-memory config for API queries (e.g., embedding provider list)
             self.providers_config = astrbot_config["provider"]
 
+    def _get_all_provider_instances(self) -> list[Providers]:
+        seen: set[int] = set()
+        instances: list[Providers] = []
+        for provider_inst in [
+            *self.provider_insts,
+            *self.stt_provider_insts,
+            *self.tts_provider_insts,
+            *self.embedding_provider_insts,
+            *self.rerank_provider_insts,
+            *self.inst_map.values(),
+        ]:
+            marker = id(provider_inst)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            instances.append(provider_inst)
+        return instances
+
+    def _clear_loaded_instances(self) -> None:
+        self.provider_insts = []
+        self.stt_provider_insts = []
+        self.tts_provider_insts = []
+        self.embedding_provider_insts = []
+        self.rerank_provider_insts = []
+        self.inst_map = {}
+        self.curr_provider_inst = None
+        self.curr_stt_provider_inst = None
+        self.curr_tts_provider_inst = None
+
     async def terminate(self) -> None:
         if self._mcp_init_task and not self._mcp_init_task.done():
             self._mcp_init_task.cancel()
@@ -968,9 +987,20 @@ class ProviderManager:
             except asyncio.CancelledError:
                 pass
 
-        for provider_inst in self.provider_insts:
-            if hasattr(provider_inst, "terminate"):
-                await provider_inst.terminate()  # type: ignore
+        self._mcp_init_task = None
+        provider_instances = self._get_all_provider_instances()
+        self._clear_loaded_instances()
+
+        for provider_inst in provider_instances:
+            if not isinstance(provider_inst, SupportsTerminate):
+                continue
+            try:
+                await provider_inst.terminate()
+            except Exception:
+                logger.error(
+                    "Error while terminating provider instance",
+                    exc_info=True,
+                )
         try:
             await self.llm_tools.disable_mcp_server()
         except Exception:

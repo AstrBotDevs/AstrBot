@@ -1,5 +1,4 @@
 """Test knowledge base lookup by name and UUID (issue #9529)"""
-
 import pytest
 
 
@@ -257,4 +256,3 @@ class TestCheckAllKB:
             mock_logger.warning.assert_called_once()
             call_args = mock_logger.warning.call_args[0][0]
             assert "3/3" in call_args
-

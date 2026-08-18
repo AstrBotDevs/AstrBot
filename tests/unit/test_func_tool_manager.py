@@ -7,6 +7,7 @@ import pytest
 
 from astrbot.core import sp
 from astrbot.core.computer.booters.local import LocalShellComponent
+from astrbot.core.computer.computer_tool_provider import get_all_tools
 from astrbot.core.provider import func_tool_manager as ftm
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.tools.computer_tools.shell import (
@@ -18,7 +19,44 @@ from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.tools.web_search_tools import (
     FirecrawlExtractWebPageTool,
     FirecrawlWebSearchTool,
+    TavilyExtractWebPageTool,
+    TavilyWebSearchTool,
 )
+
+
+def test_computer_tool_provider_exposes_shell_tool():
+    tools = get_all_tools()
+
+    assert "astrbot_execute_shell" in {tool.name for tool in tools}
+
+
+def test_function_tool_manager_keeps_non_builtin_list_empty():
+    manager = FunctionToolManager()
+
+    assert manager.func_list == []
+
+
+def test_function_tool_manager_resolves_cached_shell_builtin():
+    manager = FunctionToolManager()
+
+    first_tool = manager.get_func("astrbot_execute_shell")
+    second_tool = manager.get_func("astrbot_execute_shell")
+
+    assert first_tool is not None
+    assert second_tool is first_tool
+    assert manager.is_builtin_tool("astrbot_execute_shell") is True
+
+
+def test_tavily_tools_are_registered_as_builtin_tools():
+    manager = FunctionToolManager()
+
+    search_tool = manager.get_builtin_tool(TavilyWebSearchTool)
+    extract_tool = manager.get_builtin_tool(TavilyExtractWebPageTool)
+
+    assert search_tool.name == "web_search_tavily"
+    assert extract_tool.name == "tavily_extract_web_page"
+    assert manager.is_builtin_tool("web_search_tavily") is True
+    assert manager.is_builtin_tool("tavily_extract_web_page") is True
 
 
 def test_get_builtin_tool_by_class_returns_cached_instance():

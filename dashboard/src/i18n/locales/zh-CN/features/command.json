@@ -39,7 +39,8 @@
     "enable": "启用指令",
     "disable": "禁用指令",
     "rename": "重命名指令",
-    "viewDetails": "查看详情"
+    "viewDetails": "查看详情",
+    "sdkReadonly": "SDK 指令当前仅支持查看，不支持在此处修改"
   },
   "dialogs": {
     "rename": {

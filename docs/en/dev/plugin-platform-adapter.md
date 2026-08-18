@@ -23,7 +23,7 @@ class FakeClient():
         self.token = token
         self.username = username
         # ...
-                
+
     async def start_polling(self):
         while True:
             await asyncio.sleep(5)
@@ -35,10 +35,10 @@ class FakeClient():
                 'message_id': 'asdhoashd',
                 'group_id': 'group123',
             })
-            
+
     async def send_text(self, to: str, message: str):
         print('Message sent:', to, message)
-        
+
     async def send_image(self, to: str, image_path: str):
         print('Image sent:', to, image_path)
 ```
@@ -56,7 +56,7 @@ from astrbot.api.platform import register_platform_adapter
 from astrbot import logger
 from .client import FakeClient
 from .fake_platform_event import FakePlatformEvent
-            
+
 # Register the platform adapter. First param: platform name, second: description, third: default config.
 @register_platform_adapter("fake", "fake adapter", default_config_tmpl={
     "token": "your_token",
@@ -68,11 +68,11 @@ class FakePlatformAdapter(Platform):
         super().__init__(event_queue)
         self.config = platform_config # The default config above; filled in by the user and passed here
         self.settings = platform_settings # platform_settings: platform settings
-    
+
     async def send_by_session(self, session: MessageSesion, message_chain: MessageChain):
         # Must be implemented
         await super().send_by_session(session, message_chain)
-    
+
     def meta(self) -> PlatformMetadata:
         # Must be implemented. Simply return as shown below.
         return PlatformMetadata(
@@ -87,8 +87,8 @@ class FakePlatformAdapter(Platform):
         async def on_received(data):
             logger.info(data)
             abm = await self.convert_message(data=data) # Convert to AstrBotMessage
-            await self.handle_msg(abm) 
-        
+            await self.handle_msg(abm)
+
         # Initialize FakeClient
         self.client = FakeClient(self.config['token'], self.config['username'])
         self.client.on_message_received = on_received
@@ -108,9 +108,9 @@ class FakePlatformAdapter(Platform):
         abm.self_id = data['bot_id']
         abm.session_id = data['userid'] # Session ID. Important!
         abm.message_id = data['message_id'] # Message ID.
-        
+
         return abm
-    
+
     async def handle_msg(self, message: AstrBotMessage):
         # Handle the message
         message_event = FakePlatformEvent(
@@ -136,7 +136,7 @@ class FakePlatformEvent(AstrMessageEvent):
     def __init__(self, message_str: str, message_obj: AstrBotMessage, platform_meta: PlatformMetadata, session_id: str, client: FakeClient):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
-        
+
     async def send(self, message: MessageChain):
         for i in message.chain: # Iterate over the message chain
             if isinstance(i, Plain): # If it's a text message

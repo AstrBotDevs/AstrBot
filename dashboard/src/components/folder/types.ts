@@ -63,10 +63,7 @@ export interface FolderOperations {
   deleteFolder: (folderId: string) => Promise<void>;
 
   // 移动文件夹
-  moveFolder?: (
-    folderId: string,
-    targetParentId: string | null,
-  ) => Promise<void>;
+  moveFolder?: (folderId: string, targetParentId: string | null) => Promise<void>;
 }
 
 /**

@@ -6,7 +6,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.core.tools.cron_tools import FutureTaskTool
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.tools.cron_tools import (
+    CreateActiveCronTool,
+    DeleteCronJobTool,
+    FutureTaskTool,
+    ListCronJobsTool,
+)
 
 
 def _context(
@@ -46,6 +52,76 @@ def _job(job_id: str, *, umo: str = "test:group:shared", sender_id: str = "user-
             "origin": "tool",
         },
     )
+
+
+def _wrapper_context(cron_manager: object | None = None) -> ContextWrapper:
+    return ContextWrapper(
+        context=SimpleNamespace(
+            context=SimpleNamespace(
+                cron_manager=cron_manager,
+                get_config=lambda umo=None: {"timezone": "Asia/Shanghai"},
+            ),
+            event=SimpleNamespace(
+                unified_msg_origin="test:private:session",
+                get_sender_id=lambda: "user-1",
+            ),
+        )
+    )
+
+
+def test_legacy_future_task_wrappers_keep_names_and_requirements():
+    create_tool = CreateActiveCronTool()
+    delete_tool = DeleteCronJobTool()
+    list_tool = ListCronJobsTool()
+
+    assert create_tool.name == "create_future_task"
+    assert "note" in create_tool.parameters["required"]
+    assert (
+        "mon-fri"
+        in create_tool.parameters["properties"]["cron_expression"]["description"]
+    )
+    assert (
+        "sat,sun"
+        in create_tool.parameters["properties"]["cron_expression"]["description"]
+    )
+    assert delete_tool.name == "delete_future_task"
+    assert "job_id" in delete_tool.parameters["required"]
+    assert list_tool.name == "list_future_tasks"
+
+
+@pytest.mark.asyncio
+async def test_delete_future_task_wrapper_routes_to_delete_action():
+    cron_mgr = SimpleNamespace(
+        db=SimpleNamespace(
+            get_cron_job=AsyncMock(
+                return_value=SimpleNamespace(
+                    job_id="job-1",
+                    payload={
+                        "session": "test:private:session",
+                        "sender_id": "user-1",
+                    },
+                )
+            )
+        ),
+        delete_job=AsyncMock(return_value=True),
+    )
+
+    result = await DeleteCronJobTool().call(
+        _wrapper_context(cron_mgr),
+        job_id="job-1",
+    )
+
+    cron_mgr.delete_job.assert_awaited_once_with("job-1")
+    assert result == "Deleted cron job job-1."
+
+
+@pytest.mark.asyncio
+async def test_list_future_tasks_wrapper_routes_to_list_action():
+    cron_mgr = SimpleNamespace(list_jobs=AsyncMock(return_value=[]))
+
+    result = await ListCronJobsTool().call(_wrapper_context(cron_mgr))
+
+    assert result == "No cron jobs found."
 
 
 def test_future_task_schema_has_action_and_create_cron_guidance():

@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, watch, useAttrs } from "vue";
-import { useCustomizerStore } from "@/stores/customizer";
+import { computed, ref, useAttrs, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
-import UninstallConfirmDialog from "./UninstallConfirmDialog.vue";
+import { useCustomizerStore } from "@/stores/customizer";
+import { usePluginI18n } from "@/utils/pluginI18n";
+import defaultPluginIcon from "/favicon.svg";
 import PluginPlatformChip from "./PluginPlatformChip.vue";
 import StyledMenu from "./StyledMenu.vue";
-import defaultPluginIcon from "/favicon.svg";
-import { usePluginI18n } from "@/utils/pluginI18n";
+import UninstallConfirmDialog from "./UninstallConfirmDialog.vue";
 
 const props = defineProps({
   extension: {
@@ -32,6 +32,7 @@ const emit = defineEmits([
   "configure",
   "update",
   "reload",
+  "install",
   "uninstall",
   "toggle-activation",
   "view-handlers",
@@ -41,7 +42,6 @@ const emit = defineEmits([
   "open-webui",
   "change-source",
 ]);
-
 const attrs = useAttrs();
 
 // 国际化
@@ -49,15 +49,11 @@ const { tm } = useModuleI18n("features/extension");
 const { pluginName, pluginDesc } = usePluginI18n();
 
 const hasPages = computed(() => {
-  return (
-    Array.isArray(props.extension?.pages) && props.extension.pages.length > 0
-  );
+  return Array.isArray(props.extension?.pages) && props.extension.pages.length > 0;
 });
 
 const updateDisabledReason = computed(() => {
-  return (
-    props.extension?.update_disabled_reason || tm("messages.updateDisabled")
-  );
+  return props.extension?.update_disabled_reason || tm("messages.updateDisabled");
 });
 
 const hasKnownInstallSource = computed(() => {
@@ -65,11 +61,7 @@ const hasKnownInstallSource = computed(() => {
   const installMethod = String(source?.install_method || "")
     .trim()
     .toLowerCase();
-  return Boolean(
-    source &&
-      source.implicit !== true &&
-      ["market", "repository"].includes(installMethod),
-  );
+  return Boolean(source && source.implicit !== true && ["market", "repository"].includes(installMethod));
 });
 
 const hasUsableRepo = computed(() => {
@@ -78,11 +70,7 @@ const hasUsableRepo = computed(() => {
 });
 
 const canUpdateExtension = computed(() => {
-  return (
-    props.marketMode ||
-    (!props.extension?.reserved &&
-      (hasKnownInstallSource.value || hasUsableRepo.value))
-  );
+  return props.marketMode || (!props.extension?.reserved && (hasKnownInstallSource.value || hasUsableRepo.value));
 });
 
 const canChangePluginSource = computed(() => {
@@ -101,9 +89,18 @@ const supportPlatforms = computed(() => {
 
 const astrbotVersionRequirement = computed(() => {
   const versionSpec = props.extension?.astrbot_version;
-  return typeof versionSpec === "string" && versionSpec.trim().length
-    ? versionSpec.trim()
-    : "";
+  return typeof versionSpec === "string" && versionSpec.trim().length ? versionSpec.trim() : "";
+});
+
+// 作者显示（兼容多种字段名）
+const authorDisplay = computed(() => {
+  const ext = props.extension || {};
+  if (typeof ext.author === "string" && ext.author.trim()) return ext.author;
+  if (Array.isArray(ext.authors) && ext.authors.length) return ext.authors.join(", ");
+  if (typeof ext.author_name === "string" && ext.author_name.trim()) return ext.author_name;
+  if (typeof ext.owner === "string" && ext.owner.trim()) return ext.owner;
+  if (ext.author && typeof ext.author === "object" && ext.author.name) return ext.author.name;
+  return "";
 });
 
 const logoLoadFailed = ref(false);
@@ -113,9 +110,7 @@ const logoSrc = computed(() => {
   if (logoLoadFailed.value) {
     return defaultPluginIcon;
   }
-  return typeof logo === "string" && logo.trim().length
-    ? logo
-    : defaultPluginIcon;
+  return typeof logo === "string" && logo.trim().length ? logo : defaultPluginIcon;
 });
 
 const localizedName = computed(() => pluginName(props.extension));
@@ -152,10 +147,7 @@ const uninstallExtension = async () => {
   showUninstallDialog.value = true;
 };
 
-const handleUninstallConfirm = (options: {
-  deleteConfig: boolean;
-  deleteData: boolean;
-}) => {
+const handleUninstallConfirm = (options: { deleteConfig: boolean; deleteData: boolean }) => {
   emit("uninstall", props.extension, options);
 };
 
@@ -194,18 +186,12 @@ const openWebui = () => {
     variant="outlined"
     :style="{
       position: 'relative',
-      backgroundColor:
-        useCustomizerStore().uiTheme === 'PurpleTheme'
-          ? marketMode
-            ? '#f8f0dd'
-            : '#ffffff'
-          : marketMode
-          ? '#3a3425'
-          : '#282833',
-      color:
-        useCustomizerStore().uiTheme === 'PurpleTheme'
-          ? '#000000dd'
-          : '#ffffffdd',
+      backgroundColor: !useCustomizerStore().isDarkTheme
+        ? marketMode
+          ? '#f8f0dd'
+          : '#ffffff'
+        : '#282833',
+      color: !useCustomizerStore().isDarkTheme ? '#000000dd' : '#ffffff',
     }"
   >
     <v-card-text class="extension-card-text">
@@ -233,7 +219,7 @@ const openWebui = () => {
                     : extension.name
                 "
               >
-                <template v-slot:activator="{ props: titleTooltipProps }">
+                <template #activator="{ props: titleTooltipProps }">
                   <span
                     v-bind="titleTooltipProps"
                     class="extension-title__text"
@@ -271,10 +257,10 @@ const openWebui = () => {
                 }}
               </v-chip>
               <v-tooltip
-                location="top"
                 v-if="extension?.has_update && !marketMode"
+                location="top"
               >
-                <template v-slot:activator="{ props: tooltipProps }">
+                <template #activator="{ props: tooltipProps }">
                   <v-icon
                     v-bind="tooltipProps"
                     color="warning"
@@ -283,7 +269,7 @@ const openWebui = () => {
                     size="small"
                     style="cursor: pointer"
                     @click.stop="updateExtension"
-                  ></v-icon>
+                  />
                 </template>
                 <span
                   >{{ tm("card.status.hasUpdate") }}:
@@ -294,7 +280,7 @@ const openWebui = () => {
 
             <template v-if="!marketMode">
               <v-tooltip location="left">
-                <template v-slot:activator="{ props: tooltipProps }">
+                <template #activator="{ props: tooltipProps }">
                   <div class="extension-switch-wrap" @click.stop>
                     <div
                       v-bind="tooltipProps"
@@ -312,7 +298,7 @@ const openWebui = () => {
                         hide-details
                         inset
                         @update:model-value="toggleActivation"
-                      ></v-switch>
+                      />
                     </div>
                   </div>
                 </template>
@@ -326,6 +312,10 @@ const openWebui = () => {
           </div>
 
           <div class="extension-chip-group d-flex flex-wrap">
+            <v-chip color="primary" label size="small">
+              <v-icon icon="mdi-source-branch" start />
+              {{ extension.version }}
+            </v-chip>
             <v-chip
               v-if="extension?.has_update"
               color="warning"
@@ -334,8 +324,20 @@ const openWebui = () => {
               style="cursor: pointer"
               @click.stop="updateExtension"
             >
-              <v-icon icon="mdi-arrow-up-bold" start></v-icon>
+              <v-icon icon="mdi-arrow-up-bold" start />
               {{ extension.online_version }}
+            </v-chip>
+            <v-chip
+              v-if="extension.handlers?.length"
+              color="primary"
+              label
+              size="small"
+              style="cursor: pointer"
+              @click.stop="viewHandlers"
+            >
+              <v-icon icon="mdi-cogs" start />
+              {{ extension.handlers?.length
+              }}{{ tm("card.status.handlersCount") }}
             </v-chip>
             <v-chip
               v-for="tag in extension.tags"
@@ -347,6 +349,10 @@ const openWebui = () => {
               {{ tag === "danger" ? tm("tags.danger") : tag }}
             </v-chip>
             <PluginPlatformChip :platforms="supportPlatforms" />
+            <v-chip v-if="authorDisplay" color="info" label size="small">
+              <v-icon icon="mdi-account" start></v-icon>
+              {{ authorDisplay }}
+            </v-chip>
             <v-chip
               v-if="astrbotVersionRequirement"
               color="secondary"
@@ -372,7 +378,7 @@ const openWebui = () => {
       <template v-if="!marketMode">
         <v-spacer></v-spacer>
         <v-tooltip location="top">
-          <template v-slot:activator="{ props: pinTooltipProps }">
+          <template #activator="{ props: pinTooltipProps }">
             <v-btn
               v-bind="pinTooltipProps"
               :aria-label="isPinned ? tm('buttons.unpin') : tm('buttons.pin')"
@@ -388,7 +394,7 @@ const openWebui = () => {
         </v-tooltip>
 
         <v-tooltip location="top" :text="tm('buttons.viewDocs')">
-          <template v-slot:activator="{ props: actionProps }">
+          <template #activator="{ props: actionProps }">
             <v-btn
               v-bind="actionProps"
               icon="mdi-book-open-page-variant"
@@ -417,9 +423,8 @@ const openWebui = () => {
             ></v-btn>
           </template>
         </v-tooltip>
-
         <v-tooltip location="top" :text="tm('card.actions.pluginConfig')">
-          <template v-slot:activator="{ props: actionProps }">
+          <template #activator="{ props: actionProps }">
             <v-btn
               v-bind="actionProps"
               icon="mdi-cog"
@@ -431,8 +436,27 @@ const openWebui = () => {
           </template>
         </v-tooltip>
 
+        <v-tooltip
+          v-if="extension?.repo"
+          location="top"
+          :text="tm('buttons.viewRepo')"
+        >
+          <template #activator="{ props: actionProps }">
+            <v-btn
+              v-bind="actionProps"
+              icon="mdi-github"
+              size="small"
+              variant="tonal"
+              color="secondary"
+              :href="extension.repo"
+              target="_blank"
+              @click.stop
+            ></v-btn>
+          </template>
+        </v-tooltip>
+
         <v-tooltip location="top" :text="tm('card.actions.reloadPlugin')">
-          <template v-slot:activator="{ props: actionProps }">
+          <template #activator="{ props: actionProps }">
             <v-btn
               v-bind="actionProps"
               icon="mdi-refresh"

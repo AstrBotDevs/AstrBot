@@ -1,62 +1,94 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { useAuthStore } from '@/stores/auth';
-import { useModuleI18n } from '@/i18n/composables';
-import AuthStageAccount from './stages/AuthStageAccount.vue';
-import AuthStageTotp from './stages/AuthStageTotp.vue';
-import AuthStageRecovery from './stages/AuthStageRecovery.vue';
+import { onMounted, onUnmounted, ref } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
+import { useApiStore } from "@/stores/api";
+import { useAuthStore } from "@/stores/auth";
+import AuthStageAccount from "./stages/AuthStageAccount.vue";
+import AuthStageRecovery from "./stages/AuthStageRecovery.vue";
+import AuthStageTotp from "./stages/AuthStageTotp.vue";
 
-const { tm: t } = useModuleI18n('features/auth');
+const { tm: t } = useModuleI18n("features/auth");
 const authStore = useAuthStore();
+const apiStore = useApiStore();
 
-const username = ref('');
-const password = ref('');
-const totpCode = ref('');
+const emit = defineEmits<(e: "openServerConfig") => void>();
+
+const username = ref("");
+const password = ref("");
+const totpCode = ref("");
 const trustTotpDevice = ref(false);
-const recoveryCode = ref('');
+const recoveryCode = ref("");
 const loading = ref(false);
-const apiError = ref('');
-const stage = ref<'account' | 'totp' | 'recovery'>('account');
+const apiError = ref("");
+const stage = ref<"account" | "totp" | "recovery">("account");
+
+// 从URL参数读取用户名
+const params = new URLSearchParams(window.location.search);
+const usernameParam = params.get("username");
+if (usernameParam) {
+  username.value = usernameParam;
+}
+
+// 监听从LoginPage传来的用户名参数
+function handleUsernameParam(event: Event) {
+  const customEvent = event as CustomEvent<{ username: string }>;
+  username.value = customEvent.detail.username;
+}
+
+onMounted(() => {
+  window.addEventListener("astrbot-url-param-username", handleUsernameParam);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("astrbot-url-param-username", handleUsernameParam);
+});
 
 function resetTotpStage() {
-  totpCode.value = '';
+  totpCode.value = "";
   trustTotpDevice.value = false;
 }
 
 function goToAccountStage() {
-  stage.value = 'account';
-  apiError.value = '';
+  stage.value = "account";
+  apiError.value = "";
   resetTotpStage();
 }
 
 function goToTotpStage() {
-  stage.value = 'totp';
-  apiError.value = '';
+  stage.value = "totp";
+  apiError.value = "";
 }
 
 function goToRecoveryStage() {
-  stage.value = 'recovery';
-  apiError.value = '';
-  recoveryCode.value = '';
+  stage.value = "recovery";
+  apiError.value = "";
+  recoveryCode.value = "";
+}
+
+function setRedirectReturnUrl() {
+  authStore.returnUrl = new URLSearchParams(window.location.search).get("redirect");
 }
 
 async function submitAccountStage() {
   if (!username.value || !password.value) {
     return;
   }
+  if (!apiStore.apiBaseUrl) {
+    emit("openServerConfig");
+    return;
+  }
   loading.value = true;
-  apiError.value = '';
+  apiError.value = "";
   try {
-    // @ts-ignore
-    authStore.returnUrl = new URLSearchParams(window.location.search).get('redirect');
+    setRedirectReturnUrl();
     const res = await authStore.login(username.value, password.value);
-    if (res === 'totp_required') {
+    if (res === "totp_required") {
       goToTotpStage();
     } else if (res === 'upgrade_recovery_required') {
       return;
     }
   } catch (err) {
-    apiError.value = String(err || '') || 'Login failed';
+    apiError.value = String(err || "") || "Login failed";
   } finally {
     loading.value = false;
   }
@@ -67,16 +99,12 @@ async function submitTotpStage() {
     return;
   }
   loading.value = true;
-  apiError.value = '';
+  apiError.value = "";
   try {
-    await authStore.login(
-      username.value,
-      password.value,
-      totpCode.value,
-      trustTotpDevice.value,
-    );
+    setRedirectReturnUrl();
+    await authStore.login(username.value, password.value, totpCode.value, trustTotpDevice.value);
   } catch (err) {
-    apiError.value = String(err || '') || 'Verification failed';
+    apiError.value = String(err || "") || "Verification failed";
   } finally {
     loading.value = false;
   }
@@ -89,11 +117,12 @@ async function submitRecoveryStage() {
     return;
   }
   loading.value = true;
-  apiError.value = '';
+  apiError.value = "";
   try {
+    setRedirectReturnUrl();
     await authStore.login(username.value, password.value, recoveryCode.value);
   } catch (err) {
-    apiError.value = String(err || '') || 'Recovery login failed';
+    apiError.value = String(err || "") || "Recovery login failed";
   } finally {
     loading.value = false;
   }
@@ -135,7 +164,12 @@ async function submitRecoveryStage() {
     />
 
     <div v-if="apiError" class="mt-4 error-container">
-      <v-alert color="error" variant="tonal" icon="mdi-alert-circle" border="start">
+      <v-alert
+        color="error"
+        variant="tonal"
+        icon="mdi-alert-circle"
+        border="start"
+      >
         {{ apiError }}
       </v-alert>
     </div>
@@ -205,6 +239,11 @@ async function submitRecoveryStage() {
       font-size: 1.05rem;
       font-weight: 500;
     }
+  }
+
+  .hint-label {
+    color: var(--v-theme-on-surface-variant);
+    padding-left: 5px;
   }
 
   .error-container {

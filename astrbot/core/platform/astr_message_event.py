@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import abc
 import asyncio
 import hashlib
@@ -64,7 +66,7 @@ class AstrMessageEvent(abc.ABC):
             except (ValueError, TypeError, AttributeError):
                 logger.warning(
                     f"Failed to convert message type {message_obj.type!r} to MessageType. "
-                    f"Falling back to FRIEND_MESSAGE."
+                    f"Falling back to FRIEND_MESSAGE.",
                 )
                 message_type = MessageType.FRIEND_MESSAGE
         self.session = MessageSession(
@@ -279,7 +281,7 @@ class AstrMessageEvent(abc.ABC):
 
     async def send_streaming(
         self,
-        generator: AsyncGenerator[MessageChain, None],
+        generator: AsyncGenerator[MessageChain],
         use_fallback: bool = False,
     ) -> None:
         """发送流式消息到消息平台，使用异步生成器。
@@ -510,3 +512,7 @@ class AstrMessageEvent(abc.ABC):
 
         - aiocqhttp(OneBotv11)
         """
+        group = self.message_obj.group
+        if group is None or (group_id is not None and group_id != group.group_id):
+            return None
+        return group

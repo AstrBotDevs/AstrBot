@@ -2,7 +2,6 @@
   <div class="base-folder-tree">
     <!-- 搜索框 -->
     <v-text-field
-      v-if="folderTree.length > 0"
       v-model="searchQuery"
       :placeholder="labels.searchPlaceholder"
       prepend-inner-icon="mdi-magnify"
@@ -10,27 +9,25 @@
       density="compact"
       hide-details
       clearable
-      class="folder-search mb-2"
+      class="mb-3"
     />
 
     <!-- 根目录节点 -->
-    <div class="tree-list">
-      <button
-        type="button"
+    <v-list density="compact" nav class="tree-list" bg-color="transparent">
+      <v-list-item
+        :active="currentFolderId === null"
+        rounded="lg"
+        :class="['root-item', { 'drag-over': isRootDragOver }]"
         @click="handleFolderClick(null)"
-        :class="[
-          'root-item',
-          {
-            'root-item--active': currentFolderId === null,
-            'drag-over': isRootDragOver,
-          },
-        ]"
         @dragover.prevent="handleRootDragOver"
         @dragleave="handleRootDragLeave"
         @drop.prevent="handleRootDrop"
       >
-        {{ labels.rootFolder }}
-      </button>
+        <template #prepend>
+          <v-icon>mdi-home</v-icon>
+        </template>
+        <v-list-item-title>{{ labels.rootFolder }}</v-list-item-title>
+      </v-list-item>
 
       <!-- 文件夹树 -->
       <template v-if="!treeLoading">
@@ -59,11 +56,14 @@
       <!-- 空状态 -->
       <div
         v-if="!treeLoading && folderTree.length === 0"
-        class="empty-tree text-medium-emphasis"
+        class="text-center pa-4 text-medium-emphasis"
       >
-        {{ labels.noFolders }}
+        <v-icon size="32" class="mb-2"> mdi-folder-outline </v-icon>
+        <div class="text-body-2">
+          {{ labels.noFolders }}
+        </div>
       </div>
-    </div>
+    </v-list>
 
     <!-- 右键菜单 -->
     <v-menu
@@ -74,24 +74,24 @@
     >
       <v-list density="compact">
         <v-list-item @click="openFolder">
-          <template v-slot:prepend>
-            <v-icon size="small">mdi-folder-open</v-icon>
+          <template #prepend>
+            <v-icon size="small"> mdi-folder-open </v-icon>
           </template>
           <v-list-item-title>{{
             mergedLabels.contextMenu.open
           }}</v-list-item-title>
         </v-list-item>
         <v-list-item @click="$emit('rename-folder', contextMenu.folder)">
-          <template v-slot:prepend>
-            <v-icon size="small">mdi-pencil</v-icon>
+          <template #prepend>
+            <v-icon size="small"> mdi-pencil </v-icon>
           </template>
           <v-list-item-title>{{
             mergedLabels.contextMenu.rename
           }}</v-list-item-title>
         </v-list-item>
         <v-list-item @click="$emit('move-folder', contextMenu.folder)">
-          <template v-slot:prepend>
-            <v-icon size="small">mdi-folder-move</v-icon>
+          <template #prepend>
+            <v-icon size="small"> mdi-folder-move </v-icon>
           </template>
           <v-list-item-title>{{
             mergedLabels.contextMenu.moveTo
@@ -99,11 +99,11 @@
         </v-list-item>
         <v-divider class="my-1" />
         <v-list-item
-          @click="$emit('delete-folder', contextMenu.folder)"
           class="text-error"
+          @click="$emit('delete-folder', contextMenu.folder)"
         >
-          <template v-slot:prepend>
-            <v-icon size="small" color="error">mdi-delete</v-icon>
+          <template #prepend>
+            <v-icon size="small" color="error"> mdi-delete </v-icon>
           </template>
           <v-list-item-title>{{
             mergedLabels.contextMenu.delete
@@ -116,8 +116,8 @@
 
 <script lang="ts">
 import { defineComponent, type PropType } from "vue";
-import type { FolderTreeNode, ContextMenuEvent } from "./types";
 import BaseFolderTreeNode from "./BaseFolderTreeNode.vue";
+import type { ContextMenuEvent, FolderTreeNode } from "./types";
 
 interface ContextMenuState {
   show: boolean;
@@ -230,17 +230,11 @@ export default defineComponent({
     },
   },
   methods: {
-    filterTreeBySearch(
-      nodes: FolderTreeNode[],
-      query: string,
-    ): FolderTreeNode[] {
+    filterTreeBySearch(nodes: FolderTreeNode[], query: string): FolderTreeNode[] {
       return nodes
         .filter((node) => {
           const matches = node.name.toLowerCase().includes(query);
-          const childMatches = this.filterTreeBySearch(
-            node.children || [],
-            query,
-          );
+          const childMatches = this.filterTreeBySearch(node.children || [], query);
           return matches || childMatches.length > 0;
         })
         .map((node) => ({
@@ -269,10 +263,7 @@ export default defineComponent({
 
       try {
         const data = JSON.parse(event.dataTransfer.getData("application/json"));
-        if (
-          this.acceptDropTypes.length === 0 ||
-          this.acceptDropTypes.includes(data.type)
-        ) {
+        if (this.acceptDropTypes.length === 0 || this.acceptDropTypes.includes(data.type)) {
           this.$emit("item-dropped", {
             item_id: data.id || data.persona_id || data.item_id,
             item_type: data.type,
@@ -309,55 +300,18 @@ export default defineComponent({
 }
 
 .tree-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
   flex: 1;
   overflow-y: auto;
-  padding: 2px 0;
 }
 
 .root-item {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  min-height: 32px;
-  margin-bottom: 0;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-  text-align: left;
-  transition: none;
-}
-
-.root-item:hover,
-.root-item--active {
-  background: rgba(var(--v-theme-on-surface), 0.045);
+  margin-bottom: 4px;
+  transition: all 0.2s ease;
 }
 
 .root-item.drag-over {
-  background-color: rgba(var(--v-theme-on-surface), 0.09);
-  outline: 1px dashed rgba(var(--v-theme-on-surface), 0.4);
-}
-
-.folder-search :deep(.v-field) {
-  border-radius: 7px !important;
-  background: transparent;
-  box-shadow: none;
-}
-
-.folder-search :deep(.v-field__outline) {
-  --v-field-border-opacity: 0.16;
-}
-
-.empty-tree {
-  padding: 12px 8px;
-  font-size: 0.78rem;
-  text-align: left;
+  background-color: rgba(var(--v-theme-primary), 0.15);
+  border: 2px dashed rgb(var(--v-theme-primary));
+  border-radius: 8px;
 }
 </style>

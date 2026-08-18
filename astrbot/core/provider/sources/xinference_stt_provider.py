@@ -1,14 +1,21 @@
+import uuid
+
+import aiofiles
 import aiohttp
+import anyio
 from xinference_client.client.restful.async_restful_client import (
     AsyncClient as Client,
 )
 
 from astrbot.core import logger
-from astrbot.core.utils.media_utils import MediaResolver
-
-from ..entities import ProviderType
-from ..provider import STTProvider
-from ..register import register_provider_adapter
+from astrbot.core.provider import STTProvider
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.register import register_provider_adapter
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.tencent_record_helper import (
+    convert_to_pcm_wav,
+    tencent_silk_to_wav,
+)
 
 
 @register_provider_adapter(
@@ -30,19 +37,20 @@ class ProviderXinferenceSTT(STTProvider):
             "launch_model_if_not_running",
             False,
         )
-        self.client = None
-        self.model_uid = None
+        self.client: Client | None = None
+        self.model_uid: str | None = None
 
     async def initialize(self) -> None:
         if self.api_key:
             logger.info("Xinference STT: Using API key for authentication.")
-            self.client = Client(self.base_url, api_key=self.api_key)
+            client = Client(self.base_url, api_key=self.api_key)
         else:
             logger.info("Xinference STT: No API key provided.")
-            self.client = Client(self.base_url)
+            client = Client(self.base_url)
+        self.client = client
 
         try:
-            running_models = await self.client.list_models()
+            running_models = await client.list_models()
             for uid, model_spec in running_models.items():
                 if model_spec.get("model_name") == self.model_name:
                     logger.info(
@@ -54,7 +62,7 @@ class ProviderXinferenceSTT(STTProvider):
             if self.model_uid is None:
                 if self.launch_model_if_not_running:
                     logger.info(f"Launching {self.model_name} model...")
-                    self.model_uid = await self.client.launch_model(
+                    self.model_uid = await client.launch_model(
                         model_name=self.model_name,
                         model_type="audio",
                     )
@@ -77,56 +85,126 @@ class ProviderXinferenceSTT(STTProvider):
             logger.error("Xinference STT model is not initialized.")
             return ""
 
+        audio_bytes = None
+        temp_files = []
+        is_tencent = False
+
         try:
-            async with MediaResolver(
-                audio_url,
-                media_type="audio",
-                default_suffix=".wav",
-            ).as_path(target_format="wav") as audio:
-                audio_bytes = audio.read_bytes()
+            # 1. Get audio bytes
+            if audio_url.startswith("http"):
+                if "multimedia.nt.qq.com.cn" in audio_url:
+                    is_tencent = True
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(audio_url, timeout=self.timeout) as resp:
+                        if resp.status == 200:
+                            audio_bytes = await resp.read()
+                        else:
+                            logger.error(
+                                f"Failed to download audio from {audio_url}, status: {resp.status}",
+                            )
+                            return ""
+            elif await anyio.Path(audio_url).exists():
+                async with aiofiles.open(audio_url, "rb") as f:
+                    audio_bytes = await f.read()
+            else:
+                logger.error(f"File not found: {audio_url}")
+                return ""
 
-                if not audio_bytes:
-                    logger.error("Audio bytes are empty.")
-                    return ""
+            if not audio_bytes:
+                logger.error("Audio bytes are empty.")
+                return ""
 
-                # 官方asyncCLient的客户端似乎实现有点问题，这里直接用aiohttp实现openai标准兼容请求，提交issue等待官方修复后再改回来
-                url = f"{self.base_url}/v1/audio/transcriptions"
-                headers = {
-                    "accept": "application/json",
-                }
-                if self.client and self.client._headers:
-                    headers.update(self.client._headers)
+            # 2. Check for conversion
+            conversion_type = None
 
-                data = aiohttp.FormData()
-                data.add_field("model", self.model_uid)
-                data.add_field(
-                    "file",
-                    audio_bytes,
-                    filename="audio.wav",
-                    content_type="audio/wav",
+            if b"SILK" in audio_bytes[:8]:
+                conversion_type = "silk"
+            elif b"#!AMR" in audio_bytes[:6]:
+                conversion_type = "amr"
+            elif audio_url.endswith(".silk") or is_tencent:
+                conversion_type = "silk"
+            elif audio_url.endswith(".amr"):
+                conversion_type = "amr"
+
+            # 3. Perform conversion if needed
+            if conversion_type:
+                logger.info(
+                    f"Audio requires conversion ({conversion_type}), using temporary files...",
                 )
+                temp_dir = anyio.Path(get_astrbot_temp_path())
+                await temp_dir.mkdir(parents=True, exist_ok=True)
 
-                async with self.client.session.post(
-                    url,
-                    data=data,
-                    headers=headers,
-                    timeout=self.timeout,
-                ) as resp:
-                    if resp.status == 200:
-                        result = await resp.json()
-                        text = result.get("text", "")
-                        logger.debug(f"Xinference STT result: {text}")
-                        return text
-                    error_text = await resp.text()
-                    logger.error(
-                        f"Xinference STT transcription failed with status {resp.status}: {error_text}",
-                    )
-                    return ""
+                input_path = str(
+                    temp_dir / f"xinference_stt_{uuid.uuid4().hex[:8]}.input",
+                )
+                output_path = str(
+                    temp_dir / f"xinference_stt_{uuid.uuid4().hex[:8]}.wav",
+                )
+                temp_files.extend([input_path, output_path])
+
+                async with aiofiles.open(input_path, "wb") as f:
+                    await f.write(audio_bytes)
+
+                if conversion_type == "silk":
+                    logger.info("Converting silk to wav ...")
+                    await tencent_silk_to_wav(input_path, output_path)
+                elif conversion_type == "amr":
+                    logger.info("Converting amr to wav ...")
+                    await convert_to_pcm_wav(input_path, output_path)
+
+                async with aiofiles.open(output_path, "rb") as f:
+                    audio_bytes = await f.read()
+
+            # 4. Transcribe
+            # 官方asyncCLient的客户端似乎实现有点问题,这里直接用aiohttp实现openai标准兼容请求,提交issue等待官方修复后再改回来
+            url = f"{self.base_url}/v1/audio/transcriptions"
+            headers = {
+                "accept": "application/json",
+            }
+            if self.api_key:
+                headers["Authorization"] = f"Bearer {self.api_key}"
+
+            data = aiohttp.FormData()
+            data.add_field("model", self.model_uid)
+            data.add_field(
+                "file",
+                audio_bytes,
+                filename="audio.wav",
+                content_type="audio/wav",
+            )
+
+            async with self.client.session.post(
+                url,
+                data=data,
+                headers=headers,
+                timeout=self.timeout,
+            ) as resp:
+                if resp.status == 200:
+                    result = await resp.json()
+                    text_value = result.get("text")
+                    text = text_value if isinstance(text_value, str) else ""
+                    logger.debug(f"Xinference STT result: {text}")
+                    return text
+                error_text = await resp.text()
+                logger.error(
+                    f"Xinference STT transcription failed with status {resp.status}: {error_text}",
+                )
+                return ""
 
         except Exception as e:
             logger.error(f"Xinference STT failed: {e}")
             logger.debug(f"Xinference STT failed with exception: {e}", exc_info=True)
             return ""
+        finally:
+            # 5. Cleanup
+            for temp_file in temp_files:
+                try:
+                    temp_path = anyio.Path(temp_file)
+                    if await temp_path.exists():
+                        await temp_path.unlink()
+                        logger.debug(f"Removed temporary file: {temp_file}")
+                except Exception as e:
+                    logger.error(f"Failed to remove temporary file {temp_file}: {e}")
 
     async def terminate(self) -> None:
         """关闭客户端会话"""

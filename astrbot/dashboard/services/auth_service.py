@@ -447,8 +447,7 @@ class AuthService:
     def generate_jwt(self, username: str, *, auth_source: str = "password"):
         payload = {
             "username": username,
-            "exp": datetime.datetime.now(datetime.timezone.utc)
-            + datetime.timedelta(days=7),
+            "exp": datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=7),
         }
         if auth_source != "password":
             payload["auth_source"] = auth_source

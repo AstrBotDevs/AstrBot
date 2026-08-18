@@ -1,26 +1,28 @@
 import asyncio
 import hashlib
 import json
-import sys
 import typing as T
 from collections import deque
 from dataclasses import dataclass, field
+from typing import Any, override
 from uuid import uuid4
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.core import sp
+from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.response import AgentResponse, AgentResponseData
+from astrbot.core.agent.run_context import ContextWrapper, TContext
+from astrbot.core.agent.runners.base import AgentState, BaseAgentRunner
+from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
+from astrbot.core.provider.provider import Provider
 from astrbot.core.utils.config_number import coerce_int_config
 
-from ...hooks import BaseAgentRunHooks
-from ...response import AgentResponseData
-from ...run_context import ContextWrapper, TContext
-from ..base import AgentResponse, AgentState, BaseAgentRunner
 from .constants import DEERFLOW_SESSION_PREFIX, DEERFLOW_THREAD_ID_KEY
 from .deerflow_api_client import DeerFlowAPIClient
 from .deerflow_content_mapper import (
@@ -41,16 +43,12 @@ from .deerflow_stream_utils import (
     get_message_id,
 )
 
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
-
 
 class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
     """DeerFlow Agent Runner via LangGraph HTTP API."""
 
     _MAX_VALUES_HISTORY = 200
+    final_llm_resp: LLMResponse | None
 
     @dataclass(frozen=True)
     class _RunnerConfig:
@@ -131,7 +129,9 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
 
     async def _finish_with_result(
-        self, chain: MessageChain, role: str
+        self,
+        chain: MessageChain,
+        role: str,
     ) -> AgentResponse:
         self.final_llm_resp = LLMResponse(
             role=role,
@@ -248,7 +248,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                 await old_client.close()
             except Exception as e:
                 logger.warning(
-                    f"Failed to close previous DeerFlow API client cleanly: {e}"
+                    f"Failed to close previous DeerFlow API client cleanly: {e}",
                 )
 
         self.api_client = DeerFlowAPIClient(
@@ -262,20 +262,32 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
     @override
     async def reset(
         self,
+        provider: Provider,
         request: ProviderRequest,
         run_context: ContextWrapper[TContext],
+        tool_executor: BaseFunctionToolExecutor[TContext],
         agent_hooks: BaseAgentRunHooks[TContext],
-        provider_config: dict,
-        **kwargs: T.Any,
+        streaming: bool = False,
+        enforce_max_turns: int = -1,
+        llm_compress_instruction: str | None = None,
+        llm_compress_keep_recent: int = 0,
+        llm_compress_provider: Provider | None = None,
+        truncate_turns: int = 1,
+        custom_token_counter: Any = None,
+        custom_compressor: Any = None,
+        tool_schema_mode: str | None = "full",
+        fallback_providers: list[Provider] | None = None,
+        provider_config: dict | None = None,
+        **kwargs: Any,
     ) -> None:
         self.req = request
-        self.streaming = kwargs.get("streaming", False)
+        self.streaming = streaming
         self.final_llm_resp = None
         self._state = AgentState.IDLE
         self.agent_hooks = agent_hooks
         self.run_context = run_context
 
-        await self._load_config_and_client(provider_config)
+        await self._load_config_and_client(provider_config or {})
 
     @override
     async def step(self):
@@ -304,9 +316,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             yield await self._finish_with_error(err_msg)
 
     @override
-    async def step_until_done(
-        self, max_step: int = 30
-    ) -> T.AsyncGenerator[AgentResponse, None]:
+    async def step_until_done(self, max_step: int):
         if max_step <= 0:
             raise ValueError("max_step must be greater than 0")
 
@@ -318,7 +328,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
 
         if not self.done():
             raise RuntimeError(
-                f"DeerFlow agent reached max_step ({max_step}) without completion."
+                f"DeerFlow agent reached max_step ({max_step}) without completion.",
             )
 
     def _extract_new_messages_from_values(
@@ -383,7 +393,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         thread_id = thread.get("thread_id", "")
         if not thread_id:
             raise Exception(
-                f"DeerFlow create thread returned invalid payload: {thread}"
+                f"DeerFlow create thread returned invalid payload: {thread}",
             )
 
         await sp.put_async(
@@ -539,7 +549,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                 AgentResponse(
                     type="streaming_delta",
                     data=AgentResponseData(chain=MessageChain().message(delta)),
-                )
+                ),
             ]
 
         if delta_text:
@@ -549,9 +559,9 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                     AgentResponse(
                         type="streaming_delta",
                         data=AgentResponseData(
-                            chain=MessageChain().message(delta_text)
+                            chain=MessageChain().message(delta_text),
                         ),
-                    )
+                    ),
                 ]
 
         return []
@@ -603,7 +613,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             self._update_text_and_maybe_stream(
                 state=state,
                 new_full_text=latest_text or None,
-            )
+            ),
         )
         return responses
 
@@ -620,7 +630,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                 self._update_text_and_maybe_stream(
                     state=state,
                     delta_text=delta,
-                )
+                ),
             )
 
         maybe_clarification = extract_clarification_from_event_data(data)
@@ -737,7 +747,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
 
                 if event_type == "end":
                     break
-        except (asyncio.TimeoutError, TimeoutError):
+        except TimeoutError:
             logger.warning(
                 "DeerFlow stream timed out after %ss for thread_id=%s; returning partial result.",
                 self.timeout,

@@ -112,8 +112,12 @@ class TestDiscoverBayCredentials:
 
         assert result == "sk-bay-mismatch"
         mock_logger.warning.assert_called_once()
-        warning_msg = mock_logger.warning.call_args[0][0]
-        assert "endpoint mismatch" in warning_msg
+        warning_args = mock_logger.warning.call_args.args
+        assert "bay_credentials_mismatch" in warning_args[0]
+        assert warning_args[1:] == (
+            "http://other-host:9000",
+            "http://127.0.0.1:8114",
+        )
 
     def test_endpoint_match_no_warning(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

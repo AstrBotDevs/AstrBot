@@ -28,7 +28,7 @@ from tenacity import (
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import File, Image, Plain, Record, Video
-from astrbot.api.platform import AstrBotMessage, PlatformMetadata
+from astrbot.api.platform import AstrBotMessage, Group, PlatformMetadata
 from astrbot.core.platform.sources.qqofficial.qqofficial_chunked_upload import (
     QQOFFICIAL_CHUNKED_UPLOAD_THRESHOLD,
     QQOfficialChunkedUploader,
@@ -49,10 +49,10 @@ def _patch_qq_botpy_formdata() -> None:
     """
 
     try:
-        from botpy.http import _FormData  # type: ignore
+        form_data_type = getattr(botpy.http, "_FormData", None)
 
-        if not hasattr(_FormData, "_is_processed"):
-            setattr(_FormData, "_is_processed", False)
+        if form_data_type is not None and not hasattr(form_data_type, "_is_processed"):
+            setattr(form_data_type, "_is_processed", False)
     except Exception:
         logger.debug("[QQOfficial] Skip botpy FormData patch.")
 
@@ -107,6 +107,23 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
         self.send_buffer = None
+
+    async def send_typing(self) -> None:
+        """QQ Official does not expose a typing-state API."""
+
+    async def stop_typing(self) -> None:
+        """QQ Official does not expose a typing-state API."""
+
+    async def get_group(
+        self,
+        group_id: str | None = None,
+        **kwargs: object,
+    ) -> Group | None:
+        """Return group metadata already associated with this event."""
+        group = self.message_obj.group
+        if group is None or (group_id is not None and group_id != group.group_id):
+            return None
+        return group
 
     async def send(self, message: MessageChain) -> None:
         self.send_buffer = message
@@ -394,7 +411,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         payload["content"] = plain_text or None
                 ret = await self._send_with_markdown_fallback(
                     send_func=lambda retry_payload: self.bot.api.post_group_message(
-                        group_openid=source.group_openid,  # type: ignore
+                        group_openid=source.group_openid or "",
                         **retry_payload,
                     ),
                     payload=payload,
@@ -633,22 +650,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         file_name: str | None = None,
         **kwargs,
     ) -> Media:
-        """Upload media to a QQ group or C2C session.
-
-        Args:
-            file_source: Local file path or remote URL to upload.
-            file_type: QQ media type identifier.
-            srv_send_msg: Whether QQ should send the media immediately.
-            file_name: Optional display name for the uploaded file.
-            **kwargs: Recipient identifier as ``openid`` or ``group_openid``.
-
-        Returns:
-            Metadata for the uploaded media.
-
-        Raises:
-            ValueError: No supported recipient identifier was provided.
-            Exception: The upload request fails or returns an invalid response.
-        """
+        """Upload media to a QQ group or C2C session."""
         local_file = Path(file_source)
         if (
             local_file.is_file()

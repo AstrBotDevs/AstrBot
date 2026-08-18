@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import threading
 from collections import defaultdict
@@ -8,7 +9,6 @@ from typing import Any, TypeVar, overload
 from apscheduler.schedulers.background import BackgroundScheduler
 from deprecated import deprecated
 
-from astrbot import logger
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Preference
 
@@ -16,6 +16,7 @@ from .astrbot_path import get_astrbot_data_path
 
 _VT = TypeVar("_VT")
 _MISSING = object()
+logger = logging.getLogger("astrbot")
 _WriteOperation = tuple[
     str,
     str,

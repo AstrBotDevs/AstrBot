@@ -908,9 +908,7 @@ async def test_open_api_key_scope_normalization(
     )
     orphan_chat_admin_data = await orphan_chat_admin_res.get_json()
     assert orphan_chat_admin_data["status"] == "error"
-    assert orphan_chat_admin_data["message"] == (
-        "chat:admin requires the chat scope"
-    )
+    assert orphan_chat_admin_data["message"] == ("chat:admin requires the chat scope")
 
 
 @pytest.mark.asyncio
@@ -988,6 +986,16 @@ async def test_file_scope_is_available_for_developer_api_key(
     assert create_res.status_code == 200
     assert create_data["status"] == "ok"
     assert set(create_data["data"]["scopes"]) == {"file"}
+
+    missing_file_res = await test_client.post(
+        "/api/v1/file",
+        data={},
+        headers={"X-API-Key": create_data["data"]["api_key"]},
+    )
+    missing_file_data = await missing_file_res.get_json()
+
+    assert missing_file_res.status_code == 422
+    assert any(error["loc"][-1] == "file" for error in missing_file_data["detail"])
 
     upload_res = await test_client.post(
         "/api/v1/file",

@@ -4,6 +4,7 @@ import os
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
@@ -18,7 +19,9 @@ class LogFileConfig:
 class StorageCleaner:
     TARGET_LOGS = "logs"
     TARGET_CACHE = "cache"
-    VALID_TARGETS = {TARGET_LOGS, TARGET_CACHE, "all"}
+    VALID_TARGETS: ClassVar[frozenset[str]] = frozenset(
+        {TARGET_LOGS, TARGET_CACHE, "all"},
+    )
 
     def __init__(
         self,
@@ -261,7 +264,7 @@ class StorageCleaner:
     def _cleanup_empty_dirs(root_dir: Path) -> None:
         if not root_dir.exists():
             return
-        for dirpath, dirnames, filenames in os.walk(root_dir, topdown=False):
+        for dirpath, _dirnames, _filenames in os.walk(root_dir, topdown=False):
             path = Path(dirpath)
             if path == root_dir:
                 continue

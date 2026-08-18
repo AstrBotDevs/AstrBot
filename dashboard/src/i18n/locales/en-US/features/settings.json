@@ -100,7 +100,14 @@
       "title": "Theme Colors",
       "primary": "Primary Color",
       "secondary": "Secondary Color",
-      "reset": "Reset to Default"
+      "reset": "Reset to Default",
+      "auto": "System Mode",
+      "autoSwitchDesc": "Theme will automatically switch based on your browser's appearance setting when enable system mode",
+      "colors": "Custom Colors",
+      "dark": "Dark Mode",
+      "light": "Light Mode",
+      "preset": "Color Scheme",
+      "presetApplied": "Theme applied"
     }
   },
   "system": {
@@ -150,6 +157,11 @@
         "cleanupSuccess": "Cleared {count} files and freed {size}",
         "cleanupFailed": "Cleanup failed"
       }
+    },
+    "migration": {
+      "button": "Start Migration Assistant",
+      "subtitle": "If you encounter data compatibility issues, you can manually start the database migration assistant",
+      "title": "Data Migration to v4.0.0"
     }
   },
   "sidebar": {

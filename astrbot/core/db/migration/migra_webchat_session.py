@@ -54,14 +54,15 @@ async def migrate_webchat_session(db_helper: BaseDatabase) -> None:
             existing_result = await session.execute(existing_query)
             existing_session_ids = {row[0] for row in existing_result.fetchall()}
 
-            # 查询 Conversations 表中的 title，用于设置 display_name
-            # 对于每个 user_id，对应的 conversation user_id 格式为: webchat:FriendMessage:webchat!astrbot!{user_id}
+            # 查询 Conversations 表中的 title,用于设置 display_name
+            # 对于每个 user_id,对应的 conversation user_id 格式为: webchat:FriendMessage:webchat!astrbot!{user_id}
             user_ids_to_query = [
                 f"webchat:FriendMessage:webchat!astrbot!{user_id}"
                 for user_id, _, _, _ in webchat_users
             ]
             conv_query = select(
-                col(ConversationV2.user_id), col(ConversationV2.title)
+                col(ConversationV2.user_id),
+                col(ConversationV2.title),
             ).where(col(ConversationV2.user_id).in_(user_ids_to_query))
             conv_result = await session.execute(conv_query)
             # 创建 user_id -> title 的映射字典
@@ -78,19 +79,19 @@ async def migrate_webchat_session(db_helper: BaseDatabase) -> None:
                 # user_id 就是 webchat_conv_id (session_id)
                 session_id = user_id
 
-                # sender_name 通常是 username，但可能为 None
-                creator = sender_name if sender_name else "guest"
+                # sender_name 通常是 username,但可能为 None
+                creator = sender_name or "guest"
 
                 # 检查是否已经存在该会话
                 if session_id in existing_session_ids:
-                    logger.debug(f"会话 {session_id} 已存在，跳过")
+                    logger.debug(f"会话 {session_id} 已存在,跳过")
                     skipped_count += 1
                     continue
 
                 # 从 Conversations 表中获取 display_name
                 display_name = title_map.get(user_id)
 
-                # 创建新的 PlatformSession（保留原有的时间戳）
+                # 创建新的 PlatformSession(保留原有的时间戳)
                 new_session = PlatformSession(
                     session_id=session_id,
                     platform_id="webchat",
@@ -108,7 +109,7 @@ async def migrate_webchat_session(db_helper: BaseDatabase) -> None:
                 await session.commit()
 
                 logger.info(
-                    f"WebChat 会话迁移完成！成功迁移: {len(sessions_to_add)}, 跳过: {skipped_count}",
+                    f"WebChat 会话迁移完成!成功迁移: {len(sessions_to_add)}, 跳过: {skipped_count}",
                 )
             else:
                 logger.info("没有新会话需要迁移")

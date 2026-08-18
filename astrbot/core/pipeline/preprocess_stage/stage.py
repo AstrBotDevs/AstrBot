@@ -1,11 +1,12 @@
 import asyncio
 import random
 import traceback
-from collections.abc import AsyncGenerator
 from pathlib import Path
 
 from astrbot.core import logger
 from astrbot.core.message.components import Image, Plain, Record, Reply
+from astrbot.core.pipeline.context import PipelineContext
+from astrbot.core.pipeline.stage import Stage, register_stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
@@ -15,9 +16,6 @@ from astrbot.core.utils.media_utils import (
     file_uri_to_path,
     is_file_uri,
 )
-
-from ..context import PipelineContext
-from ..stage import Stage, register_stage
 
 
 @register_stage
@@ -32,13 +30,7 @@ class PreProcessStage(Stage):
 
     @staticmethod
     def _track_temp_media(event: AstrMessageEvent, media_path: str) -> None:
-        """Track a media file owned by the current event.
-
-        Args:
-            event: Message event whose lifecycle owns the temporary file.
-            media_path: Local media path to track when it lives under AstrBot temp.
-        """
-
+        """Track files owned by this event when they live under AstrBot temp."""
         try:
             path = Path(media_path).resolve()
             temp_dir = Path(get_astrbot_temp_path()).resolve()
@@ -50,9 +42,9 @@ class PreProcessStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> None:
         """在处理事件之前的预处理"""
-        # 平台特异配置：platform_specific.<platform>.pre_ack_emoji
+        # 平台特异配置:platform_specific.<platform>.pre_ack_emoji
         supported = {"telegram", "lark", "discord"}
         platform = event.get_platform_name()
         cfg = (
@@ -76,7 +68,7 @@ class PreProcessStage(Stage):
 
         # 路径映射
         if mappings := self.platform_settings.get("path_mapping", []):
-            # 支持 Record，Image 消息段的路径映射。
+            # 支持 Record,Image 消息段的路径映射｡
             message_chain = event.get_messages()
 
             for idx, component in enumerate(message_chain):
@@ -96,7 +88,7 @@ class PreProcessStage(Stage):
                             logger.debug(f"Path mapping: {url} -> {component.url}")
                     message_chain[idx] = component
 
-        # Normalize provider-facing media early so downstream code sees local files.
+        # In here, we convert all Record components to wav format and update the file path.
         message_chain = event.get_messages()
         for idx, component in enumerate(message_chain):
             if isinstance(component, Record):
@@ -118,7 +110,6 @@ class PreProcessStage(Stage):
                     self._track_temp_media(event, image_path)
                     component.file = image_path
                     component.path = image_path
-                    # Image.convert_to_file_path() prefers url, so keep it aligned.
                     component.url = image_path
                     message_chain[idx] = component
                 except Exception as e:
@@ -129,7 +120,7 @@ class PreProcessStage(Stage):
                         e,
                     )
 
-        # Also normalize media components inside Reply chains.
+        # Also process Record components inside Reply chains (wav conversion)
         for component in event.get_messages():
             if isinstance(component, Reply) and component.chain:
                 for idx, reply_comp in enumerate(component.chain):
@@ -154,7 +145,6 @@ class PreProcessStage(Stage):
                             self._track_temp_media(event, image_path)
                             reply_comp.file = image_path
                             reply_comp.path = image_path
-                            # Image.convert_to_file_path() prefers url, so keep it aligned.
                             reply_comp.url = image_path
                             component.chain[idx] = reply_comp
                         except Exception as e:

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { useModuleI18n } from '@/i18n/composables';
+import { ref } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
 
-const { tm: t } = useModuleI18n('features/auth');
+const { tm: t } = useModuleI18n("features/auth");
 
 const props = defineProps<{
   username: string;
@@ -11,15 +11,15 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'update:username', value: string): void;
-  (e: 'update:password', value: string): void;
-  (e: 'submit'): void;
+  (e: "update:username", value: string): void;
+  (e: "update:password", value: string): void;
+  (e: "submit"): void;
 }>();
 
 const showPassword = ref(false);
 
 function onSubmit() {
-  emit('submit');
+  emit("submit");
 }
 </script>
 

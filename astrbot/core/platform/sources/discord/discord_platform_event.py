@@ -2,10 +2,8 @@ import asyncio
 from collections.abc import AsyncGenerator
 from io import BytesIO
 from pathlib import Path
-from typing import cast
 
 import discord
-from discord.types.interactions import ComponentInteractionData
 
 from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -17,7 +15,7 @@ from astrbot.api.message_components import (
     Record,
     Reply,
 )
-from astrbot.api.platform import AstrBotMessage, At, PlatformMetadata
+from astrbot.api.platform import AstrBotMessage, At, Group, PlatformMetadata
 from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
     MediaResolver,
@@ -28,7 +26,6 @@ from .client import DiscordBotClient
 from .components import DiscordEmbed, DiscordView
 
 
-# 自定义Discord视图组件（兼容旧版本）
 class DiscordViewComponent(BaseMessageComponent):
     type: str = "discord_view"
 
@@ -50,9 +47,25 @@ class DiscordPlatformEvent(AstrMessageEvent):
         self.client = client
         self.interaction_followup_webhook = interaction_followup_webhook
 
+    async def send_typing(self) -> None:
+        """Discord typing state is managed by the channel context when needed."""
+
+    async def stop_typing(self) -> None:
+        """Discord does not expose an explicit stop-typing operation."""
+
+    async def get_group(
+        self,
+        group_id: str | None = None,
+        **kwargs: object,
+    ) -> Group | None:
+        """Return group metadata already associated with this event."""
+        group = self.message_obj.group
+        if group is None or (group_id is not None and group_id != group.group_id):
+            return None
+        return group
+
     async def send(self, message: MessageChain) -> None:
         """发送消息到Discord平台"""
-        # 解析消息链为 Discord 所需的对象
         try:
             (
                 content,
@@ -64,7 +77,6 @@ class DiscordPlatformEvent(AstrMessageEvent):
         except Exception as e:
             logger.error(f"[Discord] 解析消息链时失败: {e}", exc_info=True)
             return
-
         kwargs = {}
         if content:
             kwargs["content"] = content
@@ -74,19 +86,14 @@ class DiscordPlatformEvent(AstrMessageEvent):
             kwargs["view"] = view
         if embeds:
             kwargs["embeds"] = embeds
-        if reference_message_id and not self.interaction_followup_webhook:
+        if reference_message_id and (not self.interaction_followup_webhook):
             kwargs["reference"] = self.client.get_message(int(reference_message_id))
         if not kwargs:
-            logger.debug("[Discord] 尝试发送空消息，已忽略。")
+            logger.debug("[Discord] 尝试发送空消息,已忽略｡")
             return
-
-        # 根据上下文执行发送/回复操作
         try:
-            # -- 斜杠指令/交互上下文 --
             if self.interaction_followup_webhook:
                 await self.interaction_followup_webhook.send(**kwargs)
-
-            # -- 常规消息上下文 --
             else:
                 channel = await self._get_channel()
                 if not channel:
@@ -95,14 +102,14 @@ class DiscordPlatformEvent(AstrMessageEvent):
                     logger.error(f"[Discord] 频道 {channel.id} 不是可发送消息的类型")
                     return
                 await channel.send(**kwargs)
-
         except Exception as e:
             logger.error(f"[Discord] 发送消息时发生未知错误: {e}", exc_info=True)
-
         await super().send(message)
 
     async def send_streaming(
-        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+        self,
+        generator: AsyncGenerator[MessageChain, None],
+        use_fallback: bool = False,
     ):
         buffer = None
         async for chain in generator:
@@ -145,8 +152,8 @@ class DiscordPlatformEvent(AstrMessageEvent):
         view = None
         embeds = []
         reference_message_id = None
-        for i in message.chain:  # 遍历消息链
-            if isinstance(i, Plain):  # 如果是文字类型的
+        for i in message.chain:
+            if isinstance(i, Plain):
                 content_parts.append(i.text)
             elif isinstance(i, Reply):
                 reference_message_id = i.id
@@ -157,11 +164,9 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 try:
                     filename = getattr(i, "filename", None)
                     file_content = getattr(i, "file", None)
-
                     if not file_content:
                         logger.warning(f"[Discord] Image 组件没有 file 属性: {i}")
                         continue
-
                     if file_content.startswith("http"):
                         logger.debug(
                             "[Discord] 处理 URL 图片: %s",
@@ -189,9 +194,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
                             filename=filename or f"image{suffix}",
                         )
                     )
-
                 except Exception:
-                    # 使用 getattr 来安全地访问 i.file，以防 i 本身就是问题
                     file_info = getattr(i, "file", "未知")
                     logger.error(
                         "[Discord] 处理图片时发生未知严重错误: %s",
@@ -210,10 +213,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
                         audio_ref,
                         media_type="audio",
                         default_suffix=".wav",
-                    ).to_base64_data(
-                        strict=True,
-                        target_format="wav",
-                    )
+                    ).to_base64_data(strict=True, target_format="wav")
                     if not audio_data:
                         logger.warning(
                             "[Discord] 语音解析失败: %s",
@@ -246,30 +246,26 @@ class DiscordPlatformEvent(AstrMessageEvent):
                             )
                         else:
                             logger.warning(
-                                f"[Discord] 获取文件失败，路径不存在: {file_path_str}",
+                                f"[Discord] 获取文件失败,路径不存在: {file_path_str}",
                             )
                     else:
                         logger.warning(f"[Discord] 获取文件失败: {i.name}")
                 except Exception as e:
                     logger.warning(f"[Discord] 处理文件失败: {i.name}, 错误: {e}")
             elif isinstance(i, DiscordEmbed):
-                # Discord Embed消息
                 embeds.append(i.to_discord_embed())
             elif isinstance(i, DiscordView):
-                # Discord视图组件（按钮、选择菜单等）
                 view = i.to_discord_view()
             elif isinstance(i, DiscordViewComponent):
-                # 如果消息链中包含Discord视图组件（兼容旧版本）
                 if isinstance(i.view, discord.ui.View):
                     view = i.view
             else:
                 logger.debug(f"[Discord] 忽略了不支持的消息组件: {i.type}")
-
         content = "".join(content_parts)
         if len(content) > 2000:
-            logger.warning("[Discord] 消息内容超过2000字符，将被截断。")
+            logger.warning("[Discord] 消息内容超过2000字符,将被截断｡")
             content = content[:2000]
-        return content, files, view, embeds, reference_message_id
+        return (content, files, view, embeds, reference_message_id)
 
     async def react(self, emoji: str) -> None:
         """对原消息添加反应"""
@@ -278,9 +274,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 self.message_obj.raw_message,
                 "add_reaction",
             ):
-                await cast(discord.Message, self.message_obj.raw_message).add_reaction(
-                    emoji
-                )
+                await self.message_obj.raw_message.add_reaction(emoji)
         except Exception as e:
             logger.error(f"[Discord] 添加反应失败: {e}")
 
@@ -289,8 +283,10 @@ class DiscordPlatformEvent(AstrMessageEvent):
         return (
             hasattr(self.message_obj, "raw_message")
             and hasattr(self.message_obj.raw_message, "type")
-            and cast(discord.Interaction, self.message_obj.raw_message).type
-            == discord.InteractionType.application_command
+            and (
+                self.message_obj.raw_message.type
+                == discord.InteractionType.application_command
+            )
         )
 
     def is_button_interaction(self) -> bool:
@@ -298,18 +294,14 @@ class DiscordPlatformEvent(AstrMessageEvent):
         return (
             hasattr(self.message_obj, "raw_message")
             and hasattr(self.message_obj.raw_message, "type")
-            and cast(discord.Interaction, self.message_obj.raw_message).type
-            == discord.InteractionType.component
+            and (self.message_obj.raw_message.type == discord.InteractionType.component)
         )
 
     def get_interaction_custom_id(self) -> str:
         """获取交互组件的custom_id"""
         if self.is_button_interaction():
             try:
-                return cast(
-                    ComponentInteractionData,
-                    cast(discord.Interaction, self.message_obj.raw_message).data,
-                ).get("custom_id", "")
+                return self.message_obj.raw_message.data.get("custom_id", "")
             except Exception:
                 pass
         return ""
@@ -322,9 +314,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
         ):
             return any(
                 mention.id == int(self.message_obj.self_id)
-                for mention in cast(
-                    discord.Message, self.message_obj.raw_message
-                ).mentions
+                for mention in self.message_obj.raw_message.mentions
             )
         return False
 
@@ -334,5 +324,5 @@ class DiscordPlatformEvent(AstrMessageEvent):
             self.message_obj.raw_message,
             "clean_content",
         ):
-            return cast(discord.Message, self.message_obj.raw_message).clean_content
+            return self.message_obj.raw_message.clean_content
         return self.message_str

@@ -142,6 +142,44 @@ def _setup_conversation_for_build(conv_mgr, cid: str = "conv-id") -> MagicMock:
     return conversation
 
 
+@pytest.mark.asyncio
+async def test_build_main_agent_passes_streaming_config_to_agent_runner(
+    mock_event,
+    mock_context,
+    mock_provider,
+):
+    mock_provider.provider_config = {
+        "id": "google_gemini",
+        "type": "googlegenai_chat_completion",
+    }
+    mock_provider.get_model.return_value = "gemini-2.0-flash"
+    mock_event.get_platform_name.return_value = "webchat"
+    mock_context.get_provider_by_id.return_value = None
+    mock_context.get_using_provider.return_value = mock_provider
+    mock_context.get_config.return_value = {}
+    _setup_conversation_for_build(mock_context.conversation_manager)
+
+    with (
+        patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+        patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+    ):
+        mock_runner = MagicMock()
+        mock_runner.reset = AsyncMock()
+        mock_runner_cls.return_value = mock_runner
+
+        result = await ama.build_main_agent(
+            event=mock_event,
+            plugin_context=mock_context,
+            config=ama.MainAgentBuildConfig(
+                tool_call_timeout=60,
+                streaming_response=True,
+            ),
+        )
+
+    assert result is not None
+    assert mock_runner.reset.call_args.kwargs["streaming"] is True
+
+
 def test_append_system_reminders_includes_weekday(mock_event):
     """Test datetime reminder includes weekday information."""
     req = ProviderRequest(prompt="Hello")
@@ -151,7 +189,7 @@ def test_append_system_reminders_includes_weekday(mock_event):
         8,
         12,
         34,
-        tzinfo=datetime.timezone.utc,
+        tzinfo=datetime.UTC,
     )
 
     class FixedDateTime(datetime.datetime):

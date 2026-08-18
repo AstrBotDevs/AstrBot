@@ -23,8 +23,11 @@ from astrbot.core.computer.file_read_utils import (
     read_local_text_range_sync,
 )
 from astrbot.core.utils.astrbot_path import (
+    get_astrbot_data_path,
     get_astrbot_root,
     get_astrbot_system_tmp_path,
+    get_astrbot_temp_path,
+    get_astrbot_workspaces_path,
 )
 
 from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
@@ -54,8 +57,23 @@ def _is_safe_command(command: str) -> bool:
 
 
 def resolve_windows_shell() -> str:
-    """Prefer PowerShell 7 (pwsh.exe) when on PATH, else Windows PowerShell 5.1."""
+    """Prefer PowerShell 7 when available, else Windows PowerShell 5.1."""
     return "pwsh.exe" if shutil.which("pwsh") else "powershell.exe"
+
+
+def _ensure_safe_path(path: str) -> str:
+    candidate = Path(path).resolve(strict=False)
+    allowed_roots = (
+        Path(get_astrbot_root()).resolve(strict=False),
+        Path(get_astrbot_data_path()).resolve(strict=False),
+        Path(get_astrbot_temp_path()).resolve(strict=False),
+        Path(get_astrbot_workspaces_path()).resolve(strict=False),
+    )
+    if not any(
+        candidate == root or candidate.is_relative_to(root) for root in allowed_roots
+    ):
+        raise PermissionError("Path is outside the allowed computer roots.")
+    return str(candidate)
 
 
 def _decode_bytes_with_fallback(
@@ -162,9 +180,8 @@ class LocalShellComponent(ShellComponent):
                 ]
                 popen_shell = False
             if background:
-                # Shell commands use PowerShell 7 if available, else Windows
-                # PowerShell 5.1, on Windows and the platform shell elsewhere.
-                # Safety relies on `_is_safe_command()`.
+                # Prefer PowerShell 7 on Windows when available, then fall back
+                # to Windows PowerShell 5.1. Safety relies on `_is_safe_command()`.
                 proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                     popen_command,
                     shell=popen_shell,
@@ -174,9 +191,8 @@ class LocalShellComponent(ShellComponent):
                     stderr=subprocess.DEVNULL,
                 )
                 return {"pid": proc.pid, "stdout": "", "stderr": "", "exit_code": None}
-            # Shell commands use PowerShell 7 if available, else Windows
-            # PowerShell 5.1, on Windows and the platform shell elsewhere.
-            # Safety relies on `_is_safe_command()`.
+            # Prefer PowerShell 7 on Windows when available, then fall back to
+            # Windows PowerShell 5.1. Safety relies on `_is_safe_command()`.
             proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                 popen_command,
                 shell=popen_shell,
@@ -353,7 +369,7 @@ class LocalShellComponent(ShellComponent):
                         asyncio.shield(wait_task),
                         timeout=timeout,
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     session.timed_out = True
                     logger.warning(
                         "Managed local shell session timed out: session_id=%s pid=%s",
@@ -376,7 +392,7 @@ class LocalShellComponent(ShellComponent):
                     asyncio.shield(wait_task),
                     timeout=yield_time_ms / 1000,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
 
         return await self.poll_session(
@@ -796,7 +812,7 @@ class LocalShellComponent(ShellComponent):
                 asyncio.shield(session.wait_task),
                 timeout=5,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             if os.name == "nt":
                 session.process.kill()
             else:
@@ -881,7 +897,7 @@ class LocalFileSystemComponent(FileSystemComponent):
         self, path: str, content: str = "", mode: int = 0o644
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = os.path.abspath(path)
+            abs_path = _ensure_safe_path(path)
             os.makedirs(os.path.dirname(abs_path), exist_ok=True)
             with open(abs_path, "w", encoding="utf-8") as f:
                 f.write(content)
@@ -898,7 +914,7 @@ class LocalFileSystemComponent(FileSystemComponent):
         limit: int | None = None,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = os.path.abspath(path)
+            abs_path = _ensure_safe_path(path)
             detected_encoding = encoding
             if encoding == "utf-8":
                 with open(abs_path, "rb") as f:
@@ -925,10 +941,11 @@ class LocalFileSystemComponent(FileSystemComponent):
         before_context: int | None = None,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
+            search_path = _ensure_safe_path(path) if path else get_astrbot_root()
             if sys.version_info < (3, 14):
                 results = search(
                     patterns=[pattern],
-                    paths=[path] if path else None,
+                    paths=[search_path],
                     globs=[glob] if glob else None,
                     after_context=after_context,
                     before_context=before_context,
@@ -958,7 +975,7 @@ class LocalFileSystemComponent(FileSystemComponent):
                 command.extend(["-A", str(after_context)])
             if before_context is not None:
                 command.extend(["-B", str(before_context)])
-            command.extend(["--", path or "."])
+            command.extend(["--", search_path])
 
             try:
                 result = subprocess.run(
@@ -1011,7 +1028,7 @@ class LocalFileSystemComponent(FileSystemComponent):
         encoding: str = "utf-8",
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = os.path.abspath(path)
+            abs_path = _ensure_safe_path(path)
             with open(abs_path, encoding=encoding) as f:
                 content = f.read()
             occurrences = content.count(old_string)
@@ -1041,7 +1058,7 @@ class LocalFileSystemComponent(FileSystemComponent):
         self, path: str, content: str, mode: str = "w", encoding: str = "utf-8"
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = os.path.abspath(path)
+            abs_path = _ensure_safe_path(path)
             os.makedirs(os.path.dirname(abs_path), exist_ok=True)
             with open(abs_path, mode, encoding=encoding) as f:
                 f.write(content)
@@ -1051,7 +1068,7 @@ class LocalFileSystemComponent(FileSystemComponent):
 
     async def delete_file(self, path: str) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = os.path.abspath(path)
+            abs_path = _ensure_safe_path(path)
             if os.path.isdir(abs_path):
                 shutil.rmtree(abs_path)
             else:
@@ -1064,7 +1081,7 @@ class LocalFileSystemComponent(FileSystemComponent):
         self, path: str = ".", show_hidden: bool = False
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = os.path.abspath(path)
+            abs_path = _ensure_safe_path(path)
             entries = os.listdir(abs_path)
             if not show_hidden:
                 entries = [e for e in entries if not e.startswith(".")]

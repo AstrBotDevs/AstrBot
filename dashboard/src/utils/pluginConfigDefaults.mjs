@@ -15,7 +15,7 @@ const resolveDefaultValue = (itemMeta) => {
   if (!itemMeta || typeof itemMeta !== "object") {
     return undefined;
   }
-  if (Object.prototype.hasOwnProperty.call(itemMeta, "default")) {
+  if (Object.hasOwn(itemMeta, "default")) {
     return itemMeta.default;
   }
   return CONFIG_TYPE_DEFAULTS[itemMeta.type];
@@ -30,25 +30,16 @@ const configValuesEqual = (currentValue, defaultValue) => {
       Array.isArray(currentValue) &&
       Array.isArray(defaultValue) &&
       currentValue.length === defaultValue.length &&
-      currentValue.every((value, index) =>
-        configValuesEqual(value, defaultValue[index]),
-      )
+      currentValue.every((value, index) => configValuesEqual(value, defaultValue[index]))
     );
   }
-  if (
-    currentValue &&
-    defaultValue &&
-    typeof currentValue === "object" &&
-    typeof defaultValue === "object"
-  ) {
+  if (currentValue && defaultValue && typeof currentValue === "object" && typeof defaultValue === "object") {
     const currentKeys = Object.keys(currentValue);
     const defaultKeys = Object.keys(defaultValue);
     return (
       currentKeys.length === defaultKeys.length &&
       currentKeys.every(
-        (key) =>
-          Object.prototype.hasOwnProperty.call(defaultValue, key) &&
-          configValuesEqual(currentValue[key], defaultValue[key]),
+        (key) => Object.hasOwn(defaultValue, key) && configValuesEqual(currentValue[key], defaultValue[key]),
       )
     );
   }
@@ -62,7 +53,5 @@ export const isPluginConfigValueModified = (value, itemMeta) => {
 
 export const getPluginConfigDefaultValue = (itemMeta) => {
   const defaultValue = resolveDefaultValue(itemMeta);
-  return defaultValue === undefined
-    ? undefined
-    : JSON.parse(JSON.stringify(defaultValue));
+  return defaultValue === undefined ? undefined : JSON.parse(JSON.stringify(defaultValue));
 };

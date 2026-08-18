@@ -1,18 +1,16 @@
 import asyncio
 import math
 import random
-from collections.abc import AsyncGenerator
 
 import astrbot.core.message.components as Comp
 from astrbot.core import logger
 from astrbot.core.message.components import BaseMessageComponent, ComponentType
 from astrbot.core.message.message_event_result import MessageChain, ResultContentType
+from astrbot.core.pipeline.context import PipelineContext, call_event_hook
+from astrbot.core.pipeline.stage import Stage, register_stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.path_util import path_Mapping
-
-from ..context import PipelineContext, call_event_hook
-from ..stage import Stage, register_stage
 
 
 @register_stage
@@ -40,7 +38,7 @@ class RespondStage(Stage):
         ),  # 音乐分享
         Comp.Forward: lambda comp: bool(comp.id),  # 合并转发
         Comp.Location: lambda comp: bool(
-            comp.lat is not None and comp.lon is not None
+            comp.lat is not None and comp.lon is not None,
         ),  # 位置
         Comp.Contact: lambda comp: bool(comp._type and comp.id),  # 推荐好友 or 群
         Comp.Shake: lambda _: True,  # 窗口抖动（戳一戳）
@@ -106,6 +104,44 @@ class RespondStage(Stage):
         # random
         return random.uniform(self.interval[0], self.interval[1])
 
+    def _has_meaningful_content(self, comp: BaseMessageComponent) -> bool:
+        """Check if a component has meaningful content."""
+        from astrbot.core.message.components import (
+            At,
+            Face,
+            File,
+            Forward,
+            Image,
+            Plain,
+            Poke,
+            Record,
+            Reply,
+            Video,
+        )
+
+        if isinstance(comp, Plain):
+            return bool(comp.text and comp.text.strip())
+        if isinstance(comp, Image):
+            return bool(comp.url or comp.file_id)
+        if isinstance(comp, Face):
+            return comp.id is not None
+        if isinstance(comp, Record):
+            return bool(comp.url or comp.file_id)
+        if isinstance(comp, Video):
+            return bool(comp.url or comp.file_id)
+        if isinstance(comp, At):
+            return comp.qq is not None
+        if isinstance(comp, Reply):
+            return comp.id is not None
+        if isinstance(comp, Poke):
+            return comp.target_id() is not None
+        if isinstance(comp, Forward):
+            return bool(comp.id)
+        if isinstance(comp, File):
+            return bool(comp.name)
+        # Default: treat as meaningful if it's not an empty container
+        return True
+
     async def _is_empty_message_chain(self, chain: list[BaseMessageComponent]) -> bool:
         """检查消息链是否为空
 
@@ -117,12 +153,8 @@ class RespondStage(Stage):
             return True
 
         for comp in chain:
-            comp_type = type(comp)
-
-            # 检查组件类型是否在字典中
-            if comp_type in self._component_validators:
-                if self._component_validators[comp_type](comp):
-                    return False
+            if self._has_meaningful_content(comp):
+                return False
 
         # 如果所有组件都为空
         return True
@@ -169,7 +201,7 @@ class RespondStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> None:
         result = event.get_result()
         if result is None:
             return
@@ -228,7 +260,7 @@ class RespondStage(Stage):
             if mappings := self.platform_settings.get("path_mapping", []):
                 for idx, component in enumerate(result.chain):
                     if isinstance(component, Comp.File) and component.file:
-                        # 支持 File 消息段的路径映射。
+                        # 支持 File 消息段的路径映射｡
                         component.file = path_Mapping(mappings, component.file)
                         result.chain[idx] = component
 

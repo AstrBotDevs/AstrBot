@@ -42,21 +42,13 @@ const props = defineProps({
 
 const emit = defineEmits(["toggle", "toggle-all", "configure"]);
 
-const selectableItems = computed(() =>
-  props.items.filter((item) => !item.disabled),
-);
-const selectedCount = computed(
-  () => selectableItems.value.filter((item) => item.selected).length,
-);
+const selectableItems = computed(() => props.items.filter((item) => !item.disabled));
+const selectedCount = computed(() => selectableItems.value.filter((item) => item.selected).length);
 const allSelected = computed(
-  () =>
-    selectableItems.value.length > 0 &&
-    selectedCount.value === selectableItems.value.length,
+  () => selectableItems.value.length > 0 && selectedCount.value === selectableItems.value.length,
 );
 const partiallySelected = computed(
-  () =>
-    props.items.some((item) => item.indeterminate) ||
-    (selectedCount.value > 0 && !allSelected.value),
+  () => props.items.some((item) => item.indeterminate) || (selectedCount.value > 0 && !allSelected.value),
 );
 </script>
 

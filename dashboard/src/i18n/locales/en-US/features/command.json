@@ -39,7 +39,8 @@
     "enable": "Enable command",
     "disable": "Disable command",
     "rename": "Rename command",
-    "viewDetails": "View details"
+    "viewDetails": "View details",
+    "sdkReadonly": "SDK commands are currently view-only in this panel"
   },
   "dialogs": {
     "rename": {
