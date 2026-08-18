@@ -294,6 +294,20 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
 
         return payloads, context_query
 
+    def _build_response_tools(self, tools: ToolSet | None) -> list[dict]:
+        response_tools: list[dict] = []
+        if tools:
+            for tool in tools.openai_schema():
+                function = tool.get("function", {})
+                response_tools.append({"type": "function", **function})
+
+        if self.provider_config.get("provider") == "xai" and bool(
+            self.provider_config.get("xai_native_search", False)
+        ):
+            response_tools.append({"type": "web_search"})
+
+        return response_tools
+
     async def _query(
         self,
         payloads: dict,
@@ -314,14 +328,10 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         Raises:
             TypeError: If the SDK returns an unexpected response type.
         """
-        if tools:
-            response_tools = []
-            for tool in tools.openai_schema():
-                function = tool.get("function", {})
-                response_tools.append({"type": "function", **function})
-            if response_tools:
-                payloads["tools"] = response_tools
-                payloads["tool_choice"] = payloads.get("tool_choice", "auto")
+        response_tools = self._build_response_tools(tools)
+        if response_tools:
+            payloads["tools"] = response_tools
+            payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
         extra_body: dict[str, Any] = {}
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
@@ -383,14 +393,10 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         Raises:
             EmptyModelOutputError: If the stream ends without a terminal event.
         """
-        if tools:
-            response_tools = []
-            for tool in tools.openai_schema():
-                function = tool.get("function", {})
-                response_tools.append({"type": "function", **function})
-            if response_tools:
-                payloads["tools"] = response_tools
-                payloads["tool_choice"] = payloads.get("tool_choice", "auto")
+        response_tools = self._build_response_tools(tools)
+        if response_tools:
+            payloads["tools"] = response_tools
+            payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
         extra_body: dict[str, Any] = {}
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
