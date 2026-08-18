@@ -1,8 +1,10 @@
+import threading
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlmodel import col, update
+from sqlmodel import col, text, update
 
+from astrbot.core.db import is_aiosqlite_worker_thread
 from astrbot.core.db.po import (
     MemoryFact,
     PlatformMessageHistory,
@@ -1580,3 +1582,18 @@ async def test_get_webchat_threads_by_parent_session_without_creator_orders_by_c
         second.thread_id,
         first.thread_id,
     ]
+
+
+@pytest.mark.asyncio
+async def test_close_joins_aiosqlite_worker_threads(tmp_path):
+    db = SQLiteDatabase(str(tmp_path / "close-workers.db"))
+    await db.initialize()
+    async with db.get_db() as session:
+        await session.execute(text("SELECT 1"))
+
+    workers = [
+        thread for thread in threading.enumerate() if is_aiosqlite_worker_thread(thread)
+    ]
+    assert workers
+    await db.close()
+    assert not any(thread.is_alive() for thread in workers)

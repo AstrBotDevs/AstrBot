@@ -1,8 +1,10 @@
 import json
 import os
+import threading
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
+from weakref import WeakSet
 
 from sqlalchemy import Column, Text, bindparam
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
@@ -10,6 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import Field, MetaData, SQLModel, col, func, select, text
 
 from astrbot import logger
+from astrbot.core.db import dispose_async_engine, track_aiosqlite_workers
 from astrbot.core.knowledge_base.retrieval.tokenizer import (
     build_fts5_or_query,
     load_stopwords,
@@ -47,6 +50,7 @@ class DocumentStorage:
         self.DATABASE_URL = f"sqlite+aiosqlite:///{db_path}"
         self.engine: AsyncEngine | None = None
         self.async_session_maker: sessionmaker | None = None
+        self._aiosqlite_workers: WeakSet[threading.Thread] | None = None
         self.sqlite_init_path = os.path.join(
             os.path.dirname(__file__),
             "sqlite_init.sql",
@@ -204,6 +208,7 @@ class DocumentStorage:
                 echo=False,
                 future=True,
             )
+            self._aiosqlite_workers = track_aiosqlite_workers(self.engine)
             self.async_session_maker = sessionmaker(
                 self.engine,  # type: ignore
                 class_=AsyncSession,
@@ -784,6 +789,7 @@ class DocumentStorage:
     async def close(self) -> None:
         """Close the connection to the SQLite database."""
         if self.engine:
-            await self.engine.dispose()
+            await dispose_async_engine(self.engine, self._aiosqlite_workers)
             self.engine = None
+            self._aiosqlite_workers = None
             self.async_session_maker = None

@@ -97,6 +97,38 @@ def test_thread_guard_does_not_exempt_a_non_anyio_named_thread(pytester) -> None
     result.stdout.fnmatch_lines(["*Leaked threads: AnyIO worker thread*"])
 
 
+def test_thread_guard_waits_for_stopping_aiosqlite_workers(pytester) -> None:
+    _load_repository_conftest(pytester)
+    pytester.makepyfile(
+        """
+        import threading
+        from queue import SimpleQueue
+
+        import aiosqlite.core
+
+
+        def test_worker_is_signaled_during_teardown():
+            queue = SimpleQueue()
+            thread = threading.Thread(
+                target=aiosqlite.core._connection_worker_thread,
+                args=(queue,),
+                daemon=True,
+            )
+            thread.start()
+            assert thread.is_alive()
+
+            def stop():
+                return aiosqlite.core._STOP_RUNNING_SENTINEL
+
+            queue.put_nowait((None, stop))
+        """
+    )
+
+    result = pytester.runpytest_subprocess("-q")
+
+    result.assert_outcomes(passed=1)
+
+
 def test_thread_guard_allows_fixture_owned_module_thread(pytester) -> None:
     _load_repository_conftest(pytester)
     pytester.makepyfile(

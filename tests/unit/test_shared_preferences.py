@@ -20,7 +20,7 @@ async def preferences(tmp_path):
         yield store, database
     finally:
         await store.terminate()
-        await database.engine.dispose()
+        await database.close()
 
 
 @pytest.mark.asyncio
@@ -65,7 +65,7 @@ async def test_initialize_preloads_values_and_returns_copies(tmp_path):
         assert await store.session_get("session", "provider") == {"id": "provider-1"}
     finally:
         await store.terminate()
-        await database.engine.dispose()
+        await database.close()
 
 
 @pytest.mark.asyncio

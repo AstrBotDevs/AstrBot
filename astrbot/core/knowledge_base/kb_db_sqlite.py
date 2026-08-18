@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlmodel import col, desc
 
 from astrbot import logger
+from astrbot.core.db import dispose_async_engine, track_aiosqlite_workers
 from astrbot.core.knowledge_base.models import (
     BaseKBModel,
     KBDocument,
@@ -43,6 +44,7 @@ class KBSQLiteDatabase:
             pool_pre_ping=True,
             pool_recycle=3600,
         )
+        self._aiosqlite_workers = track_aiosqlite_workers(self.engine)
 
         # 创建会话工厂
         self.async_session = async_sessionmaker(
@@ -82,7 +84,7 @@ class KBSQLiteDatabase:
 
     async def close(self) -> None:
         """关闭数据库连接"""
-        await self.engine.dispose()
+        await dispose_async_engine(self.engine, self._aiosqlite_workers)
         logger.info(f"知识库数据库已关闭: {self.db_path}")
 
     async def get_kb_by_id(self, kb_id: str) -> KnowledgeBase | None:

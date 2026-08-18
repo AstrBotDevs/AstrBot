@@ -160,6 +160,28 @@ def _is_anyio_worker_thread(thread: threading.Thread) -> bool:
     )
 
 
+def _is_aiosqlite_worker_thread(thread: threading.Thread) -> bool:
+    """Return whether a thread is an aiosqlite connection worker."""
+    target = getattr(thread, "_target", None)
+    return (
+        getattr(target, "__name__", None) == "_connection_worker_thread"
+        and getattr(target, "__module__", "") == "aiosqlite.core"
+    )
+
+
+def _collect_leaked_threads(
+    existing_threads: set[threading.Thread],
+) -> list[threading.Thread]:
+    """Return still-alive threads that a test created."""
+    return [
+        thread
+        for thread in threading.enumerate()
+        if thread not in existing_threads
+        and thread.is_alive()
+        and not _is_anyio_worker_thread(thread)
+    ]
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_teardown(item, nextitem):  # noqa: ARG001
     """Report threads that a test left alive after its fixtures tear down."""
@@ -168,13 +190,11 @@ def pytest_runtest_teardown(item, nextitem):  # noqa: ARG001
     existing_threads = getattr(item, "_astrbot_test_threads", None)
     if existing_threads is None:
         return
-    leaked_threads = [
-        thread
-        for thread in threading.enumerate()
-        if thread not in existing_threads
-        and thread.is_alive()
-        and not _is_anyio_worker_thread(thread)
-    ]
+    leaked_threads = _collect_leaked_threads(existing_threads)
+    for thread in leaked_threads:
+        if _is_aiosqlite_worker_thread(thread):
+            thread.join(timeout=1.0)
+    leaked_threads = _collect_leaked_threads(existing_threads)
     if leaked_threads:
         thread_names = ", ".join(thread.name for thread in leaked_threads)
         pytest.fail(f"Leaked threads: {thread_names}")
