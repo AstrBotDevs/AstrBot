@@ -646,3 +646,20 @@ async def test_mattermost_parse_post_attachments_fetches_info_when_metadata_lack
     assert len(components) == 1
     assert isinstance(components[0], Comp.Record)
     client.get_file_info.assert_awaited_once_with("audio")
+
+
+def test_mattermost_create_event_does_not_promote_channel_roles():
+    from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+
+    adapter = _build_adapter()
+    message = AstrBotMessage()
+    message.type = MessageType.GROUP_MESSAGE
+    message.group_id = "chan-1"
+    message.session_id = "chan-1"
+    message.sender = MessageMember("user-1", "tester")
+    message.raw_message = {"roles": "channel_admin", "is_admin": True}
+    message.message_str = "hello"
+    message.message = []
+    event = adapter.create_event(message)
+    assert event.platform_member_role == "member"
+    assert event.platform_role_source == "none"

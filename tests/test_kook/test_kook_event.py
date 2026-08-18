@@ -161,7 +161,7 @@ async def test_kook_event_warp_message(
     try:
         expected_output_text = json.loads(expected_output_text)
         is_json_text = True
-    except (TypeError, json.JSONDecodeError):
+    except TypeError, json.JSONDecodeError:
         pass
 
     if is_json_text:
@@ -172,3 +172,22 @@ async def test_kook_event_warp_message(
     assert result.index == expected_output.index
     assert result.type == expected_output.type
     assert result.reply_id == expected_output.reply_id
+
+
+def test_kook_create_event_does_not_promote_guild_roles():
+    from types import SimpleNamespace
+
+    from astrbot.core.platform.sources.kook.kook_adapter import KookPlatformAdapter
+
+    adapter = KookPlatformAdapter.__new__(KookPlatformAdapter)
+    adapter.kook_config = SimpleNamespace(id="kook-test")
+    adapter.client = SimpleNamespace()
+    message = mock_astrbot_message()
+    message.message_str = "hello"
+    message.message = []
+    message.raw_message = SimpleNamespace(
+        extra=SimpleNamespace(author=SimpleNamespace(roles=[1, 2]))
+    )
+    event = adapter.create_event(message)
+    assert event.platform_member_role == "member"
+    assert event.platform_role_source == "none"

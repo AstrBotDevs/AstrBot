@@ -46,6 +46,25 @@ MAX_FILE_UPLOAD_COUNT = 16
 DEFAULT_UPLOAD_CONCURRENCY = 3
 
 
+def _misskey_room_owner_role(message: AstrBotMessage) -> str | None:
+    raw = getattr(message, "raw_message", None)
+    if not isinstance(raw, dict):
+        return None
+    room_id = raw.get("toRoomId")
+    room = raw.get("toRoom")
+    if room_id is None or not isinstance(room, dict):
+        return None
+    if str(room_id) != str(message.group_id or ""):
+        return None
+    owner_id = room.get("ownerId")
+    sender_id = getattr(message.sender, "user_id", None)
+    if owner_id is None or sender_id is None:
+        return None
+    if str(owner_id) != str(sender_id):
+        return None
+    return "owner"
+
+
 @register_platform_adapter(
     "misskey", "Misskey 平台适配器", support_streaming_message=False
 )
@@ -132,13 +151,18 @@ class MisskeyPlatformAdapter(Platform):
         Returns:
             Created Misskey message event.
         """
-        return MisskeyPlatformEvent(
+        event = MisskeyPlatformEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
             session_id=message.session_id,
             client=self,
         )
+        if not event.is_private_chat():
+            role = _misskey_room_owner_role(message)
+            if role is not None:
+                event.set_platform_member_role(role, source="adapter")
+        return event
 
     async def run(self) -> None:
         if not self.instance_url or not self.access_token:

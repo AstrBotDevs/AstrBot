@@ -27,6 +27,22 @@ from .aiocqhttp_message_event import *
 from .aiocqhttp_message_event import AiocqhttpMessageEvent
 
 
+def _payload_field(payload: Any, name: str) -> Any:
+    if payload is None:
+        return None
+    if isinstance(payload, dict):
+        return payload.get(name)
+    getter = getattr(payload, "get", None)
+    if callable(getter):
+        try:
+            return getter(name)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            pass
+    return getattr(payload, name, None)
+
+
 @register_platform_adapter(
     "aiocqhttp",
     "适用于 OneBot V11 标准的消息平台适配器，支持反向 WebSockets。",
@@ -463,7 +479,7 @@ class AiocqhttpAdapter(Platform):
         Returns:
             Created aiocqhttp message event.
         """
-        return AiocqhttpMessageEvent(
+        event = AiocqhttpMessageEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
@@ -472,6 +488,18 @@ class AiocqhttpAdapter(Platform):
             forward_message_max_retries=self.forward_message_max_retries,
             forward_message_fallback_enabled=self.forward_message_fallback_enabled,
         )
+        raw_event = getattr(message, "raw_message", None)
+        if (
+            not event.is_private_chat()
+            and raw_event is not None
+            and _payload_field(raw_event, "post_type") == "message"
+            and _payload_field(raw_event, "message_type") == "group"
+        ):
+            sender = _payload_field(raw_event, "sender")
+            role = _payload_field(sender, "role") if sender is not None else None
+            if role is not None:
+                event.set_platform_member_role(str(role), source="adapter")
+        return event
 
     async def handle_msg(self, message: AstrBotMessage) -> None:
         self.commit_event(self.create_event(message))

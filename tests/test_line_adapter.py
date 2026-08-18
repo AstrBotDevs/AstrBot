@@ -749,6 +749,8 @@ def test_line_create_event_wraps_message_with_line_context():
     assert event.line_api is adapter.line_api
     assert event.message_str == "hello"
     assert event.session_id == "user-1"
+    assert event.platform_member_role == "member"
+    assert event.platform_role_source == "none"
 
 
 @pytest.mark.asyncio

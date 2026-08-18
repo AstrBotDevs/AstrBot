@@ -29,6 +29,24 @@ from .client import DiscordBotClient
 from .discord_platform_event import DiscordPlatformEvent
 
 
+def _discord_platform_member_role(raw_message: Any) -> str:
+    guild = getattr(raw_message, "guild", None)
+    author = getattr(raw_message, "author", None)
+    author_id = getattr(author, "id", None)
+    if guild is not None and author_id is not None:
+        if getattr(guild, "owner_id", None) == author_id:
+            return "owner"
+    member = getattr(raw_message, "member", None)
+    if member is None:
+        return "unknown"
+    permissions = getattr(member, "guild_permissions", None)
+    if permissions is None:
+        return "unknown"
+    if getattr(permissions, "administrator", False):
+        return "admin"
+    return "member"
+
+
 # 注册平台适配器
 @register_platform_adapter(
     "discord", "Discord 适配器 (基于 Pycord)", support_streaming_message=False
@@ -277,7 +295,7 @@ class DiscordPlatformAdapter(Platform):
         Returns:
             Created Discord message event.
         """
-        return DiscordPlatformEvent(
+        event = DiscordPlatformEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
@@ -285,6 +303,12 @@ class DiscordPlatformAdapter(Platform):
             client=self.client,
             interaction_followup_webhook=followup_webhook,
         )
+        if not event.is_private_chat():
+            event.set_platform_member_role(
+                _discord_platform_member_role(getattr(message, "raw_message", None)),
+                source="adapter",
+            )
+        return event
 
     async def handle_msg(self, message: AstrBotMessage, followup_webhook=None) -> None:
         """处理消息"""

@@ -695,3 +695,21 @@ def test_lark_unified_webhook_requires_webhook_mode_and_uuid():
 
     adapter.config = {"lark_connection_mode": "webhook"}
     assert adapter.unified_webhook() is False
+
+
+def test_lark_create_event_does_not_promote_group_roles():
+    from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+
+    adapter = _adapter()
+    adapter.config = {"id": "lark-test"}
+    message = AstrBotMessage()
+    message.type = MessageType.GROUP_MESSAGE
+    message.group_id = "chat-1"
+    message.session_id = "chat-1"
+    message.sender = MessageMember("ou_1", "tester")
+    message.raw_message = SimpleNamespace(sender=SimpleNamespace(role="owner"))
+    message.message_str = "hello"
+    message.message = []
+    event = adapter.create_event(message)
+    assert event.platform_member_role == "member"
+    assert event.platform_role_source == "none"

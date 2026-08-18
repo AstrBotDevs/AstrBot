@@ -161,3 +161,24 @@ async def test_build_webchat_message_parts_preserves_payload_filename(tmp_path):
             "stored_filename": "uuid.txt",
         }
     ]
+
+
+def test_webchat_create_event_does_not_promote_declared_username(tmp_path):
+    from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+    from astrbot.core.platform.message_type import MessageType
+    from astrbot.core.platform.sources.webchat.webchat_adapter import WebChatAdapter
+
+    adapter = WebChatAdapter.__new__(WebChatAdapter)
+    adapter.metadata = SimpleNamespace(id="webchat", name="webchat")
+    adapter._webchat_queue_manager = WebChatQueueManager()
+    adapter.attachments_dir = tmp_path
+    message = AstrBotMessage()
+    message.type = MessageType.FRIEND_MESSAGE
+    message.session_id = "webchat!admin!cid"
+    message.sender = MessageMember("admin", "admin")
+    message.raw_message = ("admin", "cid", {"username": "admin", "role": "owner"})
+    message.message_str = "hello"
+    message.message = []
+    event = adapter.create_event(message)
+    assert event.platform_member_role == "member"
+    assert event.platform_role_source == "none"

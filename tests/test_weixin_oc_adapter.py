@@ -346,3 +346,20 @@ async def test_resolve_inbound_voice_component_downloads_and_converts_on_demand(
     assert tracked_paths == [str(saved_paths[0]), WAV_PATH]
     assert record.file == WAV_PATH
     assert record.path == WAV_PATH
+
+
+def test_weixin_oc_create_event_does_not_promote_roles():
+    from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+    from astrbot.core.platform.message_type import MessageType
+
+    adapter = _make_adapter()
+    message = AstrBotMessage()
+    message.type = MessageType.FRIEND_MESSAGE
+    message.session_id = "user-1"
+    message.sender = MessageMember("user-1", "tester")
+    message.raw_message = {"role": "admin"}
+    message.message_str = "hello"
+    message.message = []
+    event = adapter.create_event(message)
+    assert event.platform_member_role == "member"
+    assert event.platform_role_source == "none"

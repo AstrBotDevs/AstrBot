@@ -777,3 +777,111 @@ async def test_discord_parse_to_discord_keeps_long_content_and_reply_id():
     assert view is None
     assert embeds == []
     assert reference_message_id == "77"
+
+
+def _discord_adapter() -> DiscordPlatformAdapter:
+    adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
+    adapter.config = {"id": "discord-test"}
+    adapter.client = SimpleNamespace()
+    return adapter
+
+
+def _discord_group_message(
+    *,
+    owner_id=1,
+    author_id=2,
+    administrator: bool | None = False,
+    include_member: bool = True,
+) -> discord_platform_adapter.AstrBotMessage:
+    from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+    from astrbot.core.platform.message_type import MessageType
+
+    member = None
+    if include_member:
+        member = SimpleNamespace(
+            guild_permissions=None
+            if administrator is None
+            else SimpleNamespace(administrator=administrator)
+        )
+    raw = SimpleNamespace(
+        guild=SimpleNamespace(owner_id=owner_id),
+        author=SimpleNamespace(id=author_id, display_name="tester"),
+        member=member,
+        channel=SimpleNamespace(id=123, guild=SimpleNamespace(id=9)),
+    )
+    message = AstrBotMessage()
+    message.type = MessageType.GROUP_MESSAGE
+    message.group_id = "123"
+    message.session_id = "123"
+    message.sender = MessageMember(user_id=str(author_id), nickname="tester")
+    message.raw_message = raw
+    message.message_str = "hello"
+    message.message = []
+    return message
+
+
+def test_discord_group_owner_admin_member_and_unknown_roles():
+    adapter = _discord_adapter()
+    owner = adapter.create_event(
+        _discord_group_message(owner_id=2, author_id=2, administrator=False)
+    )
+    admin = adapter.create_event(
+        _discord_group_message(owner_id=1, author_id=2, administrator=True)
+    )
+    member = adapter.create_event(
+        _discord_group_message(owner_id=1, author_id=2, administrator=False)
+    )
+    unknown = adapter.create_event(_discord_group_message(include_member=False))
+    missing_perms = adapter.create_event(_discord_group_message(administrator=None))
+    assert owner.platform_member_role == "owner"
+    assert admin.platform_member_role == "admin"
+    assert member.platform_member_role == "member"
+    assert unknown.platform_member_role == "unknown"
+    assert missing_perms.platform_member_role == "unknown"
+
+
+def test_discord_private_message_does_not_use_guild_owner():
+    from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+    from astrbot.core.platform.message_type import MessageType
+
+    message = AstrBotMessage()
+    message.type = MessageType.FRIEND_MESSAGE
+    message.session_id = "dm-1"
+    message.sender = MessageMember(user_id="2", nickname="tester")
+    message.raw_message = SimpleNamespace(
+        guild=SimpleNamespace(owner_id=2),
+        author=SimpleNamespace(id=2),
+        member=SimpleNamespace(guild_permissions=SimpleNamespace(administrator=True)),
+    )
+    message.message_str = "hello"
+    message.message = []
+    event = _discord_adapter().create_event(message)
+    assert event.platform_member_role == "member"
+    assert event.platform_role_source == "none"
+
+
+@pytest.mark.asyncio
+async def test_discord_group_owner_role_stays_in_current_session(tmp_path):
+    from astrbot.core.auth.service import AuthorizationService
+    from astrbot.core.db.sqlite import SQLiteDatabase
+    from tests.fixtures.auth import assert_platform_role_stays_in_session
+
+    event = _discord_adapter().create_event(
+        _discord_group_message(owner_id=2, author_id=2)
+    )
+    db = SQLiteDatabase(str(tmp_path / "discord-auth.db"))
+    await db.initialize()
+    service = AuthorizationService(db)
+    await service.start()
+    try:
+        await assert_platform_role_stays_in_session(
+            service,
+            platform_instance="discord",
+            sender_id="2",
+            platform_role=event.platform_member_role,
+            current_umo="discord:GroupMessage:123",
+            other_umo="discord:GroupMessage:999",
+        )
+    finally:
+        await service.close()
+        await db.close()

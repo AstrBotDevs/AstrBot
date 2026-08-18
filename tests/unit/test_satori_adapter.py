@@ -118,3 +118,32 @@ async def test_satori_parse_elements_rejects_xml_entities():
     elements = await adapter.parse_satori_elements(payload)
 
     assert elements == [Plain(text=payload)]
+
+
+def test_satori_create_event_does_not_promote_member_roles():
+    from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+    from astrbot.core.platform.message_type import MessageType
+
+    adapter = SatoriPlatformAdapter(
+        {
+            "id": "satori-test",
+            "satori_endpoint": "ws://localhost:5140/satori/v1/events",
+        },
+        {},
+        asyncio.Queue(),
+    )
+    message = AstrBotMessage()
+    message.type = MessageType.GROUP_MESSAGE
+    message.group_id = "guild-1"
+    message.session_id = "channel-1"
+    message.sender = MessageMember("user-1", "tester")
+    message.raw_message = {
+        "guild": {"id": "guild-1"},
+        "user": {"id": "user-1", "roles": ["admin"]},
+        "member": {"roles": ["owner"]},
+    }
+    message.message_str = "hello"
+    message.message = []
+    event = adapter.create_event(message)
+    assert event.platform_member_role == "member"
+    assert event.platform_role_source == "none"

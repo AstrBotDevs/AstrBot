@@ -286,6 +286,8 @@ async def test_qqofficial_webhook_create_event_populates_webhook_extra_data():
 
     assert event.get_extra("webhook_trace_id") == "trace-msg-123"
     assert event.get_extra("webhook_retry") is True
+    assert event.platform_member_role == "member"
+    assert event.platform_role_source == "none"
 
 
 @pytest.mark.asyncio

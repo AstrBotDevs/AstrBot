@@ -1174,3 +1174,22 @@ async def test_dingtalk_event_send_streaming_merges_mixed_components_before_send
     assert buffered_chain.chain[0].text == "hello world"
     assert isinstance(buffered_chain.chain[1], At)
     assert buffered_chain.chain[1].qq == "user-1"
+
+
+def test_dingtalk_create_event_does_not_promote_roles():
+    from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    adapter.config = {"id": "dingtalk-test"}
+    adapter.client = SimpleNamespace()
+    message = AstrBotMessage()
+    message.type = MessageType.GROUP_MESSAGE
+    message.group_id = "conv-1"
+    message.session_id = "conv-1"
+    message.sender = MessageMember("staff-1", "tester")
+    message.raw_message = SimpleNamespace(isAdmin=True, role="owner")
+    message.message_str = "hello"
+    message.message = []
+    event = adapter.create_event(message)
+    assert event.platform_member_role == "member"
+    assert event.platform_role_source == "none"

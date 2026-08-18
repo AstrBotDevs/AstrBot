@@ -330,3 +330,120 @@ async def test_aiocqhttp_reply_only_wake_resolves_sender_lazily(monkeypatch):
     assert event.is_at_or_wake_command is True
     assert event.get_messages()[0].sender_id == "123456"
     adapter.bot.call_action.assert_awaited_once_with("get_msg", message_id="9001")
+
+
+def _aiocqhttp_create_adapter():
+    from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_platform_adapter import (
+        AiocqhttpAdapter,
+    )
+
+    adapter = AiocqhttpAdapter.__new__(AiocqhttpAdapter)
+    adapter.metadata = SimpleNamespace(id="aiocqhttp-test", name="aiocqhttp")
+    adapter.bot = SimpleNamespace()
+    adapter.forward_message_max_retries = 3
+    adapter.forward_message_fallback_enabled = True
+    return adapter
+
+
+def _aiocqhttp_message(
+    *,
+    message_type: MessageType,
+    post_type: str = "message",
+    ob_message_type: str = "group",
+    role: str | None = "admin",
+) -> AstrBotMessage:
+    message = AstrBotMessage()
+    message.type = message_type
+    message.self_id = "123456"
+    message.group_id = "654321"
+    message.session_id = (
+        "654321" if message_type == MessageType.GROUP_MESSAGE else "111222"
+    )
+    message.message_id = "778"
+    message.sender = MessageMember("111222", "tester")
+    message.message = [Plain("hello")]
+    message.message_str = "hello"
+    sender = {"user_id": 111222, "nickname": "tester"}
+    if role is not None:
+        sender["role"] = role
+    message.raw_message = _FakeEvent(
+        {
+            "post_type": post_type,
+            "message_type": ob_message_type,
+            "sender": sender,
+        }
+    )
+    return message
+
+
+@pytest.mark.parametrize(
+    ("role", "expected"),
+    [
+        ("owner", "owner"),
+        ("admin", "admin"),
+        ("member", "member"),
+        ("guild_master", "unknown"),
+    ],
+)
+def test_aiocqhttp_group_message_maps_sender_role(role, expected):
+    event = _aiocqhttp_create_adapter().create_event(
+        _aiocqhttp_message(message_type=MessageType.GROUP_MESSAGE, role=role)
+    )
+    assert event.platform_member_role == expected
+    assert event.platform_role_source == "adapter"
+
+
+def test_aiocqhttp_private_and_notice_do_not_promote_sender_role():
+    adapter = _aiocqhttp_create_adapter()
+    private = adapter.create_event(
+        _aiocqhttp_message(
+            message_type=MessageType.FRIEND_MESSAGE,
+            ob_message_type="private",
+            role="owner",
+        )
+    )
+    notice = adapter.create_event(
+        _aiocqhttp_message(
+            message_type=MessageType.GROUP_MESSAGE,
+            post_type="notice",
+            role="admin",
+        )
+    )
+    request = adapter.create_event(
+        _aiocqhttp_message(
+            message_type=MessageType.GROUP_MESSAGE,
+            post_type="request",
+            role="owner",
+        )
+    )
+    assert private.platform_member_role == "member"
+    assert private.platform_role_source == "none"
+    assert notice.platform_member_role == "member"
+    assert request.platform_member_role == "member"
+
+
+@pytest.mark.asyncio
+async def test_aiocqhttp_group_admin_role_stays_in_current_session(tmp_path):
+    from astrbot.core.auth.service import AuthorizationService
+    from astrbot.core.db.sqlite import SQLiteDatabase
+    from tests.fixtures.auth import assert_platform_role_stays_in_session
+
+    event = _aiocqhttp_create_adapter().create_event(
+        _aiocqhttp_message(message_type=MessageType.GROUP_MESSAGE, role="admin")
+    )
+    db = SQLiteDatabase(str(tmp_path / "aiocqhttp-auth.db"))
+    await db.initialize()
+    service = AuthorizationService(db)
+    await service.start()
+    try:
+        await assert_platform_role_stays_in_session(
+            service,
+            platform_instance="aiocqhttp",
+            sender_id="111222",
+            platform_role=event.platform_member_role,
+            current_umo="aiocqhttp:GroupMessage:654321",
+            other_umo="aiocqhttp:GroupMessage:999000",
+        )
+    finally:
+        await service.close()
+        await db.close()

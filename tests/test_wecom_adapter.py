@@ -821,3 +821,20 @@ async def test_wecom_terminate_swallows_shutdown_errors():
 
     adapter.server.shutdown_event.set.assert_called_once()
     adapter.server.server.shutdown.assert_awaited_once()
+
+
+def test_wecom_create_event_does_not_promote_roles():
+    from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+
+    adapter = _adapter()
+    message = AstrBotMessage()
+    message.type = MessageType.GROUP_MESSAGE
+    message.group_id = "room-1"
+    message.session_id = "room-1"
+    message.sender = MessageMember("user-1", "tester")
+    message.raw_message = SimpleNamespace(role="admin")
+    message.message_str = "hello"
+    message.message = []
+    event = adapter.create_event(message)
+    assert event.platform_member_role == "member"
+    assert event.platform_role_source == "none"

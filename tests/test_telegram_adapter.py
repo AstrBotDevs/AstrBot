@@ -630,9 +630,7 @@ async def test_telegram_video_note_becomes_video_component():
         {},
         asyncio.Queue(),
     )
-    video_note = create_mock_file(
-        "https://api.telegram.org/file/test/note.mp4"
-    )
+    video_note = create_mock_file("https://api.telegram.org/file/test/note.mp4")
     update = create_mock_update(message_text=None, video_note=video_note)
 
     result = await adapter.convert_message(update, _build_context())
@@ -1565,3 +1563,93 @@ async def test_telegram_run_rebuilds_fresh_application_after_recreate_init_failu
     app_two.shutdown.assert_awaited()
     app_three.initialize.assert_awaited()
     app_three.start.assert_awaited()
+
+
+def _telegram_bare_adapter():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter.__new__(TelegramPlatformAdapter)
+    adapter.config = {"id": "telegram-test"}
+    adapter.client = SimpleNamespace()
+    return adapter
+
+
+def _telegram_message(*, chat_type: str, status: str | None = None):
+    from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+    from astrbot.core.platform.message_type import MessageType
+
+    message = AstrBotMessage()
+    message.type = (
+        MessageType.FRIEND_MESSAGE
+        if chat_type == "private"
+        else MessageType.GROUP_MESSAGE
+    )
+    message.group_id = None if chat_type == "private" else "-1001"
+    message.session_id = "1001" if chat_type == "private" else "-1001"
+    message.sender = MessageMember("42", "tester")
+    message.message_str = "hello"
+    message.message = []
+    update = SimpleNamespace(
+        message=SimpleNamespace(chat=SimpleNamespace(type=chat_type)),
+        chat_member=None,
+        my_chat_member=None,
+    )
+    if status is not None:
+        update.chat_member = SimpleNamespace(
+            new_chat_member=SimpleNamespace(status=status)
+        )
+    message.raw_message = update
+    return message
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        ("creator", "owner"),
+        ("administrator", "admin"),
+        ("member", "member"),
+        ("restricted", "member"),
+        ("kicked", "unknown"),
+        (None, "unknown"),
+    ],
+)
+def test_telegram_group_status_maps_or_stays_unknown(status, expected):
+    event = _telegram_bare_adapter().create_event(
+        _telegram_message(chat_type="group", status=status)
+    )
+    assert event.platform_member_role == expected
+    assert event.platform_role_source == "adapter"
+
+
+def test_telegram_private_chat_does_not_promote_creator_status():
+    event = _telegram_bare_adapter().create_event(
+        _telegram_message(chat_type="private", status="creator")
+    )
+    assert event.platform_member_role == "member"
+    assert event.platform_role_source == "none"
+
+
+@pytest.mark.asyncio
+async def test_telegram_group_admin_role_stays_in_current_session(tmp_path):
+    from astrbot.core.auth.service import AuthorizationService
+    from astrbot.core.db.sqlite import SQLiteDatabase
+    from tests.fixtures.auth import assert_platform_role_stays_in_session
+
+    event = _telegram_bare_adapter().create_event(
+        _telegram_message(chat_type="group", status="administrator")
+    )
+    db = SQLiteDatabase(str(tmp_path / "telegram-auth.db"))
+    await db.initialize()
+    service = AuthorizationService(db)
+    await service.start()
+    try:
+        await assert_platform_role_stays_in_session(
+            service,
+            platform_instance="telegram",
+            sender_id="42",
+            platform_role=event.platform_member_role,
+            current_umo="telegram:GroupMessage:-1001",
+            other_umo="telegram:GroupMessage:-2002",
+        )
+    finally:
+        await service.close()
+        await db.close()

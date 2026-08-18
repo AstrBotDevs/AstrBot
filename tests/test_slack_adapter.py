@@ -688,3 +688,20 @@ async def test_slack_terminate_stops_socket_and_webhook_clients():
 
     adapter.socket_client.stop.assert_awaited_once()
     adapter.webhook_client.stop.assert_awaited_once()
+
+
+def test_slack_create_event_does_not_promote_workspace_admin():
+    from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+
+    adapter = _build_adapter()
+    message = AstrBotMessage()
+    message.type = MessageType.GROUP_MESSAGE
+    message.group_id = "C123"
+    message.session_id = "C123"
+    message.sender = MessageMember("U1", "tester")
+    message.raw_message = {"user": "U1", "channel": "C123", "is_admin": True}
+    message.message_str = "hello"
+    message.message = []
+    event = adapter.create_event(message)
+    assert event.platform_member_role == "member"
+    assert event.platform_role_source == "none"

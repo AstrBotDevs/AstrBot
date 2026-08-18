@@ -146,3 +146,81 @@ async def test_send_by_session_reports_send_exception_and_keeps_external_file(
     assert result and not result.success
     assert result.error_message == "network down"
     assert external_file.exists()
+
+
+def _misskey_room_message(*, owner_id: str, sender_id: str, room_id: str = "room-1"):
+    from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+
+    message = AstrBotMessage()
+    message.type = MessageType.GROUP_MESSAGE
+    message.group_id = room_id
+    message.session_id = f"room%{room_id}"
+    message.sender = MessageMember(sender_id, "tester")
+    message.raw_message = {
+        "toRoomId": room_id,
+        "toRoom": {"ownerId": owner_id, "name": "room"},
+        "fromUserId": sender_id,
+        "fromUser": {"id": sender_id, "username": "tester"},
+    }
+    message.message_str = "hello"
+    message.message = []
+    return message
+
+
+def test_misskey_room_owner_id_only_promotes_matching_inbound_owner():
+    adapter = make_adapter()
+    owner = adapter.create_event(_misskey_room_message(owner_id="42", sender_id="42"))
+    member = adapter.create_event(_misskey_room_message(owner_id="99", sender_id="42"))
+    mismatched = _misskey_room_message(owner_id="42", sender_id="42", room_id="room-x")
+    mismatched.group_id = "room-y"
+    mismatched_event = adapter.create_event(mismatched)
+    assert owner.platform_member_role == "owner"
+    assert member.platform_member_role == "member"
+    assert mismatched_event.platform_member_role == "member"
+
+
+def test_misskey_private_chat_does_not_use_room_owner():
+    from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+
+    adapter = make_adapter()
+    message = AstrBotMessage()
+    message.type = MessageType.FRIEND_MESSAGE
+    message.session_id = "chat%42"
+    message.sender = MessageMember("42", "tester")
+    message.raw_message = {
+        "toRoomId": "room-1",
+        "toRoom": {"ownerId": "42"},
+        "fromUserId": "42",
+    }
+    message.message_str = "hello"
+    message.message = []
+    event = adapter.create_event(message)
+    assert event.platform_member_role == "member"
+    assert event.platform_role_source == "none"
+
+
+@pytest.mark.asyncio
+async def test_misskey_room_owner_role_stays_in_current_session(tmp_path):
+    from astrbot.core.auth.service import AuthorizationService
+    from astrbot.core.db.sqlite import SQLiteDatabase
+    from tests.fixtures.auth import assert_platform_role_stays_in_session
+
+    event = make_adapter().create_event(
+        _misskey_room_message(owner_id="42", sender_id="42")
+    )
+    db = SQLiteDatabase(str(tmp_path / "misskey-auth.db"))
+    await db.initialize()
+    service = AuthorizationService(db)
+    await service.start()
+    try:
+        await assert_platform_role_stays_in_session(
+            service,
+            platform_instance="misskey",
+            sender_id="42",
+            platform_role=event.platform_member_role,
+            current_umo="misskey:GroupMessage:room-1",
+            other_umo="misskey:GroupMessage:room-2",
+        )
+    finally:
+        await service.close()
+        await db.close()
