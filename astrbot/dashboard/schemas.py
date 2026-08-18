@@ -562,6 +562,7 @@ class SkillUpdateRequest(BaseModel):
 
 class SkillNeoRequest(OpenModel):
     skill_name: str | None = None
+    skill_key: str | None = None
     name: str | None = None
     candidate_id: str | None = None
     release_id: str | None = None

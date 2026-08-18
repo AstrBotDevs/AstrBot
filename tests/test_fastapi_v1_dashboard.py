@@ -21,6 +21,7 @@ import astrbot.dashboard.api.memory as dashboard_memory_api
 import astrbot.dashboard.api.sessions as dashboard_sessions_api
 import astrbot.dashboard.api.skills as dashboard_skills_api
 import astrbot.dashboard.services.config_service as config_service
+from astrbot.core.auth.registry import dashboard_api_capability_specs
 from astrbot.core.file_token_service import FileTokenService
 from astrbot.core.log import LogBroker
 from astrbot.core.platform.send_result import PlatformSendResult
@@ -34,6 +35,7 @@ from astrbot.core.utils.totp import TotpRuntimeState
 from astrbot.core.webchat.queue_manager import WebChatQueueManager
 from astrbot.core.webchat.run_coordinator import WebChatRunCoordinator
 from astrbot.dashboard.api.app import create_dashboard_asgi_app
+from astrbot.dashboard.services.api_key_scopes import SCOPE_INCLUDES
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.auth_service import (
     DASHBOARD_JWT_COOKIE_NAME,
@@ -105,6 +107,7 @@ class _FakeDbContext:
 class FakeDb:
     def __init__(self) -> None:
         self.api_keys: dict[str, FakeApiKey] = {}
+        self.capabilities: set[tuple[str, str, str, str]] = set()
         self.touched_key_ids: list[str] = []
         self.umo_ids = ["webchat:FriendMessage:webchat!user!session-1"]
         self.preferences: list[object] = []
@@ -125,10 +128,27 @@ class FakeDb:
         return []
 
     def add_api_key(self, raw_key: str, scopes: list[str]) -> None:
+        key_id = f"key-{raw_key}"
         self.api_keys[ApiKeyService.hash_key(raw_key)] = FakeApiKey(
-            key_id="config-key",
+            key_id=key_id,
             scopes=scopes,
         )
+        subject_id = f"api-key:{key_id}"
+        expanded = list(scopes)
+        for scope in scopes:
+            expanded.extend(SCOPE_INCLUDES.get(scope, ()))
+        for action, resource_type, resource_id in dashboard_api_capability_specs(
+            expanded
+        ):
+            self.capabilities.add((subject_id, action, resource_type, resource_id))
+
+    def capability_allows(self, subject_id: str, action: str, resource) -> bool:
+        return (
+            subject_id,
+            action,
+            resource.type,
+            resource.id,
+        ) in self.capabilities
 
 
 class FakeLlmTools:
@@ -641,9 +661,15 @@ class FakeAstrBotConfig(dict):
 
 
 class FakeAuthorizationService:
-    """Allow-all authorization double for route-focused Dashboard tests."""
+    """Dashboard allow-all double that still enforces API-key capabilities."""
 
-    async def authorize(self, *_args, **_kwargs):
+    def __init__(self, db: FakeDb) -> None:
+        self.db = db
+
+    async def authorize(self, subject, action, resource, context):
+        if getattr(subject, "kind", None) == "api-key":
+            allowed = self.db.capability_allows(subject.id, action, resource)
+            return SimpleNamespace(allowed=allowed, requires_step_up=False)
         return SimpleNamespace(allowed=True, requires_step_up=False)
 
 
@@ -700,7 +726,7 @@ def fake_db() -> FakeDb:
 
 
 @pytest.fixture
-def fake_core_lifecycle():
+def fake_core_lifecycle(fake_db: FakeDb):
     config = _build_fake_config()
     provider_manager = FakeProviderManager(config)
     catalogs = RuntimeCatalogs()
@@ -809,7 +835,7 @@ def fake_core_lifecycle():
         log_broker=LogBroker(),
         services=SimpleNamespace(
             demo_mode=False,
-            authorization=FakeAuthorizationService(),
+            authorization=FakeAuthorizationService(fake_db),
             preferences=FakePreferences(),
             file_token_service=FileTokenService(),
             pip_installer=SimpleNamespace(install=lambda *_args, **_kwargs: None),
@@ -2273,7 +2299,11 @@ async def test_v1_config_scope_includes_bot_and_provider(
     data = response.json()
     assert data["status"] == "ok"
     assert isinstance(data["data"]["bots"], list)
-    assert fake_db.touched_key_ids == ["config-key", "config-key", "config-key"]
+    assert fake_db.touched_key_ids == [
+        "key-abk_fastapi_v1_config",
+        "key-abk_fastapi_v1_config",
+        "key-abk_fastapi_v1_bot",
+    ]
 
 
 @pytest.mark.asyncio
@@ -3570,6 +3600,33 @@ async def test_v1_skill_scope_accepts_api_key_and_rejects_plural_scope(
     data = response.json()
     assert data["status"] == "ok"
     assert data["data"]["skills"] == [{"name": "demo_skill"}]
+
+    named = await asgi_client.get(
+        "/api/v1/skills/demo_skill/files",
+        headers={"X-API-Key": raw_key},
+    )
+    assert named.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_v1_neo_skill_sync_accepts_skill_key_target(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def fake_sync(data):
+        return {"synced": data["skill_key"]}
+
+    monkeypatch.setattr(asgi_app.state.services.skills, "sync_neo_release", fake_sync)
+
+    response = await asgi_client.post(
+        "/api/v1/skills/neo/sync",
+        json={"skill_key": "neo.demo"},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {"synced": "neo.demo"}
 
 
 @pytest.mark.asyncio

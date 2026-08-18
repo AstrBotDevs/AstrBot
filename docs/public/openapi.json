@@ -3536,7 +3536,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/NeoReleaseActionRequest"
+                "$ref": "#/components/schemas/NeoSyncRequest"
               }
             }
           }
@@ -6271,6 +6271,26 @@
             "type": "string"
           }
         },
+        "additionalProperties": true
+      },
+      "NeoSyncRequest": {
+        "type": "object",
+        "properties": {
+          "release_id": {
+            "type": "string"
+          },
+          "skill_key": {
+            "type": "string"
+          }
+        },
+        "anyOf": [
+          {
+            "required": ["release_id"]
+          },
+          {
+            "required": ["skill_key"]
+          }
+        ],
         "additionalProperties": true
       },
       "KnowledgeBaseRequest": {

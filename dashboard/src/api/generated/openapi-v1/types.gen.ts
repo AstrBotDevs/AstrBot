@@ -616,6 +616,12 @@ export type NeoReleaseActionRequest = {
   [key: string]: unknown;
 };
 
+export type NeoSyncRequest = unknown & {
+  release_id?: string;
+  skill_key?: string;
+  [key: string]: unknown;
+};
+
 export type KnowledgeBaseRequest = {
   kb_name?: string;
   description?: string;
@@ -4626,7 +4632,7 @@ export type RollbackNeoSkillReleaseResponse =
   RollbackNeoSkillReleaseResponses[keyof RollbackNeoSkillReleaseResponses];
 
 export type SyncNeoSkillReleaseData = {
-  body: NeoReleaseActionRequest;
+  body: NeoSyncRequest;
   path?: never;
   query?: never;
   url: '/api/v1/skills/neo/sync';

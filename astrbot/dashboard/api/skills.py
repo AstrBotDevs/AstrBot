@@ -4,9 +4,10 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 
 from astrbot import logger
+from astrbot.core.auth.models import Resource
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.dashboard.async_utils import run_maybe_async
-from astrbot.dashboard.responses import error, ok
+from astrbot.dashboard.responses import ApiError, error, ok
 from astrbot.dashboard.schemas import (
     SkillNeoRequest,
     SkillUpdateRequest,
@@ -18,7 +19,7 @@ from astrbot.dashboard.services.skills_service import (
     SkillsServiceError,
 )
 
-from .auth import AuthContext, require_scope
+from .auth import AuthContext, object_resource, require_resource_action, require_scope
 from .error_handling import internal_error_response
 
 router = APIRouter(tags=["Skills"])
@@ -38,6 +39,57 @@ def get_service(request: Request) -> SkillsService:
 
 async def require_skill_scope(request: Request) -> AuthContext:
     return await require_scope(request, "skill")
+
+
+async def _authorize_skill_collection(
+    request: Request, auth: AuthContext, *, write: bool
+) -> None:
+    await require_resource_action(
+        request,
+        auth,
+        action="extension.manage" if write else "extension.read",
+        resource=Resource.named("skill", "collection"),
+    )
+
+
+async def _authorize_skill_object(
+    request: Request, auth: AuthContext, skill_name: str, *, write: bool
+) -> None:
+    await require_resource_action(
+        request,
+        auth,
+        action="extension.manage" if write else "extension.read",
+        resource=object_resource("skill", skill_name),
+    )
+
+
+async def _authorize_neo_collection(
+    request: Request, auth: AuthContext, *, kind: str, write: bool = False
+) -> None:
+    await require_resource_action(
+        request,
+        auth,
+        action="extension.manage" if write else "extension.read",
+        resource=Resource.named("skill", f"neo-{kind}"),
+    )
+
+
+async def _authorize_neo_object(
+    request: Request,
+    auth: AuthContext,
+    *,
+    kind: str,
+    object_id: str | None,
+    write: bool,
+) -> None:
+    if not object_id or not str(object_id).strip():
+        raise ApiError("Authorization denied", status_code=403)
+    await require_resource_action(
+        request,
+        auth,
+        action="extension.manage" if write else "extension.read",
+        resource=object_resource("skill", f"neo-{kind}", str(object_id).strip()),
+    )
 
 
 def _model_dict(payload) -> dict[str, Any]:
@@ -90,36 +142,44 @@ async def _download_skill(service: SkillsService, name: str):
 
 @router.get("/skills")
 async def list_skills(
-    _auth: AuthContext = Depends(require_skill_scope),
+    request: Request,
+    auth: AuthContext = Depends(require_skill_scope),
     service: SkillsService = Depends(get_service),
 ):
+    await _authorize_skill_collection(request, auth, write=False)
     return await _run(service.get_skills)
 
 
 @router.post("/skills")
 async def upload_skill(
+    request: Request,
     file: UploadFile = File(...),
-    _auth: AuthContext = Depends(require_skill_scope),
+    auth: AuthContext = Depends(require_skill_scope),
     service: SkillsService = Depends(get_service),
 ):
+    await _authorize_skill_collection(request, auth, write=True)
     return await _run(lambda: service.upload_skill(file))
 
 
 @router.post("/skills/batch")
 async def upload_skills_batch(
+    request: Request,
     files: list[UploadFile] = File(...),
-    _auth: AuthContext = Depends(require_skill_scope),
+    auth: AuthContext = Depends(require_skill_scope),
     service: SkillsService = Depends(get_service),
 ):
+    await _authorize_skill_collection(request, auth, write=True)
     return await _run(lambda: service.batch_upload_skills(files))
 
 
 @router.get("/skills/{skill_name:path}/archive", responses=_ARCHIVE_RESPONSE)
 async def download_skill(
     skill_name: str,
-    _auth: AuthContext = Depends(require_skill_scope),
+    request: Request,
+    auth: AuthContext = Depends(require_skill_scope),
     service: SkillsService = Depends(get_service),
 ):
+    await _authorize_skill_object(request, auth, skill_name, write=False)
     return await _download_skill(service, skill_name)
 
 
@@ -127,9 +187,10 @@ async def download_skill(
 async def list_skill_files(
     skill_name: str,
     request: Request,
-    _auth: AuthContext = Depends(require_skill_scope),
+    auth: AuthContext = Depends(require_skill_scope),
     service: SkillsService = Depends(get_service),
 ):
+    await _authorize_skill_object(request, auth, skill_name, write=False)
     return await _run(
         lambda: service.list_skill_files(
             skill_name,
@@ -142,9 +203,11 @@ async def list_skill_files(
 async def get_skill_file(
     skill_name: str,
     file_path: str,
-    _auth: AuthContext = Depends(require_skill_scope),
+    request: Request,
+    auth: AuthContext = Depends(require_skill_scope),
     service: SkillsService = Depends(get_service),
 ):
+    await _authorize_skill_object(request, auth, skill_name, write=False)
     return await _run(lambda: service.get_skill_file(skill_name, file_path))
 
 
@@ -153,9 +216,10 @@ async def update_skill_file(
     skill_name: str,
     file_path: str,
     request: Request,
-    _auth: AuthContext = Depends(require_skill_scope),
+    auth: AuthContext = Depends(require_skill_scope),
     service: SkillsService = Depends(get_service),
 ):
+    await _authorize_skill_object(request, auth, skill_name, write=True)
     content = (await request.body()).decode("utf-8")
     return await _run(
         lambda: service.update_skill_file(
@@ -168,9 +232,11 @@ async def update_skill_file(
 async def update_skill(
     skill_name: str,
     payload: SkillUpdateRequest,
-    _auth: AuthContext = Depends(require_skill_scope),
+    request: Request,
+    auth: AuthContext = Depends(require_skill_scope),
     service: SkillsService = Depends(get_service),
 ):
+    await _authorize_skill_object(request, auth, skill_name, write=True)
     return await _run(
         lambda: service.update_skill(
             {
@@ -184,18 +250,21 @@ async def update_skill(
 @router.delete("/skills/{skill_name:path}")
 async def delete_skill(
     skill_name: str,
-    _auth: AuthContext = Depends(require_skill_scope),
+    request: Request,
+    auth: AuthContext = Depends(require_skill_scope),
     service: SkillsService = Depends(get_service),
 ):
+    await _authorize_skill_object(request, auth, skill_name, write=True)
     return await _run(lambda: service.delete_skill({"name": skill_name}))
 
 
 @router.get("/skills/neo/candidates")
 async def list_neo_skill_candidates(
     request: Request,
-    _auth: AuthContext = Depends(require_skill_scope),
+    auth: AuthContext = Depends(require_skill_scope),
     service: SkillsService = Depends(get_service),
 ):
+    await _authorize_neo_collection(request, auth, kind="candidates")
     return await _run(
         service.get_neo_candidates(
             dict(request.query_params),
@@ -206,9 +275,10 @@ async def list_neo_skill_candidates(
 @router.get("/skills/neo/releases")
 async def list_neo_skill_releases(
     request: Request,
-    _auth: AuthContext = Depends(require_skill_scope),
+    auth: AuthContext = Depends(require_skill_scope),
     service: SkillsService = Depends(get_service),
 ):
+    await _authorize_neo_collection(request, auth, kind="releases")
     return await _run(
         service.get_neo_releases(
             dict(request.query_params),
@@ -219,61 +289,98 @@ async def list_neo_skill_releases(
 @router.get("/skills/neo/payload")
 async def get_neo_skill_payload(
     request: Request,
-    _auth: AuthContext = Depends(require_skill_scope),
+    auth: AuthContext = Depends(require_skill_scope),
     service: SkillsService = Depends(get_service),
 ):
+    await _authorize_neo_object(
+        request,
+        auth,
+        kind="payload",
+        object_id=request.query_params.get("payload_ref"),
+        write=False,
+    )
     return await _run(service.get_neo_payload(dict(request.query_params)))
 
 
 @router.post("/skills/neo/evaluate")
 async def evaluate_neo_skill_candidate(
     payload: SkillNeoRequest,
-    _auth: AuthContext = Depends(require_skill_scope),
+    request: Request,
+    auth: AuthContext = Depends(require_skill_scope),
     service: SkillsService = Depends(get_service),
 ):
+    await _authorize_neo_object(
+        request, auth, kind="candidate", object_id=payload.candidate_id, write=True
+    )
     return await _run(lambda: service.evaluate_neo_candidate(_model_dict(payload)))
 
 
 @router.post("/skills/neo/promote")
 async def promote_neo_skill_candidate(
     payload: SkillNeoRequest,
-    _auth: AuthContext = Depends(require_skill_scope),
+    request: Request,
+    auth: AuthContext = Depends(require_skill_scope),
     service: SkillsService = Depends(get_service),
 ):
+    await _authorize_neo_object(
+        request, auth, kind="candidate", object_id=payload.candidate_id, write=True
+    )
     return await _run(lambda: service.promote_neo_candidate(_model_dict(payload)))
 
 
 @router.post("/skills/neo/rollback")
 async def rollback_neo_skill_release(
     payload: SkillNeoRequest,
-    _auth: AuthContext = Depends(require_skill_scope),
+    request: Request,
+    auth: AuthContext = Depends(require_skill_scope),
     service: SkillsService = Depends(get_service),
 ):
+    await _authorize_neo_object(
+        request, auth, kind="release", object_id=payload.release_id, write=True
+    )
     return await _run(lambda: service.rollback_neo_release(_model_dict(payload)))
 
 
 @router.post("/skills/neo/sync")
 async def sync_neo_skill_release(
     payload: SkillNeoRequest,
-    _auth: AuthContext = Depends(require_skill_scope),
+    request: Request,
+    auth: AuthContext = Depends(require_skill_scope),
     service: SkillsService = Depends(get_service),
 ):
+    if payload.release_id:
+        target_kind = "release"
+        target_id = payload.release_id
+    else:
+        target_kind = "skill-key"
+        target_id = payload.skill_key
+    await _authorize_neo_object(
+        request, auth, kind=target_kind, object_id=target_id, write=True
+    )
     return await _run(lambda: service.sync_neo_release(_model_dict(payload)))
 
 
 @router.post("/skills/neo/candidates/delete")
 async def delete_neo_skill_candidate(
     payload: SkillNeoRequest,
-    _auth: AuthContext = Depends(require_skill_scope),
+    request: Request,
+    auth: AuthContext = Depends(require_skill_scope),
     service: SkillsService = Depends(get_service),
 ):
+    await _authorize_neo_object(
+        request, auth, kind="candidate", object_id=payload.candidate_id, write=True
+    )
     return await _run(lambda: service.delete_neo_candidate(_model_dict(payload)))
 
 
 @router.post("/skills/neo/releases/delete")
 async def delete_neo_skill_release(
     payload: SkillNeoRequest,
-    _auth: AuthContext = Depends(require_skill_scope),
+    request: Request,
+    auth: AuthContext = Depends(require_skill_scope),
     service: SkillsService = Depends(get_service),
 ):
+    await _authorize_neo_object(
+        request, auth, kind="release", object_id=payload.release_id, write=True
+    )
     return await _run(lambda: service.delete_neo_release(_model_dict(payload)))

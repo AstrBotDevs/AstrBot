@@ -1018,6 +1018,7 @@ export type {
   NameRequest,
   NeoCandidateActionRequest,
   NeoReleaseActionRequest,
+  NeoSyncRequest,
   OpenChatWebSocketData,
   OpenLiveChatWebSocketData,
   OpenUnifiedChatWebSocketData,
