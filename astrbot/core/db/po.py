@@ -741,6 +741,14 @@ class AuthRoleBinding(TimestampMixin, SQLModel, table=True):
             "revoked_at",
             "expires_at",
         ),
+        Index(
+            "ix_auth_role_bindings_relation_lookup",
+            "subject_id",
+            "scope_type",
+            "scope_id",
+            "role",
+            "revoked_at",
+        ),
     )
 
 
@@ -853,6 +861,35 @@ class AuthPolicyOverride(TimestampMixin, SQLModel, table=True):
     expires_at: datetime | None = Field(default=None, index=True)
     created_by: str | None = Field(default=None, max_length=512)
     metadata_json: dict = Field(default_factory=dict, sa_type=JSON)
+
+
+class AuthCapability(TimestampMixin, SQLModel, table=True):
+    """Explicit API-key capability. Never a wildcard or implicit operator."""
+
+    __tablename__ = "auth_capabilities"  # type: ignore
+
+    capability_id: str = Field(
+        default_factory=lambda: str(uuid.uuid4()), primary_key=True
+    )
+    subject_id: str = Field(nullable=False, index=True, max_length=512)
+    action: str = Field(nullable=False, index=True, max_length=128)
+    resource_type: str = Field(nullable=False, max_length=64)
+    resource_id: str = Field(nullable=False, max_length=4096)
+    config_id: str | None = Field(default=None, index=True, max_length=128)
+    expires_at: datetime | None = Field(default=None, index=True)
+    created_by: str | None = Field(default=None, max_length=512)
+    revoked_at: datetime | None = Field(default=None, index=True)
+
+    __table_args__ = (
+        Index(
+            "ix_auth_capabilities_lookup",
+            "subject_id",
+            "action",
+            "resource_type",
+            "resource_id",
+            "revoked_at",
+        ),
+    )
 
 
 class DashboardTrustedDevice(TimestampMixin, SQLModel, table=True):

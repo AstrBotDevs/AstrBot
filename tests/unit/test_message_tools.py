@@ -25,7 +25,6 @@ def _make_context(
     """Build a minimal ContextWrapper for SendMessageToUserTool."""
     cfg = {
         "provider_settings": {
-            "computer_use_require_admin": require_admin,
             "computer_use_runtime": runtime,
         }
     }

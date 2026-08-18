@@ -30,7 +30,6 @@ def _make_context(
     config_holder = SimpleNamespace(
         get_config=lambda umo=None: {
             "provider_settings": {
-                "computer_use_require_admin": require_admin,
                 "computer_use_runtime": runtime,
             }
         },
@@ -54,7 +53,6 @@ def _make_sandbox_context(
     config_holder = SimpleNamespace(
         get_config=lambda umo=None: {
             "provider_settings": {
-                "computer_use_require_admin": True,
                 "computer_use_runtime": "sandbox",
             }
         },

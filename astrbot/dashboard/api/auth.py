@@ -16,11 +16,7 @@ from astrbot.dashboard.schemas import (
     LoginRequest,
     TotpSetupRequest,
 )
-from astrbot.dashboard.services.api_key_scopes import (
-    DASHBOARD_API_KEY_SCOPES,
-    api_key_has_scope,
-    effective_api_key_scopes,
-)
+from astrbot.dashboard.services.api_key_scopes import DASHBOARD_API_KEY_SCOPES
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.auth_service import (
     DASHBOARD_JWT_COOKIE_MAX_AGE,
@@ -126,6 +122,12 @@ def _scope_action(request: Request, auth: AuthContext, scope: str) -> str | None
         )
     if scope == "data":
         return "data.manage"
+    if scope in {"chat", "im"}:
+        return (
+            "session.read"
+            if request.method.upper() in _SAFE_HTTP_METHODS
+            else "session.manage"
+        )
     return _SCOPE_ACTIONS.get(scope)
 
 
@@ -177,7 +179,7 @@ async def _authorize_scope_action(
     resource = Resource.named(
         "dashboard-api",
         f"{request.method.lower()}-{scope}",
-        config_id=config_id,
+        config_id=None if auth.via == "api_key" else config_id,
     )
     core_context = CoreAuthContext(
         subject=subject,
@@ -202,6 +204,8 @@ async def _authorize_scope_action(
     )
     decision = await authorization.authorize(subject, action, resource, core_context)
     if not decision.allowed:
+        if auth.via == "api_key":
+            raise ApiError("Insufficient API key scope", status_code=403)
         raise ApiError(
             "Authorization denied",
             data={"requires_step_up": decision.requires_step_up},
@@ -558,13 +562,10 @@ async def _require_api_key_scope(
     api_key = await request.app.state.db.get_active_api_key_by_hash(key_hash)
     if not api_key:
         raise ApiError("Invalid API key", status_code=401)
-    scopes = effective_api_key_scopes(api_key.scopes)
-    if not api_key_has_scope(scopes, scope):
-        raise ApiError("Insufficient API key scope", status_code=403)
     await request.app.state.db.touch_api_key(api_key.key_id)
     return AuthContext(
         username=f"api_key:{api_key.key_id}",
-        scopes=scopes,
+        scopes=[],
         subject=f"api-key:{api_key.key_id}",
         api_key_id=api_key.key_id,
         api_key_created_by=getattr(api_key, "created_by", None),

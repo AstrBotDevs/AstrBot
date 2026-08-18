@@ -5,24 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
-# Keep this fixed when adding Dashboard-only scopes. Existing rows
-# with ``scopes = NULL`` predate explicit scope storage and must not silently
-# acquire capabilities introduced in the future.
-DEFAULT_API_KEY_SCOPES = (
-    "bot",
-    "provider",
-    "persona",
-    "im",
-    "config",
-    "chat",
-    "kb",
-    "memory",
-    "data",
-    "file",
-    "plugin",
-    "mcp",
-    "skill",
-)
+from astrbot.core.auth.registry import DEFAULT_API_KEY_SCOPES
+
 DASHBOARD_API_KEY_SCOPES = (*DEFAULT_API_KEY_SCOPES,)
 
 SCOPE_INCLUDES: dict[str, tuple[str, ...]] = {
@@ -39,22 +23,13 @@ def _ordered_unique(scopes: Iterable[str]) -> list[str]:
 
 
 def effective_api_key_scopes(raw_scopes: Any) -> list[str]:
-    """Return the scopes a persisted API key effectively has.
-
-    ``NULL`` is the historical representation of the then-current baseline,
-    not a wildcard.  An explicit historical ``*`` keeps its documented
-    wildcard semantics and is intentionally distinct from ``NULL``.
-    Invalid persisted values never grant access.
-    """
-    if raw_scopes is None:
-        return list(DEFAULT_API_KEY_SCOPES)
+    """Return explicit stored scopes. NULL and ``*`` grant nothing."""
     if not isinstance(raw_scopes, list):
         return []
     return _ordered_unique(
         scope
         for scope in raw_scopes
-        if isinstance(scope, str)
-        and (scope == "*" or scope in DASHBOARD_API_KEY_SCOPES)
+        if isinstance(scope, str) and scope in DASHBOARD_API_KEY_SCOPES
     )
 
 
@@ -87,10 +62,8 @@ def normalize_api_key_scopes(raw_scopes: Any) -> list[str]:
 
 
 def api_key_has_scope(scopes: Iterable[str], required_scope: str) -> bool:
-    """Return whether effective API-key scopes grant ``required_scope``."""
+    """Return whether explicit stored scopes include ``required_scope``."""
     selected = set(scopes)
-    if "*" in selected:
-        return True
     return required_scope in selected or any(
         required_scope in SCOPE_INCLUDES.get(scope, ()) for scope in selected
     )

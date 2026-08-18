@@ -923,7 +923,6 @@ class AuthorizationCapability:
         target = Resource.session(event.auth_context.config_id, umo)
         target_context = replace(
             event.auth_context,
-            origin_session_resource_id=None,
             platform_member_role="unknown",
             platform_role_source="none",
             platform_role_expires_at=None,

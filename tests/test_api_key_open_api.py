@@ -61,6 +61,24 @@ async def _create_api_key(
     return create_data["data"]["api_key"], create_data["data"]["key_id"]
 
 
+async def _grant_webchat_user(
+    app: FastAPI,
+    key_id: str,
+    username: str,
+    *actions: str,
+) -> None:
+    from astrbot.dashboard.api.auth import object_resource
+
+    authorization = app.state.runtime.services.authorization
+    resource = object_resource("webchat-user", username)
+    for action in actions or ("session.read",):
+        await authorization.grant_capability(
+            subject=Subject.api_key(key_id),
+            action=action,
+            resource=resource,
+        )
+
+
 async def _create_step_up(
     test_client: DashboardTestClient,
     authenticated_header: dict,
@@ -699,13 +717,15 @@ async def test_open_chat_send_auto_session_id_and_username(
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
 
-    raw_key, _ = await _create_api_key(
+    raw_key, key_id = await _create_api_key(
         test_client,
         authenticated_header,
         dashboard_password,
         scopes=["chat"],
         name_prefix="chat-send-key",
     )
+    await _grant_webchat_user(app, key_id, "alice_auto_session", "session.manage")
+    await _grant_webchat_user(app, key_id, "alice", "session.manage")
 
     async def fake_chat_response(
         _chat_service,
@@ -784,6 +804,18 @@ async def test_open_chat_send_auto_session_id_and_username(
     assert missing_username_data["status"] == "error"
     assert missing_username_data["message"] == "Missing key: username"
 
+    denied_other = await test_client.post(
+        "/api/v1/chat",
+        json={
+            "message": "hello",
+            "username": "not-granted-user",
+            "session_id": f"openapi_denied_{uuid.uuid4().hex[:8]}",
+            "enable_streaming": False,
+        },
+        headers={"X-API-Key": raw_key},
+    )
+    assert denied_other.status_code == 403
+
 
 @pytest.mark.asyncio
 async def test_open_chat_username_is_not_an_admin_identity(
@@ -793,13 +825,15 @@ async def test_open_chat_username_is_not_an_admin_identity(
     dashboard_password: str,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    basic_key, _ = await _create_api_key(
+    basic_key, key_id = await _create_api_key(
         test_client,
         authenticated_header,
         dashboard_password,
         scopes=["chat"],
         name_prefix="chat-basic-admin-boundary",
     )
+    await _grant_webchat_user(app, key_id, "fixture-api-admin", "session.manage")
+    await _grant_webchat_user(app, key_id, "ordinary-api-user", "session.manage")
     calls: list[tuple[str, tuple[str, ...] | None]] = []
 
     async def fake_chat_response(
@@ -830,7 +864,7 @@ async def test_open_chat_username_is_not_an_admin_identity(
         headers={"X-API-Key": basic_key},
     )
     assert accepted.status_code == 200
-    assert calls[-1] == ("fixture-api-admin", ("chat",))
+    assert calls[-1] == ("fixture-api-admin", ())
 
     ordinary = await test_client.post(
         "/api/v1/chat",
@@ -842,7 +876,7 @@ async def test_open_chat_username_is_not_an_admin_identity(
         headers={"X-API-Key": basic_key},
     )
     assert ordinary.status_code == 200
-    assert calls[-1] == ("ordinary-api-user", ("chat",))
+    assert calls[-1] == ("ordinary-api-user", ())
 
     allowed = await test_client.post(
         "/api/v1/chat",
@@ -856,7 +890,7 @@ async def test_open_chat_username_is_not_an_admin_identity(
     assert allowed.status_code == 200
     allowed_data = await allowed.get_json()
     assert allowed_data["status"] == "ok"
-    assert calls[-1] == ("fixture-api-admin", ("chat",))
+    assert calls[-1] == ("fixture-api-admin", ())
 
     dashboard = await test_client.post(
         "/api/v1/chat",
@@ -897,9 +931,14 @@ async def test_api_key_configuration_rejects_deprecated_permission_fields(
     )
     assert created.status_code == 200
     profile_id = (await created.get_json())["data"]["conf_id"]
-    profile = await test_client.get(
+    denied = await test_client.get(
         f"/api/v1/config-profiles/{profile_id}",
         headers={"X-API-Key": config_key},
+    )
+    assert denied.status_code == 403
+    profile = await test_client.get(
+        f"/api/v1/config-profiles/{profile_id}",
+        headers=authenticated_header,
     )
     profile_config = copy.deepcopy((await profile.get_json())["data"]["config"])
     profile_config["admins_id"] = ["changed-profile-admin"]
@@ -908,12 +947,12 @@ async def test_api_key_configuration_rejects_deprecated_permission_fields(
     profile_update = await test_client.put(
         f"/api/v1/config-profiles/{profile_id}",
         json=profile_config,
-        headers={"X-API-Key": config_key},
+        headers=authenticated_header,
     )
     assert profile_update.status_code == 422
     stored_profile = await test_client.get(
         f"/api/v1/config-profiles/{profile_id}",
-        headers={"X-API-Key": config_key},
+        headers=authenticated_header,
     )
     stored_profile_config = (await stored_profile.get_json())["data"]["config"]
     assert not {
@@ -1010,7 +1049,7 @@ async def test_unknown_sensitive_scopes_are_rejected_and_null_is_baseline(
         },
         headers={"X-API-Key": raw_key},
     )
-    assert accepted.status_code == 200
+    assert accepted.status_code == 403
 
     list_step_up = await test_client.post(
         "/api/v1/authorization/step-up",
@@ -1032,8 +1071,7 @@ async def test_unknown_sensitive_scopes_are_rejected_and_null_is_baseline(
         for item in (await listed.get_json())["data"]
         if item["name"] == "legacy-null-scope"
     )
-    assert "chat" in null_scope_key["scopes"]
-    assert "chat:admin" not in null_scope_key["scopes"]
+    assert null_scope_key["scopes"] == []
 
 
 @pytest.mark.asyncio
@@ -1045,7 +1083,7 @@ async def test_open_chat_sessions_pagination(
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
 
-    raw_key, _ = await _create_api_key(
+    raw_key, key_id = await _create_api_key(
         test_client,
         authenticated_header,
         dashboard_password,
@@ -1055,6 +1093,7 @@ async def test_open_chat_sessions_pagination(
 
     creator = f"alice_{uuid.uuid4().hex[:8]}"
     other_creator = f"bob_{uuid.uuid4().hex[:8]}"
+    await _grant_webchat_user(app, key_id, creator, "session.read")
     for idx in range(3):
         await core_lifecycle_td.db.create_platform_session(
             creator=creator,
@@ -1101,6 +1140,12 @@ async def test_open_chat_sessions_pagination(
     missing_username_data = await missing_username_res.get_json()
     assert missing_username_data["status"] == "error"
     assert missing_username_data["message"] == "Missing key: username"
+
+    other_user_res = await test_client.get(
+        f"/api/v1/chat/sessions?page=1&page_size=2&username={other_creator}",
+        headers={"X-API-Key": raw_key},
+    )
+    assert other_user_res.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -1190,13 +1235,14 @@ async def test_open_chat_rejects_blank_username_and_uses_session_id(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    raw_key, _ = await _create_api_key(
+    raw_key, key_id = await _create_api_key(
         test_client,
         authenticated_header,
         dashboard_password,
         scopes=["chat"],
         name_prefix="chat-conversation-key",
     )
+    await _grant_webchat_user(app, key_id, "alias-user", "session.manage")
 
     async def fake_chat_response(
         _chat_service,
@@ -1255,13 +1301,14 @@ async def test_open_chat_send_config_resolution(
     dashboard_password: str,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    raw_key, _ = await _create_api_key(
+    raw_key, key_id = await _create_api_key(
         test_client,
         authenticated_header,
         dashboard_password,
         scopes=["chat"],
         name_prefix="chat-config-resolution-key",
     )
+    await _grant_webchat_user(app, key_id, "alice", "session.manage")
     conf_list = [
         {
             "id": "default",
@@ -1401,7 +1448,7 @@ async def test_open_chat_sessions_input_validation_and_filtering(
     dashboard_password: str,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
-    raw_key, _ = await _create_api_key(
+    raw_key, key_id = await _create_api_key(
         test_client,
         authenticated_header,
         dashboard_password,
@@ -1410,6 +1457,7 @@ async def test_open_chat_sessions_input_validation_and_filtering(
     )
 
     creator = f"chat_bounds_{uuid.uuid4().hex[:8]}"
+    await _grant_webchat_user(app, key_id, creator, "session.read")
     webchat_sid = f"open_api_bounds_webchat_{uuid.uuid4().hex[:8]}"
     telegram_sid = f"open_api_bounds_telegram_{uuid.uuid4().hex[:8]}"
     await core_lifecycle_td.db.create_platform_session(

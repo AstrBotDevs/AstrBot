@@ -150,6 +150,13 @@ async def _open_api_chat_response(
     except OpenApiServiceError as exc:
         return _open_api_error(str(exc))
 
+    if not auth.api_key_id or not await open_api_service.authorize_declared_chat_user(
+        key_id=auth.api_key_id,
+        action="session.manage",
+        username=effective_username,
+    ):
+        raise ApiError("Authorization denied", status_code=403)
+
     config_err = await open_api_service.update_session_config_route(
         username=effective_username,
         session_id=session_id,

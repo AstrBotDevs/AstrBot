@@ -16,7 +16,6 @@ from sqlmodel import col, delete, select
 
 from astrbot import logger
 from astrbot.core.auth.models import (
-    ACTIONS,
     GLOBAL_SCOPE_ID,
     HIGH_RISK_ACTIONS,
     ROLE_ORDER,
@@ -30,8 +29,10 @@ from astrbot.core.auth.models import (
     parse_canonical_session_resource,
     utc_now,
 )
+from astrbot.core.auth.registry import ActionPolicy, policy_for
 from astrbot.core.db.po import (
     AuthAuditLog,
+    AuthCapability,
     AuthPlatformMembershipFact,
     AuthPolicyOverride,
     AuthRoleBinding,
@@ -64,214 +65,31 @@ _SENSITIVE_KEYS = frozenset(
     }
 )
 
-# A role is only meaningful after _binding_matches_resource has verified scope.
-_ACTION_ROLES: dict[str, frozenset[Role]] = {
-    "session.read": frozenset(
-        {
-            Role.MEMBER,
-            Role.SESSION_ADMIN,
-            Role.SESSION_OWNER,
-            Role.INSTANCE_OPERATOR,
-            Role.OPERATOR,
-            Role.ROOT,
-        }
-    ),
-    "session.manage": frozenset(
-        {
-            Role.SESSION_ADMIN,
-            Role.SESSION_OWNER,
-            Role.INSTANCE_OPERATOR,
-            Role.OPERATOR,
-            Role.ROOT,
-        }
-    ),
-    "session.assign": frozenset(
-        {Role.SESSION_OWNER, Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}
-    ),
-    "provider.read": frozenset(
-        {
-            Role.MEMBER,
-            Role.SESSION_ADMIN,
-            Role.SESSION_OWNER,
-            Role.INSTANCE_OPERATOR,
-            Role.OPERATOR,
-            Role.ROOT,
-        }
-    ),
-    "provider.use": frozenset(
-        {
-            Role.MEMBER,
-            Role.SESSION_ADMIN,
-            Role.SESSION_OWNER,
-            Role.INSTANCE_OPERATOR,
-            Role.OPERATOR,
-            Role.ROOT,
-        }
-    ),
-    "platform.read": frozenset(
-        {
-            Role.MEMBER,
-            Role.SESSION_ADMIN,
-            Role.SESSION_OWNER,
-            Role.INSTANCE_OPERATOR,
-            Role.OPERATOR,
-            Role.ROOT,
-        }
-    ),
-    "provider.manage": frozenset({Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}),
-    "provider.credentials.write": frozenset(
-        {Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}
-    ),
-    "platform.manage": frozenset({Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}),
-    "agent.manage": frozenset(
-        {Role.SESSION_OWNER, Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}
-    ),
-    "extension.read": frozenset(
-        {
-            Role.MEMBER,
-            Role.SESSION_ADMIN,
-            Role.SESSION_OWNER,
-            Role.INSTANCE_OPERATOR,
-            Role.OPERATOR,
-            Role.ROOT,
-        }
-    ),
-    "extension.manage": frozenset({Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}),
-    "extension.plugin_install": frozenset(
-        {Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}
-    ),
-    "data.manage": frozenset(
-        {
-            Role.MEMBER,
-            Role.SESSION_ADMIN,
-            Role.SESSION_OWNER,
-            Role.INSTANCE_OPERATOR,
-            Role.OPERATOR,
-            Role.ROOT,
-        }
-    ),
-    "data.export_all": frozenset({Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}),
-    "system.manage": frozenset({Role.ROOT}),
-    "system.update": frozenset({Role.ROOT}),
-    "system.restart": frozenset({Role.ROOT}),
-    "system.pip_install": frozenset({Role.ROOT}),
-    "identity.read": frozenset({Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}),
-    "identity.manage": frozenset(
-        {Role.SESSION_OWNER, Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}
-    ),
-    "identity.operator.write": frozenset({Role.ROOT}),
-    "identity.root.write": frozenset({Role.ROOT}),
-    "tool.local_exec": frozenset({Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}),
-    "tool.python_exec": frozenset({Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}),
-    "tool.file_read": frozenset(
-        {
-            Role.MEMBER,
-            Role.SESSION_ADMIN,
-            Role.SESSION_OWNER,
-            Role.INSTANCE_OPERATOR,
-            Role.OPERATOR,
-            Role.ROOT,
-        }
-    ),
-    "tool.file_write": frozenset({Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}),
-    "tool.browser_control": frozenset(
-        {Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}
-    ),
-    "tool.mcp_read": frozenset(
-        {
-            Role.MEMBER,
-            Role.SESSION_ADMIN,
-            Role.SESSION_OWNER,
-            Role.INSTANCE_OPERATOR,
-            Role.OPERATOR,
-            Role.ROOT,
-        }
-    ),
-    "tool.mcp_write": frozenset({Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}),
-    "tool.computer_use": frozenset({Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}),
-    "dashboard.account.manage": frozenset({Role.ROOT}),
-}
 
-_API_SCOPE_ACTIONS: dict[str, frozenset[str]] = {
-    # API keys are capabilities, never implicit control-plane roles. The
-    # historical provider scope can use configured models but cannot alter a
-    # provider definition or its credentials.
-    "provider": frozenset({"provider.read", "provider.use"}),
-    "config": frozenset(
-        {"platform.read", "platform.manage", "provider.read", "provider.manage"}
-    ),
-    "chat": frozenset({"session.read", "session.manage", "provider.use"}),
-    "persona": frozenset({"agent.manage"}),
-    "plugin": frozenset({"extension.read", "extension.manage"}),
-    "mcp": frozenset({"tool.mcp_read", "tool.mcp_write"}),
-    "skill": frozenset({"extension.manage"}),
-    "kb": frozenset({"data.manage"}),
-    "memory": frozenset({"data.manage"}),
-    "data": frozenset({"data.manage"}),
-    "file": frozenset({"data.manage", "tool.file_read", "tool.file_write"}),
-    "im": frozenset({"session.manage"}),
-    "bot": frozenset({"platform.read"}),
-}
+def _missing_policy_context(policy: ActionPolicy, context: AuthContext) -> str | None:
+    required = policy.required_context
+    if "source" in required and not context.source:
+        return "missing_context_source"
+    if "config" in required and context.source == "im" and not context.config_id:
+        return "missing_context_config"
+    if (
+        "origin_session" in required
+        and context.source == "im"
+        and not context.origin_session_resource_id
+    ):
+        return "missing_context_origin_session"
+    return None
 
 
-_API_SCOPE_RESOURCE_TYPES: dict[str, frozenset[str]] = {
-    "provider": frozenset({"provider", "provider-model", "instance", "dashboard-api"}),
-    "config": frozenset(
-        {"instance", "config-profile", "config-route", "dashboard-api"}
-    ),
-    "chat": frozenset(
-        {"session", "conversation", "webchat", "webchat-user", "dashboard-api"}
-    ),
-    "persona": frozenset({"persona", "session", "dashboard-api"}),
-    "plugin": frozenset({"plugin", "dashboard-api"}),
-    "mcp": frozenset({"mcp", "tool", "dashboard-api"}),
-    "skill": frozenset({"skill", "dashboard-api"}),
-    "kb": frozenset(
-        {
-            "knowledge-base",
-            "knowledge-base-document",
-            "knowledge-base-chunk",
-            "dashboard-api",
-        }
-    ),
-    "memory": frozenset({"memory", "memory-fact", "memory-profile", "dashboard-api"}),
-    "data": frozenset(
-        {
-            "conversation",
-            "memory",
-            "memory-fact",
-            "memory-profile",
-            "knowledge-base",
-            "knowledge-base-document",
-            "knowledge-base-chunk",
-            "file",
-            "data",
-            "dashboard-api",
-        }
-    ),
-    "file": frozenset({"file", "dashboard-api"}),
-    "im": frozenset({"session", "webchat", "dashboard-api"}),
-    "bot": frozenset({"platform", "bot", "dashboard-api"}),
-}
+def _control_plane_bindings_apply(subject: Subject, context: AuthContext) -> bool:
+    """Return whether global root/operator bindings apply in this context."""
 
-
-def api_key_scopes_allow_action(
-    scopes: Iterable[str], action: str, resource: Resource | None = None
-) -> bool:
-    """Map scopes to action and resource capabilities, never roles."""
-
-    if action in HIGH_RISK_ACTIONS:
-        return False
-    selected_scopes = set(scopes)
-    if "*" in selected_scopes:
+    if context.source == "dashboard":
         return True
-    return any(
-        action in _API_SCOPE_ACTIONS.get(scope, ())
-        and (
-            resource is None
-            or resource.type in _API_SCOPE_RESOURCE_TYPES.get(scope, ())
-        )
-        for scope in selected_scopes
+    return (
+        context.source == "webchat"
+        and subject.kind == "dashboard-account"
+        and context.authenticated
     )
 
 
@@ -290,6 +108,12 @@ def _requires_step_up(action: str, resource: Resource, context: AuthContext) -> 
     ):
         return False
     if action == "platform.manage" and resource.type == "bot":
+        return True
+    if (
+        action == "session.assign"
+        and resource.type == "session"
+        and context.origin_session_resource_id != resource.id
+    ):
         return True
     return action in HIGH_RISK_ACTIONS
 
@@ -322,6 +146,14 @@ class AuthorizationService:
         self._binding_mutation_lock = asyncio.Lock()
 
     async def start(self) -> None:
+        from astrbot.core.auth.preflight import inspect_authorization_upgrade
+
+        report = await inspect_authorization_upgrade(self._db)
+        if not report.ok:
+            raise RuntimeError(
+                "Authorization upgrade preflight failed: "
+                + ",".join(report.blocking[:8])
+            )
         if self._audit_task is None:
             self._audit_task = asyncio.create_task(
                 self._write_audit_loop(), name="auth-audit-writer"
@@ -1349,6 +1181,68 @@ class AuthorizationService:
             return context
         return replace(context, config_id=resource.config_id)
 
+    async def grant_capability(
+        self,
+        *,
+        subject: Subject,
+        action: str,
+        resource: Resource,
+        created_by: str | None = None,
+        expires_at=None,
+    ) -> AuthCapability:
+        if subject.kind != "api-key":
+            raise AuthorizationValueError("Capabilities are only issued to API keys")
+        if action in HIGH_RISK_ACTIONS:
+            raise AuthorizationValueError(
+                "High-risk actions cannot be granted to API keys"
+            )
+        policy = policy_for(action)
+        if policy is None:
+            raise AuthorizationValueError("Unknown action")
+        record = AuthCapability(
+            subject_id=subject.id,
+            action=action,
+            resource_type=resource.type,
+            resource_id=resource.id,
+            config_id=resource.config_id,
+            created_by=created_by,
+            expires_at=expires_at,
+        )
+        async with self._db.get_db() as session:
+            async with session.begin():
+                session.add(record)
+        return record
+
+    async def _capability_allows(
+        self, subject: Subject, action: str, resource: Resource
+    ) -> bool:
+        if action in HIGH_RISK_ACTIONS:
+            return False
+        now = utc_now()
+        async with self._db.get_db() as session:
+            result = await session.execute(
+                select(AuthCapability).where(
+                    col(AuthCapability.subject_id) == subject.id,
+                    col(AuthCapability.action) == action,
+                    col(AuthCapability.revoked_at).is_(None),
+                )
+            )
+            for capability in result.scalars():
+                if capability.expires_at is not None and capability.expires_at <= now:
+                    continue
+                if capability.resource_type != resource.type:
+                    continue
+                if capability.resource_id != resource.id:
+                    continue
+                if (
+                    capability.config_id is not None
+                    and resource.config_id is not None
+                    and capability.config_id != resource.config_id
+                ):
+                    continue
+                return True
+        return False
+
     async def _authorize(
         self,
         subject: Subject,
@@ -1357,7 +1251,13 @@ class AuthorizationService:
         context: AuthContext,
         audit_id: str,
     ) -> Decision:
-        if action not in ACTIONS and not action.startswith("plugin:"):
+        from astrbot.core.auth.relationships import (
+            evaluate_relations,
+            tuples_from_roles,
+        )
+
+        policy = policy_for(action)
+        if policy is None:
             return Decision(
                 False,
                 subject,
@@ -1365,6 +1265,27 @@ class AuthorizationService:
                 resource,
                 None,
                 "unknown_action",
+                audit_id=audit_id,
+            )
+        if resource.type not in policy.resource_types:
+            return Decision(
+                False,
+                subject,
+                action,
+                resource,
+                None,
+                "resource_type_denied",
+                audit_id=audit_id,
+            )
+        missing_context = _missing_policy_context(policy, context)
+        if missing_context is not None:
+            return Decision(
+                False,
+                subject,
+                action,
+                resource,
+                None,
+                missing_context,
                 audit_id=audit_id,
             )
         if context.subject.id != subject.id:
@@ -1405,43 +1326,28 @@ class AuthorizationService:
                 "cross_session_resource",
                 audit_id=audit_id,
             )
-        if action.startswith("plugin:"):
-            parts = action.split(":")
-            if len(parts) != 3 or not all(parts):
+        if subject.kind == "api-key" or context.source == "api_key":
+            capability_grant = await self._capability_allows(subject, action, resource)
+            if not capability_grant:
                 return Decision(
                     False,
                     subject,
                     action,
                     resource,
                     None,
-                    "invalid_plugin_action",
+                    "api_key_capability_denied",
                     audit_id=audit_id,
                 )
-            allowed_roles = _ACTION_ROLES["session.manage"]
-        else:
-            allowed_roles = _ACTION_ROLES.get(action)
-            if allowed_roles is None:
-                return Decision(
-                    False,
-                    subject,
-                    action,
-                    resource,
-                    None,
-                    "unknown_action",
-                    audit_id=audit_id,
-                )
-        api_key_capability = subject.kind == "api-key" and api_key_scopes_allow_action(
-            context.api_scopes, action, resource
-        )
-        if subject.kind == "api-key" and not api_key_capability:
             return Decision(
-                False,
+                True,
                 subject,
                 action,
                 resource,
                 None,
-                "api_key_scope_denied",
+                "allowed",
                 audit_id=audit_id,
+                matched_relations=("capability",),
+                relation_sources=("api_key",),
             )
         if not subject.authenticated and action not in {"provider.use", "session.read"}:
             return Decision(
@@ -1453,13 +1359,20 @@ class AuthorizationService:
                 "unauthenticated",
                 audit_id=audit_id,
             )
-        role = await self._resolve_role(subject, resource, context)
+        from astrbot.core.auth.relationships import display_role
+
+        facts = await self._collect_relation_facts(subject, resource, context)
+        granted, matched = evaluate_relations(
+            action=action,
+            resource=resource,
+            context=context,
+            tuples=tuples_from_roles(subject_id=subject.id, roles=facts),
+        )
+        role = display_role(matched) or await self._resolve_role(
+            subject, resource, context
+        )
         override_allowed = await self._policy_override_allows(action, resource, role)
-        if (
-            role not in allowed_roles
-            and not api_key_capability
-            and not override_allowed
-        ):
+        if not granted and not override_allowed:
             return Decision(
                 False,
                 subject,
@@ -1468,6 +1381,8 @@ class AuthorizationService:
                 role,
                 "role_scope_denied",
                 audit_id=audit_id,
+                matched_relations=tuple(item.relation.value for item in matched),
+                relation_sources=tuple(item.source for item in matched),
             )
         step_up_id: str | None = None
         if _requires_step_up(action, resource, context):
@@ -1485,6 +1400,10 @@ class AuthorizationService:
                         "step_up_required",
                         requires_step_up=True,
                         audit_id=audit_id,
+                        matched_relations=tuple(
+                            item.relation.value for item in matched
+                        ),
+                        relation_sources=tuple(item.source for item in matched),
                     )
             else:
                 return Decision(
@@ -1495,6 +1414,8 @@ class AuthorizationService:
                     role,
                     "high_risk_dashboard_only",
                     audit_id=audit_id,
+                    matched_relations=tuple(item.relation.value for item in matched),
+                    relation_sources=tuple(item.source for item in matched),
                 )
         return Decision(
             True,
@@ -1505,6 +1426,8 @@ class AuthorizationService:
             "allowed",
             audit_id=audit_id,
             step_up_id=step_up_id,
+            matched_relations=tuple(item.relation.value for item in matched),
+            relation_sources=tuple(item.source for item in matched),
         )
 
     async def _policy_override_allows(
@@ -1553,27 +1476,36 @@ class AuthorizationService:
         origin = cls._origin_session_resource(context)
         if (
             origin is not None
-            and resource.type == "tool"
+            and resource.type in {"tool", "file", "mcp"}
             and resource.config_id == origin.config_id
         ):
             return origin
         return None
 
-    async def _resolve_role(
+    async def _collect_relation_facts(
         self, subject: Subject, resource: Resource, context: AuthContext
-    ) -> Role:
+    ) -> list[tuple[Role, str, Resource]]:
+        facts: list[tuple[Role, str, Resource]] = []
         candidates = [subject.id]
-        if (
+        if subject.kind not in {"plugin", "agent"} and (
             context.principal_subject_id
             and context.principal_subject_id not in candidates
         ):
             candidates.append(context.principal_subject_id)
+        origin = self._origin_session_resource(context)
         session_scope = self._session_scope_resource(resource, context)
-        roles = [Role.GUEST]
-        if subject.authenticated and session_scope is not None:
-            origin = self._origin_session_resource(context)
-            if origin is not None and session_scope.id == origin.id:
-                roles.append(Role.MEMBER)
+        origin_matches = (
+            origin is not None
+            and session_scope is not None
+            and origin.id == session_scope.id
+        )
+        if (
+            subject.kind not in {"plugin", "agent"}
+            and subject.authenticated
+            and origin_matches
+            and session_scope is not None
+        ):
+            facts.append((Role.MEMBER, "default", session_scope))
         now = utc_now()
         async with self._db.get_db() as session:
             bindings = await session.execute(
@@ -1583,48 +1515,55 @@ class AuthorizationService:
                 )
             )
             for binding in bindings.scalars():
-                if binding.expires_at is None or binding.expires_at > now:
-                    if binding.scope_type == "global" and binding.role in {
-                        Role.ROOT.value,
-                        Role.OPERATOR.value,
-                    }:
-                        # Global control-plane roles are intentionally not an
-                        # IM privilege. A Dashboard account must not become a
-                        # group administrator merely because it shares a
-                        # normalized subject ID with a message sender.
-                        if context.source != "dashboard":
-                            continue
-                        # Global control-plane roles are tied to the current
-                        # Dashboard account state. This check also closes the
-                        # race between account deactivation and a concurrent
-                        # binding write, and ignores bindings that no longer
-                        # correspond to an active account.
-                        account_id = binding.subject_id.removeprefix(
-                            "dashboard-account:"
-                        )
-                        if account_id == binding.subject_id:
-                            continue
-                        account = (
-                            await session.execute(
-                                select(DashboardAccount).where(
-                                    col(DashboardAccount.account_id) == account_id,
-                                    col(DashboardAccount.is_active).is_(True),
-                                )
+                if binding.expires_at is not None and binding.expires_at <= now:
+                    continue
+                try:
+                    binding_role = Role(binding.role)
+                except ValueError:
+                    continue
+                if binding.scope_type == "global" and binding.role in {
+                    Role.ROOT.value,
+                    Role.OPERATOR.value,
+                }:
+                    if not _control_plane_bindings_apply(subject, context):
+                        continue
+                    account_id = binding.subject_id.removeprefix("dashboard-account:")
+                    if account_id == binding.subject_id:
+                        continue
+                    account = (
+                        await session.execute(
+                            select(DashboardAccount).where(
+                                col(DashboardAccount.account_id) == account_id,
+                                col(DashboardAccount.is_active).is_(True),
                             )
-                        ).scalar_one_or_none()
-                        if account is None:
-                            continue
-                    if self._binding_matches_resource(binding, resource) or (
-                        session_scope is not None
-                        and session_scope.id != resource.id
-                        and self._binding_matches_resource(binding, session_scope)
-                    ):
-                        roles.append(Role(binding.role))
-            if (
-                session_scope is not None
-                and session_scope.umo
-                and session_scope.config_id
-            ):
+                        )
+                    ).scalar_one_or_none()
+                    if account is None:
+                        continue
+                    facts.append((binding_role, "binding", resource))
+                    continue
+                if binding.scope_type == "instance" and binding.config_id:
+                    if resource.config_id != binding.config_id:
+                        continue
+                    facts.append(
+                        (binding_role, "binding", Resource.instance(binding.config_id))
+                    )
+                    continue
+                if binding.scope_type == "session" and binding.config_id:
+                    try:
+                        scoped = self._normalize_session_binding_scope(
+                            binding.config_id, binding.scope_id
+                        )
+                        config_id, umo = parse_canonical_session_resource(scoped)
+                        facts.append(
+                            (binding_role, "binding", Resource.session(config_id, umo))
+                        )
+                    except AuthorizationValueError:
+                        continue
+                    continue
+                if self._binding_matches_resource(binding, resource):
+                    facts.append((binding_role, "binding", resource))
+            if origin_matches and session_scope is not None and session_scope.umo:
                 fact = (
                     await session.execute(
                         select(AuthPlatformMembershipFact).where(
@@ -1637,33 +1576,43 @@ class AuthorizationService:
                     )
                 ).scalar_one_or_none()
                 if fact is not None:
-                    roles.append(
-                        Role.SESSION_OWNER
-                        if fact.platform_role == "owner"
-                        else Role.SESSION_ADMIN
-                        if fact.platform_role == "admin"
-                        else Role.MEMBER
+                    facts.append(
+                        (
+                            Role.SESSION_OWNER
+                            if fact.platform_role == "owner"
+                            else Role.SESSION_ADMIN
+                            if fact.platform_role == "admin"
+                            else Role.MEMBER,
+                            "platform",
+                            session_scope,
+                        )
                     )
-        if session_scope is not None and context.platform_member_role in {
-            "owner",
-            "admin",
-        }:
-            if (
-                context.platform_role_source in {"adapter", "api", "cache"}
-                and (
-                    context.origin_session_resource_id is None
-                    or context.origin_session_resource_id == session_scope.id
-                )
-                and (
-                    context.platform_role_expires_at is None
-                    or context.platform_role_expires_at > now
-                )
-            ):
-                roles.append(
+        if (
+            origin_matches
+            and session_scope is not None
+            and context.platform_member_role in {"owner", "admin"}
+            and context.platform_role_source in {"adapter", "api", "cache"}
+            and (
+                context.platform_role_expires_at is None
+                or context.platform_role_expires_at > now
+            )
+        ):
+            facts.append(
+                (
                     Role.SESSION_OWNER
                     if context.platform_member_role == "owner"
-                    else Role.SESSION_ADMIN
+                    else Role.SESSION_ADMIN,
+                    context.platform_role_source,
+                    session_scope,
                 )
+            )
+        return facts
+
+    async def _resolve_role(
+        self, subject: Subject, resource: Resource, context: AuthContext
+    ) -> Role:
+        facts = await self._collect_relation_facts(subject, resource, context)
+        roles = [Role.GUEST, *(role for role, _, _ in facts)]
         return max(roles, key=lambda candidate: ROLE_ORDER[candidate])
 
     @staticmethod

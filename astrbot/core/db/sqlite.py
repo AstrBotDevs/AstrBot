@@ -6,10 +6,12 @@ from sqlalchemy import CursorResult, Row
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, desc, func, or_, select, text, update
 
+from astrbot.core.auth.registry import dashboard_api_capability_specs
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import (
     ApiKey,
     Attachment,
+    AuthCapability,
     ChatUIProject,
     CommandConfig,
     CommandConflict,
@@ -101,6 +103,21 @@ class SQLiteDatabase(BaseDatabase):
                 "CREATE UNIQUE INDEX IF NOT EXISTS "
                 "uix_auth_role_binding_active_scope "
                 "ON auth_role_bindings(subject_id, scope_type, scope_id, config_id) "
+                "WHERE revoked_at IS NULL"
+            )
+        )
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS "
+                "ix_auth_role_bindings_relation_lookup "
+                "ON auth_role_bindings(subject_id, scope_type, scope_id, role, revoked_at)"
+            )
+        )
+        await conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "uix_auth_capabilities_active "
+                "ON auth_capabilities(subject_id, action, resource_type, resource_id, config_id) "
                 "WHERE revoked_at IS NULL"
             )
         )
@@ -1764,6 +1781,22 @@ class SQLiteDatabase(BaseDatabase):
                 )
                 session.add(api_key)
                 await session.flush()
+                if scopes:
+                    for (
+                        action,
+                        resource_type,
+                        resource_id,
+                    ) in dashboard_api_capability_specs(scopes):
+                        session.add(
+                            AuthCapability(
+                                subject_id=f"api-key:{api_key.key_id}",
+                                action=action,
+                                resource_type=resource_type,
+                                resource_id=resource_id,
+                                created_by=created_by,
+                                expires_at=expires_at,
+                            )
+                        )
                 await session.refresh(api_key)
                 return api_key
 
@@ -1814,12 +1847,22 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
+                now = datetime.now(UTC)
                 query = (
                     update(ApiKey)
                     .where(col(ApiKey.key_id) == key_id)
-                    .values(revoked_at=datetime.now(UTC))
+                    .values(revoked_at=now)
                 )
                 result = T.cast(CursorResult, await session.execute(query))
+                if result.rowcount:
+                    await session.execute(
+                        update(AuthCapability)
+                        .where(
+                            col(AuthCapability.subject_id) == f"api-key:{key_id}",
+                            col(AuthCapability.revoked_at).is_(None),
+                        )
+                        .values(revoked_at=now)
+                    )
                 return result.rowcount > 0
 
     async def delete_api_key(self, key_id: str) -> bool:
@@ -1827,6 +1870,11 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
+                await session.execute(
+                    delete(AuthCapability).where(
+                        col(AuthCapability.subject_id) == f"api-key:{key_id}"
+                    )
+                )
                 result = T.cast(
                     CursorResult,
                     await session.execute(

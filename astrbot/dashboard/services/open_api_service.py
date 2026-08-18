@@ -1,3 +1,4 @@
+import hashlib
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -26,10 +27,6 @@ from astrbot.core.webchat.run_coordinator import (
     WebChatRunCoordinator,
 )
 from astrbot.dashboard.responses import INTERNAL_SERVER_ERROR_MESSAGE
-from astrbot.dashboard.services.api_key_scopes import (
-    api_key_has_scope,
-    effective_api_key_scopes,
-)
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 
 if TYPE_CHECKING:
@@ -88,6 +85,25 @@ class OpenApiService:
         self.webchat_run_coordinator = webchat_run_coordinator
         self.platform_history_mgr = platform_message_history_manager
         self.authorization = authorization
+
+    @staticmethod
+    def chat_user_resource(username: str) -> Resource:
+        resource_id = hashlib.sha256(str(username).encode("utf-8")).hexdigest()
+        return Resource.named("webchat-user", resource_id)
+
+    async def authorize_declared_chat_user(
+        self, *, key_id: str, action: str, username: str
+    ) -> bool:
+        if self.authorization is None:
+            return False
+        subject = Subject.api_key(key_id)
+        decision = await self.authorization.authorize(
+            subject,
+            action,
+            self.chat_user_resource(username),
+            AuthContext(subject=subject, source="api_key", authenticated=True),
+        )
+        return decision.allowed
 
     @staticmethod
     def resolve_open_username(
@@ -221,13 +237,20 @@ class OpenApiService:
         if not api_key:
             return None, "Invalid API key"
 
-        scopes = effective_api_key_scopes(api_key.scopes)
-
-        if not api_key_has_scope(scopes, "chat"):
+        if self.authorization is None:
+            return None, "Authorization unavailable"
+        subject = Subject.api_key(api_key.key_id)
+        decision = await self.authorization.authorize(
+            subject,
+            "session.read",
+            Resource.named("webchat", "socket"),
+            AuthContext(subject=subject, source="api_key", authenticated=True),
+        )
+        if not decision.allowed:
             return None, "Insufficient API key scope"
 
         await self.db.touch_api_key(api_key.key_id)
-        return OpenApiKeyAuthContext(api_key.key_id, tuple(scopes)), None
+        return OpenApiKeyAuthContext(api_key.key_id, ()), None
 
     @staticmethod
     async def send_chat_ws_error(
@@ -415,6 +438,18 @@ class OpenApiService:
             message = str(exc)
             await send_error(message, self.get_chat_send_error_code(message))
             return
+
+        if api_key_principal is not None:
+            key_id = api_key_principal.get("key_id")
+            if not isinstance(
+                key_id, str
+            ) or not await self.authorize_declared_chat_user(
+                key_id=key_id,
+                action="session.manage",
+                username=effective_username,
+            ):
+                await send_error("Authorization denied", "FORBIDDEN")
+                return
 
         config_err = await self.update_session_config_route(
             username=effective_username,

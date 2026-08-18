@@ -45,7 +45,7 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
     )
     runtime = SimpleNamespace(
         get_config=lambda **_kwargs: {
-            "provider_settings": {"computer_use_require_admin": True}
+            "provider_settings": {}
         },
         computer_runtime=SimpleNamespace(
             get_local_booter=lambda: SimpleNamespace(
@@ -89,7 +89,7 @@ async def test_local_python_tool_accepts_timeout_alias(tmp_path, monkeypatch):
     )
     runtime = SimpleNamespace(
         get_config=lambda **_kwargs: {
-            "provider_settings": {"computer_use_require_admin": True}
+            "provider_settings": {}
         },
         computer_runtime=SimpleNamespace(
             get_local_booter=lambda: SimpleNamespace(

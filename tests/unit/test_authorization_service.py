@@ -9,7 +9,7 @@ import pytest_asyncio
 from sqlmodel import select
 
 from astrbot.core.auth.models import AuthContext, Decision, Resource, Role, Subject
-from astrbot.core.auth.service import AuthorizationService, api_key_scopes_allow_action
+from astrbot.core.auth.service import AuthorizationService
 from astrbot.core.db.po import AuthAuditLog, AuthRoleBinding, DashboardAccount
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.star.plugin_context import AuthorizationCapability
@@ -102,12 +102,18 @@ async def test_platform_admin_is_session_scoped_and_expires(authorization):
     )
     assert (
         await authorization.authorize(
-            subject, "session.manage", current, _context(subject, "default")
+            subject,
+            "session.manage",
+            current,
+            _session_context(subject, current),
         )
     ).allowed
     assert not (
         await authorization.authorize(
-            subject, "session.manage", other, _context(subject, "default")
+            subject,
+            "session.manage",
+            other,
+            _session_context(subject, other),
         )
     ).allowed
 
@@ -213,22 +219,17 @@ async def test_dashboard_step_up_uses_the_resource_config_scope(authorization):
     assert decision.allowed
 
 
-def test_api_key_scopes_are_capabilities_not_roles():
-    assert api_key_scopes_allow_action(["provider"], "provider.use")
-    assert not api_key_scopes_allow_action(["provider"], "provider.manage")
-    assert not api_key_scopes_allow_action(["config"], "provider.credentials.write")
-    assert not api_key_scopes_allow_action(
-        ["chat", "chat:admin"], "chat.impersonate_admin"
+def test_api_key_scope_helpers_reject_wildcard_and_null():
+    from astrbot.dashboard.services.api_key_scopes import (
+        api_key_has_scope,
+        effective_api_key_scopes,
     )
 
-
-def test_api_key_scopes_are_bound_to_resource_domains():
-    assert api_key_scopes_allow_action(
-        ["data"], "data.manage", Resource.named("file", "file-1")
-    )
-    assert not api_key_scopes_allow_action(
-        ["provider"], "provider.use", Resource.named("file", "file-1")
-    )
+    assert effective_api_key_scopes(None) == []
+    assert effective_api_key_scopes(["*"]) == []
+    assert effective_api_key_scopes(["chat", "*"]) == ["chat"]
+    assert api_key_has_scope(["chat"], "chat")
+    assert not api_key_has_scope(["*"], "chat")
 
 
 def test_dashboard_step_up_resource_parser_accepts_canonical_session_and_instance():
@@ -568,7 +569,7 @@ async def test_target_session_authorization_does_not_inherit_origin_owner(
         umo=target.umo or "",
     )
     assert not denied.allowed
-    assert denied.reason == "role_scope_denied"
+    assert denied.reason == "cross_session_resource"
 
     await authorization.grant_binding(
         actor=Subject.system("test"),
@@ -579,13 +580,62 @@ async def test_target_session_authorization_does_not_inherit_origin_owner(
         config_id="default",
         enforce_actor=False,
     )
-    assert (
-        await capability.authorize_target_session(
-            event,
-            action="session.assign",
-            umo=target.umo or "",
-        )
-    ).allowed
+    still_denied = await capability.authorize_target_session(
+        event,
+        action="session.assign",
+        umo=target.umo or "",
+    )
+    assert not still_denied.allowed
+    assert still_denied.reason == "cross_session_resource"
+
+
+@pytest.mark.asyncio
+async def test_dashboard_cross_session_assign_requires_step_up(authorization):
+    subject = Subject.dashboard_session("session-1")
+    target = Resource.session("default", "napcat:GroupMessage:room-b")
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=subject.id,
+        role=Role.INSTANCE_OPERATOR,
+        scope_type="instance",
+        scope_id="default",
+        config_id="default",
+        enforce_actor=False,
+    )
+    context = AuthContext(
+        subject=subject,
+        source="dashboard",
+        config_id="default",
+        authenticated=True,
+        metadata={"dashboard_session_id": "session-1"},
+    )
+    denied = await authorization.authorize(subject, "session.assign", target, context)
+    assert not denied.allowed
+    assert denied.requires_step_up
+    assert denied.reason == "step_up_required"
+
+    _credential_id, token = await authorization.issue_step_up(
+        subject=subject,
+        dashboard_session_id="session-1",
+        action="session.assign",
+        resource=target,
+        context=context,
+        verified_method="password",
+    )
+    allowed = await authorization.authorize(
+        subject,
+        "session.assign",
+        target,
+        AuthContext(
+            subject=subject,
+            source="dashboard",
+            config_id="default",
+            authenticated=True,
+            step_up_token=token,
+            metadata={"dashboard_session_id": "session-1"},
+        ),
+    )
+    assert allowed.allowed
 
 
 @pytest.mark.asyncio
@@ -717,6 +767,116 @@ async def test_global_control_plane_role_is_not_an_im_session_role(authorization
         subject, "session.manage", current, _session_context(subject, current)
     )
     assert not decision.allowed
+
+
+def _webchat_context(subject: Subject, resource: Resource, **kwargs) -> AuthContext:
+    """Create a WebChat pipeline context bound to one inbound session."""
+
+    return AuthContext(
+        subject=subject,
+        source="webchat",
+        config_id=resource.config_id,
+        authenticated=subject.authenticated,
+        origin_session_resource_id=resource.id,
+        principal_subject_id=(
+            subject.id if subject.kind == "dashboard-account" else None
+        ),
+        **kwargs,
+    )
+
+
+@pytest.mark.asyncio
+async def test_authenticated_webchat_uses_dashboard_account_global_role(authorization):
+    account = DashboardAccount(
+        account_id="webchat-root", username="alice", password_hash="hash"
+    )
+    subject = Subject.dashboard_account(account.account_id, account.username)
+    current = Resource.session(
+        "default", "webchat:FriendMessage:webchat!alice!session-1"
+    )
+    async with authorization._db.get_db() as session:
+        async with session.begin():
+            session.add(account)
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=subject.id,
+        role=Role.ROOT,
+        scope_type="global",
+        scope_id="global",
+        config_id=None,
+        enforce_actor=False,
+    )
+
+    decision = await authorization.authorize(
+        subject, "session.manage", current, _webchat_context(subject, current)
+    )
+    assert decision.allowed
+    assert decision.effective_role == Role.ROOT
+
+
+@pytest.mark.asyncio
+async def test_guest_webchat_does_not_inherit_homonymous_account_role(authorization):
+    account = DashboardAccount(
+        account_id="webchat-root", username="alice", password_hash="hash"
+    )
+    account_subject = Subject.dashboard_account(account.account_id, account.username)
+    guest = Subject.guest("webchat-alice")
+    current = Resource.session(
+        "default", "webchat:FriendMessage:webchat!alice!session-1"
+    )
+    async with authorization._db.get_db() as session:
+        async with session.begin():
+            session.add(account)
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=account_subject.id,
+        role=Role.ROOT,
+        scope_type="global",
+        scope_id="global",
+        config_id=None,
+        enforce_actor=False,
+    )
+
+    decision = await authorization.authorize(
+        guest,
+        "session.manage",
+        current,
+        _webchat_context(guest, current, caller_declared_username="alice"),
+    )
+    assert not decision.allowed
+
+
+@pytest.mark.asyncio
+async def test_authenticated_webchat_high_risk_remains_dashboard_only(authorization):
+    account = DashboardAccount(
+        account_id="webchat-root", username="alice", password_hash="hash"
+    )
+    subject = Subject.dashboard_account(account.account_id, account.username)
+    resource = Resource.named("system", "restart")
+    current = Resource.session(
+        "default", "webchat:FriendMessage:webchat!alice!session-1"
+    )
+    async with authorization._db.get_db() as session:
+        async with session.begin():
+            session.add(account)
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=subject.id,
+        role=Role.ROOT,
+        scope_type="global",
+        scope_id="global",
+        config_id=None,
+        enforce_actor=False,
+    )
+
+    decision = await authorization.authorize(
+        subject,
+        "system.restart",
+        resource,
+        _webchat_context(subject, current, auth_strength="password"),
+    )
+    assert not decision.allowed
+    assert decision.reason == "high_risk_dashboard_only"
 
 
 @pytest.mark.asyncio
@@ -895,3 +1055,416 @@ async def test_failed_step_up_factor_is_audited_without_secret_metadata(authoriz
     assert record.decision == "deny"
     assert "password" not in record.metadata_json
     assert "must-not-be-stored" not in str(record.metadata_json)
+
+
+def test_action_registry_covers_frozen_actions():
+    from astrbot.core.auth.models import ACTIONS, HIGH_RISK_ACTIONS
+    from astrbot.core.auth.registry import (
+        ACTION_POLICIES,
+        ACTION_ROLE_GRANTS,
+        policy_for,
+    )
+
+    assert set(ACTION_ROLE_GRANTS) == set(ACTIONS)
+    assert set(ACTION_POLICIES) == set(ACTIONS)
+    for action in HIGH_RISK_ACTIONS:
+        policy = policy_for(action)
+        assert policy is not None
+        assert policy.risk == "high"
+        assert policy.requires_step_up
+    assert policy_for("plugin:example:publish") is not None
+    assert policy_for("provider.credentials.read") is None
+    assert policy_for("tool.file.write") is None
+
+
+def test_plugin_and_agent_subjects_are_execution_components():
+    plugin = Subject.plugin("weather")
+    agent = Subject.agent("sub-1")
+    assert plugin.kind == "plugin"
+    assert agent.kind == "agent"
+    assert plugin.id == "plugin:weather"
+    assert not plugin.id.startswith("dashboard-account:")
+    assert not agent.id.startswith("im:")
+
+
+@pytest.mark.asyncio
+async def test_plugin_subject_cannot_inherit_root_or_forge_system(authorization):
+    plugin = Subject.plugin("weather")
+    resource = Resource.named("system", "restart")
+    context = AuthContext(
+        subject=plugin,
+        source="plugin",
+        config_id="default",
+        authenticated=True,
+    )
+    decision = await authorization.authorize(
+        plugin, "system.restart", resource, context
+    )
+    assert not decision.allowed
+    assert decision.effective_role not in {Role.ROOT, Role.OPERATOR}
+
+
+@pytest.mark.asyncio
+async def test_v2_shadow_matches_v1_for_session_and_api_key_boundaries(authorization):
+    subject = Subject.im(
+        platform_instance="napcat", bot_account_id="bot", sender_id="42"
+    )
+    current = Resource.session("default", "napcat:GroupMessage:room-a")
+    other = Resource.session("default", "napcat:GroupMessage:room-b")
+    await authorization.record_platform_membership(
+        subject=subject,
+        resource=current,
+        platform_instance="napcat",
+        platform_role="owner",
+        source="adapter",
+    )
+    current_ok = await authorization.authorize(
+        subject,
+        "session.manage",
+        current,
+        _session_context(
+            subject,
+            current,
+            platform_member_role="owner",
+            platform_role_source="adapter",
+        ),
+    )
+    cross = await authorization.authorize(
+        subject, "session.manage", other, _session_context(subject, current)
+    )
+    assert current_ok.allowed
+    assert not cross.allowed
+    key = Subject.api_key("key-1")
+    key_context = AuthContext(
+        subject=key,
+        source="api_key",
+        config_id="default",
+        authenticated=True,
+        api_scopes=("*",),
+    )
+    wildcard = await authorization.authorize(key, "session.read", current, key_context)
+    assert not wildcard.allowed
+    assert wildcard.reason == "api_key_capability_denied"
+
+
+@pytest.mark.asyncio
+async def test_api_key_capability_is_exact_and_rejects_high_risk(authorization):
+    from astrbot.core.db.po import AuthCapability
+
+    key = Subject.api_key("cap-key")
+    resource = Resource.session("default", "webchat:FriendMessage:user-1")
+    async with authorization._db.get_db() as session:
+        async with session.begin():
+            session.add(
+                AuthCapability(
+                    subject_id=key.id,
+                    action="session.read",
+                    resource_type=resource.type,
+                    resource_id=resource.id,
+                    config_id="default",
+                )
+            )
+    assert await authorization._capability_allows(key, "session.read", resource)
+    assert not (
+        await authorization._capability_allows(key, "data.export_all", resource)
+    )
+    other = Resource.session("default", "webchat:FriendMessage:other")
+    assert not await authorization._capability_allows(key, "session.read", other)
+    allowed = await authorization.authorize(
+        key,
+        "session.read",
+        resource,
+        AuthContext(
+            subject=key, source="api_key", config_id="default", authenticated=True
+        ),
+    )
+    assert allowed.allowed
+    assert allowed.matched_relations == ("capability",)
+
+
+@pytest.mark.asyncio
+async def test_upgrade_preflight_blocks_wildcard_and_unmapped_bindings(authorization):
+    from astrbot.core.auth.preflight import inspect_authorization_upgrade
+    from astrbot.core.db.po import ApiKey
+
+    async with authorization._db.get_db() as session:
+        async with session.begin():
+            session.add(
+                ApiKey(
+                    key_id="wild-1",
+                    name="wild",
+                    key_hash="hash-wild",
+                    key_prefix="sk-wild",
+                    scopes=["*"],
+                    created_by="test",
+                )
+            )
+    report = await inspect_authorization_upgrade(authorization._db)
+    assert not report.ok
+    assert any(item.startswith("api_key_wildcard:") for item in report.blocking)
+
+    async with authorization._db.get_db() as session:
+        async with session.begin():
+            session.add(
+                ApiKey(
+                    key_id="null-1",
+                    name="null",
+                    key_hash="hash-null",
+                    key_prefix="sk-null",
+                    scopes=None,
+                    created_by="test",
+                )
+            )
+    report = await inspect_authorization_upgrade(authorization._db)
+    assert any(item.startswith("api_key_null_scope:") for item in report.blocking)
+
+    async with authorization._db.get_db() as session:
+        async with session.begin():
+            session.add(
+                ApiKey(
+                    key_id="legacy-chat",
+                    name="legacy-chat",
+                    key_hash="hash-chat",
+                    key_prefix="sk-chat",
+                    scopes=["chat"],
+                    created_by="test",
+                )
+            )
+    report = await inspect_authorization_upgrade(authorization._db)
+    assert any(
+        item.startswith("api_key_missing_capabilities:") for item in report.blocking
+    )
+    assert "legacy-chat" in report.rebuild_api_keys
+
+
+@pytest.mark.asyncio
+async def test_im_session_binding_requires_full_im_context(authorization):
+    subject = Subject.im(
+        platform_instance="napcat", bot_account_id="bot", sender_id="42"
+    )
+    resource = Resource.session("default", "napcat:GroupMessage:room-a")
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=subject.id,
+        role=Role.SESSION_ADMIN,
+        scope_type="session",
+        scope_id=resource.id,
+        config_id="default",
+        enforce_actor=False,
+    )
+    denied = await authorization.authorize(
+        subject,
+        "session.manage",
+        resource,
+        AuthContext(subject=subject, source="im", authenticated=True),
+    )
+    assert not denied.allowed
+    assert denied.reason in {
+        "missing_context_config",
+        "missing_context_origin_session",
+    }
+    assert (
+        await authorization.authorize(
+            subject,
+            "session.manage",
+            resource,
+            _session_context(subject, resource),
+        )
+    ).allowed
+
+
+@pytest.mark.asyncio
+async def test_preflight_parses_canonical_session_bindings(authorization):
+    from astrbot.core.auth.preflight import inspect_authorization_upgrade
+    from astrbot.core.db.po import AuthRoleBinding
+
+    resource = Resource.session("default", "napcat:GroupMessage:room-a")
+    async with authorization._db.get_db() as session:
+        async with session.begin():
+            session.add(
+                AuthRoleBinding(
+                    subject_id="im:napcat:bot:1",
+                    role=Role.SESSION_ADMIN.value,
+                    scope_type="session",
+                    scope_id="session:v1:not-valid",
+                    config_id="default",
+                    source="explicit",
+                )
+            )
+            session.add(
+                AuthRoleBinding(
+                    subject_id="im:napcat:bot:2",
+                    role=Role.SESSION_ADMIN.value,
+                    scope_type="session",
+                    scope_id=resource.id,
+                    config_id="other",
+                    source="explicit",
+                )
+            )
+    report = await inspect_authorization_upgrade(authorization._db)
+    assert any(item.startswith("non_canonical_session:") for item in report.blocking)
+    assert any(item.startswith("session_config_mismatch:") for item in report.blocking)
+
+
+def test_chat_scope_emits_webchat_socket_capability():
+    from astrbot.core.auth.registry import dashboard_api_capability_specs
+
+    socket = Resource.named("webchat", "socket")
+    specs = dashboard_api_capability_specs(["chat"])
+    assert ("session.read", "webchat", socket.id) in specs
+
+
+def test_provider_scope_capabilities_use_the_default_config_resource():
+    from astrbot.core.auth.registry import dashboard_api_capability_specs
+
+    schema = Resource.named("provider", "schema", config_id="default")
+    sources = Resource.named("provider-source", "collection", config_id="default")
+    specs = dashboard_api_capability_specs(["provider"])
+    assert ("provider.read", schema.type, schema.id) in specs
+    assert ("provider.read", sources.type, sources.id) in specs
+
+
+@pytest.mark.asyncio
+async def test_action_policy_rejects_wrong_resource_type_and_missing_im_context(
+    authorization,
+):
+    subject = Subject.im(
+        platform_instance="napcat", bot_account_id="bot", sender_id="42"
+    )
+    session = Resource.session("default", "napcat:GroupMessage:room-a")
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=subject.id,
+        role=Role.INSTANCE_OPERATOR,
+        scope_type="instance",
+        scope_id="default",
+        config_id="default",
+        enforce_actor=False,
+    )
+    wrong_type = await authorization.authorize(
+        subject,
+        "provider.manage",
+        session,
+        _session_context(subject, session),
+    )
+    assert not wrong_type.allowed
+    assert wrong_type.reason == "resource_type_denied"
+
+    missing = await authorization.authorize(
+        subject,
+        "session.manage",
+        session,
+        AuthContext(
+            subject=subject,
+            source="im",
+            authenticated=True,
+            platform_member_role="owner",
+            platform_role_source="adapter",
+        ),
+    )
+    assert not missing.allowed
+    assert missing.reason in {
+        "missing_context_config",
+        "missing_context_origin_session",
+    }
+
+
+@pytest.mark.asyncio
+async def test_decisions_keep_all_matched_relations_not_only_highest_role(
+    authorization,
+):
+    subject = Subject.im(
+        platform_instance="napcat", bot_account_id="bot", sender_id="42"
+    )
+    session = Resource.session("default", "napcat:GroupMessage:room-a")
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=subject.id,
+        role=Role.INSTANCE_OPERATOR,
+        scope_type="instance",
+        scope_id="default",
+        config_id="default",
+        enforce_actor=False,
+    )
+    await authorization.record_platform_membership(
+        subject=subject,
+        resource=session,
+        platform_instance="napcat",
+        platform_role="owner",
+        source="adapter",
+    )
+    decision = await authorization.authorize(
+        subject,
+        "session.manage",
+        session,
+        _session_context(
+            subject,
+            session,
+            platform_member_role="owner",
+            platform_role_source="adapter",
+        ),
+    )
+    assert decision.allowed
+    assert "instance_operator" in decision.matched_relations
+    assert "owner" in decision.matched_relations
+    assert "binding" in decision.relation_sources
+    assert decision.effective_role == Role.INSTANCE_OPERATOR
+
+
+@pytest.mark.asyncio
+async def test_start_blocks_when_preflight_finds_wildcard_key(tmp_path):
+    from astrbot.core.auth.preflight import inspect_authorization_upgrade
+    from astrbot.core.db.po import ApiKey
+    from astrbot.core.db.sqlite import SQLiteDatabase
+
+    db = SQLiteDatabase(str(tmp_path / "preflight-start.db"))
+    await db.initialize()
+    async with db.get_db() as session:
+        async with session.begin():
+            session.add(
+                ApiKey(
+                    key_id="wild-start",
+                    name="wild",
+                    key_hash="hash-start",
+                    key_prefix="sk-start",
+                    scopes=["*"],
+                    created_by="test",
+                )
+            )
+    service = AuthorizationService(db)
+    with pytest.raises(RuntimeError, match="preflight"):
+        await service.start()
+    report = await inspect_authorization_upgrade(db)
+    assert any(item.startswith("api_key_wildcard:") for item in report.blocking)
+    await db.close()
+
+
+@pytest.mark.asyncio
+async def test_start_blocks_legacy_scoped_key_without_capabilities(tmp_path):
+    from astrbot.core.auth.preflight import inspect_authorization_upgrade
+    from astrbot.core.db.po import ApiKey
+    from astrbot.core.db.sqlite import SQLiteDatabase
+
+    db = SQLiteDatabase(str(tmp_path / "preflight-legacy.db"))
+    await db.initialize()
+    async with db.get_db() as session:
+        async with session.begin():
+            session.add(
+                ApiKey(
+                    key_id="legacy-chat-start",
+                    name="legacy-chat",
+                    key_hash="hash-legacy",
+                    key_prefix="sk-legacy",
+                    scopes=["chat"],
+                    created_by="test",
+                )
+            )
+    service = AuthorizationService(db)
+    with pytest.raises(RuntimeError, match="preflight"):
+        await service.start()
+    report = await inspect_authorization_upgrade(db)
+    assert any(
+        item == "api_key_missing_capabilities:legacy-chat-start"
+        for item in report.blocking
+    )
+    await db.close()

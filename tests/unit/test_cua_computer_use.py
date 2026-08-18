@@ -1622,7 +1622,6 @@ async def test_screenshot_tool_returns_image_and_sends_file(monkeypatch, tmp_pat
             {
                 "provider_settings": {
                     "computer_use_runtime": "sandbox",
-                    "computer_use_require_admin": True,
                     "sandbox": {"booter": "cua"},
                 }
             }
@@ -1703,7 +1702,6 @@ async def test_screenshot_tool_normalizes_supported_screenshot_shapes(
             {
                 "provider_settings": {
                     "computer_use_runtime": "sandbox",
-                    "computer_use_require_admin": True,
                     "sandbox": {"booter": "cua"},
                 }
             }
@@ -1774,7 +1772,7 @@ async def test_screenshot_tool_can_opt_in_to_llm_image_content(monkeypatch, tmp_
     class FakeAstrContext:
         event = FakeEvent()
         context = FakeContext(
-            {"provider_settings": {"computer_use_require_admin": True}}
+            {"provider_settings": {}}
         )
 
     class FakeWrapper:
@@ -1832,7 +1830,7 @@ async def test_screenshot_tool_can_opt_out_of_llm_image_content(monkeypatch, tmp
     class FakeAstrContext:
         event = FakeEvent()
         context = FakeContext(
-            {"provider_settings": {"computer_use_require_admin": True}}
+            {"provider_settings": {}}
         )
 
     class FakeWrapper:
@@ -1928,7 +1926,7 @@ async def test_cua_tools_include_exception_type_for_blank_error(monkeypatch):
     class FakeAstrContext:
         event = FakeEvent()
         context = FakeContext(
-            {"provider_settings": {"computer_use_require_admin": True}}
+            {"provider_settings": {}}
         )
 
     class FakeWrapper:
@@ -1964,7 +1962,7 @@ async def test_cua_mouse_click_tool_happy_path_forwards_args_and_serializes_json
     class FakeAstrContext:
         event = FakeEvent()
         context = FakeContext(
-            {"provider_settings": {"computer_use_require_admin": True}}
+            {"provider_settings": {}}
         )
 
     class FakeWrapper:
@@ -2021,7 +2019,7 @@ async def test_cua_keyboard_type_tool_happy_path_forwards_args_and_serializes_js
     class FakeAstrContext:
         event = FakeEvent()
         context = FakeContext(
-            {"provider_settings": {"computer_use_require_admin": True}}
+            {"provider_settings": {}}
         )
 
     class FakeWrapper:

@@ -28,15 +28,12 @@ class _FakeSandbox:
 
 
 def _make_run_context(
-    require_admin: bool,
     role: str = "member",
     computer_runtime: object | None = None,
 ) -> ContextWrapper:
     config_holder = SimpleNamespace(
         get_config=lambda umo: {  # noqa: ARG005
-            "provider_settings": {
-                "computer_use_require_admin": require_admin,
-            }
+            "provider_settings": {}
         },
         computer_runtime=computer_runtime,
     )
@@ -64,7 +61,6 @@ async def test_browser_tool_direct_component_call_is_not_gated_by_legacy_config(
 
     result = await BrowserExecTool().call(
         _make_run_context(
-            require_admin=False,
             computer_runtime=SimpleNamespace(get_booter=_fake_get_booter),
         ),
         cmd="open https://example.com",
@@ -85,7 +81,6 @@ async def test_neo_skill_tool_direct_component_call_is_not_gated_by_legacy_confi
 
     result = await GetExecutionHistoryTool().call(
         _make_run_context(
-            require_admin=False,
             computer_runtime=SimpleNamespace(get_booter=_fake_get_booter),
         ),
         limit=5,
@@ -99,7 +94,7 @@ async def test_neo_skill_tool_direct_component_call_is_not_gated_by_legacy_confi
 @pytest.mark.asyncio
 async def test_browser_tool_without_runtime_context_is_not_gated_by_legacy_config():
     result = await BrowserExecTool().call(
-        _make_run_context(require_admin=True),
+        _make_run_context(),
         cmd="open https://example.com",
     )
 

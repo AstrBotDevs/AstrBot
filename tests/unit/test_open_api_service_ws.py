@@ -614,3 +614,76 @@ async def test_open_api_send_message_redacts_adapter_error(monkeypatch):
     ):
         assert sensitive_fragment not in rendered_log
     assert "exc_info" not in logger.error.call_args.kwargs
+
+
+@pytest.mark.asyncio
+async def test_ws_handshake_and_send_use_explicit_capabilities(tmp_path):
+    from astrbot.core.auth.models import AuthContext, Resource, Subject
+    from astrbot.core.auth.service import AuthorizationService
+    from astrbot.core.db.sqlite import SQLiteDatabase
+    from astrbot.dashboard.services.open_api_service import OpenApiService
+
+    db = SQLiteDatabase(str(tmp_path / "ws-auth.db"))
+    await db.initialize()
+    authorization = AuthorizationService(db)
+    await authorization.start()
+    created = await db.create_api_key(
+        name="chat-ws",
+        key_hash="hash-ws",
+        key_prefix="abk_ws",
+        scopes=["chat"],
+        created_by="test",
+    )
+    service = _service()
+    service.authorization = authorization
+    subject = Subject.api_key(created.key_id)
+    context = AuthContext(subject=subject, source="api_key", authenticated=True)
+    handshake = await authorization.authorize(
+        subject,
+        "session.read",
+        Resource.named("webchat", "socket"),
+        context,
+    )
+    assert handshake.allowed
+
+    service.prepare_chat_send = AsyncMock(return_value=("alice", "session-1", None))
+    errors: list[tuple[str, str]] = []
+
+    async def send_json(_payload):
+        return None
+
+    async def send_error(message: str, code: str) -> None:
+        errors.append((message, code))
+
+    await service.handle_chat_ws_send(
+        post_data={"message": "hello", "username": "alice"},
+        conf_list=[],
+        chat_bridge=_bridge(),
+        send_json=send_json,
+        send_error=send_error,
+        api_key_principal={"key_id": created.key_id, "scopes": ["chat"]},
+    )
+    assert errors == [("Authorization denied", "FORBIDDEN")]
+
+    await authorization.grant_capability(
+        subject=subject,
+        action="session.manage",
+        resource=OpenApiService.chat_user_resource("alice"),
+    )
+    errors.clear()
+    await service.handle_chat_ws_send(
+        post_data={"message": "hello", "username": "alice"},
+        conf_list=[],
+        chat_bridge=_bridge(),
+        send_json=send_json,
+        send_error=send_error,
+        api_key_principal={"key_id": created.key_id, "scopes": ["chat"]},
+    )
+    assert errors == [
+        (
+            "Message content is empty (reply only is not allowed)",
+            "INVALID_MESSAGE",
+        )
+    ]
+    await authorization.close()
+    await db.close()

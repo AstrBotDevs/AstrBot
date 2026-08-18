@@ -270,6 +270,26 @@ class Subject:
         )
 
     @classmethod
+    def plugin(cls, plugin_id: str) -> Subject:
+        """Return an execution-component identity. It never inherits caller root."""
+
+        return cls(
+            id=f"plugin:{_validate_identifier(plugin_id, 'plugin id')}",
+            kind="plugin",
+            authenticated=True,
+        )
+
+    @classmethod
+    def agent(cls, agent_id: str) -> Subject:
+        """Return an execution-component identity. It never inherits caller root."""
+
+        return cls(
+            id=f"agent:{_validate_identifier(agent_id, 'agent id')}",
+            kind="agent",
+            authenticated=True,
+        )
+
+    @classmethod
     def guest(cls, label: str = "anonymous") -> Subject:
         return cls(
             id=f"guest:{_validate_identifier(label, 'guest id')}",
@@ -418,6 +438,8 @@ class Decision:
     requires_step_up: bool = False
     audit_id: str | None = None
     step_up_id: str | None = None
+    matched_relations: tuple[str, ...] = ()
+    relation_sources: tuple[str, ...] = ()
 
 
 def utc_now() -> datetime:

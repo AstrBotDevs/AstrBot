@@ -7,26 +7,16 @@ Tool exposure from the main agent:
   `astrbot_read_file_tool`, `astrbot_file_write_tool`,
   `astrbot_file_edit_tool`, and `astrbot_grep_tool`.
 
-Behavior when `provider_settings.computer_use_require_admin=True`:
-- Admin + local: read/write/edit/grep are not path-restricted by this module;
-  access depends on the local runtime implementation and host OS permissions.
-  Upload and download tools are defined here, but `LocalBooter` does not
-  implement them and the main agent does not expose them in local mode.
-- Member + local: read/grep are restricted to `data/skills`,
-  plugin-provided `data/plugins/*/skills`, builtin Star Skills,
-  `data/workspaces/{normalized_umo}`, and temporary directories; write/edit are
-  restricted to the workspace and temporary directories.  All Skill catalogs
-  are read-only. Upload/download are denied by `check_admin_permission` if
-  invoked.
-- Admin + sandbox: read/write/edit/grep are not path-restricted by this
-  module;
-  sandbox filesystem boundaries are enforced by the sandbox runtime. Upload and
-  download are allowed.
-- Member + sandbox: read/write/edit/grep are also not path-restricted by this
-  module. Upload/download are denied by `check_admin_permission` if invoked.
+Authorization uses `tool.file_read` and `tool.file_write`. High-risk writes
+require Dashboard step-up. This module only applies path constraints after
+the authorization service has already allowed the action.
 
-When `computer_use_require_admin=False`, member behavior in this module matches
-admin behavior.
+- Local read/grep: restricted to `data/skills`, plugin-provided
+  `data/plugins/*/skills`, builtin Star Skills,
+  `data/workspaces/{normalized_umo}`, and temporary directories.
+- Local write/edit: restricted to the workspace and temporary directories.
+  Skill catalogs are read-only.
+- Sandbox path boundaries are enforced by the sandbox runtime.
 
 Local path resolution rule:
 - In local runtime, relative paths are resolved under

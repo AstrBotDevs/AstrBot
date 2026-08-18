@@ -63,7 +63,7 @@ def test_promote_stable_sync_failure_auto_rolls_back(monkeypatch):
     runtime = SimpleNamespace(
         get_config=lambda umo: {  # noqa: ARG005
             "provider_settings": {
-                "computer_use_require_admin": True,
+                "computer_use_runtime": "local",
             }
         },
         computer_runtime=SimpleNamespace(
