@@ -222,6 +222,9 @@ class RespondStage(Stage):
             )
             logger.info(f"Applying streaming output ({event.get_platform_id()}).")
             await event.send_streaming(result.async_stream, realtime_segmenting)
+            if await call_event_hook(event, EventType.OnAfterMessageSentEvent):
+                return
+            event.clear_result()
             return
         if len(result.chain) > 0:
             # 检查路径映射
