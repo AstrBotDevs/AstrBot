@@ -1,6 +1,7 @@
 """Security-contract coverage for the unified authorization service."""
 
 import asyncio
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -8,9 +9,22 @@ import pytest
 import pytest_asyncio
 from sqlmodel import select
 
-from astrbot.core.auth.models import AuthContext, Decision, Resource, Role, Subject
+from astrbot.core.auth.models import (
+    WEBCHAT_INSTANCE_TOOL_ACTIONS,
+    AuthContext,
+    Decision,
+    Resource,
+    Role,
+    Subject,
+    utc_now,
+)
 from astrbot.core.auth.service import AuthorizationService
-from astrbot.core.db.po import AuthAuditLog, AuthRoleBinding, DashboardAccount
+from astrbot.core.db.po import (
+    AuthAuditLog,
+    AuthRoleBinding,
+    AuthStepUpCredential,
+    DashboardAccount,
+)
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.star.plugin_context import AuthorizationCapability
 from astrbot.core.utils.totp import TotpRuntimeState
@@ -443,6 +457,7 @@ async def test_audit_redacts_secrets(authorization):
                 "jwt_token": "eyJhbGciOiJIUzI1NiJ9.secret.signature",
                 "authorization": "Bearer should-not-be-stored",
                 "message": "full message",
+                "webchat_step_up_tokens": {"tool.local_exec": "raw-proof"},
                 "url": "https://secret.example/a?token=leak",
             },
         ),
@@ -454,6 +469,7 @@ async def test_audit_redacts_secrets(authorization):
     assert "jwt_token" not in records[0].metadata_json
     assert "authorization" not in records[0].metadata_json
     assert "message" not in records[0].metadata_json
+    assert "webchat_step_up_tokens" not in records[0].metadata_json
 
 
 @pytest.mark.asyncio
@@ -772,6 +788,11 @@ async def test_global_control_plane_role_is_not_an_im_session_role(authorization
 def _webchat_context(subject: Subject, resource: Resource, **kwargs) -> AuthContext:
     """Create a WebChat pipeline context bound to one inbound session."""
 
+    kwargs.setdefault("platform", "webchat")
+    kwargs.setdefault("message_type", "FriendMessage")
+    kwargs.setdefault("platform_member_role", "member")
+    kwargs.setdefault("platform_role_source", "none")
+
     return AuthContext(
         subject=subject,
         source="webchat",
@@ -877,6 +898,309 @@ async def test_authenticated_webchat_high_risk_remains_dashboard_only(authorizat
     )
     assert not decision.allowed
     assert decision.reason == "high_risk_dashboard_only"
+
+
+@pytest.mark.asyncio
+async def test_authenticated_webchat_instance_tools_require_fresh_proof(authorization):
+    account = DashboardAccount(
+        account_id="webchat-operator", username="alice", password_hash="hash"
+    )
+    subject = Subject.dashboard_account(account.account_id, account.username)
+    current = Resource.session(
+        "default", "webchat:FriendMessage:webchat!alice!session-tools"
+    )
+    async with authorization._db.get_db() as session:
+        async with session.begin():
+            session.add(account)
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=subject.id,
+        role=Role.INSTANCE_OPERATOR,
+        scope_type="instance",
+        scope_id="default",
+        config_id="default",
+        enforce_actor=False,
+    )
+    context = _webchat_context(
+        subject,
+        current,
+        metadata={"dashboard_session_id": "sid-tools"},
+    )
+    for action in WEBCHAT_INSTANCE_TOOL_ACTIONS:
+        tool = Resource.named("tool", action, config_id="default")
+        denied = await authorization.authorize(subject, action, tool, context)
+        assert not denied.allowed
+        assert denied.reason == "step_up_required"
+        _credential_id, token = await authorization.issue_step_up(
+            subject=subject,
+            dashboard_session_id="sid-tools",
+            action=action,
+            resource=current,
+            context=context,
+            verified_method="password",
+        )
+        allowed_context = _webchat_context(
+            subject,
+            current,
+            step_up_token=token,
+            metadata={"dashboard_session_id": "sid-tools"},
+        )
+        allowed = await authorization.authorize(subject, action, tool, allowed_context)
+        assert allowed.allowed
+
+
+@pytest.mark.asyncio
+async def test_webchat_step_up_proof_supports_multiple_tools_in_one_event(
+    authorization,
+):
+    account = DashboardAccount(
+        account_id="webchat-operator-run", username="alice", password_hash="hash"
+    )
+    subject = Subject.dashboard_account(account.account_id, account.username)
+    current = Resource.session(
+        "default", "webchat:FriendMessage:webchat!alice!session-run"
+    )
+    async with authorization._db.get_db() as session:
+        async with session.begin():
+            session.add(account)
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=subject.id,
+        role=Role.INSTANCE_OPERATOR,
+        scope_type="instance",
+        scope_id="default",
+        config_id="default",
+        enforce_actor=False,
+    )
+    issued_context = _webchat_context(
+        subject,
+        current,
+        metadata={"dashboard_session_id": "sid-run"},
+    )
+    tokens = {}
+    for action in ("tool.local_exec", "tool.python_exec"):
+        _credential_id, tokens[action] = await authorization.issue_step_up(
+            subject=subject,
+            dashboard_session_id="sid-run",
+            action=action,
+            resource=current,
+            context=issued_context,
+            verified_method="totp",
+        )
+    context = _webchat_context(
+        subject,
+        current,
+        metadata={
+            "dashboard_session_id": "sid-run",
+            "webchat_step_up_tokens": tokens,
+        },
+    )
+    for action in tokens:
+        assert (
+            await authorization.authorize(
+                subject,
+                action,
+                Resource.named("tool", action, config_id="default"),
+                context,
+            )
+        ).allowed
+        # The cached, trusted event proof permits another invocation of the
+        # same action without replaying the raw one-time token.
+        assert (
+            await authorization.authorize(
+                subject,
+                action,
+                Resource.named("tool", f"{action}-again", config_id="default"),
+                context,
+            )
+        ).allowed
+
+
+@pytest.mark.asyncio
+async def test_webchat_consumed_proof_cache_expires_with_the_step_up_ttl(
+    authorization,
+):
+    account = DashboardAccount(
+        account_id="webchat-proof-cache-expiry", username="alice", password_hash="hash"
+    )
+    subject = Subject.dashboard_account(account.account_id, account.username)
+    current = Resource.session(
+        "default", "webchat:FriendMessage:webchat!alice!cache-expiry"
+    )
+    async with authorization._db.get_db() as session:
+        async with session.begin():
+            session.add(account)
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=subject.id,
+        role=Role.INSTANCE_OPERATOR,
+        scope_type="instance",
+        scope_id="default",
+        config_id="default",
+        enforce_actor=False,
+    )
+    issued_context = _webchat_context(
+        subject, current, metadata={"dashboard_session_id": "sid-cache-expiry"}
+    )
+    _credential_id, token = await authorization.issue_step_up(
+        subject=subject,
+        dashboard_session_id="sid-cache-expiry",
+        action="tool.local_exec",
+        resource=current,
+        context=issued_context,
+        verified_method="password",
+    )
+    context = _webchat_context(
+        subject,
+        current,
+        metadata={
+            "dashboard_session_id": "sid-cache-expiry",
+            "webchat_step_up_tokens": {"tool.local_exec": token},
+        },
+    )
+    tool = Resource.named("tool", "shell", config_id="default")
+    assert (await authorization.authorize(subject, "tool.local_exec", tool, context)).allowed
+    context.metadata["_webchat_step_up_consumed"]["tool.local_exec"][
+        "expires_at"
+    ] = 0
+    denied = await authorization.authorize(subject, "tool.local_exec", tool, context)
+    assert not denied.allowed
+    assert denied.reason == "step_up_required"
+@pytest.mark.asyncio
+async def test_webchat_step_up_proof_rejects_binding_mismatches_and_expiry(
+    authorization,
+):
+    account = DashboardAccount(
+        account_id="webchat-proof-bindings", username="alice", password_hash="hash"
+    )
+    subject = Subject.dashboard_account(account.account_id, account.username)
+    current = Resource.session(
+        "default", "webchat:FriendMessage:webchat!alice!session-proof"
+    )
+    other_session = Resource.session(
+        "default", "webchat:FriendMessage:webchat!alice!other-session"
+    )
+    other_config = Resource.session(
+        "config-b", "webchat:FriendMessage:webchat!alice!session-proof"
+    )
+    async with authorization._db.get_db() as session:
+        async with session.begin():
+            session.add(account)
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=subject.id,
+        role=Role.INSTANCE_OPERATOR,
+        scope_type="instance",
+        scope_id="default",
+        config_id="default",
+        enforce_actor=False,
+    )
+    issued_context = _webchat_context(
+        subject,
+        current,
+        metadata={"dashboard_session_id": "sid-proof"},
+    )
+    credential_id, token = await authorization.issue_step_up(
+        subject=subject,
+        dashboard_session_id="sid-proof",
+        action="tool.local_exec",
+        resource=current,
+        context=issued_context,
+        verified_method="password",
+    )
+
+    async def decide(
+        candidate_subject: Subject,
+        candidate_resource: Resource,
+        *,
+        sid: str = "sid-proof",
+        action: str = "tool.local_exec",
+        token_map: dict[str, str] | None = None,
+    ):
+        return await authorization.authorize(
+            candidate_subject,
+            action,
+            Resource.named("tool", "shell", config_id=candidate_resource.config_id),
+            _webchat_context(
+                candidate_subject,
+                candidate_resource,
+                metadata={
+                    "dashboard_session_id": sid,
+                    "webchat_step_up_tokens": token_map or {"tool.local_exec": token},
+                },
+            ),
+        )
+
+    assert not (await decide(subject, current, sid="other-dashboard-sid")).allowed
+    assert not (
+        await decide(
+            Subject.dashboard_account("other-account", "alice"),
+            current,
+        )
+    ).allowed
+    assert not (await decide(subject, other_session)).allowed
+    assert not (await decide(subject, other_config)).allowed
+    assert not (
+        await decide(
+            subject,
+            current,
+            action="tool.python_exec",
+            token_map={"tool.local_exec": token},
+        )
+    ).allowed
+
+    concurrent = await asyncio.gather(
+        decide(subject, current),
+        decide(subject, current),
+    )
+    assert sum(item.allowed for item in concurrent) == 1
+
+    async with authorization._db.get_db() as session:
+        async with session.begin():
+            credential = (
+                await session.execute(
+                    select(AuthStepUpCredential).where(
+                        AuthStepUpCredential.credential_id == credential_id
+                    )
+                )
+            ).scalar_one()
+            credential.expires_at = utc_now() - timedelta(seconds=1)
+    assert not (await decide(subject, current)).allowed
+
+
+@pytest.mark.asyncio
+async def test_webchat_session_roles_do_not_gain_instance_tools(authorization):
+    account = DashboardAccount(
+        account_id="webchat-member", username="alice", password_hash="hash"
+    )
+    subject = Subject.dashboard_account(account.account_id, account.username)
+    current = Resource.session(
+        "default", "webchat:FriendMessage:webchat!alice!session-member"
+    )
+    async with authorization._db.get_db() as session:
+        async with session.begin():
+            session.add(account)
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=subject.id,
+        role=Role.SESSION_ADMIN,
+        scope_type="session",
+        scope_id=current.id,
+        config_id="default",
+        enforce_actor=False,
+    )
+    decision = await authorization.authorize(
+        subject,
+        "tool.local_exec",
+        Resource.named("tool", "shell", config_id="default"),
+        _webchat_context(
+            subject,
+            current,
+            metadata={"dashboard_session_id": "sid-member"},
+        ),
+    )
+    assert not decision.allowed
+    assert decision.reason == "role_scope_denied"
 
 
 @pytest.mark.asyncio
@@ -1075,6 +1399,15 @@ def test_action_registry_covers_frozen_actions():
     assert policy_for("plugin:example:publish") is not None
     assert policy_for("provider.credentials.read") is None
     assert policy_for("tool.file.write") is None
+
+
+def test_mcp_dashboard_collection_routes_are_valid_resources():
+    from astrbot.core.auth.registry import policy_for
+
+    for action in ("tool.mcp_read", "tool.mcp_write"):
+        policy = policy_for(action)
+        assert policy is not None
+        assert "dashboard-api" in policy.resource_types
 
 
 def test_plugin_and_agent_subjects_are_execution_components():

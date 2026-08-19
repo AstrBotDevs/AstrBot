@@ -4,7 +4,12 @@ from dataclasses import dataclass
 from enum import Enum
 
 from astrbot import logger
-from astrbot.core.auth.models import AuthContext, Resource, Subject
+from astrbot.core.auth.models import (
+    WEBCHAT_INSTANCE_TOOL_ACTIONS,
+    AuthContext,
+    Resource,
+    Subject,
+)
 from astrbot.core.command import (
     CommandEngine,
     CommandError,
@@ -175,6 +180,7 @@ class WakingCheckStage(Stage):
         principal_subject_id: str | None = None
         dashboard_session_id: str | None = None
         auth_strength = "none"
+        webchat_step_up_tokens: dict[str, str] = {}
         api_key_principal = event.get_extra("_api_key_principal")
         dashboard_principal = event.get_extra("_dashboard_principal")
         if event.get_platform_name() == "webchat" and isinstance(
@@ -214,6 +220,21 @@ class WakingCheckStage(Stage):
                 source = "webchat"
                 principal_subject_id = subject.id
                 dashboard_session_id = session_id
+                raw_step_up_tokens = dashboard_principal.get("step_up_tokens")
+                if isinstance(raw_step_up_tokens, dict):
+                    webchat_step_up_tokens = {
+                        action: token
+                        for action, token in raw_step_up_tokens.items()
+                        if action in WEBCHAT_INSTANCE_TOOL_ACTIONS
+                        and isinstance(token, str)
+                        and 0 < len(token) <= 512
+                    }
+                logger.debug(
+                    "WebChat Dashboard principal attached: account=%s sid_present=%s proof_actions=%s",
+                    account_id,
+                    bool(session_id),
+                    tuple(sorted(webchat_step_up_tokens)),
+                )
             else:
                 subject = Subject.guest(
                     f"webchat-{hashlib.sha256(event.get_sender_id().encode()).hexdigest()[:24]}"
@@ -254,6 +275,17 @@ class WakingCheckStage(Stage):
             umo = str(getattr(event, "get_session_id", lambda: "unknown")())
             if ":" not in umo:
                 umo = f"{event.get_platform_name()}:FriendMessage:{umo or 'unknown'}"
+        parent_session_id = event.get_extra("webchat_parent_session_id")
+        if (
+            event.get_platform_name() == "webchat"
+            and isinstance(parent_session_id, str)
+            and parent_session_id
+        ):
+            # Thread runs keep their own history/session id, but a WebChat
+            # step-up proof is bound to the parent conversation that enabled
+            # the tools.  This value is injected by ChatService from the
+            # verified thread row and is never accepted from the client.
+            umo = f"webchat:FriendMessage:webchat!{event.get_sender_id()}!{parent_session_id}"
         resource = Resource.session(config_id, umo)
         message_type = getattr(event, "get_message_type", None)
         message_type = message_type().value if callable(message_type) else "friend"
@@ -275,7 +307,10 @@ class WakingCheckStage(Stage):
             api_scopes=tuple(scopes) if isinstance(scopes, (list, tuple)) else (),
             principal_subject_id=principal_subject_id,
             metadata=(
-                {"dashboard_session_id": dashboard_session_id}
+                {
+                    "dashboard_session_id": dashboard_session_id,
+                    "webchat_step_up_tokens": webchat_step_up_tokens,
+                }
                 if dashboard_session_id is not None
                 else {}
             ),

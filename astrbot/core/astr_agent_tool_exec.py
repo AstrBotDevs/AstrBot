@@ -7,6 +7,7 @@ import uuid
 from collections.abc import AsyncGenerator as AsyncGeneratorABC
 from collections.abc import Sequence
 from collections.abc import Set as AbstractSet
+from dataclasses import replace
 
 import mcp
 
@@ -672,7 +673,23 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         )
         cron_event.subject = getattr(event, "subject", None)
         cron_event.resource = getattr(event, "resource", None)
-        cron_event.auth_context = getattr(event, "auth_context", None)
+        auth_context = getattr(event, "auth_context", None)
+        if auth_context is not None:
+            # A background notification is a new event/run.  Do not carry a
+            # consumed WebChat proof (or its raw token) into the later agent
+            # invocation; otherwise the per-run cache becomes unbounded by
+            # the lifetime of the original AuthContext object.
+            metadata = {
+                key: value
+                for key, value in auth_context.metadata.items()
+                if key not in {"webchat_step_up_tokens", "_webchat_step_up_consumed"}
+            }
+            cron_event.auth_context = replace(
+                auth_context,
+                request_id=str(uuid.uuid4()),
+                step_up_token=None,
+                metadata=metadata,
+            )
         cfg = ctx.get_config(umo=event.unified_msg_origin) or {}
         provider_settings = cfg.get("provider_settings") or {}
         from astrbot.core.streaming_override import resolve_streaming_response

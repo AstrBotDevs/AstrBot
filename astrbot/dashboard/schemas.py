@@ -176,6 +176,16 @@ class AuthorizationStepUpRequest(BaseModel):
     code: str | None = Field(default=None, max_length=128)
 
 
+class WebChatStepUpRequest(BaseModel):
+    """Fresh Dashboard factor for the current WebChat session's tools."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str = Field(min_length=1, max_length=512)
+    password: str | None = Field(default=None, max_length=1024)
+    code: str | None = Field(default=None, max_length=128)
+
+
 class AuthorizationBindingBatchRevokeRequest(BaseModel):
     """One exact binding set plus an optional factor for issuing step-up."""
 
@@ -253,6 +263,12 @@ class ChatMessageRegenerateRequest(OpenModel):
     selected_provider: str | None = None
     selected_model: str | None = None
     enable_streaming: bool | None = None
+    webchat_step_up_tokens: dict[str, str] | None = Field(
+        default=None,
+        alias="_webchat_step_up_tokens",
+        description="Internal WebUI in-memory WebChat step-up proofs.",
+        json_schema_extra={"writeOnly": True},
+    )
 
 
 class ChatThreadCreateRequest(OpenModel):
@@ -266,6 +282,12 @@ class ChatThreadMessageRequest(OpenModel):
     selected_provider: str | None = None
     selected_model: str | None = None
     enable_streaming: bool | None = None
+    webchat_step_up_tokens: dict[str, str] | None = Field(
+        default=None,
+        alias="_webchat_step_up_tokens",
+        description="Internal WebUI in-memory WebChat step-up proofs.",
+        json_schema_extra={"writeOnly": True},
+    )
 
 
 class CronJobRequest(OpenModel):
@@ -337,6 +359,12 @@ class OpenApiChatRequest(OpenModel):
     config_name: str | None = None
     platform_id: str | None = None
     enable_streaming: bool | None = None
+    webchat_step_up_tokens: dict[str, str] | None = Field(
+        default=None,
+        alias="_webchat_step_up_tokens",
+        description="Internal WebUI in-memory WebChat step-up proofs.",
+        json_schema_extra={"writeOnly": True},
+    )
 
 
 class ImMessageRequest(OpenModel):

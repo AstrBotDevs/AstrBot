@@ -206,7 +206,7 @@ class OpenApiService:
     ) -> str | None:
         session = await self.db.get_platform_session_by_id(session_id)
         if session:
-            if session.creator != username:
+            if session.platform_id != "webchat" or session.creator != username:
                 return "session_id belongs to another username"
             return None
 
@@ -219,7 +219,11 @@ class OpenApiService:
             )
         except Exception as exc:
             existing = await self.db.get_platform_session_by_id(session_id)
-            if existing and existing.creator == username:
+            if (
+                existing
+                and existing.platform_id == "webchat"
+                and existing.creator == username
+            ):
                 return None
             logger.error("Failed to create chat session: %s", safe_error("", exc))
             return "Failed to create session"

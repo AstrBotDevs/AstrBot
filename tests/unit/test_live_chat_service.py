@@ -10,7 +10,10 @@ from starlette.websockets import WebSocketDisconnect
 
 from astrbot.core.webchat.queue_manager import WebChatQueueManager
 from astrbot.core.webchat.run_coordinator import WebChatRunCoordinator
-from astrbot.dashboard.services.auth_service import DashboardTokenValidator
+from astrbot.dashboard.services.auth_service import (
+    DashboardSessionPrincipal,
+    DashboardTokenValidator,
+)
 from astrbot.dashboard.services.live_chat_service import LiveChatService
 
 _LIVE_CHAT_JWT_SECRET = "live-chat-test-secret-with-32-bytes"
@@ -40,6 +43,155 @@ def test_authenticate_dashboard_session_token():
     token = DashboardTokenValidator(_LIVE_CHAT_JWT_SECRET).issue("dashboard-user")
 
     assert service.authenticate_token(token) == "dashboard-user"
+
+
+def test_live_voice_principal_payload_excludes_webchat_step_up_proof():
+    service = _service()
+    session = service.create_session(
+        "alice",
+        DashboardSessionPrincipal(
+            username="alice",
+            sid="dashboard-sid",
+            jti="jti",
+            account_id="account-1",
+        ),
+    )
+    session.webchat_step_up_tokens = {"tool.local_exec": "opaque-proof"}
+
+    payload = service._dashboard_principal_payload(
+        session,
+        include_step_up_tokens=False,
+    )
+
+    assert payload["_dashboard_principal"]["account_id"] == "account-1"
+    assert "step_up_tokens" not in payload["_dashboard_principal"]
+
+
+def test_live_chat_proof_cache_is_cleared_when_chat_session_changes():
+    service = _service()
+    session = service.create_session(
+        "alice",
+        DashboardSessionPrincipal(
+            username="alice",
+            sid="dashboard-sid",
+            jti="jti",
+            account_id="account-1",
+        ),
+    )
+    first = service._dashboard_principal_payload(
+        session,
+        {
+            "tool.local_exec": "opaque-proof",
+            "system.restart": "must-not-forward",
+            "tool.python_exec": "x" * 513,
+        },
+        webchat_session_id="session-a",
+    )
+    second = service._dashboard_principal_payload(
+        session,
+        webchat_session_id="session-b",
+    )
+
+    assert first["_dashboard_principal"]["step_up_tokens"] == {
+        "tool.local_exec": "opaque-proof"
+    }
+    assert "step_up_tokens" not in second["_dashboard_principal"]
+    assert session.webchat_step_up_tokens == {}
+
+
+@pytest.mark.asyncio
+async def test_live_chat_rejects_foreign_persistent_session():
+    service = _service()
+    service.db.get_platform_session_by_id = AsyncMock(
+        return_value=SimpleNamespace(platform_id="webchat", creator="bob")
+    )
+    session = service.create_session(
+        "alice",
+        DashboardSessionPrincipal(
+            username="alice",
+            sid="dashboard-sid",
+            jti="jti",
+            account_id="account-1",
+        ),
+    )
+    sent: list[dict] = []
+
+    async def send_json(payload: dict) -> None:
+        sent.append(payload)
+
+    await service.handle_chat_message(
+        session,
+        {
+            "t": "send",
+            "session_id": "foreign-session",
+            "message_id": "message-1",
+            "message": [{"type": "plain", "text": "hello"}],
+        },
+        send_json,
+    )
+
+    assert sent[-1]["code"] == "FORBIDDEN"
+    assert service.webchat_run_coordinator.get_run("message-1") is None
+
+
+@pytest.mark.asyncio
+async def test_live_chat_bind_creates_missing_webchat_session_for_owner():
+    service = _service()
+    service.db.get_platform_session_by_id = AsyncMock(return_value=None)
+    service.db.create_platform_session = AsyncMock()
+    service.ensure_chat_subscription = AsyncMock(return_value="req-created")
+    session = service.create_session("alice")
+    sent: list[dict] = []
+
+    async def send_json(payload: dict) -> None:
+        sent.append(payload)
+
+    await service.handle_chat_message(
+        session,
+        {"t": "bind", "session_id": "missing-session"},
+        send_json,
+    )
+
+    service.db.create_platform_session.assert_awaited_once_with(
+        creator="alice",
+        platform_id="webchat",
+        session_id="missing-session",
+        is_group=0,
+    )
+    service.ensure_chat_subscription.assert_awaited_once()
+    assert sent[-1]["type"] == "session_bound"
+
+
+@pytest.mark.asyncio
+async def test_live_chat_send_creates_missing_webchat_session_before_validation():
+    service = _service()
+    service.db.get_platform_session_by_id = AsyncMock(return_value=None)
+    service.db.create_platform_session = AsyncMock()
+    service.build_chat_message_parts = AsyncMock(return_value=[])
+    session = service.create_session("alice")
+    sent: list[dict] = []
+
+    async def send_json(payload: dict) -> None:
+        sent.append(payload)
+
+    await service.handle_chat_message(
+        session,
+        {
+            "t": "send",
+            "session_id": "missing-session",
+            "message_id": "message-1",
+            "message": [{"type": "plain", "text": ""}],
+        },
+        send_json,
+    )
+
+    service.db.create_platform_session.assert_awaited_once_with(
+        creator="alice",
+        platform_id="webchat",
+        session_id="missing-session",
+        is_group=0,
+    )
+    assert sent[-1]["code"] == "INVALID_MESSAGE_FORMAT"
 
 
 @pytest.mark.asyncio
@@ -1170,7 +1322,18 @@ async def test_handle_chat_message_send_enqueues_and_persists_messages(monkeypat
     )
     service.save_bot_message = AsyncMock(return_value=_record(20))
     service.db.get_attachment_by_id = AsyncMock()
-    session = service.create_session("alice")
+    service.db.get_platform_session_by_id = AsyncMock(
+        return_value=SimpleNamespace(platform_id="webchat", creator="alice")
+    )
+    session = service.create_session(
+        "alice",
+        DashboardSessionPrincipal(
+            username="alice",
+            sid="dashboard-sid",
+            jti="jti",
+            account_id="account-1",
+        ),
+    )
     chat_queue: asyncio.Queue = asyncio.Queue()
     back_queue: asyncio.Queue = asyncio.Queue()
     removed_request_ids: list[str] = []
@@ -1235,6 +1398,7 @@ async def test_handle_chat_message_send_enqueues_and_persists_messages(monkeypat
             "session_id": "chat-session",
             "message_id": "msg-1",
             "message": [{"type": "plain", "text": "hello"}],
+            "webchat_step_up_tokens": {"tool.local_exec": "opaque-proof"},
         },
         send_json,
     )
@@ -1244,6 +1408,10 @@ async def test_handle_chat_message_send_enqueues_and_persists_messages(monkeypat
     assert queued_session_id == "chat-session"
     assert queued_payload["message"] == [{"type": "plain", "text": "hello"}]
     assert queued_payload["message_id"] == "msg-1"
+    assert queued_payload["_dashboard_principal"]["step_up_tokens"] == {
+        "tool.local_exec": "opaque-proof"
+    }
+    assert session.webchat_step_up_tokens == {}
 
     service.platform_history_mgr.insert.assert_awaited_once()
     service.save_bot_message.assert_awaited_once()
@@ -1885,7 +2053,16 @@ async def test_process_audio_streams_audio_chunks_without_plaintext_fallback(
     monkeypatch,
 ):
     service = _service()
-    session = service.create_session("alice")
+    session = service.create_session(
+        "alice",
+        DashboardSessionPrincipal(
+            username="alice",
+            sid="dashboard-sid",
+            jti="jti",
+            account_id="account-1",
+        ),
+    )
+    session.webchat_step_up_tokens = {"tool.local_exec": "opaque-proof"}
     stt_provider = SimpleNamespace(
         meta=lambda: SimpleNamespace(type="mock-stt"),
         get_text=AsyncMock(return_value="hello bot"),
@@ -1947,6 +2124,7 @@ async def test_process_audio_streams_audio_chunks_without_plaintext_fallback(
     assert queued_conversation_id == session.conversation_id
     assert queued_payload["message"] == [{"type": "plain", "text": "hello bot"}]
     assert queued_payload["action_type"] == "live"
+    assert "step_up_tokens" not in queued_payload["_dashboard_principal"]
     message_id = queued_payload["message_id"]
 
     assert sent_payloads[0] == {"t": "metrics", "data": {"wav_assemble_time": 0.1}}

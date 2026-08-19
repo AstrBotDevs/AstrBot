@@ -303,6 +303,8 @@ import type {
   IssueAuthorizationBatchRevokeStepUpResponses,
   IssueAuthorizationStepUpData,
   IssueAuthorizationStepUpResponses,
+  IssueWebChatAuthorizationStepUpData,
+  IssueWebChatAuthorizationStepUpResponses,
   ListActiveUmosData,
   ListActiveUmosResponses,
   ListApiKeysData,
@@ -954,6 +956,44 @@ export const issueAuthorizationStepUp = <ThrowOnError extends boolean = false>(
     responseType: 'json',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/authorization/step-up',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Reauthenticate and issue WebChat instance-tool proofs
+ */
+export const issueWebChatAuthorizationStepUp = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<IssueWebChatAuthorizationStepUpData, ThrowOnError>,
+): RequestResult<
+  IssueWebChatAuthorizationStepUpResponses,
+  unknown,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    IssueWebChatAuthorizationStepUpResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [
+      {
+        key: 'DashboardBearerAuth',
+        scheme: 'bearer',
+        type: 'http',
+      },
+      {
+        in: 'cookie',
+        name: 'astrbot_dashboard_jwt',
+        type: 'apiKey',
+      },
+    ],
+    url: '/api/v1/authorization/webchat-step-up',
     ...options,
     headers: {
       'Content-Type': 'application/json',

@@ -219,6 +219,10 @@ def _resource_types_for(action: str) -> frozenset[str]:
                 "dashboard-account",
             }
         )
+    if action in {"tool.mcp_read", "tool.mcp_write"}:
+        # Dashboard MCP management routes authorize their collection-level
+        # request before resolving an individual server resource.
+        return frozenset({"tool", "file", "mcp", "session", "dashboard-api"})
     if action.startswith("tool."):
         return frozenset({"tool", "file", "mcp", "session"})
     return frozenset({"instance", "session", "dashboard-api"})

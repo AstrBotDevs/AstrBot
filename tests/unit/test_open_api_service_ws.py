@@ -491,6 +491,20 @@ async def test_open_api_session_and_route_errors_hide_internal_details(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_open_api_session_rejects_same_owner_non_webchat_session():
+    service = _service()
+    service.db.create_platform_session = AsyncMock()
+    service.db.get_platform_session_by_id = AsyncMock(
+        return_value=SimpleNamespace(creator="alice", platform_id="telegram")
+    )
+
+    assert await service.ensure_chat_session("alice", "telegram-session") == (
+        "session_id belongs to another username"
+    )
+    service.db.create_platform_session.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_open_api_send_message_delegates_to_platform_manager():
     service = _service()
     calls: list[tuple[object, object]] = []

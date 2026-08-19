@@ -5758,6 +5758,15 @@
           "_thread_selected_text": {
             "type": "string",
             "description": "Internal WebUI side-thread context."
+          },
+          "_webchat_step_up_tokens": {
+            "type": "object",
+            "writeOnly": true,
+            "description": "Internal WebUI in-memory WebChat step-up proofs.",
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 512
+            }
           }
         },
         "additionalProperties": false
@@ -5807,6 +5816,15 @@
           "enable_streaming": {
             "type": "boolean",
             "default": true
+          },
+          "_webchat_step_up_tokens": {
+            "type": "object",
+            "writeOnly": true,
+            "description": "Internal WebUI in-memory WebChat step-up proofs.",
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 512
+            }
           }
         },
         "additionalProperties": false
@@ -5860,6 +5878,15 @@
           "enable_streaming": {
             "type": "boolean",
             "default": true
+          },
+          "_webchat_step_up_tokens": {
+            "type": "object",
+            "writeOnly": true,
+            "description": "Internal WebUI in-memory WebChat step-up proofs.",
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 512
+            }
           }
         },
         "additionalProperties": false

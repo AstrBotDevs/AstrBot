@@ -121,6 +121,50 @@ async def test_open_api_chat_forwards_dashboard_principal(monkeypatch):
     }
 
 
+@pytest.mark.asyncio
+async def test_open_api_chat_forwards_webchat_step_up_tokens(monkeypatch):
+    auth = DashboardAuthContext(
+        username="alice",
+        scopes=["*"],
+        subject="dashboard-account:account-1",
+        account_id="account-1",
+        sid="sid-1",
+        auth_strength="password",
+    )
+    expected = object()
+    captured: dict = {}
+
+    async def fake_streaming_response(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return expected
+
+    monkeypatch.setattr(
+        open_api_routes,
+        "_build_streaming_chat_response",
+        fake_streaming_response,
+    )
+
+    result = await open_api_routes._open_api_chat_response(
+        {
+            "message": "hello",
+            "session_id": "session-1",
+            "_webchat_step_up_tokens": {
+                "tool.local_exec": "opaque-proof",
+                "ignored": 42,
+            },
+        },
+        auth,
+        MagicMock(),
+        MagicMock(),
+    )
+
+    assert result is expected
+    assert captured["kwargs"]["dashboard_principal"]["step_up_tokens"] == {
+        "tool.local_exec": "opaque-proof"
+    }
+
+
 def _session(
     session_id: str = "session-1", creator: str = "alice", platform_id: str = "webchat"
 ):
@@ -499,6 +543,7 @@ async def test_build_chat_stream_saves_plain_response_and_emits_saved_events(
             "sid": "session-1",
             "username": "alice",
             "auth_strength": "password",
+            "step_up_tokens": {"tool.local_exec": "opaque-proof"},
         },
     )
     webchat_run = service.webchat_run_coordinator.get_run("mid-1")
@@ -525,6 +570,7 @@ async def test_build_chat_stream_saves_plain_response_and_emits_saved_events(
                 "sid": "session-1",
                 "username": "alice",
                 "auth_strength": "password",
+                "step_up_tokens": {"tool.local_exec": "opaque-proof"},
             },
         },
     )
@@ -1136,6 +1182,7 @@ async def test_prepare_regenerate_message_payload_rewrites_latest_turn():
             "enable_streaming": False,
             "selected_provider": "provider-1",
             "selected_model": "model-1",
+            "_webchat_step_up_tokens": {"tool.local_exec": "opaque-proof"},
         },
     )
 
@@ -1418,6 +1465,7 @@ async def test_prepare_thread_chat_payload_returns_selected_text_and_overrides()
             "enable_streaming": False,
             "selected_provider": "provider-1",
             "selected_model": "model-1",
+            "_webchat_step_up_tokens": {"tool.local_exec": "opaque-proof"},
         },
     )
 
@@ -1429,7 +1477,55 @@ async def test_prepare_thread_chat_payload_returns_selected_text_and_overrides()
         "selected_model": "model-1",
         "_platform_history_id": "webchat_thread",
         "_thread_selected_text": "quoted context",
+        "_webchat_step_up_tokens": {"tool.local_exec": "opaque-proof"},
     }
+
+
+@pytest.mark.asyncio
+async def test_thread_chat_stream_forwards_verified_parent_session_id():
+    service = _service()
+    thread = SimpleNamespace(
+        thread_id="thread-1",
+        parent_session_id="parent-session",
+        selected_text="quoted context",
+        creator="alice",
+    )
+    service.db.get_webchat_thread_by_id = AsyncMock(return_value=thread)
+    service.build_user_message_parts = AsyncMock(
+        return_value=[{"type": "plain", "text": "follow up"}]
+    )
+    service.platform_history_mgr.insert = AsyncMock(
+        return_value=_history_record(
+            1,
+            {"type": "user", "message": [{"type": "plain", "text": "follow up"}]},
+        )
+    )
+    service.webchat_run_coordinator.dispatch = AsyncMock()
+
+    stream = await service.build_chat_stream(
+        "alice",
+        {
+            "session_id": "thread-1",
+            "message": "follow up",
+            "_platform_history_id": "webchat_thread",
+            "_thread_selected_text": "quoted context",
+        },
+        dashboard_principal={
+            "account_id": "account-1",
+            "sid": "dashboard-session",
+            "username": "alice",
+            "auth_strength": "password",
+        },
+    )
+    try:
+        payload = service.webchat_run_coordinator.dispatch.await_args.args[1]
+        assert payload["webchat_parent_session_id"] == "parent-session"
+    finally:
+        await stream.aclose()
+        for run in list(service.chat_run_states.values()):
+            if run.run.task and not run.run.task.done():
+                run.run.task.cancel()
+                await asyncio.gather(run.run.task, return_exceptions=True)
 
 
 @pytest.mark.asyncio

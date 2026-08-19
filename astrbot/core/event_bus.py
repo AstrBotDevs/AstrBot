@@ -46,9 +46,8 @@ class EventBus:
         while True:
             event: AstrMessageEvent = await self.event_queue.get()
             try:
-                conf_info = self.astrbot_config_mgr.get_conf_info(
-                    event.unified_msg_origin
-                )
+                routing_umo = self._routing_umo(event)
+                conf_info = self.astrbot_config_mgr.get_conf_info(routing_umo)
                 conf_id = conf_info["id"]
                 conf_name = conf_info.get("name") or conf_id
                 self._print_event(event, conf_name)
@@ -69,6 +68,20 @@ class EventBus:
                 raise
             except Exception:
                 logger.error("事件总线分发异常", exc_info=True)
+
+    @staticmethod
+    def _routing_umo(event: AstrMessageEvent) -> str:
+        """Resolve a trusted WebChat thread to its parent config route."""
+
+        parent_session_id = event.get_extra("webchat_parent_session_id")
+        if (
+            event.get_platform_name() == "webchat"
+            and isinstance(parent_session_id, str)
+            and parent_session_id
+        ):
+            sender_id = str(event.get_sender_id())
+            return f"webchat:FriendMessage:webchat!{sender_id}!{parent_session_id}"
+        return event.unified_msg_origin
 
     async def _execute_scheduler(
         self,

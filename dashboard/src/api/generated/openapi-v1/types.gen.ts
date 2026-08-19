@@ -475,6 +475,10 @@ export type AuthorizationStepUpRequest = {
   config_id?: string;
 };
 
+export type WebChatStepUpRequest = {
+  session_id: string;
+};
+
 export type AuthorizationBindingBatchRevokeRequest = {
   binding_ids: Array<string>;
 };
@@ -883,11 +887,78 @@ export type SubAgentConfigRequest = {
   }>;
 };
 
+export type ChatRequestWritable = {
+  /**
+   * Caller-declared WebChat sender/session owner.
+   */
+  username?: string;
+  session_id?: string;
+  message: string | Array<MessagePart>;
+  config_id?: string;
+  config_name?: string;
+  selected_provider?: string;
+  selected_model?: string;
+  enable_streaming?: boolean;
+  /**
+   * Internal WebUI flag for edit/regenerate flows.
+   */
+  _skip_user_history?: boolean;
+  /**
+   * Internal WebUI checkpoint override.
+   */
+  _llm_checkpoint_id?: string;
+  /**
+   * Internal WebUI platform history override.
+   */
+  _platform_history_id?: string;
+  /**
+   * Internal WebUI side-thread context.
+   */
+  _thread_selected_text?: string;
+  /**
+   * Internal WebUI in-memory WebChat step-up proofs.
+   */
+  _webchat_step_up_tokens?: {
+    [key: string]: string;
+  };
+};
+
+export type ChatMessageRegenerateRequestWritable = {
+  selected_provider?: string;
+  selected_model?: string;
+  enable_streaming?: boolean;
+  /**
+   * Internal WebUI in-memory WebChat step-up proofs.
+   */
+  _webchat_step_up_tokens?: {
+    [key: string]: string;
+  };
+};
+
+export type ChatThreadMessageRequestWritable = {
+  message: string | Array<MessagePart>;
+  selected_provider?: string;
+  selected_model?: string;
+  enable_streaming?: boolean;
+  /**
+   * Internal WebUI in-memory WebChat step-up proofs.
+   */
+  _webchat_step_up_tokens?: {
+    [key: string]: string;
+  };
+};
+
 export type AuthorizationStepUpRequestWritable = {
   action: string;
   resource_type: string;
   resource_id: string;
   config_id?: string;
+  password?: string;
+  code?: string;
+};
+
+export type WebChatStepUpRequestWritable = {
+  session_id: string;
   password?: string;
   code?: string;
 };
@@ -1284,6 +1355,23 @@ export type IssueAuthorizationStepUpResponses = {
 
 export type IssueAuthorizationStepUpResponse =
   IssueAuthorizationStepUpResponses[keyof IssueAuthorizationStepUpResponses];
+
+export type IssueWebChatAuthorizationStepUpData = {
+  body: WebChatStepUpRequestWritable;
+  path?: never;
+  query?: never;
+  url: '/api/v1/authorization/webchat-step-up';
+};
+
+export type IssueWebChatAuthorizationStepUpResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type IssueWebChatAuthorizationStepUpResponse =
+  IssueWebChatAuthorizationStepUpResponses[keyof IssueWebChatAuthorizationStepUpResponses];
 
 export type ListAuthorizationAuditData = {
   body?: never;
@@ -2148,7 +2236,7 @@ export type GetProviderEmbeddingDimensionResponse =
   GetProviderEmbeddingDimensionResponses[keyof GetProviderEmbeddingDimensionResponses];
 
 export type SendChatMessageData = {
-  body: ChatRequest;
+  body: ChatRequestWritable;
   path?: never;
   query?: never;
   url: '/api/v1/chat';
@@ -2365,7 +2453,7 @@ export type UpdateChatMessageResponse =
   UpdateChatMessageResponses[keyof UpdateChatMessageResponses];
 
 export type RegenerateChatMessageData = {
-  body?: ChatMessageRegenerateRequest;
+  body?: ChatMessageRegenerateRequestWritable;
   path: {
     session_id: string;
     message_id: string;
@@ -2457,7 +2545,7 @@ export type GetChatThreadResponse =
   GetChatThreadResponses[keyof GetChatThreadResponses];
 
 export type SendChatThreadMessageData = {
-  body: ChatThreadMessageRequest;
+  body: ChatThreadMessageRequestWritable;
   path: {
     thread_id: string;
   };

@@ -288,6 +288,12 @@ class WebChatAdapter(Platform):
                 message_event.set_extra(
                     "thread_selected_text", payload.get("thread_selected_text")
                 )
+                parent_session_id = payload.get("webchat_parent_session_id")
+                if isinstance(parent_session_id, str) and parent_session_id:
+                    message_event.set_extra(
+                        "webchat_parent_session_id",
+                        parent_session_id,
+                    )
                 api_key_principal = payload.get("_api_key_principal")
                 if isinstance(api_key_principal, dict):
                     message_event.set_extra(

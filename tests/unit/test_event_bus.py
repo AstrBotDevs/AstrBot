@@ -102,6 +102,37 @@ class TestEventBusDispatch:
         )
 
     @pytest.mark.asyncio
+    async def test_dispatch_routes_webchat_thread_by_trusted_parent_session(
+        self, event_bus, event_queue, mock_pipeline_scheduler, mock_config_manager
+    ):
+        processed = asyncio.Event()
+        mock_pipeline_scheduler.execute.side_effect = lambda _event: processed.set()
+
+        mock_event = MagicMock()
+        mock_event.unified_msg_origin = "webchat:FriendMessage:webchat!alice!thread-1"
+        mock_event.get_extra.side_effect = lambda key, default=None: {
+            "webchat_parent_session_id": "parent-1"
+        }.get(key, default)
+        mock_event.get_platform_name.return_value = "webchat"
+        mock_event.get_sender_id.return_value = "alice"
+        mock_event.get_platform_id.return_value = "webchat"
+        mock_event.get_sender_name.return_value = "alice"
+        mock_event.get_message_outline.return_value = "hello"
+        await event_queue.put(mock_event)
+
+        task = asyncio.create_task(event_bus.dispatch())
+        try:
+            await asyncio.wait_for(processed.wait(), timeout=1.0)
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+        mock_config_manager.get_conf_info.assert_called_once_with(
+            "webchat:FriendMessage:webchat!alice!parent-1"
+        )
+
+    @pytest.mark.asyncio
     async def test_dispatch_handles_missing_scheduler(
         self,
         event_bus,

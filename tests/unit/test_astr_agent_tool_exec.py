@@ -10,6 +10,7 @@ from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.auth.models import AuthContext, Resource, Subject
 from astrbot.core.message.components import Image
 from astrbot.core.tools.function_tool_manager import (
     FunctionToolManager,
@@ -536,8 +537,27 @@ async def test_background_wakeup_passes_provider_settings_to_main_agent(
         ),
         conversation_manager=SimpleNamespace(),
     )
+    event = _DummyEvent([])
+    subject = Subject.dashboard_account("account-1", "user")
+    resource = Resource.session("default", "webchat:FriendMessage:webchat!user!session")
+    event.subject = subject
+    event.resource = resource
+    event.auth_context = AuthContext(
+        subject=subject,
+        source="webchat",
+        config_id="default",
+        authenticated=True,
+        origin_session_resource_id=resource.id,
+        metadata={
+            "dashboard_session_id": "sid-1",
+            "webchat_step_up_tokens": {"tool.local_exec": "raw-proof"},
+            "_webchat_step_up_consumed": {
+                "tool.local_exec": {"credential_id": "credential-1", "expires_at": 1}
+            },
+        },
+    )
     run_context = ContextWrapper(
-        context=SimpleNamespace(event=_DummyEvent([]), context=context),
+        context=SimpleNamespace(event=event, context=context),
         tool_call_timeout=456,
     )
 
@@ -556,6 +576,10 @@ async def test_background_wakeup_passes_provider_settings_to_main_agent(
     assert config.streaming_response == provider_settings["streaming_response"]
     assert config.provider_settings == provider_settings
     assert config.provider_settings["fallback_chat_models"] == ["fallback-provider"]
+    cron_context = captured["event"].auth_context
+    assert cron_context is not event.auth_context
+    assert cron_context.request_id != event.auth_context.request_id
+    assert cron_context.metadata == {"dashboard_session_id": "sid-1"}
 
 
 @pytest.mark.asyncio

@@ -313,6 +313,24 @@ paths:
         '200':
           $ref: '#/components/responses/Ok'
 
+  /api/v1/authorization/webchat-step-up:
+    post:
+      tags: [Authorization]
+      summary: Reauthenticate and issue WebChat instance-tool proofs
+      operationId: issueWebChatAuthorizationStepUp
+      security:
+        - DashboardBearerAuth: []
+        - DashboardCookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebChatStepUpRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
   /api/v1/authorization/audit:
     get:
       tags: [Authorization]
@@ -5672,6 +5690,13 @@ components:
         _thread_selected_text:
           type: string
           description: Internal WebUI side-thread context.
+        _webchat_step_up_tokens:
+          type: object
+          writeOnly: true
+          description: Internal WebUI in-memory WebChat step-up proofs.
+          additionalProperties:
+            type: string
+            maxLength: 512
       additionalProperties: false
 
     ChatSessionBatchDeleteRequest:
@@ -5710,6 +5735,13 @@ components:
         enable_streaming:
           type: boolean
           default: true
+        _webchat_step_up_tokens:
+          type: object
+          writeOnly: true
+          description: Internal WebUI in-memory WebChat step-up proofs.
+          additionalProperties:
+            type: string
+            maxLength: 512
       additionalProperties: false
 
     ChatThreadCreateRequest:
@@ -5743,6 +5775,13 @@ components:
         enable_streaming:
           type: boolean
           default: true
+        _webchat_step_up_tokens:
+          type: object
+          writeOnly: true
+          description: Internal WebUI in-memory WebChat step-up proofs.
+          additionalProperties:
+            type: string
+            maxLength: 512
       additionalProperties: false
 
     ChatProjectRequest:
@@ -6034,6 +6073,24 @@ components:
         config_id:
           type: string
           nullable: true
+        password:
+          type: string
+          writeOnly: true
+          nullable: true
+        code:
+          type: string
+          writeOnly: true
+          nullable: true
+
+    WebChatStepUpRequest:
+      type: object
+      additionalProperties: false
+      required: [session_id]
+      properties:
+        session_id:
+          type: string
+          minLength: 1
+          maxLength: 512
         password:
           type: string
           writeOnly: true

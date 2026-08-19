@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
+from astrbot.core.auth.models import WEBCHAT_INSTANCE_TOOL_ACTIONS
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.schemas import (
@@ -89,9 +90,27 @@ async def _send_chat(
     post_data = payload if payload is not None else await _json_or_none(request)
     if post_data is None:
         return JSONResponse(error("Missing JSON body"))
+    if payload is not None and post_data.get("_platform_history_id", "webchat") in {
+        "webchat",
+        "webchat_thread",
+    }:
+        # Regenerate/thread routes build a server-owned payload from the
+        # request. Preserve only the in-memory proof map; action/resource and
+        # principal facts are reconstructed below and never trusted here.
+        original = await _json_or_none(request)
+        raw_tokens = (
+            original.get(
+                "_webchat_step_up_tokens", original.get("webchat_step_up_tokens")
+            )
+            if original
+            else None
+        )
+        if isinstance(raw_tokens, dict):
+            post_data = dict(post_data)
+            post_data["_webchat_step_up_tokens"] = raw_tokens
 
     try:
-        dashboard_principal = None
+        dashboard_principal: dict[str, object] | None = None
         if auth.via == "jwt" and auth.account_id and auth.sid:
             dashboard_principal = {
                 "account_id": auth.account_id,
@@ -99,6 +118,18 @@ async def _send_chat(
                 "username": auth.username,
                 "auth_strength": auth.auth_strength,
             }
+            raw_tokens = post_data.get(
+                "_webchat_step_up_tokens",
+                post_data.get("webchat_step_up_tokens"),
+            )
+            if isinstance(raw_tokens, dict):
+                dashboard_principal["step_up_tokens"] = {
+                    action: token
+                    for action, token in raw_tokens.items()
+                    if action in WEBCHAT_INSTANCE_TOOL_ACTIONS
+                    and isinstance(token, str)
+                    and 0 < len(token) <= 512
+                }
         stream = await service.build_chat_stream(
             username,
             post_data,

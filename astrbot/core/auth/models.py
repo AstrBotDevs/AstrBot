@@ -104,6 +104,20 @@ HIGH_RISK_ACTIONS = frozenset(
     }
 )
 
+# WebChat may use only these instance-scoped tools after a fresh Dashboard
+# factor verification.  Keep this separate from HIGH_RISK_ACTIONS: global
+# control-plane mutations must remain Dashboard-only.
+WEBCHAT_INSTANCE_TOOL_ACTIONS = frozenset(
+    {
+        "tool.local_exec",
+        "tool.python_exec",
+        "tool.file_write",
+        "tool.browser_control",
+        "tool.mcp_write",
+        "tool.computer_use",
+    }
+)
+
 
 class AuthorizationValueError(ValueError):
     """Raised for invalid authorization value objects before policy evaluation."""

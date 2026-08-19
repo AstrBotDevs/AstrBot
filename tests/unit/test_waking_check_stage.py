@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 import astrbot.core.pipeline.waking_check.stage as waking
+from astrbot.core.auth.models import Resource
 from astrbot.core.command import (
     CommandCatalogStore,
     CommandLexer,
@@ -137,6 +138,9 @@ async def test_dashboard_webchat_principal_is_kept_separate_from_username():
                 "sid": "session-1",
                 "username": "alice",
                 "auth_strength": "password",
+                "step_up_tokens": {
+                    "tool.local_exec": "opaque-proof",
+                },
             }
         },
     )
@@ -150,6 +154,40 @@ async def test_dashboard_webchat_principal_is_kept_separate_from_username():
     assert context.caller_declared_username == "alice"
     assert context.auth_strength == "password"
     assert context.metadata["dashboard_session_id"] == "session-1"
+    assert context.metadata["webchat_step_up_tokens"] == {
+        "tool.local_exec": "opaque-proof"
+    }
+
+
+@pytest.mark.asyncio
+async def test_webchat_thread_authorization_uses_verified_parent_session():
+    stage = await make_stage()
+    parent_session_id = "parent-session"
+    event = FakeEvent(
+        [],
+        private=True,
+        platform="webchat",
+        sender_id="alice",
+        group_id="thread-session",
+        extras={
+            "_dashboard_principal": {
+                "account_id": "account-1",
+                "sid": "dashboard-session",
+                "username": "alice",
+                "auth_strength": "password",
+                "step_up_tokens": {"tool.local_exec": "opaque-proof"},
+            },
+            "webchat_parent_session_id": parent_session_id,
+        },
+    )
+
+    await stage._attach_authorization(event)
+
+    context = event.get_extra("auth_context")
+    assert context.origin_session_resource_id == Resource.session(
+        "default",
+        f"webchat:FriendMessage:webchat!alice!{parent_session_id}",
+    ).id
 
 
 def install_handlers(stage, monkeypatch, handlers) -> None:

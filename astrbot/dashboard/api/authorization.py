@@ -1,10 +1,12 @@
 """Dashboard authorization bindings, step-up, and audit APIs."""
 
+import uuid
 from dataclasses import replace
 
 from fastapi import APIRouter, Depends, Request
 
 from astrbot.core.auth.models import (
+    WEBCHAT_INSTANCE_TOOL_ACTIONS,
     AuthContext,
     AuthorizationValueError,
     Decision,
@@ -21,6 +23,7 @@ from astrbot.dashboard.schemas import (
     AuthorizationStepUpRequest,
     DashboardAccountCreateRequest,
     DashboardAccountUpdateRequest,
+    WebChatStepUpRequest,
 )
 
 from .auth import object_resource, require_dashboard_session_principal
@@ -81,6 +84,82 @@ def _step_up_context(context: AuthContext, token: str | None) -> AuthContext:
         caller_declared_username=context.caller_declared_username,
         metadata=dict(context.metadata),
     )
+
+
+async def _webchat_step_up_target(
+    request: Request,
+    principal,
+    session_id: str,
+) -> tuple[Subject, AuthContext, Resource]:
+    """Reconstruct the trusted WebChat session/config target server-side."""
+
+    if principal.account_subject is None:
+        raise ApiError("Dashboard account is unavailable", status_code=401)
+    chat_service = getattr(request.app.state.services, "chat", None)
+    chat_db = getattr(chat_service, "db", None) or getattr(
+        request.app.state, "db", None
+    )
+    get_session = getattr(chat_db, "get_platform_session_by_id", None)
+    session = await get_session(session_id) if callable(get_session) else None
+    if session is None and callable(getattr(chat_db, "create_platform_session", None)):
+        # The chat UI can have a route for a freshly allocated conversation
+        # before the first message persists its platform session.  Establish
+        # the same Dashboard-owned session that ChatService would create for
+        # the first send, but never adopt an existing session from another
+        # account.  UUID validation keeps this recovery path scoped to normal
+        # WebChat session identifiers rather than arbitrary database keys.
+        try:
+            if str(uuid.UUID(session_id)) != session_id:
+                raise ValueError("non-canonical session id")
+        except ValueError, AttributeError, TypeError:
+            session = None
+        else:
+            try:
+                session = await chat_db.create_platform_session(
+                    creator=principal.username,
+                    platform_id="webchat",
+                    session_id=session_id,
+                    is_group=0,
+                )
+            except Exception:
+                # A concurrent first message may have won the insert race.
+                # Re-read and apply the ownership check below; do not turn a
+                # collision into an account-adoption opportunity.
+                session = await get_session(session_id)
+    if (
+        session is None
+        or getattr(session, "platform_id", None) != "webchat"
+        or getattr(session, "creator", None) != principal.username
+    ):
+        raise ApiError("Authorization denied", status_code=403)
+    umo = f"webchat:FriendMessage:webchat!{principal.username}!{session_id}"
+    router = getattr(
+        getattr(request.app.state, "runtime", None), "umop_config_router", None
+    )
+    config_id = router.get_conf_id_for_umop(umo) if router is not None else None
+    config_id = config_id or "default"
+    resource = Resource.session(config_id, umo)
+    subject = principal.account_subject
+    context = AuthContext(
+        subject=subject,
+        source="webchat",
+        config_id=config_id,
+        platform="webchat",
+        message_type="FriendMessage",
+        # WebChatMessageEvent currently carries the neutral compatibility role
+        # ``member``; bind issuance to that trusted event fact so the proof
+        # digest can be consumed by the eventual tool call.
+        platform_member_role="member",
+        platform_role_source="none",
+        authenticated=True,
+        principal_subject_id=subject.id,
+        auth_strength=principal.auth_strength,
+        authenticated_at=principal.issued_at,
+        origin_session_resource_id=resource.id,
+        caller_declared_username=principal.username,
+        metadata={"dashboard_session_id": principal.sid},
+    )
+    return subject, context, resource
 
 
 async def _authorize_identity_read(
@@ -361,6 +440,60 @@ async def issue_step_up(
         verified_method=method,
     )
     return ok({"step_up_id": credential_id, "token": token})
+
+
+@router.post("/webchat-step-up")
+async def issue_webchat_step_up(
+    payload: WebChatStepUpRequest,
+    request: Request,
+    principal=Depends(require_dashboard_session_principal),
+):
+    """Issue one exact-action token per allowed WebChat tool action.
+
+    The request names only a session.  The account, Dashboard sid, canonical
+    UMO, config route, role, and action set are reconstructed on the server.
+    Password/TOTP never cross the WebSocket or enter a chat message.
+    """
+
+    subject, context, resource = await _webchat_step_up_target(
+        request, principal, payload.session_id
+    )
+    authorization = _service(request)
+    actions = tuple(sorted(WEBCHAT_INSTANCE_TOOL_ACTIONS))
+    decisions = [
+        await authorization.authorize(subject, action, resource, context)
+        for action in actions
+    ]
+    if any(decision.reason == "role_scope_denied" for decision in decisions):
+        raise ApiError("Authorization denied", status_code=403)
+    if not all(decision.reason == "step_up_required" for decision in decisions):
+        raise ApiError("Authorization denied", status_code=403)
+    method = await _auth_service(request).verify_step_up_factor(
+        account_id=principal.account_id or "",
+        password=payload.password,
+        code=payload.code,
+    )
+    if method is None:
+        authorization.record_step_up_failure(
+            subject=subject,
+            action=actions[0],
+            resource=resource,
+            context=context,
+        )
+        raise ApiError("Reauthentication required", status_code=401)
+
+    tokens: dict[str, str] = {}
+    for action in actions:
+        _credential_id, token = await authorization.issue_step_up(
+            subject=subject,
+            dashboard_session_id=principal.sid,
+            action=action,
+            resource=resource,
+            context=context,
+            verified_method=method,
+        )
+        tokens[action] = token
+    return ok({"tokens": tokens, "expires_in": 300})
 
 
 @router.get("/audit")

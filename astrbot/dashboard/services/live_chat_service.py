@@ -14,7 +14,8 @@ from starlette.websockets import WebSocketDisconnect
 
 from astrbot import logger
 from astrbot.core.agent.mcp_client import MCPInteractionCoordinator, MCPInteractionKey
-from astrbot.core.db.protocols import AttachmentStore
+from astrbot.core.auth.models import WEBCHAT_INSTANCE_TOOL_ACTIONS
+from astrbot.core.db.protocols import ChatStore
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from astrbot.core.utils.error_redaction import safe_error
@@ -40,6 +41,10 @@ from astrbot.dashboard.services.auth_service import (
     AuthService,
     DashboardSessionPrincipal,
     DashboardTokenValidator,
+)
+from astrbot.dashboard.services.chat_service import (
+    ChatServiceError,
+    ensure_webchat_platform_session_owner,
 )
 
 if TYPE_CHECKING:
@@ -69,6 +74,8 @@ class LiveChatSession:
         self.session_id = session_id
         self.username = username
         self.dashboard_principal = dashboard_principal
+        self.webchat_step_up_tokens: dict[str, str] = {}
+        self.webchat_step_up_session_id: str | None = None
         self.conversation_id = str(uuid.uuid4())
         self.is_speaking = False
         self.is_processing = False
@@ -141,7 +148,7 @@ class LiveChatSession:
 class LiveChatService:
     def __init__(
         self,
-        db: AttachmentStore,
+        db: ChatStore,
         *,
         preferences: SharedPreferences,
         config: AstrBotConfig,
@@ -226,18 +233,66 @@ class LiveChatService:
     @staticmethod
     def _dashboard_principal_payload(
         session: LiveChatSession,
-    ) -> dict[str, dict[str, str]]:
+        step_up_tokens: dict[str, str] | None = None,
+        *,
+        webchat_session_id: str | None = None,
+        include_step_up_tokens: bool = True,
+    ) -> dict[str, dict[str, object]]:
         principal = session.dashboard_principal
         if principal is None or not principal.account_id:
             return {}
-        return {
-            "_dashboard_principal": {
-                "account_id": principal.account_id,
-                "sid": principal.sid,
-                "username": principal.username,
-                "auth_strength": principal.auth_strength,
-            }
+        payload: dict[str, object] = {
+            "account_id": principal.account_id,
+            "sid": principal.sid,
+            "username": principal.username,
+            "auth_strength": principal.auth_strength,
         }
+        if webchat_session_id is not None and (
+            session.webchat_step_up_session_id != webchat_session_id
+        ):
+            session.webchat_step_up_tokens = {}
+            session.webchat_step_up_session_id = None
+        if step_up_tokens is not None:
+            session.webchat_step_up_tokens = {
+                action: token
+                for action, token in step_up_tokens.items()
+                if action in WEBCHAT_INSTANCE_TOOL_ACTIONS
+                and isinstance(token, str)
+                and 0 < len(token) <= 512
+            }
+            session.webchat_step_up_session_id = webchat_session_id
+        if (
+            include_step_up_tokens
+            and webchat_session_id is not None
+            and session.webchat_step_up_session_id == webchat_session_id
+            and session.webchat_step_up_tokens
+        ):
+            payload["step_up_tokens"] = dict(session.webchat_step_up_tokens)
+        return {"_dashboard_principal": payload}
+
+    async def _owns_chat_session(
+        self,
+        session: LiveChatSession,
+        chat_session_id: str,
+    ) -> bool:
+        """Check that a persistent WebChat session belongs to this user."""
+
+        get_session = getattr(self.db, "get_platform_session_by_id", None)
+        # Lightweight unit doubles without an authenticated Dashboard
+        # principal represent the legacy live-voice test path. An
+        # authenticated Dashboard WebSocket must always have the runtime DB;
+        # fail closed if that store is unavailable.
+        if not callable(get_session):
+            return session.dashboard_principal is None
+        try:
+            await ensure_webchat_platform_session_owner(
+                self.db,
+                username=session.username,
+                session_id=chat_session_id,
+            )
+        except ChatServiceError:
+            return False
+        return True
 
     async def cleanup_session(self, session: LiveChatSession) -> None:
         if session.session_id in self.sessions:
@@ -551,6 +606,32 @@ class LiveChatService:
         persona_prompt = message.get("persona_prompt")
         show_reasoning = message.get("show_reasoning")
         enable_streaming = message.get("enable_streaming", True)
+        raw_step_up_tokens = message.get("webchat_step_up_tokens")
+        step_up_tokens = (
+            {
+                action: token
+                for action, token in raw_step_up_tokens.items()
+                if action in WEBCHAT_INSTANCE_TOOL_ACTIONS
+                and isinstance(token, str)
+                and 0 < len(token) <= 512
+            }
+            if isinstance(raw_step_up_tokens, dict)
+            else None
+        )
+
+        if not await self._owns_chat_session(session, str(session_id)):
+            await self.send_chat_payload(
+                session,
+                {
+                    "ct": "chat",
+                    "t": "error",
+                    "data": "Authorization denied",
+                    "code": "FORBIDDEN",
+                    **request_metadata,
+                },
+                send_json,
+            )
+            return
 
         (
             message_parts,
@@ -598,6 +679,15 @@ class LiveChatService:
         pending_bot_message_flusher = None
         try:
             await self.ensure_chat_subscription(session, session_id, send_json)
+            principal_payload = self._dashboard_principal_payload(
+                session,
+                step_up_tokens,
+                webchat_session_id=session_id,
+            )
+            # The opaque proofs are one-time credentials.  Keep them only in
+            # the event payload that starts this run; a later WebSocket send
+            # must not replay a consumed token from the session cache.
+            session.webchat_step_up_tokens = {}
             await self.webchat_run_coordinator.dispatch(
                 run,
                 {
@@ -610,7 +700,7 @@ class LiveChatService:
                     "show_reasoning": show_reasoning,
                     "enable_streaming": enable_streaming,
                     "llm_checkpoint_id": llm_checkpoint_id,
-                    **self._dashboard_principal_payload(session),
+                    **principal_payload,
                 },
             )
 
@@ -899,6 +989,19 @@ class LiveChatService:
                 )
                 return True
 
+            if not await self._owns_chat_session(session, chat_session_id):
+                await self.send_chat_payload(
+                    session,
+                    {
+                        "ct": "chat",
+                        "t": "error",
+                        "data": "Authorization denied",
+                        "code": "FORBIDDEN",
+                    },
+                    send_json,
+                )
+                return True
+
             request_id = await self.ensure_chat_subscription(
                 session, chat_session_id, send_json
             )
@@ -1099,7 +1202,16 @@ class LiveChatService:
                 {
                     "message": [{"type": "plain", "text": user_text}],
                     "action_type": "live",
-                    **self._dashboard_principal_payload(session),
+                    # Live Voice currently uses an ephemeral conversation id,
+                    # not the persistent WebChat session bound by the HTTP
+                    # step-up endpoint.  Do not carry a proof from a regular
+                    # chat run into this separate transport; high-risk tools
+                    # remain denied until Live Voice has an equivalent bound
+                    # session flow.
+                    **self._dashboard_principal_payload(
+                        session,
+                        include_step_up_tokens=False,
+                    ),
                 },
             )
 

@@ -19,6 +19,7 @@ from astrbot.core.auth.models import (
     GLOBAL_SCOPE_ID,
     HIGH_RISK_ACTIONS,
     ROLE_ORDER,
+    WEBCHAT_INSTANCE_TOOL_ACTIONS,
     AuthContext,
     AuthorizationValueError,
     Decision,
@@ -58,6 +59,8 @@ _SENSITIVE_KEYS = frozenset(
         "password",
         "refresh_token",
         "session_id",
+        "webchat_step_up_tokens",
+        "_webchat_step_up_consumed",
         "credential",
         "secret",
         "message",
@@ -70,15 +73,68 @@ def _missing_policy_context(policy: ActionPolicy, context: AuthContext) -> str |
     required = policy.required_context
     if "source" in required and not context.source:
         return "missing_context_source"
-    if "config" in required and context.source == "im" and not context.config_id:
+    if (
+        "config" in required
+        and context.source in {"im", "webchat"}
+        and not context.config_id
+    ):
         return "missing_context_config"
     if (
         "origin_session" in required
-        and context.source == "im"
+        and context.source in {"im", "webchat"}
         and not context.origin_session_resource_id
     ):
         return "missing_context_origin_session"
     return None
+
+
+def _webchat_step_up_binding_resource(
+    action: str, resource: Resource, context: AuthContext
+) -> Resource:
+    """Bind WebChat tool proofs to the current session, not a tool name.
+
+    Agent tool names are implementation details and a single run may invoke
+    several tools.  The proof is still exact-action and exact-session-bound;
+    the session resource is the trusted parent for all tool/file/MCP resources
+    reached from this event.
+    """
+
+    if (
+        context.source != "webchat"
+        or action not in WEBCHAT_INSTANCE_TOOL_ACTIONS
+        or resource.type not in {"session", "tool", "file", "mcp"}
+    ):
+        return resource
+    origin = AuthorizationService._origin_session_resource(context)
+    if origin is None or resource.config_id != origin.config_id:
+        return resource
+    return origin
+
+
+def _webchat_step_up_cached(context: AuthContext, action: str) -> str | None:
+    """Return a proof consumed earlier in this trusted event/run, if any."""
+
+    cached = context.metadata.get("_webchat_step_up_consumed")
+    if not isinstance(cached, dict):
+        return None
+    entry = cached.get(action)
+    if isinstance(entry, str):
+        # Do not grant an unbounded legacy cache entry.  Entries written by
+        # the current implementation always carry an explicit expiry.
+        cached.pop(action, None)
+        return None
+    if not isinstance(entry, dict):
+        return None
+    credential_id = entry.get("credential_id")
+    expires_at = entry.get("expires_at")
+    if (
+        not isinstance(credential_id, str)
+        or not isinstance(expires_at, int | float)
+        or expires_at <= utc_now().timestamp()
+    ):
+        cached.pop(action, None)
+        return None
+    return credential_id
 
 
 def _control_plane_bindings_apply(subject: Subject, context: AuthContext) -> bool:
@@ -1371,6 +1427,19 @@ class AuthorizationService:
         role = display_role(matched) or await self._resolve_role(
             subject, resource, context
         )
+        if context.source == "webchat" and action in WEBCHAT_INSTANCE_TOOL_ACTIONS:
+            if role not in {Role.INSTANCE_OPERATOR, Role.OPERATOR, Role.ROOT}:
+                return Decision(
+                    False,
+                    subject,
+                    action,
+                    resource,
+                    role,
+                    "role_scope_denied",
+                    audit_id=audit_id,
+                    matched_relations=tuple(item.relation.value for item in matched),
+                    relation_sources=tuple(item.source for item in matched),
+                )
         override_allowed = await self._policy_override_allows(action, resource, role)
         if not granted and not override_allowed:
             return Decision(
@@ -1386,26 +1455,7 @@ class AuthorizationService:
             )
         step_up_id: str | None = None
         if _requires_step_up(action, resource, context):
-            if context.source == "dashboard":
-                step_up_id = await self._consume_step_up(
-                    subject, action, resource, context
-                )
-                if step_up_id is None:
-                    return Decision(
-                        False,
-                        subject,
-                        action,
-                        resource,
-                        role,
-                        "step_up_required",
-                        requires_step_up=True,
-                        audit_id=audit_id,
-                        matched_relations=tuple(
-                            item.relation.value for item in matched
-                        ),
-                        relation_sources=tuple(item.source for item in matched),
-                    )
-            else:
+            if context.source not in {"dashboard", "webchat"}:
                 return Decision(
                     False,
                     subject,
@@ -1413,6 +1463,41 @@ class AuthorizationService:
                     resource,
                     role,
                     "high_risk_dashboard_only",
+                    audit_id=audit_id,
+                    matched_relations=tuple(item.relation.value for item in matched),
+                    relation_sources=tuple(item.source for item in matched),
+                )
+            if context.source == "webchat" and (
+                subject.kind != "dashboard-account"
+                or action not in WEBCHAT_INSTANCE_TOOL_ACTIONS
+                or not context.authenticated
+                or context.origin_session_resource_id is None
+            ):
+                return Decision(
+                    False,
+                    subject,
+                    action,
+                    resource,
+                    role,
+                    "high_risk_dashboard_only",
+                    audit_id=audit_id,
+                    matched_relations=tuple(item.relation.value for item in matched),
+                    relation_sources=tuple(item.source for item in matched),
+                )
+            step_up_id = _webchat_step_up_cached(context, action)
+            if step_up_id is None:
+                step_up_id = await self._consume_step_up(
+                    subject, action, resource, context
+                )
+            if step_up_id is None:
+                return Decision(
+                    False,
+                    subject,
+                    action,
+                    resource,
+                    role,
+                    "step_up_required",
+                    requires_step_up=True,
                     audit_id=audit_id,
                     matched_relations=tuple(item.relation.value for item in matched),
                     relation_sources=tuple(item.source for item in matched),
@@ -1646,15 +1731,32 @@ class AuthorizationService:
         verified_method: str,
         ttl_seconds: int = _STEP_UP_TTL_SECONDS,
     ) -> tuple[str, str]:
-        """Issue a short-lived, one-time Dashboard credential after reauthentication."""
+        """Issue a short-lived, one-time credential after reauthentication."""
 
         context = self._resource_scoped_dashboard_context(context, resource)
         if (
-            context.source != "dashboard"
+            context.source not in {"dashboard", "webchat"}
             or not _requires_step_up(action, resource, context)
             or not 0 < ttl_seconds <= 900
         ):
             raise AuthorizationValueError("Invalid step-up request")
+        if context.source == "webchat":
+            if (
+                subject.kind != "dashboard-account"
+                or action not in WEBCHAT_INSTANCE_TOOL_ACTIONS
+                or not context.authenticated
+                or context.origin_session_resource_id is None
+                or not isinstance(context.metadata.get("dashboard_session_id"), str)
+            ):
+                raise AuthorizationValueError("Invalid WebChat step-up request")
+            resource = _webchat_step_up_binding_resource(action, resource, context)
+            if (
+                resource.type != "session"
+                or resource.id != context.origin_session_resource_id
+            ):
+                raise AuthorizationValueError(
+                    "WebChat step-up must bind the current session"
+                )
         credential_id, secret = str(uuid.uuid4()), secrets.token_urlsafe(32)
         record = AuthStepUpCredential(
             credential_id=credential_id,
@@ -1708,14 +1810,28 @@ class AuthorizationService:
         self, subject: Subject, action: str, resource: Resource, context: AuthContext
     ) -> str | None:
         token = context.step_up_token
+        if context.source == "webchat":
+            token_map = context.metadata.get("webchat_step_up_tokens")
+            if isinstance(token_map, dict):
+                candidate = token_map.get(action)
+                if isinstance(candidate, str):
+                    token = candidate
         session_id = context.metadata.get("dashboard_session_id")
         if (
             not isinstance(token, str)
             or "." not in token
             or not isinstance(session_id, str)
         ):
+            if context.source == "webchat":
+                logger.debug(
+                    "WebChat step-up proof unavailable: action=%s token_present=%s sid_present=%s",
+                    action,
+                    isinstance(token, str) and bool(token),
+                    isinstance(session_id, str) and bool(session_id),
+                )
             return None
         credential_id, secret = token.split(".", 1)
+        binding_resource = _webchat_step_up_binding_resource(action, resource, context)
         now = utc_now()
         async with self._db.get_db() as session:
             async with session.begin():
@@ -1726,14 +1842,38 @@ class AuthorizationService:
                         col(AuthStepUpCredential.subject_id) == subject.id,
                         col(AuthStepUpCredential.dashboard_session_id) == session_id,
                         col(AuthStepUpCredential.action) == action,
-                        col(AuthStepUpCredential.resource_id) == resource.id,
+                        col(AuthStepUpCredential.resource_id) == binding_resource.id,
                         col(AuthStepUpCredential.context_digest)
-                        == context.digest_for(action, resource),
+                        == context.digest_for(action, binding_resource),
                         col(AuthStepUpCredential.token_hash)
                         == hashlib.sha256(secret.encode()).hexdigest(),
                         col(AuthStepUpCredential.expires_at) > now,
                         col(AuthStepUpCredential.consumed_at).is_(None),
                     )
                     .values(consumed_at=now)
+                    .returning(AuthStepUpCredential.expires_at)
                 )
-                return credential_id if result.rowcount else None
+                expires_at = result.scalar_one_or_none()
+                if expires_at is None:
+                    if context.source == "webchat":
+                        logger.debug(
+                            "WebChat step-up proof binding rejected: action=%s resource_type=%s",
+                            action,
+                            binding_resource.type,
+                        )
+                    return None
+                if context.source == "webchat":
+                    cached = context.metadata.setdefault(
+                        "_webchat_step_up_consumed", {}
+                    )
+                    if isinstance(cached, dict):
+                        expires_at_utc = (
+                            expires_at.replace(tzinfo=UTC)
+                            if expires_at.tzinfo is None
+                            else expires_at.astimezone(UTC)
+                        )
+                        cached[action] = {
+                            "credential_id": credential_id,
+                            "expires_at": expires_at_utc.timestamp(),
+                        }
+                return credential_id
