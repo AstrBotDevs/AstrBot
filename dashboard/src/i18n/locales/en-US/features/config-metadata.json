@@ -1569,6 +1569,26 @@
         "description": "Single voice",
         "hint": "Single voice ID; see the official documentation."
       },
+      "minimax-voice-design-prompt": {
+        "description": "Voice design prompt",
+        "hint": "Text description of the desired voice. When set, a custom voice is created via the Voice Design API before synthesis."
+      },
+      "minimax-voice-design-preview-text": {
+        "description": "Voice design preview text",
+        "hint": "Text used to generate the preview audio sample for voice design. Required by the Voice Design API."
+      },
+      "minimax-voice-design-voice-id": {
+        "description": "Voice design voice ID",
+        "hint": "Required custom voice ID for the designed voice."
+      },
+      "minimax-voice-design-prompt-audio": {
+        "description": "Voice design prompt audio path",
+        "hint": "Local .mp3, .m4a, or .wav reference audio uploaded with purpose 'prompt_audio' to enhance voice similarity and stability."
+      },
+      "minimax-voice-design-api-base": {
+        "description": "Voice design API base",
+        "hint": "Regional MiniMax API base for prompt audio upload and voice design."
+      },
       "minimax-voice-emotion": {
         "description": "Emotion",
         "hint": "Controls emotion of synthesized speech. When set to auto, it selects emotion based on text."

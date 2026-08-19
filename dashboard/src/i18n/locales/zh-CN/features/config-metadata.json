@@ -1571,6 +1571,26 @@
         "description": "单一音色",
         "hint": "单一音色编号, 详见官网文档"
       },
+      "minimax-voice-design-prompt": {
+        "description": "音色设计提示词",
+        "hint": "描述目标音色的文本。设置后将在合成前通过音色设计 API 创建自定义音色。"
+      },
+      "minimax-voice-design-preview-text": {
+        "description": "音色设计预览文本",
+        "hint": "用于生成音色设计预览音频的文本。音色设计 API 要求必填。"
+      },
+      "minimax-voice-design-voice-id": {
+        "description": "Voice design voice ID",
+        "hint": "Required custom voice ID for the designed voice."
+      },
+      "minimax-voice-design-prompt-audio": {
+        "description": "音色设计提示音频路径",
+        "hint": "本地 .mp3、.m4a 或 .wav 参考音频, 以 prompt_audio 用途上传, 用于增强音色相似度和稳定性。"
+      },
+      "minimax-voice-design-api-base": {
+        "description": "音色设计 API 地址",
+        "hint": "用于提示音频上传和音色设计的区域化 MiniMax API 地址。"
+      },
       "minimax-voice-emotion": {
         "description": "情绪",
         "hint": "控制合成语音的情绪。当为 auto 时，将根据文本内容自动选择情绪。"
