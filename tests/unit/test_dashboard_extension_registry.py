@@ -76,6 +76,24 @@ def test_example_fixture_declares_dashboard_v1_capability_and_loads():
     assert metadata.dashboard.pages[0].actions == ("settings.read",)
 
 
+def test_dashboard_plugin_metadata_accepts_authorization_actions(tmp_path: Path):
+    plugin_root = tmp_path / "dashboard_extension_example"
+    shutil.copytree(EXAMPLE_FIXTURE_ROOT, plugin_root)
+    metadata_path = plugin_root / "metadata.yaml"
+    metadata = yaml.safe_load(metadata_path.read_text(encoding="utf-8"))
+    metadata["authorization"] = {"actions": [{"id": "settings.read"}]}
+    metadata_path.write_text(
+        yaml.safe_dump(metadata, sort_keys=False),
+        encoding="utf-8",
+    )
+
+    loaded = PluginRuntimeLoader.load_metadata(str(plugin_root))
+
+    assert loaded.authorization_actions == frozenset(
+        {"plugin:xero-team/dashboard_extension_example:settings.read"}
+    )
+
+
 @pytest.mark.parametrize("capability", [None, 2])
 def test_metadata_loader_requires_exact_dashboard_v1_capability(
     tmp_path: Path,

@@ -90,6 +90,7 @@ _ALLOWED_METADATA_FIELDS = frozenset(
         "support_platforms",
         "requires",
         "dashboard",
+        "authorization",
     }
 )
 
