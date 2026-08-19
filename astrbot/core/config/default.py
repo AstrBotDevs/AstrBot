@@ -1805,6 +1805,10 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.minimax.chat/v1/t2a_v2",
                         "minimax-group-id": "",
                         "model": "speech-02-turbo",
+                        "minimax-voice-clone-audio": "",
+                        "minimax-voice-clone-id": "",
+                        "minimax-voice-clone-model": "speech-2.8-hd",
+                        "minimax-voice-clone-api-base": "https://api.minimaxi.com/v1",
                         "minimax-langboost": "auto",
                         "minimax-voice-speed": 1.0,
                         "minimax-voice-vol": 1.0,
@@ -2610,6 +2614,36 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "description": "单一音色",
                         "hint": "单一音色编号, 详见官网文档",
+                    },
+                    "minimax-voice-clone-audio": {
+                        "type": "string",
+                        "description": "Voice clone audio path",
+                        "hint": "Local .mp3, .m4a, or .wav reference audio. Leave empty to disable automatic voice cloning.",
+                    },
+                    "minimax-voice-clone-id": {
+                        "type": "string",
+                        "description": "Voice clone ID",
+                        "hint": "Custom voice ID to create before synthesis. Required when voice clone audio is configured.",
+                    },
+                    "minimax-voice-clone-model": {
+                        "type": "string",
+                        "description": "Voice clone model",
+                        "options": [
+                            "speech-2.8-hd",
+                            "speech-2.6-hd",
+                            "speech-02-hd",
+                            "speech-01-hd",
+                        ],
+                        "hint": "HD speech model used to create the custom voice.",
+                    },
+                    "minimax-voice-clone-api-base": {
+                        "type": "string",
+                        "description": "Voice clone API base",
+                        "options": [
+                            "https://api.minimax.io/v1",
+                            "https://api.minimaxi.com/v1",
+                        ],
+                        "hint": "Regional MiniMax API base for file upload and voice cloning.",
                     },
                     "minimax-voice-emotion": {
                         "type": "string",

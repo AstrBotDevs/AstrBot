@@ -1,6 +1,8 @@
+import asyncio
 import json
 import os
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 import aiohttp
 
@@ -32,6 +34,20 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
         )
         self.group_id: str = provider_config.get("minimax-group-id", "")
         self.set_model(provider_config.get("model", ""))
+        self.voice_clone_audio: str = str(
+            provider_config.get("minimax-voice-clone-audio") or "",
+        ).strip()
+        self.voice_clone_id: str = str(
+            provider_config.get("minimax-voice-clone-id") or "",
+        ).strip()
+        self.voice_clone_model: str = str(
+            provider_config.get("minimax-voice-clone-model") or "",
+        ).strip()
+        self.voice_clone_api_base: str = str(
+            provider_config.get("minimax-voice-clone-api-base") or "",
+        ).strip()
+        self._voice_clone_ready = False
+        self._voice_clone_lock = asyncio.Lock()
         self.lang_boost: str = provider_config.get("minimax-langboost", "auto")
         self.is_timber_weight: bool = provider_config.get(
             "minimax-is-timber-weight",
@@ -83,6 +99,155 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
             "accept": "application/json, text/plain, */*",
             "content-type": "application/json",
         }
+
+    def _voice_clone_url(self, path: str) -> str:
+        """Build a MiniMax voice-cloning endpoint URL."""
+        if self.voice_clone_api_base:
+            api_base = self.voice_clone_api_base
+        else:
+            api_base = self.api_base.rstrip("/")
+            if not api_base.endswith("/v1"):
+                api_base = api_base.rsplit("/", 1)[0]
+        return f"{api_base.rstrip('/')}/{path.lstrip('/')}"
+
+    async def _ensure_voice_clone(self) -> None:
+        """Create the configured custom voice before the first synthesis request."""
+        if not self.voice_clone_audio:
+            return
+        if self._voice_clone_ready:
+            return
+
+        async with self._voice_clone_lock:
+            if self._voice_clone_ready:
+                return
+            if not self.voice_clone_id:
+                raise ValueError(
+                    "MiniMax voice cloning requires 'minimax-voice-clone-id'.",
+                )
+            if not self.voice_clone_model:
+                raise ValueError(
+                    "MiniMax voice cloning requires 'minimax-voice-clone-model'.",
+                )
+            if not self.voice_clone_model.endswith("-hd"):
+                raise ValueError(
+                    "MiniMax voice cloning requires an HD speech model.",
+                )
+            if self.is_timber_weight:
+                raise ValueError(
+                    "MiniMax voice cloning cannot be combined with mixed voices.",
+                )
+
+            audio_path = Path(self.voice_clone_audio).expanduser()
+            if not audio_path.is_file():
+                raise FileNotFoundError(
+                    f"MiniMax voice-clone audio file does not exist: {audio_path}",
+                )
+
+            content_type = {
+                ".m4a": "audio/mp4",
+                ".mp3": "audio/mpeg",
+                ".wav": "audio/wav",
+            }.get(audio_path.suffix.lower())
+            if content_type is None:
+                raise ValueError(
+                    "MiniMax voice cloning supports only .mp3, .m4a, and .wav files.",
+                )
+
+            try:
+                async with aiohttp.ClientSession() as session:
+                    form = aiohttp.FormData()
+                    with audio_path.open("rb") as audio_file:
+                        form.add_field(
+                            "file",
+                            audio_file,
+                            filename=audio_path.name,
+                            content_type=content_type,
+                        )
+                        form.add_field("purpose", "voice_clone")
+                        async with session.post(
+                            self._voice_clone_url("files/upload"),
+                            headers={"Authorization": self.headers["Authorization"]},
+                            data=form,
+                            timeout=aiohttp.ClientTimeout(total=60),
+                        ) as response:
+                            if response.status >= 400:
+                                error_text = (await response.text())[:1024]
+                                raise RuntimeError(
+                                    "MiniMax voice-clone audio upload failed: "
+                                    f"HTTP {response.status}: {error_text}",
+                                )
+                            upload_data = await response.json(content_type=None)
+
+                    upload_base_resp = upload_data.get("base_resp", {})
+                    upload_status_code = upload_base_resp.get("status_code")
+                    if upload_status_code not in (None, 0, "0"):
+                        status_msg = upload_base_resp.get(
+                            "status_msg",
+                            "unknown error",
+                        )
+                        raise RuntimeError(
+                            f"MiniMax voice-clone audio upload failed: {status_msg}",
+                        )
+
+                    file_data = upload_data.get("file") or {}
+                    nested_data = upload_data.get("data") or {}
+                    file_id = (
+                        upload_data.get("file_id")
+                        or file_data.get("file_id")
+                        or nested_data.get("file_id")
+                    )
+                    if not file_id:
+                        raise RuntimeError(
+                            "MiniMax voice-clone audio upload returned no file_id.",
+                        )
+
+                    async with session.post(
+                        self._voice_clone_url("voice_clone"),
+                        headers=self.headers,
+                        json={
+                            "file_id": file_id,
+                            "voice_id": self.voice_clone_id,
+                            "model": self.voice_clone_model,
+                        },
+                        timeout=aiohttp.ClientTimeout(total=60),
+                    ) as response:
+                        if response.status >= 400:
+                            error_text = (await response.text())[:1024]
+                            raise RuntimeError(
+                                "MiniMax voice cloning failed: "
+                                f"HTTP {response.status}: {error_text}",
+                            )
+                        clone_data = await response.json(content_type=None)
+
+                base_resp = clone_data.get("base_resp", {})
+                status_code = base_resp.get("status_code")
+                if status_code not in (None, 0, "0"):
+                    status_msg = base_resp.get("status_msg", "unknown error")
+                    raise RuntimeError(
+                        f"MiniMax voice cloning failed: {status_msg}",
+                    )
+
+                clone_result = clone_data.get("data") or {}
+                voice_id = (
+                    clone_data.get("voice_id")
+                    or clone_result.get("voice_id")
+                    or self.voice_clone_id
+                )
+                self.voice_setting["voice_id"] = voice_id
+                self._voice_clone_ready = True
+            except aiohttp.ClientError as exc:
+                raise RuntimeError(
+                    f"MiniMax voice cloning request failed: {exc!s}",
+                ) from exc
+
+    async def clone_voice(self) -> str:
+        """Create and return the configured MiniMax custom voice ID."""
+        await self._ensure_voice_clone()
+        if not self.voice_clone_audio:
+            raise ValueError(
+                "MiniMax voice cloning requires 'minimax-voice-clone-audio'.",
+            )
+        return self.voice_setting["voice_id"]
 
     def _build_tts_stream_body(self, text: str):
         """构建流式请求体"""
@@ -154,6 +319,7 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
         return b"".join(chunks)
 
     async def get_audio(self, text: str) -> str:
+        await self._ensure_voice_clone()
         temp_dir = get_astrbot_temp_path()
         os.makedirs(temp_dir, exist_ok=True)
         path = os.path.join(temp_dir, f"minimax_tts_api_{generate_timestamp_id()}.wav")
