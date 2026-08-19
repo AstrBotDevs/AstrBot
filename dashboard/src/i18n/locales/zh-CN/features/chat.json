@@ -8,6 +8,8 @@
     "clear": "清空",
     "upload": "上传文件",
     "voice": "语音输入",
+    "enableHighRiskTools": "启用高风险工具",
+    "disableHighRiskTools": "停用高风险工具",
     "recordingPrompt": "录音中，请说话...",
     "chatPrompt": "聊天吧!",
     "dropToUpload": "松开鼠标上传文件",

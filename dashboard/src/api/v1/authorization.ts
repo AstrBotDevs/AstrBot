@@ -36,6 +36,12 @@ export type AuthorizationStepUpRequest = {
   code?: string;
 };
 
+export type WebChatStepUpRequest = {
+  session_id: string;
+  password?: string;
+  code?: string;
+};
+
 export type AuthorizationBatchRevokeRequest = {
   binding_ids: string[];
   password?: string;
@@ -59,6 +65,8 @@ export const authorizationApi = {
     ),
   stepUp: (payload: AuthorizationStepUpRequest) =>
     httpClient.post('/api/v1/authorization/step-up', payload),
+  webChatStepUp: (payload: WebChatStepUpRequest) =>
+    httpClient.post('/api/v1/authorization/webchat-step-up', payload),
   issueBatchRevokeStepUp: (payload: AuthorizationBatchRevokeRequest) =>
     httpClient.post(
       '/api/v1/authorization/role-bindings/batch-revoke/step-up',

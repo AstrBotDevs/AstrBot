@@ -338,6 +338,7 @@
               Boolean(currSessionId && isSessionRunning(currSessionId))
             "
             :token-usage="tokenUsageIndicator"
+            :web-chat-tools-enabled="webChatToolsEnabled"
             :session-id="currSessionId || null"
             :current-session="currentSession"
             :reply-to="chatInputReplyTarget"
@@ -354,6 +355,8 @@
             @paste-image="handlePaste"
             @file-select="handleFilesSelected"
             @clear-reply="replyTarget = null"
+            @config-changed="handleChatConfigChange"
+            @toggle-web-chat-tools="toggleWebChatTools"
           />
         </section>
       </ProjectView>
@@ -424,6 +427,7 @@
               Boolean(currSessionId && isSessionRunning(currSessionId))
             "
             :token-usage="tokenUsageIndicator"
+            :web-chat-tools-enabled="webChatToolsEnabled"
             :session-id="currSessionId || null"
             :current-session="currentSession"
             :reply-to="chatInputReplyTarget"
@@ -439,6 +443,8 @@
             @paste-image="handlePaste"
             @file-select="handleFilesSelected"
             @clear-reply="replyTarget = null"
+            @config-changed="handleChatConfigChange"
+            @toggle-web-chat-tools="toggleWebChatTools"
           />
         </section>
       </template>
@@ -502,7 +508,9 @@
       :thread="activeThread"
       :is-dark="isDark"
       :deleting="deletingThread"
+      :web-chat-step-up-tokens="webChatStepUpTokens"
       @delete="deleteThread"
+      @consume-step-up="webChatStepUpTokens = null"
     />
     <ReasoningSidebar
       v-model="reasoningPanelOpen"
@@ -510,6 +518,14 @@
       :is-dark="isDark"
     />
     <RefsSidebar v-model="refsSidebarOpen" :refs="selectedRefs" />
+    <DashboardStepUpDialog
+      :model-value="stepUpDialogOpen"
+      :loading="stepUpLoading"
+      :error-message="stepUpError"
+      @update:model-value="(value) => !value && cancelWebChatTools()"
+      @confirm="submitStepUp"
+      @cancel="cancelWebChatTools"
+    />
   </div>
 </template>
 
@@ -535,6 +551,7 @@ import ProjectDialog, {
 import ProjectList, { type Project } from '@/components/chat/ProjectList.vue';
 import ProjectView from '@/components/chat/ProjectView.vue';
 import ChatInput from '@/components/chat/ChatInput.vue';
+import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
 import ChatMessageList from '@/components/chat/ChatMessageList.vue';
 import type { RegenerateModelSelection } from '@/components/chat/RegenerateMenu.vue';
 import ReasoningSidebar from '@/components/chat/ReasoningSidebar.vue';
@@ -567,6 +584,7 @@ import {
   type ProviderMetadataSource,
 } from '@/utils/providerMetadata';
 import { useToast } from '@/utils/toast';
+import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 
 const props = withDefaults(
   defineProps<{ chatboxMode?: boolean; active?: boolean }>(),
@@ -584,6 +602,8 @@ const { t } = useI18n();
 const { tm } = useModuleI18n('features/chat');
 const confirmDialog = useConfirmDialog();
 const toast = useToast();
+const webChatStepUpTokens = ref<Record<string, string> | null>(null);
+const webChatToolsEnabled = computed(() => webChatStepUpTokens.value !== null);
 const { languageOptions, currentLanguage, switchLanguage, locale } =
   useLanguageSwitcher();
 const {
@@ -731,6 +751,7 @@ const {
   stopSession,
 } = useMessages({
   currentSessionId: currSessionId,
+  webchatStepUpTokens: webChatStepUpTokens,
   onSessionsChanged: getSessions,
   onStreamUpdate: (sessionId) => {
     if (sessionId === currSessionId.value && shouldStickToBottom.value) {
@@ -797,6 +818,28 @@ const {
     respond({ action: 'accept', content });
   },
 });
+
+const {
+  dialogOpen: stepUpDialogOpen,
+  loading: stepUpLoading,
+  errorMessage: stepUpError,
+  webChatExpiresAt: webChatStepUpExpiresAt,
+  requestWebChatStepUp,
+  submitStepUp,
+  cancelStepUp,
+} = useDashboardStepUp();
+
+watch(webChatStepUpExpiresAt, (expiresAt) => {
+  if (expiresAt === null) webChatStepUpTokens.value = null;
+});
+
+watch(currSessionId, (sessionId, previousSessionId) => {
+  if (!previousSessionId || sessionId === previousSessionId) return;
+  cancelStepUp();
+  webChatStepUpTokens.value = null;
+});
+
+const activeConfigId = ref<string | null>(null);
 
 const transportMode = ref<TransportMode>(
   (localStorage.getItem('chat.transportMode') as TransportMode) === 'websocket'
@@ -1250,6 +1293,35 @@ async function sendCurrentMessage() {
     sending.value = false;
     await focusChatInput();
   }
+}
+
+async function toggleWebChatTools() {
+  if (webChatToolsEnabled.value) {
+    cancelWebChatTools();
+    return;
+  }
+  const sessionId = currSessionId.value || (await newSession());
+  const tokens = await requestWebChatStepUp(sessionId);
+  if (tokens) webChatStepUpTokens.value = tokens;
+}
+
+function cancelWebChatTools() {
+  cancelStepUp();
+  webChatStepUpTokens.value = null;
+}
+
+function handleChatConfigChange(payload: {
+  configId: string;
+  agentRunnerType: string;
+}) {
+  const configId = payload.configId || 'default';
+  const previousConfigId = activeConfigId.value;
+  activeConfigId.value = configId;
+  if (!previousConfigId || previousConfigId === configId) return;
+  // A proof is bound to the config route as well as the WebChat session.
+  // Clear it immediately when the user changes the selected profile instead
+  // of relying on a later authorization failure.
+  cancelWebChatTools();
 }
 
 function buildOutgoingParts(text: string): MessagePart[] {

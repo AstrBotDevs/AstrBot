@@ -71,6 +71,7 @@ interface CreateLocalExchangeOptions {
 
 interface UseMessagesOptions {
   currentSessionId: Ref<string>;
+  webchatStepUpTokens?: Ref<Record<string, string> | null>;
   onSessionsChanged?: () => Promise<void> | void;
   onStreamUpdate?: (sessionId: string) => void;
   onMcpInputRequest?: (
@@ -326,6 +327,9 @@ export function useMessages(options: UseMessagesOptions) {
     skipUserHistory = false,
     llmCheckpointId = null,
   }: SendMessageStreamOptions) {
+    // Step-up credentials are one-time per action.  Take the in-memory bundle
+    // at run creation so a later chat cannot replay an already consumed proof.
+    const stepUpTokens = takeWebChatStepUpTokens();
     if (transport === 'websocket') {
       startWebSocketStream(
         sessionId,
@@ -336,6 +340,7 @@ export function useMessages(options: UseMessagesOptions) {
         enableStreaming,
         selectedProvider,
         selectedModel,
+        stepUpTokens,
       );
       return;
     }
@@ -350,7 +355,19 @@ export function useMessages(options: UseMessagesOptions) {
       selectedModel,
       skipUserHistory,
       llmCheckpointId,
+      stepUpTokens,
     );
+  }
+
+  function takeWebChatStepUpTokens(): Record<string, string> | undefined {
+    const tokens = options.webchatStepUpTokens?.value || undefined;
+    return tokens;
+  }
+
+  function clearWebChatStepUpTokens() {
+    if (options.webchatStepUpTokens) {
+      options.webchatStepUpTokens.value = null;
+    }
   }
 
   async function editMessage(
@@ -418,6 +435,7 @@ export function useMessages(options: UseMessagesOptions) {
     };
     messagesBySession[sessionId].push(botRecord);
 
+    const stepUpTokens = takeWebChatStepUpTokens();
     startSseStream(
       sessionId,
       messageId,
@@ -429,6 +447,7 @@ export function useMessages(options: UseMessagesOptions) {
       selectedModel,
       true,
       sourceRecord.llm_checkpoint_id || null,
+      stepUpTokens,
     );
   }
 
@@ -462,6 +481,7 @@ export function useMessages(options: UseMessagesOptions) {
       botVisible: true,
     };
     activeConnections[connection.messageId] = connection;
+    const stepUpTokens = takeWebChatStepUpTokens();
 
     try {
       const response = await fetchWithAuth(
@@ -474,6 +494,7 @@ export function useMessages(options: UseMessagesOptions) {
           body: JSON.stringify({
             selected_provider: selectedProvider,
             selected_model: selectedModel,
+            _webchat_step_up_tokens: stepUpTokens,
           }),
           signal: abort.signal,
         },
@@ -486,6 +507,7 @@ export function useMessages(options: UseMessagesOptions) {
         const payload = await response.json().catch(() => null);
         throw new Error(payload?.message || 'Regenerate failed.');
       }
+      clearWebChatStepUpTokens();
       await readSseStream(response.body, (payload) => {
         processStreamPayload(botRecord, payload, undefined, connection);
         options.onStreamUpdate?.(sessionId);
@@ -522,6 +544,9 @@ export function useMessages(options: UseMessagesOptions) {
     Object.keys(chatWebSockets).forEach((sessionId) => {
       delete chatWebSockets[sessionId];
     });
+    if (options.webchatStepUpTokens) {
+      options.webchatStepUpTokens.value = null;
+    }
   }
 
   function normalizeHistoryRecord(record: HistoryRecord): ChatRecord {
@@ -573,6 +598,7 @@ export function useMessages(options: UseMessagesOptions) {
     selectedModel: string,
     skipUserHistory = false,
     llmCheckpointId: string | null = null,
+    stepUpTokens?: Record<string, string>,
   ) {
     const abort = new AbortController();
     const connection: ActiveConnection = {
@@ -600,6 +626,7 @@ export function useMessages(options: UseMessagesOptions) {
         selected_model: selectedModel,
         _skip_user_history: skipUserHistory,
         _llm_checkpoint_id: llmCheckpointId || undefined,
+        _webchat_step_up_tokens: stepUpTokens,
       }),
       signal: abort.signal,
     })
@@ -607,6 +634,7 @@ export function useMessages(options: UseMessagesOptions) {
         if (!response.ok || !response.body) {
           throw new Error(`SSE connection failed: ${response.status}`);
         }
+        clearWebChatStepUpTokens();
         await readSseStream(response.body, (payload) => {
           processStreamPayload(botRecord, payload, userRecord, connection);
           options.onStreamUpdate?.(sessionId);
@@ -722,6 +750,7 @@ export function useMessages(options: UseMessagesOptions) {
     enableStreaming: boolean,
     selectedProvider: string,
     selectedModel: string,
+    stepUpTokens?: Record<string, string>,
   ) {
     const ws = getOrCreateChatWebSocket(sessionId);
 
@@ -748,6 +777,7 @@ export function useMessages(options: UseMessagesOptions) {
       enable_streaming: enableStreaming,
       selected_provider: selectedProvider,
       selected_model: selectedModel,
+      webchat_step_up_tokens: stepUpTokens,
     });
   }
 
@@ -1001,6 +1031,7 @@ export function useMessages(options: UseMessagesOptions) {
     }
     if (msgType === 'run_started') {
       if (connection) {
+        clearWebChatStepUpTokens();
         const runData = isRecord(data) ? data : {};
         connection.runId = String(runData.run_id || connection.messageId);
         ensureBotRecordVisible(connection);

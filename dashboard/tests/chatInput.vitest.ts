@@ -75,3 +75,24 @@ describe('ChatInput placeholders', () => {
     ).toBe('Project prompt');
   });
 });
+
+describe('ChatInput high-risk tools control', () => {
+  it('renders an icon-sized control and emits its toggle event', async () => {
+    const wrapper = mountWithVuetify(ChatInput, {
+      props: { ...baseProps, webChatToolsEnabled: false },
+    });
+
+    await flushPromises();
+
+    const control = wrapper.get('.high-risk-tools-btn');
+    expect(control.classes()).toContain('input-icon-btn');
+    expect(control.find('.v-icon').classes()).toContain(
+      'mdi-shield-key-outline',
+    );
+    expect(control.attributes('aria-label')).toBe('input.enableHighRiskTools');
+    expect(control.text()).not.toContain('Enable high-risk tools');
+
+    await control.trigger('click');
+    expect(wrapper.emitted('toggleWebChatTools')).toHaveLength(1);
+  });
+});

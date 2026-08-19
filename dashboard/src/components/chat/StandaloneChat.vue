@@ -182,6 +182,7 @@
         :session-id="currSessionId || null"
         :current-session="currentSession"
         :config-id="configId || 'default'"
+        :web-chat-tools-enabled="webChatToolsEnabled"
         send-shortcut="enter"
         @send="sendCurrentMessage"
         @stop="stopCurrentSession"
@@ -191,8 +192,19 @@
         @remove-file="removeFile"
         @paste-image="handlePaste"
         @file-select="handleFilesSelected"
+        @config-changed="handleChatConfigChange"
+        @toggle-web-chat-tools="toggleWebChatTools"
       />
     </section>
+
+    <DashboardStepUpDialog
+      :model-value="stepUpDialogOpen"
+      :loading="stepUpLoading"
+      :error-message="stepUpError"
+      @update:model-value="(value) => !value && cancelWebChatTools()"
+      @confirm="submitStepUp"
+      @cancel="cancelWebChatTools"
+    />
 
     <v-overlay
       v-model="imagePreview.visible"
@@ -213,6 +225,7 @@ import {
   onMounted,
   reactive,
   ref,
+  watch,
 } from 'vue';
 import { chatApi, configRouteApi, fileApi } from '@/api/v1';
 import { setCustomComponents } from 'markstream-vue';
@@ -226,6 +239,7 @@ import RefNode from '@/components/chat/message_list_comps/RefNode.vue';
 import ToolCallCard from '@/components/chat/message_list_comps/ToolCallCard.vue';
 import ToolCallItem from '@/components/chat/message_list_comps/ToolCallItem.vue';
 import ThemeAwareMarkdownCodeBlock from '@/components/shared/ThemeAwareMarkdownCodeBlock.vue';
+import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
 import {
   attachmentName,
   attachmentPresentation,
@@ -246,6 +260,7 @@ import type { Session } from '@/composables/useSessions';
 import { useModuleI18n } from '@/i18n/composables';
 import { useCustomizerStore } from '@/stores/customizer';
 import { buildWebchatUmoDetails } from '@/utils/chatConfigBinding';
+import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 
 const props = withDefaults(defineProps<{ configId?: string | null }>(), {
   configId: 'default',
@@ -267,6 +282,8 @@ const shouldStickToBottom = ref(true);
 const messagesContainer = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const imagePreview = reactive({ visible: false, url: '' });
+const webChatStepUpTokens = ref<Record<string, string> | null>(null);
+const webChatToolsEnabled = computed(() => webChatStepUpTokens.value !== null);
 
 const isDark = computed(() => customizer.uiTheme === 'AstrBotDark');
 const customMarkdownTags = ['ref'];
@@ -302,12 +319,46 @@ const {
   stopSession,
 } = useMessages({
   currentSessionId: currSessionId,
+  webchatStepUpTokens: webChatStepUpTokens,
   onStreamUpdate: () => {
     if (shouldStickToBottom.value) {
       scrollToBottom();
     }
   },
 });
+
+const {
+  dialogOpen: stepUpDialogOpen,
+  loading: stepUpLoading,
+  errorMessage: stepUpError,
+  webChatExpiresAt: webChatStepUpExpiresAt,
+  requestWebChatStepUp,
+  submitStepUp,
+  cancelStepUp,
+} = useDashboardStepUp();
+
+watch(webChatStepUpExpiresAt, (expiresAt) => {
+  if (expiresAt === null) webChatStepUpTokens.value = null;
+});
+
+watch(currSessionId, (sessionId, previousSessionId) => {
+  if (!previousSessionId || sessionId === previousSessionId) return;
+  cancelStepUp();
+  webChatStepUpTokens.value = null;
+});
+
+const activeConfigId = ref<string | null>(null);
+
+watch(
+  () => props.configId,
+  (configId, previousConfigId) => {
+    const nextConfigId = configId || 'default';
+    if (nextConfigId === (previousConfigId || 'default')) return;
+    activeConfigId.value = nextConfigId;
+    cancelStepUp();
+    webChatStepUpTokens.value = null;
+  },
+);
 
 const transportMode = computed<TransportMode>(() =>
   (localStorage.getItem('chat.transportMode') as TransportMode) === 'websocket'
@@ -374,6 +425,32 @@ async function sendCurrentMessage() {
     userRecord,
     botRecord,
   });
+}
+
+async function toggleWebChatTools() {
+  if (webChatToolsEnabled.value) {
+    cancelWebChatTools();
+    return;
+  }
+  const sessionId = await ensureSession();
+  const tokens = await requestWebChatStepUp(sessionId);
+  if (tokens) webChatStepUpTokens.value = tokens;
+}
+
+function cancelWebChatTools() {
+  cancelStepUp();
+  webChatStepUpTokens.value = null;
+}
+
+function handleChatConfigChange(payload: {
+  configId: string;
+  agentRunnerType: string;
+}) {
+  const configId = payload.configId || 'default';
+  const previousConfigId = activeConfigId.value;
+  activeConfigId.value = configId;
+  if (!previousConfigId || configId === previousConfigId) return;
+  cancelWebChatTools();
 }
 
 function buildOutgoingParts(text: string): MessagePart[] {

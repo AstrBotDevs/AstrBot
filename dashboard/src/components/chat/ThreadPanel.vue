@@ -91,11 +91,13 @@ const props = defineProps<{
   thread: ChatThread | null;
   isDark: boolean;
   deleting?: boolean;
+  webChatStepUpTokens?: Record<string, string> | null;
 }>();
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean];
   delete: [thread: ChatThread];
+  'consume-step-up': [];
 }>();
 
 const { tm } = useModuleI18n('features/chat');
@@ -164,6 +166,7 @@ async function send() {
 
   const abort = new AbortController();
   sending.value = true;
+  const stepUpTokens = props.webChatStepUpTokens || undefined;
   try {
     const response = await fetchWithAuth(
       chatApi.sendThreadMessageUrl(props.thread.thread_id),
@@ -175,6 +178,7 @@ async function send() {
         body: JSON.stringify({
           message: [{ type: 'plain', text }],
           enable_streaming: true,
+          _webchat_step_up_tokens: stepUpTokens,
         }),
         signal: abort.signal,
       },
@@ -182,6 +186,7 @@ async function send() {
     if (!response.ok || !response.body) {
       throw new Error(`Thread request failed: ${response.status}`);
     }
+    emit('consume-step-up');
     await readSseStream(response.body, (payload) => {
       processPayload(threadBotRecord, threadUserRecord, payload);
       scrollToBottom();

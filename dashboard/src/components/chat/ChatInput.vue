@@ -233,6 +233,28 @@
             </template>
             <span>{{ props.tokenUsage?.tooltip }}</span>
           </v-tooltip>
+          <v-btn
+            @click="$emit('toggleWebChatTools')"
+            icon
+            variant="text"
+            class="input-icon-btn high-risk-tools-btn"
+            :color="props.webChatToolsEnabled ? 'warning' : undefined"
+            :disabled="props.disabled"
+            :aria-label="
+              props.webChatToolsEnabled
+                ? tm('input.disableHighRiskTools')
+                : tm('input.enableHighRiskTools')
+            "
+          >
+            <v-icon icon="mdi-shield-key-outline" size="24" />
+            <v-tooltip activator="parent" location="top">
+              {{
+                props.webChatToolsEnabled
+                  ? tm('input.disableHighRiskTools')
+                  : tm('input.enableHighRiskTools')
+              }}
+            </v-tooltip>
+          </v-btn>
           <!-- <v-btn @click="$emit('openLiveMode')"
                         icon
                         variant="text"
@@ -352,6 +374,7 @@ interface Props {
   showProviderSelector?: boolean;
   tokenUsage?: TokenUsageInfo | null;
   placeholder?: string;
+  webChatToolsEnabled?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -363,6 +386,7 @@ const props = withDefaults(defineProps<Props>(), {
   sendShortcut: 'shift_enter',
   showProviderSelector: true,
   tokenUsage: null,
+  webChatToolsEnabled: false,
 });
 
 const emit = defineEmits<{
@@ -379,6 +403,8 @@ const emit = defineEmits<{
   fileSelect: [files: FileList];
   clearReply: [];
   openLiveMode: [];
+  toggleWebChatTools: [];
+  'config-changed': [payload: { configId: string; agentRunnerType: string }];
 }>();
 
 const { tm } = useModuleI18n('features/chat');
@@ -884,6 +910,7 @@ function handleConfigChange(payload: {
     currentConfigId.value = payload.configId;
     void fetchCommands();
   }
+  emit('config-changed', payload);
 }
 
 function getCurrentSelection() {

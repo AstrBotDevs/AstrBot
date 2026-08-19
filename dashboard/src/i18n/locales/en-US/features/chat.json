@@ -8,6 +8,8 @@
     "clear": "Clear",
     "upload": "Upload File",
     "voice": "Voice Input",
+    "enableHighRiskTools": "Enable high-risk tools",
+    "disableHighRiskTools": "Disable high-risk tools",
     "recordingPrompt": "Recording, please speak...",
     "chatPrompt": "Let's chat!",
     "dropToUpload": "Drop files to upload",
