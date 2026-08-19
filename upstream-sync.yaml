@@ -5,14 +5,16 @@ upstream:
   branch: master
 
 last_synced:
-  commit: c4616578d610c237766a5d497f9db4b607d1c75b
-  synced_at_utc: 2026-08-18T21:28:15Z
-  sync_method: reviewed-skip
-  source_pr: '9720'
+  commit: 9c895838d3c6cd7ddad3cc94bb38718ce90b0281
+  synced_at_utc: 2026-08-19T13:21:21Z
+  sync_method: manual-adaptation
+  source_pr: '9725, 9721, 9702'
   note: >-
-    Reviewed c4616578d610c237766a5d497f9db4b607d1c75b, the self-hosted T2I
-    setup instructions (#9720). Skipped it because this fork removed the
-    remote T2I strategy, endpoint, and matching pages in 824c6cdc in favor of
-    local Playwright rendering. Validation passed: upstream interval inspection
-    and ledger validation. No upstream version bump occurred, so 4.27.3 and
-    its changelog remain unchanged.
+    Reviewed the interval from 8819da3f67ffe6282c4808d654e6c1dba47460f2
+    through 9c895838d3c6cd7ddad3cc94bb38718ce90b0281. Adapted the WeCom KF
+    open_kfid fallback, LLM metadata fallback endpoint (#9725), CodeQL
+    action pin (#9721), and Telegram audio Record conversion (#9702) against
+    the fork's runtime-owned catalog, immutable Action SHA, and lazy media
+    resolver boundaries. Validation passed: focused pytest coverage and
+    make check-yaml. No upstream version bump occurred in this interval, so
+    4.27.3 and its changelog remain unchanged.
