@@ -542,6 +542,47 @@ async def test_wecom_convert_wechat_kf_message_text_builds_friend_message(
 
 
 @pytest.mark.asyncio
+async def test_wecom_convert_wechat_kf_message_accepts_openkfid_alias():
+    adapter = _adapter()
+    adapter._is_duplicate_wechat_kf_text_message = MagicMock(return_value=False)
+
+    result = await adapter.convert_wechat_kf_message(
+        {
+            "msgtype": "text",
+            "OpenKfId": "kf-alias",
+            "external_userid": "user-alias",
+            "msgid": "msg-alias",
+            "text": {"content": "alias"},
+        }
+    )
+
+    assert result is None
+    adapter.handle_msg.assert_awaited_once()
+    abm = adapter.handle_msg.await_args.args[0]
+    assert abm.self_id == "kf-alias"
+
+
+@pytest.mark.asyncio
+async def test_wecom_convert_wechat_kf_message_missing_kfid_uses_empty_self_id():
+    adapter = _adapter()
+    adapter._is_duplicate_wechat_kf_text_message = MagicMock(return_value=False)
+
+    result = await adapter.convert_wechat_kf_message(
+        {
+            "msgtype": "text",
+            "external_userid": "user-missing",
+            "msgid": "msg-missing",
+            "text": {"content": "missing"},
+        }
+    )
+
+    assert result is None
+    adapter.handle_msg.assert_awaited_once()
+    abm = adapter.handle_msg.await_args.args[0]
+    assert abm.self_id == ""
+
+
+@pytest.mark.asyncio
 async def test_wecom_convert_wechat_kf_message_blank_text_still_dispatches_plain_message():
     adapter = _adapter()
     adapter._is_duplicate_wechat_kf_text_message = MagicMock(return_value=False)

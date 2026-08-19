@@ -451,7 +451,7 @@ class WecomPlatformAdapter(Platform):
         abm.raw_message = msg
         abm.raw_message["_wechat_kf_flag"] = None  # 方便处理
         setattr(abm, "temporary_file_paths", [])
-        abm.self_id = msg["open_kfid"]
+        abm.self_id = msg.get("open_kfid") or msg.get("OpenKfId") or ""
         abm.sender = MessageMember(external_userid, external_userid)
         abm.session_id = external_userid
         abm.type = MessageType.FRIEND_MESSAGE
