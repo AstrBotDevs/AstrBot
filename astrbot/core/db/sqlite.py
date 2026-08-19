@@ -1379,6 +1379,34 @@ class SQLiteDatabase(BaseDatabase):
             result = await session.execute(query)
             return result.scalar_one_or_none()
 
+    def get_preference_sync(self, scope, scope_id, key) -> dict | None:
+        """Synchronous point query for a single preference value.
+
+        Uses a dedicated stdlib sqlite3 connection instead of the async
+        SQLAlchemy pool, so deprecated synchronous SharedPreferences APIs never
+        wait on (or deadlock against) the event-loop-owned pool. The database
+        runs in WAL mode, so this short index lookup can read concurrently with
+        the async writer.
+
+        Returns:
+            The stored value dict (e.g. ``{"val": ...}``), or None if missing.
+        """
+        import sqlite3
+
+        conn = sqlite3.connect(self.db_path, timeout=30)
+        try:
+            row = conn.execute(
+                "SELECT value FROM preferences "
+                "WHERE scope = ? AND scope_id = ? AND key = ?",
+                (scope, scope_id, key),
+            ).fetchone()
+            if row is None:
+                return None
+            value = row[0]
+            return json.loads(value) if isinstance(value, str) else value
+        finally:
+            conn.close()
+
     async def get_preferences(self, scope=None, scope_id=None, key=None):
         """Get preferences, optionally filtered by scope, scope ID, or key."""
         async with self.get_db() as session:
