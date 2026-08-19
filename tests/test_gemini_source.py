@@ -10,12 +10,8 @@ from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.gemini_source import ProviderGoogleGenAI
 
 
-def _make_gemini_provider() -> ProviderGoogleGenAI:
-    return ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
-
-
 def test_gemini_prepare_conversation_removes_leading_model_content():
-    provider = _make_gemini_provider()
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
 
     contents = provider._prepare_conversation(
         {
@@ -33,7 +29,7 @@ def test_gemini_prepare_conversation_removes_leading_model_content():
 
 
 def test_gemini_prepare_conversation_keeps_normal_user_first_history():
-    provider = _make_gemini_provider()
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
 
     contents = provider._prepare_conversation(
         {
@@ -52,6 +48,26 @@ def test_gemini_prepare_conversation_keeps_normal_user_first_history():
     ]
     assert contents[-1].parts is not None
     assert contents[-1].parts[-1].text == "current user turn"
+
+
+def test_gemini_prepare_conversation_preserves_user_model_history():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    contents = provider._prepare_conversation(
+        {
+            "messages": [
+                {"role": "user", "content": "user turn"},
+                {"role": "assistant", "content": "assistant turn"},
+            ]
+        }
+    )
+
+    assert [type(content) for content in contents] == [
+        types.UserContent,
+        types.ModelContent,
+    ]
+    assert contents[-1].parts is not None
+    assert contents[-1].parts[-1].text == "assistant turn"
 
 
 def test_gemini_empty_output_raises_empty_model_output_error():
