@@ -6,7 +6,7 @@ from sys import maxsize
 import astrbot.api.message_components as Comp
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.message_components import Image, Plain
+from astrbot.api.message_components import Image, Json, Plain
 from astrbot.api.provider import LLMResponse, ProviderRequest
 from astrbot.core import logger
 from astrbot.core.message.message_event_result import MessageChain
@@ -197,10 +197,10 @@ class Main(star.Star):
     async def on_message(self, event: AstrMessageEvent):
         """群聊上下文感知"""
         message_components = _iter_message_components(event)
-        has_image_or_plain = False
+        has_context_content = False
         for comp in message_components:
-            if isinstance(comp, Plain) or isinstance(comp, Image):
-                has_image_or_plain = True
+            if isinstance(comp, Plain | Image | Json):
+                has_context_content = True
                 break
 
         group_context_enabled = False
@@ -210,7 +210,7 @@ class Main(star.Star):
             except BaseException as e:
                 logger.error(f"group chat context: {e}")
 
-        if group_context_enabled and self.group_chat_context and has_image_or_plain:
+        if group_context_enabled and self.group_chat_context and has_context_content:
             need_active = await self.group_chat_context.need_active_reply(event)
 
             group_icl_enable = self.context.get_config(umo=event.unified_msg_origin)[
