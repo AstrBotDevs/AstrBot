@@ -49,7 +49,9 @@ Misskey maps `toRoom.ownerId` only when it matches the current room and
 sender. Lark, DingTalk, Kook, Slack, Mattermost, and Satori stay
 `member`/`unknown` because they have no stable inbound owner/admin field.
 WebChat, QQ Official, WeChat Official Account, WeCom, WeCom AI, individual
-WeChat, and Line never elevate. These facts never create `instance_operator`,
+WeChat, and Line never elevate from platform facts. A Dashboard-authenticated
+WebChat may use the six explicitly listed instance tools only with a fresh
+WebChat step-up; these facts never create `instance_operator`,
 `operator`, or `root`. Dashboard requests use stable account principals;
 account CRUD is protected by root bindings and step-up. This fork has no existing
 users to migrate. It performs no legacy permission migration or configuration
@@ -59,7 +61,7 @@ and `disable_builtin_commands`, and runtime authorization never reads them.
 WebChat/Open API `username` remains a compatibility field and is never treated
 as an authenticated root/operator identity. Dashboard-authenticated WebChat
 uses that account's role bindings, including root and operator; anonymous
-WebChat stays guest. High-risk Dashboard writes,
+WebChat stays guest. Global high-risk Dashboard writes,
 credentials, identity changes, system operations, and sensitive tools require
 fresh Dashboard step-up proof and produce redacted audit records. Cross-platform
 IM elevation is a later design and has no runtime endpoint in v1.
@@ -258,15 +260,16 @@ update/restart/install never inherit silently from a parent action.
 
 ### 19.8 Typical policy and entry-point matrix
 
-| Entry/resource                 | Allowed relation or condition                                              | Additional requirements                                        |
-| ------------------------------ | -------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| Current IM session             | owner/admin/member; instance operator or global operator/root              | resource equals `origin_session_resource_id`                   |
-| Session conversation/memory    | session owner/admin/member; instance operator; global operator/root        | service-layer object filtering                                 |
-| Provider config/credentials    | instance operator, operator, root                                          | Dashboard only; credential writes need step-up; reads redacted |
-| Plugin catalog and actions     | extension relationship; declared plugin-owned action                       | action still calls core authorization                          |
-| API-key request                | explicit action/resource capability for that key; no role binding required | all high-risk actions denied                                   |
-| Agent/Computer/MCP/local tools | original caller's authorization on the target resource                     | Persona/plugin/risk constraints only when applicable           |
-| Export/download/update/restart | explicit high-risk action                                                  | Dashboard step-up; IM, plugin, agent, and API key denied       |
+| Entry/resource                 | Allowed relation or condition                                              | Additional requirements                                                |
+| ------------------------------ | -------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Current IM session             | owner/admin/member; instance operator or global operator/root              | resource equals `origin_session_resource_id`                           |
+| Session conversation/memory    | session owner/admin/member; instance operator; global operator/root        | service-layer object filtering                                         |
+| Provider config/credentials    | instance operator, operator, root                                          | Dashboard only; credential writes need step-up; reads redacted         |
+| Plugin catalog and actions     | extension relationship; declared plugin-owned action                       | action still calls core authorization                                  |
+| API-key request                | explicit action/resource capability for that key; no role binding required | all high-risk actions denied                                           |
+| Agent/Computer/MCP/local tools | original caller's authorization on the target resource                     | Persona/plugin/risk constraints only when applicable                   |
+| Instance WebChat tools         | six explicit `tool.*` actions                                              | `instance_operator+` + WebChat step-up + current session/config        |
+| Export/download/update/restart | explicit high-risk action                                                  | Dashboard-only step-up; WebChat, IM, plugin, agent, and API key denied |
 
 List, search, batch export, and download endpoints filter objects in the
 service/query layer. Batch step-up binds the complete, sorted resource set to
@@ -299,14 +302,24 @@ runtime compatibility shim.
 
 ### 19.10 WebChat, Dashboard, and step-up
 
-v2.0 retains Dashboard-only step-up for high-risk operations. The credential is
-bound to the account/session, action, exact resource, config, source, and
-policy version; it is short-lived, single-use, and atomically consumed. The
-narrow current-session IM member-management exception remains limited to its
-origin session. Dashboard-authenticated WebChat uses the signed-in account's
-role bindings; anonymous WebChat remains guest. Plugins, agents, MCP, and API
-keys cannot execute high-risk actions, and executable credentials are never
-sent to public groups.
+v2.0 retains Dashboard-only step-up for global control-plane operations. A
+separate `/authorization/webchat-step-up` flow re-verifies password/TOTP over
+authenticated Dashboard HTTP and returns an in-memory bundle of short-lived,
+single-use proofs. Each proof is bound to `dashboard-account:<account_id>`, the
+current Dashboard `sid`, one allowed tool action, the canonical WebChat UMO,
+its config, and the WebChat source/context digest. The service atomically
+consumes each proof once and caches trusted consumption only inside the current
+event/run and never beyond the proof's own expiry, so one run may call multiple
+tools without creating a permanent session grant. Background continuation runs
+receive no proof or consumed cache. Anonymous WebChat, caller-declared usernames, and API Keys
+never inherit Dashboard roles. Plugins, agents, MCP, and tools retain their
+final authorization checks and sandbox restrictions.
+
+Live Voice currently remains outside this WebChat high-risk grant. Its audio
+run uses an ephemeral conversation resource rather than the persistent session
+bound by the HTTP proof endpoint, so the transport deliberately drops any
+regular WebChat proof and high-risk tool calls remain denied until an equivalent
+session-bound voice flow is designed and tested.
 
 ### 19.11 Implementation and release gates
 
@@ -348,8 +361,9 @@ not deleted blindly.
 7. Lists, searches, exports, downloads, and bulk writes enforce object-level authorization.
 8. Plugins, agents, MCP, Computer Tool, and local tools cannot bypass or elevate
    core authorization.
-9. High-risk Dashboard operations require exact one-time step-up; IM, plugins,
-   agents, and API keys are denied.
+9. Global high-risk operations require exact one-time Dashboard step-up;
+   WebChat instance tools require the separate WebChat proof flow, while IM,
+   plugins, agents, and API keys cannot self-elevate.
 10. Relationship changes, step-up, denials, and high-risk allows produce
     redacted, queryable audit events.
 11. Dashboard, WebSocket, SSE, download, plugin, and tool paths have matrix tests.

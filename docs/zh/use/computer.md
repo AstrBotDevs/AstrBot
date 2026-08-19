@@ -73,7 +73,7 @@ data/workspaces/{normalized_umo}/notes/todo.txt
 - `tool.file_write`
 - `tool.browser_control`
 
-`tool.file_read` 对当前会话的 member 及以上开放，但仍受路径约束。`tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.browser_control` 和 `tool.computer_use` 是高风险动作：只允许 Dashboard 控制面在一次性 step-up 后执行，IM、插件、Agent 和 API Key 一律拒绝。跨平台 IM elevation 尚未实现，不要把它当成已经存在的审批通道。
+`tool.file_read` 对当前会话的 member 及以上开放，但仍受路径约束。`tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.browser_control` 和 `tool.computer_use` 是高风险动作：已认证 Dashboard 驱动的 WebChat 仅可在当前 session/config 内，经 WebChat 一次性 step-up 后使用；全局控制面仍 Dashboard-only，匿名 WebChat、IM、插件、Agent 和 API Key 一律不会继承 Dashboard 角色。沙箱、路径和 Persona/工具声明限制仍然有效。
 
 `local` 模式下，普通会话成员可以读取：
 

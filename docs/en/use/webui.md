@@ -79,6 +79,33 @@ ChatUI supports these common workflows:
 - Edit a user message and continue generation from that point, or start a thread from a specific excerpt.
 - Switch between streaming/normal response modes and SSE/WebSocket transport modes.
 
+### High-risk tools in ChatUI
+
+The shield-key button beside the message box enables high-risk tools for one
+ChatUI run. It is available only when the signed-in Dashboard account has an
+`instance_operator` (or stronger) binding for the selected configuration
+profile. The confirmation dialog asks for the current password or TOTP code.
+
+The confirmation grants only the following instance-scoped tool actions:
+
+- local shell and Python execution;
+- local file writes;
+- browser and Computer Use control;
+- write-capable MCP tools.
+
+The proof is held only in browser memory and is bound to the active WebChat
+conversation and configuration profile. It is used once when the next run
+starts, then discarded; change the conversation or profile, wait for it to
+expire, or click the button again to disable it. Enable it again before another
+high-risk run.
+
+This does not grant access to global Dashboard operations such as changing
+accounts, providers, plugins, system settings, exports, or restarts. The
+account's Persona, tool, sandbox, and path restrictions still apply. Anonymous
+WebChat, API keys, IM messages, plugins, and background continuations cannot
+reuse this authorization. Live Voice is also excluded because it does not use
+the same persistent ChatUI conversation.
+
 > [!NOTE]
 > To keep message delivery ordered, keep only one ChatUI page open for the same browser session. If you open chat in multiple tabs, the system may ask you to reconnect.
 

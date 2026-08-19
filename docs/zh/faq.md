@@ -116,7 +116,7 @@ uv run python scripts/sync_dashboard_dist.py
 - `sandbox`：使用配置的 Shipyard Neo 或 CUA 沙箱；
 - `none`：关闭，默认值。
 
-电脑能力现在按工具动作经过统一授权服务检查（例如 `tool.computer_use`、`tool.local_exec` 和 `tool.file_write`），高风险动作只允许 Dashboard 一次性 step-up。IM elevation 尚未实现。沙箱只提供运行隔离，不会改变授权策略。详见 [使用电脑能力](./use/computer) 和 [Agent 沙箱](./use/astrbot-agent-sandbox)。
+电脑能力现在按工具动作经过统一授权服务检查（例如 `tool.computer_use`、`tool.local_exec` 和 `tool.file_write`）。已认证 Dashboard 驱动的 WebChat 在当前 session/config 内，经 WebChat 一次性 step-up 后可使用实例级高风险工具；全局控制面仍 Dashboard-only，匿名 WebChat、IM、插件、Agent 和 API Key 不会继承 Dashboard 角色。沙箱只提供运行隔离，不会改变授权策略。详见 [使用电脑能力](./use/computer) 和 [Agent 沙箱](./use/astrbot-agent-sandbox)。
 
 ### T2I 中文乱码
 

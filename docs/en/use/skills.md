@@ -58,4 +58,4 @@ Currently, AstrBot provides two execution environments:
 You can select the default execution environment on the `Config` page under "Computer Use".
 
 > [!NOTE]
-> Please note: if you select `Local` as the execution environment, Shell, Python, and local file writes are authorized as `tool.local_exec`, `tool.python_exec`, and `tool.file_write`. These high-risk actions require Dashboard step-up. IM, plugins, agents, and API keys are denied. Regular users receive a restriction message such as `Sorry, I cannot execute code on your local environment due to permission restrictions.`.
+> Please note: if you select `Local` as the execution environment, Shell, Python, and local file writes are authorized as `tool.local_exec`, `tool.python_exec`, and `tool.file_write`. An authenticated Dashboard-driven WebChat may use these high-risk actions in its current session/config after WebChat step-up; global control-plane actions remain Dashboard-only, and anonymous WebChat, IM, plugins, agents, and API keys do not inherit Dashboard roles. Regular users receive a restriction message such as `Sorry, I cannot execute code on your local environment due to permission restrictions.`.

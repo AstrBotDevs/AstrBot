@@ -75,7 +75,7 @@ Computer Use uses the unified authorization service. There is no “Require Astr
 - `tool.file_write`
 - `tool.browser_control`
 
-`tool.file_read` is available to current-session members and above, still subject to path limits. `tool.local_exec`, `tool.python_exec`, `tool.file_write`, `tool.browser_control`, and `tool.computer_use` are high-risk: only the Dashboard control plane may execute them after a one-time step-up. IM, plugins, agents, and API keys are denied. Cross-platform IM elevation is not implemented; do not treat it as an existing approval channel.
+`tool.file_read` is available to current-session members and above, still subject to path limits. `tool.local_exec`, `tool.python_exec`, `tool.file_write`, `tool.browser_control`, and `tool.computer_use` are high-risk: an authenticated Dashboard-driven WebChat may use them only in its current session/config after the WebChat one-time step-up. Global control-plane actions remain Dashboard-only; anonymous WebChat, IM, plugins, agents, and API keys do not inherit Dashboard roles. Sandbox, path, Persona, and declared-tool restrictions still apply.
 
 In `local` mode, ordinary session members may read:
 

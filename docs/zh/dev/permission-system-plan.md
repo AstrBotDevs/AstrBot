@@ -84,7 +84,7 @@ guest                                 未认证或受限作用域
 - Telegram：仅当 Update/ChatMember 已带 `status` 时映射。不调用 `getChatMember`。
 - Misskey：仅当入站 `toRoom.ownerId` 与当前房间、发送者一致时映射 `owner`。
 - Lark / DingTalk / Kook / Slack / Mattermost / Satori：入站无稳定群主/管理员字段，保持默认 `member`，测试锁住不提升。
-- WebChat / QQ Official / 微信公众号 / 企业微信 / WeCom AI / 个微 / Line：明确不接线。WebChat `username` 仍是 caller-declared。
+- QQ Official / 微信公众号 / 企业微信 / WeCom AI / 个微 / Line：不从平台事实提升权限。Dashboard 已认证 WebChat 仅可在新鲜 WebChat step-up 后使用六个实例级工具 action：`tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.browser_control`、`tool.mcp_write`、`tool.computer_use`；WebChat `username` 仍是 caller-declared。
 - Computer Use：`tool.computer_use` / `tool.local_exec` / `tool.file_write` 等统一授权。`computer_use_require_admin` 无运行时语义；高风险仅 Dashboard step-up。
 - API Key：scope 显式映射到 action。`NULL` 按冻结的 `DEFAULT_API_KEY_SCOPES` 展开，`*` 是历史 wildcard。高风险动作对 API Key 一律拒绝。
 
@@ -98,7 +98,7 @@ guest                                 未认证或受限作用域
 2. 作用域明确：群主/群管理员只影响当前会话；`instance_operator` 只影响对应配置档；root/operator 是预留的全局控制面身份。
 3. 最小权限：区分“使用 Provider”和“修改 Provider 凭据”，区分“查看数据”和“导出全部数据”。
 4. 统一入口：内置命令、Dashboard、WebChat、API Key、工具和插件都调用同一个授权服务。
-5. 可 step-up、可审计：第一阶段使用 Dashboard 密码/TOTP step-up；跨平台一次性提权凭证属于后续阶段。拒绝和高风险操作必须可审计。
+5. 可 step-up、可审计：Dashboard 控制面和 Dashboard 驱动 WebChat 分别使用密码/TOTP step-up；拒绝和高风险操作必须可审计。
 6. 无迁移扩权：本分支不从旧 `admins_id`、命令权限或工具权限创建授权绑定。
 7. 默认安全：缺少主体、资源或策略时默认拒绝；平台角色无法自动产生 `instance_operator`、global operator 或 root。
 
@@ -293,7 +293,7 @@ provider.credentials.write
 
 - Dashboard JWT session 解析为 `DashboardPrincipal(username, sid, jti, account_id, auth_strength, issued_at)`；业务代码不能凭 `username == "astrbot"` 推断 root。
 - Dashboard 控制面身份来自受保护的账户表和角色绑定；账户 CRUD 由 root 权限和 step-up 保护。
-- Dashboard 驱动的 WebChat 请求保留控制面认证主体与 caller-declared username 两个字段，不能把后者当成普通 IM 身份或授权依据。已认证请求按该 `dashboard-account` 的角色绑定授权（含 root/operator）；高风险动作仍仅限 Dashboard 控制面并要求 step-up。
+- Dashboard 驱动的 WebChat 请求保留控制面认证主体与 caller-declared username 两个字段，不能把后者当成普通 IM 身份或授权依据。已认证请求按该 `dashboard-account` 的角色绑定授权；`instance_operator` 及以上仅能在当前 session/config、Persona 和工具自身限制下使用六个实例级工具，并必须通过 `/authorization/webchat-step-up` 的新鲜密码/TOTP proof。全局控制面高风险 action 仍 Dashboard-only。
 - 需要 step-up 的操作要求最近一次 TOTP/密码重新验证，不能只依赖仍未过期的长时 JWT。
 
 ### 8.2 WebChat
@@ -301,7 +301,7 @@ provider.credentials.write
 - WebChat 继续使用现有 `webchat!<username>!<conversation-id>` 会话编码；授权资源另行包装为 `(config_id, umo)`，不直接修改历史和路由数据。
 - 现有 WebChat/Open API 的 `username` 请求字段在兼容版本中继续存在，但仅作为 caller-declared identity；不能把它当作 JWT/API Key 的认证主体，也不能凭它获得管理员权限。
 - Dashboard 支持多个账户；匿名 WebChat 为 `guest`，已认证请求同时保留 `dashboard-session:<sid>` 和 `dashboard-account:<account_id>` 两个主体层次，并使用该账户的完整角色绑定。匿名或未挂上已验证 principal 的请求不得因同名 username 获得账户权限。
-- WebChat 内的提权批准应在同一已认证 Dashboard 会话或专用私聊会话完成，不能通过公开群消息确认。
+- WebChat step-up 只能由同一已认证 Dashboard 会话通过 HTTP 密码/TOTP endpoint 完成，不能通过 WebSocket 明文提交，也不能通过公开群消息确认。
 - 项目、会话、文件等现有 owner 校验保留，但改为授权服务的资源检查，避免“项目 owner 校验”和“系统权限校验”产生冲突。
 
 ### 8.3 API Key
@@ -342,7 +342,7 @@ event.platform_role_expires_at
 
 ## 10. Step-up 与后续提权协议
 
-v1 只实现 Dashboard 控制面的短时 step-up（重新验证密码/TOTP）和高风险动作拒绝审计，不实现跨平台 IM 审批。IM 私聊审批、控制面通知和一次性 nonce 属于后续设计，当前运行时不生成或接受 elevation 凭证。`requires_step_up` 表示“需要 Dashboard step-up”。
+当前实现对全局控制面保留 Dashboard-only 的短时 step-up（重新验证密码/TOTP），并为 Dashboard 驱动的 WebChat 实例工具提供独立的 `/authorization/webchat-step-up` 流程；不实现跨平台 IM 审批。`requires_step_up` 表示需要新鲜二次验证。
 
 第一阶段的 step-up 是一次性、短时、绑定 Dashboard session、动作、资源和上下文摘要的操作凭证，不是把用户永久加入管理员列表。第一阶段记录 `step-up_id`、新鲜度、验证方式和消费状态。以下字段仅作为后续设计记录，不属于 v1 持久化模型：
 
@@ -373,10 +373,10 @@ request_context_digest
 
 ### 10.2 第一阶段 step-up 流程
 
-1. 第一阶段仅允许 Dashboard 控制面提交需要 step-up 的动作；IM、插件和 Agent 遇到高风险动作直接拒绝并审计。
-2. Dashboard step-up 返回短 TTL（建议 5 分钟）的、绑定 session/action/resource/context digest 的一次性凭证；v1 不生成 IM 可执行 nonce。
+1. 全局高风险 action 仅允许 Dashboard 控制面提交；WebChat 只允许六个明确的实例工具 action。IM、插件和 API Key 遇到高风险动作仍直接拒绝并审计。
+2. Dashboard 与 WebChat step-up 均返回短 TTL（不超过 5 分钟）的、绑定 account、Dashboard sid、action、canonical UMO/config/source/context digest 的一次性凭证；WebChat 一次签发 action bundle，但每个 raw token 仍只消费一次，只在当前 event/run 内缓存已消费结果，且缓存绝不超过凭证本身的到期时间；后台续跑不会继承 proof 或该缓存。
 3. 服务端重新验证密码或 TOTP，并检查最近验证时间、Dashboard session、动作、资源和上下文摘要。
-4. step-up 凭证只能消费一次；动作、资源、session 或上下文变化均拒绝并审计。
+4. step-up 凭证只能原子消费一次；动作、资源、session、config、Dashboard sid 或上下文变化均拒绝并审计。raw token 只保存在前端内存和传输期间，不进入 URL、localStorage、日志、审计 metadata、聊天历史或模型上下文。
 
 ### 10.3 后续跨平台 elevation 流程（未实现）
 
@@ -861,15 +861,16 @@ tool.browser_control、tool.mcp_read、tool.mcp_write、tool.computer_use 和
 
 ### 19.8 典型策略和入口矩阵
 
-| 入口/资源                        | 允许的关系或条件                                                          | 必须额外满足                                     |
-| -------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------ |
-| 当前 IM session                  | owner/admin/member；instance operator 或 global operator/root             | resource == origin_session_resource_id           |
-| session 下的 conversation/memory | 该 session 的 owner/admin/member；instance operator；global operator/root | 服务层按对象过滤                                 |
-| Provider 配置/凭据               | instance operator、operator、root                                         | 仅 Dashboard；凭据写入需 step-up，读取脱敏       |
-| 插件目录与插件 Action            | extension 相关关系；插件自有 Action 需声明                                | Action 仍调用核心 authorize                      |
-| API Key 请求                     | 该 key 的显式 action/resource capability（不依赖角色绑定）                | 高风险 action 一律拒绝                           |
-| Agent/Computer/MCP/本地工具      | 原始调用者对目标 resource 的 action 授权                                  | Persona/插件声明/风险规则仅在适用时叠加          |
-| 导出、下载、更新、重启           | 明确的高风险 action                                                       | Dashboard step-up；IM、插件、Agent、API Key 拒绝 |
+| 入口/资源                        | 允许的关系或条件                                                          | 必须额外满足                                                   |
+| -------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| 当前 IM session                  | owner/admin/member；instance operator 或 global operator/root             | resource == origin_session_resource_id                         |
+| session 下的 conversation/memory | 该 session 的 owner/admin/member；instance operator；global operator/root | 服务层按对象过滤                                               |
+| Provider 配置/凭据               | instance operator、operator、root                                         | 仅 Dashboard；凭据写入需 step-up，读取脱敏                     |
+| 插件目录与插件 Action            | extension 相关关系；插件自有 Action 需声明                                | Action 仍调用核心 authorize                                    |
+| API Key 请求                     | 该 key 的显式 action/resource capability（不依赖角色绑定）                | 高风险 action 一律拒绝                                         |
+| Agent/Computer/MCP/本地工具      | 原始调用者对目标 resource 的 action 授权                                  | Persona/插件声明/风险规则仅在适用时叠加                        |
+| WebChat 实例级工具               | 六个明确的 `tool.*` action                                                | `instance_operator+` + WebChat step-up + 当前 session/config   |
+| 导出、下载、更新、重启           | 明确的高风险 action                                                       | Dashboard-only step-up；WebChat、IM、插件、Agent、API Key 拒绝 |
 
 列表、搜索、批量导出和下载都必须在 service/query 层执行对象级过滤；禁止先取全量
 数据再在 Dashboard 或插件层隐藏。批量变更的 step-up 必须绑定排序后的完整资源集合，
@@ -938,15 +939,21 @@ WebChat 的 username 仍可作为协议兼容字段，但永远不等于认证�
 guest；Dashboard 驱动的 WebChat 同时传递已认证 account/session 上下文，并按该
 账户的角色绑定授权。修改 username 不能改变权限。
 
-v2.0 只保留 Dashboard step-up：
+全局控制面继续使用 Dashboard step-up；Dashboard 驱动的 WebChat 实例工具使用
+独立的 `/authorization/webchat-step-up`：
 
-- 高风险 Dashboard 操作要求新鲜密码或 TOTP；
-- step-up 绑定 subject、Dashboard session、action、精确 resource、config、source
-  和 policy version，短 TTL、单次消费、原子更新；
+- 高风险 Dashboard 操作和 WebChat 工具都要求新鲜密码或 TOTP；
+- WebChat 返回内存中的 action token bundle；每个 token 绑定
+  `dashboard-account:<account_id>`、Dashboard `sid`、action、canonical UMO、config、
+  source/context digest，TTL 不超过 5 分钟，单次原子消费；同一 event/run 内只缓存未超过凭证到期时间的已消费结果，后台续跑不继承该缓存；
 - IM 仅保留当前 origin session 内受限的成员管理例外；不得借此操作其他会话、
   instance 或 global identity；
-- 插件、Agent、MCP 和 API Key 不能直接执行高风险动作；
+- WebChat 只有六个实例级工具 action 可用；插件、Agent、MCP 和 API Key 不能直接自我提权；
 - 不在公开群发送可执行凭证。
+- Live Voice 暂不纳入这组 WebChat 高风险授权：语音 run 使用独立的临时
+  conversation resource，而 HTTP endpoint 绑定的是持久 WebChat session。为避免
+  proof 跨 transport 重放，语音 transport 会主动丢弃普通 WebChat proof，高风险工具
+  继续拒绝，直到设计并测试等价的 session-bound voice 流程。
 
 跨平台提权作为独立 v2.1 设计，必须分离 request/approve/execute，并要求审批者同时
 拥有目标 action 和 resource 的授权；在协议、审计和回滚方案落地前不实现。
