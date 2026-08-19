@@ -141,6 +141,25 @@ export const useCommonStore = defineStore('common', {
         Authorization: `Bearer ${token}`,
       };
 
+      const scheduleReconnect = (error: unknown) => {
+        if (signal.aborted) {
+          return;
+        }
+        console.error('SSE error:', error);
+        this.sse_connected = false;
+        this.eventSource = null;
+        this.log_cache.push({
+          type: 'log',
+          level: 'ERROR',
+          time: Date.now() / 1000,
+          data: 'SSE Connection failed, retrying in 5 seconds...',
+          uuid: `error-${Date.now()}`,
+        });
+        setTimeout(() => {
+          void this.createEventSource();
+        }, 1000);
+      };
+
       fetchWithAuth(logApi.liveUrl(), {
         method: 'GET',
         headers,
@@ -225,25 +244,9 @@ export const useCommonStore = defineStore('common', {
             return reader.read().then(processStream);
           };
 
-          void reader.read().then(processStream);
+          void reader.read().then(processStream).catch(scheduleReconnect);
         })
-        .catch((error: unknown) => {
-          if (signal.aborted) {
-            return;
-          }
-          console.error('SSE error:', error);
-          this.log_cache.push({
-            type: 'log',
-            level: 'ERROR',
-            time: Date.now() / 1000,
-            data: 'SSE Connection failed, retrying in 5 seconds...',
-            uuid: `error-${Date.now()}`,
-          });
-          setTimeout(() => {
-            this.eventSource = null;
-            void this.createEventSource();
-          }, 1000);
-        });
+        .catch(scheduleReconnect);
 
       this.eventSource = controller;
     },

@@ -413,15 +413,16 @@ function getVersion() {
   statsApi
     .version()
     .then((res) => {
-      botCurrVersion.value = `v${res.data.data.version || ''}`;
+      const data = res.data?.status === 'error' ? null : res.data?.data;
+      if (!data || typeof data !== 'object') return;
+      botCurrVersion.value = `v${data.version || ''}`;
       commonStore.setAstrBotVersion(
-        res.data.data.version || '',
-        res.data.data?.dashboard_version || undefined,
+        data.version || '',
+        data.dashboard_version || undefined,
       );
-      const change_pwd_hint = res.data.data?.change_pwd_hint;
-      const md5_pwd_hint = res.data.data?.md5_pwd_hint;
-      const password_upgrade_required =
-        res.data.data?.password_upgrade_required;
+      const change_pwd_hint = data.change_pwd_hint;
+      const md5_pwd_hint = data.md5_pwd_hint;
+      const password_upgrade_required = data.password_upgrade_required;
       if (change_pwd_hint || md5_pwd_hint || password_upgrade_required) {
         dialog.value = true;
         accountWarning.value = true;
@@ -474,9 +475,15 @@ function checkUpdate() {
   updatesApi
     .check()
     .then((res) => {
-      hasNewVersion.value = res.data.data.has_new_version;
+      const data = res.data?.status === 'error' ? null : res.data?.data;
+      if (!data || typeof data !== 'object') {
+        hasNewVersion.value = false;
+        updateStatus.value = res.data?.message || '';
+        return;
+      }
+      hasNewVersion.value = Boolean(data.has_new_version);
 
-      if (res.data.data.has_new_version) {
+      if (data.has_new_version) {
         releaseMessage.value = res.data.message || '';
         updateStatus.value = t('core.header.version.hasNewVersion');
       } else {
