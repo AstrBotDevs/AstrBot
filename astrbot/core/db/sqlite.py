@@ -1,9 +1,11 @@
 import asyncio
 import json
+import sqlite3
 import threading
 import typing as T
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from deprecated import deprecated
 from sqlalchemy import CursorResult, Row, not_
@@ -1378,6 +1380,97 @@ class SQLiteDatabase(BaseDatabase):
             )
             result = await session.execute(query)
             return result.scalar_one_or_none()
+
+    def get_preference_sync(
+        self,
+        scope: str,
+        scope_id: str,
+        key: str,
+    ) -> dict | None:
+        """Synchronous point query for a single preference value.
+
+        Uses a dedicated stdlib sqlite3 connection instead of the async
+        SQLAlchemy pool, so deprecated synchronous SharedPreferences APIs never
+        wait on (or deadlock against) the event-loop-owned pool. The database
+        runs in WAL mode, so this short index lookup can read concurrently with
+        the async writer.
+
+        Args:
+            scope: Preference scope.
+            scope_id: Identifier within the preference scope.
+            key: Preference key.
+
+        Returns:
+            The stored value dict (e.g. ``{"val": ...}``), or None if missing.
+        """
+        conn = sqlite3.connect(Path(self.db_path), timeout=30)
+        try:
+            row = conn.execute(
+                "SELECT value FROM preferences "
+                "WHERE scope = ? AND scope_id = ? AND key = ?",
+                (scope, scope_id, key),
+            ).fetchone()
+            if row is None:
+                return None
+            value = row[0]
+            return (
+                json.loads(value)
+                if isinstance(value, (str, bytes, bytearray))
+                else value
+            )
+        finally:
+            conn.close()
+
+    def get_preferences_sync(
+        self,
+        scope: str,
+        scope_id: str | None = None,
+        key: str | None = None,
+    ) -> list[Preference]:
+        """Synchronously query preferences within a scope.
+
+        This compatibility path uses a dedicated sqlite3 connection instead of
+        the async SQLAlchemy pool. It only loads the range explicitly requested
+        by the deprecated synchronous API and is never called during startup.
+
+        Args:
+            scope: Preference scope to query.
+            scope_id: Optional identifier within the scope.
+            key: Optional preference key.
+
+        Returns:
+            Preferences matching the supplied filters.
+        """
+        query = "SELECT scope, scope_id, key, value FROM preferences WHERE scope = ?"
+        params: list[str] = [scope]
+        if scope_id is not None:
+            query += " AND scope_id = ?"
+            params.append(scope_id)
+        if key is not None:
+            query += " AND key = ?"
+            params.append(key)
+
+        conn = sqlite3.connect(Path(self.db_path), timeout=30)
+        try:
+            rows = conn.execute(query, params).fetchall()
+            preferences = []
+            for row_scope, row_scope_id, row_key, row_value in rows:
+                value = (
+                    json.loads(row_value)
+                    if isinstance(row_value, (str, bytes, bytearray))
+                    else row_value
+                )
+                preferences.append(
+                    Preference(
+                        scope=row_scope,
+                        scope_id=row_scope_id,
+                        key=row_key,
+                        value=value,
+                    )
+                )
+            return preferences
+        finally:
+            conn.close()
 
     async def get_preferences(self, scope=None, scope_id=None, key=None):
         """Get preferences, optionally filtered by scope, scope ID, or key."""
