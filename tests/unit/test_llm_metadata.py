@@ -74,6 +74,29 @@ async def test_refresh_uses_fallback_endpoint_after_primary_failure():
 
 
 @pytest.mark.asyncio
+async def test_refresh_uses_fallback_endpoint_after_malformed_provider_payload():
+    catalog = LLMMetadataCatalog()
+    primary = _mock_response({"broken-provider": {"models": None}})
+    fallback = _mock_response(_catalog_payload("fallback-model"))
+    session = _mock_session([primary, fallback])
+
+    with (
+        patch(
+            "astrbot.core.utils.proxy_route.create_aiohttp_session",
+            return_value=session,
+        ),
+        patch(
+            "astrbot.core.utils.proxy_route.current_aiohttp_proxy",
+            return_value=None,
+        ),
+    ):
+        await catalog.refresh()
+
+    assert catalog.get("fallback-model") is not None
+    assert session.get.call_count == 2
+
+
+@pytest.mark.asyncio
 async def test_refresh_keeps_catalog_empty_when_all_endpoints_fail():
     catalog = LLMMetadataCatalog()
     catalog.replace(
