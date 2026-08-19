@@ -1008,7 +1008,7 @@ class ProviderOpenAIOfficial(Provider):
             Parsed tool names, arguments, and synthetic IDs, or None when the
             text is not a complete call or references an unavailable tool.
         """
-        if tools is None or not text.lstrip().startswith("<tool_call>"):
+        if not text.lstrip().startswith("<tool_call>"):
             return None
 
         blocks = list(
@@ -1038,9 +1038,10 @@ class ProviderOpenAIOfficial(Provider):
             name = block.group(1)
             if name.startswith("astrbot_tool_internal_"):
                 name = name.removeprefix("astrbot_tool_internal_")
-            get_tool = getattr(tools, "get_tool", None)
-            if not callable(get_tool) or get_tool(name) is None:
-                return None
+            if tools is not None:
+                get_tool = getattr(tools, "get_tool", None)
+                if not callable(get_tool) or get_tool(name) is None:
+                    return None
 
             call_args: dict[str, Any] = {}
             for parameter in re.finditer(

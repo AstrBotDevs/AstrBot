@@ -1812,6 +1812,51 @@ async def test_parse_openai_completion_recovers_textual_send_message_tool_call()
 
 
 @pytest.mark.asyncio
+async def test_parse_openai_completion_recovers_multiple_textual_tool_calls_without_schema():
+    provider = _make_provider()
+    try:
+        completion = ChatCompletion.model_validate(
+            {
+                "id": "chatcmpl-text-search-calls",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "mimo-v2.5",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": (
+                                "<tool_call>\n"
+                                "<function=web_search_tavily>\n"
+                                "<parameter=query>AI research\n"
+                                "</tool_call>"
+                                "<tool_call>\n"
+                                "<function=web_search_tavily>\n"
+                                "<parameter=query>GitHub AI\n"
+                                "</tool_call>"
+                            ),
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+            }
+        )
+
+        response = await provider._parse_openai_completion(completion, tools=None)
+
+        assert response.role == "tool"
+        assert response.tools_call_name == ["web_search_tavily", "web_search_tavily"]
+        assert response.tools_call_args == [
+            {"query": "AI research"},
+            {"query": "GitHub AI"},
+        ]
+        assert response.tools_call_ids == ["text-tool-call-0", "text-tool-call-1"]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_query_stream_extracts_usage_from_empty_choices_chunk(monkeypatch):
     provider = _make_provider()
     try:
