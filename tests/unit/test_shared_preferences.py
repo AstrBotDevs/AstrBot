@@ -194,6 +194,40 @@ async def test_sync_reads_fall_back_to_database_without_preload(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_sync_range_reads_historical_and_process_local_values(tmp_path):
+    """Deprecated range_get() must combine persisted and pending values."""
+    database = SQLiteDatabase(str(tmp_path / "range-fallback.db"))
+    await database.initialize()
+    await database.insert_preference_or_update(
+        "plugin",
+        "example",
+        "historical",
+        {"val": "from-database"},
+    )
+    store = SharedPreferences(database, tmp_path / "preferences.json")
+    try:
+        await store.initialize()
+        store.put(
+            "pending",
+            "from-overlay",
+            scope="plugin",
+            scope_id="example",
+        )
+
+        preferences = store.range_get("plugin", "example")
+        values = {item.key: item.value["val"] for item in preferences}
+
+        assert values == {
+            "historical": "from-database",
+            "pending": "from-overlay",
+        }
+        assert "historical" not in {cache_key for _, _, cache_key in store._cache}
+    finally:
+        await store.close()
+        await database.engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_get_async_falls_back_to_database_without_caching(preferences):
     store, database = preferences
     await database.insert_preference_or_update(

@@ -60,6 +60,7 @@ class SharedPreferences:
         self._writer_task: asyncio.Task[None] | None = None
         self._pending_writes: list[_WriteOperation] = []
         self._warned_sync_read_unsupported = False
+        self._warned_sync_range_read_unsupported = False
 
         self._scheduler = BackgroundScheduler()
         self._scheduler.add_job(
@@ -486,33 +487,62 @@ class SharedPreferences:
         scope_id: str | None = None,
         key: str | None = None,
     ) -> list[Preference]:
-        """获取指定范围的偏好设置（已弃用）
+        """Synchronously get preferences matching the supplied range.
 
-        Note: 为避免启动时全量加载 preferences 表导致内存溢出，此方法现在只能
-        返回本进程写入过且仍在内存中的值，不再保证覆盖数据库中的全部历史数据。
-        需要完整范围查询时请使用 range_get_async()。
+        Historical values are loaded on demand through a dedicated synchronous
+        database connection, then values written by this process are overlaid to
+        preserve immediate read-after-write visibility without startup preload.
+
+        Args:
+            scope: Preference scope to query.
+            scope_id: Optional identifier within the scope.
+            key: Optional preference key.
+
+        Returns:
+            Preferences matching the supplied filters.
         """
+        get_sync = getattr(self.db_helper, "get_preferences_sync", None)
+        if get_sync is None:
+            if not self._warned_sync_range_read_unsupported:
+                self._warned_sync_range_read_unsupported = True
+                logger.warning(
+                    "SharedPreferences sync range_get() is not supported by "
+                    "database backend %s; returning process-local values only. "
+                    "Use range_get_async() instead.",
+                    type(self.db_helper).__name__,
+                )
+            persisted: list[Preference] = []
+        else:
+            try:
+                persisted = get_sync(scope, scope_id, key)
+            except Exception as exc:
+                logger.warning(
+                    "SharedPreferences sync range_get() failed for %s/%s/%s: %s",
+                    scope,
+                    scope_id,
+                    key,
+                    exc,
+                )
+                persisted = []
+
+        values = {
+            (preference.scope, preference.scope_id, preference.key): preference
+            for preference in persisted
+        }
         with self._cache_lock:
-            values = [
-                (cache_scope, cache_scope_id, cache_key, deepcopy(value))
-                for (
-                    cache_scope,
-                    cache_scope_id,
-                    cache_key,
-                ), value in self._cache.items()
-                if cache_scope == scope
-                and (scope_id is None or cache_scope_id == scope_id)
-                and (key is None or cache_key == key)
-            ]
-        return [
-            Preference(
-                scope=cache_scope,
-                scope_id=cache_scope_id,
-                key=cache_key,
-                value={"val": value},
-            )
-            for cache_scope, cache_scope_id, cache_key, value in values
-        ]
+            for (cache_scope, cache_scope_id, cache_key), value in self._cache.items():
+                if (
+                    cache_scope == scope
+                    and (scope_id is None or cache_scope_id == scope_id)
+                    and (key is None or cache_key == key)
+                ):
+                    values[(cache_scope, cache_scope_id, cache_key)] = Preference(
+                        scope=cache_scope,
+                        scope_id=cache_scope_id,
+                        key=cache_key,
+                        value={"val": deepcopy(value)},
+                    )
+        return list(values.values())
 
     @deprecated(
         version="4.0.0",
