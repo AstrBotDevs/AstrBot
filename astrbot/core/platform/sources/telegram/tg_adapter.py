@@ -530,6 +530,15 @@ class TelegramPlatformAdapter(Platform):
                 )
             )
             message.message.append(record)
+        elif telegram_message.audio:
+            record = Comp.Record(file="")
+            record.set_source_resolver(
+                lambda audio=telegram_message.audio: (
+                    self._resolve_telegram_attachment_file_path(audio)
+                )
+            )
+            message.message.append(record)
+            self._apply_telegram_caption(message, telegram_message)
         elif telegram_message.photo:
             photo = telegram_message.photo[-1]
             image = Comp.Image(file="")

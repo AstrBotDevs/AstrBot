@@ -280,6 +280,47 @@ async def test_telegram_voice_message_creates_record_component(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_telegram_audio_caption_populates_message_text_and_plain(tmp_path):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    audio = create_mock_file("https://api.telegram.org/file/test/song.mp3")
+    update = create_mock_update(
+        message_text=None,
+        audio=audio,
+        caption="这首歌是什么",
+    )
+    wav_path = tmp_path / "song.mp3.wav"
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert result.message_str == "这首歌是什么"
+    assert len(result.message) == 2
+    assert isinstance(result.message[0], Comp.Record)
+    assert result.message[0].file == ""
+    assert result.message[0].url == ""
+    audio.get_file.assert_not_awaited()
+    assert isinstance(result.message[1], Comp.Plain)
+    assert result.message[1].text == "这首歌是什么"
+
+    media_resolver = MagicMock()
+    media_resolver.to_path = AsyncMock(return_value=str(wav_path))
+    with patch(
+        "astrbot.core.message.components.MediaResolver",
+        MagicMock(return_value=media_resolver),
+    ):
+        resolved_path = await result.message[0].convert_to_file_path()
+
+    assert resolved_path == str(wav_path)
+    audio.get_file.assert_awaited_once()
+    media_resolver.to_path.assert_awaited_once_with(target_format="wav")
+    assert result.message[0].url == "https://api.telegram.org/file/test/song.mp3"
+
+
+@pytest.mark.asyncio
 async def test_telegram_topic_group_message_uses_thread_scoped_session():
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(

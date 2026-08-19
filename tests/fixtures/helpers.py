@@ -161,6 +161,7 @@ def create_mock_update(
     video: MagicMock | None = None,
     document: MagicMock | None = None,
     voice: MagicMock | None = None,
+    audio: MagicMock | None = None,
     sticker: MagicMock | None = None,
     video_note: MagicMock | None = None,
     reply_to_message: MagicMock | None = None,
@@ -185,6 +186,7 @@ def create_mock_update(
         video: 视频对象
         document: 文档对象
         voice: 语音对象
+        audio: 音频文件对象
         sticker: 贴纸对象
         reply_to_message: 回复的消息
         quote: 回复消息中的部分引用
@@ -222,6 +224,7 @@ def create_mock_update(
     message.video = video
     message.document = document
     message.voice = voice
+    message.audio = audio
     message.sticker = sticker
     message.video_note = video_note
     message.reply_to_message = reply_to_message
