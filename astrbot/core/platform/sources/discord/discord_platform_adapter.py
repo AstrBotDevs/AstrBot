@@ -28,6 +28,8 @@ from astrbot.core.utils.media_utils import MediaResolver
 from .client import DiscordBotClient
 from .discord_platform_event import DiscordPlatformEvent
 
+_DISCORD_MAX_OPTIONS = 25
+
 if sys.version_info >= (3, 12):
     from typing import override
 else:
@@ -415,6 +417,19 @@ class DiscordPlatformAdapter(Platform):
             if not handler_md.enabled:
                 continue
             for event_filter in handler_md.event_filters:
+                if isinstance(event_filter, CommandGroupFilter):
+                    if event_filter.parent_group is not None:
+                        continue
+                    slash_group = self._create_slash_command_group(
+                        event_filter,
+                        handler_md,
+                    )
+                    if slash_group is None:
+                        continue
+                    self.client.add_application_command(slash_group)
+                    registered_commands.append(event_filter.group_name)
+                    continue
+
                 cmd_info = self._extract_command_info(event_filter, handler_md)
                 if not cmd_info:
                     continue
@@ -538,6 +553,224 @@ class DiscordPlatformAdapter(Platform):
         return dynamic_callback
 
     @staticmethod
+    def _is_valid_slash_command_name(name: str) -> bool:
+        """Check whether a command name follows Discord slash command rules.
+
+        Args:
+            name: Command, subcommand, or group name to validate.
+
+        Returns:
+            Whether the name can be registered with Discord.
+        """
+        return name == name.lower() and bool(re.match(r"^[-_\w]{1,32}$", name))
+
+    @staticmethod
+    def _format_command_path(*parts: str) -> str:
+        """Join command path components for callbacks and diagnostics."""
+        return " ".join(parts)
+
+    def _can_add_group_option(
+        self,
+        group: discord.SlashCommandGroup,
+        path: str,
+    ) -> bool:
+        """Return whether a Discord group can accept another option."""
+        if len(group.subcommands) >= _DISCORD_MAX_OPTIONS:
+            logger.warning(
+                f"[Discord] Command group '{path}' exceeds "
+                f"{_DISCORD_MAX_OPTIONS} options; remaining entries were skipped."
+            )
+            return False
+        return True
+
+    def _is_valid_unique_slash_name(
+        self,
+        name: str,
+        used_names: set[str],
+        path: str,
+    ) -> bool:
+        """Validate one Discord option name and reject sibling duplicates."""
+        if not self._is_valid_slash_command_name(name) or name in used_names:
+            logger.warning(f"[Discord] Skipping invalid or duplicate entry '{path}'.")
+            return False
+        return True
+
+    @staticmethod
+    def _normalize_slash_description(description: str, fallback: str) -> str:
+        """Return a non-empty Discord description within the 100-character limit.
+
+        Args:
+            description: Preferred command description.
+            fallback: Description used when the preferred value is empty.
+
+        Returns:
+            A valid Discord slash command description.
+        """
+        normalized = description or fallback
+        return normalized if len(normalized) <= 100 else f"{normalized[:97]}..."
+
+    def _create_slash_subcommand(
+        self,
+        command_filter: CommandFilter,
+        full_command_name: str,
+        parent: discord.SlashCommandGroup,
+    ) -> discord.SlashCommand | None:
+        """Build one Discord subcommand from an AstrBot command filter.
+
+        Args:
+            command_filter: AstrBot leaf command to convert.
+            full_command_name: Complete command path used by the callback.
+            parent: Discord group that owns the subcommand.
+
+        Returns:
+            The Discord subcommand, or None when the AstrBot command is unavailable.
+        """
+        command_name = command_filter.command_name
+        command_metadata = getattr(command_filter, "handler_md", None)
+        if (
+            not self._is_valid_slash_command_name(command_name)
+            or command_metadata is None
+            or not command_metadata.enabled
+        ):
+            logger.warning(
+                f"[Discord] Skipping invalid or disabled entry '{full_command_name}'."
+            )
+            return None
+
+        return discord.SlashCommand(
+            name=command_name,
+            description=self._normalize_slash_description(
+                command_metadata.desc,
+                f"Command: {full_command_name}",
+            ),
+            func=self._create_dynamic_callback(full_command_name),
+            options=[
+                discord.Option(
+                    name="params",
+                    description="All command parameters",
+                    type=discord.SlashCommandOptionType.string,
+                    required=False,
+                ),
+            ],
+            parent=parent,
+        )
+
+    def _create_slash_command_group(
+        self,
+        group_filter: CommandGroupFilter,
+        handler_metadata: StarHandlerMetadata,
+    ) -> discord.SlashCommandGroup | None:
+        """Build a Discord slash command tree from an AstrBot command group.
+
+        Discord supports direct subcommands and one level of subcommand groups.
+        Deeper AstrBot command groups are skipped with a warning.
+
+        Args:
+            group_filter: Root AstrBot command group to convert.
+            handler_metadata: Metadata registered for the root group.
+
+        Returns:
+            The Discord slash command group, or None when no valid leaves exist.
+        """
+        root_name = group_filter.group_name
+        if not self._is_valid_slash_command_name(root_name):
+            logger.debug(f"[Discord] Skipping invalid slash command group: {root_name}")
+            return None
+
+        root_group = discord.SlashCommandGroup(
+            name=root_name,
+            description=self._normalize_slash_description(
+                handler_metadata.desc,
+                f"Command group: {root_name}",
+            ),
+            guild_ids=[self.guild_id] if self.guild_id else None,
+        )
+        root_names: set[str] = set()
+
+        for child_filter in group_filter.sub_command_filters:
+            if not self._can_add_group_option(root_group, root_name):
+                break
+
+            child_name = (
+                child_filter.command_name
+                if isinstance(child_filter, CommandFilter)
+                else child_filter.group_name
+            )
+            child_path = self._format_command_path(root_name, child_name)
+            if not self._is_valid_unique_slash_name(
+                child_name,
+                root_names,
+                child_path,
+            ):
+                continue
+
+            if isinstance(child_filter, CommandFilter):
+                slash_command = self._create_slash_subcommand(
+                    child_filter,
+                    child_path,
+                    root_group,
+                )
+                if slash_command is None:
+                    continue
+                root_group.add_command(slash_command)
+                root_names.add(child_name)
+                continue
+
+            subgroup = discord.SlashCommandGroup(
+                name=child_name,
+                description=self._normalize_slash_description(
+                    "",
+                    f"Command group: {child_path}",
+                ),
+                parent=root_group,
+            )
+            subgroup_names: set[str] = set()
+
+            for leaf_filter in child_filter.sub_command_filters:
+                if isinstance(leaf_filter, CommandGroupFilter):
+                    leaf_path = self._format_command_path(
+                        root_name,
+                        child_name,
+                        leaf_filter.group_name,
+                    )
+                    logger.warning(
+                        f"[Discord] Skipping command group deeper than one level: "
+                        f"'{leaf_path}'."
+                    )
+                    continue
+                if not self._can_add_group_option(subgroup, child_path):
+                    break
+
+                leaf_name = leaf_filter.command_name
+                leaf_path = self._format_command_path(
+                    root_name,
+                    child_name,
+                    leaf_name,
+                )
+                if not self._is_valid_unique_slash_name(
+                    leaf_name,
+                    subgroup_names,
+                    leaf_path,
+                ):
+                    continue
+
+                slash_command = self._create_slash_subcommand(
+                    leaf_filter,
+                    leaf_path,
+                    subgroup,
+                )
+                if slash_command is None:
+                    continue
+                subgroup.add_command(slash_command)
+                subgroup_names.add(leaf_name)
+
+            if subgroup.subcommands:
+                root_group.add_command(subgroup)
+                root_names.add(child_name)
+
+        return root_group if root_group.subcommands else None
+
+    @staticmethod
     def _extract_command_info(
         event_filter: Any,
         handler_metadata: StarHandlerMetadata,
@@ -548,7 +781,7 @@ class DiscordPlatformAdapter(Platform):
         cmd_filter_instance = None
 
         if isinstance(event_filter, CommandFilter):
-            # 暂不支持子指令注册为斜杠指令
+            # Child commands are registered through their root command group.
             if (
                 event_filter.parent_command_names
                 and event_filter.parent_command_names != [""]
@@ -558,19 +791,20 @@ class DiscordPlatformAdapter(Platform):
             cmd_filter_instance = event_filter
 
         elif isinstance(event_filter, CommandGroupFilter):
-            # 暂不支持指令组直接注册为斜杠指令，因为它们没有 handle 方法
+            # Root groups are handled directly by the command collector.
             return None
 
         if not cmd_name:
             return None
 
         # Discord 斜杠指令名称规范
-        if cmd_name != cmd_name.lower() or not re.match(r"^[-_'\w]{1,32}$", cmd_name):
+        if not DiscordPlatformAdapter._is_valid_slash_command_name(cmd_name):
             logger.debug(f"[Discord] Skipping invalid slash command format: {cmd_name}")
             return None
 
-        description = handler_metadata.desc or f"Command: {cmd_name}"
-        if len(description) > 100:
-            description = f"{description[:97]}..."
+        description = DiscordPlatformAdapter._normalize_slash_description(
+            handler_metadata.desc,
+            f"Command: {cmd_name}",
+        )
 
         return cmd_name, description, cmd_filter_instance
