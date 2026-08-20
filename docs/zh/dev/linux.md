@@ -55,7 +55,8 @@ make dev             # 后端 6185，Vite Dashboard 3000
 make status          # 检查两个进程
 make stop            # 停止两个进程组
 make check           # 严格执行 Linux/macOS 源码检查
-make test            # 执行 pytest
+make test            # 执行全量 pytest
+make test-blocking   # 执行 blocking pytest
 make pr-test-full    # lint、测试、启动 smoke test 与 Dashboard 构建
 ```
 

@@ -115,18 +115,22 @@ uv run pytest tests/unit
 uv run pytest tests/unit/test_event_bus.py
 uv run pytest tests/unit/test_event_bus.py::TestEventBusDispatch::test_dispatch_processes_event
 uv run pytest --test-profile blocking
+make test-blocking
 ```
 
 Tests use `pytest-asyncio`; mark async tests explicitly. `tests/conftest.py`
-sets test-mode environment flags, prioritizes unit tests, and classifies slow,
-provider/platform, and integration tests into tiers. Put a regression test next
-to the nearest existing coverage (`tests/unit/`, `tests/test_*.py`,
-`tests/agent/`, or a specialist directory). Dashboard Vitest files live under
-`dashboard/tests/` as `*.vitest.ts`. Browser-level Dashboard tests live under
-`dashboard/tests/e2e/` and use `dashboard/playwright.config.ts`; the plugin UI
-suite starts its isolated backend through `tests/e2e/plugin_ui_test_server.py`.
-Install the required Playwright browsers before running `pnpm
-test:e2e` from `dashboard/`.
+sets test-mode environment flags and classifies tests into `--test-profile`
+tiers. The `blocking` profile excludes `slow`, `integration`, and `live`.
+`platform` and `provider` are domain tags and do not remove tests from the
+blocking gate. Put a regression test next to the nearest existing coverage
+(`tests/unit/`, `tests/test_*.py`, `tests/agent/`, or a specialist directory).
+Dashboard Vitest files live under `dashboard/tests/` as `*.vitest.ts`.
+Browser-level Dashboard tests live under `dashboard/tests/e2e/` and use
+`dashboard/playwright.config.ts`; the plugin UI suite starts its isolated
+backend through `tests/e2e/plugin_ui_test_server.py`. Install the required
+Playwright browsers before running `pnpm test:e2e` from `dashboard/`. CI runs
+the Chromium project; Firefox and WebKit stay in `playwright.config.ts` and
+run on workflow_dispatch.
 
 The repository gates are deliberately separate:
 
@@ -134,6 +138,7 @@ The repository gates are deliberately separate:
 make check                 # host-platform format/lint/build gate
 make check-all-platforms   # add PowerShell validation on POSIX
 make test                  # full pytest suite
+make test-blocking         # pytest --test-profile blocking
 make quality               # focused pyright/security/audit/complexity gates
 make quality-report        # broader report; not currently a required CI gate
 ```

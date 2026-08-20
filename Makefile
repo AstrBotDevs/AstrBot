@@ -3,7 +3,7 @@
 	stop stop-backend stop-dashboard clean status docs napcat-schema-ob11-event napcat-schema-ob11-event-normalized napcat-models-ob11-event napcat-models-ob11-event-src napcat-codegen napcat-test napcat-check quality quality-report \
 	quality-all quality-sync quality-pyright quality-bandit quality-audit quality-web-audit quality-complexity quality-radon-cc quality-radon-mi \
 	quality-report-all quality-report-pyright quality-report-bandit quality-report-audit quality-report-radon-cc quality-report-radon-mi \
-	check check-all check-all-platforms format format-all test test-all \
+	check check-all check-all-platforms format format-all test test-all test-blocking \
 	check-py check-py-all check-py-format check-py-lint \
 	check-web check-web-all check-web-build check-web-eslint check-web-smoke check-web-prettier \
 	check-data check-md check-md-all check-md-prettier check-md-markdownlint check-toml check-toml-all check-toml-format check-toml-lint check-yaml check-yaml-all check-yaml-prettier check-yaml-lint \
@@ -265,6 +265,10 @@ test: test-all
 test-all:
 	@echo "==> [test] pytest"
 	uv run pytest
+
+test-blocking:
+	@echo "==> [test] pytest --test-profile blocking"
+	uv run pytest --test-profile blocking
 
 check-py:
 	@$(MAKE) $(PARALLEL_SUBMAKE_FLAGS) check-py-all

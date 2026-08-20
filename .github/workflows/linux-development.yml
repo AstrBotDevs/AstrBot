@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   linux-development:
-    name: Bootstrap, check, and test on Linux
+    name: Bootstrap and check on Linux
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -63,6 +63,3 @@ jobs:
 
       - name: Verify reproducible NapCat event models
         run: make napcat-check
-
-      - name: Run test suite
-        run: make test

@@ -83,9 +83,10 @@ uv run pytest tests/unit
 uv run pytest tests/unit/test_event_bus.py
 uv run pytest tests/unit/test_event_bus.py::TestEventBusDispatch::test_dispatch_processes_event
 uv run pytest --test-profile blocking
+make test-blocking
 ```
 
-`blocking` profile 只运行未标记为 `slow`、`platform`、`provider` 或 `integration` 的确定性测试。`tests/integration/` 和 `tests/e2e/` 下的测试会自动归类为集成测试；其他位置请显式使用这些命名标记。回归测试应放在离被改代码最近的现有测试文件，不要机械地全部放入 `tests/unit/`。
+`blocking` profile 只排除标记为 `slow`、`integration` 或 `live` 的测试。`platform` 和 `provider` 是领域标签，不会把测试移出 blocking 门禁。`tests/integration/` 和 `tests/e2e/` 下的测试会自动归类为集成测试；真实外网、厂商 SDK 或外部密钥测试使用 `live`。回归测试应放在离被改代码最近的现有测试文件，不要机械地全部放入 `tests/unit/`。
 
 Dashboard 使用 Vitest：
 
@@ -105,8 +106,9 @@ pnpm test:e2e
 ```
 
 用例位于 `dashboard/tests/e2e/`，隔离后端入口是
-`tests/e2e/plugin_ui_test_server.py`。Linux CI 使用 `playwright install
---with-deps` 同时安装系统依赖。
+`tests/e2e/plugin_ui_test_server.py`。PR/push CI 只跑 Chromium；Firefox 与
+WebKit 项目定义保留在 `playwright.config.ts`，通过 `workflow_dispatch` 运行。
+Linux CI 使用 `playwright install --with-deps` 同时安装系统依赖。
 
 ## 格式、检查与质量门禁
 
@@ -116,6 +118,7 @@ pnpm test:e2e
 make check       # 当前宿主平台的严格源码检查
 make quality     # 类型、安全、依赖审计与复杂度门禁
 make test        # pytest 全量测试
+make test-blocking  # pytest --test-profile blocking
 make pr-test-full
 ```
 

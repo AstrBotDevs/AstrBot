@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   unit-tests:
-    name: Run pytest suite
+    name: Run blocking pytest suite
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -37,4 +37,4 @@ jobs:
       - name: Run tests
         run: |
           chmod +x scripts/run_pytests_ci.sh
-          bash ./scripts/run_pytests_ci.sh --test-profile blocking ./tests
+          bash ./scripts/run_pytests_ci.sh --test-profile blocking

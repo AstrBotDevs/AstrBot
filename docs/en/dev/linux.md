@@ -58,7 +58,8 @@ make dev             # backend on 6185 and Vite dashboard on 3000
 make status           # health check both processes
 make stop             # stop both process groups
 make check            # strict Linux/macOS source checks
-make test             # pytest suite
+make test             # full pytest suite
+make test-blocking    # blocking pytest profile
 make pr-test-full     # lint, tests, smoke test, and dashboard build
 ```
 

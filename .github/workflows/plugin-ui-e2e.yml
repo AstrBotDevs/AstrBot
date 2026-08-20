@@ -4,13 +4,19 @@ on:
   pull_request:
   push:
     branches: [master]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   plugin-ui-e2e:
+    name: Plugin UI E2E (${{ matrix.browser }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium]
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -37,7 +43,46 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install Playwright browsers
         working-directory: dashboard
-        run: pnpm exec playwright install --with-deps chromium firefox webkit
+        run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
       - name: Run Plugin UI E2E
         working-directory: dashboard
-        run: pnpm test:e2e
+        run: pnpm test:e2e -- --project=${{ matrix.browser }}
+
+  plugin-ui-e2e-extra-browsers:
+    if: github.event_name == 'workflow_dispatch'
+    name: Plugin UI E2E (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [firefox, webkit]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.14.6'
+      - name: Install uv and Python dependencies
+        run: |
+          python -m pip install uv
+          uv sync --group dev --locked
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 11.21.0
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '26.5.0'
+          cache: 'pnpm'
+          cache-dependency-path: dashboard/pnpm-lock.yaml
+      - name: Install Dashboard dependencies
+        working-directory: dashboard
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright browsers
+        working-directory: dashboard
+        run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
+      - name: Run Plugin UI E2E
+        working-directory: dashboard
+        run: pnpm test:e2e -- --project=${{ matrix.browser }}

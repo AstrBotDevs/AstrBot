@@ -13,10 +13,14 @@ if [[ -n "${OPENAI_API_KEY:-}" && -z "${ZHIPU_API_KEY:-}" ]]; then
   export ZHIPU_API_KEY="$OPENAI_API_KEY"
 fi
 
-PYTEST_TARGETS=("${@:-./tests}")
+PYTEST_TARGETS=("$@")
 
 echo "[ci] syncing dependencies with uv"
 uv sync --group dev --locked
 
-echo "[ci] running tests: ${PYTEST_TARGETS[*]}"
+if ((${#PYTEST_TARGETS[@]} > 0)); then
+  echo "[ci] running tests: ${PYTEST_TARGETS[*]}"
+else
+  echo "[ci] running tests: <pytest testpaths>"
+fi
 uv run pytest "${PYTEST_TARGETS[@]}"
