@@ -46,9 +46,9 @@ export default mergeConfig(
           'tests/**',
         ],
         thresholds: {
-          lines: 78,
-          functions: 88,
-          statements: 77,
+          lines: 85,
+          functions: 93,
+          statements: 84,
         },
       },
     },

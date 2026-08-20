@@ -47,6 +47,8 @@ const api = vi.hoisted(() => {
       schema: fn(),
       setEnabled: fn(),
       test: fn(),
+      createInSource: fn(),
+      update: fn(),
     },
     personaApi: {
       tree: fn(),
@@ -435,7 +437,17 @@ describe('frontend logic coverage', () => {
       showMessage: vi.fn(),
     });
     dialog.openProviderEdit({ id: 'p1' });
+    dialog.openModelAddDialog('');
     dialog.openModelAddDialog('gpt-4');
+    api.providerApi.update.mockResolvedValue({
+      data: { status: 'ok', message: 'saved' },
+    });
+    api.providerApi.createInSource.mockResolvedValue({
+      data: { status: 'ok', message: 'created' },
+    });
+    await dialog.saveEditedProvider();
+    dialog.openModelAddDialog('gpt-5');
+    await dialog.saveEditedProvider();
 
     const { mountWithVuetify } = await import('./utils/mountWithVuetify');
     const Harness = defineComponent({
@@ -466,10 +478,25 @@ describe('frontend logic coverage', () => {
     });
     await stepUp.submitStepUp({ password: 'p' });
     await expect(issued).resolves.toBe('step-token');
+    const webChat = stepUp.requestWebChatStepUp('sess-1');
+    api.authorizationApi.webChatStepUp.mockResolvedValue({
+      data: {
+        data: { tokens: { 'webchat.tool_run': 'wc-token' }, expires_in: 1 },
+      },
+    });
+    await stepUp.submitStepUp({ password: 'p', code: '123' });
+    await expect(webChat).resolves.toMatchObject({
+      'webchat.tool_run': 'wc-token',
+    });
     wrapper.unmount();
 
     api.statsApi.restart.mockResolvedValue({ data: { status: 'ok' } });
     await restartAstrBot(null, async () => 'step-token');
+    await restartAstrBot(null, async () => null);
+    await restartAstrBot(
+      { check: vi.fn(), stop: vi.fn() },
+      async () => 'step-token',
+    );
     expect(formatTokenCount(12_000)).toContain('K');
     expect(contextLimit({ max_context_tokens: 8000 })).toBe(8000);
     expect(formatContextLimit({ max_context_tokens: 8000 })).toBeTruthy();
