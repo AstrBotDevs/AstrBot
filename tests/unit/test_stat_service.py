@@ -163,3 +163,65 @@ def test_stat_service_get_first_notice_uses_only_supported_locales(
     assert service.get_first_notice("zh-CN") == {"content": "Chinese notice"}
     assert service.get_first_notice("en-US") == {"content": "English notice"}
     assert service.get_first_notice(None) == {"content": "Chinese notice"}
+
+
+def test_running_time_components_and_timestamp_coercion():
+    assert StatService.get_running_time_components(3661) == {
+        "hours": 1,
+        "minutes": 1,
+        "seconds": 1,
+    }
+    naive = datetime(2026, 1, 2, 3, 4, 5)
+    aware = StatService._ensure_aware_utc(naive)
+    assert aware.tzinfo is not None
+    already = StatService._ensure_aware_utc(aware)
+    assert already.tzinfo is not None
+    from_seconds = StatService._coerce_platform_stat_timestamp(1_700_000_000)
+    assert from_seconds.tzinfo is not None
+    from_ms = StatService._coerce_platform_stat_timestamp(1_700_000_000_000)
+    assert from_ms.year >= 2023
+    from_numeric_str = StatService._coerce_platform_stat_timestamp("1700000000")
+    assert from_numeric_str.tzinfo is not None
+    from_iso = StatService._coerce_platform_stat_timestamp("2026-01-02T03:04:05Z")
+    assert from_iso.year == 2026
+    with pytest.raises(ValueError):
+        StatService._coerce_platform_stat_timestamp("   ")
+    with pytest.raises(TypeError):
+        StatService._coerce_platform_stat_timestamp(None)
+
+
+@pytest.mark.asyncio
+async def test_stat_service_start_time_changelog_and_restart(tmp_path, monkeypatch):
+    core = SimpleNamespace(restart=lambda: None)
+    service = StatService(
+        SimpleNamespace(),
+        core,
+        {"dashboard": {"username": "astrbot"}},
+        demo_mode=True,
+        start_time=123,
+        html_renderer=SimpleNamespace(
+            get_runtime_stats=lambda: {"renders": 1},
+        ),
+        plugin_catalog=SimpleNamespace(all=lambda: ()),
+        platform_manager=SimpleNamespace(get_platform_count=lambda: 0),
+    )
+    assert service.get_start_time() == {"start_time": 123}
+    assert service.get_t2i_runtime_stats() == {"renders": 1}
+
+    with pytest.raises(stat_service.StatServiceError):
+        await service.restart_core()
+
+    monkeypatch.setattr(stat_service, "get_astrbot_path", lambda: str(tmp_path))
+    with pytest.raises(stat_service.StatServiceError, match="required"):
+        service.get_changelog(None)
+    with pytest.raises(stat_service.StatServiceError, match="Invalid"):
+        service.get_changelog("../etc/passwd")
+    with pytest.raises(stat_service.StatServiceError, match="not found"):
+        service.get_changelog("9.9.9")
+    changelogs = tmp_path / "changelogs"
+    changelogs.mkdir()
+    (changelogs / "v1.2.3.md").write_text("notes", encoding="utf-8")
+    (changelogs / "readme.txt").write_text("skip", encoding="utf-8")
+    assert service.get_changelog("v1.2.3")["content"] == "notes"
+    assert "1.2.3" in service.list_changelog_versions()["versions"]
+    assert service.get_first_notice("zh-CN") == {"content": None}

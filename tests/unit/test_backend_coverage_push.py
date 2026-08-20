@@ -195,3 +195,19 @@ async def test_create_tracked_task_with_future():
     tasks: set[asyncio.Task] = set()
     task = create_tracked_task(tasks, future, name="wrap")
     assert await task == "ok"
+
+
+def test_mcp_timeout_resolver_clamps_and_falls_back(monkeypatch):
+    from astrbot.core.tools.function_tool_manager import (
+        DEFAULT_MCP_INIT_TIMEOUT_SECONDS,
+        MAX_MCP_TIMEOUT_SECONDS,
+        _resolve_timeout,
+    )
+
+    monkeypatch.delenv("ASTRBOT_MCP_INIT_TIMEOUT", raising=False)
+    assert _resolve_timeout(None) == DEFAULT_MCP_INIT_TIMEOUT_SECONDS
+    assert _resolve_timeout("not-a-number") == DEFAULT_MCP_INIT_TIMEOUT_SECONDS
+    assert _resolve_timeout(0) == DEFAULT_MCP_INIT_TIMEOUT_SECONDS
+    assert _resolve_timeout(-1) == DEFAULT_MCP_INIT_TIMEOUT_SECONDS
+    assert _resolve_timeout(10_000) == MAX_MCP_TIMEOUT_SECONDS
+    assert _resolve_timeout(12) == 12.0
