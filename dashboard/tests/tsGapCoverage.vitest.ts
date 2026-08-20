@@ -446,6 +446,29 @@ describe('ts gap coverage', () => {
     await expect(import('@/utils/streamMonacoDisabled')).rejects.toThrow(
       /disabled/,
     );
+
+    const localesReport = await new I18nValidator().validateLocales([
+      'zh-CN',
+      'en-US',
+    ]);
+    expect(localesReport.summary.totalLocales).toBe(2);
+
+    const { useRouterLoadingStore } = await import('@/stores/routerLoading');
+    const loading = useRouterLoadingStore();
+    vi.useFakeTimers();
+    loading.start();
+    await vi.advanceTimersByTimeAsync(800);
+    loading.finish();
+    await vi.advanceTimersByTimeAsync(300);
+    vi.useRealTimers();
+
+    const randomUUID = crypto.randomUUID;
+    // @ts-expect-error coverage fallback
+    crypto.randomUUID = undefined;
+    const { useCommonStore } = await import('@/stores/common');
+    const common = useCommonStore();
+    common.log_cache.push({ uuid: '', data: 'x' } as never);
+    crypto.randomUUID = randomUUID;
   });
 
   it('covers log SSE reconnect paths on the common store', async () => {
