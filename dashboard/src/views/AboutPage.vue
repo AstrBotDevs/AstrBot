@@ -12,7 +12,7 @@
             variant="tonal"
             size="small"
             prepend-icon="mdi-star"
-            @click="open('https://github.com/AstrBotDevs/AstrBot')"
+            @click="open('https://github.com/Xero-Team/AstrBot')"
           >
             {{ tm('hero.starButton') }}
           </v-btn>
@@ -22,7 +22,7 @@
             size="small"
             variant="tonal"
             prepend-icon="mdi-comment-question"
-            @click="open('https://github.com/AstrBotDevs/AstrBot/issues')"
+            @click="open('https://github.com/Xero-Team/AstrBot/issues')"
           >
             {{ tm('hero.issueButton') }}
           </v-btn>

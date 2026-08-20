@@ -4,7 +4,7 @@
 
 ## 环境变量
 
-- `VITE_ASTRBOT_RELEASE_BASE_URL`（可选）
-  - 默认值：`https://github.com/AstrBotDevs/AstrBot/releases`
-  - 用途：管理面板内“更新到最新版本”外部跳转所使用的 release 基地址。集成方可按需覆盖（例如 Desktop 指向其自身发布页）。
+- `VITE_ASTRBOT_RELEASE_BASE_URL`（可选，构建时）
+  - 默认值：`https://github.com/Xero-Team/AstrBot/releases`
+  - 用途：集成方（例如 Desktop）可用来覆盖外部 Release 页地址。当前 Dashboard 运行时版本检查走后端 `ASTRBOT_RELEASE_API`，不读取该变量。
   - 建议传入仓库的 `.../releases` 基地址（不带 `/latest`）。
