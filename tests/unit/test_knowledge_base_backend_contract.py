@@ -2,6 +2,8 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
+from astrbot.api import BaseKnowledgeBaseBackend as ExportedBaseKnowledgeBaseBackend
+from astrbot.api.all import BaseKnowledgeBaseBackend as LegacyBaseKnowledgeBaseBackend
 from astrbot.api.knowledge_base import (
     BaseKnowledgeBaseBackend,
     KnowledgeBaseBackendError,
@@ -108,3 +110,8 @@ def test_backend_error_is_part_of_public_error_hierarchy() -> None:
 def test_backend_contract_cannot_be_instantiated_directly() -> None:
     with pytest.raises(TypeError):
         BaseKnowledgeBaseBackend()
+
+
+def test_backend_contract_is_exported_from_plugin_api() -> None:
+    assert ExportedBaseKnowledgeBaseBackend is BaseKnowledgeBaseBackend
+    assert LegacyBaseKnowledgeBaseBackend is BaseKnowledgeBaseBackend
