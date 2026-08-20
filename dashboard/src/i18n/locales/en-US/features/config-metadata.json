@@ -190,6 +190,10 @@
             "description": "Shipyard Neo Profile",
             "hint": "Sandbox profile for Shipyard Neo, e.g. python-default. Leave empty to auto-select the most capable profile."
           },
+          "shipyard_neo_persist_id": {
+            "description": "Shipyard Neo Persist ID",
+            "hint": "When enabled, sandboxes with the same persist ID will reuse the same storage volume for file persistence. Suitable for scenarios that require saving files across sessions. Leave empty to disable file persistence."
+          },
           "shipyard_neo_ttl": {
             "description": "Shipyard Neo Sandbox TTL",
             "hint": "Sandbox time-to-live in seconds."
