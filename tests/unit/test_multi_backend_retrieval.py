@@ -328,6 +328,7 @@ async def test_retrieve_filters_invalid_hits(
         ("score", "not-a-number"),
         ("score", float("nan")),
         ("score", float("inf")),
+        pytest.param("score", 10**10000, id="oversized-score"),
         ("document_id", 1),
         ("chunk_id", 1),
         ("source_uri", 1),

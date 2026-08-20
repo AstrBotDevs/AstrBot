@@ -274,6 +274,16 @@ class KnowledgeBaseManager:
                 f"{backend.display_name}: {warning}" for warning in response.warnings
             )
             for hit_index, hit in enumerate(response.hits):
+                score_is_valid = False
+                if isinstance(hit, KnowledgeBaseHit):
+                    try:
+                        score_is_valid = hit.score is None or (
+                            isinstance(hit.score, (int, float))
+                            and not isinstance(hit.score, bool)
+                            and math.isfinite(float(hit.score))
+                        )
+                    except (OverflowError, ValueError):
+                        score_is_valid = False
                 if (
                     not isinstance(hit, KnowledgeBaseHit)
                     or not isinstance(hit.ref, KnowledgeBaseRef)
@@ -286,14 +296,7 @@ class KnowledgeBaseManager:
                     or not isinstance(hit.rank, int)
                     or isinstance(hit.rank, bool)
                     or hit.rank < 1
-                    or not (
-                        hit.score is None
-                        or (
-                            isinstance(hit.score, (int, float))
-                            and not isinstance(hit.score, bool)
-                            and math.isfinite(hit.score)
-                        )
-                    )
+                    or not score_is_valid
                     or not (hit.document_id is None or isinstance(hit.document_id, str))
                     or not (hit.chunk_id is None or isinstance(hit.chunk_id, str))
                     or not (hit.source_uri is None or isinstance(hit.source_uri, str))
