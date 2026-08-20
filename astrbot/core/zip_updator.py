@@ -150,8 +150,14 @@ class RepoZipUpdator:
             result = await fetch_json(url, JSON_FETCH)
             if not result:
                 return []
+            if not isinstance(result, list):
+                raise OutboundRequestError("The remote response is not a JSON array.")
             ret = []
             for release in result:
+                if not isinstance(release, dict):
+                    raise OutboundRequestError(
+                        "The remote response is not a JSON array of objects."
+                    )
                 ret.append(
                     {
                         "version": release["name"],
@@ -200,21 +206,24 @@ class RepoZipUpdator:
         """Semver 版本比较"""
         return VersionComparator.compare_version(v1, v2)
 
-    async def check_update(
+    def select_newer_release(
         self,
-        url: str,
+        update_data: list,
         current_version: str,
         consider_prerelease: bool = True,
     ) -> ReleaseInfo | None:
-        update_data = await self.fetch_release_info(url)
+        """Return the first newer release, or None when already up to date."""
+
+        if not update_data:
+            return None
 
         sel_release_data = None
+        tag_name = None
         if consider_prerelease:
             tag_name = update_data[0]["tag_name"]
             sel_release_data = update_data[0]
         else:
             for data in update_data:
-                # 跳过带有 alpha、beta 等预发布标签的版本
                 if re.search(
                     r"[\-_.]?(alpha|beta|rc|dev)[\-_.]?\d*$",
                     data["tag_name"],
@@ -235,6 +244,19 @@ class RepoZipUpdator:
             version=tag_name,
             published_at=sel_release_data["published_at"],
             body=f"{tag_name}\n\n{sel_release_data['body']}",
+        )
+
+    async def check_update(
+        self,
+        url: str,
+        current_version: str,
+        consider_prerelease: bool = True,
+    ) -> ReleaseInfo | None:
+        update_data = await self.fetch_release_info(url)
+        return self.select_newer_release(
+            update_data,
+            current_version,
+            consider_prerelease,
         )
 
     async def download_from_repo_url(

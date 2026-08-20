@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from astrbot.core.updator import NoPublishedCoreReleaseError
 from astrbot.dashboard.api import updates as updates_api
 from astrbot.dashboard.services import update_service as update_service_module
 from astrbot.dashboard.services.update_service import UpdateService, UpdateServiceError
@@ -500,3 +501,19 @@ async def test_update_service_rejects_new_records_when_capacity_has_only_running
         await service.update_project({"progress_id": "new", "reboot": False})
 
     assert list(service.update_progress) == ["active"]
+
+
+@pytest.mark.asyncio
+async def test_check_update_reports_unpublished_fork_releases(monkeypatch, tmp_path):
+    service, updater, _lifecycle, _pip_install = _make_service(monkeypatch, tmp_path)
+
+    async def fake_check_update(*args, **kwargs):
+        del args, kwargs
+        raise NoPublishedCoreReleaseError(
+            "当前 fork 未发布可供 Dashboard 下载的 Core Release。请通过更新源码 checkout 升级。"
+        )
+
+    updater.check_update = fake_check_update
+    result = await service.check_update()
+    assert result.data["has_new_version"] is False
+    assert "未发布可供 Dashboard 下载" in (result.message or "")

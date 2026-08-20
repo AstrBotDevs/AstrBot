@@ -15,7 +15,7 @@ from astrbot.core.desktop_runtime import (
     DESKTOP_MANAGED_RESTART_MESSAGE,
     is_desktop_managed_backend,
 )
-from astrbot.core.updator import AstrBotUpdator
+from astrbot.core.updator import AstrBotUpdator, NoPublishedCoreReleaseError
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.error_redaction import redact_sensitive_text, safe_error
 from astrbot.core.utils.pip_installer import PipInstaller
@@ -82,14 +82,11 @@ class UpdateService:
     async def check_update(self) -> UpdateServiceResult:
         try:
             update_result = await self.astrbot_updator.check_update(None, None, False)
+        except NoPublishedCoreReleaseError as exc:
             return UpdateServiceResult(
                 status="success",
-                message=str(update_result)
-                if update_result is not None
-                else "已经是最新版本了。",
-                data={
-                    "has_new_version": update_result is not None,
-                },
+                message=str(exc),
+                data={"has_new_version": False},
             )
         except Exception as exc:
             logger.warning(
@@ -97,6 +94,15 @@ class UpdateService:
                 safe_error("", exc),
             )
             raise UpdateServiceError("检查更新失败。") from exc
+        return UpdateServiceResult(
+            status="success",
+            message=str(update_result)
+            if update_result is not None
+            else "已经是最新版本了。",
+            data={
+                "has_new_version": update_result is not None,
+            },
+        )
 
     async def get_releases(self) -> UpdateServiceResult:
         try:

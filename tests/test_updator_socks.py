@@ -12,7 +12,7 @@ import pytest
 
 from astrbot.core import updator as core_updator
 from astrbot.core.star.updator import PluginUpdator
-from astrbot.core.updator import AstrBotUpdator
+from astrbot.core.updator import AstrBotUpdator, NoPublishedCoreReleaseError
 from astrbot.core.utils.outbound_http import PLUGIN_REPOSITORY
 from astrbot.core.zip_updator import RepoZipUpdator
 
@@ -1024,3 +1024,100 @@ def test_repo_unzip_file_handles_archives_without_explicit_root_dir_entry(
     assert captured["move"] == (expected_file, target_dir)
     assert captured["cleanup"] == expected_root
     assert captured["removed"] == "temp.zip"
+
+
+def test_astrbot_updator_defaults_to_fork_github_releases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ASTRBOT_RELEASE_API", raising=False)
+    monkeypatch.delenv("ASTRBOT_CORE_PACKAGE_BASE_URL", raising=False)
+    updator = AstrBotUpdator()
+    assert updator.ASTRBOT_RELEASE_API == (
+        "https://api.github.com/repos/Xero-Team/AstrBot/releases"
+    )
+    assert updator.CORE_PACKAGE_BASE_URL == ""
+
+
+@pytest.mark.asyncio
+async def test_check_update_returns_none_when_no_releases_are_published(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_fetch_release_info(url: str):
+        del url
+        return []
+
+    updator = RepoZipUpdator()
+    monkeypatch.setattr(updator, "fetch_release_info", fake_fetch_release_info)
+    assert (
+        await updator.check_update(
+            "https://api.github.com/repos/Xero-Team/AstrBot/releases",
+            "v4.27.4",
+        )
+        is None
+    )
+
+
+@pytest.mark.asyncio
+async def test_fetch_release_info_rejects_non_list_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import astrbot.core.zip_updator as zip_updator_module
+
+    async def fake_fetch_json(url, policy, **kwargs):
+        del url, policy, kwargs
+        return {"message": "Not Found"}
+
+    monkeypatch.setattr(zip_updator_module, "fetch_json", fake_fetch_json)
+    with pytest.raises(Exception, match="解析版本信息失败"):
+        await RepoZipUpdator().fetch_release_info(
+            "https://api.github.com/repos/Xero-Team/AstrBot/releases"
+        )
+
+
+@pytest.mark.asyncio
+async def test_fetch_release_info_rejects_non_object_array_items(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import astrbot.core.zip_updator as zip_updator_module
+
+    async def fake_fetch_json(url, policy, **kwargs):
+        del url, policy, kwargs
+        return ["v1"]
+
+    monkeypatch.setattr(zip_updator_module, "fetch_json", fake_fetch_json)
+    with pytest.raises(Exception, match="解析版本信息失败"):
+        await RepoZipUpdator().fetch_release_info(
+            "https://api.github.com/repos/Xero-Team/AstrBot/releases"
+        )
+
+
+@pytest.mark.asyncio
+async def test_download_update_package_rejects_empty_fork_releases(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.delenv("ASTRBOT_CLI", raising=False)
+    monkeypatch.delenv("ASTRBOT_LAUNCHER", raising=False)
+    updator = AstrBotUpdator()
+
+    async def fake_fetch_release_info(url: str, latest: bool = True):
+        del url, latest
+        return []
+
+    monkeypatch.setattr(updator, "fetch_release_info", fake_fetch_release_info)
+    with pytest.raises(NoPublishedCoreReleaseError, match="未发布可供 Dashboard 下载"):
+        await updator.download_update_package(path=tmp_path / "core.zip")
+
+
+@pytest.mark.asyncio
+async def test_astrbot_updator_check_update_rejects_empty_fork_releases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_fetch_release_info(url: str, latest: bool = True):
+        del url, latest
+        return []
+
+    updator = AstrBotUpdator()
+    monkeypatch.setattr(updator, "fetch_release_info", fake_fetch_release_info)
+    with pytest.raises(NoPublishedCoreReleaseError, match="未发布可供 Dashboard 下载"):
+        await updator.check_update(None, None, False)

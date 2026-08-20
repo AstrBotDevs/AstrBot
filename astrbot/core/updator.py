@@ -19,6 +19,16 @@ from astrbot.core.utils.outbound_http import CORE_UPDATE
 
 from .zip_updator import ReleaseInfo, RepoZipUpdator
 
+_FORK_GITHUB_REPO = "Xero-Team/AstrBot"
+_DEFAULT_RELEASE_API = f"https://api.github.com/repos/{_FORK_GITHUB_REPO}/releases"
+_NO_PUBLISHED_CORE_RELEASE = (
+    "当前 fork 未发布可供 Dashboard 下载的 Core Release。请通过更新源码 checkout 升级。"
+)
+
+
+class NoPublishedCoreReleaseError(Exception):
+    """Raised when this fork has no GitHub Releases for Dashboard Core updates."""
+
 
 class AstrBotUpdator(RepoZipUpdator):
     """AstrBot 更新器，继承自 RepoZipUpdator 类
@@ -29,10 +39,14 @@ class AstrBotUpdator(RepoZipUpdator):
     def __init__(self, repo_mirror: str = "", verify: str | bool | None = None) -> None:
         super().__init__(repo_mirror, verify=verify)
         self.MAIN_PATH = get_astrbot_path()
-        self.ASTRBOT_RELEASE_API = "https://api.soulter.top/releases"
-        self.CORE_PACKAGE_BASE_URL = (
-            "https://astrbot-registry.soulter.top/download/astrbot-core"
+        self.ASTRBOT_RELEASE_API = (
+            os.environ.get("ASTRBOT_RELEASE_API", _DEFAULT_RELEASE_API).strip()
+            or _DEFAULT_RELEASE_API
         )
+        self.CORE_PACKAGE_BASE_URL = os.environ.get(
+            "ASTRBOT_CORE_PACKAGE_BASE_URL",
+            "",
+        ).strip()
 
     def _build_core_package_url(self, version: str | None) -> str | None:
         """Build the hosted core package URL for a release tag.
@@ -189,8 +203,12 @@ class AstrBotUpdator(RepoZipUpdator):
         consider_prerelease: bool = True,
     ) -> ReleaseInfo | None:
         """检查更新"""
-        return await super().check_update(
-            self.ASTRBOT_RELEASE_API,
+        del url, current_version
+        update_data = await self.fetch_release_info(self.ASTRBOT_RELEASE_API)
+        if not update_data:
+            raise NoPublishedCoreReleaseError(_NO_PUBLISHED_CORE_RELEASE)
+        return self.select_newer_release(
+            update_data,
             VERSION,
             consider_prerelease,
         )
@@ -249,6 +267,9 @@ class AstrBotUpdator(RepoZipUpdator):
                 "Error: You are running AstrBot via CLI, please use `pip` or `uv tool upgrade` to update AstrBot."
             )  # 避免版本管理混乱
 
+        if not update_data:
+            raise NoPublishedCoreReleaseError(_NO_PUBLISHED_CORE_RELEASE)
+
         target_version = None
         if latest:
             latest_version = update_data[0]["tag_name"]
@@ -267,7 +288,7 @@ class AstrBotUpdator(RepoZipUpdator):
         else:
             if len(str(version)) != 40:
                 raise Exception("commit hash 长度不正确，应为 40")
-            file_url = f"https://github.com/AstrBotDevs/AstrBot/archive/{version}.zip"
+            file_url = f"https://github.com/{_FORK_GITHUB_REPO}/archive/{version}.zip"
         logger.info(f"准备更新至指定版本的 AstrBot Core: {version}")
 
         download_policy = CORE_UPDATE
