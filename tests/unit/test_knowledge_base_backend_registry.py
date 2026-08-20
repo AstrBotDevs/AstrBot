@@ -19,9 +19,11 @@ class StubBackend(BaseKnowledgeBaseBackend):
         self,
         backend_id: str = "example",
         api_version: int = 1,
+        display_name: str = "Example",
     ) -> None:
         self._backend_id = backend_id
         self.api_version = api_version
+        self._display_name = display_name
 
     @property
     def backend_id(self) -> str:
@@ -31,7 +33,7 @@ class StubBackend(BaseKnowledgeBaseBackend):
     @property
     def display_name(self) -> str:
         """Return the test display name."""
-        return "Example"
+        return self._display_name
 
     async def list_knowledge_bases(
         self,
@@ -107,6 +109,11 @@ def test_incompatible_api_version_is_rejected(
 ) -> None:
     with pytest.raises(ValueError, match="API version"):
         manager.register_backend(StubBackend(api_version=2))
+
+
+def test_empty_display_name_is_rejected(manager: KnowledgeBaseManager) -> None:
+    with pytest.raises(ValueError, match="display name"):
+        manager.register_backend(StubBackend(display_name=" "))
 
 
 def test_builtin_backend_cannot_be_unregistered(

@@ -93,6 +93,21 @@ async def test_list_registered_knowledge_bases_isolates_backend_failures(
 
 
 @pytest.mark.asyncio
+async def test_list_registered_knowledge_bases_filters_backends(
+    manager: KnowledgeBaseManager,
+) -> None:
+    selected = MockBackend("selected")
+    skipped = MockBackend("skipped")
+    manager.register_backend(selected)
+    manager.register_backend(skipped)
+
+    await manager.list_registered_knowledge_bases(backend_ids={"selected"})
+
+    selected.list_mock.assert_awaited_once_with(umo=None)
+    skipped.list_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_retrieve_groups_refs_and_merges_by_backend_rank(
     manager: KnowledgeBaseManager,
 ) -> None:
@@ -161,3 +176,42 @@ async def test_retrieve_isolates_unknown_and_failing_backends(
     assert len(response.warnings) == 2
     assert "not registered" in response.warnings[0]
     assert "offline" in response.warnings[1]
+
+
+@pytest.mark.asyncio
+async def test_retrieve_rejects_invalid_backend_response(
+    manager: KnowledgeBaseManager,
+) -> None:
+    invalid = MockBackend("invalid")
+    invalid.retrieve_mock.return_value = object()
+    manager.register_backend(invalid)
+
+    response = await manager.retrieve_from_backends(
+        [KnowledgeBaseRef("invalid", "kb-1")],
+        KnowledgeBaseQuery(query="AstrBot"),
+    )
+
+    assert response.hits == []
+    assert "invalid response" in response.warnings[0]
+
+
+@pytest.mark.asyncio
+async def test_retrieve_filters_invalid_hits(
+    manager: KnowledgeBaseManager,
+) -> None:
+    backend = MockBackend("example")
+    backend.retrieve_mock.return_value = KnowledgeBaseResponse(
+        hits=[
+            KnowledgeBaseHit(content="", source="empty", rank=1),
+            KnowledgeBaseHit(content="valid", source="docs", rank=1),
+        ]
+    )
+    manager.register_backend(backend)
+
+    response = await manager.retrieve_from_backends(
+        [KnowledgeBaseRef("example", "kb-1")],
+        KnowledgeBaseQuery(query="AstrBot"),
+    )
+
+    assert [hit.content for hit in response.hits] == ["valid"]
+    assert "invalid result" in response.warnings[0]

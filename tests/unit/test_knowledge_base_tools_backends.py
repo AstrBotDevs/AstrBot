@@ -63,6 +63,10 @@ async def test_external_backend_works_without_builtin_configuration(
     assert refs == [KnowledgeBaseRef("dify:company", "dataset-1")]
     assert request.query == "installation"
     assert request.umo == "session-1"
+    context.kb_manager.list_registered_knowledge_bases.assert_awaited_once_with(
+        umo="session-1",
+        backend_ids={"dify:company"},
+    )
 
 
 @pytest.mark.asyncio

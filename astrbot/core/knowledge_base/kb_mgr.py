@@ -78,6 +78,9 @@ class KnowledgeBaseManager:
                 "Knowledge base backend ID may only contain letters, numbers, "
                 "hyphens, underscores, periods, and colons."
             )
+        display_name = backend.display_name
+        if not isinstance(display_name, str) or not display_name.strip():
+            raise ValueError("Knowledge base backend display name cannot be empty.")
         if backend.api_version != KNOWLEDGE_BASE_BACKEND_API_VERSION:
             raise ValueError(
                 f"Knowledge base backend '{backend_id}' uses API version "
@@ -92,7 +95,7 @@ class KnowledgeBaseManager:
         logger.info(
             "Knowledge base backend registered: %s (%s)",
             backend_id,
-            backend.display_name,
+            display_name,
         )
 
     def unregister_backend(self, backend_id: str) -> None:
@@ -115,16 +118,22 @@ class KnowledgeBaseManager:
         self,
         *,
         umo: str | None = None,
+        backend_ids: set[str] | None = None,
     ) -> list[KnowledgeBaseInfo]:
         """List knowledge bases exposed by all registered backends.
 
         Args:
             umo: Optional unified message origin for backend access filtering.
+            backend_ids: Optional backend identifiers to include.
 
         Returns:
             Knowledge bases returned by available backends.
         """
-        backends = list(self.backends.values())
+        backends = [
+            backend
+            for backend_id, backend in self.backends.items()
+            if backend_ids is None or backend_id in backend_ids
+        ]
         responses = await asyncio.gather(
             *(
                 asyncio.wait_for(
@@ -138,14 +147,28 @@ class KnowledgeBaseManager:
 
         knowledge_bases = []
         for backend, response in zip(backends, responses):
-            if isinstance(response, BaseException):
+            if isinstance(response, asyncio.CancelledError):
+                raise response
+            if isinstance(response, Exception):
                 logger.warning(
                     "Failed to list knowledge bases from backend %s: %s",
                     backend.backend_id,
                     response,
                 )
                 continue
+            if not isinstance(response, list):
+                logger.warning(
+                    "Knowledge base backend %s returned an invalid list response.",
+                    backend.backend_id,
+                )
+                continue
             for info in response:
+                if not isinstance(info, KnowledgeBaseInfo):
+                    logger.warning(
+                        "Knowledge base backend %s returned an invalid descriptor.",
+                        backend.backend_id,
+                    )
+                    continue
                 if info.ref.backend_id != backend.backend_id:
                     logger.warning(
                         "Knowledge base backend %s returned a mismatched reference: %s",
@@ -209,9 +232,19 @@ class KnowledgeBaseManager:
         for backend_index, ((backend, _), response) in enumerate(
             zip(selected_backends, responses)
         ):
-            if isinstance(response, BaseException):
+            if isinstance(response, asyncio.CancelledError):
+                raise response
+            if isinstance(response, Exception):
                 warning = (
                     f"Knowledge base backend '{backend.backend_id}' failed: {response}"
+                )
+                warnings.append(warning)
+                logger.warning(warning)
+                continue
+            if not isinstance(response, KnowledgeBaseResponse):
+                warning = (
+                    f"Knowledge base backend '{backend.backend_id}' returned "
+                    "an invalid response."
                 )
                 warnings.append(warning)
                 logger.warning(warning)
@@ -221,7 +254,20 @@ class KnowledgeBaseManager:
                 f"{backend.display_name}: {warning}" for warning in response.warnings
             )
             for hit_index, hit in enumerate(response.hits):
-                if not hit.content or not hit.content.strip():
+                if (
+                    not isinstance(hit, KnowledgeBaseHit)
+                    or not isinstance(hit.content, str)
+                    or not hit.content.strip()
+                    or not isinstance(hit.rank, int)
+                    or hit.rank < 1
+                    or not isinstance(hit.metadata, dict)
+                ):
+                    warning = (
+                        f"Knowledge base backend '{backend.backend_id}' returned "
+                        "an invalid result."
+                    )
+                    warnings.append(warning)
+                    logger.warning(warning)
                     continue
                 hit.metadata.setdefault("backend_id", backend.backend_id)
                 ranked_hits.append((hit.rank, backend_index, hit_index, hit))
