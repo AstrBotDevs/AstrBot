@@ -98,6 +98,7 @@ export interface ProviderByIdData {
 export interface ProviderSourceModelsData {
   models?: string[];
   model_metadata?: Record<string, unknown>;
+  model_key_indexes?: Record<string, number[]>;
 }
 
 export interface ProviderTestData {
