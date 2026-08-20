@@ -1410,6 +1410,44 @@ def test_mcp_dashboard_collection_routes_are_valid_resources():
         assert "dashboard-api" in policy.resource_types
 
 
+def test_filesystem_actions_have_expected_roles_and_risk():
+    from astrbot.core.auth.models import HIGH_RISK_ACTIONS
+    from astrbot.core.auth.registry import ACTION_ROLE_GRANTS, policy_for
+
+    assert ACTION_ROLE_GRANTS["filesystem.read"] == frozenset(
+        {Role.OPERATOR, Role.ROOT}
+    )
+    assert ACTION_ROLE_GRANTS["filesystem.write"] == frozenset(
+        {Role.OPERATOR, Role.ROOT}
+    )
+    assert ACTION_ROLE_GRANTS["filesystem.manage"] == frozenset({Role.ROOT})
+    assert "filesystem.manage" in HIGH_RISK_ACTIONS
+    assert "filesystem.read" not in HIGH_RISK_ACTIONS
+    assert "filesystem.write" not in HIGH_RISK_ACTIONS
+    for action in ("filesystem.read", "filesystem.write", "filesystem.manage"):
+        policy = policy_for(action)
+        assert policy is not None
+        assert "filesystem" in policy.resource_types
+
+
+def test_filesystem_object_resource_handles_unicode_and_dots():
+    resource = object_resource("filesystem", "配置/空间 文件.json")
+    assert resource.type == "filesystem"
+    assert resource.id.startswith("filesystem:v1::")
+    assert "配置" not in resource.id
+
+
+def test_filesystem_collection_resource_is_stable_for_step_up():
+    from astrbot.dashboard.api.authorization import _resource
+
+    payload = type(
+        "Payload",
+        (),
+        {"resource_type": "filesystem", "resource_id": "collection", "config_id": None},
+    )()
+    assert _resource(payload).id == Resource.named("filesystem", "collection").id
+
+
 def test_plugin_and_agent_subjects_are_execution_components():
     plugin = Subject.plugin("weather")
     agent = Subject.agent("sub-1")

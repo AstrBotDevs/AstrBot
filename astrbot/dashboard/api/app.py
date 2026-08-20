@@ -1,3 +1,5 @@
+import copy
+from pathlib import Path
 from types import SimpleNamespace
 
 from fastapi import FastAPI, Request
@@ -7,6 +9,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from astrbot import logger
+from astrbot.core.agent.mcp_client import validate_mcp_server_config
 from astrbot.core.core_runtime import CoreControl, CoreRuntime
 from astrbot.core.db.protocols import DashboardStore
 from astrbot.core.skills.skill_manager import SkillManager
@@ -29,9 +32,11 @@ from astrbot.dashboard.services.config_service import (
     ConfigProfileService,
     ConfigRoutingService,
     ProviderConfigService,
+    save_config_async,
 )
 from astrbot.dashboard.services.conversation_service import ConversationService
 from astrbot.dashboard.services.cron_service import CronService
+from astrbot.dashboard.services.data_file_service import DataFileService
 from astrbot.dashboard.services.file_service import FileService
 from astrbot.dashboard.services.knowledge_base_service import KnowledgeBaseService
 from astrbot.dashboard.services.live_chat_service import LiveChatService
@@ -110,6 +115,118 @@ def create_dashboard_asgi_app(
         totp_runtime_state=runtime.services.totp_runtime_state,
         token_validator=dashboard_token_validator,
     )
+
+    config_files_service = ConfigFileService(
+        runtime.catalogs.plugins,
+        runtime.plugin_manager.lifecycle,
+    )
+
+    async def save_managed_core_config(relative_path: str, next_config: dict) -> None:
+        if relative_path.casefold().startswith("config/"):
+            filename = Path(relative_path).name
+            profile_id = next(
+                (
+                    config_id
+                    for config_id, config in runtime.astrbot_config_mgr.confs.items()
+                    if Path(config.config_path).name == filename
+                ),
+                None,
+            )
+            if profile_id is not None:
+                profile_config = runtime.astrbot_config_mgr.confs[profile_id]
+                previous = copy.deepcopy(dict(profile_config))
+                committed = await save_config_async(
+                    next_config,
+                    profile_config,
+                    is_core=True,
+                )
+                if not committed:
+                    raise RuntimeError("Configuration save was superseded")
+                try:
+                    await core_control.reload_pipeline_scheduler(profile_id)
+                except Exception as exc:
+                    try:
+                        await save_config_async(
+                            previous,
+                            profile_config,
+                            is_core=True,
+                        )
+                        await core_control.reload_pipeline_scheduler(profile_id)
+                    except Exception:
+                        logger.error(
+                            "Failed to restore config profile after reload failure"
+                        )
+                    raise RuntimeError("Configuration reload failed") from exc
+                return
+            await config_files_service.save_plugin_configs(
+                next_config,
+                Path(relative_path).stem,
+            )
+            return
+        if relative_path != "cmd_config.json":
+            if relative_path != "mcp_server.json":
+                raise ValueError("Managed configuration is unavailable")
+            servers = next_config.get("mcpServers")
+            if not isinstance(servers, dict):
+                raise ValueError("MCP configuration must contain an object mcpServers")
+            for server_config in servers.values():
+                if not isinstance(server_config, dict):
+                    raise ValueError("MCP server configuration is invalid")
+                try:
+                    validate_mcp_server_config(server_config)
+                except ValueError as exc:
+                    raise ValueError("MCP server configuration is invalid") from exc
+            tool_manager = runtime.catalogs.tools
+            previous = tool_manager.load_mcp_config()
+            if not tool_manager.save_mcp_config(next_config):
+                raise ValueError("MCP configuration was not saved")
+            try:
+                await tool_manager.disable_mcp_server()
+                for name, server_config in servers.items():
+                    if server_config.get("active", True) and not server_config.get(
+                        "auth_ref"
+                    ):
+                        await tool_manager.enable_mcp_server(
+                            name, server_config, timeout_seconds=30
+                        )
+            except Exception as exc:
+                # Restore both persisted and live state before reporting failure.
+                tool_manager.save_mcp_config(previous)
+                try:
+                    await tool_manager.disable_mcp_server()
+                    old_servers = previous.get("mcpServers", {})
+                    if isinstance(old_servers, dict):
+                        for name, server_config in old_servers.items():
+                            if (
+                                isinstance(server_config, dict)
+                                and server_config.get("active", True)
+                                and not server_config.get("auth_ref")
+                            ):
+                                await tool_manager.enable_mcp_server(
+                                    name, server_config, timeout_seconds=30
+                                )
+                except Exception:
+                    logger.error(
+                        "Failed to restore MCP runtime after configuration error"
+                    )
+                raise RuntimeError("MCP configuration reload failed") from exc
+            return
+        previous = copy.deepcopy(dict(runtime.astrbot_config))
+        committed = await save_config_async(
+            next_config, runtime.astrbot_config, is_core=True
+        )
+        if not committed:
+            raise RuntimeError("Configuration save was superseded")
+        try:
+            await core_control.reload_pipeline_scheduler("default")
+        except Exception:
+            try:
+                await save_config_async(previous, runtime.astrbot_config, is_core=True)
+                await core_control.reload_pipeline_scheduler("default")
+            except Exception:
+                logger.error("Failed to roll back managed Dashboard configuration")
+            raise
+
     app.state.services = SimpleNamespace(
         appearance=AppearanceService(),
         config_profiles=ConfigProfileService(
@@ -126,10 +243,7 @@ def create_dashboard_asgi_app(
             runtime.catalogs.plugins,
             runtime.services.file_token_service,
         ),
-        config_files=ConfigFileService(
-            runtime.catalogs.plugins,
-            runtime.plugin_manager.lifecycle,
-        ),
+        config_files=config_files_service,
         config_routes=ConfigRoutingService(runtime.umop_config_router),
         api_keys=ApiKeyService(db),
         auth=auth_service,
@@ -231,6 +345,10 @@ def create_dashboard_asgi_app(
             SkillManager(builtin_skill_catalog=runtime.catalogs.builtin_skills),
             demo_mode=runtime.services.demo_mode,
             plugins=runtime.catalogs.plugins,
+        ),
+        data_files=DataFileService(
+            demo_mode=runtime.services.demo_mode,
+            managed_config_saver=save_managed_core_config,
         ),
         stats=StatService(
             db,

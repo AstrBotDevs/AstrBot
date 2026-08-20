@@ -78,6 +78,9 @@ ACTIONS = frozenset(
         "tool.mcp_write",
         "tool.computer_use",
         "dashboard.account.manage",
+        "filesystem.read",
+        "filesystem.write",
+        "filesystem.manage",
     }
 )
 
@@ -101,6 +104,7 @@ HIGH_RISK_ACTIONS = frozenset(
         "provider.credentials.write",
         "identity.manage",
         "dashboard.account.manage",
+        "filesystem.manage",
     }
 )
 

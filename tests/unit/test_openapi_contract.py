@@ -64,6 +64,9 @@ NON_JSON_SUCCESS_MEDIA = {
     ("get", "/api/v1/files/{attachment_id}/content"): frozenset(
         {"application/octet-stream"}
     ),
+    ("get", "/api/v1/data-files/download/{path}"): frozenset(
+        {"application/octet-stream"}
+    ),
     (
         "get",
         "/api/v1/chat/projects/{project_id}/workspace/file/download",

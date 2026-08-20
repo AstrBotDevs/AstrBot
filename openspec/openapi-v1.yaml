@@ -93,8 +93,170 @@ tags:
   - name: T2I
   - name: Subagents
   - name: Webhooks
+  - name: Data Files
 
 paths:
+  /api/v1/data-files/tree:
+    get:
+      tags: [Data Files]
+      summary: List runtime data directory entries
+      operationId: listDataFileTree
+      security:
+        - DashboardBearerAuth: []
+        - DashboardCookieAuth: []
+      parameters:
+        - name: path
+          in: query
+          schema: { type: string, default: '' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+  /api/v1/data-files/metadata:
+    get:
+      tags: [Data Files]
+      summary: Get runtime data entry metadata
+      operationId: getDataFileMetadata
+      security:
+        - DashboardBearerAuth: []
+        - DashboardCookieAuth: []
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+  /api/v1/data-files/content/{path}:
+    get:
+      tags: [Data Files]
+      summary: Read a UTF-8 runtime data text file
+      operationId: getDataFileContent
+      security:
+        - DashboardBearerAuth: []
+        - DashboardCookieAuth: []
+      parameters:
+        - { $ref: '#/components/parameters/DataFilePath' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+    put:
+      tags: [Data Files]
+      summary: Atomically save a runtime data text file
+      operationId: updateDataFileContent
+      security:
+        - DashboardBearerAuth: []
+        - DashboardCookieAuth: []
+      parameters:
+        - { $ref: '#/components/parameters/DataFilePath' }
+        - name: If-Match
+          in: header
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DataFileContentRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/v1/data-files/download/{path}:
+    get:
+      tags: [Data Files]
+      summary: Download a runtime data file
+      operationId: downloadDataFile
+      security:
+        - DashboardBearerAuth: []
+        - DashboardCookieAuth: []
+      parameters:
+        - { $ref: '#/components/parameters/DataFilePath' }
+      responses:
+        '200':
+          description: Raw file download
+          content:
+            application/octet-stream:
+              { schema: { type: string, format: binary } }
+  /api/v1/data-files/entries:
+    post:
+      tags: [Data Files]
+      summary: Create a runtime data file or directory
+      operationId: createDataFileEntry
+      security:
+        - DashboardBearerAuth: []
+        - DashboardCookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DataFileEntryRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+    patch:
+      tags: [Data Files]
+      summary: Move or rename a runtime data entry
+      operationId: moveDataFileEntry
+      security:
+        - DashboardBearerAuth: []
+        - DashboardCookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DataFileMoveRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+  /api/v1/data-files/entries/{path}:
+    delete:
+      tags: [Data Files]
+      summary: Delete a runtime data entry
+      operationId: deleteDataFileEntry
+      security:
+        - DashboardBearerAuth: []
+        - DashboardCookieAuth: []
+      parameters:
+        - { $ref: '#/components/parameters/DataFilePath' }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DataFileDeleteRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+  /api/v1/data-files/upload:
+    post:
+      tags: [Data Files]
+      summary: Upload a runtime data file
+      operationId: uploadDataFile
+      security:
+        - DashboardBearerAuth: []
+        - DashboardCookieAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [path, file]
+              properties:
+                path: { type: string }
+                file: { type: string, format: binary }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+  /api/v1/data-files/search:
+    get:
+      tags: [Data Files]
+      summary: Search runtime data file names
+      operationId: searchDataFiles
+      security:
+        - DashboardBearerAuth: []
+        - DashboardCookieAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string }
+        - name: path
+          in: query
+          schema: { type: string, default: '' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+
   /api/v1/auth/login:
     post:
       tags: [Auth]
@@ -4883,6 +5045,14 @@ components:
             type: string
 
   parameters:
+    DataFilePath:
+      name: path
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 4096
     AppearanceWallpaperId:
       name: wallpaper_id
       in: path
@@ -5097,6 +5267,36 @@ components:
         type: string
 
   schemas:
+    DataFileContentRequest:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string, maxLength: 1048576 }
+        expected_etag: { type: string, maxLength: 256 }
+        encoding: { type: string, enum: [utf-8], default: utf-8 }
+      additionalProperties: false
+    DataFileEntryRequest:
+      type: object
+      required: [path]
+      properties:
+        path: { type: string, minLength: 1, maxLength: 4096 }
+        type: { type: string, enum: [file, directory], default: file }
+        content: { type: string, maxLength: 1048576 }
+      additionalProperties: false
+    DataFileMoveRequest:
+      type: object
+      required: [source_path, target_path]
+      properties:
+        source_path: { type: string, minLength: 1, maxLength: 4096 }
+        target_path: { type: string, minLength: 1, maxLength: 4096 }
+      additionalProperties: false
+    DataFileDeleteRequest:
+      type: object
+      required: [path]
+      properties:
+        path: { type: string, minLength: 1, maxLength: 4096 }
+        recursive: { type: boolean, default: false }
+      additionalProperties: false
     SuccessEnvelope:
       type: object
       required: [status, data]

@@ -110,6 +110,9 @@ ACTION_ROLE_GRANTS: dict[str, frozenset[Role]] = {
     "tool.mcp_write": _INSTANCE_AND_ABOVE,
     "tool.computer_use": _INSTANCE_AND_ABOVE,
     "dashboard.account.manage": _ROOT_ONLY,
+    "filesystem.read": frozenset({Role.OPERATOR, Role.ROOT}),
+    "filesystem.write": frozenset({Role.OPERATOR, Role.ROOT}),
+    "filesystem.manage": _ROOT_ONLY,
 }
 
 # Frozen historical NULL-scope expansion. Not a runtime wildcard.
@@ -207,6 +210,8 @@ def _resource_types_for(action: str) -> frozenset[str]:
         )
     if action.startswith("system."):
         return frozenset({"system", "dashboard-api"})
+    if action.startswith("filesystem."):
+        return frozenset({"filesystem", "dashboard-api"})
     if action.startswith("identity.") or action == "dashboard.account.manage":
         return frozenset(
             {

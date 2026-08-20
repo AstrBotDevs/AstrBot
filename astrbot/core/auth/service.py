@@ -1806,6 +1806,29 @@ class AuthorizationService:
             reason="step_up_verification_failed",
         )
 
+    def record_dashboard_operation(
+        self,
+        *,
+        subject: Subject,
+        action: str,
+        resource: Resource,
+        context: AuthContext,
+        effective_role: Role | None,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> bool:
+        """Record a completed Dashboard mutation without caller-controlled data."""
+        return self._audit(
+            audit_id=str(uuid.uuid4()),
+            subject=subject,
+            action=action,
+            resource=resource,
+            context=context,
+            decision="allow",
+            reason="operation_completed",
+            effective_role=effective_role,
+            metadata=metadata,
+        )
+
     async def _consume_step_up(
         self, subject: Subject, action: str, resource: Resource, context: AuthContext
     ) -> str | None:

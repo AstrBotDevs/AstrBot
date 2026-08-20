@@ -1126,9 +1126,26 @@ class ConfigFileService:
         )
         if errors:
             raise DashboardValidationError(f"格式校验未通过: {errors}")
+        try:
+            previous = copy.deepcopy(dict(metadata.config))
+        except TypeError, ValueError:
+            previous = None
         committed = await metadata.config.save_config_async(post_configs)
         _require_config_save_commit(committed)
-        await self.plugin_lifecycle.reload(plugin_name)
+        try:
+            await self.plugin_lifecycle.reload(plugin_name)
+        except Exception:
+            if previous is None:
+                raise
+            try:
+                rollback_committed = await metadata.config.save_config_async(previous)
+                _require_config_save_commit(rollback_committed)
+                await self.plugin_lifecycle.reload(plugin_name)
+            except Exception:
+                logger.error(
+                    "Failed to roll back plugin configuration after reload failure"
+                )
+            raise
 
     async def upload_config_file(
         self,

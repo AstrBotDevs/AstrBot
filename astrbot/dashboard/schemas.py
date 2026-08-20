@@ -8,6 +8,36 @@ class OpenModel(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
+class DataFileContentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    content: str = Field(max_length=1024 * 1024)
+    expected_etag: str | None = Field(default=None, max_length=256)
+    encoding: Literal["utf-8"] = "utf-8"
+
+
+class DataFileEntryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1, max_length=4096)
+    type: Literal["file", "directory"] = "file"
+    content: str = Field(default="", max_length=1024 * 1024)
+
+
+class DataFileMoveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_path: str = Field(min_length=1, max_length=4096)
+    target_path: str = Field(min_length=1, max_length=4096)
+
+
+class DataFileDeleteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1, max_length=4096)
+    recursive: bool = False
+
+
 class PluginDashboardSessionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

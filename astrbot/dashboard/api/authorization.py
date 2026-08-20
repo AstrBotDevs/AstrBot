@@ -263,6 +263,13 @@ def _resource(payload) -> Resource:
             return object_resource(
                 "bot", payload.resource_id, config_id=payload.config_id
             )
+        if payload.resource_type == "filesystem":
+            # Relative data paths may contain Unicode, spaces and dots.  Their
+            # authorization identity must therefore use the opaque helper,
+            # matching the data-files routes rather than Resource.named().
+            if payload.resource_id == "collection":
+                return Resource.named("filesystem", "collection")
+            return object_resource("filesystem", payload.resource_id)
         return Resource.named(
             payload.resource_type, payload.resource_id, config_id=payload.config_id
         )
