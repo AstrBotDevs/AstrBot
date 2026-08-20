@@ -18,11 +18,9 @@ class StubBackend(BaseKnowledgeBaseBackend):
     def __init__(
         self,
         backend_id: str = "example",
-        api_version: int = 1,
         display_name: str = "Example",
     ) -> None:
         self._backend_id = backend_id
-        self.api_version = api_version
         self._display_name = display_name
 
     @property
@@ -102,13 +100,6 @@ def test_invalid_backend_id_is_rejected(
 ) -> None:
     with pytest.raises(ValueError, match="backend ID"):
         manager.register_backend(StubBackend(backend_id=backend_id))
-
-
-def test_incompatible_api_version_is_rejected(
-    manager: KnowledgeBaseManager,
-) -> None:
-    with pytest.raises(ValueError, match="API version"):
-        manager.register_backend(StubBackend(api_version=2))
 
 
 def test_empty_display_name_is_rejected(manager: KnowledgeBaseManager) -> None:

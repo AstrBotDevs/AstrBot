@@ -3,7 +3,6 @@ from dataclasses import FrozenInstanceError
 import pytest
 
 from astrbot.api.knowledge_base import (
-    KNOWLEDGE_BASE_BACKEND_API_VERSION,
     BaseKnowledgeBaseBackend,
     KnowledgeBaseBackendError,
     KnowledgeBaseHit,
@@ -83,7 +82,6 @@ async def test_backend_contract_supports_listing_and_retrieval() -> None:
         KnowledgeBaseQuery(query="AstrBot", umo="session-1"),
     )
 
-    assert backend.api_version == KNOWLEDGE_BASE_BACKEND_API_VERSION
     assert knowledge_bases[0].ref == KnowledgeBaseRef("example", "kb-1")
     assert knowledge_bases[0].metadata == {"umo": "session-1"}
     assert response.hits[0].content == "AstrBot"

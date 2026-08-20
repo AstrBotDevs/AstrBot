@@ -4,8 +4,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
-KNOWLEDGE_BASE_BACKEND_API_VERSION = 1
-
 
 @dataclass(frozen=True, slots=True)
 class KnowledgeBaseRef:
@@ -121,8 +119,6 @@ class KnowledgeBaseTimeoutError(KnowledgeBaseBackendError):
 class BaseKnowledgeBaseBackend(ABC):
     """Define the public contract implemented by knowledge base backends."""
 
-    api_version = KNOWLEDGE_BASE_BACKEND_API_VERSION
-
     @property
     @abstractmethod
     def backend_id(self) -> str:
@@ -170,7 +166,6 @@ class BaseKnowledgeBaseBackend(ABC):
 
 
 __all__ = [
-    "KNOWLEDGE_BASE_BACKEND_API_VERSION",
     "BaseKnowledgeBaseBackend",
     "KnowledgeBaseAuthenticationError",
     "KnowledgeBaseBackendError",

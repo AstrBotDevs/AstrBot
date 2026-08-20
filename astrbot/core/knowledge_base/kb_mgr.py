@@ -4,7 +4,6 @@ from pathlib import Path
 from sqlalchemy.exc import IntegrityError  # type: ignore
 
 from astrbot.api.knowledge_base import (
-    KNOWLEDGE_BASE_BACKEND_API_VERSION,
     BaseKnowledgeBaseBackend,
     KnowledgeBaseHit,
     KnowledgeBaseInfo,
@@ -57,8 +56,7 @@ class KnowledgeBaseManager:
             backend: Backend instance to register.
 
         Raises:
-            ValueError: If the backend identifier is invalid, already registered,
-                or uses an incompatible API version.
+            ValueError: If the backend identifier is invalid or already registered.
         """
         backend_id = backend.backend_id
         if (
@@ -81,12 +79,6 @@ class KnowledgeBaseManager:
         display_name = backend.display_name
         if not isinstance(display_name, str) or not display_name.strip():
             raise ValueError("Knowledge base backend display name cannot be empty.")
-        if backend.api_version != KNOWLEDGE_BASE_BACKEND_API_VERSION:
-            raise ValueError(
-                f"Knowledge base backend '{backend_id}' uses API version "
-                f"{backend.api_version}; expected "
-                f"{KNOWLEDGE_BASE_BACKEND_API_VERSION}."
-            )
         if backend_id in self.backends:
             raise ValueError(
                 f"Knowledge base backend '{backend_id}' is already registered."
