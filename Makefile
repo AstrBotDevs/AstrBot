@@ -163,7 +163,11 @@ napcat-codegen: napcat-models-ob11-event-src
 
 napcat-test:
 	uv run pytest \
-		tests/unit/test_napcat_adapter.py \
+		tests/unit/platform/test_napcat_ws_lifecycle.py \
+		tests/unit/platform/test_napcat_inbound_parse.py \
+		tests/unit/platform/test_napcat_inbound_events.py \
+		tests/unit/platform/test_napcat_notices.py \
+		tests/unit/platform/test_napcat_outbound.py \
 		tests/unit/test_onebot_contracts.py \
 		tests/unit/test_onebot_capability.py \
 		tests/unit/test_napcat_codegen_scripts.py \

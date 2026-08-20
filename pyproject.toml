@@ -104,10 +104,7 @@ url = "https://mirrors.aliyun.com/pypi/simple"
 default = true
 
 [tool.ruff]
-exclude = [
-  "astrbot/core/utils/t2i/local_strategy.py",
-  "astrbot/api/all.py",
-]
+exclude = ["astrbot/core/utils/t2i/local_strategy.py", "astrbot/api/all.py"]
 line-length = 88
 target-version = "py314"
 
@@ -130,6 +127,12 @@ ignore = [
   "ASYNC230", # TODO: handle ASYNC230 in AstrBot
   "ASYNC240", # TODO: handle ASYNC240 in AstrBot
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/unit/agent_sub_stage_support.py" = ["F401"]
+"tests/unit/platform/napcat_adapter_support.py" = ["F401"]
+"tests/unit/dashboard/dashboard_lifecycle_support.py" = ["F401"]
+"tests/unit/dashboard/fastapi_v1_support.py" = ["F401"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 15

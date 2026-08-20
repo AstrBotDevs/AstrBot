@@ -23,6 +23,11 @@ PROJECT_ROOT = Path(__file__).parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+pytest_plugins = [
+    "tests.unit.dashboard.dashboard_lifecycle_support",
+    "tests.unit.dashboard.fastapi_v1_support",
+]
+
 # 设置测试环境变量
 os.environ.setdefault("TESTING", "true")
 os.environ.setdefault("ASTRBOT_TEST_MODE", "true")

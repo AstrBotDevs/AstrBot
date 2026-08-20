@@ -25,7 +25,11 @@ PLATFORM_TEST_MODULES = (
     "tests/unit/platform/test_weixin_official_account_adapter.py",
     "tests/unit/test_aiocqhttp_adapter.py",
     "tests/unit/test_misskey_adapter.py",
-    "tests/unit/test_napcat_adapter.py",
+    "tests/unit/platform/test_napcat_ws_lifecycle.py",
+    "tests/unit/platform/test_napcat_inbound_parse.py",
+    "tests/unit/platform/test_napcat_inbound_events.py",
+    "tests/unit/platform/test_napcat_notices.py",
+    "tests/unit/platform/test_napcat_outbound.py",
     "tests/unit/test_satori_adapter.py",
 )
 
