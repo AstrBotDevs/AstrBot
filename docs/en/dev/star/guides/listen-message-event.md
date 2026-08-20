@@ -485,3 +485,30 @@ async def check_ok(self, event: AstrMessageEvent):
 When event propagation is stopped, all subsequent steps will not be executed.
 
 Assuming there's a plugin A, after A terminates event propagation, all subsequent operations will not be executed, such as executing other plugins' handlers or requesting the LLM.
+
+## QQ Official Button Interactions
+
+QQ Official callback buttons (`action.type = 1`) are delivered as WebSocket interaction events. They do not enter the normal message, command, or LLM pipeline. Plugins can handle them with `on_qqofficial_interaction`.
+
+A handler receives the qq-botpy interaction object. Return `QQOfficialInteractionResultCode` or an integer from `0` to `5` as the QQ acknowledgement code, or return `None` when the click does not belong to the plugin so later enabled handlers can inspect it. The first valid result is acknowledged to QQ; an unhandled interaction receives the `FAILED` code.
+
+```python
+from typing import Any
+
+from astrbot.api.event import QQOfficialInteractionResultCode, filter
+
+
+@filter.on_qqofficial_interaction()
+async def on_qqofficial_interaction(
+    self, interaction: Any
+) -> QQOfficialInteractionResultCode | None:
+    resolved = getattr(getattr(interaction, "data", None), "resolved", {})
+    button_data = getattr(resolved, "button_data", None)
+    if button_data != "demo:confirm":
+        return None
+
+    # Start or schedule the real operation here. Return promptly so QQ can stop loading.
+    return QQOfficialInteractionResultCode.SUCCESS
+```
+
+Acknowledgement codes use `QQOfficialInteractionResultCode`: `SUCCESS` (0), `FAILED` (1), `RATE_LIMITED` (2), `DUPLICATE` (3), `FORBIDDEN` (4), and `ADMIN_ONLY` (5). This feature is available only on the QQ Official WebSocket adapter; the QQ Official Webhook adapter does not currently dispatch interaction events and is not supported.
