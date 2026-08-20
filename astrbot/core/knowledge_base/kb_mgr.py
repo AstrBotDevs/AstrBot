@@ -116,14 +116,14 @@ class KnowledgeBaseManager:
         umo: str | None = None,
         backend_ids: set[str] | None = None,
     ) -> list[KnowledgeBaseInfo]:
-        """List knowledge bases exposed by all registered backends.
+        """List enabled knowledge bases exposed by registered backends.
 
         Args:
             umo: Optional unified message origin for backend access filtering.
             backend_ids: Optional backend identifiers to include.
 
         Returns:
-            Knowledge bases returned by available backends.
+            Knowledge bases exposed to AstrBot retrieval by available backends.
         """
         backends = [
             backend

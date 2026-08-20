@@ -104,12 +104,12 @@ async def retrieve_knowledge_base(
         backend_id for backend_id in kb_mgr.backends if backend_id != "builtin"
     }
     if external_backend_ids:
-        available_kbs = await kb_mgr.list_registered_knowledge_bases(
+        enabled_kbs = await kb_mgr.list_registered_knowledge_bases(
             umo=umo,
             backend_ids=external_backend_ids,
         )
         external_refs = [
-            info.ref for info in available_kbs if info.ref.backend_id != "builtin"
+            info.ref for info in enabled_kbs if info.ref.backend_id != "builtin"
         ]
         external_response = await kb_mgr.retrieve_from_backends(
             external_refs,

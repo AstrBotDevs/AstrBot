@@ -139,13 +139,13 @@ class BaseKnowledgeBaseBackend(ABC):
         *,
         umo: str | None = None,
     ) -> list[KnowledgeBaseInfo]:
-        """List knowledge bases exposed to a caller.
+        """List knowledge bases enabled and accessible for a caller.
 
         Args:
             umo: Optional unified message origin for access filtering.
 
         Returns:
-            Knowledge bases available to the caller.
+            Knowledge bases exposed to AstrBot retrieval for the caller.
         """
         raise NotImplementedError
 

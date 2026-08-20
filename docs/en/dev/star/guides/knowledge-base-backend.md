@@ -12,7 +12,7 @@ A plugin must extend `BaseKnowledgeBaseBackend` and implement these members:
 | --- | --- |
 | `backend_id` | Globally unique backend identifier. It must contain 1–128 characters and may only use ASCII letters, numbers, `-`, `_`, `.`, and `:` |
 | `display_name` | Human-readable name used in logs and errors |
-| `list_knowledge_bases()` | Return knowledge bases available to the current session |
+| `list_knowledge_bases()` | Return knowledge bases enabled and accessible for the current session |
 | `retrieve()` | Retrieve standardized results from selected knowledge bases |
 
 The following example shows a complete plugin structure. Its remote paths and response fields are illustrative; adapt them to your service.
@@ -59,13 +59,13 @@ class RemoteKnowledgeBaseBackend(BaseKnowledgeBaseBackend):
         *,
         umo: str | None = None,
     ) -> list[KnowledgeBaseInfo]:
-        """List knowledge bases visible to the current session.
+        """List enabled knowledge bases visible to the current session.
 
         Args:
             umo: Unified message origin used for access filtering.
 
         Returns:
-            Knowledge bases that the current session may query.
+            Enabled knowledge bases that the current session may query.
         """
         response = await self.client.get(
             "/knowledge-bases",
@@ -180,9 +180,10 @@ Scores from different backends are not necessarily comparable, so AstrBot does n
 
 ## Discovery and access control
 
-When external backends are registered, the Agent calls each backend's `list_knowledge_bases(umo=...)` before retrieval and queries every knowledge base it returns. Therefore:
+When external backends are registered, the Agent calls each backend's `list_knowledge_bases(umo=...)` before retrieval and queries every knowledge base it returns. This method represents the set exposed to AstrBot automatic retrieval, not every dataset discoverable in the remote service. Therefore:
 
-- `list_knowledge_bases()` must return only knowledge bases that the current `umo` may access and should use.
+- `list_knowledge_bases()` must return only knowledge bases that the current `umo` may access and that are currently enabled.
+- Expose discoverable but disabled knowledge bases through plugin configuration or Plugin Pages instead of returning them from this method.
 - Return an empty list when a session should not use the backend.
 - Do not expose unauthorized knowledge bases and rely only on a second check in `retrieve()`.
 - Listing and retrieval may run concurrently, so avoid shared mutable request state in backend implementations.

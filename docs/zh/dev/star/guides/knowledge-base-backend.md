@@ -12,7 +12,7 @@
 | --- | --- |
 | `backend_id` | Backend 的全局唯一标识。长度为 1–128，只能包含 ASCII 字母、数字、`-`、`_`、`.` 和 `:` |
 | `display_name` | 用于日志和错误信息的可读名称 |
-| `list_knowledge_bases()` | 返回当前会话可以访问的知识库 |
+| `list_knowledge_bases()` | 返回当前会话已启用且有权访问的知识库 |
 | `retrieve()` | 从指定知识库中检索并返回标准结果 |
 
 下面是一个完整的插件结构示例。远端接口的路径和响应字段仅用于演示，请根据实际服务调整。
@@ -59,13 +59,13 @@ class RemoteKnowledgeBaseBackend(BaseKnowledgeBaseBackend):
         *,
         umo: str | None = None,
     ) -> list[KnowledgeBaseInfo]:
-        """List knowledge bases visible to the current session.
+        """List enabled knowledge bases visible to the current session.
 
         Args:
             umo: Unified message origin used for access filtering.
 
         Returns:
-            Knowledge bases that the current session may query.
+            Enabled knowledge bases that the current session may query.
         """
         response = await self.client.get(
             "/knowledge-bases",
@@ -180,9 +180,10 @@ class Main(Star):
 
 ## 知识库发现和权限
 
-当存在外部 Backend 时，Agent 在检索前会调用每个 Backend 的 `list_knowledge_bases(umo=...)`，然后查询它返回的所有知识库。因此：
+当存在外部 Backend 时，Agent 在检索前会调用每个 Backend 的 `list_knowledge_bases(umo=...)`，然后查询它返回的所有知识库。该方法返回的是“暴露给 AstrBot 自动检索”的集合，而不是远端服务中全部可发现的数据集。因此：
 
-- `list_knowledge_bases()` 只能返回当前 `umo` 有权访问且应当启用的知识库。
+- `list_knowledge_bases()` 只能返回当前 `umo` 有权访问且已经启用的知识库。
+- 如果插件需要展示其他可发现但尚未启用的知识库，应通过自己的配置页或 Plugin Pages 提供，不要把它们加入此方法的返回值。
 - 如果某个会话不应使用此 Backend，应返回空列表。
 - 不要把未经授权的知识库暴露后再依赖 `retrieve()` 二次过滤。
 - 列表和检索调用可能并发发生，Backend 实现应避免共享可变的请求状态。
