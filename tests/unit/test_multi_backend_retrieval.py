@@ -108,6 +108,44 @@ async def test_list_registered_knowledge_bases_filters_backends(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "descriptor",
+    [
+        KnowledgeBaseInfo(ref=None, name="Invalid"),
+        KnowledgeBaseInfo(ref=KnowledgeBaseRef("example", ""), name="Invalid"),
+        KnowledgeBaseInfo(ref=KnowledgeBaseRef("example", "kb-1"), name=" "),
+        KnowledgeBaseInfo(
+            ref=KnowledgeBaseRef("example", "kb-1"),
+            name="Invalid",
+            description=1,
+        ),
+        KnowledgeBaseInfo(
+            ref=KnowledgeBaseRef("example", "kb-1"),
+            name="Invalid",
+            metadata=None,
+        ),
+    ],
+)
+async def test_list_registered_knowledge_bases_filters_invalid_descriptors(
+    manager: KnowledgeBaseManager,
+    descriptor: KnowledgeBaseInfo,
+) -> None:
+    backend = MockBackend("example")
+    backend.list_mock.return_value = [
+        descriptor,
+        KnowledgeBaseInfo(
+            ref=KnowledgeBaseRef("example", "valid"),
+            name="Valid",
+        ),
+    ]
+    manager.register_backend(backend)
+
+    result = await manager.list_registered_knowledge_bases()
+
+    assert [info.ref.knowledge_base_id for info in result] == ["valid"]
+
+
+@pytest.mark.asyncio
 async def test_retrieve_groups_refs_and_merges_by_backend_rank(
     manager: KnowledgeBaseManager,
 ) -> None:
@@ -223,6 +261,32 @@ async def test_retrieve_rejects_invalid_backend_response(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "backend_response",
+    [
+        KnowledgeBaseResponse(hits=None),
+        KnowledgeBaseResponse(hits=[], warnings=None),
+        KnowledgeBaseResponse(hits=[], warnings=[1]),
+    ],
+)
+async def test_retrieve_rejects_invalid_response_containers(
+    manager: KnowledgeBaseManager,
+    backend_response: KnowledgeBaseResponse,
+) -> None:
+    backend = MockBackend("example")
+    backend.retrieve_mock.return_value = backend_response
+    manager.register_backend(backend)
+
+    response = await manager.retrieve_from_backends(
+        [KnowledgeBaseRef("example", "kb-1")],
+        KnowledgeBaseQuery(query="AstrBot"),
+    )
+
+    assert response.hits == []
+    assert "invalid response" in response.warnings[0]
+
+
+@pytest.mark.asyncio
 async def test_retrieve_filters_invalid_hits(
     manager: KnowledgeBaseManager,
 ) -> None:
@@ -251,6 +315,47 @@ async def test_retrieve_filters_invalid_hits(
     )
 
     assert [hit.content for hit in response.hits] == ["valid"]
+    assert "invalid result" in response.warnings[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("source", " "),
+        ("source", 1),
+        ("rank", True),
+        ("score", "not-a-number"),
+        ("score", float("nan")),
+        ("score", float("inf")),
+        ("document_id", 1),
+        ("chunk_id", 1),
+        ("source_uri", 1),
+        ("metadata", None),
+    ],
+)
+async def test_retrieve_filters_hits_with_invalid_fields(
+    manager: KnowledgeBaseManager,
+    field: str,
+    value: object,
+) -> None:
+    backend = MockBackend("example")
+    hit = KnowledgeBaseHit(
+        ref=KnowledgeBaseRef("example", "kb-1"),
+        content="invalid",
+        source="docs",
+        rank=1,
+    )
+    setattr(hit, field, value)
+    backend.retrieve_mock.return_value = KnowledgeBaseResponse(hits=[hit])
+    manager.register_backend(backend)
+
+    response = await manager.retrieve_from_backends(
+        [KnowledgeBaseRef("example", "kb-1")],
+        KnowledgeBaseQuery(query="AstrBot"),
+    )
+
+    assert response.hits == []
     assert "invalid result" in response.warnings[0]
 
 

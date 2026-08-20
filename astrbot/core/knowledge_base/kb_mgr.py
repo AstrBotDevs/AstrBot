@@ -1,4 +1,5 @@
 import asyncio
+import math
 from pathlib import Path
 
 from sqlalchemy.exc import IntegrityError  # type: ignore
@@ -158,7 +159,18 @@ class KnowledgeBaseManager:
                 )
                 continue
             for info in response:
-                if not isinstance(info, KnowledgeBaseInfo):
+                if (
+                    not isinstance(info, KnowledgeBaseInfo)
+                    or not isinstance(info.ref, KnowledgeBaseRef)
+                    or not isinstance(info.ref.knowledge_base_id, str)
+                    or not info.ref.knowledge_base_id
+                    or not isinstance(info.name, str)
+                    or not info.name.strip()
+                    or not (
+                        info.description is None or isinstance(info.description, str)
+                    )
+                    or not isinstance(info.metadata, dict)
+                ):
                     logger.warning(
                         "Knowledge base backend %s returned an invalid descriptor.",
                         backend.backend_id,
@@ -245,6 +257,19 @@ class KnowledgeBaseManager:
                 logger.warning(warning)
                 continue
 
+            if (
+                not isinstance(response.hits, list)
+                or not isinstance(response.warnings, list)
+                or any(not isinstance(warning, str) for warning in response.warnings)
+            ):
+                warning = (
+                    f"Knowledge base backend '{backend.backend_id}' returned "
+                    "an invalid response."
+                )
+                warnings.append(warning)
+                logger.warning(warning)
+                continue
+
             warnings.extend(
                 f"{backend.display_name}: {warning}" for warning in response.warnings
             )
@@ -256,8 +281,22 @@ class KnowledgeBaseManager:
                     or hit.ref.knowledge_base_id not in knowledge_base_ids
                     or not isinstance(hit.content, str)
                     or not hit.content.strip()
+                    or not isinstance(hit.source, str)
+                    or not hit.source.strip()
                     or not isinstance(hit.rank, int)
+                    or isinstance(hit.rank, bool)
                     or hit.rank < 1
+                    or not (
+                        hit.score is None
+                        or (
+                            isinstance(hit.score, (int, float))
+                            and not isinstance(hit.score, bool)
+                            and math.isfinite(hit.score)
+                        )
+                    )
+                    or not (hit.document_id is None or isinstance(hit.document_id, str))
+                    or not (hit.chunk_id is None or isinstance(hit.chunk_id, str))
+                    or not (hit.source_uri is None or isinstance(hit.source_uri, str))
                     or not isinstance(hit.metadata, dict)
                 ):
                     warning = (
