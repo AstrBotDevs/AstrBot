@@ -863,28 +863,7 @@ function getUmoSelectionText(value?: string | null): string {
 }
 
 function resolveUmoSlotValue(item: unknown): string {
-  if (typeof item === 'string') {
-    return item;
-  }
-
-  if (item && typeof item === 'object') {
-    const candidate = item as {
-      raw?: unknown;
-      value?: unknown;
-      title?: unknown;
-    };
-    if (typeof candidate.raw === 'string') {
-      return candidate.raw;
-    }
-    if (typeof candidate.value === 'string') {
-      return candidate.value;
-    }
-    if (typeof candidate.title === 'string') {
-      return candidate.title;
-    }
-  }
-
-  return '';
+  return typeof item === 'string' ? item : '';
 }
 
 async function loadUmos(force = false) {

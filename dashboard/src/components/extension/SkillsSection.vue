@@ -1,6 +1,6 @@
 <template>
   <div class="skills-page">
-    <v-container fluid class="pa-0" elevation="0">
+    <v-container fluid class="pa-0">
       <v-row
         v-if="neoEnabled"
         class="d-flex justify-end align-center px-4 py-3 pb-4"

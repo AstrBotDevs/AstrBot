@@ -9,7 +9,7 @@ minimumReleaseAgeExclude:
   - vue-tsc@3.3.6
   - linkify-it@5.0.2
   - markdown-it@14.3.0
-  - vuetify@4.1.3
+  - vuetify@4.1.9
   - '@tiptap/core@3.30.1'
   - '@tiptap/extension-blockquote@3.30.1'
   - '@tiptap/extension-bold@3.30.1'

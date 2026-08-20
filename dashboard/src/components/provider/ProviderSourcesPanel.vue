@@ -256,9 +256,6 @@ const resolveOption = (item) => {
   if (!item || typeof item !== 'object') {
     return null;
   }
-  if (item.raw && typeof item.raw === 'object') {
-    return item.raw;
-  }
   return item;
 };
 

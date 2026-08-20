@@ -48,7 +48,7 @@
               :key="pair._id"
               class="key-value-pair"
             >
-              <v-row no-gutters align="center" class="mb-2">
+              <v-row no-gutters class="mb-2 align-center">
                 <v-col cols="4">
                   <v-text-field
                     v-model="pair.key"
@@ -156,7 +156,7 @@
                 'template-field-inactive': !isTemplateKeyAdded(templateKey),
               }"
             >
-              <v-row no-gutters align="center" class="mb-2">
+              <v-row no-gutters class="mb-2 align-center">
                 <v-col cols="4">
                   <div class="d-flex flex-column">
                     <span class="text-caption font-weight-medium">{{

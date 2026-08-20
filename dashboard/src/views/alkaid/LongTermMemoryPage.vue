@@ -68,7 +68,7 @@
       <v-divider />
       <v-card-text class="pa-4">
         <form class="memory-filters" @submit.prevent="applyFilters">
-          <v-row dense>
+          <v-row density="comfortable">
             <v-col cols="12" sm="6" lg="3">
               <v-text-field
                 v-model="filters.person_id"
@@ -329,7 +329,7 @@
         <v-divider />
         <v-card-text class="pa-4">
           <form @submit.prevent="loadProfiles">
-            <v-row dense>
+            <v-row density="comfortable">
               <v-col cols="12" sm="6">
                 <v-text-field
                   v-model="profileFilters.person_id"

@@ -1,10 +1,4 @@
 /* Required component internals that cannot be expressed through Vuetify defaults. */
-.v-btn {
-  min-height: 40px;
-  letter-spacing: 0;
-  text-transform: none;
-}
-
 .v-btn--icon.v-btn--density-default {
   min-width: 40px;
   width: 40px;

@@ -1,6 +1,6 @@
 <template>
   <div class="tools-page">
-    <v-container fluid class="pa-0" elevation="0">
+    <v-container fluid class="pa-0">
       <!-- MCP 服务器部分 -->
       <div v-if="mcpServers.length === 0" class="text-center pa-8">
         <v-icon size="64" color="on-surface-variant">mdi-server-off</v-icon>

@@ -57,7 +57,7 @@ const statusItems = [
 
 <template>
   <!-- 过滤器行 -->
-  <v-row class="mb-4" align="center">
+  <v-row class="mb-4 align-center">
     <v-col cols="12" sm="6" md="3">
       <v-select
         :model-value="pluginFilter"

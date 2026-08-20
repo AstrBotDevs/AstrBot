@@ -1,4 +1,6 @@
 @forward 'vuetify/settings' with (
   $color-pack: false,
-  $border-radius-root: 8px
+  $border-radius-root: 8px,
+  $button-height: 40px,
+  $button-text-letter-spacing: 0
 );

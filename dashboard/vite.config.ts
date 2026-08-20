@@ -2,7 +2,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath, URL } from 'url';
 import { defineConfig, type Plugin } from 'vite';
 import vue from '@vitejs/plugin-vue';
-import vuetify from 'vite-plugin-vuetify';
+import vuetify, { transformAssetUrls } from 'vite-plugin-vuetify';
 import { runMdiSubset } from './scripts/subset-mdi-font.mjs';
 
 const t2iShikiRuntimePath = fileURLToPath(
@@ -90,11 +90,7 @@ export default defineConfig(({ command }) => ({
     ...(command === 'build' ? [mdiSubset()] : []),
     t2iShikiRuntimeAsset(),
     vue({
-      template: {
-        compilerOptions: {
-          isCustomElement: (tag) => ['v-list-recognize-title'].includes(tag),
-        },
-      },
+      template: { transformAssetUrls },
     }),
     vuetify({
       autoImport: true,
@@ -135,7 +131,10 @@ export default defineConfig(({ command }) => ({
   build: {
     sourcemap: false,
     chunkSizeWarningLimit: 1024 * 1024, // Set the limit to 1 MB
-    rollupOptions: {
+    rolldownOptions: {
+      checks: {
+        pluginTimings: false,
+      },
       output: {
         manualChunks(id) {
           return resolveVendorChunk(id);

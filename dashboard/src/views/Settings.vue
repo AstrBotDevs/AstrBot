@@ -604,11 +604,7 @@ const secondaryColor = ref(
   getStoredColor('themeSecondary', defaultThemeColors.secondary),
 );
 
-const resolveThemes = () => {
-  if (theme?.themes?.value) return theme.themes.value;
-  if (theme?.global?.themes?.value) return theme.global.themes.value;
-  return null;
-};
+const resolveThemes = () => theme.themes.value ?? null;
 
 const applyThemeColors = (primary, secondary) =>
   void applyUserThemeColors(resolveThemes(), primary, secondary);
