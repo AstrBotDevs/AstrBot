@@ -91,7 +91,7 @@ cd ..
 uv run python scripts/sync_dashboard_dist.py
 ```
 
-更新前阅读 `changelogs/` 中跨越的版本和当前未发布提交。不要使用 `uv tool upgrade astrbot` 更新本 fork；PyPI 上的 `astrbot` 是上游包。
+更新前阅读 `changelogs/` 中跨越的版本和当前未发布提交。不要使用 `uv tool upgrade astrbot` 更新本 fork；PyPI 上的 `astrbot` 是上游包。Dashboard 一键 Core 更新当前没有 fork 发布资产，不要用它安装上游 zip。
 
 ## Agent、权限与输出
 

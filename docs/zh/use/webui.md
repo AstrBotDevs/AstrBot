@@ -159,7 +159,7 @@ ChatUI 会话。
 
 ## 更新管理面板
 
-当前 fork 不发布可供下载的独立 Dashboard Release。源码部署应在更新 checkout 后重新构建 `dashboard/dist`，再运行 `uv run python scripts/sync_dashboard_dist.py`，具体命令见[源码部署](/deploy/astrbot/cli#更新-checkout)。
+当前 fork 不发布可供 Dashboard 下载的 Core 或独立 Dashboard Release。版本检查请求 `Xero-Team/AstrBot` 的 GitHub Releases；列表为空时界面提示未发布 Core Release，不要用面板一键更新去安装上游 zip。源码部署应在更新 checkout 后重新构建 `dashboard/dist`，再运行 `uv run python scripts/sync_dashboard_dist.py`，具体命令见[源码部署](/deploy/astrbot/cli#更新-checkout)。
 
 消息指令和 `astrbot` CLI 都不会下载、安装或更新 Dashboard。上游 Dashboard 静态资源与当前 fork 的后端 API 和前端功能不兼容，不应复制到 `data/dist`。启动时只使用显式 `--webui-dir`、当前源码树构建产物、随包资源或版本匹配的 `data/dist`；没有兼容构建时，后端继续运行，但 WebUI 不可用。
 

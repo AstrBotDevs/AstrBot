@@ -91,7 +91,7 @@ cd ..
 uv run python scripts/sync_dashboard_dist.py
 ```
 
-Read the intervening files under `changelogs/` and current unreleased commits first. Do not use `uv tool upgrade astrbot` for this fork; the `astrbot` package on PyPI is upstream.
+Read the intervening files under `changelogs/` and current unreleased commits first. Do not use `uv tool upgrade astrbot` for this fork; the `astrbot` package on PyPI is upstream. The Dashboard one-click Core updater currently has no fork release assets; do not use it to install an upstream zip.
 
 ## Agent behavior, permissions, and output
 

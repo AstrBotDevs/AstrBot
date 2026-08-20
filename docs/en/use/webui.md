@@ -164,7 +164,7 @@ You can enable or disable trace recording using the switch at the top of the pag
 
 ## Updating the Admin Panel
 
-This fork does not currently publish an independent downloadable Dashboard release. Source deployments should rebuild `dashboard/dist` after updating the checkout and run `uv run python scripts/sync_dashboard_dist.py`; see [Update the Checkout](/en/deploy/astrbot/cli#update-the-checkout).
+This fork does not publish downloadable Core or independent Dashboard releases. The in-app version check queries GitHub Releases for `Xero-Team/AstrBot`; when that list is empty the UI reports that no Core Release is published. Do not use the Dashboard one-click updater to install an upstream zip. Source deployments should rebuild `dashboard/dist` after updating the checkout and run `uv run python scripts/sync_dashboard_dist.py`; see [Update the Checkout](/en/deploy/astrbot/cli#update-the-checkout).
 
 Message commands and the `astrbot` CLI never download, install, or update Dashboard assets. Upstream Dashboard static files are incompatible with this fork's backend API and frontend behavior and must not be copied into `data/dist`. Startup uses only an explicit `--webui-dir`, a build from the current source tree, bundled assets, or a version-matched `data/dist`. Without a compatible build, the backend continues to run but the WebUI is unavailable.
 
