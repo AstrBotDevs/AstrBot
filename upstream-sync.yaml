@@ -5,16 +5,17 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 9c895838d3c6cd7ddad3cc94bb38718ce90b0281
-  synced_at_utc: 2026-08-19T13:21:21Z
+  commit: 4fe29759758255a35ad01ea6177a91c2293bfcd3
+  synced_at_utc: 2026-08-20T04:58:17Z
   sync_method: manual-adaptation
-  source_pr: '9725, 9721, 9702'
+  source_pr: '9747, 9749'
   note: >-
-    Reviewed the interval from 8819da3f67ffe6282c4808d654e6c1dba47460f2
-    through 9c895838d3c6cd7ddad3cc94bb38718ce90b0281. Adapted the WeCom KF
-    open_kfid fallback, LLM metadata fallback endpoint (#9725), CodeQL
-    action pin (#9721), and Telegram audio Record conversion (#9702) against
-    the fork's runtime-owned catalog, immutable Action SHA, and lazy media
-    resolver boundaries. Validation passed: focused pytest coverage and
-    make check-yaml. No upstream version bump occurred in this interval, so
-    4.27.3 and its changelog remain unchanged.
+    Reviewed the interval from 9c895838d3c6cd7ddad3cc94bb38718ce90b0281
+    through 4fe29759758255a35ad01ea6177a91c2293bfcd3. Adapted the preferences
+    OOM fix (#9747) onto the fork's async-only PreferenceStore write overlay
+    without restoring deprecated sync APIs or sqlite3 helpers. Adapted the
+    4.27.4 version bump (#9749) by synchronizing pyproject.toml and
+    astrbot.__version__, finalizing the existing fork changelog, and omitting
+    upstream-only entries, skipped commits, and upstream compare links.
+    Validation passed: focused pytest coverage for shared preferences and
+    Prettier on the changelog.
