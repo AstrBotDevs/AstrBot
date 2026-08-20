@@ -46,7 +46,9 @@ jobs:
           export TESTING=true
           export ZHIPU_API_KEY=${{ secrets.OPENAI_API_KEY }}
           uv run pytest --test-profile all --cov=astrbot --cov-branch \
-            --cov-report=xml --cov-report=term -q --tb=short
+            --cov-report=xml --cov-report=json --cov-report=term -q --tb=short
+          uv run python scripts/check_function_coverage.py \
+            --coverage-file coverage.json --min 95
 
       - name: Check Codecov configuration
         id: codecov

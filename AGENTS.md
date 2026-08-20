@@ -118,6 +118,11 @@ uv run pytest --test-profile blocking
 make test-blocking
 ```
 
+Python function coverage for the `astrbot` package is gated at 95% via
+`scripts/check_function_coverage.py` in the coverage CI job. Dashboard
+Vitest also enforces measured line and function floors in
+`dashboard/vitest.config.ts`.
+
 Tests use `pytest-asyncio`; mark async tests explicitly. `tests/conftest.py`
 sets test-mode environment flags and classifies tests into `--test-profile`
 tiers. The `blocking` profile excludes `slow`, `integration`, and `live`.
