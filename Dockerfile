@@ -573,6 +573,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /AstrBot/astrbot /AstrBot/astrbot
+COPY --from=builder /AstrBot/changelogs /AstrBot/changelogs
 COPY --from=builder /AstrBot/main.py /AstrBot/runtime_bootstrap.py \
     /AstrBot/pyproject.toml /AstrBot/requirements.txt /AstrBot/.python-version /AstrBot/
 

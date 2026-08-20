@@ -43,6 +43,14 @@ def test_compose_docs_service_uses_the_local_docs_image(compose_name: str) -> No
     assert docs["tmpfs"] == ["/tmp:mode=1777"]
 
 
+def test_runtime_image_copies_changelogs() -> None:
+    """Dashboard changelog APIs read ``changelogs/`` from the application root."""
+    dockerfile = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    runtime_section = dockerfile.rsplit("\nFROM ", 1)[1]
+
+    assert "COPY --from=builder /AstrBot/changelogs /AstrBot/changelogs" in runtime_section
+
+
 def test_docs_dockerfile_builds_from_the_locked_docs_workspace() -> None:
     """The docs image must install from the lockfile before building static assets."""
     dockerfile = (REPO_ROOT / "Dockerfile.docs").read_text(encoding="utf-8")
