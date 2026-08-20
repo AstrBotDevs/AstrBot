@@ -80,6 +80,22 @@ def test_pip_redaction_and_conflict_helpers():
         ]
     )
     assert classified is None or classified.errors
+    core_conflict = pip_installer_module._classify_pip_failure(
+        [
+            "ERROR: Cannot install plugin-x",
+            "The user requested plugin-x==1.0",
+            "astrbot 4.0.0 depends on pydantic>=2 (constraint)",
+        ]
+    )
+    assert core_conflict is not None
+    assert core_conflict.is_core_conflict is True
+    assert (
+        pip_installer_module._normalize_conflict_detail_line(
+            "The user requested plugin-x==1.0"
+        )
+        == "plugin-x==1.0"
+    )
+    assert pip_installer_module._build_pip_conflict_context([]) is None
 
 
 def test_media_ref_helpers(tmp_path):

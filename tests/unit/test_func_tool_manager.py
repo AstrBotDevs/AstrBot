@@ -625,6 +625,17 @@ async def test_modelscope_sync_enables_only_synced_servers(monkeypatch):
     ]
 
 
+def test_log_safe_mcp_debug_config_redacts_command_and_url():
+    manager = FunctionToolManager()
+    manager._log_safe_mcp_debug_config(
+        {"command": ["uv", "run", "secret-token"], "args": ["--token", "abc"]}
+    )
+    manager._log_safe_mcp_debug_config(
+        {"url": "https://user:pass@example.com:8080/mcp?token=1"}
+    )
+    manager._log_safe_mcp_debug_config({"url": "not a url"})
+
+
 def test_shell_session_schema_supports_line_writes():
     from astrbot.core.tools.computer_tools import ShellSessionTool
 
