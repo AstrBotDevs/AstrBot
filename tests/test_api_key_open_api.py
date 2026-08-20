@@ -106,7 +106,7 @@ async def _create_step_up(
     return (await response.get_json())["data"]["token"]
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def core_lifecycle_td(tmp_path_factory):
     runtime_root = tmp_path_factory.mktemp("astrbot-runtime")
     tmp_db_path = runtime_root / "data" / "test_data_api_key.db"
@@ -157,7 +157,7 @@ def app(core_lifecycle_td: AstrBotCoreLifecycle):
     return server.asgi_app
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def test_client(app: FastAPI):
     client = DashboardTestClient(app)
     try:
@@ -176,7 +176,7 @@ def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
     return password
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def authenticated_header(app: FastAPI, core_lifecycle_td: AstrBotCoreLifecycle):
     client = DashboardTestClient(app)
     try:

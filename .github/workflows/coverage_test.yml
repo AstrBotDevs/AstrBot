@@ -45,7 +45,8 @@ jobs:
           mkdir -p data/temp
           export TESTING=true
           export ZHIPU_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          uv run pytest --cov=astrbot -v -o log_cli=true -o log_level=DEBUG
+          uv run pytest --test-profile all --cov=astrbot --cov-branch \
+            --cov-report=xml --cov-report=term -q --tb=short
 
       - name: Check Codecov configuration
         id: codecov

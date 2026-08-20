@@ -146,7 +146,7 @@ async def _wait_for_update_progress(
     pytest.fail(f"Update task did not finish: {progress_id}")
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def core_lifecycle_td(tmp_path_factory):
     """Creates and initializes a core lifecycle instance with a temporary database."""
     runtime_root = tmp_path_factory.mktemp("astrbot-runtime")
@@ -490,7 +490,7 @@ async def _restore_dashboard_password_state(
                     account.totp_recovery_code_hash = ""
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def authenticated_header(app: FastAPI, core_lifecycle_td: AstrBotCoreLifecycle):
     """Handles login and returns an authenticated header."""
     test_client = DashboardTestClient(app)
@@ -579,9 +579,10 @@ async def test_webchat_step_up_recovers_unpersisted_dashboard_session(
     platform_session = await core_lifecycle_td.db.get_platform_session_by_id(session_id)
     assert platform_session is not None
     assert platform_session.platform_id == "webchat"
-    assert platform_session.creator == core_lifecycle_td.astrbot_config["dashboard"][
-        "username"
-    ]
+    assert (
+        platform_session.creator
+        == core_lifecycle_td.astrbot_config["dashboard"]["username"]
+    )
 
 
 @pytest.mark.asyncio
@@ -752,9 +753,7 @@ async def test_webchat_step_up_http_chat_pipeline_context_matches_authorization(
     assert context.platform_member_role == "member"
     assert context.platform_role_source == "none"
     assert context.config_id == "default"
-    assert context.origin_session_resource_id == Resource.session(
-        "default", umo
-    ).id
+    assert context.origin_session_resource_id == Resource.session("default", umo).id
 
     authorization = core_lifecycle_td.runtime.services.authorization
     subject = event.get_extra("auth_subject")

@@ -88,6 +88,7 @@ def test_blocking_profile_excludes_all_non_blocking_domains() -> None:
         _item("tests/unit/test_provider.py", "provider"),
         _item("tests/unit/test_platform.py", "platform"),
         _item("tests/unit/test_slow.py", "slow"),
+        _item("tests/unit/test_live.py", "live"),
         _item("tests/test_api.py", "integration"),
         _item("tests/e2e/test_browser.py"),
     ]
@@ -95,11 +96,14 @@ def test_blocking_profile_excludes_all_non_blocking_domains() -> None:
 
     conftest.pytest_collection_modifyitems(None, config, items)
 
-    assert [item.path.name for item in items] == ["test_core.py"]
-    assert {item.path.name for item in config.hook.deselected} == {
+    assert [item.path.name for item in items] == [
+        "test_core.py",
         "test_provider.py",
         "test_platform.py",
+    ]
+    assert {item.path.name for item in config.hook.deselected} == {
         "test_slow.py",
+        "test_live.py",
         "test_api.py",
         "test_browser.py",
     }

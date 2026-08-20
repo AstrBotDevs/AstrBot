@@ -1,0 +1,16 @@
+coverage:
+  round: down
+  precision: 0
+  status:
+    project:
+      default:
+        target: 65
+        informational: false
+    patch:
+      default:
+        target: auto
+        informational: false
+
+ignore:
+  - astrbot/core/platform/sources/napcat/generated/**
+  - dashboard/src/api/generated/**

@@ -139,16 +139,31 @@ max-complexity = 15
 exclude_dirs = ["tests", "data", ".venv", "dashboard/node_modules"]
 
 [tool.coverage.run]
-omit = ["data/plugins/*", "data/plugins/**/*"]
+source = ["astrbot"]
+branch = true
+omit = [
+  "data/plugins/*",
+  "data/plugins/**/*",
+  "astrbot/core/platform/sources/napcat/generated/**",
+]
 
 [tool.coverage.report]
-omit = ["data/plugins/*", "data/plugins/**/*"]
+omit = [
+  "data/plugins/*",
+  "data/plugins/**/*",
+  "astrbot/core/platform/sources/napcat/generated/**",
+]
+skip_empty = true
+fail_under = 65
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "docs/tests"]
 addopts = "--strict-markers"
 faulthandler_timeout = "120"
 faulthandler_exit_on_timeout = true
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+asyncio_default_test_loop_scope = "function"
 filterwarnings = [
   "ignore:'_UnionGenericAlias' is deprecated.*Python 3\\.17:DeprecationWarning:google\\.genai\\.types",
   "ignore:'return' in a 'finally' block:SyntaxWarning",

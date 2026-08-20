@@ -45,7 +45,7 @@ def reset_global_network_config():
 
 
 TEST_PROFILES = frozenset({"all", "blocking"})
-NON_BLOCKING_MARKERS = frozenset({"provider", "platform", "slow", "integration"})
+NON_BLOCKING_MARKERS = frozenset({"slow", "integration", "live"})
 
 
 def get_test_profile(config) -> str:
@@ -130,7 +130,7 @@ def pytest_addoption(parser):
         action="store",
         default=None,
         choices=sorted(TEST_PROFILES),
-        help="Select the test profile. 'blocking' excludes provider/platform/slow/integration tests.",
+        help="Select the test profile. 'blocking' excludes slow/integration/live tests.",
     )
 
 
@@ -142,6 +142,10 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "slow: test with a larger execution budget")
     config.addinivalue_line("markers", "platform: platform-domain test")
     config.addinivalue_line("markers", "provider: provider-domain test")
+    config.addinivalue_line(
+        "markers",
+        "live: real network, vendor SDK, or required external secret",
+    )
     config.addinivalue_line("markers", "db: database-related test")
 
 
