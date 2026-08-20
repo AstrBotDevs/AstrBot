@@ -171,6 +171,10 @@ export default defineConfig({
             items: [
               { text: '项目架构', link: '/architecture' },
               {
+                text: 'Dashboard 数据文件管理器',
+                link: '/data-file-manager-design',
+              },
+              {
                 text: '插件 Web 扩展迁移',
                 link: '/plugin-web-extension-migration',
               },
@@ -422,6 +426,10 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: 'Architecture', link: '/architecture' },
+              {
+                text: 'Dashboard Data File Manager',
+                link: '/data-file-manager-design',
+              },
               { text: 'Source Development', link: '/development' },
               { text: 'Linux Development', link: '/linux' },
               {
