@@ -143,7 +143,7 @@ def test_command_line_profile_takes_precedence_over_environment(monkeypatch) -> 
     assert conftest.get_test_profile(_FakeConfig("all")) == "all"
 
 
-def test_platform_adapter_suites_are_explicitly_excluded_from_blocking() -> None:
+def test_platform_adapter_suites_keep_platform_domain_tag() -> None:
     for relative_path in PLATFORM_TEST_MODULES:
         module = ast.parse((PROJECT_ROOT / relative_path).read_text(encoding="utf-8"))
         markers = [
@@ -165,3 +165,22 @@ def test_platform_adapter_suites_are_explicitly_excluded_from_blocking() -> None
             and marker.value.value.id == "pytest"
             for marker in markers
         ), relative_path
+
+
+def test_mocked_platform_and_provider_suites_stay_in_blocking() -> None:
+    conftest = _load_conftest_module()
+    items = [
+        _item("tests/test_telegram_adapter.py", "platform"),
+        _item("tests/unit/test_openai_embedding_contract.py", "provider"),
+        _item("tests/unit/test_core.py"),
+    ]
+    config = _FakeConfig("blocking")
+
+    conftest.pytest_collection_modifyitems(None, config, items)
+
+    assert [item.path.name for item in items] == [
+        "test_telegram_adapter.py",
+        "test_openai_embedding_contract.py",
+        "test_core.py",
+    ]
+    assert config.hook.deselected == []

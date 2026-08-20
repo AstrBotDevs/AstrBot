@@ -146,7 +146,6 @@ def pytest_configure(config):
         "markers",
         "live: real network, vendor SDK, or required external secret",
     )
-    config.addinivalue_line("markers", "db: database-related test")
 
 
 def pytest_runtest_call(item) -> None:
