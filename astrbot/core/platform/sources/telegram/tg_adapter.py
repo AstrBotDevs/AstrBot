@@ -130,13 +130,18 @@ class TelegramPlatformAdapter(Platform):
         )  # max seconds - hard cap to prevent indefinite delay
 
     def _build_application(self) -> None:
-        self.application = (
+        builder = (
             ApplicationBuilder()
             .token(self.config["telegram_token"])
             .base_url(self.base_url)
             .base_file_url(self.file_base_url)
-            .build()
         )
+        proxy = self.config.get("telegram_proxy")
+        if proxy:
+            # getUpdates long-polling uses a separate request pool, so .proxy()
+            # alone would leave polling on a direct connection.
+            builder = builder.proxy(proxy).get_updates_proxy(proxy)
+        self.application = builder.build()
         message_handler = TelegramMessageHandler(
             filters=filters.ALL,
             callback=self.message_handler,
