@@ -17,7 +17,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 
 from ..registry import builtin_tool
 from .util import (
-    check_admin_permission,
+    check_local_execution_permission,
     is_local_runtime,
     workspace_root_for_context,
 )
@@ -99,8 +99,13 @@ class ExecuteShellTool(FunctionTool):
         env: dict[str, Any] | None = None,
         yield_time_ms: int = 10_000,
     ) -> ToolExecResult:
-        if permission_error := check_admin_permission(context, "Shell execution"):
+        local_policy, permission_error = check_local_execution_permission(
+            context,
+            "Shell execution",
+        )
+        if permission_error:
             return permission_error
+        sandboxed = bool(local_policy and local_policy.requires_sandbox)
 
         sb = await get_booter(
             context.context.context,
@@ -129,10 +134,16 @@ class ExecuteShellTool(FunctionTool):
                     owner_id=context.context.event.unified_msg_origin,
                     creator_id=creator_id,
                     creator_is_admin=context.context.event.role == "admin",
-                    sandboxed=False,
+                    sandboxed=sandboxed,
+                    allow_network=(
+                        local_policy.allow_network if local_policy else True
+                    ),
+                    filesystem_scope=(
+                        local_policy.filesystem_scope if local_policy else "host"
+                    ),
                     cwd=cwd,
                     env=env,
-                    timeout=timeout,
+                    timeout=min(timeout or 300, 300) if sandboxed else timeout,
                     yield_time_ms=0 if background else yield_time_ms,
                 )
                 elapsed_seconds = monotonic() - started_at
@@ -185,7 +196,8 @@ class LocalExecuteShellTool(ExecuteShellTool):
 
     description: str = (
         "Execute a command in the shell. If it is still running after "
-        "yield_time_ms, the tool returns a managed shell session ID."
+        "yield_time_ms, the tool returns a managed shell session ID. "
+        "Restricted Linux and macOS calls run inside an operating-system sandbox."
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -336,10 +348,11 @@ class ShellSessionTool(FunctionTool):
         Returns:
             JSON session operation result or a user-facing error.
         """
-        if permission_error := check_admin_permission(
+        _, permission_error = check_local_execution_permission(
             context,
             "Shell session management",
-        ):
+        )
+        if permission_error:
             return permission_error
         if not is_local_runtime(context):
             return "Error managing shell session: only local runtime is supported."

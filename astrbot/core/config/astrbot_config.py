@@ -84,6 +84,32 @@ class AstrBotConfig(dict):
                 "_dashboard_password_change_required_from_config",
                 True,
             )
+        provider_settings = conf.get("provider_settings")
+        default_provider_settings = default_config.get("provider_settings")
+        if (
+            isinstance(provider_settings, dict)
+            and isinstance(default_provider_settings, dict)
+            and "computer_use_local_permissions" in default_provider_settings
+            and "computer_use_local_permissions" not in provider_settings
+        ):
+            # Preserve the legacy Local meaning while replacing its use of the
+            # shared admin switch with explicit per-role permissions.
+            member_execution = not provider_settings.get(
+                "computer_use_require_admin",
+                True,
+            )
+            provider_settings["computer_use_local_permissions"] = {
+                "member": {
+                    "allow_execution": member_execution,
+                    "allow_network": False,
+                    "filesystem_scope": "workspace",
+                },
+                "admin": {
+                    "allow_execution": True,
+                    "allow_network": True,
+                    "filesystem_scope": "host",
+                },
+            }
         # 检查配置完整性，并插入
         has_new = self.check_config_integrity(default_config, conf)
         reset_dashboard_password = self._consume_reset_dashboard_password_flag()
