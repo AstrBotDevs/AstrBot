@@ -406,8 +406,13 @@ class TestAstrBotCoreLifecycleInitialize:
         mock_persona_mgr = MagicMock()
         mock_persona_mgr.initialize = AsyncMock()
 
+        # Records the relative order of the two startup steps below.
+        startup_order: list[str] = []
+
         mock_provider_manager = MagicMock()
-        mock_provider_manager.initialize = AsyncMock()
+        mock_provider_manager.initialize = AsyncMock(
+            side_effect=lambda: startup_order.append("providers")
+        )
 
         mock_platform_manager = MagicMock()
         mock_platform_manager.initialize = AsyncMock()
@@ -425,7 +430,9 @@ class TestAstrBotCoreLifecycleInitialize:
         mock_star_context._register_tasks = []
 
         mock_plugin_manager = MagicMock()
-        mock_plugin_manager.reload = AsyncMock()
+        mock_plugin_manager.reload = AsyncMock(
+            side_effect=lambda: startup_order.append("plugins")
+        )
 
         mock_pipeline_scheduler = MagicMock()
         mock_pipeline_scheduler.initialize = AsyncMock()
@@ -523,6 +530,11 @@ class TestAstrBotCoreLifecycleInitialize:
 
         # Verify knowledge base manager initialized
         mock_kb_manager.initialize.assert_awaited_once()
+
+        # Providers must be ready before plugins start: a plugin may issue an
+        # LLM call from initialize(), and an empty instance map would make that
+        # call resolve to an unrelated provider.
+        assert startup_order == ["providers", "plugins"]
 
         # Verify pipeline scheduler loaded
         assert lifecycle.pipeline_scheduler_mapping is not None
