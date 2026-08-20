@@ -1428,6 +1428,9 @@
       "dashscope_embedding": {
         "hint": "Aliyun DashScope Embedding. Default base URL: https://dashscope.aliyuncs.com/api/v1."
       },
+      "volcengine_tts_v3": {
+        "hint": "Volcengine audio generation API (/api/v3/tts/create). Create the API Key in the new console. See https://docs.volcengine.com/docs/6561/2550782 for details."
+      },
       "volcengine_cluster": {
         "description": "Volcengine cluster",
         "hint": "For voice cloning models, choose volcano_icl or volcano_icl_concurr; default is volcano_tts."
@@ -1443,6 +1446,30 @@
       "volcengine_volume_ratio": {
         "description": "Volume",
         "hint": "Volume, range 0.0 to 2.0, default 1.0."
+      },
+      "volcengine_v3_speaker": {
+        "description": "Volcengine voice (v3)",
+        "hint": "Speaker ID for the audio generation API. Leave empty to generate audio from the text prompt without a voice reference."
+      },
+      "volcengine_v3_format": {
+        "description": "Audio output format",
+        "hint": "Supports wav, mp3, pcm, and ogg_opus; the AstrBot preset uses mp3."
+      },
+      "volcengine_v3_sample_rate": {
+        "description": "Sample rate",
+        "hint": "Supports 8000, 16000, 24000, 32000, 44100, and 48000 Hz; the AstrBot preset uses 48000 Hz."
+      },
+      "volcengine_v3_speech_rate": {
+        "description": "Speech rate",
+        "hint": "Range -50 to 100; -50 is 0.5x, 100 is 2x, and 0 applies no adjustment."
+      },
+      "volcengine_v3_loudness_rate": {
+        "description": "Loudness",
+        "hint": "Range -50 to 100; -50 is 0.5x, 100 is 2x, and 0 applies no adjustment."
+      },
+      "volcengine_v3_pitch_rate": {
+        "description": "Pitch",
+        "hint": "Range -12 to 12; 0 applies no pitch adjustment."
       },
       "azure_tts_voice": {
         "description": "Voice style",

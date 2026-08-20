@@ -523,6 +523,10 @@ class ProviderManager:
                 from .sources.volcengine_tts import (
                     ProviderVolcengineTTS as ProviderVolcengineTTS,
                 )
+            case "volcengine_tts_v3":
+                from .sources.volcengine_tts_v3 import (
+                    ProviderVolcengineTTSV3 as ProviderVolcengineTTSV3,
+                )
             case "gemini_tts":
                 from .sources.gemini_tts_source import (
                     ProviderGeminiTTSAPI as ProviderGeminiTTSAPI,
