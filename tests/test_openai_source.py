@@ -11,6 +11,7 @@ from PIL import Image as PILImage
 
 import astrbot.core.provider.sources.openai_source as openai_source_module
 import astrbot.core.provider.sources.request_retry as request_retry
+from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.groq_source import ProviderGroq
@@ -2199,5 +2200,163 @@ async def test_query_filters_empty_list_content_assistant_message(monkeypatch):
         assert len(messages) == 2
         assert messages[0] == {"role": "user", "content": "hi"}
         assert messages[1] == {"role": "user", "content": "again"}
+    finally:
+        await provider.terminate()
+
+
+def _make_tool_call_chunk(tool_call_delta: dict) -> ChatCompletionChunk:
+    return ChatCompletionChunk.model_validate(
+        {
+            "id": "chatcmpl-toolcall",
+            "object": "chat.completion.chunk",
+            "created": 0,
+            "model": "gpt-4o-mini",
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"role": "assistant", "tool_calls": [tool_call_delta]},
+                    "finish_reason": None,
+                }
+            ],
+        }
+    )
+
+
+def _make_finish_chunk(finish_reason: str = "tool_calls") -> ChatCompletionChunk:
+    return ChatCompletionChunk.model_validate(
+        {
+            "id": "chatcmpl-toolcall",
+            "object": "chat.completion.chunk",
+            "created": 0,
+            "model": "gpt-4o-mini",
+            "choices": [
+                {"index": 0, "delta": {}, "finish_reason": finish_reason},
+            ],
+        }
+    )
+
+
+async def _collect_stream_responses(
+    provider: ProviderOpenAIOfficial,
+    monkeypatch,
+    chunks: list[ChatCompletionChunk],
+) -> list[LLMResponse]:
+    async def fake_stream():
+        for chunk in chunks:
+            yield chunk
+
+    async def fake_create(**kwargs):
+        return fake_stream()
+
+    monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+
+    return [
+        response
+        async for response in provider._query_stream(
+            payloads={
+                "model": "gpt-4o-mini",
+                "messages": [{"role": "user", "content": "天气"}],
+            },
+            tools=ToolSet(),
+        )
+    ]
+
+@pytest.mark.asyncio
+async def test_query_stream_normalizes_one_based_tool_call_index(monkeypatch):
+    """上游 index 从 1 开始时不应产生 id=None 的幽灵 tool_call（refs #9590）。"""
+    provider = _make_provider()
+    try:
+        chunks = [
+            _make_tool_call_chunk(
+                {
+                    "index": 1,
+                    "id": "call_abc",
+                    "type": "function",
+                    "function": {"name": "get_weather", "arguments": ""},
+                }
+            ),
+            _make_tool_call_chunk(
+                {"index": 1, "function": {"arguments": '{"city": '}}
+            ),
+            _make_tool_call_chunk({"index": 1, "function": {"arguments": '"北京"}'}}),
+            _make_finish_chunk(),
+        ]
+
+        responses = await _collect_stream_responses(provider, monkeypatch, chunks)
+
+        final_response = responses[-1]
+        assert final_response.tools_call_ids == ["call_abc"]
+        assert final_response.tools_call_name == ["get_weather"]
+        assert final_response.tools_call_args == [{"city": "北京"}]
+        tool_calls = final_response.to_openai_tool_calls_model()
+        assert [tc.id for tc in tool_calls] == ["call_abc"]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_query_stream_falls_back_when_tool_call_id_missing(monkeypatch):
+    """上游完全不返回 tool_call.id 时应回退到占位 id 而非 None。"""
+    provider = _make_provider()
+    try:
+        chunks = [
+            _make_tool_call_chunk(
+                {
+                    "index": 0,
+                    "type": "function",
+                    "function": {"name": "get_weather", "arguments": '{"city":'},
+                }
+            ),
+            _make_tool_call_chunk({"index": 0, "function": {"arguments": '"上海"}'}}),
+            _make_finish_chunk(),
+        ]
+
+        responses = await _collect_stream_responses(provider, monkeypatch, chunks)
+
+        final_response = responses[-1]
+        assert final_response.tools_call_ids == ["call_0"]
+        assert final_response.tools_call_args == [{"city": "上海"}]
+        assert final_response.to_openai_tool_calls_model()[0].id == "call_0"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_parse_openai_completion_falls_back_when_tool_call_id_missing():
+    """非流式响应缺 tool_call.id 时不应把 None 带进 ToolCall 模型。"""
+    provider = _make_provider()
+    try:
+        completion = ChatCompletion.model_construct(
+            id="chatcmpl-noid",
+            object="chat.completion",
+            created=0,
+            model="gemini-3-pro",
+            choices=[
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "type": "function",
+                                "function": {
+                                    "name": "get_weather",
+                                    "arguments": '{"city": "广州"}',
+                                },
+                            }
+                        ],
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ],
+        )
+
+        response = await provider._parse_openai_completion(completion, tools=ToolSet())
+
+        assert response.tools_call_ids == ["call_0"]
+        assert response.tools_call_name == ["get_weather"]
+        assert response.tools_call_args == [{"city": "广州"}]
+        assert response.to_openai_tool_calls_model()[0].id == "call_0"
     finally:
         await provider.terminate()
