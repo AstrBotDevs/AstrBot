@@ -8,8 +8,10 @@ import pytest
 from astrbot.core.utils.outbound_http import (
     CORE_UPDATE,
     GITHUB_MIRROR_TEST,
+    JSON_FETCH,
     MCP_REMOTE,
     PLUGIN_DOWNLOAD_URL,
+    PLUGIN_REGISTRY,
     PLUGIN_REPOSITORY,
     OutboundRedirectError,
     OutboundRequestError,
@@ -71,6 +73,35 @@ def test_rejects_rfc1918_link_local_and_metadata() -> None:
     ):
         with pytest.raises(OutboundRequestError):
             validate_outbound_url(url, PLUGIN_DOWNLOAD_URL)
+
+
+def test_allows_clash_fake_ip_for_resolved_hostnames() -> None:
+    fake_ip = _resolver(
+        {
+            "api.soulter.top": ["198.18.0.57"],
+            "api.github.com": ["198.18.0.72"],
+        }
+    )
+    validate_outbound_url(
+        "https://api.soulter.top/releases",
+        JSON_FETCH,
+        resolve_addresses=fake_ip,
+    )
+    validate_outbound_url(
+        "https://api.soulter.top/astrbot/plugins",
+        PLUGIN_REGISTRY,
+        resolve_addresses=fake_ip,
+    )
+    validate_outbound_url(
+        "https://api.github.com/repos/AstrBotDevs/AstrBot/releases",
+        JSON_FETCH,
+        resolve_addresses=fake_ip,
+    )
+
+
+def test_still_rejects_literal_fake_ip_urls() -> None:
+    with pytest.raises(OutboundRequestError, match="private or reserved"):
+        validate_outbound_url("https://198.18.0.57/x", PLUGIN_DOWNLOAD_URL)
 
 
 def test_rejects_mixed_public_and_private_dns() -> None:

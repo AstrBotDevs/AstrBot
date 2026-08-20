@@ -50,6 +50,8 @@ _METADATA_ADDRESSES = frozenset(
     }
 )
 _LOCAL_HOSTNAMES = frozenset({"localhost", "localhost.localdomain", "ip6-localhost"})
+# fake-ip.
+_PROXY_FAKE_IP_NETWORKS = (ipaddress.ip_network("198.18.0.0/15"),)
 GITHUB_RELATED_HOSTS = frozenset(
     {
         "github.com",
@@ -237,15 +239,33 @@ def _iter_check_addresses(
     return addresses
 
 
+def _is_ip_literal(hostname: str) -> bool:
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        return False
+    return True
+
+
+def _is_proxy_fake_ip(
+    address: ipaddress.IPv4Address | ipaddress.IPv6Address,
+) -> bool:
+    return any(address in network for network in _PROXY_FAKE_IP_NETWORKS)
+
+
 def _is_disallowed_address(
     address: ipaddress.IPv4Address | ipaddress.IPv6Address,
     *,
     allow_private_network: bool,
+    hostname: str | None = None,
 ) -> bool:
+    hostname_is_literal = bool(hostname) and _is_ip_literal(hostname)
     for candidate in _iter_check_addresses(address):
         if candidate in _METADATA_ADDRESSES:
             return True
         if allow_private_network:
+            continue
+        if not hostname_is_literal and _is_proxy_fake_ip(candidate):
             continue
         if (
             candidate.is_private
@@ -361,7 +381,9 @@ def validate_outbound_url(
         raise OutboundRequestError("The destination hostname could not be resolved.")
     if any(
         _is_disallowed_address(
-            address, allow_private_network=policy.allow_private_network
+            address,
+            allow_private_network=policy.allow_private_network,
+            hostname=hostname,
         )
         for address in addresses
     ):
@@ -566,6 +588,7 @@ class ValidatingAiohttpResolver(AbstractResolver):
             _is_disallowed_address(
                 address,
                 allow_private_network=self._policy.allow_private_network,
+                hostname=hostname,
             )
             for address in addresses
         ):
@@ -882,6 +905,7 @@ class PinnedAsyncNetworkBackend:
             _is_disallowed_address(
                 address,
                 allow_private_network=self._policy.allow_private_network,
+                hostname=hostname,
             )
             for address in addresses
         ):
