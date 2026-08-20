@@ -2,6 +2,10 @@ from pathlib import Path
 
 from sqlalchemy.exc import IntegrityError  # type: ignore
 
+from astrbot.api.knowledge_base import (
+    KNOWLEDGE_BASE_BACKEND_API_VERSION,
+    BaseKnowledgeBaseBackend,
+)
 from astrbot.core import logger
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.utils.astrbot_path import get_astrbot_knowledge_base_path
@@ -34,6 +38,56 @@ class KnowledgeBaseManager:
         self._session_deleted_callback_registered = False
 
         self.kb_insts: dict[str, KBHelper] = {}
+        self.backends: dict[str, BaseKnowledgeBaseBackend] = {}
+
+    def register_backend(self, backend: BaseKnowledgeBaseBackend) -> None:
+        """Register a knowledge base backend.
+
+        Args:
+            backend: Backend instance to register.
+
+        Raises:
+            ValueError: If the backend identifier is invalid, already registered,
+                or uses an incompatible API version.
+        """
+        backend_id = backend.backend_id.strip()
+        if not backend_id or len(backend_id) > 128:
+            raise ValueError(
+                "Knowledge base backend ID must contain between 1 and 128 characters."
+            )
+        if any(
+            not character.isascii() or not (character.isalnum() or character in "-_.:")
+            for character in backend_id
+        ):
+            raise ValueError(
+                "Knowledge base backend ID may only contain letters, numbers, "
+                "hyphens, underscores, periods, and colons."
+            )
+        if backend.api_version != KNOWLEDGE_BASE_BACKEND_API_VERSION:
+            raise ValueError(
+                f"Knowledge base backend '{backend_id}' uses API version "
+                f"{backend.api_version}; expected "
+                f"{KNOWLEDGE_BASE_BACKEND_API_VERSION}."
+            )
+        if backend_id in self.backends:
+            raise ValueError(
+                f"Knowledge base backend '{backend_id}' is already registered."
+            )
+        self.backends[backend_id] = backend
+        logger.info(
+            "Knowledge base backend registered: %s (%s)",
+            backend_id,
+            backend.display_name,
+        )
+
+    def unregister_backend(self, backend_id: str) -> None:
+        """Unregister a knowledge base backend.
+
+        Args:
+            backend_id: Backend identifier to remove.
+        """
+        if self.backends.pop(backend_id, None) is not None:
+            logger.info("Knowledge base backend unregistered: %s", backend_id)
 
     async def initialize(self) -> None:
         """初始化知识库模块"""
