@@ -393,6 +393,24 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       source.ollama_disable_thinking = false
     }
 
+    if (source.type === 'openai_responses') {
+      const responseToolDefaults = {
+        responses_web_search: false,
+        responses_web_search_context_size: 'medium',
+        responses_web_search_allowed_domains: [],
+        responses_file_search_vector_store_ids: [],
+        responses_code_interpreter: false,
+        responses_image_generation: false,
+        responses_tool_choice: 'auto'
+      }
+
+      for (const [key, value] of Object.entries(responseToolDefaults)) {
+        if (source[key] === undefined) {
+          source[key] = value
+        }
+      }
+    }
+
     return source
   }
 

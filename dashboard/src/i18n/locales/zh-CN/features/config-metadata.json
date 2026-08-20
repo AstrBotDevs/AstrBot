@@ -1210,6 +1210,34 @@
         "description": "启用原生搜索功能",
         "hint": "启用后，将通过 xAI 的 Chat Completions 原生 Live Search 进行联网检索（按需计费）。仅对 xAI 提供商生效。"
       },
+      "responses_web_search": {
+        "description": "启用 Responses 原生网页搜索",
+        "hint": "通过 OpenAI Responses API 的 web_search 工具联网检索。仅对 openai_responses 提供商生效。"
+      },
+      "responses_web_search_context_size": {
+        "description": "网页搜索上下文大小",
+        "hint": "控制网页搜索为结果分配的上下文量。"
+      },
+      "responses_web_search_allowed_domains": {
+        "description": "网页搜索允许的域名",
+        "hint": "留空则不限制；填写域名后，网页搜索仅使用这些域名及其子域名。"
+      },
+      "responses_file_search_vector_store_ids": {
+        "description": "文件搜索 Vector Store IDs",
+        "hint": "填写 OpenAI Vector Store ID 以启用 file_search；留空则不启用。"
+      },
+      "responses_code_interpreter": {
+        "description": "启用 Responses 原生代码解释器",
+        "hint": "通过 OpenAI 托管容器执行 Python 代码。"
+      },
+      "responses_image_generation": {
+        "description": "启用 Responses 原生图像生成",
+        "hint": "允许支持的模型使用 image_generation 工具生成图片。"
+      },
+      "responses_tool_choice": {
+        "description": "Responses 工具选择策略",
+        "hint": "控制模型自动选择工具、强制调用工具或禁用所有工具。"
+      },
       "rerank_api_base": {
         "description": "重排序模型 API Base URL",
         "hint": "最终请求路径由 Base URL 和路径后缀拼接而成（默认为 /v1/rerank）。"
