@@ -1,5 +1,9 @@
 import { loader } from '@guolao/vue-monaco-editor';
-import * as monaco from 'monaco-editor/editor/editor.api';
+// The standalone editor API intentionally omits several contribution service
+// registrations. Monaco 0.56 lazily instantiates those services when an editor
+// is created, so use the complete browser entrypoint to avoid unknown-service
+// failures (for example ICodeLensCache and IInlayHintsCache).
+import * as monaco from 'monaco-editor';
 import 'monaco-editor/languages/definitions/dockerfile/register';
 import 'monaco-editor/languages/definitions/ini/register';
 import 'monaco-editor/languages/definitions/javascript/register';

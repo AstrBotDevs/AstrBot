@@ -110,6 +110,11 @@ const MainRoutes = {
       component: () => import('@/views/TracePage.vue'),
     },
     {
+      name: 'DataFiles',
+      path: '/data',
+      component: () => import('@/views/DataFilesPage.vue'),
+    },
+    {
       name: 'NativeKnowledgeBase',
       path: '/knowledge-base',
       component: () => import('@/views/knowledge-base/index.vue'),

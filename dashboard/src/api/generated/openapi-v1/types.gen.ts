@@ -4,6 +4,28 @@ export type ClientOptions = {
   baseURL: 'http://localhost:6185' | (string & {});
 };
 
+export type DataFileContentRequest = {
+  content: string;
+  expected_etag?: string;
+  encoding?: 'utf-8';
+};
+
+export type DataFileEntryRequest = {
+  path: string;
+  type?: 'file' | 'directory';
+  content?: string;
+};
+
+export type DataFileMoveRequest = {
+  source_path: string;
+  target_path: string;
+};
+
+export type DataFileDeleteRequest = {
+  path: string;
+  recursive?: boolean;
+};
+
 export type SuccessEnvelope = {
   status: 'ok' | 'warning';
   message?: string;
@@ -981,6 +1003,8 @@ export type DashboardAccountUpdateRequestWritable = {
   is_active?: boolean;
 };
 
+export type DataFilePath = string;
+
 export type AppearanceWallpaperId = string;
 
 export type ExtensionId = string;
@@ -1055,6 +1079,207 @@ export type ToolId = string;
 export type Umo = string;
 
 export type WebhookUuid = string;
+
+export type ListDataFileTreeData = {
+  body?: never;
+  path?: never;
+  query?: {
+    path?: string;
+  };
+  url: '/api/v1/data-files/tree';
+};
+
+export type ListDataFileTreeResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type ListDataFileTreeResponse =
+  ListDataFileTreeResponses[keyof ListDataFileTreeResponses];
+
+export type GetDataFileMetadataData = {
+  body?: never;
+  path?: never;
+  query: {
+    path: string;
+  };
+  url: '/api/v1/data-files/metadata';
+};
+
+export type GetDataFileMetadataResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type GetDataFileMetadataResponse =
+  GetDataFileMetadataResponses[keyof GetDataFileMetadataResponses];
+
+export type GetDataFileContentData = {
+  body?: never;
+  path: {
+    path: string;
+  };
+  query?: never;
+  url: '/api/v1/data-files/content/{path}';
+};
+
+export type GetDataFileContentResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type GetDataFileContentResponse =
+  GetDataFileContentResponses[keyof GetDataFileContentResponses];
+
+export type UpdateDataFileContentData = {
+  body: DataFileContentRequest;
+  headers?: {
+    'If-Match'?: string;
+  };
+  path: {
+    path: string;
+  };
+  query?: never;
+  url: '/api/v1/data-files/content/{path}';
+};
+
+export type UpdateDataFileContentErrors = {
+  /**
+   * Standard AstrBot error response
+   */
+  409: ErrorEnvelope;
+};
+
+export type UpdateDataFileContentError =
+  UpdateDataFileContentErrors[keyof UpdateDataFileContentErrors];
+
+export type UpdateDataFileContentResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type UpdateDataFileContentResponse =
+  UpdateDataFileContentResponses[keyof UpdateDataFileContentResponses];
+
+export type DownloadDataFileData = {
+  body?: never;
+  path: {
+    path: string;
+  };
+  query?: never;
+  url: '/api/v1/data-files/download/{path}';
+};
+
+export type DownloadDataFileResponses = {
+  /**
+   * Raw file download
+   */
+  200: Blob | File;
+};
+
+export type DownloadDataFileResponse =
+  DownloadDataFileResponses[keyof DownloadDataFileResponses];
+
+export type MoveDataFileEntryData = {
+  body: DataFileMoveRequest;
+  path?: never;
+  query?: never;
+  url: '/api/v1/data-files/entries';
+};
+
+export type MoveDataFileEntryResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type MoveDataFileEntryResponse =
+  MoveDataFileEntryResponses[keyof MoveDataFileEntryResponses];
+
+export type CreateDataFileEntryData = {
+  body: DataFileEntryRequest;
+  path?: never;
+  query?: never;
+  url: '/api/v1/data-files/entries';
+};
+
+export type CreateDataFileEntryResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type CreateDataFileEntryResponse =
+  CreateDataFileEntryResponses[keyof CreateDataFileEntryResponses];
+
+export type DeleteDataFileEntryData = {
+  body?: DataFileDeleteRequest;
+  path: {
+    path: string;
+  };
+  query?: never;
+  url: '/api/v1/data-files/entries/{path}';
+};
+
+export type DeleteDataFileEntryResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type DeleteDataFileEntryResponse =
+  DeleteDataFileEntryResponses[keyof DeleteDataFileEntryResponses];
+
+export type UploadDataFileData = {
+  body: {
+    path: string;
+    file: Blob | File;
+  };
+  path?: never;
+  query?: never;
+  url: '/api/v1/data-files/upload';
+};
+
+export type UploadDataFileResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type UploadDataFileResponse =
+  UploadDataFileResponses[keyof UploadDataFileResponses];
+
+export type SearchDataFilesData = {
+  body?: never;
+  path?: never;
+  query: {
+    q: string;
+    path?: string;
+  };
+  url: '/api/v1/data-files/search';
+};
+
+export type SearchDataFilesResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type SearchDataFilesResponse =
+  SearchDataFilesResponses[keyof SearchDataFilesResponses];
 
 export type LoginData = {
   body: LoginRequest;

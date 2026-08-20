@@ -56,6 +56,8 @@ import type {
   CreateConfigProfileResponses,
   CreateCronJobData,
   CreateCronJobResponses,
+  CreateDataFileEntryData,
+  CreateDataFileEntryResponses,
   CreateKnowledgeBaseData,
   CreateKnowledgeBaseResponses,
   CreateMcpServerData,
@@ -106,6 +108,8 @@ import type {
   DeleteConversationResponses,
   DeleteCronJobData,
   DeleteCronJobResponses,
+  DeleteDataFileEntryData,
+  DeleteDataFileEntryResponses,
   DeleteKnowledgeBaseData,
   DeleteKnowledgeBaseResponses,
   DeleteKnowledgeChunkData,
@@ -146,6 +150,8 @@ import type {
   DownloadBackupResponses,
   DownloadChatProjectWorkspaceFileData,
   DownloadChatProjectWorkspaceFileResponses,
+  DownloadDataFileData,
+  DownloadDataFileResponses,
   DownloadOpenApiFileData,
   DownloadOpenApiFileResponses,
   DownloadSkillData,
@@ -187,6 +193,10 @@ import type {
   GetConfigProfileSchemaResponses,
   GetConversationData,
   GetConversationResponses,
+  GetDataFileContentData,
+  GetDataFileContentResponses,
+  GetDataFileMetadataData,
+  GetDataFileMetadataResponses,
   GetFileByNameData,
   GetFileByNameResponses,
   GetFirstNoticeData,
@@ -349,6 +359,8 @@ import type {
   ListConversationsResponses,
   ListCronJobsData,
   ListCronJobsResponses,
+  ListDataFileTreeData,
+  ListDataFileTreeResponses,
   ListFailedPluginsData,
   ListFailedPluginsResponses,
   ListImBotsData,
@@ -422,6 +434,8 @@ import type {
   LoginResponses,
   LogoutData,
   LogoutResponses,
+  MoveDataFileEntryData,
+  MoveDataFileEntryResponses,
   MovePersonaItemData,
   MovePersonaItemResponses,
   OpenChatWebSocketData,
@@ -483,6 +497,8 @@ import type {
   RollbackNeoSkillReleaseResponses,
   RunCronJobData,
   RunCronJobResponses,
+  SearchDataFilesData,
+  SearchDataFilesResponses,
   SendChatMessageData,
   SendChatMessageResponse,
   SendChatMessageResponses,
@@ -556,6 +572,9 @@ import type {
   UpdateCoreResponses,
   UpdateCronJobData,
   UpdateCronJobResponses,
+  UpdateDataFileContentData,
+  UpdateDataFileContentErrors,
+  UpdateDataFileContentResponses,
   UpdateKnowledgeBaseData,
   UpdateKnowledgeBaseResponses,
   UpdateMcpServerData,
@@ -597,6 +616,8 @@ import type {
   UploadBackupChunkResponses,
   UploadBackupData,
   UploadBackupResponses,
+  UploadDataFileData,
+  UploadDataFileResponses,
   UploadFileData,
   UploadFileResponses,
   UploadKnowledgeDocumentData,
@@ -636,6 +657,311 @@ export type Options<
    */
   meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta;
 };
+
+/**
+ * List runtime data directory entries
+ */
+export const listDataFileTree = <ThrowOnError extends boolean = false>(
+  options?: Options<ListDataFileTreeData, ThrowOnError>,
+): RequestResult<ListDataFileTreeResponses, unknown, ThrowOnError> =>
+  (options?.client ?? client).get<
+    ListDataFileTreeResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [
+      {
+        key: 'DashboardBearerAuth',
+        scheme: 'bearer',
+        type: 'http',
+      },
+      {
+        in: 'cookie',
+        name: 'astrbot_dashboard_jwt',
+        type: 'apiKey',
+      },
+    ],
+    url: '/api/v1/data-files/tree',
+    ...options,
+  });
+
+/**
+ * Get runtime data entry metadata
+ */
+export const getDataFileMetadata = <ThrowOnError extends boolean = false>(
+  options: Options<GetDataFileMetadataData, ThrowOnError>,
+): RequestResult<GetDataFileMetadataResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).get<
+    GetDataFileMetadataResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [
+      {
+        key: 'DashboardBearerAuth',
+        scheme: 'bearer',
+        type: 'http',
+      },
+      {
+        in: 'cookie',
+        name: 'astrbot_dashboard_jwt',
+        type: 'apiKey',
+      },
+    ],
+    url: '/api/v1/data-files/metadata',
+    ...options,
+  });
+
+/**
+ * Read a UTF-8 runtime data text file
+ */
+export const getDataFileContent = <ThrowOnError extends boolean = false>(
+  options: Options<GetDataFileContentData, ThrowOnError>,
+): RequestResult<GetDataFileContentResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).get<
+    GetDataFileContentResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [
+      {
+        key: 'DashboardBearerAuth',
+        scheme: 'bearer',
+        type: 'http',
+      },
+      {
+        in: 'cookie',
+        name: 'astrbot_dashboard_jwt',
+        type: 'apiKey',
+      },
+    ],
+    url: '/api/v1/data-files/content/{path}',
+    ...options,
+  });
+
+/**
+ * Atomically save a runtime data text file
+ */
+export const updateDataFileContent = <ThrowOnError extends boolean = false>(
+  options: Options<UpdateDataFileContentData, ThrowOnError>,
+): RequestResult<
+  UpdateDataFileContentResponses,
+  UpdateDataFileContentErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).put<
+    UpdateDataFileContentResponses,
+    UpdateDataFileContentErrors,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [
+      {
+        key: 'DashboardBearerAuth',
+        scheme: 'bearer',
+        type: 'http',
+      },
+      {
+        in: 'cookie',
+        name: 'astrbot_dashboard_jwt',
+        type: 'apiKey',
+      },
+    ],
+    url: '/api/v1/data-files/content/{path}',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Download a runtime data file
+ */
+export const downloadDataFile = <ThrowOnError extends boolean = false>(
+  options: Options<DownloadDataFileData, ThrowOnError>,
+): RequestResult<DownloadDataFileResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).get<
+    DownloadDataFileResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'blob',
+    security: [
+      {
+        key: 'DashboardBearerAuth',
+        scheme: 'bearer',
+        type: 'http',
+      },
+      {
+        in: 'cookie',
+        name: 'astrbot_dashboard_jwt',
+        type: 'apiKey',
+      },
+    ],
+    url: '/api/v1/data-files/download/{path}',
+    ...options,
+  });
+
+/**
+ * Move or rename a runtime data entry
+ */
+export const moveDataFileEntry = <ThrowOnError extends boolean = false>(
+  options: Options<MoveDataFileEntryData, ThrowOnError>,
+): RequestResult<MoveDataFileEntryResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).patch<
+    MoveDataFileEntryResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [
+      {
+        key: 'DashboardBearerAuth',
+        scheme: 'bearer',
+        type: 'http',
+      },
+      {
+        in: 'cookie',
+        name: 'astrbot_dashboard_jwt',
+        type: 'apiKey',
+      },
+    ],
+    url: '/api/v1/data-files/entries',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Create a runtime data file or directory
+ */
+export const createDataFileEntry = <ThrowOnError extends boolean = false>(
+  options: Options<CreateDataFileEntryData, ThrowOnError>,
+): RequestResult<CreateDataFileEntryResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<
+    CreateDataFileEntryResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [
+      {
+        key: 'DashboardBearerAuth',
+        scheme: 'bearer',
+        type: 'http',
+      },
+      {
+        in: 'cookie',
+        name: 'astrbot_dashboard_jwt',
+        type: 'apiKey',
+      },
+    ],
+    url: '/api/v1/data-files/entries',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Delete a runtime data entry
+ */
+export const deleteDataFileEntry = <ThrowOnError extends boolean = false>(
+  options: Options<DeleteDataFileEntryData, ThrowOnError>,
+): RequestResult<DeleteDataFileEntryResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).delete<
+    DeleteDataFileEntryResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [
+      {
+        key: 'DashboardBearerAuth',
+        scheme: 'bearer',
+        type: 'http',
+      },
+      {
+        in: 'cookie',
+        name: 'astrbot_dashboard_jwt',
+        type: 'apiKey',
+      },
+    ],
+    url: '/api/v1/data-files/entries/{path}',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Upload a runtime data file
+ */
+export const uploadDataFile = <ThrowOnError extends boolean = false>(
+  options: Options<UploadDataFileData, ThrowOnError>,
+): RequestResult<UploadDataFileResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<
+    UploadDataFileResponses,
+    unknown,
+    ThrowOnError
+  >({
+    ...formDataBodySerializer,
+    responseType: 'json',
+    security: [
+      {
+        key: 'DashboardBearerAuth',
+        scheme: 'bearer',
+        type: 'http',
+      },
+      {
+        in: 'cookie',
+        name: 'astrbot_dashboard_jwt',
+        type: 'apiKey',
+      },
+    ],
+    url: '/api/v1/data-files/upload',
+    ...options,
+    headers: {
+      'Content-Type': null,
+      ...options.headers,
+    },
+  });
+
+/**
+ * Search runtime data file names
+ */
+export const searchDataFiles = <ThrowOnError extends boolean = false>(
+  options: Options<SearchDataFilesData, ThrowOnError>,
+): RequestResult<SearchDataFilesResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).get<
+    SearchDataFilesResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [
+      {
+        key: 'DashboardBearerAuth',
+        scheme: 'bearer',
+        type: 'http',
+      },
+      {
+        in: 'cookie',
+        name: 'astrbot_dashboard_jwt',
+        type: 'apiKey',
+      },
+    ],
+    url: '/api/v1/data-files/search',
+    ...options,
+  });
 
 /**
  * Login to the dashboard API

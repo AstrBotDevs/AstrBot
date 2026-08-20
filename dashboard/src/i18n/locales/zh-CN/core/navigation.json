@@ -22,6 +22,7 @@
   "sessionManagement": "自定义规则",
   "console": "平台日志",
   "trace": "追踪",
+  "dataFiles": "数据文件",
   "alkaid": "Alkaid",
   "alkaidMemory": "Alkaid 记忆",
   "knowledgeBase": "知识库",

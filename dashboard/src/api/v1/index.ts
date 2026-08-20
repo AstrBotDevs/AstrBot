@@ -14,5 +14,6 @@ export * from './plugins';
 export * from './providers';
 export * from './sessions';
 export * from './skills';
+export * from './dataFiles';
 export * from './system';
 export type * from './types';

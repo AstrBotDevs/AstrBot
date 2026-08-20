@@ -36,6 +36,7 @@ import zhCNCommand from './locales/zh-CN/features/command.json';
 import zhCNSubagent from './locales/zh-CN/features/subagent.json';
 import zhCNWelcome from './locales/zh-CN/features/welcome.json';
 import zhCNAuthorization from './locales/zh-CN/features/authorization.json';
+import zhCNDataFiles from './locales/zh-CN/features/data-files.json';
 
 import zhCNErrors from './locales/zh-CN/messages/errors.json';
 import zhCNSuccess from './locales/zh-CN/messages/success.json';
@@ -76,6 +77,7 @@ import enUSCommand from './locales/en-US/features/command.json';
 import enUSSubagent from './locales/en-US/features/subagent.json';
 import enUSWelcome from './locales/en-US/features/welcome.json';
 import enUSAuthorization from './locales/en-US/features/authorization.json';
+import enUSDataFiles from './locales/en-US/features/data-files.json';
 
 import enUSErrors from './locales/en-US/messages/errors.json';
 import enUSSuccess from './locales/en-US/messages/success.json';
@@ -124,6 +126,7 @@ export const translations = {
       subagent: zhCNSubagent,
       welcome: zhCNWelcome,
       authorization: zhCNAuthorization,
+      'data-files': zhCNDataFiles,
     },
     messages: {
       errors: zhCNErrors,
@@ -172,6 +175,7 @@ export const translations = {
       subagent: enUSSubagent,
       welcome: enUSWelcome,
       authorization: enUSAuthorization,
+      'data-files': enUSDataFiles,
     },
     messages: {
       errors: enUSErrors,

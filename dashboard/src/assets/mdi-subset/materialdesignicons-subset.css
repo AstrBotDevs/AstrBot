@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 264 icons */
+/* Auto-generated MDI subset – 270 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -336,6 +336,10 @@
   content: "\F1640";
 }
 
+.mdi-database-outline::before {
+  content: "\F1632";
+}
+
 .mdi-database-refresh-outline::before {
   content: "\F1634";
 }
@@ -444,6 +448,10 @@
   content: "\F021F";
 }
 
+.mdi-file-move-outline::before {
+  content: "\F1031";
+}
+
 .mdi-file-music-outline::before {
   content: "\F0E2A";
 }
@@ -454,6 +462,10 @@
 
 .mdi-file-pdf-box::before {
   content: "\F0226";
+}
+
+.mdi-file-plus-outline::before {
+  content: "\F0EED";
 }
 
 .mdi-file-powerpoint-box::before {
@@ -484,6 +496,10 @@
   content: "\F024B";
 }
 
+.mdi-folder-cog-outline::before {
+  content: "\F1080";
+}
+
 .mdi-folder-move::before {
   content: "\F0252";
 }
@@ -506,6 +522,10 @@
 
 .mdi-folder-plus::before {
   content: "\F0257";
+}
+
+.mdi-folder-plus-outline::before {
+  content: "\F0B9D";
 }
 
 .mdi-folder-zip-outline::before {
@@ -910,6 +930,10 @@
 
 .mdi-shield-lock-outline::before {
   content: "\F0CCC";
+}
+
+.mdi-shield-outline::before {
+  content: "\F0499";
 }
 
 .mdi-shuffle-variant::before {
