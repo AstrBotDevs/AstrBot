@@ -1,4 +1,3 @@
-
 import pytest
 
 from astrbot.core.project_workspace import ProjectWorkspaceResolver
@@ -6,7 +5,9 @@ from astrbot.dashboard.services.chatui_project_service import ChatUIProjectServi
 
 
 @pytest.mark.asyncio
-async def test_project_workspace_is_creator_and_uuid_derived_and_safe(temp_db, tmp_path):
+async def test_project_workspace_is_creator_and_uuid_derived_and_safe(
+    temp_db, tmp_path
+):
     service = ChatUIProjectService(temp_db)
     service.workspace_resolver = ProjectWorkspaceResolver(tmp_path)
     project = await temp_db.create_chatui_project(creator="alice", title="Project")
@@ -17,13 +18,9 @@ async def test_project_workspace_is_creator_and_uuid_derived_and_safe(temp_db, t
 
     listing = await service.list_workspace_files("alice", project.project_id)
     assert {entry["name"] for entry in listing["entries"]} == {"hello.txt", "image.bin"}
-    preview = await service.get_workspace_file(
-        "alice", project.project_id, "hello.txt"
-    )
+    preview = await service.get_workspace_file("alice", project.project_id, "hello.txt")
     assert preview["content"] == "hello"
-    binary = await service.get_workspace_file(
-        "alice", project.project_id, "image.bin"
-    )
+    binary = await service.get_workspace_file("alice", project.project_id, "image.bin")
     assert binary["binary"] is True
 
     with pytest.raises(Exception, match="Invalid workspace path"):
@@ -52,9 +49,7 @@ async def test_project_workspace_rejects_symlink_and_hardlink(temp_db, tmp_path)
 
 
 @pytest.mark.asyncio
-async def test_project_workspace_enforces_preview_and_listing_limits(
-    temp_db, tmp_path
-):
+async def test_project_workspace_enforces_preview_and_listing_limits(temp_db, tmp_path):
     service = ChatUIProjectService(temp_db)
     service.workspace_resolver = ProjectWorkspaceResolver(tmp_path)
     project = await temp_db.create_chatui_project(creator="alice", title="Project")

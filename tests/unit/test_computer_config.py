@@ -1,6 +1,5 @@
 """Tests for _discover_bay_credentials() auto-discovery and _log_computer_config_changes()."""
 
-
 import json
 from pathlib import Path
 from unittest.mock import patch

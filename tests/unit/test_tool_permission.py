@@ -66,15 +66,15 @@ def test_unclaimed_plugin_tools_have_no_implicit_authorization_action():
 
 
 def test_mcp_read_only_hint_uses_read_permission_for_sdk2_annotations():
-    assert FunctionToolExecutor._required_actions(
-        _mcp_tool(read_only_hint=True)
-    ) == ("tool.mcp_read",)
+    assert FunctionToolExecutor._required_actions(_mcp_tool(read_only_hint=True)) == (
+        "tool.mcp_read",
+    )
 
 
 def test_mcp_tools_without_read_only_hint_require_write_permission():
-    assert FunctionToolExecutor._required_actions(
-        _mcp_tool(read_only_hint=None)
-    ) == ("tool.mcp_write",)
+    assert FunctionToolExecutor._required_actions(_mcp_tool(read_only_hint=None)) == (
+        "tool.mcp_write",
+    )
 
 
 @pytest.mark.asyncio

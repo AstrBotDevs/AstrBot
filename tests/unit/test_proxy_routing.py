@@ -1,21 +1,19 @@
 import pytest
 
 from astrbot.core.utils.network_utils import create_proxy_client
-
-
-@pytest.fixture(autouse=True)
-def _reset_global_network_config():
-    from astrbot.core.utils.proxy_route import set_global_network_config
-
-    set_global_network_config(http_proxy="", no_proxy=[])
-    yield
-    set_global_network_config(http_proxy="", no_proxy=[])
 from astrbot.core.utils.proxy_route import (
     ProxyRouteMode,
     redact_proxy_url,
     resolve_proxy_route,
     set_global_network_config,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_global_network_config():
+    set_global_network_config(http_proxy="", no_proxy=[])
+    yield
+    set_global_network_config(http_proxy="", no_proxy=[])
 
 
 def test_custom_uses_only_local_proxy() -> None:

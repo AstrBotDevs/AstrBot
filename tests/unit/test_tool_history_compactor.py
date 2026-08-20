@@ -4,7 +4,11 @@ from astrbot.core.agent.tool_history_compactor import compact_consumed_tool_hist
 
 
 def _tool_call(call_id: str) -> dict:
-    return {"id": call_id, "type": "function", "function": {"name": "lookup", "arguments": "{}"}}
+    return {
+        "id": call_id,
+        "type": "function",
+        "function": {"name": "lookup", "arguments": "{}"},
+    }
 
 
 def test_compact_consumed_tool_results_preserves_pairing_fields():
@@ -54,5 +58,10 @@ def test_compacted_parallel_results_remain_valid_for_context_truncator():
 
     fixed = ContextTruncator().fix_messages(messages)
 
-    assert [message.role for message in fixed] == ["assistant", "tool", "tool", "assistant"]
+    assert [message.role for message in fixed] == [
+        "assistant",
+        "tool",
+        "tool",
+        "assistant",
+    ]
     assert [message.tool_call_id for message in fixed[1:3]] == ["one", "two"]

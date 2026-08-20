@@ -41,7 +41,9 @@ def test_save_image_retries_when_cleaner_removes_directory_mid_write(
             raise FileNotFoundError("cleaner removed the cache directory")
         original_replace(source, destination)
 
-    monkeypatch.setattr(tool_image_cache_module.os, "replace", cleaner_interleaving_replace)
+    monkeypatch.setattr(
+        tool_image_cache_module.os, "replace", cleaner_interleaving_replace
+    )
 
     image = cache.save_image(_encoded(), "tool-call", "tool")
 

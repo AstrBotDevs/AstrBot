@@ -65,7 +65,9 @@ async def test_isolated_runtime_services_do_not_share_computer_or_tool_images(
             tool_name="example",
         )
 
-        assert second.tool_image_cache.get_image_base64_by_path(cached.file_path) is None
+        assert (
+            second.tool_image_cache.get_image_base64_by_path(cached.file_path) is None
+        )
     finally:
         await first.metrics.shutdown()
         await second.metrics.shutdown()

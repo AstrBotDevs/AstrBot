@@ -83,9 +83,7 @@ async def test_result_observation_preserves_request_scoped_protocol_state() -> N
             "message_id": "request-1",
         }
     )
-    await run.back_queue.put(
-        {"type": "end", "data": "", "message_id": "request-1"}
-    )
+    await run.back_queue.put({"type": "end", "data": "", "message_id": "request-1"})
 
     assert (await coordinator.next_result(run))["type"] == "run_started"
     assert (await coordinator.next_result(run))["type"] == "agent_stats"

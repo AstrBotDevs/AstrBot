@@ -58,4 +58,3 @@ async def test_wecom_ai_queue_listener_stops_and_clears_listener() -> None:
     await asyncio.wait_for(task, timeout=1.0)
 
     assert queue_mgr._listener_callback is None
-

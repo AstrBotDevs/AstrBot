@@ -682,8 +682,7 @@ def test_skills_service_exposes_runtime_plugin_activation_for_inventory(
 
     assert skills["active_plugin-skill"]["plugin_active"] is True
     assert (
-        skills["active_plugin-skill"]["plugin_display_name"]
-        == "Friendly Active Plugin"
+        skills["active_plugin-skill"]["plugin_display_name"] == "Friendly Active Plugin"
     )
     assert skills["disabled_plugin-skill"]["plugin_active"] is False
     assert skills["unknown_plugin-skill"]["plugin_active"] is False

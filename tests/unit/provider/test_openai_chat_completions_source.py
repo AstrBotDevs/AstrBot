@@ -73,10 +73,14 @@ def test_request_payload_normalization_is_shared_and_protects_request_fields():
     streaming_extra_body = provider._normalize_request_payload(streaming_payload)
 
     assert payload == streaming_payload == {"model": "gpt-4o-mini", "messages": []}
-    assert extra_body == streaming_extra_body == {
-        "custom_flag": "value",
-        "temperature": 0.2,
-    }
+    assert (
+        extra_body
+        == streaming_extra_body
+        == {
+            "custom_flag": "value",
+            "temperature": 0.2,
+        }
+    )
 
 
 def test_null_api_version_uses_regular_openai_client(monkeypatch):
@@ -127,7 +131,9 @@ async def test_prepare_chat_payload_removes_internal_state_from_tool_messages():
                 data={},
             ),
         ),
-        tool_calls_result=[ToolCallMessageSegment(tool_call_id="call_1", content="sunny")],
+        tool_calls_result=[
+            ToolCallMessageSegment(tool_call_id="call_1", content="sunny")
+        ],
     )
 
     payload, _ = await provider._prepare_chat_payload(

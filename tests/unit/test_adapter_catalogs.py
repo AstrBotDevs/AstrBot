@@ -83,7 +83,9 @@ def test_provider_catalog_rejects_conflicting_adapter_types() -> None:
         catalog.register_module(second_module)
 
 
-def test_platform_catalog_scans_preimported_module_and_unregisters_exact_module() -> None:
+def test_platform_catalog_scans_preimported_module_and_unregisters_exact_module() -> (
+    None
+):
     first_module, first_adapter = _declared_platform(
         "tests.adapters.platform_one",
         "platform-one",

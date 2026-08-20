@@ -6,7 +6,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlparse
 
-import certifi
 import httpx
 import pytest
 
@@ -769,7 +768,6 @@ async def test_fetch_release_info_logs_status_code_and_truncated_body_on_http_er
     import astrbot.core.zip_updator as zip_updator_module
 
     url = "https://api.soulter.top/releases"
-    body = "x" * 1005
     log_messages: list[str] = []
 
     async def fake_fetch_json(*args, **kwargs):

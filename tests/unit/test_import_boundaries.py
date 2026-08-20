@@ -338,16 +338,14 @@ def test_totp_runtime_state_has_no_module_singleton() -> None:
         target.id
         for node in tree.body
         if isinstance(node, (ast.Assign, ast.AnnAssign))
-        for target in (
-            node.targets if isinstance(node, ast.Assign) else (node.target,)
-        )
+        for target in (node.targets if isinstance(node, ast.Assign) else (node.target,))
         if isinstance(target, ast.Name)
     }
     assert not forbidden_names & assigned_names
 
-    runtime_services = (
-        ROOT / "astrbot" / "core" / "runtime_services.py"
-    ).read_text(encoding="utf-8")
+    runtime_services = (ROOT / "astrbot" / "core" / "runtime_services.py").read_text(
+        encoding="utf-8"
+    )
     assert "totp_runtime_state: TotpRuntimeState" in runtime_services
     assert "totp_runtime_state = TotpRuntimeState()" in runtime_services
     assert "totp_runtime_state=totp_runtime_state" in runtime_services

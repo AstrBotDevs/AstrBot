@@ -144,5 +144,3 @@ class DashboardTestClient:
 
     async def aclose(self) -> None:
         await self._client.aclose()
-
-

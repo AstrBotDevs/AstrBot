@@ -2875,10 +2875,7 @@ async def test_staged_reload_keeps_live_module_published_during_initialize_await
         encoding="utf-8",
     )
     (plugin_path / "main.py").write_text(
-        "from astrbot.api.star import Star\n"
-        "\n"
-        "class LiveGeneration(Star):\n"
-        "    pass\n",
+        "from astrbot.api.star import Star\n\nclass LiveGeneration(Star):\n    pass\n",
         encoding="utf-8",
     )
     runtime_root = Path(plugin_manager_pm.packages.store_path).parents[1]
@@ -2918,7 +2915,9 @@ async def test_staged_reload_keeps_live_module_published_during_initialize_await
             encoding="utf-8",
         )
         importlib.invalidate_caches()
-        reload_task = asyncio.create_task(plugin_manager_pm.lifecycle.reload(plugin_name))
+        reload_task = asyncio.create_task(
+            plugin_manager_pm.lifecycle.reload(plugin_name)
+        )
         await asyncio.wait_for(probe.entered.wait(), timeout=1)
 
         assert sys.modules[module_path] is original_module
@@ -2973,9 +2972,9 @@ async def test_staged_reload_does_not_share_legacy_task_registrations(
         nonlocal registered_coroutine
         observed.extend(
             [
-                self._execution_context._register_tasks
-                is live_context._register_tasks,
-                self._execution_context.background_tasks is live_context.background_tasks,
+                self._execution_context._register_tasks is live_context._register_tasks,
+                self._execution_context.background_tasks
+                is live_context.background_tasks,
             ],
         )
 
@@ -3130,15 +3129,17 @@ async def test_batch_reload_rolls_back_catalog_after_second_extension_promotion_
         "promote_staged_generation",
         fail_second_promotion,
     )
-    monkeypatch.setattr(plugin_manager_pm.lifecycle, "terminate_plugin", terminate_plugin)
+    monkeypatch.setattr(
+        plugin_manager_pm.lifecycle, "terminate_plugin", terminate_plugin
+    )
     try:
         success, error = await plugin_manager_pm.lifecycle.reload()
         assert success is False
         assert error == "second extension promotion failed"
         assert promotion_calls == 2
-        assert [catalogs.plugins.get_by_module(item[0].module_path) for item in original] == [
-            item[0] for item in original
-        ]
+        assert [
+            catalogs.plugins.get_by_module(item[0].module_path) for item in original
+        ] == [item[0] for item in original]
         assert list(catalogs.handlers) == [item[1] for item in original]
         assert catalogs.tools.func_list == [item[2] for item in original]
         terminate_plugin.assert_not_awaited()
@@ -3200,7 +3201,9 @@ async def test_reload_rolls_back_catalog_when_command_refresh_fails(
         "_refresh_command_surfaces",
         AsyncMock(side_effect=[RuntimeError("command refresh failed"), None]),
     )
-    monkeypatch.setattr(plugin_manager_pm.lifecycle, "terminate_plugin", terminate_plugin)
+    monkeypatch.setattr(
+        plugin_manager_pm.lifecycle, "terminate_plugin", terminate_plugin
+    )
     try:
         success, error = await plugin_manager_pm.lifecycle.reload(plugin_name)
         assert success is False

@@ -45,7 +45,9 @@ async def test_slack_webhook_rejects_stale_timestamp(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.asyncio
-async def test_slack_webhook_accepts_fresh_valid_signature(monkeypatch: pytest.MonkeyPatch):
+async def test_slack_webhook_accepts_fresh_valid_signature(
+    monkeypatch: pytest.MonkeyPatch,
+):
     body = json.dumps({"type": "event_callback"}).encode("utf-8")
     handler = AsyncMock()
     client = SlackWebhookClient(
@@ -57,11 +59,14 @@ async def test_slack_webhook_accepts_fresh_valid_signature(monkeypatch: pytest.M
         "astrbot.core.platform.sources.slack.client.time.time",
         lambda: 2_000_000_000,
     )
-    signature = "v0=" + hmac.new(
-        b"secret",
-        b'v0:2000000000:{"type": "event_callback"}',
-        hashlib.sha256,
-    ).hexdigest()
+    signature = (
+        "v0="
+        + hmac.new(
+            b"secret",
+            b'v0:2000000000:{"type": "event_callback"}',
+            hashlib.sha256,
+        ).hexdigest()
+    )
     request = _FakeRequest(
         body,
         {

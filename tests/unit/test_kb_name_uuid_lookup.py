@@ -40,9 +40,13 @@ class TestKBNameUUIDLookup:
     @pytest.mark.asyncio
     async def test_get_kb_by_name_prefers_name_over_uuid(self):
         """Should prefer name match over UUID match"""
-        kb_mgr, kb1_id, kb1_name, kb2_id, kb2_name = (
-            await self._create_mock_kb_manager_with_collision()
-        )
+        (
+            kb_mgr,
+            kb1_id,
+            kb1_name,
+            kb2_id,
+            kb2_name,
+        ) = await self._create_mock_kb_manager_with_collision()
 
         # kb2_name equals kb1_id (collision scenario)
         result = await kb_mgr.get_kb_by_name(kb1_id)
@@ -257,4 +261,3 @@ class TestCheckAllKB:
             mock_logger.warning.assert_called_once()
             call_args = mock_logger.warning.call_args[0][0]
             assert "3/3" in call_args
-

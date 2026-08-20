@@ -32,7 +32,10 @@ def test_sanitize_history_replaces_only_base64_images_without_mutating_input():
 
     assert sanitized[0]["content"][0] == {"type": "text", "text": "caption"}
     assert sanitized[0]["content"][1]["image_url"]["url"] == IMAGE_HISTORY_PLACEHOLDER
-    assert sanitized[0]["content"][2]["image_url"]["url"] == "https://example.test/image.png"
+    assert (
+        sanitized[0]["content"][2]["image_url"]["url"]
+        == "https://example.test/image.png"
+    )
     assert messages == original
 
 

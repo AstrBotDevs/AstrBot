@@ -456,7 +456,9 @@ def test_firecrawl_tools_are_registered_as_builtin_tools():
 
 
 @pytest.mark.asyncio
-async def test_mcp_connection_test_uses_initial_catalog_without_subscription(monkeypatch):
+async def test_mcp_connection_test_uses_initial_catalog_without_subscription(
+    monkeypatch,
+):
     seen = {}
 
     async def fake_connect(self, config, name, *, watch_catalog=True):

@@ -22,9 +22,9 @@ def _service(
 def test_platform_service_find_platform_by_uuid_delegates_to_platform_manager() -> None:
     platform = object()
     platform_manager = SimpleNamespace(
-        find_inst_by_webhook_uuid=lambda webhook_uuid: platform
-        if webhook_uuid == "uuid-1"
-        else None
+        find_inst_by_webhook_uuid=lambda webhook_uuid: (
+            platform if webhook_uuid == "uuid-1" else None
+        )
     )
     service = _service(platform_manager)
 
@@ -78,7 +78,9 @@ async def test_platform_service_invoke_platform_action_validates_input() -> None
         await service.invoke_platform_action("napcat-main", "   ", {})
     assert exc_info.value.status_code == 400
 
-    with pytest.raises(PlatformServiceError, match="Payload must be an object") as exc_info:
+    with pytest.raises(
+        PlatformServiceError, match="Payload must be an object"
+    ) as exc_info:
         await service.invoke_platform_action("napcat-main", "send_poke", [])
     assert exc_info.value.status_code == 400
 
@@ -89,7 +91,9 @@ async def test_platform_service_invoke_platform_action_maps_common_errors() -> N
         raise LookupError("Platform adapter not found: missing")
 
     async def _unsupported(*_args, **_kwargs):
-        raise NotImplementedError("Platform missing does not support action `send_poke`")
+        raise NotImplementedError(
+            "Platform missing does not support action `send_poke`"
+        )
 
     async def _bad_payload(*_args, **_kwargs):
         raise ValueError("group_id is required")
@@ -98,16 +102,22 @@ async def test_platform_service_invoke_platform_action_maps_common_errors() -> N
     unsupported_service = _service(SimpleNamespace(invoke_action=_unsupported))
     bad_payload_service = _service(SimpleNamespace(invoke_action=_bad_payload))
 
-    with pytest.raises(PlatformServiceError, match="Platform adapter not found") as exc_info:
+    with pytest.raises(
+        PlatformServiceError, match="Platform adapter not found"
+    ) as exc_info:
         await missing_service.invoke_platform_action("missing", "send_poke", {})
     assert exc_info.value.status_code == 404
 
-    with pytest.raises(PlatformServiceError, match="does not support action") as exc_info:
+    with pytest.raises(
+        PlatformServiceError, match="does not support action"
+    ) as exc_info:
         await unsupported_service.invoke_platform_action("missing", "send_poke", {})
     assert exc_info.value.status_code == 400
 
     with pytest.raises(PlatformServiceError, match="group_id is required") as exc_info:
-        await bad_payload_service.invoke_platform_action("napcat-main", "send_group_notice", {})
+        await bad_payload_service.invoke_platform_action(
+            "napcat-main", "send_group_notice", {}
+        )
     assert exc_info.value.status_code == 400
 
 
@@ -227,7 +237,9 @@ async def test_platform_registration_maps_provisioning_validation_errors() -> No
     )
     service = _service(SimpleNamespace(), catalog)
 
-    with pytest.raises(PlatformServiceError, match="Missing registration_code") as exc_info:
+    with pytest.raises(
+        PlatformServiceError, match="Missing registration_code"
+    ) as exc_info:
         await service.handle_platform_registration(
             "invalid-provisioning",
             {"action": "poll"},
@@ -237,7 +249,9 @@ async def test_platform_registration_maps_provisioning_validation_errors() -> No
 
 
 @pytest.mark.asyncio
-async def test_platform_registration_rejects_unknown_or_unprovisioned_adapters() -> None:
+async def test_platform_registration_rejects_unknown_or_unprovisioned_adapters() -> (
+    None
+):
     catalog = PlatformCatalog()
     adapter = type("UnprovisionedAdapter", (), {})
     catalog.register(
@@ -256,14 +270,18 @@ async def test_platform_registration_rejects_unknown_or_unprovisioned_adapters()
     service = _service(SimpleNamespace(), catalog)
 
     for platform_type in ("unprovisioned", "not-a-platform"):
-        with pytest.raises(PlatformServiceError, match="Unsupported platform registration") as exc_info:
-            await service.handle_platform_registration(platform_type, {"action": "start"})
+        with pytest.raises(
+            PlatformServiceError, match="Unsupported platform registration"
+        ) as exc_info:
+            await service.handle_platform_registration(
+                platform_type, {"action": "start"}
+            )
         assert exc_info.value.status_code == 404
 
 
 def test_platform_service_does_not_import_concrete_platform_sources() -> None:
-    source = Path(
-        "astrbot/dashboard/services/platform_service.py"
-    ).read_text(encoding="utf-8")
+    source = Path("astrbot/dashboard/services/platform_service.py").read_text(
+        encoding="utf-8"
+    )
 
     assert "astrbot.core.platform.sources" not in source

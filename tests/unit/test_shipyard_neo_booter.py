@@ -1,6 +1,5 @@
 """Tests for ShipyardNeoBooter — readiness gate, shutdown cleanup, and rebuild recovery."""
 
-
 import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch

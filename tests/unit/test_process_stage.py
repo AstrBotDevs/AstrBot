@@ -56,7 +56,9 @@ sys.modules["astrbot.core.pipeline.process_stage.method.star_request"] = (
     _stub_star_request_module
 )
 sys.modules.pop("astrbot.core.pipeline.process_stage.stage", None)
-process_stage_module = importlib.import_module("astrbot.core.pipeline.process_stage.stage")
+process_stage_module = importlib.import_module(
+    "astrbot.core.pipeline.process_stage.stage"
+)
 
 if _original_agent_request_module is not None:
     sys.modules["astrbot.core.pipeline.process_stage.method.agent_request"] = (
@@ -90,6 +92,7 @@ if _had_stage_attr:
     process_stage_pkg.stage = _original_stage_attr
 else:
     process_stage_pkg.__dict__.pop("stage", None)
+
 
 class FakeEvent:
     def __init__(

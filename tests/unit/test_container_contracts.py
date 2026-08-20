@@ -48,7 +48,9 @@ def test_runtime_image_copies_changelogs() -> None:
     dockerfile = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
     runtime_section = dockerfile.rsplit("\nFROM ", 1)[1]
 
-    assert "COPY --from=builder /AstrBot/changelogs /AstrBot/changelogs" in runtime_section
+    assert (
+        "COPY --from=builder /AstrBot/changelogs /AstrBot/changelogs" in runtime_section
+    )
 
 
 def test_docs_dockerfile_builds_from_the_locked_docs_workspace() -> None:

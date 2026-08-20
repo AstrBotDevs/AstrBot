@@ -2542,7 +2542,9 @@ async def test_internal_process_sends_error_for_blocked_provider_api_base(monkey
         internal, "build_main_agent", AsyncMock(return_value=build_result)
     )
     register_runner = MagicMock()
-    stage.ctx.execution_context.follow_up_coordinator.register_active_runner = register_runner
+    stage.ctx.execution_context.follow_up_coordinator.register_active_runner = (
+        register_runner
+    )
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
 
@@ -3084,8 +3086,12 @@ async def test_internal_process_skips_history_save_when_event_stopped_without_ab
     )
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
-    stage.ctx.execution_context.follow_up_coordinator.register_active_runner = register_runner
-    stage.ctx.execution_context.follow_up_coordinator.unregister_active_runner = unregister_runner
+    stage.ctx.execution_context.follow_up_coordinator.register_active_runner = (
+        register_runner
+    )
+    stage.ctx.execution_context.follow_up_coordinator.unregister_active_runner = (
+        unregister_runner
+    )
     _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
 
@@ -3199,8 +3205,12 @@ async def test_internal_process_unregisters_runner_and_sends_error_when_history_
     )
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
-    stage.ctx.execution_context.follow_up_coordinator.register_active_runner = register_runner
-    stage.ctx.execution_context.follow_up_coordinator.unregister_active_runner = unregister_runner
+    stage.ctx.execution_context.follow_up_coordinator.register_active_runner = (
+        register_runner
+    )
+    stage.ctx.execution_context.follow_up_coordinator.unregister_active_runner = (
+        unregister_runner
+    )
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
     _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(
@@ -3273,8 +3283,12 @@ async def test_internal_process_sends_error_when_stats_task_creation_fails_befor
     )
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
-    stage.ctx.execution_context.follow_up_coordinator.register_active_runner = register_runner
-    stage.ctx.execution_context.follow_up_coordinator.unregister_active_runner = unregister_runner
+    stage.ctx.execution_context.follow_up_coordinator.register_active_runner = (
+        register_runner
+    )
+    stage.ctx.execution_context.follow_up_coordinator.unregister_active_runner = (
+        unregister_runner
+    )
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
     _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(task_utils.asyncio, "create_task", fail_create_task)
@@ -3355,8 +3369,12 @@ async def test_internal_process_sends_error_when_metric_task_creation_fails_afte
     )
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
-    stage.ctx.execution_context.follow_up_coordinator.register_active_runner = register_runner
-    stage.ctx.execution_context.follow_up_coordinator.unregister_active_runner = unregister_runner
+    stage.ctx.execution_context.follow_up_coordinator.register_active_runner = (
+        register_runner
+    )
+    stage.ctx.execution_context.follow_up_coordinator.unregister_active_runner = (
+        unregister_runner
+    )
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
     _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(task_utils.asyncio, "create_task", fail_on_second_create_task)

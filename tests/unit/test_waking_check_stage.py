@@ -184,10 +184,13 @@ async def test_webchat_thread_authorization_uses_verified_parent_session():
     await stage._attach_authorization(event)
 
     context = event.get_extra("auth_context")
-    assert context.origin_session_resource_id == Resource.session(
-        "default",
-        f"webchat:FriendMessage:webchat!alice!{parent_session_id}",
-    ).id
+    assert (
+        context.origin_session_resource_id
+        == Resource.session(
+            "default",
+            f"webchat:FriendMessage:webchat!alice!{parent_session_id}",
+        ).id
+    )
 
 
 def install_handlers(stage, monkeypatch, handlers) -> None:

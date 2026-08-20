@@ -1,4 +1,3 @@
-
 import pytest
 
 from astrbot.core.file_token_service import FileTokenService

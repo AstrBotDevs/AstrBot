@@ -8,7 +8,9 @@ from astrbot.core.platform.sources.lark.server import LarkWebhookServer
 
 
 class _FakeRequest:
-    def __init__(self, body: bytes, event_data: dict, headers: dict | None = None) -> None:
+    def __init__(
+        self, body: bytes, event_data: dict, headers: dict | None = None
+    ) -> None:
         self._body = body
         self._event_data = event_data
         self.headers = headers or {}

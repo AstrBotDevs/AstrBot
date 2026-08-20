@@ -73,7 +73,6 @@ def test_log_enricher_normalizes_unknown_fields_and_bounds_summary():
     assert "secret" not in entry["summary"]
 
 
-
 def test_log_service_filters_categories_and_replays_by_event_id():
     broker = LogBroker()
     broker.publish(

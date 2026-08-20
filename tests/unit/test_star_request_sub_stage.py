@@ -162,8 +162,12 @@ async def test_star_request_process_reports_handler_errors_and_stops(monkeypatch
 
     assert yielded == [None]
     on_plugin_error.assert_awaited_once()
-    assert event.result_history[-1].get_plain_text().startswith(
-        ":(\n\n在调用插件 demo-plugin 的处理函数 boom 时出现异常：broken handler"
+    assert (
+        event.result_history[-1]
+        .get_plain_text()
+        .startswith(
+            ":(\n\n在调用插件 demo-plugin 的处理函数 boom 时出现异常：broken handler"
+        )
     )
     assert event.clear_result_calls == 1
     assert event.is_stopped() is True

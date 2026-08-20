@@ -94,7 +94,9 @@ def test_apply_startup_env_flags_does_not_reset_for_help(monkeypatch):
     assert DASHBOARD_RESET_PASSWORD_ENV not in os.environ
 
 
-def test_prepare_runtime_environment_appends_user_site_packages_after_runtime_paths(monkeypatch):
+def test_prepare_runtime_environment_appends_user_site_packages_after_runtime_paths(
+    monkeypatch,
+):
     astrbot_root = "/tmp/astrbot-root"
     site_packages_path = "/tmp/astrbot-site-packages"
     original_sys_path = list(sys.path)
@@ -104,10 +106,18 @@ def test_prepare_runtime_environment_appends_user_site_packages_after_runtime_pa
     monkeypatch.setattr(
         "astrbot.application.get_astrbot_site_packages_path", lambda: site_packages_path
     )
-    monkeypatch.setattr("astrbot.application.get_astrbot_config_path", lambda: "/tmp/config")
-    monkeypatch.setattr("astrbot.application.get_astrbot_plugin_path", lambda: "/tmp/plugins")
-    monkeypatch.setattr("astrbot.application.get_astrbot_temp_path", lambda: "/tmp/temp")
-    monkeypatch.setattr("astrbot.application.get_astrbot_knowledge_base_path", lambda: "/tmp/kb")
+    monkeypatch.setattr(
+        "astrbot.application.get_astrbot_config_path", lambda: "/tmp/config"
+    )
+    monkeypatch.setattr(
+        "astrbot.application.get_astrbot_plugin_path", lambda: "/tmp/plugins"
+    )
+    monkeypatch.setattr(
+        "astrbot.application.get_astrbot_temp_path", lambda: "/tmp/temp"
+    )
+    monkeypatch.setattr(
+        "astrbot.application.get_astrbot_knowledge_base_path", lambda: "/tmp/kb"
+    )
     monkeypatch.setattr(sys, "path", ["/runtime/lib", *original_sys_path])
 
     with mock.patch("os.makedirs"):
@@ -118,7 +128,9 @@ def test_prepare_runtime_environment_appends_user_site_packages_after_runtime_pa
     assert sys.path.index(site_packages_path) > sys.path.index("/runtime/lib")
 
 
-def test_prepare_runtime_environment_does_not_append_duplicate_user_site_packages(monkeypatch):
+def test_prepare_runtime_environment_does_not_append_duplicate_user_site_packages(
+    monkeypatch,
+):
     astrbot_root = "/tmp/astrbot-root"
     site_packages_path = "/tmp/astrbot-site-packages"
     original_sys_path = list(sys.path)
@@ -128,10 +140,18 @@ def test_prepare_runtime_environment_does_not_append_duplicate_user_site_package
     monkeypatch.setattr(
         "astrbot.application.get_astrbot_site_packages_path", lambda: site_packages_path
     )
-    monkeypatch.setattr("astrbot.application.get_astrbot_config_path", lambda: "/tmp/config")
-    monkeypatch.setattr("astrbot.application.get_astrbot_plugin_path", lambda: "/tmp/plugins")
-    monkeypatch.setattr("astrbot.application.get_astrbot_temp_path", lambda: "/tmp/temp")
-    monkeypatch.setattr("astrbot.application.get_astrbot_knowledge_base_path", lambda: "/tmp/kb")
+    monkeypatch.setattr(
+        "astrbot.application.get_astrbot_config_path", lambda: "/tmp/config"
+    )
+    monkeypatch.setattr(
+        "astrbot.application.get_astrbot_plugin_path", lambda: "/tmp/plugins"
+    )
+    monkeypatch.setattr(
+        "astrbot.application.get_astrbot_temp_path", lambda: "/tmp/temp"
+    )
+    monkeypatch.setattr(
+        "astrbot.application.get_astrbot_knowledge_base_path", lambda: "/tmp/kb"
+    )
     monkeypatch.setattr(
         sys, "path", [astrbot_root, *original_sys_path, site_packages_path]
     )
@@ -181,7 +201,9 @@ async def test_resolve_dashboard_assets_not_exists(tmp_path):
     data_dir = tmp_path / "data"
     bundled_dist = tmp_path / "bundled-dist"
 
-    with mock.patch("astrbot.application.get_astrbot_data_path", return_value=str(data_dir)):
+    with mock.patch(
+        "astrbot.application.get_astrbot_data_path", return_value=str(data_dir)
+    ):
         with mock.patch(
             "astrbot.application.get_repo_dashboard_dist_path",
             return_value=tmp_path / "repo-dist",
@@ -206,7 +228,9 @@ async def test_resolve_dashboard_assets_uses_bundled_dist_without_download(tmp_p
     (bundled_dist / "assets" / "version").write_text(f"v{VERSION}", encoding="utf-8")
     (bundled_dist / "index.html").write_text("bundled", encoding="utf-8")
 
-    with mock.patch("astrbot.application.get_astrbot_data_path", return_value=str(data_dir)):
+    with mock.patch(
+        "astrbot.application.get_astrbot_data_path", return_value=str(data_dir)
+    ):
         with mock.patch(
             "astrbot.application.get_repo_dashboard_dist_path",
             return_value=tmp_path / "repo-dist",
@@ -231,7 +255,9 @@ async def test_resolve_dashboard_assets_exists_and_version_match(tmp_path):
     (data_dist / "assets" / "version").write_text(f"v{VERSION}", encoding="utf-8")
     (data_dist / "index.html").write_text("user", encoding="utf-8")
 
-    with mock.patch("astrbot.application.get_astrbot_data_path", return_value=str(data_dir)):
+    with mock.patch(
+        "astrbot.application.get_astrbot_data_path", return_value=str(data_dir)
+    ):
         with mock.patch(
             "astrbot.application.get_repo_dashboard_dist_path",
             return_value=tmp_path / "repo-dist",
@@ -249,7 +275,9 @@ async def test_resolve_dashboard_assets_rejects_version_mismatch(tmp_path):
     (data_dist / "assets").mkdir(parents=True)
     (data_dist / "assets" / "version").write_text("v0.0.1", encoding="utf-8")
 
-    with mock.patch("astrbot.application.get_astrbot_data_path", return_value=str(data_dir)):
+    with mock.patch(
+        "astrbot.application.get_astrbot_data_path", return_value=str(data_dir)
+    ):
         with mock.patch(
             "astrbot.application.get_repo_dashboard_dist_path",
             return_value=tmp_path / "repo-dist",
@@ -258,7 +286,9 @@ async def test_resolve_dashboard_assets_rejects_version_mismatch(tmp_path):
                 "astrbot.application.get_bundled_dashboard_dist_path",
                 return_value=bundled_dist,
             ):
-                with mock.patch("astrbot.application.logger.warning") as mock_logger_warning:
+                with mock.patch(
+                    "astrbot.application.logger.warning"
+                ) as mock_logger_warning:
                     result = await resolve_dashboard_assets()
 
     assert result is None
@@ -281,7 +311,9 @@ async def test_resolve_dashboard_assets_rejects_incomplete_matching_dist(
     (data_dist / "assets").mkdir(parents=True)
     (data_dist / "assets" / "version").write_text(f"v{VERSION}", encoding="utf-8")
 
-    with mock.patch("astrbot.application.get_astrbot_data_path", return_value=str(data_dir)):
+    with mock.patch(
+        "astrbot.application.get_astrbot_data_path", return_value=str(data_dir)
+    ):
         with mock.patch(
             "astrbot.application.get_repo_dashboard_dist_path",
             return_value=tmp_path / "repo-dist",
@@ -449,7 +481,9 @@ async def test_resolve_dashboard_assets_replaces_stale_data_dist_with_bundled_di
     (bundled_dist / "assets" / "version").write_text(f"v{VERSION}", encoding="utf-8")
     (bundled_dist / "index.html").write_text("bundled", encoding="utf-8")
 
-    with mock.patch("astrbot.application.get_astrbot_data_path", return_value=str(data_dir)):
+    with mock.patch(
+        "astrbot.application.get_astrbot_data_path", return_value=str(data_dir)
+    ):
         with mock.patch(
             "astrbot.application.get_repo_dashboard_dist_path",
             return_value=tmp_path / "repo-dist",
@@ -486,7 +520,9 @@ async def test_resolve_dashboard_assets_uses_repo_dist_when_data_dist_is_missing
     (repo_dist / "assets" / "version").write_text(f"v{VERSION}", encoding="utf-8")
     (repo_dist / "index.html").write_text("repo", encoding="utf-8")
 
-    with mock.patch("astrbot.application.get_astrbot_data_path", return_value=str(data_dir)):
+    with mock.patch(
+        "astrbot.application.get_astrbot_data_path", return_value=str(data_dir)
+    ):
         with mock.patch(
             "astrbot.application.get_repo_dashboard_dist_path",
             return_value=repo_dist,
@@ -518,7 +554,9 @@ async def test_resolve_dashboard_assets_uses_repo_dist_when_data_dist_is_stale(
     (repo_dist / "assets" / "version").write_text(f"v{VERSION}", encoding="utf-8")
     (repo_dist / "index.html").write_text("repo", encoding="utf-8")
 
-    with mock.patch("astrbot.application.get_astrbot_data_path", return_value=str(data_dir)):
+    with mock.patch(
+        "astrbot.application.get_astrbot_data_path", return_value=str(data_dir)
+    ):
         with mock.patch(
             "astrbot.application.get_repo_dashboard_dist_path",
             return_value=repo_dist,
@@ -550,7 +588,9 @@ async def test_resolve_dashboard_assets_prefers_repo_dist_when_data_dist_matches
     (repo_dist / "assets" / "version").write_text(f"v{VERSION}", encoding="utf-8")
     (repo_dist / "index.html").write_text("repo", encoding="utf-8")
 
-    with mock.patch("astrbot.application.get_astrbot_data_path", return_value=str(data_dir)):
+    with mock.patch(
+        "astrbot.application.get_astrbot_data_path", return_value=str(data_dir)
+    ):
         with mock.patch(
             "astrbot.application.get_repo_dashboard_dist_path",
             return_value=repo_dist,

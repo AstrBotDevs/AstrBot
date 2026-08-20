@@ -8,8 +8,7 @@ from astrbot.core.star.star import PluginRegistry, StarMetadata
 
 
 @pytest.mark.asyncio
-async def test_filter_handlers_respects_enabled_plugins(
-):
+async def test_filter_handlers_respects_enabled_plugins():
     event = SimpleNamespace(unified_msg_origin="umo")
     handlers = [
         SimpleNamespace(handler_module_path="module.a", handler_name="ha"),
@@ -30,8 +29,8 @@ async def test_filter_handlers_respects_enabled_plugins(
     plugins.publish(StarMetadata(name="plugin-a", module_path="module.a"))
     plugins.publish(StarMetadata(name="plugin-b", module_path="module.b"))
 
-    filtered = await SessionPluginManager(preferences, plugins).filter_handlers_by_session(
-        event, handlers
-    )
+    filtered = await SessionPluginManager(
+        preferences, plugins
+    ).filter_handlers_by_session(event, handlers)
 
     assert filtered == [handlers[0]]

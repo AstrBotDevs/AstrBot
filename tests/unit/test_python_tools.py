@@ -44,9 +44,7 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
         get_platform_name=lambda: "onebot",
     )
     runtime = SimpleNamespace(
-        get_config=lambda **_kwargs: {
-            "provider_settings": {}
-        },
+        get_config=lambda **_kwargs: {"provider_settings": {}},
         computer_runtime=SimpleNamespace(
             get_local_booter=lambda: SimpleNamespace(
                 python=SimpleNamespace(exec=python_exec)
@@ -88,9 +86,7 @@ async def test_local_python_tool_accepts_timeout_alias(tmp_path, monkeypatch):
         get_platform_name=lambda: "onebot",
     )
     runtime = SimpleNamespace(
-        get_config=lambda **_kwargs: {
-            "provider_settings": {}
-        },
+        get_config=lambda **_kwargs: {"provider_settings": {}},
         computer_runtime=SimpleNamespace(
             get_local_booter=lambda: SimpleNamespace(
                 python=SimpleNamespace(exec=python_exec)

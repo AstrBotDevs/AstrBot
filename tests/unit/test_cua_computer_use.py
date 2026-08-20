@@ -1771,9 +1771,7 @@ async def test_screenshot_tool_can_opt_in_to_llm_image_content(monkeypatch, tmp_
 
     class FakeAstrContext:
         event = FakeEvent()
-        context = FakeContext(
-            {"provider_settings": {}}
-        )
+        context = FakeContext({"provider_settings": {}})
 
     class FakeWrapper:
         context = FakeAstrContext()
@@ -1829,9 +1827,7 @@ async def test_screenshot_tool_can_opt_out_of_llm_image_content(monkeypatch, tmp
 
     class FakeAstrContext:
         event = FakeEvent()
-        context = FakeContext(
-            {"provider_settings": {}}
-        )
+        context = FakeContext({"provider_settings": {}})
 
     class FakeWrapper:
         context = FakeAstrContext()
@@ -1925,9 +1921,7 @@ async def test_cua_tools_include_exception_type_for_blank_error(monkeypatch):
 
     class FakeAstrContext:
         event = FakeEvent()
-        context = FakeContext(
-            {"provider_settings": {}}
-        )
+        context = FakeContext({"provider_settings": {}})
 
     class FakeWrapper:
         context = FakeAstrContext()
@@ -1961,9 +1955,7 @@ async def test_cua_mouse_click_tool_happy_path_forwards_args_and_serializes_json
 
     class FakeAstrContext:
         event = FakeEvent()
-        context = FakeContext(
-            {"provider_settings": {}}
-        )
+        context = FakeContext({"provider_settings": {}})
 
     class FakeWrapper:
         context = FakeAstrContext()
@@ -2018,9 +2010,7 @@ async def test_cua_keyboard_type_tool_happy_path_forwards_args_and_serializes_js
 
     class FakeAstrContext:
         event = FakeEvent()
-        context = FakeContext(
-            {"provider_settings": {}}
-        )
+        context = FakeContext({"provider_settings": {}})
 
     class FakeWrapper:
         context = FakeAstrContext()

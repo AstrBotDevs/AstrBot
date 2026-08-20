@@ -30,7 +30,9 @@ def test_create_proxy_client_reuses_shared_ssl_context(
         "OpenAI",
         {"proxy_mode": "custom", "proxy_url": "http://127.0.0.1:7890"},
     )
-    network_utils.create_proxy_client("OpenAI", {"proxy_mode": "direct"}, headers=headers)
+    network_utils.create_proxy_client(
+        "OpenAI", {"proxy_mode": "direct"}, headers=headers
+    )
     network_utils.create_proxy_client("OpenAI", {"proxy_mode": "inherit"})
 
     assert len(captured_calls) == 4

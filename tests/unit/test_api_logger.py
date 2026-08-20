@@ -41,14 +41,18 @@ def test_live_catalog_routes_sdk_logger_and_unpublish_restores_fallback(
     metadata = _metadata("logger-plugin", f"{package_name}.main")
     catalog.publish_plugin(metadata)
 
-    assert api._resolve_caller_logger(module_name).name == "astrbot.plugin.logger-plugin"
+    assert (
+        api._resolve_caller_logger(module_name).name == "astrbot.plugin.logger-plugin"
+    )
 
     catalog.unpublish(metadata.module_path)
 
     assert api._resolve_caller_logger(module_name).name == "astrbot"
 
 
-def test_staged_catalog_never_marks_live_modules(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_staged_catalog_never_marks_live_modules(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Reload staging must not steal SDK logger routing from live code."""
     package_name = "data.plugins.staged_logger"
     module_name = f"{package_name}.helpers"

@@ -37,4 +37,3 @@ async def test_kook_roles_record_timeout_returns_false_but_background_fetch_warm
 
     assert await record.has_role_in_channel(42, 1001, wait_timeout=0.01) is True
     assert fetch_count == 1
-

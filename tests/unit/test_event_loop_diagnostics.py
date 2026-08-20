@@ -93,9 +93,10 @@ async def test_faulthandler_watchdog_writes_rotating_log(tmp_path, monkeypatch):
     await asyncio.gather(task, return_exceptions=True)
 
     assert log_path.read_text(encoding="utf-8") == "watchdog dump\n"
-    assert log_path.with_name("event_loop_watchdog.log.1").read_text(
-        encoding="utf-8"
-    ) == "x" * 8
+    assert (
+        log_path.with_name("event_loop_watchdog.log.1").read_text(encoding="utf-8")
+        == "x" * 8
+    )
     assert any(isinstance(call, tuple) and call[0] == "dump" for call in calls)
 
 

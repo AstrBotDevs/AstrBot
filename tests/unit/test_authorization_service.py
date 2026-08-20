@@ -1059,13 +1059,15 @@ async def test_webchat_consumed_proof_cache_expires_with_the_step_up_ttl(
         },
     )
     tool = Resource.named("tool", "shell", config_id="default")
-    assert (await authorization.authorize(subject, "tool.local_exec", tool, context)).allowed
-    context.metadata["_webchat_step_up_consumed"]["tool.local_exec"][
-        "expires_at"
-    ] = 0
+    assert (
+        await authorization.authorize(subject, "tool.local_exec", tool, context)
+    ).allowed
+    context.metadata["_webchat_step_up_consumed"]["tool.local_exec"]["expires_at"] = 0
     denied = await authorization.authorize(subject, "tool.local_exec", tool, context)
     assert not denied.allowed
     assert denied.reason == "step_up_required"
+
+
 @pytest.mark.asyncio
 async def test_webchat_step_up_proof_rejects_binding_mismatches_and_expiry(
     authorization,

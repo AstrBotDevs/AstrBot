@@ -178,9 +178,7 @@ async def test_result_decorate_tts_dual_output_and_t2i_are_mutually_exclusive():
     stage.tts_trigger_probability = 1
     stage.ctx.astrbot_config["t2i"] = True
     provider = SimpleNamespace(get_audio=AsyncMock(return_value="D:/temp/a.mp3"))
-    stage.ctx.execution_context.get_using_tts_provider = (
-        lambda _umo: provider
-    )
+    stage.ctx.execution_context.get_using_tts_provider = lambda _umo: provider
     result = MessageEventResult(
         chain=[Plain("hello")], result_content_type=ResultContentType.LLM_RESULT
     )
