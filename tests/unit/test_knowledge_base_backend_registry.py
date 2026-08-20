@@ -90,6 +90,20 @@ def test_duplicate_backend_id_is_rejected(manager: KnowledgeBaseManager) -> None
         manager.register_backend(StubBackend())
 
 
+def test_backend_can_be_registered_again_after_plugin_reload(
+    manager: KnowledgeBaseManager,
+) -> None:
+    first_backend = StubBackend()
+    reloaded_backend = StubBackend()
+
+    manager.register_backend(first_backend)
+    manager.unregister_backend("example")
+    manager.unregister_backend("example")
+    manager.register_backend(reloaded_backend)
+
+    assert manager.backends["example"] is reloaded_backend
+
+
 @pytest.mark.parametrize(
     "backend_id",
     ["", " example ", "with space", "invalid/path", "中文", "x" * 129],

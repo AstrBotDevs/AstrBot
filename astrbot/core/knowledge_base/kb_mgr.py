@@ -93,6 +93,9 @@ class KnowledgeBaseManager:
     def unregister_backend(self, backend_id: str) -> None:
         """Unregister a knowledge base backend.
 
+        Unregistering an unknown external backend is safe so plugins can call
+        this method unconditionally during termination.
+
         Args:
             backend_id: Backend identifier to remove.
 

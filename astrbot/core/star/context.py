@@ -797,6 +797,9 @@ class Context:
     ) -> None:
         """Register a plugin-provided knowledge base backend.
 
+        The plugin owns the backend and must unregister it in ``terminate``
+        before closing any resources used by the backend.
+
         Args:
             backend: Backend instance owned by the plugin.
         """
@@ -804,6 +807,8 @@ class Context:
 
     def unregister_knowledge_base_backend(self, backend_id: str) -> None:
         """Unregister a plugin-provided knowledge base backend.
+
+        Calling this method for an already unregistered backend is safe.
 
         Args:
             backend_id: Backend identifier to remove.
