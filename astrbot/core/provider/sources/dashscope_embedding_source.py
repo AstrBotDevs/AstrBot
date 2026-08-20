@@ -48,6 +48,15 @@ class DashScopeEmbeddingProvider(EmbeddingProvider):
         )
         self.set_model(self.model)
 
+    @property
+    def max_batch_size(self) -> int:
+        """Return the configured batch size capped at DashScope's limit.
+
+        Returns:
+            The maximum number of inputs allowed in one DashScope request.
+        """
+        return min(super().max_batch_size, 10)
+
     async def get_embedding(self, text: str) -> list[float]:
         """Get the embedding vector for a single text."""
         embeddings = await self.get_embeddings([text])

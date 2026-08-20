@@ -67,6 +67,12 @@ def test_defaults():
     provider = _make_provider()
     assert provider.model == "text-embedding-v4"
     assert provider.base_url == "https://dashscope.aliyuncs.com/api/v1"
+    assert provider.max_batch_size == 10
+
+
+def test_batch_size_cannot_exceed_dashscope_limit():
+    assert _make_provider({"max_batch_size": 100}).max_batch_size == 10
+    assert _make_provider({"max_batch_size": 5}).max_batch_size == 5
 
 
 def test_user_values_preserved():

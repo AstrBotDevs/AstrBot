@@ -174,8 +174,8 @@
             <h3 class="text-h6 mb-4">{{ t('upload.batchSettings') }}</h3>
             <v-row>
               <v-col cols="12" sm="4">
-                <v-text-field v-model.number="uploadSettings.batch_size" :label="t('upload.batchSize')" hint="每批处理的文本数量"
-                  persistent-hint type="number" variant="outlined" density="compact" />
+                <v-text-field v-model.number="uploadSettings.batch_size" :label="t('upload.batchSize')" :hint="`每批处理的文本数量，当前嵌入提供方上限为 ${embeddingBatchLimit}`"
+                  persistent-hint type="number" min="1" :max="embeddingBatchLimit" variant="outlined" density="compact" />
               </v-col>
               <v-col cols="12" sm="4">
                 <v-text-field v-model.number="uploadSettings.tasks_limit" :label="t('upload.tasksLimit')"
@@ -270,6 +270,7 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const uploadMode = ref('file') // 'file' or 'url'
 const uploadUrl = ref('')
 const llmProviders = ref<any[]>([])
+const embeddingBatchLimit = ref(100)
 const uploadingTasks = ref<Map<string, any>>(new Map())
 const progressPollingInterval = ref<number | null>(null)
 const tavilyConfigStatus = ref('loading') // 'loading', 'configured', 'not_configured', 'error'
@@ -815,6 +816,32 @@ watch(searchQuery, (_value, _oldValue, onCleanup) => {
   documentsRequestId += 1
   const timeoutId = window.setTimeout(loadDocuments, 300)
   onCleanup(() => window.clearTimeout(timeoutId))
+})
+
+watch(() => props.kb?.embedding_provider_id, async (providerId) => {
+  embeddingBatchLimit.value = 100
+  if (providerId) {
+    try {
+      const response = await providerApi.get(providerId, true)
+      const provider = response.data.data.provider
+      let configuredLimit = Number(provider?.max_batch_size ?? 100)
+      if (provider?.type === 'dashscope_embedding') {
+        configuredLimit = Math.min(configuredLimit, 10)
+      }
+      if (Number.isInteger(configuredLimit) && configuredLimit > 0) {
+        embeddingBatchLimit.value = configuredLimit
+      }
+    } catch (error) {
+      console.warn('Failed to load embedding provider batch limit:', error)
+    }
+  }
+  uploadSettings.value.batch_size = Math.min(uploadSettings.value.batch_size, embeddingBatchLimit.value)
+}, { immediate: true })
+
+watch(() => uploadSettings.value.batch_size, (batchSize) => {
+  if (batchSize > embeddingBatchLimit.value) {
+    uploadSettings.value.batch_size = embeddingBatchLimit.value
+  }
 })
 
 onMounted(() => {

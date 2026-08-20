@@ -1426,7 +1426,7 @@
         "hint": "Gemini Embedding does not require manually adding /v1beta."
       },
       "dashscope_embedding": {
-        "hint": "Aliyun DashScope Embedding. Default base URL: https://dashscope.aliyuncs.com/api/v1."
+        "hint": "Aliyun DashScope Embedding. Default base URL: https://dashscope.aliyuncs.com/api/v1. The batch limit is 10."
       },
       "volcengine_cluster": {
         "description": "Volcengine cluster",
