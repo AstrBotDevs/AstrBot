@@ -3,7 +3,7 @@ import copy
 import os
 import traceback
 from collections.abc import Callable
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from deprecated import deprecated
 
@@ -12,7 +12,6 @@ from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.error_redaction import safe_error
 
-from ..persona_mgr import PersonaManager
 from .entities import ProviderType
 from .provider import (
     EmbeddingProvider,
@@ -23,6 +22,9 @@ from .provider import (
     TTSProvider,
 )
 from .register import llm_tools, provider_cls_map
+
+if TYPE_CHECKING:
+    from ..persona_mgr import PersonaManager
 
 
 @runtime_checkable
@@ -35,7 +37,7 @@ class ProviderManager:
         self,
         acm: AstrBotConfigManager,
         db_helper: BaseDatabase,
-        persona_mgr: PersonaManager,
+        persona_mgr: "PersonaManager",
     ) -> None:
         self.reload_lock = asyncio.Lock()
         self.resource_lock = asyncio.Lock()
@@ -644,6 +646,29 @@ class ProviderManager:
         provider_config["key"] = resolved_keys
         return provider_config
 
+    def _require_loadable_provider_config(self, provider_config: dict) -> None:
+        merged_config = self.get_merged_provider_config(provider_config)
+        if not merged_config.get("enable", True):
+            return
+        if merged_config.get("provider_type", "") == "agent_runner":
+            return
+
+        provider_type = merged_config.get("type")
+        if isinstance(provider_type, str) and provider_type.strip():
+            return
+
+        provider_id = merged_config.get("id", "<unknown>")
+        provider_source_id = provider_config.get("provider_source_id")
+        if provider_source_id:
+            raise ValueError(
+                f"Provider {provider_id} references provider source "
+                f"{provider_source_id}, but the merged config is missing a valid "
+                "'type' field"
+            )
+        raise ValueError(
+            f"Provider {provider_id} config is missing a valid 'type' field"
+        )
+
     async def load_provider(self, provider_config: dict) -> None:
         # 如果 provider_source_id 存在且不为空，则从 provider_sources 中找到对应的配置并合并
         provider_config = self.get_merged_provider_config(provider_config)
@@ -651,44 +676,52 @@ class ProviderManager:
         if provider_config.get("provider_type", "") == "chat_completion":
             provider_config = self._resolve_env_key_list(provider_config)
 
-        if not provider_config["enable"]:
+        if not provider_config.get("enable", True):
             logger.info(f"Provider {provider_config['id']} is disabled, skipping")
             return
         if provider_config.get("provider_type", "") == "agent_runner":
             return
 
+        provider_type = provider_config.get("type")
+        if not isinstance(provider_type, str) or not provider_type.strip():
+            logger.error(
+                "Provider %s has no valid adapter type. Skipped.",
+                provider_config.get("id", "<unknown>"),
+            )
+            return
+
         logger.info(
             "Loading model %s(%s) ...",
-            provider_config["type"],
+            provider_type,
             provider_config["id"],
         )
 
         # 动态导入
         try:
-            self.dynamic_import_provider(provider_config["type"])
+            self.dynamic_import_provider(provider_type)
         except (ImportError, ModuleNotFoundError) as e:
             logger.critical(
-                f"Failed to load provider adapter {provider_config['type']}"
+                f"Failed to load provider adapter {provider_type}"
                 f"({provider_config['id']}): {e}. A dependency may be missing.",
                 exc_info=True,
             )
             return
         except Exception as e:
             logger.critical(
-                f"Failed to load provider adapter {provider_config['type']}"
+                f"Failed to load provider adapter {provider_type}"
                 f"({provider_config['id']}): {e}. Unknown cause.",
                 exc_info=True,
             )
             return
 
-        if provider_config["type"] not in provider_cls_map:
+        if provider_type not in provider_cls_map:
             logger.error(
-                f"Provider adapter not found: {provider_config['type']}({provider_config['id']}). Skipped.",
+                f"Provider adapter not found: {provider_type}({provider_config['id']}). Skipped.",
                 exc_info=True,
             )
             return
 
-        provider_metadata = provider_cls_map[provider_config["type"]]
+        provider_metadata = provider_cls_map[provider_type]
         try:
             # 按任务实例化提供商
             cls_type = provider_metadata.cls_type
@@ -931,6 +964,7 @@ class ProviderManager:
                     and provider.get("id", None) != origin_provider_id
                 ):
                     raise ValueError(f"Provider ID {npid} already exists")
+            self._require_loadable_provider_config(new_config)
             # update config
             for idx, provider in enumerate(config["provider"]):
                 if provider.get("id", None) == origin_provider_id:
@@ -952,6 +986,7 @@ class ProviderManager:
             for provider in config["provider"]:
                 if provider.get("id", None) == npid:
                     raise ValueError(f"Provider ID {npid} already exists")
+            self._require_loadable_provider_config(new_config)
             # add to config
             config["provider"].append(new_config)
             config.save_config()
