@@ -580,4 +580,113 @@ describe('error-path coverage', () => {
     const { copyToClipboard } = await import('@/utils/clipboard');
     expect(await copyToClipboard('x')).toBe(false);
   });
+
+  it('covers pending conversation selection, breadcrumb misses, and 403 logs', async () => {
+    api.chatApi.listSessions.mockResolvedValue({
+      data: {
+        data: [
+          {
+            session_id: 'c1',
+            display_name: null,
+            updated_at: 'bad',
+          },
+        ],
+      },
+    });
+    const conversations = useConversations();
+    conversations.pendingCid.value = 'c1';
+    await conversations.getConversations();
+    expect(conversations.selectedConversations.value).toContain('c1');
+    conversations.pendingCid.value = null;
+    conversations.currCid.value = '';
+    await conversations.getConversations();
+
+    const persona = usePersonaStore();
+    persona.folderTree = [
+      { folder_id: 'a', name: 'A', parent_id: null, children: [] },
+    ];
+    persona.updateBreadcrumb('missing');
+    expect(persona.breadcrumbPath).toEqual([]);
+
+    const { useCommandFilters } =
+      await import('@/components/extension/componentPanel/composables/useCommandFilters');
+    const filters = useCommandFilters(
+      ref([
+        {
+          handler_full_name: 'g',
+          is_group: true,
+          type: 'group',
+          reserved: false,
+          enabled: true,
+          has_conflict: false,
+          plugin: 'p',
+          action: 'command',
+          effective_command: 'group',
+          sub_commands: [
+            {
+              handler_full_name: 'g.s',
+              is_group: false,
+              type: 'sub_command',
+              reserved: false,
+              enabled: true,
+              has_conflict: true,
+              plugin: 'p',
+              action: 'command',
+              effective_command: 'sub',
+              description: 'needle',
+            },
+          ],
+        },
+      ] as never),
+    );
+    filters.searchQuery.value = 'needle';
+    filters.toggleGroupExpand({
+      is_group: true,
+      handler_full_name: 'g',
+    } as never);
+    expect(filters.filteredCommands.value.length).toBeGreaterThan(0);
+    filters.statusFilter.value = 'enabled';
+    filters.typeFilter.value = 'command';
+    void filters.filteredCommands.value;
+
+    const actions = useCommandActions(vi.fn(), vi.fn());
+    expect(
+      actions.getTypeInfo('command', {
+        group: 'g',
+        subCommand: 's',
+        command: 'c',
+      }).text,
+    ).toBe('c');
+    expect(
+      actions.getStatusInfo({ has_conflict: false, enabled: false } as never, {
+        conflict: 'c',
+        enabled: 'e',
+        disabled: 'd',
+      }).text,
+    ).toBe('d');
+    expect(
+      actions.getRowProps({
+        item: {
+          has_conflict: true,
+          type: 'sub_command',
+          is_group: true,
+        } as never,
+      }),
+    ).toMatchObject({ class: expect.stringContaining('conflict') });
+
+    localStorage.setItem('token', 't');
+    vi.mocked(fetchWithAuth).mockResolvedValue(
+      new Response('x', { status: 403 }),
+    );
+    const common = useCommonStore();
+    await common.createEventSource();
+    common.closeEventSource();
+
+    vi.useFakeTimers();
+    vi.mocked(fetchWithAuth).mockRejectedValue(new Error('offline'));
+    await common.createEventSource();
+    await vi.advanceTimersByTimeAsync(1100);
+    vi.useRealTimers();
+    common.closeEventSource();
+  });
 });
