@@ -41,6 +41,7 @@ class SharedPreferences:
         """Automatically cleared every 24 hours."""
 
         self._cache: dict[tuple[str, str, str], Any] = {}
+        """Write overlay for read-after-write visibility; not a full table mirror."""
         self._cache_lock = threading.RLock()
         self._cache_initialized = False
         self._initialize_lock = asyncio.Lock()
@@ -59,7 +60,14 @@ class SharedPreferences:
         self.temporary_cache.clear()
 
     async def initialize(self) -> None:
-        """Preload preferences and bind persistence to the active event loop."""
+        """Bind persistence to the active event loop without preloading preferences.
+
+        The preferences table can be arbitrarily large, so reads miss the write
+        overlay and fall back to point queries instead of a startup full scan.
+
+        Raises:
+            RuntimeError: If another running event loop already owns the store.
+        """
         loop = asyncio.get_running_loop()
         async with self._initialize_lock:
             if self._cache_initialized:
@@ -74,27 +82,13 @@ class SharedPreferences:
                 self._writer_task = None
                 return
 
-            preferences = await self.db_helper.get_preferences()
-            loaded_cache: dict[tuple[str, str, str], Any] = {}
-            for preference in preferences:
-                value = preference.value
-                if isinstance(value, dict) and "val" in value:
-                    loaded_cache[
-                        (
-                            preference.scope,
-                            preference.scope_id,
-                            preference.key,
-                        )
-                    ] = deepcopy(value["val"])
-
             with self._cache_lock:
-                self._cache = loaded_cache
                 self._cache_initialized = True
             self._loop = loop
             self._write_queue = asyncio.Queue()
 
     def _apply_cache_operation(self, operation: _WriteOperation) -> None:
-        """Apply a queued mutation to the in-memory preference mirror."""
+        """Apply a queued mutation to the in-memory write overlay."""
         action, scope, scope_id, key, value, _ = operation
         with self._cache_lock:
             if action == "put" and key is not None:
@@ -203,11 +197,19 @@ class SharedPreferences:
         key: str,
         default: _VT = None,
     ) -> _VT:
-        """Get one scoped preference from the in-memory mirror."""
+        """Get one scoped preference from the write overlay or a point query."""
         await self.initialize()
         with self._cache_lock:
             value = self._cache.get((scope, scope_id, key), _MISSING)
-            return default if value is _MISSING else deepcopy(value)
+            if value is not _MISSING:
+                return deepcopy(value)
+        preference = await self.db_helper.get_preference(scope, scope_id, key)
+        if preference is None:
+            return default
+        stored = preference.value
+        if not isinstance(stored, dict) or "val" not in stored:
+            return default
+        return deepcopy(stored["val"])
 
     async def range_get_async(
         self,
