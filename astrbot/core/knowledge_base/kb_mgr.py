@@ -221,7 +221,7 @@ class KnowledgeBaseManager:
         )
 
         ranked_hits: list[tuple[int, int, int, KnowledgeBaseHit]] = []
-        for backend_index, ((backend, _), response) in enumerate(
+        for backend_index, ((backend, knowledge_base_ids), response) in enumerate(
             zip(selected_backends, responses)
         ):
             if isinstance(response, asyncio.CancelledError):
@@ -248,6 +248,9 @@ class KnowledgeBaseManager:
             for hit_index, hit in enumerate(response.hits):
                 if (
                     not isinstance(hit, KnowledgeBaseHit)
+                    or not isinstance(hit.ref, KnowledgeBaseRef)
+                    or hit.ref.backend_id != backend.backend_id
+                    or hit.ref.knowledge_base_id not in knowledge_base_ids
                     or not isinstance(hit.content, str)
                     or not hit.content.strip()
                     or not isinstance(hit.rank, int)
@@ -261,7 +264,6 @@ class KnowledgeBaseManager:
                     warnings.append(warning)
                     logger.warning(warning)
                     continue
-                hit.metadata.setdefault("backend_id", backend.backend_id)
                 ranked_hits.append((hit.rank, backend_index, hit_index, hit))
 
         ranked_hits.sort(key=lambda item: item[:3])

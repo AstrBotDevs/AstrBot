@@ -59,6 +59,7 @@ class KnowledgeBaseHit:
     """Represent one standardized knowledge base result.
 
     Args:
+        ref: Backend and knowledge base that produced the result.
         content: Retrieved text content.
         source: Human-readable result source.
         rank: Result rank assigned by the backend, starting from one.
@@ -69,6 +70,7 @@ class KnowledgeBaseHit:
         metadata: Backend-specific result metadata.
     """
 
+    ref: KnowledgeBaseRef
     content: str
     source: str
     rank: int

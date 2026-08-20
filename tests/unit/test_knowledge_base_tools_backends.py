@@ -41,6 +41,7 @@ async def test_external_backend_works_without_builtin_configuration(
     context.kb_manager.retrieve_from_backends.return_value = KnowledgeBaseResponse(
         hits=[
             KnowledgeBaseHit(
+                ref=KnowledgeBaseRef("dify:company", "dataset-1"),
                 content="Install AstrBot with uv.",
                 source="guide.md",
                 rank=1,
@@ -126,7 +127,14 @@ async def test_builtin_and_external_results_are_combined(context: MagicMock) -> 
         )
     ]
     context.kb_manager.retrieve_from_backends.return_value = KnowledgeBaseResponse(
-        hits=[KnowledgeBaseHit(content="external context", source="API", rank=1)]
+        hits=[
+            KnowledgeBaseHit(
+                ref=KnowledgeBaseRef("external", "kb-1"),
+                content="external context",
+                source="API",
+                rank=1,
+            )
+        ]
     )
 
     with patch(

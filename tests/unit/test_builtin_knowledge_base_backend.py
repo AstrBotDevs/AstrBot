@@ -71,6 +71,7 @@ async def test_builtin_backend_normalizes_retrieval_results() -> None:
         top_m_final=3,
     )
     assert response.hits[0].source == "guide.md"
+    assert response.hits[0].ref == KnowledgeBaseRef("builtin", "kb-1")
     assert response.hits[0].document_id == "doc-1"
     assert response.hits[0].chunk_id == "chunk-1"
     assert response.hits[0].metadata["backend_id"] == "builtin"

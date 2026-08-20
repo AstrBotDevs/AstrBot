@@ -106,6 +106,10 @@ class BuiltinKnowledgeBaseBackend(BaseKnowledgeBaseBackend):
         for rank, item in enumerate(result.get("results", []), start=1):
             hits.append(
                 KnowledgeBaseHit(
+                    ref=KnowledgeBaseRef(
+                        backend_id=self.backend_id,
+                        knowledge_base_id=item["kb_id"],
+                    ),
                     content=item["content"],
                     source=item.get("doc_name")
                     or item.get("kb_name")

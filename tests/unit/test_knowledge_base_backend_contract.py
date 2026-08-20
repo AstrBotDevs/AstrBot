@@ -64,6 +64,7 @@ class ExampleBackend(BaseKnowledgeBaseBackend):
         return KnowledgeBaseResponse(
             hits=[
                 KnowledgeBaseHit(
+                    ref=KnowledgeBaseRef(self.backend_id, knowledge_base_ids[0]),
                     content=request.query,
                     source=knowledge_base_ids[0],
                     rank=1,

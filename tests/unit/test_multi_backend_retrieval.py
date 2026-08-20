@@ -114,15 +114,35 @@ async def test_retrieve_groups_refs_and_merges_by_backend_rank(
     first = MockBackend("first")
     first.retrieve_mock.return_value = KnowledgeBaseResponse(
         hits=[
-            KnowledgeBaseHit(content="first-1", source="first", rank=1),
-            KnowledgeBaseHit(content="first-2", source="first", rank=2),
+            KnowledgeBaseHit(
+                ref=KnowledgeBaseRef("first", "kb-1"),
+                content="first-1",
+                source="first",
+                rank=1,
+            ),
+            KnowledgeBaseHit(
+                ref=KnowledgeBaseRef("first", "kb-1"),
+                content="first-2",
+                source="first",
+                rank=2,
+            ),
         ]
     )
     second = MockBackend("second")
     second.retrieve_mock.return_value = KnowledgeBaseResponse(
         hits=[
-            KnowledgeBaseHit(content="second-1", source="second", rank=1),
-            KnowledgeBaseHit(content="second-2", source="second", rank=2),
+            KnowledgeBaseHit(
+                ref=KnowledgeBaseRef("second", "kb-2"),
+                content="second-1",
+                source="second",
+                rank=1,
+            ),
+            KnowledgeBaseHit(
+                ref=KnowledgeBaseRef("second", "kb-2"),
+                content="second-2",
+                source="second",
+                rank=2,
+            ),
         ],
         warnings=["partial response"],
     )
@@ -146,7 +166,7 @@ async def test_retrieve_groups_refs_and_merges_by_backend_rank(
         "second-1",
         "first-2",
     ]
-    assert response.hits[0].metadata["backend_id"] == "first"
+    assert response.hits[0].ref == KnowledgeBaseRef("first", "kb-1")
     assert response.warnings == ["Second: partial response"]
 
 
@@ -156,7 +176,14 @@ async def test_retrieve_isolates_unknown_and_failing_backends(
 ) -> None:
     available = MockBackend("available")
     available.retrieve_mock.return_value = KnowledgeBaseResponse(
-        hits=[KnowledgeBaseHit(content="result", source="available", rank=1)]
+        hits=[
+            KnowledgeBaseHit(
+                ref=KnowledgeBaseRef("available", "kb-1"),
+                content="result",
+                source="available",
+                rank=1,
+            )
+        ]
     )
     failing = MockBackend("failing")
     failing.retrieve_mock.side_effect = RuntimeError("offline")
@@ -202,8 +229,18 @@ async def test_retrieve_filters_invalid_hits(
     backend = MockBackend("example")
     backend.retrieve_mock.return_value = KnowledgeBaseResponse(
         hits=[
-            KnowledgeBaseHit(content="", source="empty", rank=1),
-            KnowledgeBaseHit(content="valid", source="docs", rank=1),
+            KnowledgeBaseHit(
+                ref=KnowledgeBaseRef("example", "kb-1"),
+                content="",
+                source="empty",
+                rank=1,
+            ),
+            KnowledgeBaseHit(
+                ref=KnowledgeBaseRef("example", "kb-1"),
+                content="valid",
+                source="docs",
+                rank=1,
+            ),
         ]
     )
     manager.register_backend(backend)
@@ -214,4 +251,38 @@ async def test_retrieve_filters_invalid_hits(
     )
 
     assert [hit.content for hit in response.hits] == ["valid"]
+    assert "invalid result" in response.warnings[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "ref",
+    [
+        KnowledgeBaseRef("other", "kb-1"),
+        KnowledgeBaseRef("example", "not-selected"),
+    ],
+)
+async def test_retrieve_filters_hits_with_mismatched_references(
+    manager: KnowledgeBaseManager,
+    ref: KnowledgeBaseRef,
+) -> None:
+    backend = MockBackend("example")
+    backend.retrieve_mock.return_value = KnowledgeBaseResponse(
+        hits=[
+            KnowledgeBaseHit(
+                ref=ref,
+                content="mismatched",
+                source="docs",
+                rank=1,
+            )
+        ]
+    )
+    manager.register_backend(backend)
+
+    response = await manager.retrieve_from_backends(
+        [KnowledgeBaseRef("example", "kb-1")],
+        KnowledgeBaseQuery(query="AstrBot"),
+    )
+
+    assert response.hits == []
     assert "invalid result" in response.warnings[0]
