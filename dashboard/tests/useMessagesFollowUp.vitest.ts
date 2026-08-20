@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 
 const testState = vi.hoisted(() => ({
@@ -8,6 +8,7 @@ const testState = vi.hoisted(() => ({
 vi.mock('@/api/v1', () => ({
   chatApi: {
     unifiedWebSocketUrl: () => 'ws://example.test/unified-chat',
+    stopSession: vi.fn().mockResolvedValue({ data: { status: 'ok' } }),
   },
   fileApi: {},
 }));
@@ -16,6 +17,7 @@ vi.mock('@/api/http', () => ({
   fetchWithAuth: vi.fn(),
 }));
 
+import { chatApi } from '@/api/v1';
 import { useMessages } from '@/composables/useMessages';
 
 class MockWebSocket {
@@ -52,6 +54,11 @@ class MockWebSocket {
 }
 
 describe('useMessages follow-up streams', () => {
+  beforeEach(() => {
+    testState.sockets.length = 0;
+    vi.mocked(chatApi.stopSession).mockClear();
+  });
+
   it('keeps a captured follow-up with its target run and routes concurrent events', () => {
     vi.stubGlobal('WebSocket', MockWebSocket);
     const sessionId = 'session-1';
@@ -238,5 +245,67 @@ describe('useMessages follow-up streams', () => {
     expect(messages.messageParts(breakFallback.botRecord)).toEqual([
       { type: 'plain', text: 'tool-call handoff' },
     ]);
+  });
+
+  it('keeps agent_stats on the originating request and can interrupt that session', async () => {
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    const sessionId = 'session-1';
+    const messages = useMessages({ currentSessionId: ref(sessionId) });
+    const first = messages.createLocalExchange({
+      sessionId,
+      messageId: 'request-1',
+      parts: [{ type: 'plain', text: 'first' }],
+    });
+    messages.sendMessageStream({
+      sessionId,
+      messageId: 'request-1',
+      parts: [{ type: 'plain', text: 'first' }],
+      transport: 'websocket',
+      botRecord: first.botRecord,
+      userRecord: first.userRecord,
+    });
+    const second = messages.createLocalExchange({
+      sessionId,
+      messageId: 'request-2',
+      parts: [{ type: 'plain', text: 'second' }],
+    });
+    messages.sendMessageStream({
+      sessionId,
+      messageId: 'request-2',
+      parts: [{ type: 'plain', text: 'second' }],
+      transport: 'websocket',
+      botRecord: second.botRecord,
+      userRecord: second.userRecord,
+    });
+
+    const socket = testState.sockets[0];
+    socket.emit({
+      ct: 'chat',
+      type: 'agent_stats',
+      message_id: 'request-1',
+      data: { token_usage: { output: 1 } },
+    });
+    socket.emit({
+      ct: 'chat',
+      type: 'agent_stats',
+      message_id: 'request-1',
+      data: { token_usage: { output: 2 } },
+    });
+    socket.emit({
+      ct: 'chat',
+      type: 'agent_stats',
+      message_id: 'request-2',
+      data: { token_usage: { output: 9 } },
+    });
+
+    expect(first.botRecord.content.agentStats).toEqual({
+      token_usage: { output: 2 },
+    });
+    expect(second.botRecord.content.agentStats).toEqual({
+      token_usage: { output: 9 },
+    });
+
+    await messages.stopSession(sessionId);
+    expect(chatApi.stopSession).toHaveBeenCalledWith(sessionId);
   });
 });

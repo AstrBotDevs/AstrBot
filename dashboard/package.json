@@ -68,6 +68,7 @@
     "@types/markdown-it": "^14.1.2",
     "@types/node": "26.2.0",
     "@vitejs/plugin-vue": "6.0.8",
+    "@vitest/coverage-v8": "4.1.10",
     "@vue/test-utils": "2.4.11",
     "@vue/tsconfig": "0.9.1",
     "eslint": "10.8.1",

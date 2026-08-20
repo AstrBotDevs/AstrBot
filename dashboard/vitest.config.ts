@@ -25,6 +25,16 @@ export default mergeConfig(
       css: false,
       restoreMocks: true,
       clearMocks: true,
+      coverage: {
+        provider: 'v8',
+        reportsDirectory: './coverage',
+        reporter: ['text', 'json-summary'],
+        include: ['src/**/*.{ts,vue}'],
+        exclude: ['src/api/generated/**', 'src/**/*.d.ts', 'tests/**'],
+        thresholds: {
+          lines: 24,
+        },
+      },
     },
   }),
 );
