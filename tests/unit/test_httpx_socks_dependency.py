@@ -5,7 +5,7 @@ import pytest
 
 from astrbot.core.utils.toml_parser import read_pyproject_project_dependencies
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 REQUIREMENTS_PATH = PROJECT_ROOT / "requirements.txt"
 PYPROJECT_PATH = PROJECT_ROOT / "pyproject.toml"
 HTTPX_SOCKS_PATTERN = re.compile(r"^httpx\[socks\](?:\s*[<>=!~][^;]*)?(?:\s*;.*)?$")

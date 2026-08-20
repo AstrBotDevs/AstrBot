@@ -123,7 +123,7 @@ sets test-mode environment flags and classifies tests into `--test-profile`
 tiers. The `blocking` profile excludes `slow`, `integration`, and `live`.
 `platform` and `provider` are domain tags and do not remove tests from the
 blocking gate. Put a regression test next to the nearest existing coverage
-(`tests/unit/`, `tests/test_*.py`, `tests/agent/`, or a specialist directory).
+(`tests/unit/`, `tests/agent/`, or a specialist directory).
 Dashboard Vitest files live under `dashboard/tests/` as `*.vitest.ts`.
 Browser-level Dashboard tests live under `dashboard/tests/e2e/` and use
 `dashboard/playwright.config.ts`; the plugin UI suite starts its isolated

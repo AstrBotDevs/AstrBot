@@ -207,15 +207,20 @@ $pytestArgs.Add("pytest")
 if ($TestProfile -eq "neo") {
     $pytestArgs.AddRange([string[]]@(
             "-q",
-            "tests/test_neo_skill_sync.py",
-            "tests/test_neo_skill_tools.py",
-            "tests/test_computer_skill_sync.py",
-            "tests/test_skill_manager_sandbox_cache.py",
-            "tests/test_dashboard.py::test_neo_skills_routes"
+            "tests/unit/test_neo_skill_sync.py",
+            "tests/unit/test_neo_skill_tools.py",
+            "tests/unit/test_computer_skill_sync.py",
+            "tests/unit/test_skill_manager_sandbox_cache.py",
+            "tests/unit/dashboard/test_dashboard.py::test_neo_skills_routes"
         ))
 }
 else {
-    $pytestArgs.AddRange([string[]]@("--cov=.", "-v", "-o", "log_cli=true", "-o", "log_level=DEBUG"))
+    $pytestCmd = [System.Collections.Generic.List[string]]::new()
+    $pytestCmd.AddRange([string[]]@("--cov=astrbot", "--cov-branch", "-v"))
+    if (-not [string]::IsNullOrWhiteSpace($env:PYTEST_DEBUG)) {
+        $pytestCmd.AddRange([string[]]@("-o", "log_cli=true", "-o", "log_level=DEBUG"))
+    }
+    $pytestArgs.AddRange($pytestCmd)
 }
 
 $extraPytestArgs = [string[]](Split-CommandLineArgs -Value $env:PYTEST_ARGS)

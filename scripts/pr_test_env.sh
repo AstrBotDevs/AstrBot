@@ -156,11 +156,11 @@ if [[ -n "${PYTEST_ARGS:-}" ]]; then
 fi
 if [[ "$PROFILE" == "neo" ]]; then
   NEO_TESTS=(
-    "tests/test_neo_skill_sync.py"
-    "tests/test_neo_skill_tools.py"
-    "tests/test_computer_skill_sync.py"
-    "tests/test_skill_manager_sandbox_cache.py"
-    "tests/test_dashboard.py::test_neo_skills_routes"
+    "tests/unit/test_neo_skill_sync.py"
+    "tests/unit/test_neo_skill_tools.py"
+    "tests/unit/test_computer_skill_sync.py"
+    "tests/unit/test_skill_manager_sandbox_cache.py"
+    "tests/unit/dashboard/test_dashboard.py::test_neo_skills_routes"
   )
   uv run pytest -q "${NEO_TESTS[@]}" "${pytest_args[@]}"
 else

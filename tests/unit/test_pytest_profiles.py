@@ -10,19 +10,19 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFTEST_PATH = PROJECT_ROOT / "tests" / "conftest.py"
 PLATFORM_TEST_MODULES = (
-    "tests/test_dingtalk_adapter.py",
-    "tests/test_discord_adapter.py",
-    "tests/test_lark_adapter.py",
-    "tests/test_line_adapter.py",
-    "tests/test_mattermost_adapter.py",
-    "tests/test_platform_audio_media_resolver.py",
-    "tests/test_platform_image_format_preservation.py",
-    "tests/test_slack_adapter.py",
-    "tests/test_telegram_adapter.py",
-    "tests/test_wecom_adapter.py",
-    "tests/test_wecom_ai_bot_adapter.py",
-    "tests/test_weixin_oc_adapter.py",
-    "tests/test_weixin_official_account_adapter.py",
+    "tests/unit/platform/test_dingtalk_adapter.py",
+    "tests/unit/platform/test_discord_adapter.py",
+    "tests/unit/platform/test_lark_adapter.py",
+    "tests/unit/platform/test_line_adapter.py",
+    "tests/unit/platform/test_mattermost_adapter.py",
+    "tests/unit/platform/test_platform_audio_media_resolver.py",
+    "tests/unit/platform/test_platform_image_format_preservation.py",
+    "tests/unit/platform/test_slack_adapter.py",
+    "tests/unit/platform/test_telegram_adapter.py",
+    "tests/unit/platform/test_wecom_adapter.py",
+    "tests/unit/platform/test_wecom_ai_bot_adapter.py",
+    "tests/unit/platform/test_weixin_oc_adapter.py",
+    "tests/unit/platform/test_weixin_official_account_adapter.py",
     "tests/unit/test_aiocqhttp_adapter.py",
     "tests/unit/test_misskey_adapter.py",
     "tests/unit/test_napcat_adapter.py",
@@ -170,7 +170,7 @@ def test_platform_adapter_suites_keep_platform_domain_tag() -> None:
 def test_mocked_platform_and_provider_suites_stay_in_blocking() -> None:
     conftest = _load_conftest_module()
     items = [
-        _item("tests/test_telegram_adapter.py", "platform"),
+        _item("tests/unit/platform/test_telegram_adapter.py", "platform"),
         _item("tests/unit/test_openai_embedding_contract.py", "provider"),
         _item("tests/unit/test_core.py"),
     ]

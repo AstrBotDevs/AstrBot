@@ -1,6 +1,5 @@
 """Smoke tests for critical startup and import paths."""
 
-
 import subprocess
 import sys
 from pathlib import Path
@@ -14,7 +13,7 @@ from astrbot.core.pipeline.process_stage.method.agent_sub_stages.third_party imp
 )
 from astrbot.core.pipeline.stage_order import STAGES_ORDER
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _run_code_in_fresh_interpreter(code: str, failure_message: str) -> None:

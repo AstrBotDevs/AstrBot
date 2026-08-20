@@ -1304,7 +1304,7 @@ async def test_v1_openapi_is_served_by_fastapi(asgi_client: httpx.AsyncClient):
 
 
 def test_static_openapi_v1_paths_include_api_version():
-    spec_path = Path(__file__).resolve().parents[1] / "openspec" / "openapi-v1.yaml"
+    spec_path = Path(__file__).resolve().parents[3] / "openspec" / "openapi-v1.yaml"
     in_paths = False
     path_keys = []
     for line in spec_path.read_text(encoding="utf-8").splitlines():

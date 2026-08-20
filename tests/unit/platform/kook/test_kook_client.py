@@ -23,7 +23,7 @@ from astrbot.core.platform.sources.kook.kook_types import (
     KookMessageSignal,
     KookWebsocketEvent,
 )
-from tests.test_kook.shared import (
+from tests.unit.platform.kook.shared import (
     KookEventDataPath,
     mock_http_client,
     mock_kook_roles_record,

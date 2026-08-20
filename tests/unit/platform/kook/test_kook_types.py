@@ -27,7 +27,11 @@ from astrbot.core.platform.sources.kook.kook_types import (
     PlainTextElement,
     SectionModule,
 )
-from tests.test_kook.shared import TEST_DATA_DIR, KookApiDataPath, KookEventDataPath
+from tests.unit.platform.kook.shared import (
+    TEST_DATA_DIR,
+    KookApiDataPath,
+    KookEventDataPath,
+)
 
 
 def test_kook_card_message_container_append():

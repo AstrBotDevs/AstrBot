@@ -15,7 +15,7 @@ from astrbot.core.message.components import (
 )
 from astrbot.core.platform.sources.kook.kook_event import KookEvent
 from astrbot.core.platform.sources.kook.kook_types import KookMessageType, OrderMessage
-from tests.test_kook.shared import (
+from tests.unit.platform.kook.shared import (
     mock_astrbot_message,
     mock_file_message,
     mock_kook_client,
