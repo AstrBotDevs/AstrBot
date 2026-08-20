@@ -30,26 +30,17 @@ X-API-Key: abk_xxx
 
 ## Scope 权限说明
 
-创建 API Key 时可配置 `scopes`。每个 scope 控制可访问的接口范围：
-
-| Scope | 作用 | 可访问接口 |
-| --- | --- | --- |
-| `bot` | 管理机器人/平台配置 | `GET /api/v1/bot-types`、`GET/POST /api/v1/bots`、`PATCH /api/v1/bots/enabled` |
-| `provider` | 管理模型提供商和提供商源 | `GET/POST /api/v1/providers`、`GET/PUT/DELETE /api/v1/provider-sources/by-id` |
-| `persona` | 管理人格和人格文件夹 | `GET/POST /api/v1/personas`、`GET/POST /api/v1/persona-folders` |
-| `im` | 主动发 IM 消息、查询 bot/platform 列表 | `POST /api/v1/im/message`、`GET /api/v1/im/bots` |
-| `config` | 管理配置文件、系统配置和通用配置。该 scope 同时包含 `bot` 和 `provider` 访问权限。 | `GET /api/v1/configs`、`GET/PUT /api/v1/system-config`、`GET/POST /api/v1/config-profiles` |
-| `chat` | 调用对话能力、查询对话会话 | `POST /api/v1/chat`、`GET /api/v1/chat/sessions` |
-| `file` | 上传和下载对话附件 | `POST /api/v1/file`、`GET /api/v1/file`、`POST /api/v1/files` |
-| `plugin` | 管理插件、插件配置、插件源和插件市场 | `GET /api/v1/plugins`、`GET/PUT /api/v1/plugins/config`、`POST /api/v1/plugins/install/url` |
-| `mcp` | 管理 MCP 服务器配置和服务端同步 | `GET/POST /api/v1/mcp/servers`、`PATCH /api/v1/mcp/servers/{server_name}/enabled`、`POST /api/v1/mcp/providers/modelscope/sync` |
-| `skill` | 管理 Skills、Skill 压缩包、Skill 文件和 Shipyard Neo Skill 流程 | `GET/POST /api/v1/skills`、`PUT /api/v1/skills/{skill_name}/files/{file_path}`、`POST /api/v1/skills/neo/sync` |
+创建 API Key 时可配置 `scopes`。每个 scope 的作用、继承关系及完整接口清单见 [API Scope 与接口对照](./openapi-scopes.md)。
 
 如果 API Key 未包含目标接口所需 scope，请求会返回 `403 Insufficient API key scope`。
 
-`config` 是较大的管理 scope。创建 API Key 时如果包含 `config`，AstrBot 会同时授予该 Key `config`、`bot` 和 `provider` 访问权限。WebUI 的勾选逻辑也会体现这个依赖关系：选中 `config` 会同时选中 `bot` 和 `provider`；取消选中 `bot` 或 `provider` 时，会同步取消 `config`。
+- `config` 在 WebUI 中默认不选中，并自动包含 `bot` 和 `provider`。
+- `config:edit_admin` 和 `chat:admin` 必须显式授予，不会随父 scope 隐式获得。
+- WebUI 中取消 `bot` 或 `provider` 时，会同步取消依赖它们的 `config`。
 
-当前开发者 API Key 仅开放以上 10 个 scope。`tool`、`skills`、`kb`、`data`、`system` 暂不支持作为开发者 API Key scope。`/api/v1/skills/*` 接口使用单数 `skill` scope，不使用复数 `skills`。公开 OpenAPI 文档只包含这些开发者 API Key scope 覆盖的接口。
+当前开发者 API Key 开放 11 个顶级 scope 和 2 个敏感子权限。`tool`、`skills`、`kb`、`system` 暂不支持作为开发者 API Key scope。`/api/v1/skills/*` 接口使用单数 `skill` scope，不使用复数 `skills`。
+
+交互式文档中的每个接口也会显示英文标签 `Required scope: ...`；涉及管理员能力时，还会显示 `Conditional sensitive scope: ...`。
 
 ## 常用接口
 
@@ -131,7 +122,7 @@ X-API-Key: abk_xxx
 
 `POST /api/v1/chat` 额外需要 `username`，可选 `session_id`（不传会自动创建 UUID）。
 
-`username` 是调用方声明的 WebChat 用户标识，会作为本次消息的 sender 和会话 owner 进入消息管道，并参与基于 sender ID 的指令权限判断。因此，带有 `chat` scope 的 API Key 应仅发放给可信后端服务。如果需要面向终端用户开放，请在自己的服务端将外部用户映射到受控的 `username`，不要允许客户端直接传入管理员 ID 或其他保留 sender ID。
+`username` 是调用方声明的 WebChat 用户标识，会作为本次消息的 sender 和会话 owner。只有 `chat` 的 Key 如果使用任一已配置管理员 ID，会被拒绝，并且消息管道也不会为其授予管理员角色。敏感子权限 `chat:admin` 会显式允许使用已配置的管理员 ID，但不会把任意用户名变成管理员。集成方仍应将外部用户映射为稳定、由应用控制的用户名。
 
 ```json
 {

@@ -26,6 +26,9 @@ from astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter import
 from astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter import (
     botClient as QQOfficialBotClient,
 )
+from astrbot.core.platform.sources.qqofficial.qqofficial_message_event import (
+    QQOfficialMessageEvent,
+)
 from astrbot.core.platform.sources.qqofficial_webhook.qo_webhook_adapter import (
     QQOfficialWebhookPlatformAdapter,
 )
@@ -308,6 +311,31 @@ async def test_ws_group_send_by_session_with_cached_msg_id_still_omits_msg_id():
 
 
 @pytest.mark.asyncio
+async def test_media_upload_propagates_qq_api_error(monkeypatch):
+    """QQ upload errors propagate so callers cannot report a false success."""
+    request = AsyncMock(
+        side_effect=botpy.errors.ServerError("413 Request Entity Too Large")
+    )
+    send_helper = SimpleNamespace(
+        bot=SimpleNamespace(
+            api=SimpleNamespace(_http=SimpleNamespace(request=request))
+        )
+    )
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.qqofficial.qqofficial_message_event._qqofficial_retry",
+        lambda *args, **kwargs: lambda func: func,
+    )
+
+    with pytest.raises(botpy.errors.ServerError, match="413 Request Entity Too Large"):
+        await QQOfficialMessageEvent.upload_group_and_c2c_media(
+            send_helper,
+            "https://example.com/large.bin",
+            QQOfficialMessageEvent.FILE_FILE_TYPE,
+            group_openid="group-1",
+        )
+
+
+@pytest.mark.asyncio
 async def test_webhook_group_send_by_session_without_cached_msg_id_omits_msg_id():
     adapter = QQOfficialWebhookPlatformAdapter(
         {
@@ -388,7 +416,9 @@ async def test_result_decorate_segments_qqofficial_ws_plain_result():
         "ctx",
         SimpleNamespace(
             plugin_manager=SimpleNamespace(
-                context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+                context=SimpleNamespace(
+                    get_using_tts_provider_async=AsyncMock(return_value=None)
+                )
             ),
             astrbot_config={
                 "provider_tts_settings": {

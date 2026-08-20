@@ -98,6 +98,8 @@ class TestAstrBotCoreLifecycleInit:
             # Verify proxy environment variables are cleared
             assert "http_proxy" not in os.environ
             assert "https_proxy" not in os.environ
+            # Verify local APIs always bypass proxies after clearing the environment.
+            assert os.environ.get("no_proxy") == "localhost,127.0.0.1,::1"
 
 
 class TestAstrBotCoreLifecycleStop:
@@ -397,6 +399,7 @@ class TestAstrBotCoreLifecycleInitialize:
         mock_umop_config_router.initialize = AsyncMock()
 
         mock_astrbot_config_mgr = MagicMock()
+        mock_astrbot_config_mgr.initialize = AsyncMock()
         mock_astrbot_config_mgr.default_conf = {}
         mock_astrbot_config_mgr.confs = {}
 
@@ -427,7 +430,7 @@ class TestAstrBotCoreLifecycleInitialize:
         mock_pipeline_scheduler = MagicMock()
         mock_pipeline_scheduler.initialize = AsyncMock()
 
-        mock_astrbot_updator = MagicMock()
+        mock_astrbot_updater = MagicMock()
 
         mock_event_bus = MagicMock()
 
@@ -482,8 +485,8 @@ class TestAstrBotCoreLifecycleInitialize:
                 return_value=mock_pipeline_scheduler,
             ),
             patch(
-                "astrbot.core.core_lifecycle.AstrBotUpdator",
-                return_value=mock_astrbot_updator,
+                "astrbot.core.core_lifecycle.AstrBotUpdater",
+                return_value=mock_astrbot_updater,
             ),
             patch("astrbot.core.core_lifecycle.EventBus", return_value=mock_event_bus),
             patch("astrbot.core.core_lifecycle.migra", new_callable=AsyncMock),
@@ -502,6 +505,9 @@ class TestAstrBotCoreLifecycleInitialize:
 
         # Verify UMOP config router initialized
         mock_umop_config_router.initialize.assert_awaited_once()
+
+        # Verify config manager initialized
+        mock_astrbot_config_mgr.initialize.assert_awaited_once()
 
         # Verify persona manager initialized
         mock_persona_mgr.initialize.assert_awaited_once()
@@ -537,6 +543,7 @@ class TestAstrBotCoreLifecycleInitialize:
         mock_umop_config_router.initialize = AsyncMock()
 
         mock_astrbot_config_mgr = MagicMock()
+        mock_astrbot_config_mgr.initialize = AsyncMock()
         mock_astrbot_config_mgr.default_conf = {}
         mock_astrbot_config_mgr.confs = {}
 
@@ -593,7 +600,7 @@ class TestAstrBotCoreLifecycleInitialize:
                 return_value=MagicMock(initialize=AsyncMock()),
             ),
             patch(
-                "astrbot.core.core_lifecycle.AstrBotUpdator",
+                "astrbot.core.core_lifecycle.AstrBotUpdater",
                 return_value=MagicMock(),
             ),
             patch(
@@ -886,7 +893,7 @@ class TestAstrBotCoreLifecycleRestart:
 
         lifecycle.dashboard_shutdown_event = asyncio.Event()
 
-        lifecycle.astrbot_updator = MagicMock()
+        lifecycle.astrbot_updater = MagicMock()
 
         with patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread:
             await lifecycle.restart()

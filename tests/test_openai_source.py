@@ -62,6 +62,16 @@ def _make_groq_provider(overrides: dict | None = None) -> ProviderGroq:
 
 def test_create_http_client_uses_openai_httpx_module(monkeypatch):
     captured: dict[str, object] = {}
+    fake_httpx_module = object()
+
+    from openai import _base_client as openai_base_client
+
+    monkeypatch.setattr(
+        openai_base_client,
+        "httpx",
+        fake_httpx_module,
+        raising=False,
+    )
 
     def fake_create_proxy_client(
         provider_label: str,
@@ -82,9 +92,7 @@ def test_create_http_client_uses_openai_httpx_module(monkeypatch):
     provider = ProviderOpenAIOfficial.__new__(ProviderOpenAIOfficial)
     provider._create_http_client({"proxy": ""})
 
-    from openai import _base_client as openai_base_client
-
-    assert captured["httpx_module"] is openai_base_client.httpx
+    assert captured["httpx_module"] is fake_httpx_module
 
 
 def test_create_http_client_falls_back_to_global_httpx_module(monkeypatch):
@@ -1451,6 +1459,50 @@ async def test_parse_openai_completion_raises_empty_model_output_error():
 
         with pytest.raises(EmptyModelOutputError):
             await provider._parse_openai_completion(completion, tools=None)
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_parse_openai_completion_reads_nested_data_choices():
+    provider = _make_provider()
+    try:
+        completion = ChatCompletion.model_construct(
+            id=None,
+            object="chat.completion",
+            created=None,
+            model=None,
+            choices=None,
+            data={
+                "id": "gen_test",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "deepseek/deepseek-v4-flash",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": "PONG",
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 12,
+                    "completion_tokens": 38,
+                    "total_tokens": 50,
+                },
+            },
+        )
+
+        response = await provider._parse_openai_completion(completion, tools=None)
+
+        assert response.completion_text == "PONG"
+        assert response.id == "gen_test"
+        assert response.usage is not None
+        assert response.usage.input_other == 12
+        assert response.usage.output == 38
     finally:
         await provider.terminate()
 

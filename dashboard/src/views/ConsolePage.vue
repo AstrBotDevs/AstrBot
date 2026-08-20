@@ -18,6 +18,15 @@ const { tm } = useModuleI18n('features/console');
       </div>
       <div class="d-flex align-center">
         <v-switch
+          v-model="hideUserChatEnabled"
+          :label="hideUserChatEnabled ? tm('hideUserChat.enabled') : tm('hideUserChat.disabled')"
+          hide-details
+          density="compact"
+          inset
+          color="primary"
+          style="margin-right: 16px;"
+        ></v-switch>
+        <v-switch
           v-model="autoScrollEnabled"
           :label="autoScrollEnabled ? tm('autoScroll.enabled') : tm('autoScroll.disabled')"
           hide-details
@@ -49,7 +58,7 @@ const { tm } = useModuleI18n('features/console');
         </v-dialog>
       </div>
     </div>
-    <ConsoleDisplayer ref="consoleDisplayer" class="console-display" />
+    <ConsoleDisplayer ref="consoleDisplayer" class="console-display" :hide-user-chat="hideUserChatEnabled" />
   </div>
 </template>
 <script>
@@ -61,6 +70,7 @@ export default {
   data() {
     return {
       autoScrollEnabled: localStorage.getItem('console_auto_scroll') !== 'false',
+      hideUserChatEnabled: localStorage.getItem('console_hide_user_chat') === 'true',
       pipDialog: false,
       pipInstallPayload: {
         package: '',
@@ -80,6 +90,9 @@ export default {
       if (this.$refs.consoleDisplayer) {
         this.$refs.consoleDisplayer.autoScroll = val;
       }
+    },
+    hideUserChatEnabled(val) {
+      localStorage.setItem('console_hide_user_chat', val);
     }
   },
   methods: {

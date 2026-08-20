@@ -1089,7 +1089,18 @@ export function useMessages(options: UseMessagesOptions) {
     if (msgType === "complete" || msgType === "break") {
       markMessageStarted(botRecord);
       const finalText = payloadText(data);
-      if (finalText && !hasPlainText(botRecord)) {
+      const existingText = botRecord.content.message
+        .filter((part) => part.type === "plain")
+        .map((part) => part.text || "")
+        .join("");
+      const missingText = finalText.slice(existingText.length);
+      if (
+        msgType === "complete" &&
+        missingText &&
+        finalText.startsWith(existingText)
+      ) {
+        appendPlain(botRecord, missingText);
+      } else if (finalText && !hasPlainText(botRecord)) {
         appendPlain(botRecord, finalText, false);
       }
       return;

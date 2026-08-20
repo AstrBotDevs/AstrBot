@@ -161,7 +161,7 @@ class ConversationCommands:
             )
             return
 
-        if not self.context.get_using_provider(umo):
+        if not await self.context.get_using_provider_async(umo):
             message.set_result(
                 MessageEventResult().message(
                     "😕 Cannot find any LLM provider. Configure one first."
