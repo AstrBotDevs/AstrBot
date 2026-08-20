@@ -14,7 +14,6 @@
   "save": "Save",
   "saved": "Saved",
   "readonly": "Read-only",
-  "runtimeReloadNotGuaranteed": "Disk changed only; runtime reload is not guaranteed",
   "binary": "Binary file",
   "database": "Database file",
   "loading": "Loading…",

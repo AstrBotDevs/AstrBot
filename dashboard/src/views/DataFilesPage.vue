@@ -129,12 +129,6 @@
               variant="tonal"
               >{{ tm('readonly') }}</v-chip
             >
-            <v-chip
-              v-if="runtimeReload === 'not_guaranteed'"
-              size="small"
-              variant="tonal"
-              >{{ tm('runtimeReloadNotGuaranteed') }}</v-chip
-            >
             <v-btn
               v-if="selectedEntry.type === 'file' && selectedEntry.downloadable"
               icon="mdi-download"
@@ -354,7 +348,6 @@ const selectedPath = ref('');
 const activeDirectory = ref('');
 const content = ref<string | null>(null);
 const editorReady = ref(false);
-const runtimeReload = ref<'not_guaranteed' | 'reloaded' | null>(null);
 const etag = ref('');
 const dirty = ref(false);
 const saving = ref(false);
@@ -484,7 +477,6 @@ async function openEntry(entry: DataFileEntry) {
     : '';
   editorError.value = '';
   content.value = null;
-  runtimeReload.value = null;
   dirty.value = false;
   await router.replace({ path: '/data', query: { path: entry.path } });
   if (!isTextEntry(entry)) {
@@ -495,7 +487,6 @@ async function openEntry(entry: DataFileEntry) {
     const response = await dataFilesApi.content(entry.path);
     content.value = response.data.data.content;
     etag.value = response.data.data.etag;
-    runtimeReload.value = response.data.data.runtime_reload ?? null;
     selectedEntry.value = { ...entry, writable: response.data.data.writable };
   } catch {
     editorError.value = tm('error');
@@ -606,7 +597,6 @@ async function save() {
       etag.value,
     );
     etag.value = response.data.data.etag;
-    runtimeReload.value = response.data.data.runtime_reload ?? null;
     dirty.value = false;
     toastMessage.value = tm('saved');
     toastColor.value = 'success';
@@ -631,7 +621,6 @@ async function save() {
             { headers: stepUpHeaders(token) },
           );
           etag.value = response.data.data.etag;
-          runtimeReload.value = response.data.data.runtime_reload ?? null;
           dirty.value = false;
           toastMessage.value = tm('saved');
           toastColor.value = 'success';

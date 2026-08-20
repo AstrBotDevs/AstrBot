@@ -14,7 +14,6 @@
   "save": "保存",
   "saved": "已保存",
   "readonly": "只读",
-  "runtimeReloadNotGuaranteed": "仅修改磁盘，运行时不会立即重载",
   "binary": "二进制文件",
   "database": "数据库文件",
   "loading": "加载中…",
