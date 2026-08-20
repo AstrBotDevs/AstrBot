@@ -75,11 +75,12 @@ def test_register_and_unregister_backend(manager: KnowledgeBaseManager) -> None:
 
     manager.register_backend(backend)
 
-    assert manager.backends == {"example": backend}
+    assert manager.backends["example"] is backend
+    assert "builtin" in manager.backends
 
     manager.unregister_backend("example")
 
-    assert manager.backends == {}
+    assert set(manager.backends) == {"builtin"}
 
 
 def test_duplicate_backend_id_is_rejected(manager: KnowledgeBaseManager) -> None:
@@ -91,7 +92,7 @@ def test_duplicate_backend_id_is_rejected(manager: KnowledgeBaseManager) -> None
 
 @pytest.mark.parametrize(
     "backend_id",
-    ["", "with space", "invalid/path", "中文", "x" * 129],
+    ["", " example ", "with space", "invalid/path", "中文", "x" * 129],
 )
 def test_invalid_backend_id_is_rejected(
     manager: KnowledgeBaseManager,
@@ -106,6 +107,13 @@ def test_incompatible_api_version_is_rejected(
 ) -> None:
     with pytest.raises(ValueError, match="API version"):
         manager.register_backend(StubBackend(api_version=2))
+
+
+def test_builtin_backend_cannot_be_unregistered(
+    manager: KnowledgeBaseManager,
+) -> None:
+    with pytest.raises(ValueError, match="cannot be unregistered"):
+        manager.unregister_backend("builtin")
 
 
 def test_context_forwards_backend_registration() -> None:

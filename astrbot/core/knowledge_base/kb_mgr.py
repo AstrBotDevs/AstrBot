@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 from sqlalchemy.exc import IntegrityError  # type: ignore
@@ -5,10 +6,17 @@ from sqlalchemy.exc import IntegrityError  # type: ignore
 from astrbot.api.knowledge_base import (
     KNOWLEDGE_BASE_BACKEND_API_VERSION,
     BaseKnowledgeBaseBackend,
+    KnowledgeBaseHit,
+    KnowledgeBaseInfo,
+    KnowledgeBaseQuery,
+    KnowledgeBaseRef,
+    KnowledgeBaseResponse,
 )
 from astrbot.core import logger
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.utils.astrbot_path import get_astrbot_knowledge_base_path
+
+from .builtin_backend import BuiltinKnowledgeBaseBackend
 
 # from .chunking.fixed_size import FixedSizeChunker
 from .chunking.recursive import RecursiveCharacterChunker
@@ -23,6 +31,7 @@ FILES_PATH = get_astrbot_knowledge_base_path()
 DB_PATH = Path(FILES_PATH) / "kb.db"
 """Knowledge Base storage root directory"""
 CHUNKER = RecursiveCharacterChunker()
+BACKEND_TIMEOUT_SECONDS = 15.0
 
 
 class KnowledgeBaseManager:
@@ -39,6 +48,7 @@ class KnowledgeBaseManager:
 
         self.kb_insts: dict[str, KBHelper] = {}
         self.backends: dict[str, BaseKnowledgeBaseBackend] = {}
+        self.register_backend(BuiltinKnowledgeBaseBackend(self))
 
     def register_backend(self, backend: BaseKnowledgeBaseBackend) -> None:
         """Register a knowledge base backend.
@@ -50,8 +60,13 @@ class KnowledgeBaseManager:
             ValueError: If the backend identifier is invalid, already registered,
                 or uses an incompatible API version.
         """
-        backend_id = backend.backend_id.strip()
-        if not backend_id or len(backend_id) > 128:
+        backend_id = backend.backend_id
+        if (
+            not isinstance(backend_id, str)
+            or backend_id != backend_id.strip()
+            or not backend_id
+            or len(backend_id) > 128
+        ):
             raise ValueError(
                 "Knowledge base backend ID must contain between 1 and 128 characters."
             )
@@ -85,9 +100,135 @@ class KnowledgeBaseManager:
 
         Args:
             backend_id: Backend identifier to remove.
+
+        Raises:
+            ValueError: If attempting to unregister the built-in backend.
         """
+        if backend_id == "builtin":
+            raise ValueError(
+                "The built-in knowledge base backend cannot be unregistered."
+            )
         if self.backends.pop(backend_id, None) is not None:
             logger.info("Knowledge base backend unregistered: %s", backend_id)
+
+    async def list_registered_knowledge_bases(
+        self,
+        *,
+        umo: str | None = None,
+    ) -> list[KnowledgeBaseInfo]:
+        """List knowledge bases exposed by all registered backends.
+
+        Args:
+            umo: Optional unified message origin for backend access filtering.
+
+        Returns:
+            Knowledge bases returned by available backends.
+        """
+        backends = list(self.backends.values())
+        responses = await asyncio.gather(
+            *(
+                asyncio.wait_for(
+                    backend.list_knowledge_bases(umo=umo),
+                    timeout=BACKEND_TIMEOUT_SECONDS,
+                )
+                for backend in backends
+            ),
+            return_exceptions=True,
+        )
+
+        knowledge_bases = []
+        for backend, response in zip(backends, responses):
+            if isinstance(response, BaseException):
+                logger.warning(
+                    "Failed to list knowledge bases from backend %s: %s",
+                    backend.backend_id,
+                    response,
+                )
+                continue
+            for info in response:
+                if info.ref.backend_id != backend.backend_id:
+                    logger.warning(
+                        "Knowledge base backend %s returned a mismatched reference: %s",
+                        backend.backend_id,
+                        info.ref.backend_id,
+                    )
+                    continue
+                knowledge_bases.append(info)
+        return knowledge_bases
+
+    async def retrieve_from_backends(
+        self,
+        refs: list[KnowledgeBaseRef],
+        request: KnowledgeBaseQuery,
+    ) -> KnowledgeBaseResponse:
+        """Retrieve from multiple registered knowledge base backends.
+
+        Backends are invoked concurrently and failures are returned as warnings.
+        Since backend-local scores are not necessarily comparable, successful hits
+        are merged by their backend-assigned rank and then truncated globally.
+
+        Args:
+            refs: Knowledge bases grouped by their backend identifiers.
+            request: Standardized retrieval request.
+
+        Returns:
+            Merged retrieval results and non-fatal warnings.
+        """
+        if request.top_k <= 0 or not refs:
+            return KnowledgeBaseResponse(hits=[])
+
+        grouped_ids: dict[str, list[str]] = {}
+        warnings = []
+        for ref in refs:
+            backend_ids = grouped_ids.setdefault(ref.backend_id, [])
+            if ref.knowledge_base_id not in backend_ids:
+                backend_ids.append(ref.knowledge_base_id)
+
+        selected_backends = []
+        for backend_id, knowledge_base_ids in grouped_ids.items():
+            backend = self.backends.get(backend_id)
+            if backend is None:
+                warnings.append(
+                    f"Knowledge base backend '{backend_id}' is not registered."
+                )
+                continue
+            selected_backends.append((backend, knowledge_base_ids))
+
+        responses = await asyncio.gather(
+            *(
+                asyncio.wait_for(
+                    backend.retrieve(knowledge_base_ids, request),
+                    timeout=BACKEND_TIMEOUT_SECONDS,
+                )
+                for backend, knowledge_base_ids in selected_backends
+            ),
+            return_exceptions=True,
+        )
+
+        ranked_hits: list[tuple[int, int, int, KnowledgeBaseHit]] = []
+        for backend_index, ((backend, _), response) in enumerate(
+            zip(selected_backends, responses)
+        ):
+            if isinstance(response, BaseException):
+                warning = (
+                    f"Knowledge base backend '{backend.backend_id}' failed: {response}"
+                )
+                warnings.append(warning)
+                logger.warning(warning)
+                continue
+
+            warnings.extend(
+                f"{backend.display_name}: {warning}" for warning in response.warnings
+            )
+            for hit_index, hit in enumerate(response.hits):
+                if not hit.content or not hit.content.strip():
+                    continue
+                hit.metadata.setdefault("backend_id", backend.backend_id)
+                ranked_hits.append((hit.rank, backend_index, hit_index, hit))
+
+        ranked_hits.sort(key=lambda item: item[:3])
+        hits = [item[3] for item in ranked_hits[: request.top_k]]
+        return KnowledgeBaseResponse(hits=hits, warnings=warnings)
 
     async def initialize(self) -> None:
         """初始化知识库模块"""
