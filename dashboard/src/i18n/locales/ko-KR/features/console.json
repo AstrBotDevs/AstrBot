@@ -1,0 +1,21 @@
+{
+  "title": "콘솔",
+  "autoScroll": {
+    "enabled": "자동 스크롤 켜짐",
+    "disabled": "자동 스크롤 꺼짐"
+  },
+  "pipInstall": {
+    "button": "pip 패키지 설치",
+    "dialogTitle": "Pip 패키지 설치",
+    "packageLabel": "*패키지 이름, 예: llmtuner",
+    "mirrorLabel": "PyPI 저장소 URL 강제 지정 (선택)",
+    "mirrorHint": "PyPI 저장소 URL 강제 지정 > 구성 항목 `PyPI 저장소 주소`",
+    "installButton": "설치",
+    "installSuccess": "설치에 성공했습니다.",
+    "installFailed": "설치에 실패했습니다.",
+    "requestFailed": "요청에 실패했습니다."
+  },
+  "debugHint": {
+    "text": "디버그 로그는 \"구성 파일 → 시스템 → 콘솔 로그 레벨\"에서 활성화할 수 있습니다"
+  }
+}
