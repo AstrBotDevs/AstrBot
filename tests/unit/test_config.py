@@ -557,6 +557,44 @@ class TestConfigValidation:
         assert "level2" in config.nested["level1"]
         assert config.nested["level1"]["level2"]["value"] == 42
 
+    def test_preserve_dict_type_user_content(self, temp_config_path):
+        """Test that dict-type config items keep user key-value pairs across reloads."""
+        schema = {
+            "custom_groups": {
+                "type": "dict",
+                "default": {},
+            },
+        }
+        config = AstrBotConfig(config_path=temp_config_path, schema=schema)
+        config.custom_groups = {"group_a": ["platform:type:id"]}
+        config.save_config()
+
+        config2 = AstrBotConfig(config_path=temp_config_path, schema=schema)
+
+        assert config2.custom_groups == {"group_a": ["platform:type:id"]}
+
+    def test_preserve_nested_dict_type_user_content(self, temp_config_path):
+        """Test that user content nested inside dict-type items survives reloads."""
+        schema = {
+            "custom_groups": {
+                "type": "object",
+                "items": {
+                    "enable": {"type": "bool", "default": True},
+                    "share_groups": {"type": "dict", "default": {}},
+                },
+            },
+        }
+        config = AstrBotConfig(config_path=temp_config_path, schema=schema)
+        config.custom_groups["share_groups"] = {"group_a": ["platform:type:id"]}
+        config.save_config()
+
+        config2 = AstrBotConfig(config_path=temp_config_path, schema=schema)
+
+        assert config2.custom_groups["enable"] is True
+        assert config2.custom_groups["share_groups"] == {
+            "group_a": ["platform:type:id"]
+        }
+
     def test_integrity_log_does_not_include_inserted_secret_value(
         self, temp_config_path, monkeypatch
     ):

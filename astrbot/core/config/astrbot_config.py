@@ -188,6 +188,10 @@ class AstrBotConfig(dict):
                     # 类型不匹配，使用默认值
                     new_conf[key] = value
                     has_new = True
+                elif not value:
+                    # 参考值为空 dict（如 dict 类型的自由键值对配置项），
+                    # 保留用户的全部键值对，不进行递归清理
+                    new_conf[key] = conf[key]
                 else:
                     # 递归检查并同步顺序
                     child_has_new = self.check_config_integrity(
