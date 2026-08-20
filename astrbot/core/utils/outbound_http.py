@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import gzip
+import io
 import ipaddress
 import socket
 import ssl
@@ -27,6 +29,11 @@ _CORE_ARCHIVE_MAX_BYTES = 200 * 1024 * 1024
 _MIRROR_TEST_MAX_BYTES = 64 * 1024
 _JSON_MAX_BYTES = 8 * 1024 * 1024
 _DEFAULT_HTTPS_PORTS = frozenset({443})
+_JSON_REQUEST_HEADERS = {
+    "Accept": "application/json, text/plain;q=0.9, */*;q=0.8",
+    "Accept-Encoding": "identity",
+    "User-Agent": "AstrBot",
+}
 _BLOCKED_SCHEMES = frozenset(
     {"file", "gopher", "data", "ftp", "ftps", "ws", "wss", "javascript"}
 )
@@ -76,6 +83,11 @@ SOULTER_REGISTRY_HOSTS = frozenset(
         "api.soulter.top",
         "astrbot-registry.soulter.top",
     }
+)
+DEFAULT_PLUGIN_MARKET_URLS = (
+    "https://raw.githubusercontent.com/AstrBotDevs/AstrBot_Plugins_Collection/main/plugin_cache_original.json",
+    "https://cdn.jsdelivr.net/gh/AstrBotDevs/AstrBot_Plugins_Collection@main/plugin_cache_original.json",
+    "https://api.soulter.top/astrbot/plugins",
 )
 _ARCHIVE_CONTENT_TYPES = frozenset(
     {
@@ -636,6 +648,79 @@ def _content_type_allowed(value: str | None, policy: OutboundRequestPolicy) -> b
     return media_type in policy.allowed_content_types
 
 
+def _decompress_gzip_limited(data: bytes, max_bytes: int) -> bytes:
+    """Decompress gzip bytes without allowing a size-limit bypass."""
+
+    chunks: list[bytes] = []
+    total = 0
+    try:
+        with gzip.GzipFile(fileobj=io.BytesIO(data), mode="rb") as handle:
+            while True:
+                remaining = max_bytes - total
+                chunk = handle.read(min(65536, remaining + 1))
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_bytes:
+                    raise OutboundSizeLimitError(
+                        "The response is larger than the allowed size."
+                    )
+                chunks.append(chunk)
+    except OutboundSizeLimitError:
+        raise
+    except (EOFError, OSError, gzip.BadGzipFile) as exc:
+        raise OutboundRequestError(
+            safe_error("The remote response could not be decoded.", exc)
+        ) from exc
+    return b"".join(chunks)
+
+
+def _decode_text_payload(raw: bytes, *, max_bytes: int | None = None) -> str:
+    """Decode a JSON/text payload, including accidental gzip wrappers."""
+
+    limit = _JSON_MAX_BYTES if max_bytes is None else max_bytes
+    if raw.startswith(b"\x1f\x8b"):
+        payload = _decompress_gzip_limited(raw, limit)
+    else:
+        payload = raw
+        if len(payload) > limit:
+            raise OutboundSizeLimitError(
+                "The response is larger than the allowed size."
+            )
+    return payload.decode("utf-8-sig")
+
+
+def _proxy_for_url(url: str) -> str | None:
+    """Return the configured forward proxy for one destination URL."""
+
+    from astrbot.core.utils.proxy_route import (
+        destination_host_from_url,
+        resolve_proxy_route,
+    )
+
+    return resolve_proxy_route(
+        destination_host=destination_host_from_url(url),
+    ).proxy_url
+
+
+def _open_connector(
+    policy: OutboundRequestPolicy,
+    *,
+    proxy: str | None,
+    resolve_addresses: Callable[
+        [str, int], Sequence[ipaddress.IPv4Address | ipaddress.IPv6Address]
+    ]
+    | None,
+) -> tuple[aiohttp.TCPConnector, ValidatingAiohttpResolver | None]:
+    if proxy:
+        return aiohttp.TCPConnector(ssl=_build_ssl_context()), None
+    resolver = ValidatingAiohttpResolver(
+        policy,
+        resolve_addresses=resolve_addresses,
+    )
+    return aiohttp.TCPConnector(ssl=_build_ssl_context(), resolver=resolver), resolver
+
+
 def _raise_http_status(status: int, url: str) -> None:
     raise OutboundRequestError(
         f"Download failed with HTTP {status} from {redact_outbound_url(url)}."
@@ -673,16 +758,25 @@ async def _request_with_manual_redirects(
     ]
     | None,
     allow_redirects: bool,
+    proxy: str | None = None,
+    headers: Mapping[str, str] | None = None,
 ) -> aiohttp.ClientResponse:
     current = validate_outbound_url(url, policy, resolve_addresses=resolve_addresses)
     hops = 0
     max_hops = policy.max_redirects if allow_redirects else 0
+    request_kwargs: dict[str, Any] = {
+        "allow_redirects": False,
+        "timeout": aiohttp.ClientTimeout(total=policy.timeout_seconds),
+    }
+    if headers:
+        request_kwargs["headers"] = headers
+    if proxy:
+        request_kwargs["proxy"] = proxy
     while True:
         response = await session.request(
             method,
             current.url,
-            allow_redirects=False,
-            timeout=aiohttp.ClientTimeout(total=policy.timeout_seconds),
+            **request_kwargs,
         )
         if response.status not in {301, 302, 303, 307, 308}:
             return response
@@ -731,6 +825,7 @@ async def download_to_path(
     target = Path(path)
     ensure_dir(target.parent)
     validate_outbound_url(url, policy, resolve_addresses=resolve_addresses)
+    forward_proxy = proxy or _proxy_for_url(url)
 
     async def emit(payload: dict[str, Any]) -> None:
         if progress_callback is None:
@@ -739,8 +834,11 @@ async def download_to_path(
         if asyncio.iscoroutine(result):
             await result
 
-    resolver = ValidatingAiohttpResolver(policy, resolve_addresses=resolve_addresses)
-    connector = aiohttp.TCPConnector(ssl=_build_ssl_context(), resolver=resolver)
+    connector, resolver = _open_connector(
+        policy,
+        proxy=forward_proxy,
+        resolve_addresses=resolve_addresses,
+    )
     downloaded = 0
     try:
         async with aiohttp.ClientSession(
@@ -754,6 +852,7 @@ async def download_to_path(
                 policy,
                 resolve_addresses=resolve_addresses,
                 allow_redirects=policy.max_redirects > 0,
+                proxy=forward_proxy,
             )
             async with response:
                 if response.status != 200:
@@ -814,7 +913,8 @@ async def download_to_path(
         ) from exc
     finally:
         await connector.close()
-        await resolver.close()
+        if resolver is not None:
+            await resolver.close()
 
 
 async def fetch_text(
@@ -841,8 +941,12 @@ async def fetch_text(
     """
 
     validate_outbound_url(url, policy, resolve_addresses=resolve_addresses)
-    resolver = ValidatingAiohttpResolver(policy, resolve_addresses=resolve_addresses)
-    connector = aiohttp.TCPConnector(ssl=_build_ssl_context(), resolver=resolver)
+    forward_proxy = _proxy_for_url(url)
+    connector, resolver = _open_connector(
+        policy,
+        proxy=forward_proxy,
+        resolve_addresses=resolve_addresses,
+    )
     try:
         async with aiohttp.ClientSession(
             connector=connector,
@@ -855,19 +959,26 @@ async def fetch_text(
                 policy,
                 resolve_addresses=resolve_addresses,
                 allow_redirects=policy.max_redirects > 0,
+                proxy=forward_proxy,
+                headers=_JSON_REQUEST_HEADERS,
             )
             async with response:
-                raw = await response.content.read(
-                    (policy.max_response_bytes or _JSON_MAX_BYTES) + 1
+                limit = (
+                    policy.max_response_bytes
+                    if policy.max_response_bytes is not None
+                    else _JSON_MAX_BYTES
                 )
-                if (
-                    policy.max_response_bytes is not None
-                    and len(raw) > policy.max_response_bytes
-                ):
+                raw = await response.content.read(limit + 1)
+                if len(raw) > limit:
                     raise OutboundSizeLimitError(
                         "The response is larger than the allowed size."
                     )
-                text = raw.decode(response.charset or "utf-8", errors="replace")
+                try:
+                    text = _decode_text_payload(raw, max_bytes=limit)
+                except UnicodeDecodeError as exc:
+                    raise OutboundRequestError(
+                        safe_error("The remote response could not be decoded.", exc)
+                    ) from exc
                 return response.status, text, response.headers
     except OutboundRequestError:
         raise
@@ -875,7 +986,8 @@ async def fetch_text(
         raise OutboundRequestError(safe_error("Outbound request failed.", exc)) from exc
     finally:
         await connector.close()
-        await resolver.close()
+        if resolver is not None:
+            await resolver.close()
 
 
 class PinnedAsyncNetworkBackend:
@@ -973,7 +1085,12 @@ async def fetch_json(
     )
     if status != 200:
         _raise_http_status(status, url)
+    stripped = text.lstrip("\ufeff \t\r\n")
+    if stripped[:1] == "<" or stripped.lower().startswith(("<!doctype", "<html")):
+        raise OutboundRequestError("The remote response is HTML, not JSON.")
     try:
         return json.loads(text)
     except json.JSONDecodeError as exc:
-        raise OutboundRequestError("The remote response is not valid JSON.") from exc
+        raise OutboundRequestError(
+            f"The remote response is not valid JSON (len={len(text)})."
+        ) from exc

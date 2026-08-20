@@ -454,3 +454,149 @@ def test_redact_does_not_log_signed_query(caplog: pytest.LogCaptureFixture) -> N
         "https://cdn.example/file.zip?X-Amz-Signature=supersecret"
     )
     assert "supersecret" not in message
+
+
+def test_proxy_for_url_uses_configured_http_proxy() -> None:
+    from astrbot.core.utils.outbound_http import _proxy_for_url
+    from astrbot.core.utils.proxy_route import set_global_network_config
+
+    set_global_network_config(http_proxy="http://127.0.0.1:7890")
+    try:
+        assert (
+            _proxy_for_url("https://raw.githubusercontent.com/AstrBotDevs/x")
+            == "http://127.0.0.1:7890"
+        )
+    finally:
+        set_global_network_config(http_proxy="", no_proxy=[])
+
+
+@pytest.mark.asyncio
+async def test_fetch_json_rejects_html_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    from astrbot.core.utils import outbound_http as outbound
+
+    async def fake_fetch_text(url, policy, **kwargs):
+        del url, policy, kwargs
+        return 200, "<!DOCTYPE html><html></html>", {}
+
+    monkeypatch.setattr(outbound, "fetch_text", fake_fetch_text)
+    with pytest.raises(OutboundRequestError, match="HTML"):
+        await outbound.fetch_json("https://cdn.example/plugins", PLUGIN_REGISTRY)
+
+
+def test_decode_text_payload_accepts_gzip_and_utf8_bom() -> None:
+    import gzip
+
+    from astrbot.core.utils.outbound_http import _decode_text_payload
+
+    assert _decode_text_payload(b'\xef\xbb\xbf{"ok": true}') == '{"ok": true}'
+    compressed = gzip.compress(b'{"ok": true}')
+    assert _decode_text_payload(compressed) == '{"ok": true}'
+
+
+def test_decode_text_payload_rejects_gzip_bomb() -> None:
+    import gzip
+
+    from astrbot.core.utils.outbound_http import _decode_text_payload
+
+    compressed = gzip.compress(b"a" * 64 * 1024)
+    with pytest.raises(OutboundSizeLimitError):
+        _decode_text_payload(compressed, max_bytes=1024)
+
+
+@pytest.mark.asyncio
+async def test_fetch_json_does_not_leak_body_in_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from astrbot.core.utils import outbound_http as outbound
+
+    async def fake_fetch_text(url, policy, **kwargs):
+        del url, policy, kwargs
+        return 200, "not-json secret-token-value", {}
+
+    monkeypatch.setattr(outbound, "fetch_text", fake_fetch_text)
+    with pytest.raises(OutboundRequestError, match="not valid JSON") as excinfo:
+        await outbound.fetch_json("https://cdn.example/plugins", PLUGIN_REGISTRY)
+    assert "secret-token-value" not in str(excinfo.value)
+
+
+@pytest.mark.asyncio
+async def test_fetch_text_reads_only_max_plus_one_bytes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from astrbot.core.utils import outbound_http as outbound
+
+    class FakeStream:
+        def __init__(self) -> None:
+            self.n: int | None = None
+
+        async def read(self, n: int = -1) -> bytes:
+            self.n = n
+            return b"x" * n
+
+    stream = FakeStream()
+
+    class FakeResponse:
+        status = 200
+        headers: dict[str, str] = {}
+        content = stream
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def read(self) -> bytes:
+            raise AssertionError("unbounded response.read()")
+
+    class FakeConnector:
+        async def close(self) -> None:
+            return None
+
+    class FakeSession:
+        def __init__(self, *args, **kwargs) -> None:
+            del args, kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    async def fake_request(*args, **kwargs):
+        del args, kwargs
+        return FakeResponse()
+
+    monkeypatch.setattr(outbound, "_request_with_manual_redirects", fake_request)
+    monkeypatch.setattr(
+        outbound,
+        "validate_outbound_url",
+        lambda url, policy, resolve_addresses=None: outbound.ValidatedOutboundURL(
+            url=url,
+            scheme="https",
+            hostname="cdn.example",
+            port=443,
+            addresses=(ipaddress.ip_address("93.184.216.34"),),
+        ),
+    )
+    monkeypatch.setattr(outbound, "_proxy_for_url", lambda url: None)
+    monkeypatch.setattr(
+        outbound,
+        "_open_connector",
+        lambda *args, **kwargs: (FakeConnector(), None),
+    )
+    monkeypatch.setattr(outbound.aiohttp, "ClientSession", FakeSession)
+
+    policy = outbound.OutboundRequestPolicy(
+        allowed_schemes=frozenset({"https"}),
+        allowed_hosts=None,
+        allowed_ports=frozenset({443}),
+        allow_private_network=False,
+        max_redirects=0,
+        max_url_length=2048,
+        max_response_bytes=8,
+        timeout_seconds=5,
+    )
+    with pytest.raises(OutboundSizeLimitError):
+        await outbound.fetch_text("https://cdn.example/plugins", policy)
+    assert stream.n == 9
