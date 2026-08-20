@@ -32,8 +32,8 @@ export default mergeConfig(
         include: ['src/**/*.{ts,vue}'],
         exclude: ['src/api/generated/**', 'src/**/*.d.ts', 'tests/**'],
         thresholds: {
-          lines: 27,
-          functions: 27,
+          lines: 37,
+          functions: 34,
         },
       },
     },
