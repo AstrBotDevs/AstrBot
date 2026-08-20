@@ -6,39 +6,37 @@ import click
 import pytest
 
 from astrbot.cli.utils.plugin import PluginStatus, build_plug_list, get_git_repo
+from astrbot.core.utils.outbound_http import (
+    DEFAULT_PLUGIN_MARKET_URLS,
+    OutboundRequestError,
+)
+
+REMOTE_PLUGINS = {
+    "$meta": {"schema_version": 1},
+    "local-plugin": {
+        "desc": "remote description",
+        "version": "2.0.0",
+        "author": "remote-author",
+        "repo": "https://example.com/local-plugin",
+    },
+    "remote-only": {
+        "desc": "remote only",
+        "version": "1.0.0",
+        "author": "remote-author",
+        "repo": "https://example.com/remote-only",
+    },
+}
 
 
-class FakeResponse:
-    def raise_for_status(self):
-        return None
+def patch_fetch_json(monkeypatch, handler=None):
+    async def fake_fetch_json(url, policy, **kwargs):
+        del policy, kwargs
+        if handler is not None:
+            return handler(url)
+        assert url in DEFAULT_PLUGIN_MARKET_URLS
+        return REMOTE_PLUGINS
 
-    def json(self):
-        return {
-            "local-plugin": {
-                "desc": "remote description",
-                "version": "2.0.0",
-                "author": "remote-author",
-                "repo": "https://example.com/local-plugin",
-            },
-            "remote-only": {
-                "desc": "remote only",
-                "version": "1.0.0",
-                "author": "remote-author",
-                "repo": "https://example.com/remote-only",
-            },
-        }
-
-
-class FakeClient:
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        return False
-
-    def get(self, url):
-        assert url == "https://api.soulter.top/astrbot/plugins"
-        return FakeResponse()
+    monkeypatch.setattr("astrbot.cli.utils.plugin.fetch_json", fake_fetch_json)
 
 
 def write_metadata(plugin_dir: Path, name: str, version: str) -> None:
@@ -60,7 +58,7 @@ def test_build_plug_list_merges_local_and_remote_plugins(monkeypatch, tmp_path):
     write_metadata(tmp_path / "unpublished-plugin", "unpublished-plugin", "1.0.0")
     tmp_path.joinpath("ignored-file").write_text("not a plugin", encoding="utf-8")
 
-    monkeypatch.setattr("astrbot.cli.utils.plugin.httpx.Client", FakeClient)
+    patch_fetch_json(monkeypatch)
 
     plugins = build_plug_list(tmp_path)
     plugins_by_name = {plugin["name"]: plugin for plugin in plugins}
@@ -77,7 +75,7 @@ def test_build_plug_list_treats_file_plugin_path_as_empty_local_set(
     plugins_file = tmp_path / "plugins"
     plugins_file.write_text("not a directory", encoding="utf-8")
 
-    monkeypatch.setattr("astrbot.cli.utils.plugin.httpx.Client", FakeClient)
+    patch_fetch_json(monkeypatch)
 
     plugins = build_plug_list(plugins_file)
 
@@ -86,7 +84,7 @@ def test_build_plug_list_treats_file_plugin_path_as_empty_local_set(
 
 
 def test_build_plug_list_local_version_equal_or_newer(monkeypatch, tmp_path):
-    monkeypatch.setattr("astrbot.cli.utils.plugin.httpx.Client", FakeClient)
+    patch_fetch_json(monkeypatch)
 
     # 1. test if local version == remote version
     dir_equal = tmp_path / "dir_equal"
@@ -108,7 +106,7 @@ def test_build_plug_list_local_version_equal_or_newer(monkeypatch, tmp_path):
 def test_build_plug_list_non_existent_path(monkeypatch, tmp_path):
     non_existent_dir = tmp_path / "completely_non_existent_path"
 
-    monkeypatch.setattr("astrbot.cli.utils.plugin.httpx.Client", FakeClient)
+    patch_fetch_json(monkeypatch)
 
     plugins = build_plug_list(non_existent_dir)
 
@@ -130,11 +128,12 @@ repo: https://example.com/legacy-plugin
         encoding="utf-8",
     )
 
-    monkeypatch.setattr("astrbot.cli.utils.plugin.httpx.Client", FakeClient)
+    patch_fetch_json(monkeypatch)
 
     plugins = build_plug_list(tmp_path)
 
     assert all(plugin["name"] != "legacy-plugin" for plugin in plugins)
+    assert all(plugin["name"] != "$meta" for plugin in plugins)
 
 
 def test_get_git_repo_rejects_zip_path_traversal(monkeypatch, tmp_path):
@@ -160,3 +159,38 @@ def test_get_git_repo_rejects_zip_path_traversal(monkeypatch, tmp_path):
         get_git_repo("https://github.com/example/repo", tmp_path / "repo")
 
     assert not (tmp_path / "escape.txt").exists()
+
+
+def test_build_plug_list_falls_back_after_non_object_source(monkeypatch, tmp_path):
+    calls: list[str] = []
+
+    def handler(url: str):
+        calls.append(url)
+        if "raw.githubusercontent.com" in url:
+            return ["not-an-object"]
+        if "jsdelivr.net" in url:
+            return REMOTE_PLUGINS
+        raise AssertionError(url)
+
+    patch_fetch_json(monkeypatch, handler)
+    plugins = build_plug_list(tmp_path)
+    assert {plugin["name"] for plugin in plugins} == {"local-plugin", "remote-only"}
+    assert calls[0].startswith("https://raw.githubusercontent.com/")
+    assert "jsdelivr.net" in calls[1]
+
+
+def test_build_plug_list_falls_back_after_fetch_error(monkeypatch, tmp_path):
+    calls: list[str] = []
+
+    def handler(url: str):
+        calls.append(url)
+        if "raw.githubusercontent.com" in url:
+            raise OutboundRequestError("The remote response is not valid JSON.")
+        if "jsdelivr.net" in url:
+            return REMOTE_PLUGINS
+        raise AssertionError(url)
+
+    patch_fetch_json(monkeypatch, handler)
+    plugins = build_plug_list(tmp_path)
+    assert "remote-only" in {plugin["name"] for plugin in plugins}
+    assert "jsdelivr.net" in calls[1]

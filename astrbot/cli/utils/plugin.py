@@ -1,3 +1,4 @@
+import asyncio
 import shutil
 import tempfile
 import uuid
@@ -12,6 +13,11 @@ import httpx
 import yaml
 
 from astrbot.core.utils.io import extract_zip_safely
+from astrbot.core.utils.outbound_http import (
+    DEFAULT_PLUGIN_MARKET_URLS,
+    PLUGIN_REGISTRY,
+    fetch_json,
+)
 from astrbot.utils.version_comparator import VersionComparator
 
 
@@ -253,16 +259,26 @@ def _load_local_plugin(plugin_dir: Path) -> PluginRecord | None:
 
 def _fetch_online_plugins() -> dict[str, PluginRecord]:
     online_plugins: dict[str, PluginRecord] = {}
-    try:
-        with httpx.Client() as client:
-            resp = client.get("https://api.soulter.top/astrbot/plugins")
-            resp.raise_for_status()
-            data = resp.json()
-    except Exception as e:
-        click.echo(f"Failed to get online plugin list: {e}", err=True)
+    data = None
+    last_error: Exception | None = None
+    for url in DEFAULT_PLUGIN_MARKET_URLS:
+        try:
+            payload = asyncio.run(fetch_json(url, PLUGIN_REGISTRY))
+        except Exception as e:
+            last_error = e
+            continue
+        if not isinstance(payload, dict):
+            last_error = ValueError("response is not a JSON object")
+            continue
+        data = payload
+        break
+    if not isinstance(data, dict):
+        click.echo(f"Failed to get online plugin list: {last_error}", err=True)
         return online_plugins
 
     for plugin_id, plugin_info in data.items():
+        if plugin_id == "$meta" or not isinstance(plugin_info, dict):
+            continue
         online_plugins[str(plugin_id)] = _build_plugin_record(
             name=str(plugin_id),
             desc=str(plugin_info.get("desc", "")),

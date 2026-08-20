@@ -28,9 +28,11 @@ from astrbot.core.star.star import PluginRegistry, StarMetadata
 from astrbot.core.star.star_handler import EventType, HandlerRegistry
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 from astrbot.core.utils.outbound_http import (
+    DEFAULT_PLUGIN_MARKET_URLS,
     PLUGIN_REGISTRY,
     OutboundRequestError,
     fetch_json,
+    redact_outbound_url,
     reject_unsafe_plugin_fetch,
 )
 from astrbot.core.utils.shared_preferences import SharedPreferences
@@ -926,6 +928,7 @@ class PluginService:
                 return cached_data, None
 
         remote_data = None
+        last_error: Exception | None = None
         for url in source.urls:
             try:
                 remote_data = await fetch_json(url, PLUGIN_REGISTRY)
@@ -947,7 +950,12 @@ class PluginService:
                 )
                 return remote_data, None
             except Exception as exc:
-                logger.error("请求插件市场失败: %s", exc)
+                last_error = exc
+                logger.warning(
+                    "请求插件市场失败 (%s): %s",
+                    redact_outbound_url(url),
+                    exc,
+                )
 
         if not cached_data:
             cached_data = self.load_plugin_cache(source.cache_file)
@@ -956,6 +964,7 @@ class PluginService:
             logger.warning("远程插件市场数据获取失败，使用缓存数据")
             return cached_data, "使用缓存数据，可能不是最新版本"
 
+        logger.error("请求插件市场失败: %s", last_error)
         raise PluginServiceError("获取插件列表失败，且没有可用的缓存数据")
 
     @staticmethod
@@ -978,11 +987,8 @@ class PluginService:
             urls = [custom_url]
         else:
             cache_file = os.path.join(data_dir, "plugins.json")
-            md5_url = "https://api.soulter.top/astrbot/plugins-md5"
-            urls = [
-                "https://api.soulter.top/astrbot/plugins",
-                "https://github.com/AstrBotDevs/AstrBot_Plugins_Collection/raw/refs/heads/main/plugin_cache_original.json",
-            ]
+            md5_url = None
+            urls = list(DEFAULT_PLUGIN_MARKET_URLS)
         return RegistrySource(urls=urls, cache_file=cache_file, md5_url=md5_url)
 
     @staticmethod
@@ -1012,6 +1018,8 @@ class PluginService:
         return None
 
     async def is_cache_valid(self, source: RegistrySource) -> bool:
+        if not source.md5_url:
+            return False
         try:
             cached_md5 = self.load_cached_md5(source.cache_file)
             if not cached_md5:
