@@ -1417,6 +1417,14 @@ class PluginManager:
                 if hasattr(metadata.star_cls, "initialize") and metadata.star_cls:
                     await metadata.star_cls.initialize()
 
+                # 在 initialize() 之后重新应用工具失活状态，以便捕获
+                # 在 initialize() 内通过 add_llm_tools() 注册的工具。
+                if metadata.module_path:
+                    for ft in llm_tools.func_list:
+                        if self._is_plugin_llm_tool(ft, metadata.module_path):
+                            if ft.name in inactivated_llm_tools:
+                                ft.active = False
+
                 # 触发插件加载事件
                 handlers = star_handlers_registry.get_handlers_by_event_type(
                     EventType.OnPluginLoadedEvent,
