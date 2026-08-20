@@ -102,22 +102,6 @@ class KnowledgeBaseBackendError(KnowledgeBaseError):
     """Raised when a knowledge base backend request fails."""
 
 
-class KnowledgeBaseAuthenticationError(KnowledgeBaseBackendError):
-    """Raised when a knowledge base backend rejects authentication."""
-
-
-class KnowledgeBaseRateLimitError(KnowledgeBaseBackendError):
-    """Raised when a knowledge base backend rate limit is reached."""
-
-
-class KnowledgeBaseNotFoundError(KnowledgeBaseError):
-    """Raised when a requested knowledge base does not exist."""
-
-
-class KnowledgeBaseTimeoutError(KnowledgeBaseBackendError):
-    """Raised when a knowledge base backend request times out."""
-
-
 class BaseKnowledgeBaseBackend(ABC):
     """Define the public contract implemented by knowledge base backends."""
 
@@ -169,15 +153,11 @@ class BaseKnowledgeBaseBackend(ABC):
 
 __all__ = [
     "BaseKnowledgeBaseBackend",
-    "KnowledgeBaseAuthenticationError",
     "KnowledgeBaseBackendError",
     "KnowledgeBaseError",
     "KnowledgeBaseHit",
     "KnowledgeBaseInfo",
-    "KnowledgeBaseNotFoundError",
     "KnowledgeBaseQuery",
-    "KnowledgeBaseRateLimitError",
     "KnowledgeBaseRef",
     "KnowledgeBaseResponse",
-    "KnowledgeBaseTimeoutError",
 ]

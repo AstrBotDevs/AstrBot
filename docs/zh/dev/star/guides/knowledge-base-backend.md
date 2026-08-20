@@ -190,7 +190,7 @@ class Main(Star):
 
 ## 错误处理
 
-Backend 可以抛出 `KnowledgeBaseAuthenticationError`、`KnowledgeBaseRateLimitError`、`KnowledgeBaseNotFoundError`、`KnowledgeBaseTimeoutError` 或通用的 `KnowledgeBaseBackendError`。多 Backend 检索会隔离单个 Backend 的异常，将其记录为警告，并继续使用其他可用结果。
+Backend 请求失败时可以抛出 `KnowledgeBaseBackendError`。多 Backend 检索也会隔离其他异常，将其记录为警告，并继续使用其他可用结果。
 
 能够返回部分结果时，应使用 `KnowledgeBaseResponse.warnings` 描述非致命问题，而不是丢弃已经获得的结果。Backend 返回类型错误、空内容、无效排名或不匹配的知识库引用时，对应结果会被忽略。
 

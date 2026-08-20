@@ -10,17 +10,13 @@ from astrbot.core.star.register import register_llm_tool as llm_tool
 
 from .knowledge_base import (
     BaseKnowledgeBaseBackend,
-    KnowledgeBaseAuthenticationError,
     KnowledgeBaseBackendError,
     KnowledgeBaseError,
     KnowledgeBaseHit,
     KnowledgeBaseInfo,
-    KnowledgeBaseNotFoundError,
     KnowledgeBaseQuery,
-    KnowledgeBaseRateLimitError,
     KnowledgeBaseRef,
     KnowledgeBaseResponse,
-    KnowledgeBaseTimeoutError,
 )
 
 _fallback_logger = logging.getLogger("astrbot")
@@ -90,17 +86,13 @@ __all__ = [
     "BaseFunctionToolExecutor",
     "BaseKnowledgeBaseBackend",
     "FunctionTool",
-    "KnowledgeBaseAuthenticationError",
     "KnowledgeBaseBackendError",
     "KnowledgeBaseError",
     "KnowledgeBaseHit",
     "KnowledgeBaseInfo",
-    "KnowledgeBaseNotFoundError",
     "KnowledgeBaseQuery",
-    "KnowledgeBaseRateLimitError",
     "KnowledgeBaseRef",
     "KnowledgeBaseResponse",
-    "KnowledgeBaseTimeoutError",
     "ToolSet",
     "agent",
     "html_renderer",

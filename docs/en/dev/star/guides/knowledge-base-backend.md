@@ -190,7 +190,7 @@ When external backends are registered, the Agent calls each backend's `list_know
 
 ## Error handling
 
-A backend may raise `KnowledgeBaseAuthenticationError`, `KnowledgeBaseRateLimitError`, `KnowledgeBaseNotFoundError`, `KnowledgeBaseTimeoutError`, or the general `KnowledgeBaseBackendError`. Multi-backend retrieval isolates an individual backend failure, records it as a warning, and continues with other available results.
+A backend may raise `KnowledgeBaseBackendError` when a request fails. Multi-backend retrieval also isolates other exceptions, records them as warnings, and continues with other available results.
 
 When partial results are available, return them and describe non-fatal issues in `KnowledgeBaseResponse.warnings`. AstrBot ignores responses with invalid types and hits with empty content, invalid ranks, or mismatched knowledge base references.
 
