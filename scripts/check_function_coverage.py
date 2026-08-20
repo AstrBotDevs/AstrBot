@@ -12,13 +12,33 @@ from pathlib import Path
 def _functions(path: Path) -> list[ast.AST]:
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
-    except OSError, SyntaxError:
+    except (OSError, SyntaxError):
         return []
-    return [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
-    ]
+    functions: list[ast.AST] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        decorator_names = []
+        for decorator in node.decorator_list:
+            if isinstance(decorator, ast.Name):
+                decorator_names.append(decorator.id)
+            elif isinstance(decorator, ast.Attribute):
+                decorator_names.append(decorator.attr)
+        if "overload" in decorator_names:
+            continue
+        body = node.body
+        if len(body) == 1:
+            statement = body[0]
+            if isinstance(statement, ast.Pass):
+                continue
+            if (
+                isinstance(statement, ast.Expr)
+                and isinstance(statement.value, ast.Constant)
+                and statement.value.value is Ellipsis
+            ):
+                continue
+        functions.append(node)
+    return functions
 
 
 def measure(coverage_path: Path) -> tuple[int, int]:
@@ -43,7 +63,7 @@ def measure(coverage_path: Path) -> tuple[int, int]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--coverage-file", type=Path, required=True)
-    parser.add_argument("--min", type=float, default=95.0)
+    parser.add_argument("--min", type=float, default=99.0)
     args = parser.parse_args()
     covered, total = measure(args.coverage_file)
     if total == 0:

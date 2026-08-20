@@ -118,8 +118,9 @@ uv run pytest --test-profile blocking
 make test-blocking
 ```
 
-Python function coverage for the `astrbot` package is gated at 95% via
-`scripts/check_function_coverage.py` in the coverage CI job. Dashboard
+Python function coverage for the `astrbot` package is gated at 99% via
+`scripts/check_function_coverage.py` in the coverage CI job. Typing-only
+`@overload` signatures are excluded from that denominator. Dashboard
 Vitest gates `src/**/*.ts` (excluding generated OpenAPI, `main.ts`, and
 page-orchestration modules) in `dashboard/vitest.config.ts`. Vue SFC
 smoke tests stay under `dashboard/tests/` but are not in that 95%
