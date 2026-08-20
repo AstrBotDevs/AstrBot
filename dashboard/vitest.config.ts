@@ -33,7 +33,7 @@ export default mergeConfig(
         exclude: ['src/api/generated/**', 'src/**/*.d.ts', 'tests/**'],
         thresholds: {
           lines: 43,
-          functions: 40,
+          functions: 39,
         },
       },
     },

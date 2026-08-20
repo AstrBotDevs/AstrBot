@@ -1,6 +1,6 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises } from '@vue/test-utils';
-import { defineComponent } from 'vue';
+import { defineComponent, ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mountWithVuetify } from './utils/mountWithVuetify';
 
@@ -136,6 +136,32 @@ import App from '@/App.vue';
 import AuthSetup from '@/views/authentication/authForms/AuthSetup.vue';
 import AuthStageRecovery from '@/views/authentication/authForms/stages/AuthStageRecovery.vue';
 import SkillsSection from '@/components/extension/SkillsSection.vue';
+import {
+  appendCompletePlainSuffix,
+  appendPlain,
+  appendReasoningPart,
+  displayParts,
+  extractReasoningText,
+  finishToolCall,
+  hasPlainText,
+  markMessageStarted,
+  messageBlocks,
+  normalizeMessageParts,
+  parseJsonSafe,
+  payloadText,
+  reasoningActivityCounts,
+  reasoningActivityTitle,
+  thinkingParts,
+  upsertToolCall,
+  useMessages,
+} from '@/composables/useMessages';
+import { useProviderModelConfigDialog } from '@/composables/useProviderModelConfigDialog';
+import { fetchWithAuth } from '@/api/http';
+import ConfirmDialog from '@/components/ConfirmDialog.vue';
+import FolderCard from '@/views/persona/FolderCard.vue';
+import PluginSortControl from '@/components/extension/PluginSortControl.vue';
+import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue';
+import QrCodeViewer from '@/components/shared/QrCodeViewer.vue';
 import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
 import PlatformRegistrationAction from '@/components/platform/PlatformRegistrationAction.vue';
 import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
@@ -384,5 +410,96 @@ describe('remaining coverage', () => {
     await clickButtons(wrapper);
     expect(wrapper.exists()).toBe(true);
     wrapper.unmount();
+  });
+
+  it('covers message helpers, provider dialog, and leftover widgets', async () => {
+    const record = {
+      id: 'm1',
+      content: {
+        type: 'bot' as const,
+        message: [{ type: 'plain', text: 'hello' }],
+        isLoading: true,
+        reasoning: 'think',
+      },
+    };
+    appendPlain(record, ' world');
+    appendReasoningPart(record, ' more');
+    upsertToolCall(record, { id: 't1', name: 'search', arguments: '{}' });
+    finishToolCall(record, { id: 't1', result: 'ok' });
+    markMessageStarted(record);
+    expect(hasPlainText(record)).toBe(true);
+    appendCompletePlainSuffix(record, 'hello world extra');
+    expect(payloadText({ text: 'y' })).toBe('y');
+    expect(parseJsonSafe('{"a":1}')).toEqual({ a: 1 });
+    const parts = normalizeMessageParts('hi', 'reason');
+    expect(extractReasoningText(parts).length).toBeGreaterThan(0);
+    const counts = reasoningActivityCounts(parts);
+    expect(reasoningActivityTitle(counts, (key) => key).length).toBeGreaterThan(
+      0,
+    );
+    const content = {
+      type: 'bot' as const,
+      message: [
+        { type: 'think', think: 't' },
+        { type: 'plain', text: 'hi' },
+      ],
+    };
+    expect(thinkingParts(content).length).toBeGreaterThan(0);
+    expect(displayParts(content).length).toBeGreaterThan(0);
+    expect(messageBlocks(content).length).toBeGreaterThan(0);
+
+    const messages = useMessages({ currentSessionId: ref('s1') });
+    await messages.loadSessionMessages('s1');
+    messages.createLocalExchange({
+      sessionId: 's1',
+      messageId: 'm2',
+      parts: [{ type: 'plain', text: 'q' }],
+    });
+    messages.cleanupConnections();
+
+    const dialog = useProviderModelConfigDialog({
+      selectedProviderSource: ref({ id: 'src', type: 'openai' }),
+      configSchema: ref({
+        provider: { items: { id: {}, model: {} } },
+      }),
+      buildModelProviderConfig: (modelId) => ({ id: modelId, model: modelId }),
+      modelAlreadyConfigured: () => false,
+      loadConfig: vi.fn(),
+      tm: (key) => key,
+      showMessage: vi.fn(),
+    });
+    dialog.openProviderEdit({ id: 'p1', model: 'gpt' });
+    dialog.openModelAddDialog('gpt-4');
+
+    const fetchMock = vi.fn(async () => new Response('ok'));
+    vi.stubGlobal('fetch', fetchMock);
+    localStorage.setItem('token', 'tok');
+    await fetchWithAuth('/api/v1/ping');
+    vi.unstubAllGlobals();
+
+    const folder = {
+      folder_id: 'f1',
+      name: 'folder',
+      parent_id: null,
+      children: [],
+    };
+    const extras = [
+      mountWithVuetify(ConfirmDialog),
+      mountWithVuetify(FolderCard, { props: { folder } }),
+      mountWithVuetify(PluginSortControl, {
+        props: {
+          modelValue: 'stars',
+          items: [{ title: 'Stars', value: 'stars' }],
+          label: 'Sort',
+        },
+      }),
+      mountWithVuetify(OutlinedActionListItem, {
+        props: { title: 'demo', clickable: true },
+      }),
+      mountWithVuetify(QrCodeViewer, { props: { value: 'otpauth://x' } }),
+    ];
+    await flushPromises();
+    expect(extras.length).toBe(5);
+    for (const wrapper of extras) wrapper.unmount();
   });
 });
