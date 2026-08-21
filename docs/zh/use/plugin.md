@@ -18,4 +18,6 @@ AstrBot 将插件称为 `Star`。AstrBot 是一个高度模块化的项目，通
 
 插件加载、卸载、重载或启禁后，AstrBot 会立即重建指令 catalog，并刷新已启用的 Telegram/Discord 原生命令入口。在管理面板中也可以管理已经安装的插件。
 
+Dashboard 插件市场的默认源是上游兼容源，不是本 fork 的官方市场。能在市场里搜到不等于能在本分支运行。安装前检查 `astrbot_version`；需要 Dashboard 页面的插件必须声明 `requires.dashboard_extension: 1` 并使用 Extension Protocol v1。不兼容时用 `/plugin install <仓库 URL>` 或 WebUI 的 URL/文件安装。
+
 如果想自己开发插件，详见 [AstrBot 插件开发指南](/dev/star/plugin-new)。

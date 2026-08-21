@@ -109,6 +109,28 @@ the same persistent ChatUI conversation.
 > [!NOTE]
 > To keep message delivery ordered, keep only one ChatUI page open for the same browser session. If you open chat in multiple tabs, the system may ask you to reconnect.
 
+## Accounts and authorization
+
+WebUI supports multiple Dashboard accounts. First startup creates a bootstrap `root` account (username is usually `astrbot`). Control-plane identity comes from the account table and role bindings; a username never implies `root`.
+
+**More → Authorization** opens `/authorization` for role bindings. Account CRUD, granting `root`/`operator`, and disabling accounts require a current `root` binding plus a one-time password or TOTP step-up, and the last `root` cannot be removed. An IM session owner may manage only that session's `session_admin` / `member` bindings through `/admin grant` or the authorization page; it cannot turn an IM user into a global operator.
+
+Fixed roles:
+
+| Role                | Scope                | Typical use                                    |
+| ------------------- | -------------------- | ---------------------------------------------- |
+| `root`              | global control plane | accounts, core updates, restarts, pip installs |
+| `operator`          | global control plane | config, providers, plugins, data operations    |
+| `instance_operator` | one config profile   | management actions for that profile            |
+| `session_owner`     | current group/DM     | session management and in-session model choice |
+| `session_admin`     | current session      | limited management such as stopping a task     |
+| `member`            | current session      | ordinary chat                                  |
+| `guest`             | unauthenticated      | anonymous WebChat                              |
+
+Plugin installs, credential writes, full conversation export, core updates, pip installs, and restarts prompt for step-up. The proof is single-use for that operation and is never placed in a URL. Conversation export requires the exact `conversation:export` resource and `data.export_all`; a `data` API key is denied. Backup downloads use an authenticated Blob request and never put a Dashboard JWT in the query string.
+
+The developer model is in [Architecture](/en/dev/architecture#unified-authorization).
+
 ## Visual Configuration
 
 In the admin panel, you can configure AstrBot's plugins through visual configuration. Click `Configuration` in the left sidebar to enter the configuration page.
@@ -127,13 +149,13 @@ After editing, first click `Apply This Configuration`, which will apply the conf
 
 In the admin panel, you can view installed plugins and install new plugins through the `Plugins` section in the left sidebar.
 
-Click the Plugin Market tab to browse plugins officially listed by AstrBot.
+Click the Plugin Market tab to browse plugins from the default marketplace source. That source points at upstream `AstrBotDevs/AstrBot_Plugins_Collection` and its CDN/compatibility mirrors; Xero-Team does not operate or review it. This fork requires Python 3.14+ and does not keep legacy plugin APIs, so entries in that list may fail to install or load.
 
 ![image](https://files.astrbot.app/docs/source/images/webui/image-1.png)
 
 You can also click the + button in the bottom right corner to manually install plugins via URL or file upload.
 
-> Due to the plugin update mechanism, the AstrBot Team cannot fully guarantee the security of plugins in the plugin market. Please carefully verify them. The AstrBot Team is not responsible for any losses caused by plugins.
+> Neither this fork nor the upstream AstrBot Team guarantees the security or compatibility of these plugins. Maintainers are not responsible for losses caused by plugins.
 
 ### Handling Plugin Load Failures
 
@@ -152,6 +174,24 @@ Use the `Command Management` menu on the left to centrally manage all registered
 Filter by plugin, type (command / command group / subcommand), permission, and status, and combine with the search box for quick lookup. Command group rows can expand to show subcommands, badges display the subcommand count, and subcommand rows are indented to indicate hierarchy.
 
 You can enable/disable, rename, and edit aliases for each command. Saving immediately rebuilds the immutable command catalog owned by the plugin lifecycle. Telegram and Discord adapters with native command registration enabled also refresh their menus or slash commands immediately instead of waiting for the next message.
+
+## Data files
+
+**More → Data files** opens `/data` to browse and edit the active runtime `data/` directory. It is not a remote IDE: there is no terminal, code execution, Git, or arbitrary host-path access.
+
+On desktop the left pane is a directory tree and the center holds file tabs plus a Monaco editor. The URL stores only a relative path such as `/data?path=skills/demo/SKILL.md`, never file contents or credentials. An invalid path falls back to the `data/` root. Hidden files are shown. Leaving a dirty tab prompts for confirmation.
+
+`operator` and `root` can browse ordinary text and save it. Editable text is capped at 1 MiB; larger files become read-only downloads. You can create, rename, move, and delete files and directories, upload a file up to 32 MiB, and search by filename (not contents). Images and audio can be previewed; databases, archives, and unknown binaries expose metadata and download only.
+
+Protected paths have a separate policy:
+
+- `plugins/` is read-only until a root `filesystem.manage` step-up.
+- `dist/`, `site-packages/`, and live databases plus WAL/SHM are never writable.
+- Raw reads of `cmd_config.json` and `config/` require root; ordinary configuration still belongs on the structured config pages.
+- Demo mode is read-only.
+- API keys cannot open this page.
+
+Concurrent saves use an etag; a changed file on disk returns a conflict with **Keep local** or **Reload**. The developer model is in [Architecture](/en/dev/architecture#data-file-manager).
 
 ## Trace
 

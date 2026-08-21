@@ -85,7 +85,7 @@ In `local` mode, ordinary session members may read:
 - AstrBot temporary directories
 - `.astrbot` under the system temporary directory
 
-Writes and edits remain limited to the current session workspace and temporary directories. Grant matching actions from the Dashboard authorization page. `/admin grant` only creates current-session `session_admin`; it does not turn an IM user into a global operator.
+Writes and edits remain limited to the current session workspace and temporary directories. Grant matching actions from the Dashboard [authorization page](/en/use/webui#accounts-and-authorization). `/admin grant` only creates current-session `session_admin`; it does not turn an IM user into a global operator. See [Architecture](/en/dev/architecture#unified-authorization) for the developer model.
 
 ## Sandbox Mode
 

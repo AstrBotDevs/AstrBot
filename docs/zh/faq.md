@@ -97,7 +97,7 @@ uv run python scripts/sync_dashboard_dist.py
 
 ### 群聊中机器人不回复
 
-为避免群消息泛滥，默认需要 @ 机器人或使用唤醒前缀，例如 `/你好`。同时检查：
+为避免群消息泛滥，默认不会因 @ 机器人或回复机器人而唤醒。需要发送唤醒前缀（默认 `/`），或在当前配置档打开 `platform_settings.group_wake_policy.mention_bot` / `reply_to_bot`。同时检查：
 
 - 当前配置档是否绑定到该消息会话；
 - 平台和 Provider 是否启用；
@@ -106,7 +106,7 @@ uv run python scripts/sync_dashboard_dist.py
 
 ### 管理员指令提示无权限
 
-使用 `/session info` 查看当前用户 ID，然后通过 Dashboard 权限页面或 `/admin grant` 授予当前会话的 `session_admin`。这不是全局 operator。配置档可能按平台、群或私聊分别绑定，修改默认配置档不一定影响当前会话。
+使用 `/session info` 查看当前用户 ID，然后通过 Dashboard [权限页面](/use/webui#账户与权限)或 `/admin grant` 授予当前会话的 `session_admin`。这不是全局 operator。配置档可能按平台、群或私聊分别绑定，修改默认配置档不一定影响当前会话。
 
 ### 如何使用电脑能力
 
@@ -140,6 +140,14 @@ font-family: 'Maple Mono', 'Noto Sans CJK SC', sans-serif;
 6. fallback 模型是否来自真正独立的端点。
 
 不要用关闭 TLS 验证的方式“修复”连接。必要时重置会话或降低历史轮数，并参考 [上下文压缩](./use/context-compress)。
+
+### 市场插件安装后加载失败
+
+Dashboard 默认市场源是上游 `AstrBotDevs/AstrBot_Plugins_Collection`，不是本 fork 的官方市场。本分支要求 Python 3.14+，且不提供旧插件 API 或旧 Dashboard 页面兼容。安装前核对该插件的 `astrbot_version` 和 `requires.dashboard_extension`。失败时用 URL 安装已知兼容的插件，或查看插件加载错误，不要假定上游市场插件能在本分支运行。详见 [插件](/use/plugin) 和 [插件开发指南](/dev/star/plugin-new)。
+
+### 如何关闭长期记忆
+
+当前源码会在运行时无条件初始化长期记忆，并在本地 Agent 对话完成后排队写回；WebUI 和配置档没有按用户或按配置档关闭的开关。处理敏感数据前先阅读 [长期记忆](/use/long-term-memory)。不要把 WebUI 软删除当成数据擦除。
 
 ## 插件
 

@@ -104,6 +104,7 @@ support_platforms:
 The currently recognized IDs are:
 
 - `aiocqhttp`
+- `napcat`
 - `qq_official`
 - `qq_official_webhook`
 - `telegram`
@@ -124,6 +125,7 @@ The currently recognized IDs are:
 - `mattermost`
 - `webchat`
 
+`vocechat` and `matrix` are community plugin adapter IDs, not built-in adapters.
 This field declares compatibility; it does not automatically prevent handlers
 from receiving other platforms. Use public event filters when a runtime
 restriction is required.
@@ -136,9 +138,12 @@ restriction is required.
 astrbot_version: '>=4.26,<5'
 ```
 
+Plugins targeting this fork should declare `astrbot_version`, for example
+`>=4.26`. Metadata currently has no separate `python_requires` field; write for
+Python 3.14+ and do not depend on 3.10–3.13 patterns or removed legacy APIs.
 AstrBot normally blocks the plugin when the running version does not satisfy
 the constraint. The WebUI install flow can explicitly override that warning,
-so plugin code should still avoid relying on undeclared internal behavior.
+so plugin code still must not depend on undeclared internal modules.
 
 ### Bundle Skills (Optional)
 

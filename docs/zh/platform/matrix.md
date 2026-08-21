@@ -24,6 +24,9 @@ Matrix 是一个 IM 协议，有着丰富的服务端实现。
 
 ## 安装 astrbot_plugin_matrix_adapter 插件
 
+> [!WARNING]
+> 该适配器由社区插件提供，不是本 fork 内置适配器。默认市场源是上游源，插件未针对 Python 3.14+ 与当前无遗留 API 验证。安装失败或加载失败时，到插件自己的仓库提 issue，不要假定本 fork 维护它。
+
 进入 AstrBot WebUI 的插件市场，搜索 `astrbot_plugin_matrix_adapter`，点击安装。
 
 安装完成后，前往 `机器人` → `+ 创建机器人` → 选择 Matrix（若选项缺失，尝试重启 AstrBot 或检查插件安装状态）。

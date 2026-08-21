@@ -97,7 +97,7 @@ Read the intervening files under `changelogs/` and current unreleased commits fi
 
 ### The bot does not answer in a group
 
-To avoid flooding group chats, the default behavior requires mentioning the bot or using a wake prefix such as `/hello`. Also check:
+To avoid flooding group chats, mentioning the bot or replying to the bot does not wake it by default. Send a wake prefix (default `/`), or enable `platform_settings.group_wake_policy.mention_bot` / `reply_to_bot` on the current profile. Also check:
 
 - which profile is bound to the message session;
 - whether the platform and Provider are enabled;
@@ -106,7 +106,7 @@ To avoid flooding group chats, the default behavior requires mentioning the bot 
 
 ### An administrator command says permission denied
 
-Use `/session info` to inspect the current user ID, then grant current-session `session_admin` through the Dashboard authorization page or `/admin grant`. That is not a global operator. Profiles can be bound separately to platforms, groups, or direct messages, so editing the default profile may not affect the current session.
+Use `/session info` to inspect the current user ID, then grant current-session `session_admin` through the Dashboard [authorization page](/en/use/webui#accounts-and-authorization) or `/admin grant`. That is not a global operator. Profiles can be bound separately to platforms, groups, or direct messages, so editing the default profile may not affect the current session.
 
 ### How do I enable Computer Use?
 
@@ -140,6 +140,14 @@ Check, in order:
 6. whether fallback models actually use independent endpoints.
 
 Do not “fix” connectivity by disabling TLS verification. Reset the conversation or reduce retained history when appropriate, and see [Context Compression](./use/context-compress).
+
+### A marketplace plugin fails to load after install
+
+The Dashboard default marketplace source is upstream `AstrBotDevs/AstrBot_Plugins_Collection`, not an official market for this fork. This branch requires Python 3.14+ and does not keep legacy plugin APIs or legacy Dashboard pages. Check the plugin's `astrbot_version` and `requires.dashboard_extension` before installing. If it fails, install a known-compatible plugin by URL or inspect the load error; do not assume an upstream marketplace plugin will run here. See [Plugins](/en/use/plugin) and [Plugin development](/en/dev/star/plugin-new).
+
+### How do I disable long-term memory?
+
+The current source initializes long-term memory unconditionally at runtime and queues a write-back after a local Agent conversation finishes. WebUI and config profiles have no per-user or per-profile off switch. Read [Long-term memory](/en/use/long-term-memory) before handling sensitive data. A WebUI soft-delete is not data erasure.
 
 ## Plugins
 

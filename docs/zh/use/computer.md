@@ -83,7 +83,7 @@ data/workspaces/{normalized_umo}/notes/todo.txt
 - AstrBot 的临时目录
 - 系统临时目录中的 `.astrbot`
 
-写入和编辑仍限制在当前会话 workspace 和临时目录。请通过 Dashboard 权限页面授予匹配动作的绑定；`/admin grant` 只授予当前会话 `session_admin`，不能把 IM 用户变成全局 operator。
+写入和编辑仍限制在当前会话 workspace 和临时目录。请通过 Dashboard [权限页面](/use/webui#账户与权限)授予匹配动作的绑定；`/admin grant` 只授予当前会话 `session_admin`，不能把 IM 用户变成全局 operator。开发模型见[项目架构](/dev/architecture#统一授权系统)。
 
 ## Sandbox 模式
 

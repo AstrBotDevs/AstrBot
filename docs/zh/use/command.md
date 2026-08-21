@@ -104,7 +104,7 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 - `/admin grant <用户 ID>`：授予当前会话的 `session_admin`，不是全局 operator。
 - `/admin revoke <用户 ID>`：撤销当前会话的 `session_admin`。
 
-三个子指令都需要 `identity.manage`。当前会话的 owner 只能管理本会话的 `session_admin` / `member`，不能委派 owner。
+三个子指令都需要 `identity.manage`。当前会话的 owner 只能管理本会话的 `session_admin` / `member`，不能委派 owner。角色说明见 [WebUI](/use/webui#账户与权限)。
 
 ### Persona
 

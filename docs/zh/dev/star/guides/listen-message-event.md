@@ -378,7 +378,7 @@ if not decision.allowed:
 ```
 
 不要再使用已删除的 `PermissionType` 或 `@filter.permission_type`。
-`event.is_admin()` 恒为 `False`，不能当作授权依据。
+`event.is_admin()` 恒为 `False`，不能当作授权依据。完整模型见[项目架构](/dev/architecture#统一授权系统)。
 
 ### 多个过滤器
 

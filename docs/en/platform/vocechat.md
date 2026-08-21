@@ -3,9 +3,6 @@
 > [!TIP]
 > AstrBot does not include this adapter by default. Install [astrbot_plugin_vocechat](https://github.com/HikariFroya/astrbot_plugin_vocechat), developed by [HikariFroya](https://github.com/HikariFroya).
 
-> [!WARNING]
-> This adapter is community-maintained and not officially maintained by AstrBot.
-
 ## Deploy VoceChat
 
 VoceChat is an open-source instant messaging platform with simple multi-platform deployment.
@@ -13,6 +10,9 @@ VoceChat is an open-source instant messaging platform with simple multi-platform
 See deployment methods on the [VoceChat official website](https://voce.chat/en-US).
 
 ## Install `astrbot_plugin_vocechat`
+
+> [!WARNING]
+> This adapter is provided by a community plugin, not a built-in adapter in this fork. The default marketplace source is upstream, and the plugin is not verified against Python 3.14+ or the current no-legacy API. If install or load fails, file an issue on the plugin's own repository; do not assume this fork maintains it.
 
 In AstrBot Dashboard Plugin Market, search for `astrbot_plugin_vocechat` and install it.
 

@@ -95,6 +95,7 @@ support_platforms:
 当前可声明的 ID 包括：
 
 - `aiocqhttp`
+- `napcat`
 - `qq_official`
 - `qq_official_webhook`
 - `telegram`
@@ -115,8 +116,7 @@ support_platforms:
 - `mattermost`
 - `webchat`
 
-该字段用于声明兼容范围，不会自动阻止处理其他平台的事件；需要运行时限制时，仍应
-使用公开的事件过滤器。
+`vocechat` 和 `matrix` 是社区插件适配器 ID，不是内置适配器。该字段用于声明兼容范围，不会自动阻止处理其他平台的事件；需要运行时限制时，仍应使用公开的事件过滤器。
 
 ### 声明 AstrBot 版本范围（可选）
 
@@ -126,8 +126,10 @@ support_platforms:
 astrbot_version: '>=4.26,<5'
 ```
 
-当当前 AstrBot 版本不满足约束时，插件默认不会加载。WebUI 安装流程可以显式选择
-忽略该警告，因此插件仍应在代码中避免依赖未声明的内部实现。
+面向本 fork 的插件应声明 `astrbot_version`，例如 `>=4.26`。metadata 目前没有单独的
+`python_requires` 字段；按 Python 3.14+ 编写，不要依赖 3.10–3.13 的写法或已删除的
+legacy API。当当前 AstrBot 版本不满足约束时，插件默认不会加载。WebUI 安装流程可以
+显式选择忽略该警告，因此插件代码仍不能依赖未声明的内部模块。
 
 ### 随插件提供 Skills（可选）
 

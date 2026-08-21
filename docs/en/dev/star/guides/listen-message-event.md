@@ -379,7 +379,7 @@ if not decision.allowed:
 ```
 
 Do not use the removed `PermissionType` enum or `@filter.permission_type`.
-`event.is_admin()` is always `False` and is not an authorization check.
+`event.is_admin()` is always `False` and is not an authorization check. See [Architecture](/en/dev/architecture#unified-authorization) for the full model.
 
 ### Multiple Filters
 

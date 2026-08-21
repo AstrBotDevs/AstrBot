@@ -18,4 +18,6 @@ Entering `/plugin` alone displays the available subcommand tree. Quote repositor
 
 Plugin load, unload, reload, enable, and disable operations immediately rebuild the command catalog and refresh enabled Telegram/Discord native command surfaces. Installed plugins can also be managed in the admin panel.
 
+The Dashboard plugin marketplace uses an upstream compatibility source, not an official market for this fork. Appearing in that list does not mean the plugin will run on this branch. Check `astrbot_version` before installing. Plugins that need a Dashboard page must declare `requires.dashboard_extension: 1` and use Extension Protocol v1. If a plugin is incompatible, install it with `/plugin install <repository-url>` or the WebUI URL/file installer.
+
 If you want to develop your own plugin, see [AstrBot Plugin Development Guide](/en/dev/star/plugin-new).

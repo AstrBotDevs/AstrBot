@@ -104,7 +104,7 @@ These commands require `session.manage`. There is no argument-less toggle.
 - `/admin grant <user-id>`: Grant `session_admin` for the current session, not a global operator.
 - `/admin revoke <user-id>`: Revoke `session_admin` for the current session.
 
-All three subcommands require `identity.manage`. A current session owner may manage `session_admin` and `member` in that session only and cannot delegate ownership.
+All three subcommands require `identity.manage`. A current session owner may manage `session_admin` and `member` in that session only and cannot delegate ownership. See [WebUI](/en/use/webui#accounts-and-authorization) for the role model.
 
 ### Personas
 

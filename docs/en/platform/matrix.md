@@ -24,6 +24,9 @@ Please refer to [Matrix Server](https://matrix.org/ecosystem/servers/) to view a
 
 ## Installing the astrbot_plugin_matrix_adapter Plugin
 
+> [!WARNING]
+> This adapter is provided by a community plugin, not a built-in adapter in this fork. The default marketplace source is upstream, and the plugin is not verified against Python 3.14+ or the current no-legacy API. If install or load fails, file an issue on the plugin's own repository; do not assume this fork maintains it.
+
 Go to the AstrBot WebUI plugin marketplace, search for `astrbot_plugin_matrix_adapter`, and click Install.
 
 After installation, open AstrBot Dashboard → `Bots` → `+ Create Bot` → `Matrix` (if the option is missing, try restarting AstrBot or check the plugin installation status).
