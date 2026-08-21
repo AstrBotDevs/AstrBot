@@ -322,6 +322,19 @@ class ProviderGoogleGenAI(Provider):
                 contents.append(content_cls(parts=part))
 
         gemini_contents: list[types.Content] = []
+        # Tool result messages only carry tool_call_id, not the function name.
+        # Index first so functionResponse.name still matches even if a tool
+        # message appears before its assistant tool_calls in this payload.
+        tool_call_names: dict[str, str] = {}
+        for message in payloads["messages"]:
+            if message.get("role") != "assistant":
+                continue
+            for tool in message.get("tool_calls") or []:
+                tool_id = tool.get("id")
+                func_name = (tool.get("function") or {}).get("name")
+                if tool_id and func_name:
+                    tool_call_names[tool_id] = func_name
+
         for message in payloads["messages"]:
             role, content = message["role"], message.get("content")
 
@@ -392,10 +405,20 @@ class ProviderGoogleGenAI(Provider):
 
                 if "tool_calls" in message:
                     for tool in message["tool_calls"]:
+                        func_name = tool["function"]["name"]
+                        tool_id = tool.get("id")
                         part = types.Part.from_function_call(
-                            name=tool["function"]["name"],
+                            name=func_name,
                             args=json.loads(tool["function"]["arguments"]),
                         )
+                        # Official Gemini often omits id (and we fall back to name).
+                        # Only emit a distinct id so strict proxies can pair history.
+                        if (
+                            tool_id
+                            and tool_id != func_name
+                            and part.function_call is not None
+                        ):
+                            part.function_call.id = tool_id
                         # we should set thought_signature back to part if exists
                         # for more info about thought_signature, see:
                         # https://ai.google.dev/gemini-api/docs/thought-signatures
@@ -415,7 +438,12 @@ class ProviderGoogleGenAI(Provider):
                 append_or_extend(gemini_contents, parts, types.ModelContent)
 
             elif role == "tool":
-                func_name = message.get("name", message["tool_call_id"])
+                tool_call_id = message.get("tool_call_id")
+                func_name = (
+                    message.get("name")
+                    or tool_call_names.get(tool_call_id)
+                    or tool_call_id
+                )
                 part = types.Part.from_function_response(
                     name=func_name,
                     response={
@@ -423,6 +451,12 @@ class ProviderGoogleGenAI(Provider):
                         "content": message["content"],
                     },
                 )
+                if (
+                    tool_call_id
+                    and tool_call_id != func_name
+                    and part.function_response is not None
+                ):
+                    part.function_response.id = tool_call_id
 
                 parts = [part]
                 append_or_extend(gemini_contents, parts, types.UserContent)
