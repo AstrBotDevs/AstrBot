@@ -11,10 +11,6 @@ export default defineConfig({
     'zh/:rest*': ':rest*',
   },
 
-  sitemap: {
-    hostname: 'https://docs.astrbot.app',
-  },
-
   lastUpdated: true,
 
   locales: {
@@ -23,10 +19,12 @@ export default defineConfig({
       lang: 'zh-Hans',
       themeConfig: {
         nav: [
-          { text: '主页', link: 'https://astrbot.app' },
-          { text: '博客', link: 'https://blog.astrbot.app' },
-          { text: '路线图', link: 'https://astrbot.featurebase.app/roadmap' },
-          { text: 'HTTP API', link: 'https://docs.astrbot.app/scalar.html' },
+          { text: 'GitHub', link: 'https://github.com/Xero-Team/AstrBot' },
+          {
+            text: 'Issue',
+            link: 'https://github.com/Xero-Team/AstrBot/issues',
+          },
+          { text: 'HTTP API', link: '/scalar.html' },
         ],
         sidebar: [
           {
@@ -170,14 +168,6 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: '项目架构', link: '/architecture' },
-              {
-                text: 'Dashboard 数据文件管理器',
-                link: '/data-file-manager-design',
-              },
-              {
-                text: '插件 Web 扩展迁移',
-                link: '/plugin-web-extension-migration',
-              },
               { text: '源码开发', link: '/development' },
               { text: 'Linux 开发环境', link: '/linux' },
               {
@@ -246,7 +236,7 @@ export default defineConfig({
             text: '社区活动',
             base: '/community-events',
             collapsed: false,
-            items: [{ text: '开源之夏 2025', link: '/ospp-2025' }],
+            items: [{ text: '开源之夏 2025（上游）', link: '/ospp-2025' }],
           },
         ],
         outline: {
@@ -276,10 +266,12 @@ export default defineConfig({
       lang: 'en-US',
       themeConfig: {
         nav: [
-          { text: 'Home', link: 'https://astrbot.app' },
-          { text: 'Blog', link: 'https://blog.astrbot.app' },
-          { text: 'Roadmap', link: 'https://astrbot.featurebase.app/roadmap' },
-          { text: 'HTTP API', link: 'https://docs.astrbot.app/scalar.html' },
+          { text: 'GitHub', link: 'https://github.com/Xero-Team/AstrBot' },
+          {
+            text: 'Issues',
+            link: 'https://github.com/Xero-Team/AstrBot/issues',
+          },
+          { text: 'HTTP API', link: '/scalar.html' },
         ],
         sidebar: [
           {
@@ -426,10 +418,6 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: 'Architecture', link: '/architecture' },
-              {
-                text: 'Dashboard Data File Manager',
-                link: '/data-file-manager-design',
-              },
               { text: 'Source Development', link: '/development' },
               { text: 'Linux Development', link: '/linux' },
               {
@@ -497,7 +485,7 @@ export default defineConfig({
             text: 'Open Source Summer',
             base: '/en/community-events',
             collapsed: true,
-            items: [{ text: 'OSPP 2025', link: '/ospp-2025' }],
+            items: [{ text: 'OSPP 2025 (upstream)', link: '/ospp-2025' }],
           },
         ],
         outline: {

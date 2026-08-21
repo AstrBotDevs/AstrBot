@@ -56,9 +56,9 @@ X-API-Key: abk_xxx
 
 当前开发者 API Key 支持 13 个基础 scope。`/api/v1/skills/*` 接口使用单数 `skill` scope，不使用复数 `skills`。
 
-在显式 scope 存储出现前，数据库中的 `NULL` 表示固定的基础 scope 集，不是通配符，且不会获得敏感 scope。数据库中显式存储的 `*` 仍保留历史通配符语义。
+在显式 scope 存储出现前，数据库中的 `NULL` 表示固定的基础 scope 集，不是通配符，且不会获得敏感 scope。运行时授权只认显式 capability，不再把 `*` 或 `NULL` 扩权到新的高风险动作。授权模型见[项目架构](/dev/architecture#统一授权系统)。
 
-`tool`、`system` 等接口仍然会出现在本地完整的 `/api/v1/openapi.json` 规范里，但它们目前属于依赖 Dashboard 登录态的接口，而不是开发者 API Key scope。
+`tool`、`system` 和数据文件管理器等接口仍然会出现在本地完整的 `/api/v1/openapi.json` 规范里，但它们属于依赖 Dashboard 登录态的接口，不是开发者 API Key scope。数据文件路由使用 `Data Files` tag，不会进入公开 OpenAPI 文档。
 
 ## 常用接口
 

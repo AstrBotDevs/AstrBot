@@ -49,18 +49,19 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 常用字段如下：
 
-| 键                                          | 默认值                      | 说明                                                                                                        |
-| ------------------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `unique_session`                            | `false`                     | 是否为群内成员拆分独立会话。                                                                                |
-| `rate_limit`                                | `60` 秒 / `30` 条 / `stall` | 超限时等待（`stall`）或丢弃（`discard`）。                                                                  |
-| `enable_id_white_list`                      | `true`                      | 启用 ID 白名单；管理员是否绕过由两个 `wl_ignore_admin_*` 字段控制。                                         |
-| `reply_prefix`                              | `""`                        | 所有回复的前缀。                                                                                            |
-| `reply_with_mention` / `reply_with_quote`   | `false`                     | @ 用户或引用原消息，实际能力取决于适配器。                                                                  |
-| `forward_threshold`                         | `1500`                      | 支持转发消息的平台上，长回复转发阈值。                                                                      |
-| `segmented_reply`                           | 见默认配置                  | 非流式结果的分段、间隔、清理规则。                                                                          |
-| `path_mapping`                              | `[]`                        | 将平台事件中的容器路径映射到 AstrBot 可访问路径，格式为 `原路径:目标路径`。该功能仍在收发 pipeline 中使用。 |
-| `friend_message_needs_wake_prefix`          | `false`                     | 私聊是否也要求唤醒前缀。                                                                                    |
-| `ignore_bot_self_message` / `ignore_at_all` | `false`                     | 忽略机器人自身消息或全体提及。                                                                              |
+| 键                                          | 默认值                                      | 说明                                                                                                        |
+| ------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `unique_session`                            | `false`                                     | 是否为群内成员拆分独立会话。                                                                                |
+| `rate_limit`                                | `60` 秒 / `30` 条 / `stall`                 | 超限时等待（`stall`）或丢弃（`discard`）。                                                                  |
+| `enable_id_white_list`                      | `true`                                      | 启用 ID 白名单；管理员是否绕过由两个 `wl_ignore_admin_*` 字段控制。                                         |
+| `reply_prefix`                              | `""`                                        | 所有回复的前缀。                                                                                            |
+| `reply_with_mention` / `reply_with_quote`   | `false`                                     | @ 用户或引用原消息，实际能力取决于适配器。                                                                  |
+| `forward_threshold`                         | `1500`                                      | 支持转发消息的平台上，长回复转发阈值。                                                                      |
+| `segmented_reply`                           | 见默认配置                                  | 非流式结果的分段、间隔、清理规则。                                                                          |
+| `path_mapping`                              | `[]`                                        | 将平台事件中的容器路径映射到 AstrBot 可访问路径，格式为 `原路径:目标路径`。该功能仍在收发 pipeline 中使用。 |
+| `group_wake_policy`                         | `{mention_bot: false, reply_to_bot: false}` | 群聊是否因 @ 机器人或回复机器人而唤醒。两项默认都关闭。唤醒前缀由顶层 `wake_prefix` 控制，默认 `["/"]`。    |
+| `friend_message_needs_wake_prefix`          | `false`                                     | 私聊是否也要求唤醒前缀。                                                                                    |
+| `ignore_bot_self_message` / `ignore_at_all` | `false`                                     | 忽略机器人自身消息或全体提及。                                                                              |
 
 `path_mapping` 示例：
 

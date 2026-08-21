@@ -47,18 +47,19 @@ Object layouts inside `provider_sources`, `provider`, and `platform` come from t
 
 ## `platform_settings`
 
-| Key                                         | Default                                | Meaning                                                                                                                                     |
-| ------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `unique_session`                            | `false`                                | Split separate sessions for members inside a group.                                                                                         |
-| `rate_limit`                                | `60` seconds / `30` messages / `stall` | Wait (`stall`) or discard (`discard`) when the limit is exceeded.                                                                           |
-| `enable_id_white_list`                      | `true`                                 | Enable the ID allowlist; the two `wl_ignore_admin_*` fields control administrator bypass.                                                   |
-| `reply_prefix`                              | `""`                                   | Prefix added to replies.                                                                                                                    |
-| `reply_with_mention` / `reply_with_quote`   | `false`                                | Mention the sender or quote the source message when supported by the adapter.                                                               |
-| `forward_threshold`                         | `1500`                                 | Long-reply forwarding threshold on platforms that support forwarded messages.                                                               |
-| `segmented_reply`                           | See current defaults                   | Non-streaming segmentation, timing, and cleanup rules.                                                                                      |
-| `path_mapping`                              | `[]`                                   | Map paths from a platform container into paths AstrBot can read, using `source:target`. This is still used by the receive/respond pipeline. |
-| `friend_message_needs_wake_prefix`          | `false`                                | Require a wake prefix in direct messages.                                                                                                   |
-| `ignore_bot_self_message` / `ignore_at_all` | `false`                                | Ignore the bot's own messages or mass mentions.                                                                                             |
+| Key                                         | Default                                     | Meaning                                                                                                                                                          |
+| ------------------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unique_session`                            | `false`                                     | Split separate sessions for members inside a group.                                                                                                              |
+| `rate_limit`                                | `60` seconds / `30` messages / `stall`      | Wait (`stall`) or discard (`discard`) when the limit is exceeded.                                                                                                |
+| `enable_id_white_list`                      | `true`                                      | Enable the ID allowlist; the two `wl_ignore_admin_*` fields control administrator bypass.                                                                        |
+| `reply_prefix`                              | `""`                                        | Prefix added to replies.                                                                                                                                         |
+| `reply_with_mention` / `reply_with_quote`   | `false`                                     | Mention the sender or quote the source message when supported by the adapter.                                                                                    |
+| `forward_threshold`                         | `1500`                                      | Long-reply forwarding threshold on platforms that support forwarded messages.                                                                                    |
+| `segmented_reply`                           | See current defaults                        | Non-streaming segmentation, timing, and cleanup rules.                                                                                                           |
+| `path_mapping`                              | `[]`                                        | Map paths from a platform container into paths AstrBot can read, using `source:target`. This is still used by the receive/respond pipeline.                      |
+| `group_wake_policy`                         | `{mention_bot: false, reply_to_bot: false}` | Whether mentioning the bot or replying to the bot wakes a group message. Both default to false. The wake prefix is the top-level `wake_prefix`, default `["/"]`. |
+| `friend_message_needs_wake_prefix`          | `false`                                     | Require a wake prefix in direct messages.                                                                                                                        |
+| `ignore_bot_self_message` / `ignore_at_all` | `false`                                     | Ignore the bot's own messages or mass mentions.                                                                                                                  |
 
 Example path mapping:
 

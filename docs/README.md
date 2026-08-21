@@ -45,5 +45,7 @@ User-facing changes should update both language trees when an equivalent page
 exists. Keep internal links extensionless so VitePress validates them during
 the production build.
 
-[Published documentation](https://docs.astrbot.app/) ·
-[Report an issue](https://github.com/Xero-Team/AstrBot/issues)
+The upstream public documentation at
+[https://docs.astrbot.app/](https://docs.astrbot.app/) describes upstream
+behavior. Documentation in this repository follows the current checkout.
+[Report an issue](https://github.com/Xero-Team/AstrBot/issues).

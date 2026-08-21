@@ -1,10 +1,20 @@
 # 社区
 
-## 社区渠道
+本 fork 的协作入口是 GitHub。本文档可能没有覆盖全部功能；问题和贡献请发到当前仓库，而不是上游渠道。
 
-本文档可能没有完全覆盖所有的功能，如果你有关于 AstrBot 与本文档的任何问题或建议，欢迎通过下面的社区渠道联系我们。
+## GitHub
 
-### QQ 群
+欢迎提交 Issue 或 Pull Request：
+
+- [Xero-Team/AstrBot](https://github.com/Xero-Team/AstrBot)
+
+贡献方式见仓库根目录 [CONTRIBUTING.md](https://github.com/Xero-Team/AstrBot/blob/master/CONTRIBUTING.md)。Pull Request 的目标仓库是 `Xero-Team/AstrBot`。
+
+## 上游 AstrBot 社区渠道
+
+下列 QQ 群、Discord、Astrbook 和玖帕喵是**上游 AstrBot 社区渠道**，不代表本 fork 支持或值班。在这些渠道提问时，请标明你运行的是 Xero-Team fork，以免和上游行为混淆。
+
+### QQ 群（上游）
 
 - 1 群：322154837 (人满)
 - 3 群：630166526 (人满)
@@ -19,26 +29,16 @@
 - 12 群：916228568 (人满)
 - 13 群：1092185289
 - 14 群：1103419483
-- **AstrBot 核心开发交流群: 975206796**（AstrBot 开发成员通常活跃于此，欢迎任何对编程/AI 技术感兴趣的同学加入~）
+- 上游核心开发交流群：975206796
 
-### Discord
+### Discord（上游）
 
 <https://discord.gg/hAVk6tgV36>
 
-### Astrbook
+### Astrbook（上游）
 
-- [Astrbook](https://book.astrbot.app/) - 专为 AI Agent 打造的社交社区，你可以在这里看到机器人们的日常动态，也可以将你的 Bot 接入其中。
+- [Astrbook](https://book.astrbot.app/) — 上游运营的 Bot 社交社区。
 
-### 玖帕喵 Prompt Market
+### 玖帕喵 Prompt Market（上游）
 
-- [玖帕喵](https://jiupamiao.asia/) - AI 人设与 Prompt 分享市场，在这里发现和分享高质量的 Prompts。玖帕喵，喵喵喵喵，喵！
-
-### GitHub
-
-欢迎提交 Issue 或 Pull Request：
-
-- [Xero-Team/AstrBot](https://github.com/Xero-Team/AstrBot)
-
-## 成为 AstrBot 组织成员
-
-欢迎加入我们！
+- [玖帕喵](https://jiupamiao.asia/) — 上游相关的 AI 人设与 Prompt 分享市场。

@@ -56,9 +56,9 @@ If the API Key does not include the required scope for the target endpoint, the 
 
 Developer API keys support the 13 baseline scopes. Use the singular `skill` scope for `/api/v1/skills/*` endpoints.
 
-Keys stored before explicit scopes used `NULL` to mean the fixed baseline scope set. It is not a wildcard and does not gain sensitive scopes. An explicitly stored `*` retains its legacy wildcard meaning.
+Keys stored before explicit scopes used `NULL` to mean the fixed baseline scope set. It is not a wildcard and does not gain sensitive scopes. Runtime authorization uses explicit capabilities only and does not expand `*` or `NULL` onto new high-risk actions. See [Architecture](/en/dev/architecture#unified-authorization).
 
-`tool` and `system` routes still exist in the full local `/api/v1/openapi.json` schema, but they are dashboard-session routes today rather than developer API key scopes.
+`tool`, `system`, and data-file-manager routes still exist in the full local `/api/v1/openapi.json` schema, but they are Dashboard-session routes rather than developer API key scopes. Data-file routes use the `Data Files` tag and are excluded from the public OpenAPI document.
 
 ## Common Endpoints
 
