@@ -137,7 +137,12 @@ def test_create_http_client_uses_anthropic_httpx_module(monkeypatch):
     assert captured["provider_label"] == "Anthropic"
     assert captured["proxy"] == "http://127.0.0.1:7890"
     assert captured["headers"] == {"X-Trace-Id": "trace-1"}
-    assert captured["httpx_module"] is anthropic_base_client.httpx
+    expected_httpx_module = getattr(
+        anthropic_base_client,
+        "httpx2",
+        getattr(anthropic_base_client, "httpx", anthropic_source.httpx),
+    )
+    assert captured["httpx_module"] is expected_httpx_module
 
 
 def test_create_http_client_falls_back_to_global_httpx_module(monkeypatch):
