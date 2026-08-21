@@ -58,62 +58,64 @@ def test_kook_card_message_container_to_json(
 
 
 def test_all_kook_card_type():
-    expect_json_data = Path(TEST_DATA_DIR / "kook_card_data.json").read_text(
-        encoding="utf-8"
+    expect_json_data = json.loads(
+        Path(TEST_DATA_DIR / "kook_card_data.json").read_text(encoding="utf-8")
     )
-    json_output = KookCardMessage(
-        theme="info",
-        size="lg",
-        modules=[
-            HeaderModule(text=PlainTextElement(content="test1")),
-            SectionModule(text=KmarkdownElement(content="test2")),
-            DividerModule(),
-            SectionModule(
-                text=ParagraphStructure(
-                    cols=2,
-                    fields=[
-                        KmarkdownElement(content="test3"),
-                        KmarkdownElement(content="**test4**"),
-                    ],
-                )
-            ),
-            ImageGroupModule(
-                elements=[
-                    ImageElement(
-                        src="https://img.kookapp.cn/attachments/2023-01/05/63b645851ff19.svg"
+    json_output = json.loads(
+        KookCardMessage(
+            theme="info",
+            size="lg",
+            modules=[
+                HeaderModule(text=PlainTextElement(content="test1")),
+                SectionModule(text=KmarkdownElement(content="test2")),
+                DividerModule(),
+                SectionModule(
+                    text=ParagraphStructure(
+                        cols=2,
+                        fields=[
+                            KmarkdownElement(content="test3"),
+                            KmarkdownElement(content="**test4**"),
+                        ],
                     )
-                ]
-            ),
-            FileModule(
-                src="https://img.kookapp.cn/attachments/2023-01/05/63b645851ff19.svg",
-                title="test5",
-                type=KookModuleType.FILE,
-            ),
-            CountdownModule(
-                endTime=1772343427360,
-                startTime=1772343378259,
-                mode="second",
-            ),
-            ActionGroupModule(
-                elements=[
-                    ButtonElement(
-                        value="btn_clicked",
-                        text="点我测试回调",
-                        click="return-val",
-                        theme="primary",
-                    ),
-                    ButtonElement(
-                        value="https://www.kookapp.cn",
-                        text="访问官网",
-                        click="link",
-                        theme="danger",
-                    ),
-                ]
-            ),
-            ContextModule(elements=[PlainTextElement(content="test6")]),
-            InviteModule(code="test7"),
-        ],
-    ).to_json(indent=4, ensure_ascii=False)
+                ),
+                ImageGroupModule(
+                    elements=[
+                        ImageElement(
+                            src="https://img.kookapp.cn/attachments/2023-01/05/63b645851ff19.svg"
+                        )
+                    ]
+                ),
+                FileModule(
+                    src="https://img.kookapp.cn/attachments/2023-01/05/63b645851ff19.svg",
+                    title="test5",
+                    type=KookModuleType.FILE,
+                ),
+                CountdownModule(
+                    endTime=1772343427360,
+                    startTime=1772343378259,
+                    mode="second",
+                ),
+                ActionGroupModule(
+                    elements=[
+                        ButtonElement(
+                            value="btn_clicked",
+                            text="点我测试回调",
+                            click="return-val",
+                            theme="primary",
+                        ),
+                        ButtonElement(
+                            value="https://www.kookapp.cn",
+                            text="访问官网",
+                            click="link",
+                            theme="danger",
+                        ),
+                    ]
+                ),
+                ContextModule(elements=[PlainTextElement(content="test6")]),
+                InviteModule(code="test7"),
+            ],
+        ).to_json(indent=4, ensure_ascii=False)
+    )
     assert json_output == expect_json_data
 
 
