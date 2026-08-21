@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import ipaddress
+import mimetypes
 import os
 import re
 import socket
@@ -25,6 +26,10 @@ from astrbot.dashboard.request_state import DashboardRequestState
 from astrbot.dashboard.responses import error
 
 from .api.app import create_dashboard_asgi_app
+
+if os.name == "nt":
+    # Windows 的 mimetypes 会把 .svg 映射成非标准的 image/svg,这里强制覆盖为标准类型
+    mimetypes.add_type("image/svg+xml", ".svg", strict=True)
 
 _RATE_LIMITED_ENDPOINTS: frozenset = frozenset(
     {
