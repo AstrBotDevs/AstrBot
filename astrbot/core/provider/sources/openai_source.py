@@ -1008,9 +1008,6 @@ class ProviderOpenAIOfficial(Provider):
             Parsed tool names, arguments, and synthetic IDs, or None when the
             text is not a complete call or references an unavailable tool.
         """
-        if not text.lstrip().startswith("<tool_call>"):
-            return None
-
         blocks = list(
             re.finditer(
                 r"<tool_call>\s*<function=([^>\s]+)>(.*?)</tool_call>",
@@ -1021,11 +1018,8 @@ class ProviderOpenAIOfficial(Provider):
         if (
             not blocks
             or any(
-                text[previous_end : block.start()].strip()
-                for previous_end, block in zip(
-                    [0, *[block.end() for block in blocks[:-1]]],
-                    blocks,
-                )
+                text[previous.end() : block.start()].strip()
+                for previous, block in zip(blocks, blocks[1:])
             )
             or text[blocks[-1].end() :].strip()
         ):

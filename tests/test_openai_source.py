@@ -1857,6 +1857,44 @@ async def test_parse_openai_completion_recovers_multiple_textual_tool_calls_with
 
 
 @pytest.mark.asyncio
+async def test_parse_openai_completion_recovers_textual_tool_calls_after_prefix():
+    provider = _make_provider()
+    try:
+        completion = ChatCompletion.model_validate(
+            {
+                "id": "chatcmpl-prefixed-text-tool-call",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "mimo-v2.5",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": (
+                                "Let me search for the latest news."
+                                "<tool_call>\n"
+                                "<function=web_search_tavily>\n"
+                                "<parameter=query>AI research\n"
+                                "</tool_call>"
+                            ),
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+            }
+        )
+
+        response = await provider._parse_openai_completion(completion, tools=None)
+
+        assert response.role == "tool"
+        assert response.tools_call_name == ["web_search_tavily"]
+        assert response.tools_call_args == [{"query": "AI research"}]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_query_stream_extracts_usage_from_empty_choices_chunk(monkeypatch):
     provider = _make_provider()
     try:
