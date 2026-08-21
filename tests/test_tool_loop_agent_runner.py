@@ -14,13 +14,24 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
-from astrbot.core.agent.message import ImageURLPart, Message, TextPart
+from astrbot.core.agent.message import (
+    AssistantMessageSegment,
+    ImageURLPart,
+    Message,
+    TextPart,
+    ToolCallMessageSegment,
+)
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.exceptions import EmptyModelOutputError
-from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
+from astrbot.core.provider.entities import (
+    LLMResponse,
+    ProviderRequest,
+    TokenUsage,
+    ToolCallsResult,
+)
 from astrbot.core.provider.provider import Provider
 
 
@@ -1557,6 +1568,393 @@ async def test_tool_result_injects_follow_up_notice(
     assert ticket2.resolved.is_set() is True
     assert ticket1.consumed is True
     assert ticket2.consumed is True
+
+
+@pytest.mark.asyncio
+async def test_reset_appends_injected_tool_calls_result_after_user(
+    runner, mock_provider, mock_tool_executor, mock_hooks
+):
+    """reset() 把 on_llm_request 注入的 tool_calls_result 追加在当前 user 消息之后。
+
+    最终顺序：history → 当前 user → assistant(tool_calls) → tool(result)。
+    """
+    request = ProviderRequest(
+        prompt="当前问题",
+        contexts=[
+            {"role": "user", "content": "历史消息"},
+            {"role": "assistant", "content": "历史回答"},
+        ],
+        tool_calls_result=ToolCallsResult(
+            tool_calls_info=AssistantMessageSegment(
+                tool_calls=[
+                    {
+                        "id": "fake_1",
+                        "type": "function",
+                        "function": {
+                            "name": "recall_long_term_memory",
+                            "arguments": "{}",
+                        },
+                    }
+                ]
+            ).mark_as_temp(),
+            tool_calls_result=[
+                ToolCallMessageSegment(
+                    tool_call_id="fake_1",
+                    content="memory json",
+                ).mark_as_temp()
+            ],
+        ),
+    )
+
+    await runner.reset(
+        provider=mock_provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    roles = [m.role for m in runner.run_context.messages]
+    assert roles == ["user", "assistant", "user", "assistant", "tool"]
+    assert runner.run_context.messages[-2].tool_calls[0].id == "fake_1"
+    assert runner.run_context.messages[-1].tool_call_id == "fake_1"
+    # _no_save 标记经 reset() 追加后保留，持久化时才会被过滤。
+    assert runner.run_context.messages[-2]._no_save is True
+    assert runner.run_context.messages[-1]._no_save is True
+
+
+@pytest.mark.asyncio
+async def test_reset_appends_multiple_injected_tool_calls_results_in_order(
+    runner, mock_provider, mock_tool_executor, mock_hooks
+):
+    """list 形式的多个 ToolCallsResult 按列表顺序追加在 user 消息之后。"""
+    request = ProviderRequest(
+        prompt="当前问题",
+        contexts=[
+            {"role": "user", "content": "历史消息"},
+            {"role": "assistant", "content": "历史回答"},
+        ],
+        tool_calls_result=[
+            ToolCallsResult(
+                tool_calls_info=AssistantMessageSegment(
+                    tool_calls=[
+                        {
+                            "id": "fake_1",
+                            "type": "function",
+                            "function": {
+                                "name": "recall_long_term_memory",
+                                "arguments": "{}",
+                            },
+                        }
+                    ]
+                ),
+                tool_calls_result=[
+                    ToolCallMessageSegment(
+                        tool_call_id="fake_1",
+                        content="memory json 1",
+                    )
+                ],
+            ),
+            ToolCallsResult(
+                tool_calls_info=AssistantMessageSegment(
+                    tool_calls=[
+                        {
+                            "id": "fake_2",
+                            "type": "function",
+                            "function": {
+                                "name": "recall_short_term_memory",
+                                "arguments": "{}",
+                            },
+                        }
+                    ]
+                ),
+                tool_calls_result=[
+                    ToolCallMessageSegment(
+                        tool_call_id="fake_2",
+                        content="memory json 2",
+                    )
+                ],
+            ),
+        ],
+    )
+
+    await runner.reset(
+        provider=mock_provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    roles = [m.role for m in runner.run_context.messages]
+    assert roles == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "tool",
+        "assistant",
+        "tool",
+    ]
+    tool_calls = [
+        m.tool_calls[0].id
+        for m in runner.run_context.messages
+        if m.role == "assistant" and m.tool_calls
+    ]
+    assert tool_calls == ["fake_1", "fake_2"]
+    tool_results = [
+        m.tool_call_id for m in runner.run_context.messages if m.role == "tool"
+    ]
+    assert tool_results == ["fake_1", "fake_2"]
+
+
+def test_injected_tool_calls_result_partial_temp_mark_raises():
+    """只标记对中一方时抛 ValueError，防止悬空 assistant(tool_calls) 落库。"""
+    partial = ToolCallsResult(
+        tool_calls_info=AssistantMessageSegment(
+            tool_calls=[
+                {
+                    "id": "fake_1",
+                    "type": "function",
+                    "function": {
+                        "name": "recall",
+                        "arguments": "{}",
+                    },
+                }
+            ]
+        ).mark_as_temp(),
+        tool_calls_result=[
+            ToolCallMessageSegment(
+                tool_call_id="fake_1",
+                content="memory json",
+            )
+        ],
+    )
+
+    with pytest.raises(ValueError, match="marked temp together"):
+        partial.to_openai_messages_model()
+
+
+@pytest.mark.asyncio
+async def test_on_llm_request_priority_determines_injected_tool_calls_order(
+    runner, mock_provider, mock_tool_executor, mock_hooks
+):
+    """高 priority 的 on_llm_request 先执行，其注入对在最终上下文中排在前面。"""
+    from astrbot.core.pipeline.context_utils import call_event_hook
+    from astrbot.core.star.register.star_handler import get_handler_or_create
+    from astrbot.core.star.star import StarMetadata, star_map
+    from astrbot.core.star.star_handler import EventType, star_handlers_registry
+
+    async def high_priority_inject(_event, req):
+        req.append_tool_calls_result(
+            ToolCallsResult(
+                tool_calls_info=AssistantMessageSegment(
+                    tool_calls=[
+                        {
+                            "id": "high_1",
+                            "type": "function",
+                            "function": {
+                                "name": "high_priority_recall",
+                                "arguments": "{}",
+                            },
+                        }
+                    ]
+                ),
+                tool_calls_result=[
+                    ToolCallMessageSegment(
+                        tool_call_id="high_1",
+                        content="high priority memory",
+                    )
+                ],
+            )
+        )
+
+    async def low_priority_inject(_event, req):
+        req.append_tool_calls_result(
+            ToolCallsResult(
+                tool_calls_info=AssistantMessageSegment(
+                    tool_calls=[
+                        {
+                            "id": "low_1",
+                            "type": "function",
+                            "function": {
+                                "name": "low_priority_recall",
+                                "arguments": "{}",
+                            },
+                        }
+                    ]
+                ),
+                tool_calls_result=[
+                    ToolCallMessageSegment(
+                        tool_call_id="low_1",
+                        content="low priority memory",
+                    )
+                ],
+            )
+        )
+
+    class HookEvent:
+        plugins_name = None
+
+        def is_stopped(self):
+            return False
+
+    original_handlers = list(star_handlers_registry)
+    original_star_map = dict(star_map)
+    handler_module = high_priority_inject.__module__
+    try:
+        star_handlers_registry.clear()
+        star_map[handler_module] = StarMetadata(
+            name="test-inject-priority",
+            module_path=handler_module,
+            activated=True,
+        )
+        get_handler_or_create(
+            high_priority_inject, EventType.OnLLMRequestEvent, priority=10
+        )
+        get_handler_or_create(
+            low_priority_inject, EventType.OnLLMRequestEvent, priority=0
+        )
+
+        req = ProviderRequest(
+            prompt="current question",
+            contexts=[
+                {"role": "user", "content": "history user"},
+                {"role": "assistant", "content": "history bot"},
+            ],
+        )
+        await call_event_hook(HookEvent(), EventType.OnLLMRequestEvent, req)
+
+        injected_ids = [
+            tcr.tool_calls_info.tool_calls[0].id for tcr in req.tool_calls_result
+        ]
+        assert injected_ids == ["high_1", "low_1"]
+
+        await runner.reset(
+            provider=mock_provider,
+            request=req,
+            run_context=ContextWrapper(context=None),
+            tool_executor=mock_tool_executor,
+            agent_hooks=mock_hooks,
+            streaming=False,
+        )
+        roles = [m.role for m in runner.run_context.messages]
+        assert roles == [
+            "user",
+            "assistant",
+            "user",
+            "assistant",
+            "tool",
+            "assistant",
+            "tool",
+        ]
+        assert runner.run_context.messages[-4].tool_calls[0].id == "high_1"
+        assert runner.run_context.messages[-2].tool_calls[0].id == "low_1"
+    finally:
+        star_handlers_registry.clear()
+        star_map.clear()
+        star_map.update(original_star_map)
+        for handler in original_handlers:
+            star_handlers_registry.append(handler)
+
+
+@pytest.mark.asyncio
+async def test_runner_with_openai_provider_preserves_injected_tool_calls_order(
+    mock_tool_executor, mock_hooks
+):
+    """端到端：runner 消费注入的 tool_calls_result 后，OpenAI payload 顺序保持正确。
+
+    覆盖 ToolLoopAgentRunner → ProviderOpenAIOfficial.text_chat → _query 的完整
+    payload 组装路径（真实 provider，仅对 SDK create 的入口 _query 打桩捕获）。
+    顺序：history → 当前 user → assistant(tool_calls) → tool(result)。
+    """
+    from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
+
+    provider = ProviderOpenAIOfficial(
+        provider_config={
+            "id": "test-openai",
+            "type": "openai_chat_completion",
+            "model": "gpt-4o-mini",
+            "key": ["test-key"],
+        },
+        provider_settings={},
+    )
+    captured: dict[str, list[dict[str, Any]]] = {}
+
+    async def fake_query(payloads, func_tool, *, request_max_retries=None):
+        captured["messages"] = [dict(m) for m in payloads["messages"]]
+        return LLMResponse(role="assistant", completion_text="ok")
+
+    provider._query = fake_query  # type: ignore[method-assign]
+
+    tool_set = ToolSet(
+        tools=[
+            FunctionTool(
+                name="test_tool",
+                description="测试工具",
+                parameters={
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                },
+                handler=AsyncMock(),
+            )
+        ]
+    )
+    request = ProviderRequest(
+        prompt="当前问题",
+        func_tool=tool_set,
+        contexts=[
+            {"role": "user", "content": "历史消息"},
+            {"role": "assistant", "content": "历史回答"},
+        ],
+        tool_calls_result=ToolCallsResult(
+            tool_calls_info=AssistantMessageSegment(
+                tool_calls=[
+                    {
+                        "id": "fake_1",
+                        "type": "function",
+                        "function": {
+                            "name": "recall_long_term_memory",
+                            "arguments": "{}",
+                        },
+                    }
+                ]
+            ),
+            tool_calls_result=[
+                ToolCallMessageSegment(
+                    tool_call_id="fake_1",
+                    content="memory json",
+                )
+            ],
+        ),
+    )
+
+    runner = ToolLoopAgentRunner()
+    try:
+        await runner.reset(
+            provider=provider,
+            request=request,
+            run_context=ContextWrapper(context=None),
+            tool_executor=mock_tool_executor,
+            agent_hooks=mock_hooks,
+            streaming=False,
+        )
+        async for _ in runner.step():
+            pass
+    finally:
+        await provider.terminate()
+
+    assert [m["role"] for m in captured["messages"]] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "tool",
+    ]
+    assert captured["messages"][-2]["tool_calls"][0]["id"] == "fake_1"
+    assert captured["messages"][-1]["tool_call_id"] == "fake_1"
 
 
 @pytest.mark.asyncio

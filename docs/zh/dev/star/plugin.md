@@ -563,6 +563,79 @@ async def my_custom_hook_1(self, event: AstrMessageEvent, req: ProviderRequest):
 
 > 这里不能使用 yield 来发送消息。如需发送，请直接使用 `event.send()` 方法。
 
+###### 注入工具调用结果
+
+> 适用于 AstrBot 版本 > v4.27.3
+
+如果希望 LLM 在回答本轮问题时"看到"一次工具调用及其结果（例如插件自行检索了长期记忆后，将结果包装成一次记忆召回的工具调用），不要直接向 `req.contexts` 追加消息，而应通过 `req.append_tool_calls_result()` 注入。runner 会保证最终消息顺序为：
+
+```
+history → 当前 user → assistant(tool_calls) → tool(result)
+```
+
+```python
+from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api.provider import (
+    ProviderRequest,
+    ToolCallsResult,
+    AssistantMessageSegment,
+    ToolCallMessageSegment,
+)
+
+@filter.on_llm_request()
+async def inject_memory_recall(self, event: AstrMessageEvent, req: ProviderRequest):
+    tool_call_id = "fake_recall_memory"
+    req.append_tool_calls_result(
+        ToolCallsResult(
+            tool_calls_info=AssistantMessageSegment(
+                tool_calls=[
+                    {
+                        "id": tool_call_id,
+                        "type": "function",
+                        "function": {
+                            "name": "recall_long_term_memory",
+                            "arguments": '{"query": "..."}',
+                        },
+                    }
+                ]
+            ),
+            tool_calls_result=[
+                ToolCallMessageSegment(
+                    tool_call_id=tool_call_id,
+                    content="<memory json>",
+                )
+            ],
+        )
+    )
+```
+
+注入的工具调用结果**默认会随会话历史持久化**。如果只希望参与本轮请求、不落库，请对 assistant 与 tool 消息**成对**调用 `.mark_as_temp()`：
+
+```python
+tool_calls_info=AssistantMessageSegment(...).mark_as_temp(),
+tool_calls_result=[ToolCallMessageSegment(...).mark_as_temp()],
+```
+
+> **注意**：`.mark_as_temp()` 必须成对使用。只标记其中一方会导致历史中残留悬空的
+> `assistant(tool_calls)` 或 `tool` 消息，下一轮 provider API 会拒绝该请求。
+> 若标记不一致，runner 在组装上下文时会抛出 `ValueError` 提醒。
+
+**多个插件同时注入时，顺序由 `on_llm_request(priority=...)` 控制**：priority 越高的
+handler 越早执行，其 `append_tool_calls_result()` 的结果越靠前。最终顺序为
+`history → 当前 user → 高优先级插件的注入对 → 低优先级插件的注入对 → ...`。
+
+```python
+@filter.on_llm_request(priority=10)
+async def high_priority_inject(self, event: AstrMessageEvent, req: ProviderRequest):
+    req.append_tool_calls_result(...)  # 排在前
+
+@filter.on_llm_request(priority=0)
+async def low_priority_inject(self, event: AstrMessageEvent, req: ProviderRequest):
+    req.append_tool_calls_result(...)  # 排在后
+```
+
+> 这里不能使用 yield 来发送消息。如需发送，请直接使用 `event.send()` 方法。
+
 ##### LLM 请求完成时
 
 在 LLM 请求完成后，会触发 `on_llm_response` 钩子。

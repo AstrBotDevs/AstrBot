@@ -332,6 +332,65 @@ async def test_terminal_tool_result_persists_history_without_checkpoint():
 
 
 @pytest.mark.asyncio
+async def test_temp_injected_tool_pair_not_persisted():
+    """临时注入的伪造工具调用对（成对 mark_as_temp）整对不落库，不残留悬空 tool 消息。"""
+    conversation_manager = AsyncMock()
+    stage = InternalAgentSubStage()
+    stage.conv_manager = conversation_manager
+    event = SimpleNamespace(
+        unified_msg_origin="webchat:FriendMessage:test",
+        get_extra=lambda _key: None,
+    )
+    fake_info = AssistantMessageSegment(
+        tool_calls=[
+            {
+                "id": "fake_1",
+                "type": "function",
+                "function": {"name": "recall", "arguments": "{}"},
+            }
+        ]
+    ).mark_as_temp()
+    fake_result = ToolCallMessageSegment(
+        tool_call_id="fake_1",
+        content="mem",
+    ).mark_as_temp()
+    request = ProviderRequest(
+        conversation=Conversation(
+            platform_id="webchat",
+            user_id="webchat:FriendMessage:test",
+            cid="conversation-1",
+        ),
+        tool_calls_result=ToolCallsResult(
+            tool_calls_info=fake_info,
+            tool_calls_result=[fake_result],
+        ),
+    )
+
+    await stage._save_to_history(
+        event,
+        request,
+        LLMResponse(role="assistant", completion_text="ok"),
+        [
+            Message(role="user", content="hello"),
+            fake_info,
+            fake_result,
+            ToolCallMessageSegment(tool_call_id="real_1", content="real result"),
+        ],
+        runner_stats=None,
+    )
+
+    conversation_manager.update_conversation.assert_awaited_once_with(
+        "webchat:FriendMessage:test",
+        "conversation-1",
+        history=[
+            {"role": "user", "content": "hello"},
+            {"role": "tool", "tool_call_id": "real_1", "content": "real result"},
+        ],
+        token_usage=None,
+    )
+
+
+@pytest.mark.asyncio
 async def test_terminal_tool_result_with_checkpoint_uses_none_token_usage():
     conversation_manager = AsyncMock()
     stage = InternalAgentSubStage()
