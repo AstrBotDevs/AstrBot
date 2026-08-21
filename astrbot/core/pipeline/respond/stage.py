@@ -127,6 +127,12 @@ class RespondStage(Stage):
         # 如果所有组件都为空
         return True
 
+    async def _after_sent_cleanup(self, event: AstrMessageEvent) -> bool:
+        if await call_event_hook(event, EventType.OnAfterMessageSentEvent):
+            return True
+        event.clear_result()
+        return False
+
     def is_seg_reply_required(self, event: AstrMessageEvent) -> bool:
         """检查是否需要分段回复"""
         if not self.enable_seg:
@@ -222,6 +228,8 @@ class RespondStage(Stage):
             )
             logger.info(f"Applying streaming output ({event.get_platform_id()}).")
             await event.send_streaming(result.async_stream, realtime_segmenting)
+            if await self._after_sent_cleanup(event):
+                return
             return
         if len(result.chain) > 0:
             # 检查路径映射
@@ -319,7 +327,5 @@ class RespondStage(Stage):
                             exc_info=True,
                         )
 
-        if await call_event_hook(event, EventType.OnAfterMessageSentEvent):
+        if await self._after_sent_cleanup(event):
             return
-
-        event.clear_result()
