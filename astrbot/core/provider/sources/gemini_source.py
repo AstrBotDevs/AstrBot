@@ -322,6 +322,7 @@ class ProviderGoogleGenAI(Provider):
                 contents.append(content_cls(parts=part))
 
         gemini_contents: list[types.Content] = []
+        tool_name_by_call_id: dict[str, str] = {}
         for message in payloads["messages"]:
             role, content = message["role"], message.get("content")
 
@@ -392,6 +393,11 @@ class ProviderGoogleGenAI(Provider):
 
                 if "tool_calls" in message:
                     for tool in message["tool_calls"]:
+                        tool_call_id = tool.get("id")
+                        if isinstance(tool_call_id, str) and tool_call_id:
+                            tool_name_by_call_id[tool_call_id] = tool["function"][
+                                "name"
+                            ]
                         part = types.Part.from_function_call(
                             name=tool["function"]["name"],
                             args=json.loads(tool["function"]["arguments"]),
@@ -415,7 +421,12 @@ class ProviderGoogleGenAI(Provider):
                 append_or_extend(gemini_contents, parts, types.ModelContent)
 
             elif role == "tool":
-                func_name = message.get("name", message["tool_call_id"])
+                tool_call_id = message["tool_call_id"]
+                func_name = (
+                    message.get("name")
+                    or tool_name_by_call_id.get(tool_call_id)
+                    or tool_call_id
+                )
                 part = types.Part.from_function_response(
                     name=func_name,
                     response={
@@ -547,8 +558,13 @@ class ProviderGoogleGenAI(Provider):
                 llm_response.role = "tool"
                 llm_response.tools_call_name.append(part.function_call.name)
                 llm_response.tools_call_args.append(part.function_call.args)
-                # function_call.id might be None, use name as fallback
-                tool_call_id = part.function_call.id or part.function_call.name
+                # function_call.id might be None, use a unique name-based fallback.
+                base_tool_call_id = part.function_call.id or part.function_call.name
+                tool_call_id = base_tool_call_id
+                duplicate_index = 2
+                while tool_call_id in llm_response.tools_call_ids:
+                    tool_call_id = f"{base_tool_call_id}__astrbot_{duplicate_index}"
+                    duplicate_index += 1
                 llm_response.tools_call_ids.append(tool_call_id)
                 # extra_content
                 if part.thought_signature:

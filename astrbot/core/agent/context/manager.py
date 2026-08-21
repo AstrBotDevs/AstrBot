@@ -53,8 +53,15 @@ class ContextManager:
         Returns:
             The processed message list.
         """
+        result = messages
         try:
-            result = messages
+            result = self.truncator.fix_messages(messages)
+            history_was_sanitized = result != messages
+            if history_was_sanitized:
+                logger.debug(
+                    f"Removed {len(messages) - len(result)} invalid tool history "
+                    "message(s) before context processing."
+                )
 
             # 1. 基于轮次的截断 (Enforce max turns)
             if self.config.enforce_max_turns != -1:
@@ -67,7 +74,7 @@ class ContextManager:
             # 2. 基于 token 的压缩
             if self.config.max_context_tokens > 0:
                 total_tokens = self.token_counter.count_tokens(
-                    result, trusted_token_usage
+                    result, 0 if history_was_sanitized else trusted_token_usage
                 )
 
                 if self.compressor.should_compress(
@@ -78,7 +85,7 @@ class ContextManager:
             return result
         except Exception as e:
             logger.error(f"Error during context processing: {e}", exc_info=True)
-            return messages
+            return result
 
     async def _run_compression(
         self, messages: list[Message], prev_tokens: int

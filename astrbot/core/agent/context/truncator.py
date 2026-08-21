@@ -53,7 +53,8 @@ class ContextTruncator:
 
         This method ensures that:
         1. Each `tool` message is preceded by an `assistant` message containing `tool_calls`.
-        2. Each `assistant` message containing `tool_calls` is followed by corresponding `
+        2. Each `assistant` message containing `tool_calls` is followed by exactly one
+           `tool` message for every tool call ID.
 
         This is a requirement of the OpenAI Chat Completions API specification (Gemini enforces this strictly).
         """
@@ -66,9 +67,32 @@ class ContextTruncator:
 
         def flush_pending_if_valid() -> None:
             nonlocal pending_assistant, pending_tools
-            if pending_assistant is not None and pending_tools:
-                fixed_messages.append(pending_assistant)
-                fixed_messages.extend(pending_tools)
+            if pending_assistant is not None:
+                expected_ids = []
+                for tool_call in pending_assistant.tool_calls or []:
+                    if isinstance(tool_call, dict):
+                        tool_call_id = tool_call.get("id")
+                    else:
+                        tool_call_id = tool_call.id
+                    if not isinstance(tool_call_id, str) or not tool_call_id:
+                        expected_ids = []
+                        break
+                    expected_ids.append(tool_call_id)
+                result_ids = [tool.tool_call_id for tool in pending_tools]
+                has_valid_expected_ids = bool(expected_ids) and len(
+                    expected_ids
+                ) == len(set(expected_ids))
+                has_valid_result_ids = (
+                    len(result_ids) == len(expected_ids)
+                    and all(
+                        isinstance(tool_id, str) and tool_id for tool_id in result_ids
+                    )
+                    and len(result_ids) == len(set(result_ids))
+                )
+                ids_match = set(result_ids) == set(expected_ids)
+                if has_valid_expected_ids and has_valid_result_ids and ids_match:
+                    fixed_messages.append(pending_assistant)
+                    fixed_messages.extend(pending_tools)
             pending_assistant = None
             pending_tools = []
 

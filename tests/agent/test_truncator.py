@@ -62,6 +62,65 @@ class TestContextTruncator:
         # Tool message without context should be removed
         assert len(result) == 0
 
+    def test_fix_messages_keeps_complete_multi_tool_block(self):
+        """Keep a tool block when every call has exactly one matching result."""
+        truncator = ContextTruncator()
+        messages = [
+            self.create_message("user", "Run both tools"),
+            Message(
+                role="assistant",
+                content="Calling tools",
+                tool_calls=[
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "first", "arguments": "{}"},
+                    },
+                    {
+                        "id": "call_2",
+                        "type": "function",
+                        "function": {"name": "second", "arguments": "{}"},
+                    },
+                ],
+            ),
+            Message(role="tool", content="second result", tool_call_id="call_2"),
+            Message(role="tool", content="first result", tool_call_id="call_1"),
+            self.create_message("assistant", "Done"),
+        ]
+
+        result = truncator.fix_messages(messages)
+
+        assert result == messages
+
+    def test_fix_messages_drops_incomplete_multi_tool_block(self):
+        """Drop the whole block when one of multiple tool results is missing."""
+        truncator = ContextTruncator()
+        messages = [
+            self.create_message("user", "Run both tools"),
+            Message(
+                role="assistant",
+                content="Calling tools",
+                tool_calls=[
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "first", "arguments": "{}"},
+                    },
+                    {
+                        "id": "call_2",
+                        "type": "function",
+                        "function": {"name": "second", "arguments": "{}"},
+                    },
+                ],
+            ),
+            Message(role="tool", content="first result", tool_call_id="call_1"),
+            self.create_message("user", "Continue"),
+        ]
+
+        result = truncator.fix_messages(messages)
+
+        assert result == [messages[0], messages[-1]]
+
     # ==================== truncate_by_turns Tests ====================
 
     def test_truncate_by_turns_no_limit(self):
