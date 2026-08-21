@@ -697,6 +697,67 @@ async def test_upload_document_sanitizes_filename_and_schedules_background_task(
 
 
 @pytest.mark.asyncio
+async def test_upload_route_collects_starlette_multipart_files(
+    asgi_client: httpx.AsyncClient,
+    knowledge_base_route_service: KnowledgeBaseService,
+):
+    knowledge_base_route_service.upload_document = AsyncMock(
+        return_value={
+            "task_id": "task-md",
+            "file_count": 2,
+            "message": "ok",
+        }
+    )
+
+    response = await asgi_client.post(
+        "/api/v1/knowledge-bases/test_kb_id/documents",
+        data={"kb_id": "test_kb_id"},
+        files=[
+            ("file0", ("operators/阿米娅.md", "# 阿米娅\n".encode(), "text/markdown")),
+            ("file1", ("items/源石.md", "# 源石\n".encode(), "text/markdown")),
+        ],
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    uploaded = knowledge_base_route_service.upload_document.await_args.kwargs
+    assert [file.filename for file in uploaded["files"]] == [
+        "operators/阿米娅.md",
+        "items/源石.md",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_upload_route_accepts_more_than_starlette_default_file_limit(
+    asgi_client: httpx.AsyncClient,
+    knowledge_base_route_service: KnowledgeBaseService,
+):
+    knowledge_base_route_service.upload_document = AsyncMock(
+        return_value={
+            "task_id": "task-1001",
+            "file_count": 1001,
+            "message": "ok",
+        }
+    )
+    files = [
+        (f"file{index}", (f"doc-{index}.md", b"# title\n", "text/markdown"))
+        for index in range(1001)
+    ]
+
+    response = await asgi_client.post(
+        "/api/v1/knowledge-bases/test_kb_id/documents",
+        data={"kb_id": "test_kb_id"},
+        files=files,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    uploaded = knowledge_base_route_service.upload_document.await_args.kwargs
+    assert len(uploaded["files"]) == 1001
+
+
+@pytest.mark.asyncio
 async def test_get_document_raises_when_document_is_missing():
     kb_helper = AsyncMock()
     kb_helper.get_document = AsyncMock(return_value=None)

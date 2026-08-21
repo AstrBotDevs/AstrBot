@@ -20,6 +20,24 @@ def _make_service(*, kb_manager=None) -> KnowledgeBaseService:
     return service
 
 
+@pytest.mark.parametrize(
+    ("filename", "expected"),
+    [
+        ("nested\\guide.md", "nested/guide.md"),
+        ("markdown/operators/阿米娅.md", "markdown/operators/阿米娅.md"),
+        ("../etc/passwd", "etc/passwd"),
+        ("/etc/passwd", "etc/passwd"),
+        ("C:\\docs\\guide.md", "docs/guide.md"),
+        ("..", "document"),
+        ("", "document"),
+        (None, "document"),
+        ("a/" + ("b" * 300) + ".md", ("b" * 300 + ".md")[:255]),
+    ],
+)
+def test_sanitize_upload_filename_keeps_nested_markdown_paths(filename, expected):
+    assert KnowledgeBaseService.sanitize_upload_filename(filename) == expected
+
+
 class _EmbeddingProviderStub(EmbeddingProvider):
     def __init__(self, vectors: list[float], dim: int):
         super().__init__({}, {})
@@ -983,7 +1001,7 @@ async def test_upload_document_schedules_background_task_with_sanitized_files(
         {key: file_info[key] for key in ("file_name", "file_type")}
         for file_info in scheduled_call["files_to_upload"]
     ] == [
-        {"file_name": "guide.md", "file_type": "md"},
+        {"file_name": "nested/guide.md", "file_type": "md"},
         {"file_name": "document", "file_type": ""},
     ]
     assert [

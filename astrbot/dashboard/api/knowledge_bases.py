@@ -1,6 +1,8 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request, UploadFile
+from fastapi import APIRouter, Depends, Request
+from starlette.datastructures import UploadFile
+from starlette.formparsers import MultiPartException
 
 from astrbot import logger
 from astrbot.core.auth.models import Resource
@@ -20,6 +22,10 @@ from astrbot.dashboard.services.knowledge_base_service import (
 
 from .auth import AuthContext, object_resource, require_resource_action, require_scope
 from .error_handling import internal_error_response
+
+KB_UPLOAD_MAX_FILES = 20_000
+KB_UPLOAD_MAX_FIELDS = 20_000
+KB_UPLOAD_MAX_PART_SIZE = 128 * 1024 * 1024
 
 router = APIRouter(tags=["Knowledge Bases"])
 
@@ -187,7 +193,14 @@ async def upload_knowledge_base_document(
     service: KnowledgeBaseService = Depends(get_service),
 ):
     async def _operation():
-        form = await request.form()
+        try:
+            form = await request.form(
+                max_files=KB_UPLOAD_MAX_FILES,
+                max_fields=KB_UPLOAD_MAX_FIELDS,
+                max_part_size=KB_UPLOAD_MAX_PART_SIZE,
+            )
+        except MultiPartException as exc:
+            raise KnowledgeBaseServiceError(exc.message) from exc
         form_data = {
             key: value
             for key, value in form.multi_items()

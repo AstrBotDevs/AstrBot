@@ -27,6 +27,7 @@ class KnowledgeBaseServiceError(Exception):
 _BACKGROUND_TASK_ERROR = "Knowledge base task failed"
 _DOCUMENT_UPLOAD_ERROR = "Document upload failed"
 _KB_INITIALIZATION_ERROR = "Knowledge base initialization failed"
+_DOC_NAME_MAX_LENGTH = 255
 
 
 class KnowledgeBaseService:
@@ -39,6 +40,36 @@ class KnowledgeBaseService:
     @staticmethod
     def _payload(data: object) -> dict[str, Any]:
         return data if isinstance(data, dict) else {}
+
+    @staticmethod
+    def sanitize_upload_filename(filename: str | None) -> str:
+        """Return a document name that is safe to store as metadata.
+
+        Nested relative paths are kept so a dropped Markdown folder still
+        distinguishes ``operators/amiya.md`` from another ``amiya.md``.
+        Absolute roots, drive letters, and ``..`` segments are stripped.
+
+        Args:
+            filename: Original multipart filename.
+
+        Returns:
+            Sanitized document name, or ``document`` when nothing usable remains.
+        """
+        raw = str(filename or "document").replace("\\", "/")
+        parts: list[str] = []
+        for part in Path(raw).parts:
+            if part in {"", ".", "..", "/", "\\"}:
+                continue
+            if len(part) == 2 and part[1] == ":":
+                continue
+            parts.append(part)
+        if not parts:
+            return "document"
+        sanitized = "/".join(parts)
+        if len(sanitized) <= _DOC_NAME_MAX_LENGTH:
+            return sanitized
+        basename = parts[-1][:_DOC_NAME_MAX_LENGTH]
+        return basename or "document"
 
     @staticmethod
     def _canonical_kb_payload(data: object) -> dict[str, Any]:
@@ -577,14 +608,11 @@ class KnowledgeBaseService:
         files_to_upload = []
         try:
             for file in files:
-                file_name = Path(
-                    str(file.filename or "document").replace("\\", "/")
-                ).name
-                if file_name in {"", ".", ".."}:
-                    file_name = "document"
-                temp_file_path = staging_dir / f"{uuid.uuid4()}_{file_name}"
+                file_name = self.sanitize_upload_filename(file.filename)
+                stored_name = Path(file_name).name or "document"
+                temp_file_path = staging_dir / f"{uuid.uuid4()}_{stored_name}"
                 file_type = (
-                    file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+                    stored_name.rsplit(".", 1)[-1].lower() if "." in stored_name else ""
                 )
                 files_to_upload.append(
                     {
