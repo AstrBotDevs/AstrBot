@@ -96,7 +96,7 @@ dev = [
 astrbot = "astrbot.cli.__main__:cli"
 
 [project.urls]
-Repository = "https://github.com/AstrBotDevs/AstrBot"
+Repository = "https://github.com/Xero-Team/AstrBot"
 
 [[tool.uv.index]]
 name = "aliyun"
