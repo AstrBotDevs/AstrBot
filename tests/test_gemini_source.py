@@ -2,11 +2,72 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
+from google.genai import types
 
-from astrbot.core.exceptions import EmptyModelOutputError
 import astrbot.core.provider.sources.request_retry as request_retry
+from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.gemini_source import ProviderGoogleGenAI
+
+
+def test_gemini_prepare_conversation_removes_leading_model_content():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    contents = provider._prepare_conversation(
+        {
+            "messages": [
+                {"role": "assistant", "content": "stale assistant turn"},
+                {"role": "user", "content": "current user turn"},
+            ]
+        }
+    )
+
+    assert len(contents) == 1
+    assert isinstance(contents[0], types.UserContent)
+    assert contents[0].parts is not None
+    assert contents[0].parts[-1].text == "current user turn"
+
+
+def test_gemini_prepare_conversation_keeps_normal_user_first_history():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    contents = provider._prepare_conversation(
+        {
+            "messages": [
+                {"role": "user", "content": "first user turn"},
+                {"role": "assistant", "content": "assistant turn"},
+                {"role": "user", "content": "current user turn"},
+            ]
+        }
+    )
+
+    assert [type(content) for content in contents] == [
+        types.UserContent,
+        types.ModelContent,
+        types.UserContent,
+    ]
+    assert contents[-1].parts is not None
+    assert contents[-1].parts[-1].text == "current user turn"
+
+
+def test_gemini_prepare_conversation_preserves_user_model_history():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    contents = provider._prepare_conversation(
+        {
+            "messages": [
+                {"role": "user", "content": "user turn"},
+                {"role": "assistant", "content": "assistant turn"},
+            ]
+        }
+    )
+
+    assert [type(content) for content in contents] == [
+        types.UserContent,
+        types.ModelContent,
+    ]
+    assert contents[-1].parts is not None
+    assert contents[-1].parts[-1].text == "assistant turn"
 
 
 def test_gemini_empty_output_raises_empty_model_output_error():
