@@ -96,6 +96,18 @@ Configure it in the AstrBot WebUI:
 
 That's it.
 
+### Remote MCP Server Example
+
+Remote MCP servers that use Streamable HTTP only need a URL. For example, you can add Parallel Search without installing a local package:
+
+```json
+{
+    "url": "https://search.parallel.ai/mcp"
+}
+```
+
+This endpoint does not require an API key. Add the configuration in the AstrBot WebUI, then enable the server to make its search tools available to the agent.
+
 Reference links:
 
 1. Learn how to use MCP here: [Model Context Protocol](https://modelcontextprotocol.io/introduction)

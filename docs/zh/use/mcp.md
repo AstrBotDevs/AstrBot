@@ -95,6 +95,18 @@ npx -v
 
 即可。
 
+### 远程 MCP 服务器示例
+
+使用 Streamable HTTP 的远程 MCP 服务器只需要一个 URL。例如，无需安装本地软件包即可添加 Parallel Search：
+
+```json
+{
+    "url": "https://search.parallel.ai/mcp"
+}
+```
+
+此端点不需要 API Key。在 AstrBot WebUI 中添加配置并启用服务器后，Agent 即可使用其搜索工具。
+
 参考链接：
 
 1. 在这里了解如何使用 MCP: [Model Context Protocol](https://modelcontextprotocol.io/introduction)
