@@ -24,7 +24,7 @@ class NvidiaRerankProvider(RerankProvider):
         ).rstrip("/")
         self.timeout = provider_config.get("timeout", 20)
         self.model = provider_config.get(
-            "nvidia_rerank_model", "nv-rerank-qa-mistral-4b:1"
+            "nvidia_rerank_model", "nvidia/llama-nemotron-rerank-vl-1b-v2"
         )
         self.model_endpoint = provider_config.get(
             "nvidia_rerank_model_endpoint", "/reranking"
