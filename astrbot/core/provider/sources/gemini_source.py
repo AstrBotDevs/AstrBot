@@ -359,7 +359,8 @@ class ProviderGoogleGenAI(Provider):
             elif role == "assistant":
                 parts = []
                 if isinstance(content, str):
-                    parts.append(types.Part.from_text(text=content))
+                    if content:
+                        parts.append(types.Part.from_text(text=content))
                 elif isinstance(content, list):
                     thinking_signature = None
                     text = ""
