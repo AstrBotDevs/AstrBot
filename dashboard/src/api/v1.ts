@@ -191,6 +191,11 @@ export interface ChatSessionListParams {
   username?: string;
 }
 
+export interface ChatHistoryPageParams {
+  page?: number;
+  page_size?: number;
+}
+
 export interface CronJobListParams {
   type?: string;
 }
@@ -823,9 +828,20 @@ export const chatApi = {
       }),
     );
   },
-  getSession(sessionId: string) {
+  getSession(sessionId: string, params?: ChatHistoryPageParams) {
     return typed<any>(
-      openApiV1.getChatSession({ path: { session_id: sessionId } }),
+      openApiV1.getChatSession({
+        path: { session_id: sessionId },
+        query: generatedQuery(params),
+      }),
+    );
+  },
+  getMessage(messageId: string | number, username?: string) {
+    return typed<any>(
+      openApiV1.getChatMessage({
+        path: { message_id: Number(messageId) },
+        query: username ? { username } : undefined,
+      }),
     );
   },
   updateSession(sessionId: string, payload: ChatSessionPatchRequest) {

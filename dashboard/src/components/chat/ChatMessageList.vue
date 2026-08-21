@@ -10,6 +10,7 @@
         :key="msg.id || `${msgIndex}-${msg.created_at || ''}`"
         class="message-row"
         :class="isUserMessage(msg) ? 'from-user' : 'from-bot'"
+        :data-message-id="msg.id == null ? undefined : String(msg.id)"
       >
         <v-avatar v-if="!isUserMessage(msg)" class="bot-avatar" :size="avatarSize">
           <v-progress-circular
@@ -141,8 +142,11 @@
                   :has-non-reasoning-content="
                     hasFollowingContentBlock(msg, blockIndex)
                   "
+                  :has-reasoning="msg.hasReasoning"
+                  :reasoning-status="msg.reasoningStatus"
                   :open-in-sidebar="variant === 'main'"
                   @open="emit('openReasoning', { message: msg, blockIndex })"
+                  @load-reasoning="emit('loadReasoning', msg)"
                 />
 
                 <template v-else>
@@ -497,6 +501,7 @@ const emit = defineEmits<{
   selectBotText: [event: MouseEvent, message: ChatRecord];
   openThread: [thread: ChatThread];
   openReasoning: [payload: { message: ChatRecord; blockIndex: number }];
+  loadReasoning: [message: ChatRecord];
   openRefs: [refs: unknown];
 }>();
 
@@ -624,7 +629,11 @@ function renderBlocks(message: ChatRecord): MessageDisplayBlock[] {
     const parts = bubbleParts(message);
     return parts.length ? [{ kind: "content", parts }] : [];
   }
-  return buildMessageBlocks(messageContent(message));
+  const blocks = buildMessageBlocks(messageContent(message));
+  if (message.hasReasoning && !blocks.some((block) => block.kind === "thinking")) {
+    blocks.unshift({ kind: "thinking", parts: [] });
+  }
+  return blocks;
 }
 
 function hasFollowingContentBlock(message: ChatRecord, blockIndex: number) {

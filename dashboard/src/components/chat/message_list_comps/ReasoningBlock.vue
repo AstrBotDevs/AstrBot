@@ -56,10 +56,13 @@ const props = defineProps<{
   isStreaming?: boolean;
   hasNonReasoningContent?: boolean;
   openInSidebar?: boolean;
+  hasReasoning?: boolean;
+  reasoningStatus?: "unloaded" | "loading" | "loaded" | "error";
 }>();
 
 const emit = defineEmits<{
   open: [];
+  "load-reasoning": [];
 }>();
 
 const { tm } = useModuleI18n("features/chat");
@@ -109,6 +112,13 @@ const previewTransitionName = computed(() =>
 );
 
 function handlePrimaryAction() {
+  if (
+    props.hasReasoning &&
+    props.reasoningStatus !== "loaded"
+  ) {
+    emit("load-reasoning");
+    return;
+  }
   if (openInSidebar.value) {
     emit("open");
     return;
@@ -189,6 +199,19 @@ watch(
   syncPreviewTimer,
   {
     immediate: true,
+  },
+);
+
+watch(
+  () => props.reasoningStatus,
+  (status, previousStatus) => {
+    if (
+      status === "loaded" &&
+      previousStatus !== "loaded" &&
+      !openInSidebar.value
+    ) {
+      isExpanded.value = true;
+    }
   },
 );
 
