@@ -167,14 +167,14 @@ async def test_computer_booter_and_tool_executor_stubs():
         await booter.shutdown()
     except Exception:
         pass
-    agen = BaseFunctionToolExecutor.execute(None, None)  # type: ignore[arg-type]
+    result = BaseFunctionToolExecutor.execute(None, None)  # type: ignore[arg-type]
     try:
-        await agen.aclose()
+        if inspect.isasyncgen(result):
+            await result.aclose()
+        elif inspect.isawaitable(result):
+            await result
     except Exception:
-        try:
-            await agen.__anext__()
-        except Exception:
-            pass
+        pass
 
     from astrbot.core.skills import _skill_manager_archive, _skill_manager_listing
 

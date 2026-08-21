@@ -12,7 +12,7 @@ from pathlib import Path
 def _functions(path: Path) -> list[ast.AST]:
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
-    except (OSError, SyntaxError):
+    except OSError, SyntaxError:
         return []
     functions: list[ast.AST] = []
     for node in ast.walk(tree):
