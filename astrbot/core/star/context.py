@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from deprecated import deprecated
 
+from astrbot.api.knowledge_base import BaseKnowledgeBaseBackend
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
@@ -789,6 +790,30 @@ class Context:
             provider: 提供者实例。
         """
         self.provider_manager.provider_insts.append(provider)
+
+    def register_knowledge_base_backend(
+        self,
+        backend: BaseKnowledgeBaseBackend,
+    ) -> None:
+        """Register a plugin-provided knowledge base backend.
+
+        The plugin owns the backend and must unregister it in ``terminate``
+        before closing any resources used by the backend.
+
+        Args:
+            backend: Backend instance owned by the plugin.
+        """
+        self.kb_manager.register_backend(backend)
+
+    def unregister_knowledge_base_backend(self, backend_id: str) -> None:
+        """Unregister a plugin-provided knowledge base backend.
+
+        Calling this method for an already unregistered backend is safe.
+
+        Args:
+            backend_id: Backend identifier to remove.
+        """
+        self.kb_manager.unregister_backend(backend_id)
 
     @deprecated(reason="Use decorator-based tool registration instead.")
     def register_llm_tool(
