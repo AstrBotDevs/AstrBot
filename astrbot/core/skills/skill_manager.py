@@ -681,6 +681,8 @@ class SkillManager:
         return [skills_by_name[name] for name in sorted(skills_by_name)]
 
     def is_sandbox_only_skill(self, name: str) -> bool:
+        if self._get_plugin_skill_dir(name) is not None:
+            return False
         skill_dir = Path(self.skills_root) / name
         skill_md_exists = _normalize_skill_markdown_path(skill_dir) is not None
         if skill_md_exists:
