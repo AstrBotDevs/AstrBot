@@ -20,7 +20,7 @@
 
 </div>
 
-AstrBot is an open-source all-in-one Agent chatbot platform that integrates with mainstream instant messaging apps. It provides reliable and scalable conversational AI infrastructure for individuals, developers, and teams. Whether you're building a personal AI companion, intelligent customer service, automation assistant, or enterprise knowledge base, AstrBot enables you to quickly build production-ready AI applications within your IM platform workflows.
+AstrBot is an open-source all-in-one Agent chatbot platform that integrates with mainstream instant messaging apps. It provides reliable and scalable conversational AI infrastructure for individuals, developers, and teams. Whether you're building a personal AI companion, intelligent customer service, automation assistant, or local knowledge-base retrieval, AstrBot lets you assemble AI applications inside IM workflows. The knowledge base is currently a single-node SQLite + FAISS store, not a hosted enterprise search service.
 
 This repository is a modernized fork of AstrBot. The code, commands, deployment files, and compatibility expectations documented here describe this fork only: Python 3.14+, `uv` for backend workflows, `pnpm` for the dashboard, and no legacy compatibility shims.
 

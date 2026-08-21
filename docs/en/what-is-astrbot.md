@@ -6,7 +6,7 @@ outline: deep
 
 ## Introduction
 
-AstrBot is an open-source, all-in-one Agentic assistant for personal and group chats. It can be deployed across dozens of mainstream instant messaging platforms, such as QQ, Telegram, WeCom, Lark, DingTalk, and Slack. It also includes a lightweight built-in ChatUI (similar to OpenWebUI), providing reliable and extensible conversational AI infrastructure for individuals, developers, and teams. Whether you are building a personal AI companion, an intelligent customer service assistant, an automation bot, or an enterprise knowledge base, AstrBot helps you build AI applications directly inside your IM workflows.
+AstrBot is an open-source, all-in-one Agentic assistant for personal and group chats. It can be deployed across dozens of mainstream instant messaging platforms, such as QQ, Telegram, WeCom, Lark, DingTalk, and Slack. It also includes a lightweight built-in ChatUI (similar to OpenWebUI), providing reliable and extensible conversational AI infrastructure for individuals, developers, and teams. Whether you are building a personal AI companion, an intelligent customer-service assistant, an automation bot, or local knowledge-base retrieval, you can assemble AI applications inside IM workflows. The knowledge base is currently a single-node SQLite + FAISS store, not a hosted enterprise search service.
 
 This documentation tracks the current fork branch. When this fork diverges from upstream, the behavior documented here follows this repository.
 

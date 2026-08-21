@@ -43,3 +43,6 @@ After creating a knowledge base, you can upload documents to it. Select multiple
 ## Using the Knowledge Base
 
 In the configuration file, you can specify different knowledge bases for different configuration profiles.
+
+> [!WARNING]
+> Knowledge-base storage is a SQLite document store in the runtime directory plus local FAISS indexes under `data/knowledge_base/`. It is a single-process, single-node deployment. After you choose an embedding model, do not change the model or vector dimension; recall will break, and existing indexes are not migrated automatically. Failed uploads run compensating cleanup, so a reported API failure must not leave a partially queryable document. If the built-in NVIDIA embedding or rerank defaults change, saved provider configuration and existing indexes are also not migrated automatically.
