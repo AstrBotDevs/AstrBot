@@ -5,17 +5,15 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 4fe29759758255a35ad01ea6177a91c2293bfcd3
-  synced_at_utc: 2026-08-20T04:58:17Z
-  sync_method: manual-adaptation
-  source_pr: '9747, 9749'
+  commit: 19d00fb1f0d822690a467e8dca498adebbb2d67b
+  synced_at_utc: 2026-08-21T13:55:06Z
+  sync_method: cherry-pick
+  source_pr: '9750, 9735'
   note: >-
-    Reviewed the interval from 9c895838d3c6cd7ddad3cc94bb38718ce90b0281
-    through 4fe29759758255a35ad01ea6177a91c2293bfcd3. Adapted the preferences
-    OOM fix (#9747) onto the fork's async-only PreferenceStore write overlay
-    without restoring deprecated sync APIs or sqlite3 helpers. Adapted the
-    4.27.4 version bump (#9749) by synchronizing pyproject.toml and
-    astrbot.__version__, finalizing the existing fork changelog, and omitting
-    upstream-only entries, skipped commits, and upstream compare links.
-    Validation passed: focused pytest coverage for shared preferences and
-    Prettier on the changelog.
+    Reviewed the interval from 4fe29759758255a35ad01ea6177a91c2293bfcd3
+    through 19d00fb1f0d822690a467e8dca498adebbb2d67b. Cherry-picked the
+    NVIDIA retrieval default-model update (#9750) and the Windows SVG MIME
+    override (#9735) with no conflicts. Existing saved NVIDIA provider
+    configs and knowledge-base indexes are not migrated. Validation passed:
+    95 focused pytest cases covering NVIDIA contracts, Dashboard static
+    files, and startup MIME registration.
