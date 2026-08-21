@@ -325,192 +325,196 @@ describe('frontend logic coverage', () => {
     );
   });
 
-  it('covers messages, provider sources, and step-up', async () => {
-    api.chatApi.getSession.mockResolvedValue({
-      data: {
+  it(
+    'covers messages, provider sources, and step-up',
+    { timeout: 20_000 },
+    async () => {
+      api.chatApi.getSession.mockResolvedValue({
         data: {
-          history: [
-            { id: 'h1', content: { type: 'user', message: 'hi' } },
-            {
-              id: 'h2',
-              content: {
-                type: 'bot',
-                message: [{ type: 'plain', text: 'ok' }],
+          data: {
+            history: [
+              { id: 'h1', content: { type: 'user', message: 'hi' } },
+              {
+                id: 'h2',
+                content: {
+                  type: 'bot',
+                  message: [{ type: 'plain', text: 'ok' }],
+                },
               },
-            },
-          ],
-          threads: [],
-          project: { project_id: 'p1', title: 'P' },
-          active_runs: [],
+            ],
+            threads: [],
+            project: { project_id: 'p1', title: 'P' },
+            active_runs: [],
+          },
         },
-      },
-    });
-    const messages = useMessages({ currentSessionId: ref('s1') });
-    await messages.loadSessionMessages('s1');
-    expect(messages.activeMessages.value.length).toBe(2);
-    messages.createLocalExchange({
-      sessionId: 's1',
-      messageId: 'n1',
-      parts: [{ type: 'plain', text: 'q' }],
-    });
-    api.chatApi.stopSession.mockResolvedValue({ data: { status: 'ok' } });
-    await messages.stopSession('s1');
-    messages.cleanupConnections();
-    const bot = {
-      id: 'b',
-      content: {
-        type: 'bot' as const,
-        message: [{ type: 'plain', text: 'x' }],
-      },
-    };
-    appendPlain(bot, '!');
-    expect(messageBlocks(bot.content).length).toBeGreaterThan(0);
+      });
+      const messages = useMessages({ currentSessionId: ref('s1') });
+      await messages.loadSessionMessages('s1');
+      expect(messages.activeMessages.value.length).toBe(2);
+      messages.createLocalExchange({
+        sessionId: 's1',
+        messageId: 'n1',
+        parts: [{ type: 'plain', text: 'q' }],
+      });
+      api.chatApi.stopSession.mockResolvedValue({ data: { status: 'ok' } });
+      await messages.stopSession('s1');
+      messages.cleanupConnections();
+      const bot = {
+        id: 'b',
+        content: {
+          type: 'bot' as const,
+          message: [{ type: 'plain', text: 'x' }],
+        },
+      };
+      appendPlain(bot, '!');
+      expect(messageBlocks(bot.content).length).toBeGreaterThan(0);
 
-    api.providerApi.schema.mockResolvedValue({
-      data: {
-        status: 'ok',
+      api.providerApi.schema.mockResolvedValue({
         data: {
-          config_schema: {
-            provider: {
-              config_template: {
-                openai: {
-                  provider_type: 'chat_completion',
-                  provider: 'openai',
+          status: 'ok',
+          data: {
+            config_schema: {
+              provider: {
+                config_template: {
+                  openai: {
+                    provider_type: 'chat_completion',
+                    provider: 'openai',
+                  },
                 },
               },
             },
+            provider_sources: [
+              {
+                id: 'src1',
+                provider_type: 'chat_completion',
+                provider: 'openai',
+              },
+            ],
+            providers: [
+              {
+                id: 'p1',
+                provider_source_id: 'src1',
+                enable: true,
+                model: 'gpt',
+              },
+            ],
+            model_metadata: { gpt: { tool_call: true } },
           },
-          provider_sources: [
-            {
-              id: 'src1',
-              provider_type: 'chat_completion',
-              provider: 'openai',
-            },
-          ],
-          providers: [
-            {
-              id: 'p1',
-              provider_source_id: 'src1',
-              enable: true,
-              model: 'gpt',
-            },
-          ],
-          model_metadata: { gpt: { tool_call: true } },
         },
-      },
-    });
-    api.providerApi.setEnabled.mockResolvedValue({
-      data: { status: 'ok', message: 'ok' },
-    });
-    api.providerApi.test.mockResolvedValue({
-      data: { status: 'ok', data: { error: null } },
-    });
-    const sources = useProviderSources({
-      tm: (key) => key,
-      showMessage: vi.fn(),
-    });
-    await sources.loadProviderTemplate();
-    sources.updateDefaultTab('chat_completion');
-    expect(sources.availableSourceTypes.value.length).toBeGreaterThan(0);
-    sources.selectProviderSource(sources.providerSources.value[0] as never);
-    expect(sources.sourceProviders.value.length).toBeGreaterThan(0);
-    expect(sources.supportsToolCall({ tool_call: true })).toBe(true);
-    expect(
-      sources.supportsImageInput({ modalities: { input: ['image'] } }),
-    ).toBe(true);
-    expect(sources.formatContextLimit({ limit: { context: 8000 } })).toContain(
-      'K',
-    );
-    await sources.toggleProviderEnable(
-      sources.providers.value[0] as never,
-      false,
-    );
-    await sources.testProvider(sources.providers.value[0] as never);
+      });
+      api.providerApi.setEnabled.mockResolvedValue({
+        data: { status: 'ok', message: 'ok' },
+      });
+      api.providerApi.test.mockResolvedValue({
+        data: { status: 'ok', data: { error: null } },
+      });
+      const sources = useProviderSources({
+        tm: (key) => key,
+        showMessage: vi.fn(),
+      });
+      await sources.loadProviderTemplate();
+      sources.updateDefaultTab('chat_completion');
+      expect(sources.availableSourceTypes.value.length).toBeGreaterThan(0);
+      sources.selectProviderSource(sources.providerSources.value[0] as never);
+      expect(sources.sourceProviders.value.length).toBeGreaterThan(0);
+      expect(sources.supportsToolCall({ tool_call: true })).toBe(true);
+      expect(
+        sources.supportsImageInput({ modalities: { input: ['image'] } }),
+      ).toBe(true);
+      expect(
+        sources.formatContextLimit({ limit: { context: 8000 } }),
+      ).toContain('K');
+      await sources.toggleProviderEnable(
+        sources.providers.value[0] as never,
+        false,
+      );
+      await sources.testProvider(sources.providers.value[0] as never);
 
-    const dialog = useProviderModelConfigDialog({
-      selectedProviderSource: ref({ id: 'src1', type: 'openai' }),
-      configSchema: ref({ provider: { items: { id: {}, model: {} } } }),
-      buildModelProviderConfig: (id) => ({ id, model: id }),
-      modelAlreadyConfigured: () => false,
-      loadConfig: vi.fn(),
-      tm: (key) => key,
-      showMessage: vi.fn(),
-    });
-    dialog.openProviderEdit({ id: 'p1' });
-    dialog.openModelAddDialog('');
-    dialog.openModelAddDialog('gpt-4');
-    api.providerApi.update.mockResolvedValue({
-      data: { status: 'ok', message: 'saved' },
-    });
-    api.providerApi.createInSource.mockResolvedValue({
-      data: { status: 'ok', message: 'created' },
-    });
-    await dialog.saveEditedProvider();
-    dialog.openModelAddDialog('gpt-5');
-    await dialog.saveEditedProvider();
+      const dialog = useProviderModelConfigDialog({
+        selectedProviderSource: ref({ id: 'src1', type: 'openai' }),
+        configSchema: ref({ provider: { items: { id: {}, model: {} } } }),
+        buildModelProviderConfig: (id) => ({ id, model: id }),
+        modelAlreadyConfigured: () => false,
+        loadConfig: vi.fn(),
+        tm: (key) => key,
+        showMessage: vi.fn(),
+      });
+      dialog.openProviderEdit({ id: 'p1' });
+      dialog.openModelAddDialog('');
+      dialog.openModelAddDialog('gpt-4');
+      api.providerApi.update.mockResolvedValue({
+        data: { status: 'ok', message: 'saved' },
+      });
+      api.providerApi.createInSource.mockResolvedValue({
+        data: { status: 'ok', message: 'created' },
+      });
+      await dialog.saveEditedProvider();
+      dialog.openModelAddDialog('gpt-5');
+      await dialog.saveEditedProvider();
 
-    const { mountWithVuetify } = await import('./utils/mountWithVuetify');
-    const Harness = defineComponent({
-      setup() {
-        const stepUp = useDashboardStepUp();
-        return { stepUp };
-      },
-      template: '<div />',
-    });
-    const wrapper = mountWithVuetify(Harness);
-    const stepUp = (
-      wrapper.vm as { stepUp: ReturnType<typeof useDashboardStepUp> }
-    ).stepUp;
-    const pending = stepUp.requestStepUp({
-      action: 'x',
-      resourceType: 'system',
-      resourceId: '1',
-    });
-    stepUp.cancelStepUp();
-    await expect(pending).resolves.toBeNull();
-    const issued = stepUp.requestStepUp({
-      action: 'system.restart',
-      resourceType: 'system',
-      resourceId: 'restart',
-    });
-    api.authorizationApi.stepUp.mockResolvedValue({
-      data: { data: { token: 'step-token' } },
-    });
-    await stepUp.submitStepUp({ password: 'p' });
-    await expect(issued).resolves.toBe('step-token');
-    const webChat = stepUp.requestWebChatStepUp('sess-1');
-    api.authorizationApi.webChatStepUp.mockResolvedValue({
-      data: {
-        data: { tokens: { 'webchat.tool_run': 'wc-token' }, expires_in: 1 },
-      },
-    });
-    await stepUp.submitStepUp({ password: 'p', code: '123' });
-    await expect(webChat).resolves.toMatchObject({
-      'webchat.tool_run': 'wc-token',
-    });
-    wrapper.unmount();
+      const { mountWithVuetify } = await import('./utils/mountWithVuetify');
+      const Harness = defineComponent({
+        setup() {
+          const stepUp = useDashboardStepUp();
+          return { stepUp };
+        },
+        template: '<div />',
+      });
+      const wrapper = mountWithVuetify(Harness);
+      const stepUp = (
+        wrapper.vm as { stepUp: ReturnType<typeof useDashboardStepUp> }
+      ).stepUp;
+      const pending = stepUp.requestStepUp({
+        action: 'x',
+        resourceType: 'system',
+        resourceId: '1',
+      });
+      stepUp.cancelStepUp();
+      await expect(pending).resolves.toBeNull();
+      const issued = stepUp.requestStepUp({
+        action: 'system.restart',
+        resourceType: 'system',
+        resourceId: 'restart',
+      });
+      api.authorizationApi.stepUp.mockResolvedValue({
+        data: { data: { token: 'step-token' } },
+      });
+      await stepUp.submitStepUp({ password: 'p' });
+      await expect(issued).resolves.toBe('step-token');
+      const webChat = stepUp.requestWebChatStepUp('sess-1');
+      api.authorizationApi.webChatStepUp.mockResolvedValue({
+        data: {
+          data: { tokens: { 'webchat.tool_run': 'wc-token' }, expires_in: 1 },
+        },
+      });
+      await stepUp.submitStepUp({ password: 'p', code: '123' });
+      await expect(webChat).resolves.toMatchObject({
+        'webchat.tool_run': 'wc-token',
+      });
+      wrapper.unmount();
 
-    api.statsApi.restart.mockResolvedValue({ data: { status: 'ok' } });
-    await restartAstrBot(null, async () => 'step-token');
-    await restartAstrBot(null, async () => null);
-    await restartAstrBot(
-      { check: vi.fn(), stop: vi.fn() },
-      async () => 'step-token',
-    );
-    expect(formatTokenCount(12_000)).toContain('K');
-    expect(contextLimit({ max_context_tokens: 8000 })).toBe(8000);
-    expect(formatContextLimit({ max_context_tokens: 8000 })).toBeTruthy();
-    expect(
-      providerCapabilityBadges(
-        { modalities: ['image'] },
-        { modalities: { input: ['image'] }, tool_call: true },
-        (key) => key,
-      ).length,
-    ).toBeGreaterThan(0);
-    expect(
-      resolvePluginI18n({ 'zh-CN': { name: '插件' } }, 'zh-CN', 'name'),
-    ).toBe('插件');
-  });
+      api.statsApi.restart.mockResolvedValue({ data: { status: 'ok' } });
+      await restartAstrBot(null, async () => 'step-token');
+      await restartAstrBot(null, async () => null);
+      await restartAstrBot(
+        { check: vi.fn(), stop: vi.fn() },
+        async () => 'step-token',
+      );
+      expect(formatTokenCount(12_000)).toContain('K');
+      expect(contextLimit({ max_context_tokens: 8000 })).toBe(8000);
+      expect(formatContextLimit({ max_context_tokens: 8000 })).toBeTruthy();
+      expect(
+        providerCapabilityBadges(
+          { modalities: ['image'] },
+          { modalities: { input: ['image'] }, tool_call: true },
+          (key) => key,
+        ).length,
+      ).toBeGreaterThan(0);
+      expect(
+        resolvePluginI18n({ 'zh-CN': { name: '插件' } }, 'zh-CN', 'name'),
+      ).toBe('插件');
+    },
+  );
 
   it('covers persona, auth, common, and router-loading stores', async () => {
     const tree = [

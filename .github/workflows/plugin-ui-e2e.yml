@@ -46,7 +46,7 @@ jobs:
         run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
       - name: Run Plugin UI E2E
         working-directory: dashboard
-        run: pnpm test:e2e -- --project=${{ matrix.browser }}
+        run: pnpm exec playwright test --config=playwright.config.ts --project=${{ matrix.browser }}
 
   plugin-ui-e2e-extra-browsers:
     if: github.event_name == 'workflow_dispatch'
@@ -85,4 +85,4 @@ jobs:
         run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
       - name: Run Plugin UI E2E
         working-directory: dashboard
-        run: pnpm test:e2e -- --project=${{ matrix.browser }}
+        run: pnpm exec playwright test --config=playwright.config.ts --project=${{ matrix.browser }}

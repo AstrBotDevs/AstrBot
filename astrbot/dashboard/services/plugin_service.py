@@ -984,11 +984,11 @@ class PluginService:
                 if custom_url.endswith(".json")
                 else custom_url + "-md5.json"
             )
-            urls = [custom_url]
+            urls: list[str] = [custom_url]
         else:
             cache_file = os.path.join(data_dir, "plugins.json")
             md5_url = None
-            urls = list(DEFAULT_PLUGIN_MARKET_URLS)
+            urls = list[str](DEFAULT_PLUGIN_MARKET_URLS)
         return RegistrySource(urls=urls, cache_file=cache_file, md5_url=md5_url)
 
     @staticmethod

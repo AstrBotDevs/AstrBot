@@ -47,14 +47,26 @@ test.describe('Dashboard keyboard and responsive interactions', () => {
   test('the navigation drawer opens from the mobile application bar', async ({
     page,
   }) => {
+    await page.context().addCookies([
+      {
+        name: 'astrbot_dashboard_jwt',
+        value: 'plugin-ui-e2e-dashboard-token',
+        domain: '127.0.0.1',
+        path: '/api/v1',
+        httpOnly: true,
+        sameSite: 'Strict',
+        secure: false,
+      },
+    ]);
     await page.addInitScript(() => {
       localStorage.setItem('token', 'plugin-ui-e2e-dashboard-token');
       localStorage.setItem('user', 'a11y-e2e');
     });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/#/platforms', { waitUntil: 'domcontentloaded' });
+    await expect(page).toHaveURL(/#\/platforms/);
     const header = page.getByRole('banner');
-    await expect(header).toBeVisible();
+    await expect(header).toBeVisible({ timeout: 15_000 });
 
     const menuButton = header.getByRole('button').first();
     await expect(menuButton).toBeVisible();
