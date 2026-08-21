@@ -1,8 +1,10 @@
 import asyncio
 from collections.abc import AsyncGenerator
 from io import BytesIO
+from ipaddress import ip_address
 from pathlib import Path
 from typing import cast
+from urllib.parse import urlparse
 
 import discord
 from discord.types.interactions import ComponentInteractionData
@@ -163,13 +165,30 @@ class DiscordPlatformEvent(AstrMessageEvent):
                         continue
 
                     if file_content.startswith("http"):
-                        logger.debug(
-                            "[Discord] 处理 URL 图片: %s",
-                            describe_media_ref(file_content),
-                        )
-                        embed = discord.Embed().set_image(url=file_content)
-                        embeds.append(embed)
-                        continue
+                        host = None
+                        try:
+                            host = urlparse(file_content).hostname
+                        except ValueError:
+                            pass
+                        is_unreachable = False
+                        if host:
+                            if host == "localhost":
+                                is_unreachable = True
+                            else:
+                                try:
+                                    is_unreachable = ip_address(
+                                        host.strip("[]")
+                                    ).is_loopback
+                                except ValueError:
+                                    pass
+                        if not is_unreachable:
+                            logger.debug(
+                                "[Discord] 处理 URL 图片: %s",
+                                describe_media_ref(file_content),
+                            )
+                            embed = discord.Embed().set_image(url=file_content)
+                            embeds.append(embed)
+                            continue
 
                     image_data = await MediaResolver(
                         file_content,
