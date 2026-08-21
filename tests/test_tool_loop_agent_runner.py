@@ -142,6 +142,76 @@ class MockMixedContentToolExecutor:
         return generator()
 
 
+class MockMultiImageToolExecutor:
+    """模拟一次工具调用返回多张图片的工具执行器。"""
+
+    @classmethod
+    def execute(cls, tool, run_context, **tool_args):
+        async def generator():
+            from mcp.types import CallToolResult, ImageContent
+
+            result = CallToolResult(
+                content=[
+                    ImageContent(
+                        type="image",
+                        data="dGVzdA==",
+                        mimeType="image/png",
+                    ),
+                    ImageContent(
+                        type="image",
+                        data="dGVzdA==",
+                        mimeType="image/png",
+                    ),
+                ]
+            )
+            yield result
+
+        return generator()
+
+
+class MockCaptionProvider(MockProvider):
+    """模拟默认图片转述模型，记录收到的图片路径并返回固定描述。"""
+
+    def __init__(self, caption_text: str = "图片中是一只猫"):
+        super().__init__()
+        self.caption_text = caption_text
+        self.captioned_paths: list[str] = []
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        self.captioned_paths.extend(kwargs.get("image_urls", []))
+        return LLMResponse(
+            role="assistant",
+            completion_text=self.caption_text,
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
+class MockFailingCaptionProvider(MockCaptionProvider):
+    """模拟转述模型调用失败的场景。"""
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        raise RuntimeError("caption provider down")
+
+
+class MockImageCaptionContext:
+    """模拟含 default_image_caption_provider_id 配置的 star Context。"""
+
+    def __init__(self, caption_provider: Any, provider_id: str = "cap_prov"):
+        self.caption_provider = caption_provider
+        self.provider_id = provider_id
+
+    def get_config(self, umo=None):
+        return {
+            "provider_settings": {
+                "default_image_caption_provider_id": self.provider_id,
+            }
+        }
+
+    def get_provider_by_id(self, provider_id: str):
+        return self.caption_provider
+
+
 class VaryingUsageProvider(MockProvider):
     """Return distinct token usage values for each tool-loop request."""
 
@@ -904,6 +974,177 @@ async def test_tool_result_includes_all_calltoolresult_content(
             "mime_type": "image/png",
         }
     ]
+
+
+def _all_context_texts(contexts: list[Any]) -> list[str]:
+    texts: list[str] = []
+    for msg in contexts:
+        content = msg.get("content")
+        if isinstance(content, str):
+            texts.append(content)
+        elif isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    texts.append(str(part.get("text", "")))
+    return texts
+
+
+def _tool_image_runner_setup(
+    runner,
+    provider_request,
+    mock_hooks,
+    monkeypatch,
+    tmp_path,
+    caption_context,
+    modalities: list[str] | None = None,
+    tool_executor=MockMixedContentToolExecutor,
+):
+    if modalities is None:
+        modalities = ["tool_use"]
+    from astrbot.core.agent.tool_image_cache import CachedImage, tool_image_cache
+
+    img_path = tmp_path / "tool_img.png"
+    img_path.write_bytes(b"fake-png-bytes")
+
+    def fake_save_image(
+        base64_data, tool_call_id, tool_name, index=0, mime_type="image/png"
+    ):
+        return CachedImage(
+            tool_call_id=tool_call_id,
+            tool_name=tool_name,
+            file_path=str(img_path),
+            mime_type=mime_type,
+        )
+
+    monkeypatch.setattr(tool_image_cache, "save_image", fake_save_image)
+
+    event = MockEvent("test:FriendMessage:tool_caption", "u1")
+    provider = CapturingToolLoopProvider("test_tool")
+    provider.provider_config["modalities"] = modalities
+
+    async def _run():
+        await runner.reset(
+            provider=provider,
+            request=provider_request,
+            run_context=ContextWrapper(
+                context=SimpleNamespace(event=event, context=caption_context)
+            ),
+            tool_executor=tool_executor,
+            agent_hooks=mock_hooks,
+            streaming=False,
+        )
+        async for _ in runner.step_until_done(3):
+            pass
+
+    return provider, img_path, _run
+
+
+@pytest.mark.asyncio
+async def test_tool_image_caption_injected_when_main_model_lacks_image(
+    runner, provider_request, mock_hooks, monkeypatch, tmp_path
+):
+    """主模型不支持图片时，工具返回的图片应经默认转述模型生成文字描述注入上下文。"""
+    caption_provider = MockCaptionProvider(caption_text="图片中是一只猫")
+    provider, img_path, run = _tool_image_runner_setup(
+        runner,
+        provider_request,
+        mock_hooks,
+        monkeypatch,
+        tmp_path,
+        caption_context=MockImageCaptionContext(caption_provider),
+    )
+    await run()
+
+    assert provider.call_count == 2
+    assert caption_provider.captioned_paths == [str(img_path)]
+    second_contexts = provider.received_contexts[1]
+    context_texts = _all_context_texts(second_contexts)
+    assert any(
+        "<image_caption>图片中是一只猫</image_caption>" in t for t in context_texts
+    )
+    tool_msg_index = next(
+        i for i, msg in enumerate(second_contexts) if msg.get("role") == "tool"
+    )
+    caption_msg_index = next(
+        i
+        for i, msg in enumerate(second_contexts)
+        if isinstance(msg.get("content"), list)
+        and any(
+            isinstance(part, dict)
+            and part.get("type") == "text"
+            and "<image_caption>" in str(part.get("text", ""))
+            for part in msg.get("content", [])
+        )
+    )
+    assert caption_msg_index > tool_msg_index
+
+
+@pytest.mark.asyncio
+async def test_tool_multi_image_caption_single_call(
+    runner, provider_request, mock_hooks, monkeypatch, tmp_path
+):
+    """一次工具调用返回多张图片时，只发起一次转述调用，避免长对话中被多次串行转述拖慢。"""
+    caption_provider = MockCaptionProvider(caption_text="两张截图")
+    provider, img_path, run = _tool_image_runner_setup(
+        runner,
+        provider_request,
+        mock_hooks,
+        monkeypatch,
+        tmp_path,
+        caption_context=MockImageCaptionContext(caption_provider),
+        tool_executor=MockMultiImageToolExecutor,
+    )
+    await run()
+
+    assert provider.call_count == 2
+    assert caption_provider.call_count == 1
+    assert caption_provider.captioned_paths == [str(img_path), str(img_path)]
+    second_contexts = provider.received_contexts[1]
+    context_texts = _all_context_texts(second_contexts)
+    assert context_texts.count("<image_caption>两张截图</image_caption>") == 1
+
+
+@pytest.mark.asyncio
+async def test_tool_image_placeholder_when_no_caption_provider(
+    runner, provider_request, mock_hooks, monkeypatch, tmp_path
+):
+    """未配置默认转述模型时，注入占位文本而非静默丢弃图片内容。"""
+    provider, _, run = _tool_image_runner_setup(
+        runner,
+        provider_request,
+        mock_hooks,
+        monkeypatch,
+        tmp_path,
+        caption_context=MockImageCaptionContext(caption_provider=None, provider_id=""),
+    )
+    await run()
+
+    assert provider.call_count == 2
+    second_contexts = provider.received_contexts[1]
+    context_texts = _all_context_texts(second_contexts)
+    assert any("[Image not visible to the current model]" in t for t in context_texts)
+    assert not any("<image_caption>" in t for t in context_texts)
+
+
+@pytest.mark.asyncio
+async def test_tool_image_caption_failure_placeholder(
+    runner, provider_request, mock_hooks, monkeypatch, tmp_path
+):
+    """转述模型调用失败时注入 [Image Captioning Failed]，工具循环不被中断。"""
+    provider, _, run = _tool_image_runner_setup(
+        runner,
+        provider_request,
+        mock_hooks,
+        monkeypatch,
+        tmp_path,
+        caption_context=MockImageCaptionContext(MockFailingCaptionProvider()),
+    )
+    await run()
+
+    assert provider.call_count == 2
+    second_contexts = provider.received_contexts[1]
+    context_texts = _all_context_texts(second_contexts)
+    assert any("[Image Captioning Failed]" in t for t in context_texts)
 
 
 @pytest.mark.asyncio
