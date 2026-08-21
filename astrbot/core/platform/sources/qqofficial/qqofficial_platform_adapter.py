@@ -336,6 +336,9 @@ class QQOfficialPlatformAdapter(Platform):
         message_chains = QQOfficialMessageEvent._split_message_chain_by_media(
             message_chain
         )
+        message_chains = QQOfficialMessageEvent._split_message_chain_by_length(
+            message_chains
+        )
         if len(message_chains) > 1:
             for split_message_chain in message_chains:
                 await self._send_by_session_common(session, split_message_chain)
