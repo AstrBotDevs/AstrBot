@@ -393,6 +393,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       source.ollama_disable_thinking = false
     }
 
+    if (source.provider === 'xai' && source.xai_native_search === undefined) {
+      source.xai_native_search = false
+    }
+
     return source
   }
 

@@ -924,6 +924,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 ),
             )
 
+        if llm_resp.web_search_sources:
+            yield AgentResponse(
+                type="web_search_sources",
+                data=AgentResponseData(
+                    chain=MessageChain(
+                        type="web_search_sources",
+                        chain=[Json(data={"sources": llm_resp.web_search_sources})],
+                    )
+                ),
+            )
+
         # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:
             if self.tool_schema_mode == "skills_like":
