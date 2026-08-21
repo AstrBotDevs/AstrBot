@@ -153,12 +153,39 @@
                 <p class="text-caption text-medium-emphasis">
                   {{ t('upload.maxSize') }}
                 </p>
+                <p class="text-caption text-medium-emphasis">
+                  {{ t('upload.folderHint') }}
+                </p>
+                <div class="mt-4 d-flex justify-center ga-2" @click.stop>
+                  <v-btn
+                    size="small"
+                    variant="tonal"
+                    @click="fileInput?.click()"
+                  >
+                    {{ t('upload.selectFile') }}
+                  </v-btn>
+                  <v-btn
+                    size="small"
+                    variant="tonal"
+                    @click="folderInput?.click()"
+                  >
+                    {{ t('upload.selectFolder') }}
+                  </v-btn>
+                </div>
                 <input
                   ref="fileInput"
                   type="file"
                   multiple
                   hidden
-                  accept=".txt,.md,.markdown,.rst,.adoc,.pdf,.docx,.epub,.xls,.xlsx"
+                  accept=".txt,.md,.markdown,.rst,.adoc,.pdf,.docx,.epub,.xls,.xlsx,text/markdown,text/plain,text/x-markdown"
+                  @change="handleFileSelect"
+                />
+                <input
+                  ref="folderInput"
+                  type="file"
+                  multiple
+                  hidden
+                  webkitdirectory
                   @change="handleFileSelect"
                 />
               </div>
@@ -423,6 +450,10 @@ import { useRouter } from 'vue-router';
 import { configProfileApi, knowledgeApi, providerApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
 import { resolveErrorMessage } from '@/utils/errorUtils';
+import {
+  collectDroppedKnowledgeBaseFiles,
+  collectFilesFromFileList,
+} from '@/utils/knowledgeBaseUploadFiles';
 
 const { tm: t } = useModuleI18n('features/knowledge-base/detail');
 const router = useRouter();
@@ -541,6 +572,7 @@ const selectedFiles = ref<File[]>([]);
 const deleteTarget = ref<DocumentItem | null>(null);
 const isDragging = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
+const folderInput = ref<HTMLInputElement | null>(null);
 const uploadMode = ref('file'); // 'file' or 'url'
 const uploadUrl = ref('');
 const llmProviders = ref<LlmProviderItem[]>([]);
@@ -662,29 +694,35 @@ const handlePageSizeChange = (newPageSize: number) => {
 const handleFileSelect = (event: Event) => {
   const target = event.target as HTMLInputElement;
   if (target.files && target.files.length > 0) {
-    const newFiles = Array.from(target.files);
-    addFiles(newFiles);
+    const newFiles = collectFilesFromFileList(target.files);
+    if (newFiles.length === 0) {
+      showSnackbar(t('upload.noSupportedFiles'), 'warning');
+    } else {
+      addFiles(newFiles);
+    }
   }
   target.value = '';
 };
 
-// Add files
 const addFiles = (files: File[]) => {
   selectedFiles.value.push(...files);
 };
 
-// 移除文件
 const removeFile = (index: number) => {
   selectedFiles.value.splice(index, 1);
 };
 
-// 拖放上传
-const handleDrop = (event: DragEvent) => {
+const handleDrop = async (event: DragEvent) => {
   isDragging.value = false;
-  if (event.dataTransfer?.files && event.dataTransfer.files.length > 0) {
-    const newFiles = Array.from(event.dataTransfer.files);
-    addFiles(newFiles);
+  if (!event.dataTransfer) {
+    return;
   }
+  const newFiles = await collectDroppedKnowledgeBaseFiles(event.dataTransfer);
+  if (newFiles.length === 0) {
+    showSnackbar(t('upload.noSupportedFiles'), 'warning');
+    return;
+  }
+  addFiles(newFiles);
 };
 
 // 上传调度器
@@ -710,7 +748,7 @@ const uploadFiles = async () => {
 
     // 添加所有文件
     selectedFiles.value.forEach((file, index) => {
-      formData.append(`file${index}`, file);
+      formData.append(`file${index}`, file, file.name);
     });
 
     formData.append('kb_id', props.kbId);
@@ -772,7 +810,10 @@ const uploadFiles = async () => {
     }
   } catch (error) {
     console.error('Failed to upload document:', error);
-    showSnackbar(t('documents.uploadFailed'), 'error');
+    showSnackbar(
+      resolveErrorMessage(error, t('documents.uploadFailed')),
+      'error',
+    );
   } finally {
     uploading.value = false;
   }

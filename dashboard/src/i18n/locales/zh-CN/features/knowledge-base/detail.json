@@ -53,9 +53,12 @@
   "upload": {
     "title": "上传文档",
     "selectFile": "选择文件",
-    "dropzone": "拖放文件到这里或点击选择",
+    "selectFolder": "选择文件夹",
+    "dropzone": "拖放文件或文件夹到这里，或点击选择",
     "supportedFormats": "支持的格式: .txt, .md, .markdown, .rst, .adoc, .pdf, .docx, .epub, .xls, .xlsx",
     "maxSize": "最大文件大小: 128MB",
+    "folderHint": "支持选择或拖放文件夹，将递归收集其中的 Markdown 等受支持文档",
+    "noSupportedFiles": "未找到支持的文档。请选择文件或包含 .md 等受支持格式的文件夹",
     "chunkSettings": "分块设置",
     "batchSettings": "批处理设置",
     "cleaningSettings": "清洗设置",
