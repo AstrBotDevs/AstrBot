@@ -483,6 +483,10 @@ def _set_filter_fragment(
     setattr(filter_ref, attr, fragment)
     if hasattr(filter_ref, "_cmpl_cmd_names"):
         filter_ref._cmpl_cmd_names = None
+    if isinstance(filter_ref, CommandGroupFilter):
+        # 指令组名称变更后，同步刷新子指令持有的父级前缀快照与缓存，
+        # 否则子指令仍只能通过旧前缀触发（#9366）。
+        filter_ref.sync_sub_filters_parent_names()
 
 
 def _set_filter_aliases(
@@ -495,6 +499,9 @@ def _set_filter_aliases(
     setattr(filter_ref, "alias", set(aliases))
     if hasattr(filter_ref, "_cmpl_cmd_names"):
         filter_ref._cmpl_cmd_names = None
+    if isinstance(filter_ref, CommandGroupFilter):
+        # 指令组别名变更同样会影响子指令的完整指令名，需要一并同步（#9366）。
+        filter_ref.sync_sub_filters_parent_names()
 
 
 def _is_command_in_use(
