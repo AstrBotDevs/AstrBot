@@ -1353,6 +1353,18 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
+                    "iFlytek Spark": {
+                        "id": "iflytek_spark",
+                        "provider": "iflytek_spark",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://spark-api-open.xf-yun.com/v1",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
                     "AIHubMix": {
                         "id": "aihubmix",
                         "provider": "aihubmix",
