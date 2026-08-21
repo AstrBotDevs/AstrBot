@@ -27,8 +27,9 @@
         "all": "Все"
     },
     "views": {
-        "card": "Плитка",
-        "list": "Список"
+        "displayDensity": "Плотность отображения плагинов",
+        "detailed": "Подробный режим",
+        "compact": "Компактный режим"
     },
     "buttons": {
         "showSystemPlugins": "Показать системные",
