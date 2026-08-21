@@ -1,0 +1,95 @@
+{
+  "title": "指令管理",
+  "summary": {
+    "total": "顯示的指令數",
+    "disabled": "已停用",
+    "conflicts": "發生衝突"
+  },
+  "conflictAlert": {
+    "title": "偵測到指令衝突",
+    "description": "目前有 {count} 對指令發生衝突，衝突的指令會同時觸發多個插件回應，可能會導致非預期的行為。",
+    "hint": "請點擊「重新命名」按鈕修改衝突指令的名稱來解決衝突。"
+  },
+  "table": {
+    "headers": {
+      "command": "指令",
+      "type": "類型",
+      "plugin": "所屬插件",
+      "description": "描述",
+      "permission": "權限",
+      "status": "狀態",
+      "actions": "操作"
+    }
+  },
+  "type": {
+    "command": "指令",
+    "group": "指令群組",
+    "subCommand": "子指令"
+  },
+  "status": {
+    "enabled": "已啟用",
+    "disabled": "已停用",
+    "conflict": "發生衝突"
+  },
+  "permission": {
+    "everyone": "所有人",
+    "admin": "管理員"
+  },
+  "tooltips": {
+    "enable": "啟用指令",
+    "disable": "停用指令",
+    "rename": "重新命名指令",
+    "viewDetails": "查看詳情"
+  },
+  "dialogs": {
+    "rename": {
+      "title": "重新命名指令",
+      "newName": "新指令名稱",
+      "aliases": "管理別名",
+      "addAlias": "新增別名",
+      "cancel": "取消",
+      "confirm": "確認"
+    },
+    "details": {
+      "title": "指令詳情",
+      "type": "指令類型",
+      "handler": "處理常式 (Handler)",
+      "module": "模組路徑",
+      "originalCommand": "原始指令",
+      "effectiveCommand": "生效指令",
+      "parentGroup": "所屬指令群組",
+      "subCommands": "子指令列表",
+      "aliases": "別名",
+      "permission": "權限要求",
+      "conflictStatus": "衝突狀態"
+    }
+  },
+  "messages": {
+    "toggleSuccess": "指令狀態已更新",
+    "toggleFailed": "更新指令狀態失敗",
+    "renameSuccess": "指令已重新命名",
+    "renameFailed": "重新命名失敗",
+    "loadFailed": "載入指令列表失敗",
+    "updateSuccess": "更新成功",
+    "updateFailed": "更新失敗"
+  },
+  "search": {
+    "placeholder": "搜尋指令..."
+  },
+  "empty": {
+    "noCommands": "暫無指令",
+    "noCommandsDesc": "目前篩選條件下找不到任何指令"
+  },
+  "filters": {
+    "all": "全部",
+    "enabled": "已啟用",
+    "disabled": "已停用",
+    "conflict": "發生衝突",
+    "byPlugin": "按插件篩選",
+    "byType": "按類型篩選",
+    "byPermission": "按權限篩選",
+    "byStatus": "按狀態篩選",
+    "showSystemPlugins": "顯示系統插件指令",
+    "systemPluginConflictHint": "有涉及系統插件的衝突，需要先解決才能隱藏"
+  }
+}

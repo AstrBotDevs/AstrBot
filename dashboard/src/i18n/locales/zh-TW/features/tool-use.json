@@ -1,0 +1,159 @@
+{
+  "title": "函數工具管理",
+  "subtitle": "管理 MCP 伺服器和查看可用的函數工具",
+  "tooltip": {
+    "info": "函數呼叫和 MCP 是什麼？",
+    "marketplace": "瀏覽和安裝來自社群的 MCP 伺服器",
+    "serverConfig": "MCP 伺服器 (stdio) 設定支援以下欄位:\ncommand: 命令名稱 (例如 python 或 uv)\nargs: 命令參數陣列 (例如 [\"run\", \"server.py\"])\nenv: 環境變數物件 (例如 {\"api_key\": \"abc\"})\ncwd: 工作目錄路徑 (例如 /path/to/server)\nencoding: 輸出編碼 (預設 utf-8)\nencoding_error_handler: 文字編碼錯誤處理程序。預設為 strict。\n其他欄位請參考 MCP 文件\n⚠️ 如果您使用 Docker 部署 AstrBot, 請務必將 MCP 伺服器裝在 AstrBot 掛載好的 data 目錄下"
+  },
+  "tabs": {
+    "local": "本機伺服器",
+    "marketplace": "MCP 市場"
+  },
+  "mcpServers": {
+    "title": "MCP 伺服器",
+    "buttons": {
+      "refresh": "重新整理",
+      "add": "新增伺服器",
+      "useTemplateStdio": "Stdio 範本",
+      "useTemplateStreamableHttp": "Streamable HTTP 範本",
+      "useTemplateSse": "SSE 範本",
+      "sync": "同步伺服器"
+    },
+    "empty": "暫無 MCP 伺服器，點擊 新增伺服器 新增",
+    "status": {
+      "noTools": "無可用工具",
+      "availableTools": "可用工具",
+      "configSummary": "設定: {keys}",
+      "noConfig": "未設定"
+    }
+  },
+  "functionTools": {
+    "title": "函數工具",
+    "buttons": {
+      "view": "查看工具"
+    },
+    "search": "搜尋函數工具",
+    "empty": "沒有可用的函數工具",
+    "description": "功能描述",
+    "parameters": "參數列表",
+    "noParameters": "此工具沒有參數",
+    "table": {
+      "paramName": "參數名",
+      "type": "類型",
+      "description": "描述",
+      "required": "必填",
+      "origin": "來源",
+      "originName": "來源名稱",
+      "actions": "操作"
+    }
+  },
+  "marketplace": {
+    "title": "MCP 伺服器市場",
+    "search": "搜尋伺服器",
+    "buttons": {
+      "refresh": "重新整理",
+      "detail": "詳情",
+      "import": "匯入"
+    },
+    "loading": "正在載入 MCP 伺服器市場...",
+    "empty": "暫無可用的 MCP 伺服器",
+    "status": {
+      "availableTools": "可用工具 ({count})",
+      "noToolsInfo": "無可用工具資訊"
+    }
+  },
+  "dialogs": {
+    "addServer": {
+      "title": "新增 MCP 伺服器",
+      "editTitle": "編輯 MCP 伺服器",
+      "fields": {
+        "name": "伺服器名稱",
+        "nameRequired": "名稱為必填項",
+        "enable": "啟用伺服器",
+        "config": "伺服器設定"
+      },
+      "errors": {
+        "configEmpty": "設定不能為空",
+        "jsonFormat": "JSON 格式錯誤: {error}",
+        "jsonParse": "JSON 解析錯誤: {error}"
+      },
+      "buttons": {
+        "cancel": "取消",
+        "save": "儲存",
+        "testConnection": "測試連線",
+        "sync": "同步"
+      },
+      "tips": {
+        "timeoutConfig": "工具呼叫的逾時時間請前往設定頁面單獨設定"
+      }
+    },
+    "serverDetail": {
+      "title": "伺服器詳情",
+      "installConfig": "安裝設定",
+      "availableTools": "可用工具",
+      "buttons": {
+        "close": "關閉",
+        "importConfig": "匯入設定"
+      }
+    },
+    "confirmDelete": "確定要刪除伺服器 {name} 嗎？",
+    "syncProvider": {
+      "title": "同步 MCP 伺服器",
+      "subtitle": "從供應商同步 MCP 伺服器設定到本機",
+      "steps": {
+        "selectProvider": "步驟 1: 選擇供應商",
+        "configureAuth": "步驟 2: 設定認證",
+        "syncServers": "步驟 3: 同步伺服器"
+      },
+      "providers": {
+        "modelscope": "ModelScope",
+        "description": "ModelScope 是一個開源的模型社群，提供各種機器學習和 AI 服務的 MCP 伺服器"
+      },
+      "fields": {
+        "provider": "選擇供應商",
+        "accessToken": "存取權杖",
+        "tokenRequired": "存取權杖為必填項",
+        "tokenHint": "請輸入您的 ModelScope 存取權杖"
+      },
+      "buttons": {
+        "cancel": "取消",
+        "previous": "上一步",
+        "next": "下一步",
+        "sync": "開始同步",
+        "getToken": "取得權杖"
+      },
+      "status": {
+        "selectProvider": "請選擇一個 MCP 伺服器供應商",
+        "enterToken": "請輸入存取權杖以繼續",
+        "readyToSync": "準備同步伺服器設定"
+      },
+      "messages": {
+        "syncSuccess": "MCP 伺服器同步成功！",
+        "syncError": "同步失敗: {error}",
+        "tokenHelp": "如何取得 ModelScope 存取權杖？點擊右側按鈕查看說明"
+      }
+    }
+  },
+  "messages": {
+    "getServersError": "取得 MCP 伺服器列表失敗: {error}",
+    "getToolsError": "取得函數工具列表失敗: {error}",
+    "saveSuccess": "儲存成功！",
+    "saveError": "儲存失敗: {error}",
+    "deleteSuccess": "刪除成功！",
+    "deleteError": "刪除失敗: {error}",
+    "updateSuccess": "更新成功！",
+    "updateError": "更新失敗: {error}",
+    "getMarketError": "取得 MCP 市場伺服器列表失敗: {error}",
+    "importError": {
+      "noConfig": "此伺服器沒有可用設定",
+      "invalidFormat": "伺服器設定格式不正確",
+      "failed": "匯入設定失敗: {error}"
+    },
+    "configParseError": "設定解析錯誤: {error}",
+    "noAvailableConfig": "無可用設定",
+    "toggleToolSuccess": "工具狀態切換成功！",
+    "toggleToolError": "工具狀態切換失敗: {error}",
+    "testError": "測試連線失敗: {error}"
+  }
+}

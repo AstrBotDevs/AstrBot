@@ -1,0 +1,49 @@
+{
+  "welcome": "歡迎",
+  "dashboard": "數據統計",
+  "platforms": "機械人",
+  "providers": "模型供應商",
+  "commands": "指令管理",
+  "persona": "人格設定",
+  "subagent": "SubAgent 編排",
+  "toolUse": "MCP",
+  "extension": "插件",
+  "extensionTabs": {
+    "installed": "AstrBot 插件",
+    "market": "插件市場",
+    "mcp": "MCP",
+    "skills": "Skills",
+    "components": "管理行為"
+  },
+  "config": "設定檔",
+  "chat": "聊天",
+  "cron": "未來任務",
+  "conversation": "對話數據",
+  "sessionManagement": "自訂規則",
+  "console": "平台日誌",
+  "trace": "追蹤",
+  "alkaid": "Alkaid",
+  "knowledgeBase": "知識庫",
+  "about": "關於",
+  "settings": "設定",
+  "changelog": "更新日誌",
+  "documentation": "官方文件",
+  "faq": "FAQ",
+  "github": "GitHub",
+  "drag": "拖曳",
+  "groups": {
+    "more": "更多功能"
+  },
+  "changelogDialog": {
+    "title": "更新日誌",
+    "loading": "載入中...",
+    "error": "載入失敗",
+    "notFound": "找不到此版本的更新日誌",
+    "selectVersion": "選擇版本",
+    "current": "目前"
+  },
+  "configTabs": {
+    "normal": "一般設定",
+    "system": "系統設定"
+  }
+}
