@@ -1,5 +1,4 @@
 import { createPinia, setActivePinia } from 'pinia';
-import { createApp, defineComponent, effectScope } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
