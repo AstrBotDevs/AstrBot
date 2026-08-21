@@ -190,9 +190,11 @@ adapter.
   installs the certifi-backed verified aiohttp CA context. Keep imports above
   that call minimal.
 - The `astrbot` console entry point has its own CLI initialization and
-  Dashboard checks and does not currently invoke the root `runtime_bootstrap`
-  path. When changing startup behavior, inspect and test both entry points
-  instead of assuming they are identical.
+  Dashboard checks. `astrbot/cli/__main__.py` and `astrbot run` both call
+  `runtime_bootstrap.initialize_runtime_bootstrap()`. They still differ from
+  `main.py`: the CLI requires the `.astrbot` marker, uses a separate Dashboard
+  asset path, and has no `--webui-dir`. When changing startup behavior, inspect
+  and test both entry points instead of assuming they are identical.
 - Startup-only environment flags are applied before core imports. Runtime paths
   and Dashboard assets are resolved before `create_runtime_services()` builds
   the runtime-owned configuration, SQLite database, preferences, Playwright
@@ -215,8 +217,8 @@ adapter.
    dispatches it under bounded concurrency while retaining task references.
 3. `astrbot/core/pipeline/stage_order.py` defines the fixed sequence from
    `WakingCheck` through `WhitelistCheck`, `SessionStatusCheck`, `RateLimit`,
-   `ContentSafetyCheck`, `PreProcess`, `Process`, `ResultDecorate`, and finally
-   `Respond`.
+   `ContentSafetyCheck`, `PreProcess`, `GroupMessageHistory`, `Process`,
+   `ResultDecorate`, and finally `Respond`.
 
 The scheduler supports async stages and async-generator onion middleware.
 Preserve stage ordering, stop-propagation, and cancellation semantics.

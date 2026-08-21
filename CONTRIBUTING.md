@@ -30,9 +30,9 @@ git clone https://github.com/Xero-Team/AstrBot.git
 cd AstrBot
 make doctor
 make bootstrap
-pip install pre-commit
-pre-commit install
 ```
+
+`pre-commit` 不在当前 `pyproject.toml` 的 `dev` 依赖组中，因此不要求安装 Git hook。需要 hook 时可以自行安装 `pre-commit` 并运行 `pre-commit install`；也可以不装 hook，直接使用 `make check`。
 
 常用命令：
 
@@ -108,9 +108,9 @@ git clone https://github.com/Xero-Team/AstrBot.git
 cd AstrBot
 make doctor
 make bootstrap
-pip install pre-commit
-pre-commit install
 ```
+
+`pre-commit` is not in the current `pyproject.toml` `dev` dependency group, so a Git hook is optional. Install `pre-commit` yourself and run `pre-commit install` if you want the hook; otherwise skip it and run `make check`.
 
 Common commands:
 
