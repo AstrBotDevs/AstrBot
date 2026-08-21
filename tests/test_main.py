@@ -69,6 +69,18 @@ def test_check_env(monkeypatch):
         check_env()
 
 
+def test_version_and_opencode_providers_are_present():
+    import astrbot
+    from astrbot.core.provider.register import provider_cls_map
+    from astrbot.core.provider.sources import opencode_go_source, opencode_zen_source
+
+    assert astrbot.__version__ == "4.27.3"
+    assert provider_cls_map["opencode_go_chat_completion"]
+    assert provider_cls_map["opencode_zen_chat_completion"]
+    assert opencode_go_source.ProviderOpenCodeGo
+    assert opencode_zen_source.ProviderOpenCodeZen
+
+
 def test_apply_startup_env_flags_sets_reset_password_env(monkeypatch):
     monkeypatch.delenv(DASHBOARD_RESET_PASSWORD_ENV, raising=False)
 
