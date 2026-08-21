@@ -36,7 +36,7 @@ Fill in the relevant information. In the embedding model dropdown menu, you will
 
 ## Uploading Files
 
-After creating a knowledge base, you can upload documents to it. There is no longer a 10-file batch limit, and each file can be up to 128 MB.
+After creating a knowledge base, you can upload documents to it. Select multiple files, or drop/choose a whole folder (for example a tree of Markdown files). Nested directories are collected recursively. There is no longer a 10-file batch limit, and each file can be up to 128 MB.
 
 ![Upload Files](https://files.astrbot.app/docs/en/use/image-4.png)
 
