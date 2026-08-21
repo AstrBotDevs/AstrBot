@@ -28,7 +28,7 @@ class NvidiaEmbeddingProvider(EmbeddingProvider):
         )
         self.timeout = int(provider_config.get("timeout", 20))
         self.model = provider_config.get(
-            "embedding_model", "nvidia/llama-nemotron-embed-1b-v2"
+            "embedding_model", "nvidia/nemotron-3-embed-1b"
         )
         self.input_type = provider_config.get("input_type", "passage")
 
