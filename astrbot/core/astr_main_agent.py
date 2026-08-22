@@ -802,6 +802,7 @@ async def _append_video_attachment(
     else:
         text = f"[Video Attachment: name {video_name}, path {video_path}]"
 
+    req.video_urls.append(video_path)
     req.extra_user_content_parts.append(TextPart(text=text))
 
 
@@ -1445,6 +1446,7 @@ async def build_main_agent(
             req.prompt = ""
             req.image_urls = []
             req.audio_urls = []
+            req.video_urls = []
             if sel_model := event.get_extra("selected_model"):
                 req.model = sel_model
             if config.provider_wake_prefix and not event.message_str.startswith(
@@ -1590,6 +1592,7 @@ async def build_main_agent(
         )
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
     req.audio_urls = normalize_and_dedupe_strings(req.audio_urls)
+    req.video_urls = normalize_and_dedupe_strings(req.video_urls)
 
     if config.file_extract_enabled:
         try:
@@ -1599,7 +1602,12 @@ async def build_main_agent(
 
     has_reply = any(isinstance(comp, Reply) for comp in event.message_obj.message)
 
-    if not req.prompt and not req.image_urls and not req.audio_urls:
+    if (
+        not req.prompt
+        and not req.image_urls
+        and not req.audio_urls
+        and not req.video_urls
+    ):
         if has_reply or req.extra_user_content_parts:
             req.prompt = "<attachment>"
         else:
