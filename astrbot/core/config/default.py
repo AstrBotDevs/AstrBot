@@ -1634,6 +1634,20 @@ CONFIG_METADATA_2 = {
                         "timeout": "20",
                         "proxy": "",
                     },
+                    "StepFun ASR(API)": {
+                        "id": "stepfun_asr",
+                        "provider": "stepfun",
+                        "type": "stepfun_asr",
+                        "provider_type": "speech_to_text",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.stepfun.com/step_plan/v1",
+                        "model": "stepaudio-2.5-asr",
+                        "stepfun-asr-language": "zh",
+                        "stepfun-asr-enable-itn": True,
+                        "timeout": "20",
+                        "proxy": "",
+                    },
                     "Whisper(Local)": {
                         "provider": "openai",
                         "type": "openai_whisper_selfhost",
@@ -2699,6 +2713,16 @@ CONFIG_METADATA_2 = {
                         "description": "超时时间",
                         "type": "int",
                         "hint": "超时时间，单位为秒。",
+                    },
+                    "stepfun-asr-language": {
+                        "description": "\u8bed\u8a00",
+                        "type": "string",
+                        "hint": "StepFun ASR \u7684\u8bc6\u522b\u8bed\u8a00\u3002\u9ed8\u8ba4 zh\u3002",
+                    },
+                    "stepfun-asr-enable-itn": {
+                        "description": "\u6570\u5b57\u89c4\u6574",
+                        "type": "bool",
+                        "hint": "\u662f\u5426\u542f\u7528 StepFun ASR \u7684 ITN \u6570\u5b57\u89c4\u6574\u3002",
                     },
                     "openai-tts-voice": {
                         "description": "voice",
