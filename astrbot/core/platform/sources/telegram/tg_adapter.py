@@ -588,6 +588,25 @@ class TelegramPlatformAdapter(Platform):
             record.path = path_wav
             message.message = [record]
 
+        elif update.message.audio:
+            # Audio files use their own Bot API field and do not fall back to document.
+            file = await update.message.audio.get_file()
+
+            file_basename = os.path.basename(cast(str, file.file_path))
+            temp_dir = get_astrbot_temp_path()
+            temp_path = os.path.join(temp_dir, file_basename)
+            await download_file(cast(str, file.file_path), path=temp_path)
+            path_wav = await MediaResolver(
+                temp_path,
+                media_type="audio",
+                default_suffix=".wav",
+            ).to_path(target_format="wav")
+
+            record = Comp.Record(file=path_wav, url=path_wav)
+            record.path = path_wav
+            message.message.append(record)
+            _apply_caption()
+
         elif update.message.photo:
             photo = update.message.photo[-1]  # get the largest photo
             file = await photo.get_file()
