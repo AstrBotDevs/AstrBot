@@ -155,6 +155,8 @@ Mixin 只通过 `self.get_db()` 拿会话，不直接持有 engine，也不互�
 
 群聊唤醒规则是显式配置。`platform_settings.group_wake_policy` 分别控制“提及机器人”和“回复机器人”是否唤醒，默认都关闭；`WakingCheckStage` 会把实际原因写入事件的 `wake_reasons`。内置命令是否可用则按 handler 存储在命令数据库中；`disable_builtin_commands` 不迁移、不接受配置写入，也不被 Pipeline 读取。
 
+`platform_settings.group_sender_concurrency` 是实验性开关，默认关闭。启用且未开 `unique_session` 时，群聊 LLM 锁可按发送者拆分，不同群友可并行生成；整轮出站仍按群 UMO 排队，本轮强制非流式。对话历史在 `AssistantHistoryCommitter` 内合并并发完整轮次，不复活已截断历史。私聊、WebChat、live、定时任务和主动回复保持原 UMO 串行。
+
 ### 指令解析子系统
 
 指令参数由 `astrbot/core/command/` 下的 Orbit Command Syntax 子系统处理。`catalog.py` 为已启用指令、指令组和各级别名建立不可变最长匹配索引；`lexer.py` 实现不执行 expansion 或 operator 的确定性 POSIX word 子集；`schema.py` 在 handler 注册期编译签名；`binder.py` 负责位置参数、option、默认值和类型转换；`engine.py` 统一执行 resolve、lex 和 bind。

@@ -155,6 +155,8 @@ The order in `astrbot/core/pipeline/stage_order.py` is:
 
 Group wake behavior is explicit. `platform_settings.group_wake_policy` separately controls whether mentioning or replying to the bot wakes a group message, and both values default to false. `WakingCheckStage` records the actual `wake_reasons` on the event. Built-in command availability is stored per handler in the command database; `disable_builtin_commands` is not migrated, accepted by Dashboard config writes, or read by the Pipeline.
 
+`platform_settings.group_sender_concurrency` is experimental and off by default. When it is on and `unique_session` is off, group LLM locks may split by sender so different members can generate in parallel. A whole turn still sends one-at-a-time per group UMO, and that turn is forced non-streaming. `AssistantHistoryCommitter` merges other senders' complete turns and never resurrects truncated history. Direct messages, WebChat, live mode, cron jobs, and proactive replies keep the original UMO lock.
+
 ### Command Parsing Subsystem
 
 Command arguments are handled by the Orbit Command Syntax subsystem under `astrbot/core/command/`. `catalog.py` builds an immutable longest-match index for enabled commands, groups, and aliases at every level. `lexer.py` implements a deterministic POSIX word subset without expansions or operators. `schema.py` compiles handler signatures during registration, `binder.py` handles positionals, options, defaults, and conversion, and `engine.py` provides the resolve, lex, and bind flow.

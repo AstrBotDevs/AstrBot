@@ -19,6 +19,7 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db.protocols import PluginRuntimeStore
 from astrbot.core.exceptions import ProviderNotFoundError
+from astrbot.core.group_sender_concurrency import GroupOutboundGate
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.message.components import Plain
 from astrbot.core.message.message_event_result import MessageChain
@@ -252,6 +253,8 @@ class CoreExecutionContext:
         """Runtime-owned active event cancellation index."""
         self.session_lock_manager = session_lock_manager or SessionLockManager()
         """Runtime-owned per-session lock manager."""
+        self.group_outbound_gate = GroupOutboundGate(self.session_lock_manager)
+        """Serializes group outbound while a sender-concurrent Agent turn is active."""
         self.session_waiter_registry = (
             session_waiter_registry or SessionWaiterRegistry()
         )
@@ -663,7 +666,12 @@ class CoreExecutionContext:
             except Exception as e:
                 raise ValueError("不合法的 session 字符串: " + str(e))
 
-        result = await self._platform_manager.send_to_session(session, message_chain)
+        from astrbot.core.group_sender_concurrency import serialize_group_outbound
+
+        async with serialize_group_outbound(str(session), self.group_outbound_gate):
+            result = await self._platform_manager.send_to_session(
+                session, message_chain
+            )
         if result.success:
             await self._persist_accepted_group_send(session, message_chain)
             return result

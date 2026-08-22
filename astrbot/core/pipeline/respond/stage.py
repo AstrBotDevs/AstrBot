@@ -234,7 +234,11 @@ class RespondStage(Stage):
         """Submit one chain without conflating exceptions with acceptance."""
         try:
             await self._stop_typing_before_send(event)
-            result = await event.send(chain)
+            from astrbot.core.group_sender_concurrency import serialize_group_outbound
+
+            gate = getattr(self.ctx.execution_context, "group_outbound_gate", None)
+            async with serialize_group_outbound(event.unified_msg_origin, gate):
+                result = await event.send(chain)
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001

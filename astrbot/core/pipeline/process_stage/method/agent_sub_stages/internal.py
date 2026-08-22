@@ -1,6 +1,8 @@
 """本地 Agent 模式的 LLM 调用 Stage"""
 
 from collections.abc import AsyncGenerator
+from contextlib import nullcontext
+from copy import deepcopy
 from dataclasses import replace
 
 from astrbot import logger
@@ -26,6 +28,14 @@ from astrbot.core.astr_main_agent import (
     MainAgentBuildConfig,
     MainAgentBuildResult,
     build_main_agent,
+)
+from astrbot.core.conversation_mgr import load_sanitized_history
+from astrbot.core.group_sender_concurrency import (
+    ConcurrentTurn,
+    bind_concurrent_turn,
+    is_group_sender_concurrent,
+    sender_id_of,
+    session_lock_key,
 )
 from astrbot.core.message.components import (
     ComponentType,
@@ -55,6 +65,27 @@ from ....context import PipelineContext, call_event_hook
 _FALLBACK_HISTORY_COMMITTER = AssistantHistoryCommitter()
 _STOP_HISTORY_USER_TEXT = "Stop output."
 _STOP_HISTORY_ASSISTANT_TEXT = "Output stopped."
+
+
+def _history_merge_fields(
+    base_history: object,
+    message_to_save: list[dict],
+    checkpoint_id: str | None,
+) -> tuple[list | None, int | None, int | None]:
+    if not isinstance(base_history, list):
+        return None, None, None
+    unit_start = next(
+        (
+            index
+            for index in range(len(message_to_save) - 1, -1, -1)
+            if message_to_save[index].get("role") == "user"
+        ),
+        None,
+    )
+    expected_total = len(message_to_save) + 1
+    if checkpoint_id:
+        expected_total += 1
+    return base_history, unit_start, expected_total
 
 
 class InternalAgentSubStage:
@@ -164,6 +195,88 @@ class InternalAgentSubStage:
             timezone=self.ctx.execution_context.get_config().get("timezone"),
             max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
         )
+
+    def _prepare_group_sender_concurrency(
+        self,
+        event: AstrMessageEvent,
+        streaming_response: bool,
+    ) -> tuple[bool, str, object, bool]:
+        concurrent = is_group_sender_concurrent(event, self._profile_config(event))
+        if concurrent:
+            streaming_response = False
+        lock_key = session_lock_key(
+            event.unified_msg_origin,
+            sender_id_of(event),
+            concurrent=concurrent,
+        )
+        outbound_gate = getattr(
+            self.ctx.execution_context,
+            "group_outbound_gate",
+            None,
+        )
+        turn_cm: object = nullcontext()
+        if concurrent and outbound_gate is not None:
+            turn_cm = bind_concurrent_turn(
+                ConcurrentTurn(
+                    umo=event.unified_msg_origin,
+                    event=event,
+                    gate=outbound_gate,
+                )
+            )
+            event.set_extra("_group_outbound_turn", True)
+            event.set_extra("_group_outbound_gate", outbound_gate)
+            event.set_extra("_group_outbound_umo", event.unified_msg_origin)
+        return concurrent, lock_key, turn_cm, streaming_response
+
+    def _register_follow_up_runner(
+        self,
+        event: AstrMessageEvent,
+        agent_runner: AgentRunner,
+        concurrent: bool,
+    ) -> None:
+        sender_id = sender_id_of(event) if concurrent else None
+        event.set_extra("_follow_up_sender_id", sender_id)
+        if sender_id:
+            self.ctx.execution_context.follow_up_coordinator.register_active_runner(
+                event.unified_msg_origin,
+                agent_runner,
+                sender_id=sender_id,
+            )
+            return
+        self.ctx.execution_context.follow_up_coordinator.register_active_runner(
+            event.unified_msg_origin,
+            agent_runner,
+        )
+
+    def _unregister_follow_up_runner(
+        self,
+        event: AstrMessageEvent,
+        agent_runner: AgentRunner,
+    ) -> None:
+        sender_id = event.get_extra("_follow_up_sender_id")
+        if sender_id:
+            self.ctx.execution_context.follow_up_coordinator.unregister_active_runner(
+                event.unified_msg_origin,
+                agent_runner,
+                sender_id=sender_id,
+            )
+            return
+        self.ctx.execution_context.follow_up_coordinator.unregister_active_runner(
+            event.unified_msg_origin,
+            agent_runner,
+        )
+
+    def _profile_config(self, event: AstrMessageEvent) -> dict:
+        getter = getattr(self.ctx.execution_context, "get_config", None)
+        if callable(getter):
+            try:
+                config = getter(umo=event.unified_msg_origin)
+            except TypeError:
+                config = getter()
+            if isinstance(config, dict):
+                return config
+        config = getattr(self.ctx, "astrbot_config", None)
+        return config if isinstance(config, dict) else {}
 
     async def _send_llm_error_message(self, event: AstrMessageEvent) -> None:
         await event.send(MessageChain().message(get_agent_error_message(event)))
@@ -343,8 +456,13 @@ class InternalAgentSubStage:
             ):
                 return
 
-            async with self.ctx.execution_context.session_lock_manager.acquire_lock(
-                event.unified_msg_origin
+            concurrent, lock_key, turn_cm, streaming_response = (
+                self._prepare_group_sender_concurrency(event, streaming_response)
+            )
+
+            async with (
+                turn_cm,
+                self.ctx.execution_context.session_lock_manager.acquire_lock(lock_key),
             ):
                 logger.debug("acquired session lock for llm request")
                 agent_runner: AgentRunner | None = None
@@ -373,6 +491,11 @@ class InternalAgentSubStage:
                     )
                     provider = build_result.provider
                     reset_coro = build_result.reset_coro
+                    if concurrent and req.conversation is not None:
+                        event.set_extra(
+                            "_history_merge_base",
+                            deepcopy(load_sanitized_history(req.conversation.history)),
+                        )
 
                     stream_to_general = (
                         self.unsupported_streaming_strategy == "turn_off"
@@ -413,10 +536,7 @@ class InternalAgentSubStage:
                             )
                         else:
                             runner_stop_callback = None
-                    self.ctx.execution_context.follow_up_coordinator.register_active_runner(
-                        event.unified_msg_origin,
-                        agent_runner,
-                    )
+                    self._register_follow_up_runner(event, agent_runner, concurrent)
                     runner_registered = True
                     action_type = event.get_extra("action_type")
 
@@ -532,10 +652,7 @@ class InternalAgentSubStage:
                     )
                 finally:
                     if runner_registered and agent_runner is not None:
-                        self.ctx.execution_context.follow_up_coordinator.unregister_active_runner(
-                            event.unified_msg_origin,
-                            agent_runner,
-                        )
+                        self._unregister_follow_up_runner(event, agent_runner)
                     if runner_stop_callback is not None:
                         self.ctx.execution_context.active_event_registry.unregister_agent_stop_callback(
                             event,
@@ -661,6 +778,11 @@ class InternalAgentSubStage:
         run_id = event.get_extra("run_id")
         if run_id is None:
             run_id = getattr(getattr(event, "message_obj", None), "message_id", None)
+        base_history, unit_start, expected_total = _history_merge_fields(
+            event.get_extra("_history_merge_base"),
+            message_to_save,
+            checkpoint_id,
+        )
         return build_pending_assistant_history(
             unified_msg_origin=event.unified_msg_origin,
             conversation_id=req.conversation.cid,
@@ -674,6 +796,9 @@ class InternalAgentSubStage:
                 "user_aborted": user_aborted,
                 "token_usage": getattr(runner_stats, "token_usage", None),
             },
+            base_history=base_history,
+            unit_start=unit_start,
+            expected_total=expected_total,
         )
 
     async def _capture_pending_history(

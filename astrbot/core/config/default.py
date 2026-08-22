@@ -57,6 +57,7 @@ DEFAULT_CONFIG = {
     "config_version": 2,
     "platform_settings": {
         "unique_session": False,
+        "group_sender_concurrency": False,
         "rate_limit": {
             "time": 60,
             "count": 30,
@@ -1017,6 +1018,9 @@ CONFIG_METADATA_2 = {
                 "type": "object",
                 "items": {
                     "unique_session": {
+                        "type": "bool",
+                    },
+                    "group_sender_concurrency": {
                         "type": "bool",
                     },
                     "rate_limit": {
@@ -4024,6 +4028,11 @@ CONFIG_METADATA_3 = {
                         "description": "隔离会话",
                         "type": "bool",
                         "hint": "启用后，群成员的上下文独立。",
+                    },
+                    "platform_settings.group_sender_concurrency": {
+                        "description": "群发送者并发（实验性）",
+                        "type": "bool",
+                        "hint": "实验性，默认关闭。同群不同发送者可并行生成，但整轮发送仍按群排队；与隔离会话互斥；会关闭同群流式，分段/合并转发可能交错。",
                     },
                     "wake_prefix": {
                         "description": "唤醒词",

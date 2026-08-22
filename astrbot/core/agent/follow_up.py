@@ -41,32 +41,60 @@ class FollowUpCapture:
     order_seq: int
     monitor_task: asyncio.Task[None]
     target_run_id: str | None = None
+    order_key: str | tuple[str, str] | None = None
+
+    def _state_key(self) -> str | tuple[str, str]:
+        return self.order_key if self.order_key is not None else self.umo
 
 
 class FollowUpCoordinator:
     """Track active Agent runs and ordered follow-up captures for one runtime."""
 
     def __init__(self) -> None:
-        self._active_runners: dict[str, Any] = {}
-        self._order_states: dict[str, dict[str, object]] = {}
+        self._active_runners: dict[str | tuple[str, str], Any] = {}
+        self._order_states: dict[str | tuple[str, str], dict[str, object]] = {}
         self._monitor_tasks: set[asyncio.Task[None]] = set()
 
-    def register_active_runner(self, umo: str, runner: Any) -> None:
+    def register_active_runner(
+        self,
+        umo: str,
+        runner: Any,
+        *,
+        sender_id: str | None = None,
+    ) -> None:
         """Make a runner eligible to receive a matching follow-up message."""
-        self._active_runners[umo] = runner
+        self._active_runners[self._runner_key(umo, sender_id)] = runner
 
-    def unregister_active_runner(self, umo: str, runner: Any) -> None:
-        """Remove a runner only when it is still the active one for its UMO."""
-        if self._active_runners.get(umo) is runner:
-            self._active_runners.pop(umo, None)
-        self._release_order_state_if_idle(umo)
+    def unregister_active_runner(
+        self,
+        umo: str,
+        runner: Any,
+        *,
+        sender_id: str | None = None,
+    ) -> None:
+        """Remove a runner only when it is still the active one for its key."""
+        key = self._runner_key(umo, sender_id)
+        if self._active_runners.get(key) is runner:
+            self._active_runners.pop(key, None)
+        self._release_order_state_if_idle(key)
+
+    @staticmethod
+    def _runner_key(umo: str, sender_id: str | None) -> str | tuple[str, str]:
+        if sender_id:
+            return (umo, sender_id)
+        return umo
 
     def try_capture(self, event: FollowUpEvent) -> FollowUpCapture | None:
         """Capture an inbound message when it belongs to an active Agent run."""
         sender_id = event.get_sender_id()
         if not sender_id:
             return None
-        runner = self._active_runners.get(event.unified_msg_origin)
+        umo = event.unified_msg_origin
+        runner = self._active_runners.get((umo, sender_id))
+        order_key: str | tuple[str, str] = (umo, sender_id)
+        if runner is None:
+            runner = self._active_runners.get(umo)
+            order_key = umo
         if runner is None:
             return None
         runner_event = getattr(getattr(runner, "run_context", None), "context", None)
@@ -82,9 +110,9 @@ class FollowUpCoordinator:
         ticket = runner.follow_up(message_text=self._event_follow_up_text(event))
         if ticket is None:
             return None
-        order_seq = self._allocate_order(event.unified_msg_origin)
+        order_seq = self._allocate_order(order_key)
         monitor_task = asyncio.create_task(
-            self._monitor_ticket(event.unified_msg_origin, ticket, order_seq),
+            self._monitor_ticket(order_key, ticket, order_seq),
             name="follow_up_ticket_monitor",
         )
         self._monitor_tasks.add(monitor_task)
@@ -104,15 +132,16 @@ class FollowUpCoordinator:
             target_run_id=str(runner_message_id)
             if runner_message_id is not None
             else None,
+            order_key=order_key,
         )
 
     async def prepare_capture(self, capture: FollowUpCapture) -> tuple[bool, bool]:
         """Wait for a captured ticket and reserve its ordered continuation slot."""
         await capture.ticket.resolved.wait()
         if capture.ticket.consumed:
-            await self._mark_consumed(capture.umo, capture.order_seq)
+            await self._mark_consumed(capture._state_key(), capture.order_seq)
             return True, False
-        await self._activate_and_wait(capture.umo, capture.order_seq)
+        await self._activate_and_wait(capture._state_key(), capture.order_seq)
         return False, True
 
     async def finalize_capture(
@@ -131,9 +160,9 @@ class FollowUpCoordinator:
                 pass
 
         if activated:
-            await self._finish(capture.umo, capture.order_seq)
+            await self._finish(capture._state_key(), capture.order_seq)
         elif not consumed_marked:
-            await self._mark_consumed(capture.umo, capture.order_seq)
+            await self._mark_consumed(capture._state_key(), capture.order_seq)
 
     async def terminate(self) -> None:
         """Cancel pending monitors and discard state held by this runtime."""
@@ -151,8 +180,8 @@ class FollowUpCoordinator:
         text = (event.get_message_str() or "").strip()
         return text or event.get_message_outline().strip()
 
-    def _get_order_state(self, umo: str) -> dict[str, object]:
-        state = self._order_states.get(umo)
+    def _get_order_state(self, key: str | tuple[str, str]) -> dict[str, object]:
+        state = self._order_states.get(key)
         if state is None:
             state = {
                 "condition": asyncio.Condition(),
@@ -160,11 +189,11 @@ class FollowUpCoordinator:
                 "next_order": 0,
                 "next_turn": 0,
             }
-            self._order_states[umo] = state
+            self._order_states[key] = state
         return state
 
-    def _allocate_order(self, umo: str) -> int:
-        state = self._get_order_state(umo)
+    def _allocate_order(self, key: str | tuple[str, str]) -> int:
+        state = self._get_order_state(key)
         next_order = state["next_order"]
         assert isinstance(next_order, int)
         state["next_order"] = next_order + 1
@@ -184,17 +213,17 @@ class FollowUpCoordinator:
             next_turn += 1
         state["next_turn"] = next_turn
 
-    def _release_order_state_if_idle(self, umo: str) -> None:
-        state = self._order_states.get(umo)
-        if state is None or self._active_runners.get(umo) is not None:
+    def _release_order_state_if_idle(self, key: str | tuple[str, str]) -> None:
+        state = self._order_states.get(key)
+        if state is None or self._active_runners.get(key) is not None:
             return
         statuses = state["statuses"]
         assert isinstance(statuses, dict)
         if not statuses:
-            self._order_states.pop(umo, None)
+            self._order_states.pop(key, None)
 
-    async def _mark_consumed(self, umo: str, sequence: int) -> None:
-        state = self._order_states.get(umo)
+    async def _mark_consumed(self, key: str | tuple[str, str], sequence: int) -> None:
+        state = self._order_states.get(key)
         if state is None:
             return
         condition = state["condition"]
@@ -206,10 +235,12 @@ class FollowUpCoordinator:
                 statuses[sequence] = "consumed"
             self._advance_turn_locked(state)
             condition.notify_all()
-        self._release_order_state_if_idle(umo)
+        self._release_order_state_if_idle(key)
 
-    async def _activate_and_wait(self, umo: str, sequence: int) -> None:
-        state = self._order_states.get(umo)
+    async def _activate_and_wait(
+        self, key: str | tuple[str, str], sequence: int
+    ) -> None:
+        state = self._order_states.get(key)
         if state is None:
             return
         condition = state["condition"]
@@ -222,8 +253,8 @@ class FollowUpCoordinator:
             while state["next_turn"] != sequence:
                 await condition.wait()
 
-    async def _finish(self, umo: str, sequence: int) -> None:
-        state = self._order_states.get(umo)
+    async def _finish(self, key: str | tuple[str, str], sequence: int) -> None:
+        state = self._order_states.get(key)
         if state is None:
             return
         condition = state["condition"]
@@ -235,14 +266,14 @@ class FollowUpCoordinator:
                 statuses[sequence] = "finished"
             self._advance_turn_locked(state)
             condition.notify_all()
-        self._release_order_state_if_idle(umo)
+        self._release_order_state_if_idle(key)
 
     async def _monitor_ticket(
         self,
-        umo: str,
+        key: str | tuple[str, str],
         ticket: FollowUpTicket,
         order_seq: int,
     ) -> None:
         await ticket.resolved.wait()
         if ticket.consumed:
-            await self._mark_consumed(umo, order_seq)
+            await self._mark_consumed(key, order_seq)
