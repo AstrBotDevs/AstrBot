@@ -132,6 +132,7 @@
             "author": "Автор",
             "category": "Категория",
             "stars": "Звезды",
+            "updatedAt": "Обновлено",
             "tags": "Теги",
             "astrbotVersion": "Требуемая версия AstrBot",
             "supportPlatforms": "Поддерживаемые платформы",
