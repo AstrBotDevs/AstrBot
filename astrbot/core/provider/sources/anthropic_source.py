@@ -131,7 +131,11 @@ class ProviderAnthropic(Provider):
         try:
             from anthropic import _base_client as anthropic_base_client
 
-            httpx_module = getattr(anthropic_base_client, "httpx", httpx)
+            httpx_module = getattr(
+                anthropic_base_client,
+                "httpx2",
+                getattr(anthropic_base_client, "httpx", httpx),
+            )
         except ImportError:
             pass
         return create_proxy_client(
