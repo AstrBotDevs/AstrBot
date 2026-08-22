@@ -1,6 +1,10 @@
+from typing import Any
+
+import httpx
 from openai import NOT_GIVEN, AsyncOpenAI
 
 from astrbot.core.utils.media_utils import MediaResolver
+from astrbot.core.utils.network_utils import create_proxy_client
 
 from ..entities import ProviderType
 from ..provider import STTProvider
@@ -25,9 +29,26 @@ class ProviderOpenAIWhisperAPI(STTProvider):
             api_key=self.chosen_api_key,
             base_url=provider_config.get("api_base"),
             timeout=provider_config.get("timeout", NOT_GIVEN),
+            http_client=self._create_http_client(provider_config),
         )
 
         self.set_model(provider_config["model"])
+
+    @staticmethod
+    def _create_http_client(provider_config: dict) -> httpx.AsyncClient:
+        """Create an HTTP client that honors the provider proxy setting."""
+        proxy = provider_config.get("proxy", "")
+        httpx_module: Any = httpx
+        try:
+            # The OpenAI SDK can bundle its own compatible httpx module.
+            from openai import _base_client as openai_base_client
+
+            httpx_module = getattr(openai_base_client, "httpx", httpx)
+        except ImportError:
+            pass
+        return create_proxy_client(
+            "OpenAI Whisper", proxy, httpx_module=httpx_module
+        )
 
     async def get_text(self, audio_url: str) -> str:
         """Only supports mp3, mp4, mpeg, m4a, wav, webm"""
