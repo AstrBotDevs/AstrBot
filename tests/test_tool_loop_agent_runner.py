@@ -183,6 +183,28 @@ class MockFailingProvider(MockProvider):
         raise RuntimeError("primary provider failed")
 
 
+class MockUsageFailingProvider(MockProvider):
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        error = RuntimeError("primary response parsing failed")
+        error._astrbot_token_usage = TokenUsage(  # type: ignore[attr-defined]
+            input_other=8,
+            input_cached=4,
+            output=6,
+        )
+        raise error
+
+
+class MockUsageErrProvider(MockProvider):
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        return LLMResponse(
+            role="err",
+            completion_text="provider returned error",
+            usage=TokenUsage(input_other=3, input_cached=2, output=1),
+        )
+
+
 class MockErrProvider(MockProvider):
     async def text_chat(self, **kwargs) -> LLMResponse:
         self.call_count += 1
@@ -1211,6 +1233,47 @@ async def test_fallback_provider_used_when_primary_raises(
     assert final_resp.completion_text == "这是我的最终回答"
     assert primary_provider.call_count == 1
     assert fallback_provider.call_count == 1
+    assert len(runner.provider_stat_segments) == 1
+    segment = runner.provider_stat_segments[0]
+    assert segment.provider is primary_provider
+    assert segment.usage == TokenUsage()
+
+
+@pytest.mark.asyncio
+async def test_fallback_tracks_failed_primary_usage_by_provider(
+    runner,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+):
+    primary_provider = MockUsageFailingProvider()
+    primary_provider.provider_config["id"] = "primary"
+    fallback_provider = MockProvider()
+    fallback_provider.provider_config["id"] = "fallback"
+    fallback_provider.should_call_tools = False
+
+    await runner.reset(
+        provider=primary_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        fallback_providers=[fallback_provider],
+    )
+
+    async for _ in runner.step_until_done(5):
+        pass
+
+    assert runner.stats.token_usage == TokenUsage(
+        input_other=18,
+        input_cached=4,
+        output=11,
+    )
+    assert len(runner.provider_stat_segments) == 1
+    segment = runner.provider_stat_segments[0]
+    assert segment.provider is primary_provider
+    assert segment.usage == TokenUsage(input_other=8, input_cached=4, output=6)
 
 
 @pytest.mark.asyncio
@@ -1240,6 +1303,48 @@ async def test_fallback_provider_used_when_primary_returns_err(
     assert final_resp.completion_text == "这是我的最终回答"
     assert primary_provider.call_count == 1
     assert fallback_provider.call_count == 1
+    assert len(runner.provider_stat_segments) == 1
+    segment = runner.provider_stat_segments[0]
+    assert segment.provider is primary_provider
+    assert segment.usage == TokenUsage()
+
+
+@pytest.mark.asyncio
+async def test_fallback_consecutive_failures_do_not_duplicate_prior_usage(
+    runner,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+):
+    primary_provider = MockUsageErrProvider()
+    fallback_provider = MockUsageFailingProvider()
+
+    await runner.reset(
+        provider=primary_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        fallback_providers=[fallback_provider],
+    )
+
+    async for _ in runner.step_until_done(5):
+        pass
+
+    final_resp = runner.get_final_llm_resp()
+    assert final_resp is not None
+    assert final_resp.role == "err"
+    assert "RuntimeError" in final_resp.completion_text
+    assert runner.stats.token_usage == TokenUsage(
+        input_other=11,
+        input_cached=6,
+        output=7,
+    )
+    assert len(runner.provider_stat_segments) == 1
+    segment = runner.provider_stat_segments[0]
+    assert segment.provider is primary_provider
+    assert segment.usage == TokenUsage(input_other=3, input_cached=2, output=1)
 
 
 @pytest.mark.asyncio
