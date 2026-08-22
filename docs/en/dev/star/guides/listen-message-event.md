@@ -74,6 +74,10 @@ For inbound `Face` segments from OneBot v11 and NapCat, AstrBot adds readable QQ
 
 This enrichment covers the current message, quoted messages, forwarded messages, and group-chat context, and is also passed to built-in third-party Agent Runners that accept text prompts only. It does not modify `event.message_str`, the original `Face` component, or outbound messages. Plugins that need ID-based handling can continue to inspect `Face.id` directly.
 
+#### Group-chat JSON cards
+
+Group-chat JSON cards are recorded into group context, and when a proactive reply or ordinary LLM request has no text prompt they are sent as a `[Shared Card]` summary instead of the raw JSON blob.
+
 ## Commands
 
 ![message-event-simple-command](https://files.astrbot.app/docs/en/dev/star/guides/message-event-simple-command.svg)

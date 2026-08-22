@@ -9,6 +9,7 @@ from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import Image, Json, Plain
 from astrbot.api.provider import ProviderRequest
+from astrbot.core.message.json_card import json_card_prompt_from_components
 
 from .group_chat_context import GroupChatContext
 
@@ -190,6 +191,8 @@ class Main(star.Star):
                         return
 
                     prompt = event.message_str
+                    if not prompt or not prompt.strip():
+                        prompt = json_card_prompt_from_components(message_components)
                     image_urls = []
                     for comp in message_components:
                         if isinstance(comp, Image):
@@ -198,6 +201,7 @@ class Main(star.Star):
                             except Exception:
                                 logger.exception("主动回复处理图片失败")
 
+                    event.set_extra("active_reply", True)
                     yield event.request_llm(
                         prompt=prompt,
                         session_id=event.session_id,

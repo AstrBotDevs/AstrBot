@@ -175,6 +175,58 @@ async def test_active_reply_reuses_current_umo_conversation():
 
 
 @pytest.mark.asyncio
+async def test_active_reply_uses_json_card_summary_when_message_str_blank():
+    conv = SimpleNamespace(cid="cid-1")
+    conv_mgr = SimpleNamespace(
+        get_curr_conversation_id=AsyncMock(return_value="cid-1"),
+        new_conversation=AsyncMock(),
+        get_conversation=AsyncMock(return_value=conv),
+    )
+    main = make_main_with_conversation_manager(conv_mgr)
+    main.context.config.get.return_value = {
+        "provider_ltm_settings": {
+            "group_icl_enable": False,
+            "active_reply": {"enable": True},
+        },
+    }
+    main.context.models.using_chat.return_value = object()
+    main.group_chat_context = SimpleNamespace(
+        need_active_reply=AsyncMock(return_value=True),
+        handle_message=AsyncMock(),
+    )
+    card_data = {
+        "meta": {
+            "detail_1": {
+                "title": "WeChat AI models",
+                "desc": "AI learning",
+                "qqdocurl": "https://example.com/detail",
+            }
+        }
+    }
+    event = make_event()
+    event.message_str = "   "
+    event.message_obj.message = [Json(data=card_data)]
+    llm_request = object()
+    event.request_llm.return_value = llm_request
+
+    results = [item async for item in main.on_message(event)]
+
+    assert results == [llm_request]
+    event.request_llm.assert_called_once_with(
+        prompt=(
+            "[Shared Card: Title: WeChat AI models; Description: AI learning; "
+            "URL: https://example.com/detail]"
+        ),
+        session_id="session-1",
+        image_urls=[],
+        conversation=conv,
+    )
+    prompt = event.request_llm.call_args.kwargs["prompt"]
+    assert json.dumps(card_data) not in prompt
+    assert '"title"' not in prompt
+
+
+@pytest.mark.asyncio
 async def test_on_message_does_not_clear_group_context_on_first_enabled_message():
     main = Main.__new__(Main)
     main.context = MagicMock()

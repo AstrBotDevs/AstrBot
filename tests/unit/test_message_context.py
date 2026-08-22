@@ -151,7 +151,8 @@ async def test_message_context_renders_embedded_components_and_rich_messages():
     rendered = await MessageContextRenderer(event).render_event_components()
 
     assert "Mock Sender: embedded text" in (rendered.text or "")
-    assert '[JSON]\n{"mock": true}' in (rendered.text or "")
+    assert "[Shared Card]" in (rendered.text or "")
+    assert '{"mock": true}' not in (rendered.text or "")
     assert client.forward_requests == []
 
 

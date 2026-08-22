@@ -22,6 +22,7 @@ from astrbot.core.astr_main_agent import (
     append_message_component_context_to_prompt,
     prepare_event_attachments,
 )
+from astrbot.core.message.json_card import coalesce_prompt_with_json_cards
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -326,7 +327,9 @@ class ThirdPartyAgentSubStage:
         if provider_wake_prefix and not event.message_str.startswith(
             provider_wake_prefix
         ):
-            return
+            if event.message_str and event.message_str.strip():
+                return
+            provider_wake_prefix = ""
 
         self.prov_cfg: dict = next(
             (p for p in self.conf["provider"] if p["id"] == self.prov_id),
@@ -344,7 +347,10 @@ class ThirdPartyAgentSubStage:
         # make provider request
         req = ProviderRequest()
         req.session_id = event.unified_msg_origin
-        req.prompt = event.message_str[len(provider_wake_prefix) :]
+        req.prompt = coalesce_prompt_with_json_cards(
+            event,
+            event.message_str[len(provider_wake_prefix) :],
+        )
         settings = self.conf.get("provider_settings", {})
         build_config = MainAgentBuildConfig(
             tool_call_timeout=int(settings.get("tool_call_timeout", 120)),

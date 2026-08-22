@@ -45,6 +45,7 @@ from astrbot.core.memory.tools import (
     SearchMemoryTool,
 )
 from astrbot.core.message.components import File, Image, Record, Reply, Video
+from astrbot.core.message.json_card import coalesce_prompt_with_json_cards
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,
     set_persona_custom_error_message_on_event,
@@ -1532,6 +1533,7 @@ async def _prepare_request_for_agent(
         except Exception as exc:  # noqa: BLE001
             logger.error("Error occurred while applying file extract: %s", exc)
 
+    req.prompt = coalesce_prompt_with_json_cards(event, req.prompt)
     has_reply = any(isinstance(comp, Reply) for comp in event.message_obj.message)
     if not req.prompt and not req.image_urls and not req.audio_urls:
         if has_reply or req.extra_user_content_parts:
@@ -1933,12 +1935,16 @@ async def build_main_agent(
             req.audio_urls = []
             if sel_model := event.get_extra("selected_model"):
                 req.model = sel_model
-            if config.provider_wake_prefix and not event.message_str.startswith(
-                config.provider_wake_prefix
-            ):
-                return None
+            wake_prefix = config.provider_wake_prefix
+            if wake_prefix and not event.message_str.startswith(wake_prefix):
+                if event.message_str and event.message_str.strip():
+                    return None
+                wake_prefix = ""
 
-            req.prompt = event.message_str[len(config.provider_wake_prefix) :]
+            req.prompt = coalesce_prompt_with_json_cards(
+                event,
+                event.message_str[len(wake_prefix) :],
+            )
 
             conversation = await _get_session_conv(event, plugin_context)
             req.conversation = conversation

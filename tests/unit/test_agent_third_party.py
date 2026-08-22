@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
+from astrbot.core.message.components import Json
 from tests.unit.agent_sub_stage_support import *  # noqa: F403
 
 
@@ -489,6 +492,76 @@ async def test_third_party_process_returns_early_when_wake_prefix_does_not_match
 
     assert yielded == []
     assert event.result_history == []
+
+
+@pytest.mark.asyncio
+async def test_third_party_process_uses_json_card_summary_when_prompt_is_empty(
+    monkeypatch,
+):
+    stage = third_party.ThirdPartyAgentSubStage.__new__(
+        third_party.ThirdPartyAgentSubStage
+    )
+    stage.prov_id = "runner-1"
+    stage.runner_type = "dify"
+    stage.streaming_response = False
+    stage.unsupported_streaming_strategy = "ignore"
+    stage.stream_consumption_close_timeout_sec = 1
+    stage.ctx = _pipeline_context(SimpleNamespace())
+    stage.conf = {"provider_settings": {}, "provider": [{"id": "runner-1"}]}
+    card_data = {"meta": {"news": {"title": "News"}}}
+    event = FakeInternalProcessEvent(
+        message_str="",
+        message_components=[Json(data=card_data)],
+    )
+    runner = FakeThirdPartyRunner()
+    captured: list[object] = []
+
+    class FakeDifyRunner:
+        def __new__(cls):
+            return runner
+
+        @classmethod
+        def __class_getitem__(cls, _item):
+            return cls
+
+    async def fake_non_streaming_response(**kwargs):
+        captured.append(kwargs)
+        yield
+
+    stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
+    monkeypatch.setattr(
+        third_party,
+        "set_persona_custom_error_message_on_event",
+        MagicMock(),
+    )
+    monkeypatch.setattr(third_party, "call_event_hook", AsyncMock(return_value=False))
+    monkeypatch.setattr(third_party, "DifyAgentRunner", FakeDifyRunner)
+    monkeypatch.setattr(
+        third_party,
+        "AstrAgentContext",
+        lambda context, event: SimpleNamespace(context=context, event=event),
+    )
+    monkeypatch.setattr(
+        third_party,
+        "AgentContextWrapper",
+        lambda context, tool_call_timeout: SimpleNamespace(
+            context=context,
+            tool_call_timeout=tool_call_timeout,
+        ),
+    )
+    monkeypatch.setattr(
+        stage, "_handle_non_streaming_response", fake_non_streaming_response
+    )
+    _set_metrics_upload(stage, AsyncMock())
+
+    yielded = [item async for item in stage.process(event, provider_wake_prefix="")]
+    await asyncio.sleep(0)
+
+    assert yielded == [None]
+    req = runner.reset.await_args.kwargs["request"]
+    assert "[Shared Card: Title: News]" in req.prompt
+    assert json.dumps(card_data) not in req.prompt
+    assert captured
 
 
 @pytest.mark.asyncio

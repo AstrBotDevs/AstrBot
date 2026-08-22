@@ -1,6 +1,7 @@
 """Tests for astr_main_agent module."""
 
 import datetime
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -12,7 +13,7 @@ from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import Message, TextPart, dump_messages_with_checkpoints
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.conversation_models import Conversation
-from astrbot.core.message.components import Face, File, Image, Plain, Reply, Video
+from astrbot.core.message.components import Face, File, Image, Json, Plain, Reply, Video
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
@@ -2353,6 +2354,93 @@ class TestBuildMainAgent:
         )
 
         assert result is None
+
+    @pytest.mark.asyncio
+    async def test_prepare_request_for_agent_uses_json_card_summary(
+        self, mock_event, mock_context, mock_provider
+    ):
+        module = ama
+        card_data = {"meta": {"news": {"title": "News"}}}
+        mock_event.message_str = ""
+        mock_event.message_obj.message = [Json(data=card_data)]
+        req = ProviderRequest(prompt="")
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            llm_safety_mode=False,
+            computer_use_runtime="none",
+        )
+
+        with (
+            patch.object(module, "_decorate_llm_request", AsyncMock()),
+            patch.object(module, "_apply_kb", AsyncMock()),
+            patch.object(module, "_apply_web_search_tools", AsyncMock()),
+            patch.object(module, "_plugin_tool_fix"),
+        ):
+            ok = await module._prepare_request_for_agent(
+                mock_event,
+                req,
+                mock_context,
+                config,
+                mock_provider,
+            )
+
+        assert ok is True
+        assert req.prompt == "[Shared Card: Title: News]"
+        assert json.dumps(card_data) not in req.prompt
+
+    @pytest.mark.asyncio
+    async def test_prepare_request_for_agent_skips_truly_empty_message(
+        self, mock_event, mock_context, mock_provider
+    ):
+        module = ama
+        mock_event.message_str = ""
+        mock_event.message_obj.message = []
+        req = ProviderRequest(prompt="")
+        config = module.MainAgentBuildConfig(tool_call_timeout=60)
+
+        ok = await module._prepare_request_for_agent(
+            mock_event,
+            req,
+            mock_context,
+            config,
+            mock_provider,
+        )
+
+        assert ok is False
+        assert not req.prompt
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_json_card_prompt(
+        self, mock_event, mock_context, mock_provider
+    ):
+        module = ama
+        mock_event.message_str = ""
+        mock_event.message_obj.message = [
+            Json(data={"meta": {"news": {"title": "News"}}})
+        ]
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+            )
+
+        assert result is not None
+        assert "[Shared Card: Title: News]" in result.provider_request.prompt
+        assert '{"meta"' not in result.provider_request.prompt
 
     @pytest.mark.asyncio
     async def test_build_main_agent_apply_reset_false(

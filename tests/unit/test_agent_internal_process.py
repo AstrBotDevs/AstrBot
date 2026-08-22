@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from astrbot.core.message.components import Json
 from tests.unit.agent_sub_stage_support import *  # noqa: F403
 
 
@@ -37,6 +38,7 @@ async def test_internal_process_skips_empty_messages_without_provider_request(
     [
         [Reply(id="reply-1")],
         [Image(file="https://example.com/image.png")],
+        [Json(data={"meta": {"news": {"title": "News"}}})],
     ],
 )
 async def test_internal_process_accepts_non_text_messages_with_reply_or_media(

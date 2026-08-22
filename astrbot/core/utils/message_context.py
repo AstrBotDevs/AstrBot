@@ -35,6 +35,7 @@ from astrbot.core.message.components import (
     Video,
     Xml,
 )
+from astrbot.core.message.json_card import format_json_card_prompt
 from astrbot.core.message.qq_face import format_qq_face
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
@@ -88,8 +89,9 @@ def _render_simple_component(
 
 
 def _render_metadata_component(component: BaseMessageComponent) -> str:
+    if isinstance(component, Json):
+        return format_json_card_prompt(component)
     for component_type, prefix, attribute in (
-        (Json, "[JSON]\n", "data"),
         (Xml, "[XML]\n", "data"),
         (Markdown, "[Markdown]\n", "content"),
         (MiniApp, "[MiniApp]\n", "data"),

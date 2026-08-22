@@ -74,6 +74,10 @@ class AstrBotMessage:
 
 这项补全覆盖当前消息、引用消息、合并转发和群聊上下文，也会传给仅接受文本 prompt 的内置第三方 Agent Runner。它不会修改 `event.message_str`、原始 `Face` 组件或出站消息；插件如需按编号处理表情，仍可直接检查 `Face.id`。
 
+#### 群聊 JSON 卡片
+
+群聊 JSON 卡片会记入群聊上下文，并在主动回复或普通 LLM 请求没有文本 prompt 时作为 `[Shared Card]` 卡片摘要进入模型输入，而不会把原始 JSON 整段塞进 prompt。
+
 ## 指令
 
 ![message-event-simple-command](https://files.astrbot.app/docs/zh/dev/star/guides/message-event-simple-command.svg)
