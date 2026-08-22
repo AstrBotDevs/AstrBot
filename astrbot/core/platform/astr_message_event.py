@@ -13,7 +13,7 @@ from astrbot import logger
 from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.auth.models import AuthContext, Resource, Subject
-from astrbot.core.db.po import Conversation
+from astrbot.core.conversation_models import Conversation
 from astrbot.core.message.components import (
     RPS,
     Anonymous,

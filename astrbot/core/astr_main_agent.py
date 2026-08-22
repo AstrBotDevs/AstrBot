@@ -34,8 +34,8 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
 from astrbot.core.computer.booters.local import resolve_windows_shell
-from astrbot.core.conversation_mgr import Conversation, load_sanitized_history
-from astrbot.core.db.po import Personality
+from astrbot.core.conversation_mgr import load_sanitized_history
+from astrbot.core.conversation_models import Conversation
 from astrbot.core.db.protocols import PlatformSessionStore
 from astrbot.core.execution_context import CoreExecutionContext
 from astrbot.core.memory.tools import (
@@ -49,6 +49,7 @@ from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,
     set_persona_custom_error_message_on_event,
 )
+from astrbot.core.persona_runtime.models import Personality
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.skills.skill_manager import (

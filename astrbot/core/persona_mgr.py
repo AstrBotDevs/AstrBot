@@ -1,7 +1,8 @@
 from astrbot import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
-from astrbot.core.db.po import Persona, PersonaFolder, Personality
+from astrbot.core.db.po import Persona, PersonaFolder
 from astrbot.core.db.protocols import PersonaStore
+from astrbot.core.persona_runtime.models import Personality
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.sentinels import NOT_GIVEN
 from astrbot.core.utils.shared_preferences import SharedPreferences

@@ -33,7 +33,7 @@ from astrbot.core.star.config import *
 
 # provider
 from astrbot.core.provider import Provider, ProviderMetaData
-from astrbot.core.db.po import Personality
+from astrbot.core.persona_runtime.models import Personality
 
 # platform
 from astrbot.core.platform import (

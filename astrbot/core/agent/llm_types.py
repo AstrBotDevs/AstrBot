@@ -17,7 +17,7 @@ from astrbot.core.agent.message import (
     is_checkpoint_message,
 )
 from astrbot.core.agent.tool import ToolSet
-from astrbot.core.db.po import Conversation
+from astrbot.core.conversation_models import Conversation
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.media_utils import MediaResolver
 

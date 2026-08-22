@@ -11,7 +11,7 @@ from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import Message, TextPart, dump_messages_with_checkpoints
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.conversation_mgr import Conversation
+from astrbot.core.conversation_models import Conversation
 from astrbot.core.message.components import Face, File, Image, Plain, Reply, Video
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.platform_metadata import PlatformMetadata
