@@ -100,7 +100,7 @@ def test_every_sqlite_domain_operation_is_owned_by_a_protocol():
 def test_platform_manager_injects_a_narrow_webchat_storage_port():
     """PlatformManager must not take a dependency on SQLiteDatabase."""
     manager_path = (
-        Path(__file__).parents[2] / "astrbot" / "core" / "platform" / "manager.py"
+        Path(__file__).parents[3] / "astrbot" / "core" / "platform" / "manager.py"
     )
     manager_tree = ast.parse(manager_path.read_text(encoding="utf-8"))
     imported_modules = {

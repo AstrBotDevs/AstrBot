@@ -1556,6 +1556,29 @@ async def test_api_key_capability_is_exact_and_rejects_high_risk(authorization):
 
 
 @pytest.mark.asyncio
+async def test_grant_capability_uses_store_upsert_and_revives(authorization):
+    key = Subject.api_key("store-cap")
+    resource = Resource.named("provider", "schema", config_id="default")
+    first = await authorization.grant_capability(
+        subject=key,
+        action="provider.read",
+        resource=resource,
+        created_by="alice",
+    )
+    second = await authorization.grant_capability(
+        subject=key,
+        action="provider.read",
+        resource=resource,
+        created_by="bob",
+    )
+
+    assert first.capability_id == second.capability_id
+    assert second.created_by == "bob"
+    assert second.revoked_at is None
+    assert await authorization._capability_allows(key, "provider.read", resource)
+
+
+@pytest.mark.asyncio
 async def test_upgrade_preflight_blocks_wildcard_and_unmapped_bindings(authorization):
     from astrbot.core.auth.preflight import inspect_authorization_upgrade
     from astrbot.core.db.po import ApiKey
