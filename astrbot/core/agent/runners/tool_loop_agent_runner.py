@@ -33,6 +33,10 @@ from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
     MessageChain,
 )
+from astrbot.core.utils.media_utils import (
+    ResolvedMediaData,
+    normalize_image_for_provider,
+)
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_event,
 )
@@ -1039,10 +1043,25 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     text=f"[Image from tool '{cached_img.tool_name}', path='{cached_img.file_path}']"
                                 )
                             )
+                            normalized = normalize_image_for_provider(
+                                ResolvedMediaData(
+                                    base64_data=base64_data,
+                                    mime_type=mime_type,
+                                    format=None,
+                                )
+                            )
+                            if normalized is None:
+                                logger.warning(
+                                    "Skip cached image for provider review: unsupported "
+                                    "tool image mime_type=%s path=%s",
+                                    mime_type,
+                                    cached_img.file_path,
+                                )
+                                continue
                             image_parts.append(
                                 ImageURLPart(
                                     image_url=ImageURLPart.ImageURL(
-                                        url=f"data:{mime_type};base64,{base64_data}",
+                                        url=normalized.to_data_url(),
                                         id=cached_img.file_path,
                                     )
                                 )
