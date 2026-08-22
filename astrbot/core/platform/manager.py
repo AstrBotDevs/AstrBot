@@ -131,6 +131,19 @@ class PlatformManager:
                 platform_config["type"],
                 platform_config["id"],
             )
+            if any(
+                inst.meta().id == platform_config["id"] for inst in self.platform_insts
+            ):
+                # Proactive messages are routed by platform ID; loading two
+                # adapters with the same ID would silently deliver them
+                # through the wrong account (#9742).
+                logger.error(
+                    "Duplicate platform ID %r: an adapter with this ID is "
+                    "already loaded. Skipping this adapter. Rename one of "
+                    "the duplicated adapters in the dashboard.",
+                    platform_config["id"],
+                )
+                return
             match platform_config["type"]:
                 case "aiocqhttp":
                     from .sources.aiocqhttp.aiocqhttp_platform_adapter import (
