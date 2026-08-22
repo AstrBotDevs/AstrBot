@@ -1074,13 +1074,11 @@ async def test_encode_image_bs64_supports_file_uri(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_resolve_image_part_supports_base64_scheme():
+async def test_resolve_image_part_rejects_non_image_base64_payload():
     provider = _make_provider()
     try:
-        assert await provider._resolve_image_part("base64://abcd") == {
-            "type": "image_url",
-            "image_url": {"url": "data:image/jpeg;base64,abcd"},
-        }
+        # "abcd" decodes to bytes that cannot be identified as an image.
+        assert await provider._resolve_image_part("base64://abcd") is None
     finally:
         await provider.terminate()
 
@@ -1225,7 +1223,7 @@ async def test_audio_preprocess_failure_does_not_log_media_ref(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_prepare_chat_payload_keeps_original_context_image_when_materialization_fails(
+async def test_prepare_chat_payload_replaces_unresolvable_context_image_with_text(
     monkeypatch,
 ):
     provider = _make_provider()
@@ -1268,12 +1266,7 @@ async def test_prepare_chat_payload_keeps_original_context_image_when_materializ
 
         assert payloads["messages"][0]["content"] == [
             {"type": "text", "text": "look"},
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": "https://example.com/expired.png",
-                },
-            },
+            {"type": "text", "text": "[image omitted]"},
         ]
     finally:
         await provider.terminate()
@@ -2199,5 +2192,110 @@ async def test_query_filters_empty_list_content_assistant_message(monkeypatch):
         assert len(messages) == 2
         assert messages[0] == {"role": "user", "content": "hi"}
         assert messages[1] == {"role": "user", "content": "again"}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_handle_api_error_unsupported_image_removes_images_and_retries_text_only():
+    provider = _make_provider()
+    try:
+        payloads = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "hello"},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "data:image/jpeg;base64,abcd"},
+                        },
+                    ],
+                }
+            ]
+        }
+        context_query = payloads["messages"]
+        err = _ErrorWithBody(
+            "upstream error",
+            {
+                "error": {
+                    "code": "INVALID_REQUEST_ERROR",
+                    "message": (
+                        ".messages[67].image[0]: You have uploaded an "
+                        "unsupported image. Please make sure your image is valid "
+                        "and has one of the following formats: webp, png, jpeg, "
+                        "and gif."
+                    ),
+                }
+            },
+        )
+
+        success, *_rest = await provider._handle_api_error(
+            err,
+            payloads=payloads,
+            context_query=context_query,
+            func_tool=None,
+            chosen_key="test-key",
+            available_api_keys=["test-key"],
+            retry_cnt=0,
+            max_retries=10,
+        )
+
+        assert success is False
+        assert payloads["messages"][0]["content"] == [{"type": "text", "text": "hello"}]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_resolve_image_part_converts_bmp_to_jpeg():
+    provider = _make_provider()
+    try:
+        image_buffer = BytesIO()
+        PILImage.new("RGB", (2, 2), (255, 0, 0)).save(image_buffer, format="BMP")
+        image_base64 = base64.b64encode(image_buffer.getvalue()).decode("ascii")
+
+        image_part = await provider._resolve_image_part(f"base64://{image_base64}")
+
+        assert image_part is not None
+        assert image_part["type"] == "image_url"
+        url = image_part["image_url"]["url"]
+        assert url.startswith("data:image/jpeg;base64,")
+        raw = base64.b64decode(url.split(",", 1)[1])
+        assert PILImage.open(BytesIO(raw)).format == "JPEG"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_resolve_image_part_returns_none_for_unsupported_svg():
+    provider = _make_provider()
+    try:
+        svg = b"<svg xmlns='http://www.w3.org/2000/svg'></svg>"
+        svg_base64 = base64.b64encode(svg).decode("ascii")
+
+        assert await provider._resolve_image_part(f"base64://{svg_base64}") is None
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_transform_content_part_replaces_unresolvable_image_with_text(monkeypatch):
+    provider = _make_provider()
+    try:
+
+        async def fake_resolve(image_url: str, *, image_detail: str | None = None):
+            return None
+
+        monkeypatch.setattr(provider, "_resolve_image_part", fake_resolve)
+
+        part = await provider._transform_content_part(
+            {
+                "type": "image_url",
+                "image_url": {"url": "data:image/bmp;base64,abcd"},
+            }
+        )
+
+        assert part == {"type": "text", "text": "[image omitted]"}
     finally:
         await provider.terminate()
