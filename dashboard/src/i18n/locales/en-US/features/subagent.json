@@ -60,6 +60,7 @@
     "providerHint": "Leave empty to follow the global default provider.",
     "personaLabel": "Choose Persona",
     "personaHint": "The SubAgent inherits the selected Persona's system settings and tools.",
+    "personaPreview": "Persona Preview",
     "descriptionLabel": "Description for the main LLM (used to decide handoff)",
     "descriptionHint": "Shown to the main LLM as the transfer_to_* tool description—keep it short and clear."
   },

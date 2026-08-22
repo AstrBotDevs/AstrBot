@@ -24,6 +24,7 @@
       "openai_chat_completions": "Compatible with OpenAI /chat/completions services.",
       "openai_responses": "OpenAI /responses with native tools, state modes, and web search.",
       "kimi_code": "Dedicated Kimi CodingPlan / Kimi Code integration using a custom Anthropic API adapter.",
+      "vllm_rerank": "Also supports Jina AI, Cohere, PPIO, and similar providers.",
       "default": ""
     }
   },

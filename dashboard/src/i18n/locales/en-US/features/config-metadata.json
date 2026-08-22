@@ -91,6 +91,7 @@
     },
     "knowledgebase": {
       "description": "Knowledge Base",
+      "hint": "AstrBot's external brain.",
       "kb_names": {
         "description": "Knowledge Base List",
         "hint": "Supports multiple selections"
@@ -110,6 +111,7 @@
     },
     "websearch": {
       "description": "Web Search",
+      "hint": "Let AstrBot access the internet for current information.",
       "provider_settings": {
         "web_search": {
           "description": "Enable Web Search"
@@ -172,11 +174,13 @@
       "provider_settings": {
         "computer_use_runtime": {
           "description": "Computer Use Runtime",
-          "hint": "Environment allowed for Agent usage. `local` means the local machine environment, `sandbox` means the sandbox environment, and `none` means no environment is allowed."
+          "hint": "Environment allowed for Agent usage. `local` means the local machine environment, `sandbox` means the sandbox environment, and `none` means no environment is allowed.",
+          "labels": ["None", "Local", "Sandbox"]
         },
         "sandbox": {
           "booter": {
-            "description": "Sandbox Environment Driver"
+            "description": "Sandbox Environment Driver",
+            "labels": ["Shipyard Neo", "CUA"]
           },
           "shipyard_neo_endpoint": {
             "description": "Shipyard Neo API Endpoint",
@@ -200,7 +204,8 @@
           },
           "cua_os_type": {
             "description": "CUA OS Type",
-            "hint": "CUA sandbox operating system type. Defaults to linux."
+            "hint": "CUA sandbox operating system type. Defaults to linux.",
+            "labels": ["Linux", "macOS", "Windows", "Android"]
           },
           "cua_idle_timeout": {
             "description": "CUA Idle Timeout",
@@ -456,6 +461,16 @@
         "description": "Verification Token",
         "hint": "Token for verifying Lark callback requests."
       },
+      "line": {
+        "channel_access_token": {
+          "description": "LINE Channel Access Token",
+          "hint": "Channel access token for LINE Messaging API."
+        },
+        "channel_secret": {
+          "description": "LINE Channel Secret",
+          "hint": "Used to verify LINE webhook signatures."
+        }
+      },
       "misskey_allow_insecure_downloads": {
         "description": "Allow Insecure Downloads (Disable SSL Verification)",
         "hint": "If remote servers have certificate issues, SSL verification will be disabled as a fallback. Use only when necessary due to security risks."
@@ -504,9 +519,43 @@
         "description": "Target Drive Folder ID",
         "hint": "Optional: ID of the target folder in Misskey drive. Leave empty to use the root folder."
       },
+      "napcat": {
+        "ws_url": {
+          "description": "NapCat WebSocket URL",
+          "hint": "NapCat OneBot v11 forward WebSocket URL, for example ws://127.0.0.1:3001."
+        },
+        "token": {
+          "description": "NapCat Token",
+          "hint": "Optional WebSocket authorization token configured in NapCat."
+        },
+        "verify_ssl": {
+          "description": "Verify SSL",
+          "hint": "Disable only when NapCat uses a self-signed WSS certificate."
+        },
+        "timeout_seconds": {
+          "description": "Action Timeout Seconds",
+          "hint": "Maximum time to wait for a NapCat action response over WebSocket."
+        },
+        "reconnect_interval_seconds": {
+          "description": "Reconnect Interval Seconds",
+          "hint": "Delay before reconnecting after the NapCat WebSocket disconnects."
+        },
+        "max_frame_size_mb": {
+          "description": "Max Frame Size MB",
+          "hint": "Maximum inbound WebSocket frame size in megabytes."
+        }
+      },
       "port": {
         "description": "Callback Server Port",
         "hint": "Callback server port. Leave empty to disable the callback server."
+      },
+      "proxy_mode": {
+        "description": "Proxy Mode",
+        "hint": "inherit follows the global proxy; direct connects without environment proxies; custom uses only this item's proxy_url."
+      },
+      "proxy_url": {
+        "description": "Custom Proxy URL",
+        "hint": "Used only when proxy_mode=custom, for example http://127.0.0.1:7890"
       },
       "satori_api_base_url": {
         "description": "Satori API Endpoint",
@@ -601,7 +650,8 @@
       },
       "wecom_ai_bot_connection_mode": {
         "description": "WeCom AI Bot Connection Mode",
-        "hint": "Webhook mode requires Token/EncodingAESKey; long_connection mode requires BotID/Secret."
+        "hint": "Webhook mode requires Token/EncodingAESKey; long_connection mode requires BotID/Secret.",
+        "labels": ["Webhook Callback", "Long Connection"]
       },
       "wecomaibot_friend_message_welcome_text": {
         "description": "WeCom AI Bot DM Welcome Message",
@@ -733,6 +783,10 @@
         "unique_session": {
           "description": "Isolate Sessions",
           "hint": "When enabled, group members have independent contexts."
+        },
+        "group_sender_concurrency": {
+          "description": "Group Sender Concurrency (Experimental)",
+          "hint": "Experimental and off by default. Different group senders may generate in parallel, but a whole turn still sends one-at-a-time per group. Ignored when session isolation is on. Disables group streaming; segmented or forwarded replies may interleave."
         },
         "friend_message_needs_wake_prefix": {
           "description": "Private Messages Require Wake Word"
@@ -967,6 +1021,30 @@
         "image_caption_provider_id": {
           "description": "Group Chat Image Caption Model",
           "hint": "Used for image understanding in group chat context awareness, configured separately from the default image caption model."
+        },
+        "image_caption_scope": {
+          "description": "Group Chat Image Caption Scope",
+          "hint": "all allows every group; allowlist only full UMOs in the list; denylist rejects full UMOs in the list."
+        },
+        "image_caption_groups": {
+          "description": "Group Chat Image Caption UMO List",
+          "hint": "Only full unified_msg_origin values are accepted, for example aiocqhttp:GroupMessage:123456:bot_987654."
+        },
+        "image_caption_min_interval": {
+          "description": "Group Chat Image Caption Minimum Interval (seconds)",
+          "hint": "Minimum interval between historical image captions in the same group. 0 means no rate limit. A claimed slot is consumed even if captioning fails."
+        },
+        "image_caption_max_concurrency": {
+          "description": "Group Chat Image Caption Max Concurrency",
+          "hint": "Limits global concurrency for historical group image captions. It does not affect the current main Agent request or quoted images."
+        },
+        "image_caption_cache_ttl": {
+          "description": "Group Chat Image Caption Cache TTL (seconds)",
+          "hint": "Caches caption results by UMO and image content. 0 disables the cache. Disabled by default and not shared across sessions."
+        },
+        "image_caption_lazy": {
+          "description": "Lazy Group Chat Image Caption",
+          "hint": "When enabled, store a placeholder first and caption only when the LLM is actually woken. Disabled by default."
         },
         "active_reply": {
           "enable": {
@@ -1398,6 +1476,12 @@
       },
       "gemini_embedding": {
         "hint": "Gemini Embedding does not require manually adding /v1beta."
+      },
+      "nvidia_embedding": {
+        "hint": "NVIDIA NIM Embedding. Default API Base is https://integrate.api.nvidia.com/v1."
+      },
+      "ollama_embedding": {
+        "hint": "Ollama Embedding. Default API Base is http://localhost:11434; an API key is usually not required."
       },
       "volcengine_cluster": {
         "description": "Volcengine cluster",

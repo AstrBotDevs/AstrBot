@@ -168,11 +168,13 @@
       "provider_settings": {
         "computer_use_runtime": {
           "description": "运行环境",
-          "hint": "允许 Agent 访问的环境。local 为本机环境，sandbox 为沙箱环境，none 为不允许任何环境。"
+          "hint": "允许 Agent 访问的环境。local 为本机环境，sandbox 为沙箱环境，none 为不允许任何环境。",
+          "labels": ["无", "本地", "沙箱"]
         },
         "sandbox": {
           "booter": {
-            "description": "沙箱环境驱动器"
+            "description": "沙箱环境驱动器",
+            "labels": ["Shipyard Neo", "CUA"]
           },
           "shipyard_neo_endpoint": {
             "description": "Shipyard Neo API Endpoint",
@@ -196,7 +198,8 @@
           },
           "cua_os_type": {
             "description": "CUA 操作系统类型",
-            "hint": "CUA 沙箱操作系统类型，默认 linux。"
+            "hint": "CUA 沙箱操作系统类型，默认 linux。",
+            "labels": ["Linux", "macOS", "Windows", "Android"]
           },
           "cua_idle_timeout": {
             "description": "CUA 空闲超时(秒)",
@@ -452,6 +455,16 @@
         "description": "Verification Token",
         "hint": "用于验证飞书回调请求的令牌"
       },
+      "line": {
+        "channel_access_token": {
+          "description": "LINE Channel Access Token",
+          "hint": "LINE Messaging API 的 channel access token。"
+        },
+        "channel_secret": {
+          "description": "LINE Channel Secret",
+          "hint": "用于校验 LINE Webhook 签名。"
+        }
+      },
       "misskey_allow_insecure_downloads": {
         "description": "允许不安全下载（禁用 SSL 验证）",
         "hint": "当远端服务器存在证书问题导致无法正常下载时，自动禁用 SSL 验证作为回退方案。适用于某些图床的证书配置问题。启用有安全风险，仅在必要时使用。"
@@ -500,9 +513,43 @@
         "description": "上传到网盘的目标文件夹 ID",
         "hint": "可选：填写 Misskey 网盘中目标文件夹的 ID，上传的文件将放置到该文件夹内。留空则使用账号网盘根目录。"
       },
+      "napcat": {
+        "ws_url": {
+          "description": "NapCat WebSocket 地址",
+          "hint": "NapCat OneBot v11 正向 WebSocket 地址，例如 ws://127.0.0.1:3001。"
+        },
+        "token": {
+          "description": "NapCat Token",
+          "hint": "可选。填写 NapCat WebSocket 侧配置的鉴权令牌。"
+        },
+        "verify_ssl": {
+          "description": "校验 SSL",
+          "hint": "仅当 NapCat 使用自签名 WSS 证书时再关闭。"
+        },
+        "timeout_seconds": {
+          "description": "动作超时秒数",
+          "hint": "通过 WebSocket 调用 NapCat 动作时的单次响应超时时间。"
+        },
+        "reconnect_interval_seconds": {
+          "description": "重连间隔秒数",
+          "hint": "NapCat WebSocket 断开后，AstrBot 再次发起连接前的等待时间。"
+        },
+        "max_frame_size_mb": {
+          "description": "最大帧大小(MB)",
+          "hint": "允许接收的单个 WebSocket 帧的最大大小，单位 MB。"
+        }
+      },
       "port": {
         "description": "回调服务器端口",
         "hint": "回调服务器端口。留空则不启用回调服务器。"
+      },
+      "proxy_mode": {
+        "description": "代理模式",
+        "hint": "inherit 跟随全局代理；direct 明确直连并忽略环境变量；custom 仅使用本项 proxy_url。"
+      },
+      "proxy_url": {
+        "description": "自定义代理 URL",
+        "hint": "仅在 proxy_mode=custom 时使用，例如 http://127.0.0.1:7890"
       },
       "satori_api_base_url": {
         "description": "Satori API 终结点",
@@ -597,7 +644,8 @@
       },
       "wecom_ai_bot_connection_mode": {
         "description": "企业微信智能机器人连接模式",
-        "hint": "Webhook 回调模式需要配置 Token/EncodingAESKey；长连接模式需要配置 BotID/Secret。"
+        "hint": "Webhook 回调模式需要配置 Token/EncodingAESKey；长连接模式需要配置 BotID/Secret。",
+        "labels": ["Webhook 回调", "长连接"]
       },
       "wecomaibot_friend_message_welcome_text": {
         "description": "企业微信智能机器人私聊欢迎语",
@@ -729,6 +777,10 @@
         "unique_session": {
           "description": "隔离会话",
           "hint": "启用后,群成员的上下文独立。"
+        },
+        "group_sender_concurrency": {
+          "description": "群发送者并发（实验性）",
+          "hint": "实验性，默认关闭。同群不同发送者可并行生成，整轮发送仍按群排队。与隔离会话互斥；会关闭同群流式，分段/合并转发可能交错。"
         },
         "friend_message_needs_wake_prefix": {
           "description": "私聊消息需要唤醒词"
@@ -963,6 +1015,30 @@
         "image_caption_provider_id": {
           "description": "群聊图片转述模型",
           "hint": "用于群聊上下文感知的图片理解，与默认图片转述模型分开配置。"
+        },
+        "image_caption_scope": {
+          "description": "群聊图片转述范围",
+          "hint": "all 允许全部群；allowlist 仅完整 UMO 列表；denylist 拒绝列表中的完整 UMO。"
+        },
+        "image_caption_groups": {
+          "description": "群聊图片转述 UMO 列表",
+          "hint": "只接受完整 unified_msg_origin，例如 aiocqhttp:GroupMessage:123456:bot_987654。"
+        },
+        "image_caption_min_interval": {
+          "description": "群聊图片转述最小间隔（秒）",
+          "hint": "同一群两次历史图片转述之间的最小间隔。0 表示不限流。通过 claim 后即使转述失败也消耗额度。"
+        },
+        "image_caption_max_concurrency": {
+          "description": "群聊图片转述最大并发",
+          "hint": "限制群聊历史图片转述的全局并发，不影响主 Agent 当前请求或引用图片。"
+        },
+        "image_caption_cache_ttl": {
+          "description": "群聊图片转述缓存 TTL（秒）",
+          "hint": "按 UMO+图片内容缓存转述结果。0 表示关闭，默认关闭且不同会话不共享。"
+        },
+        "image_caption_lazy": {
+          "description": "延迟群聊图片转述",
+          "hint": "开启后先记录占位，仅在真正唤醒 LLM 时转述。默认关闭。"
         },
         "active_reply": {
           "enable": {
@@ -1390,6 +1466,12 @@
       },
       "gemini_embedding": {
         "hint": "Gemini Embedding 无需手动添加 /v1beta。"
+      },
+      "nvidia_embedding": {
+        "hint": "NVIDIA NIM Embedding。默认 API Base 为 https://integrate.api.nvidia.com/v1。"
+      },
+      "ollama_embedding": {
+        "hint": "Ollama Embedding。默认 API Base 为 http://localhost:11434，一般无需 API Key。"
       },
       "volcengine_cluster": {
         "description": "火山引擎集群",

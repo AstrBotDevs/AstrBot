@@ -363,11 +363,30 @@ describe('ts gap coverage', () => {
       runConfigMutationWithStepUp(async () => 'cfg', 'default'),
     ).resolves.toBe('cfg');
 
+    await initI18n('zh-CN');
     const resolver = useConfigTextResolver({
       pluginName: 'p',
       pluginI18n: { 'zh-CN': {} },
     });
     expect(resolver.translateIfKey(1)).toBe(1);
+    expect(resolver.translateIfKey('platform_group.name')).toBe('平台配置');
+    expect(
+      resolver.translateIfKey(
+        'platform_group.platform.lark_connection_mode.labels',
+      ),
+    ).toEqual(['长连接模式', '推送至服务器模式']);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(
+      resolver.translateIfKey('platform_group.missing.field.description'),
+    ).toBe('platform_group.missing.field.description');
+    expect(
+      warnSpy.mock.calls.some((args) =>
+        String(args[0]).includes(
+          'features.config-metadata.platform_group.missing.field.description',
+        ),
+      ),
+    ).toBe(true);
+    warnSpy.mockRestore();
     expect(resolver.resolveConfigText('a', 'title', 'fb')).toBe('fb');
 
     const filters = useCommandFilters(
