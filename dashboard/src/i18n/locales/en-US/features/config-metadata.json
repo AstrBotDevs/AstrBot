@@ -261,6 +261,24 @@
           "description": "Turns to Discard When Limit Exceeded",
           "hint": "When history exceeds 'Max Turns Before Compression' and LLM compression is unavailable, discard this many oldest turns at once. Request-time truncation also reuses this value."
         },
+        "compression_threshold_mode": {
+          "description": "Context Compression Threshold Mode",
+          "labels": [
+            "Percentage only",
+            "Context window minus max output",
+            "Lower threshold (compress earlier)",
+            "Higher threshold (compress later)"
+          ],
+          "hint": "Controls how the effective threshold combines the percentage and model output reserve. Modes requiring output metadata fall back to the percentage when the output limit is unknown."
+        },
+        "compression_threshold_percentage": {
+          "description": "Context Compression Percentage Threshold",
+          "hint": "0.82 triggers compression after context usage exceeds 82%."
+        },
+        "compression_max_output_tokens": {
+          "description": "Maximum Output Tokens for Compression Policy",
+          "hint": "0 reads the current model metadata. If metadata is also unavailable, the policy falls back to the percentage. A positive value overrides model metadata."
+        },
         "context_limit_reached_strategy": {
           "description": "Handling for History Limits or Context Window Pressure",
           "labels": [
