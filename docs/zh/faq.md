@@ -93,6 +93,12 @@ uv run python scripts/sync_dashboard_dist.py
 
 更新前阅读 `changelogs/` 中跨越的版本和当前未发布提交。不要使用 `uv tool upgrade astrbot` 更新本 fork；PyPI 上的 `astrbot` 是上游包。Dashboard 一键 Core 更新当前没有 fork 发布资产，不要用它安装上游 zip。
 
+### 升级到 4.27.5 后主库无法启动
+
+4.27.5 以当前 SQLModel 表重建主 SQLite schema，不做旧库 `ALTER TABLE` 或数据迁移。`create_all` 只创建缺失表，不会给已有 `data_v4.db` 加列或补索引。
+
+停进程并备份 `data/` 后，删除 runtime root 下的 `data/data_v4.db`、`data/data_v4.db-wal` 和 `data/data_v4.db-shm`，再启动。会话、长期记忆、授权绑定和 API Key 等主库记录不会从旧文件迁出。`data/knowledge_base/` 不受这次切库影响。架构说明见[项目架构](/dev/architecture#主-sqlite-库)。
+
 ## Agent、权限与输出
 
 ### 群聊中机器人不回复

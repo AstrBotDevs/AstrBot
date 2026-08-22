@@ -46,6 +46,94 @@ outline: deep
 
 `AstrBotCoreLifecycle` 在这些基础服务之上按依赖顺序创建 Provider、Platform、Conversation、Persona、Memory、Knowledge Base、Cron、Plugin、SubAgent 和 Pipeline 等管理器。需要共享这些能力时，应通过现有所有者注入，不要恢复进程级全局单例。
 
+主 SQLite 库以 SQLModel 表为 schema 真源，访问口是域存储协议，`SQLiteDatabase` 只是组合实现。细节见下文[主 SQLite 库](#主-sqlite-库)。知识库 SQLite 与 FAISS 文档库仍独立于主库。
+
+## 主 SQLite 库
+
+主库文件是 runtime root 下的 `data/data_v4.db`。SQLModel 表是 schema 的唯一真源：表、列、普通唯一约束和普通索引都写在模型上。访问口是 `astrbot/core/db/protocols.py` 中的域存储协议；`SQLiteDatabase` 用 mixin 组合这些协议，调用方仍导入该类。本 fork 不引入 Alembic、sqlc 或主库 `.sql` schema。
+
+`create_runtime_services()` 构造 `SQLiteDatabase(DB_PATH)`。生命周期会显式调用 `db.initialize()`；`get_db()` 保留懒初始化兜底。显式初始化、第一次 `get_db()` 和并发初始化共用同一把锁，schema 工作只执行一次。
+
+### 布局
+
+```text
+astrbot/core/db/
+  __init__.py              # BaseDatabase 与引擎生命周期
+  protocols.py             # 域协议与组合协议
+  schema.py                # registry + create_all + PRAGMA
+  sqlite.py                # SQLiteDatabase 门面
+  po/
+    __init__.py            # 再导出 table=True 的模型
+    registry.py            # 显式导入全部表模型
+    mixins.py              # TimestampMixin
+    ...                    # 按域拆分的表模块
+  stores/
+    session.py             # 会话与事务作用域助手
+    ...                    # 每个域协议一个 mixin
+```
+
+`po/__init__.py` 再导出表模型，只是包入口。新代码可以写 `from astrbot.core.db.po.memory import MemoryFact`；`from astrbot.core.db.po import MemoryFact` 仍有效。模型注册由 `po.registry.import_all_models()` 显式完成，不能依赖业务模块碰巧导入。`schema.py` 必须先调用它，再执行 `SQLModel.metadata.create_all`。`tests/unit/db/test_schema.py` 用源码内固定的 `EXPECTED_TABLE_NAMES`（当前 35 张表）对照初始化后的数据库表名；registry 漏登时测试必须失败。
+
+`initialize()` 只做：
+
+1. `import_all_models()`
+2. `SQLModel.metadata.create_all`
+3. WAL / `busy_timeout` / `synchronous` / `cache_size` / `temp_store` / `mmap_size` / `optimize`
+
+它不探测 `PRAGMA table_info`，也不执行 `ALTER TABLE`。`create_all` 只创建缺失表，不会给已有表加列。schema 变更后需要空库重建：停进程，删除 `data/data_v4.db*`，再启动。测试继续使用临时库。将来若确实需要 SQLite 的 `WHERE` 索引，必须把 `Index(..., sqlite_where=...)` 声明在模型上，让 `create_all` 在空库上创建。
+
+Mixin 只通过 `self.get_db()` 拿会话，不直接持有 engine，也不互相导入对方的查询函数。跨域写入由 composite store 或 application/domain service 持有一个事务边界。
+
+### 协议与表
+
+| 协议                   | 表                                                                                                                                                                               | store 模块                        |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| `StatisticsStore`      | `platform_stats`、`provider_stats`                                                                                                                                               | `stores/statistics.py`            |
+| `PersonaRuntimeStore`  | `persona_session_states`、expression/jargon/behavior                                                                                                                             | `stores/persona_runtime.py`       |
+| `MemoryStore`          | fact/profile/episode/scope policy/tuning task/operation log                                                                                                                      | `stores/memory.py`                |
+| `ConversationStore`    | `conversations`；只读 session projection 会 join `preferences`、`personas`                                                                                                       | `stores/conversations.py`         |
+| `MessageHistoryStore`  | `platform_message_history`                                                                                                                                                       | `stores/message_history.py`       |
+| `WebChatThreadStore`   | `webchat_threads`                                                                                                                                                                | `stores/webchat.py`               |
+| `AttachmentStore`      | `attachments`                                                                                                                                                                    | `stores/attachments.py`           |
+| `ApiKeyStore`          | `api_keys` + 派生 `auth_capabilities`                                                                                                                                            | `stores/api_keys.py`（同一事务）  |
+| `PersonaStore`         | `personas`、`persona_folders`                                                                                                                                                    | `stores/personas.py`              |
+| `PreferenceStore`      | `preferences`                                                                                                                                                                    | `stores/preferences.py`           |
+| `CommandStore`         | `command_configs`、`command_conflicts`                                                                                                                                           | `stores/commands.py`              |
+| `CronStore`            | `cron_jobs`                                                                                                                                                                      | `stores/cron.py`                  |
+| `PlatformSessionStore` | `platform_sessions`                                                                                                                                                              | `stores/sessions.py`              |
+| `UmoAliasStore`        | `umo_aliases`                                                                                                                                                                    | `stores/aliases.py`               |
+| `ChatProjectStore`     | `chatui_projects`、`session_project_relations`                                                                                                                                   | `stores/projects.py`              |
+| （无 SQLite 方法）     | `dashboard_accounts`、`auth_role_bindings`、`auth_platform_membership_facts`、`auth_step_up_credentials`、`auth_policy_overrides`、`auth_audit_log`、`dashboard_trusted_devices` | `po/auth.py` 仅建表；授权服务操作 |
+
+组合协议（`ChatStore`、`DashboardStore`、`PluginRuntimeStore` 等）不增加新方法。`tests/unit/db/test_protocols.py` 要求每个公开协程都挂在域协议上。
+
+`get_session_conversations()` 由 `ConversationStore` 所有。它是明确记录的跨域只读例外，会 join `Preference`、`ConversationV2` 和 `Persona`；不要为此新增 projection 协议。
+
+`platform_message_history` 的 `role`、`is_group` 和 `ix_platform_message_history_scope_order` 只存在于模型上，没有“缺列则补”的路径。
+
+### 运行时 DTO
+
+`Conversation` 与 `Personality` 不是表：
+
+- `Conversation` 位于 `astrbot/core/conversation_models.py`，是会话、平台和 agent 共用的中性运行时契约。
+- `Personality` 位于 `astrbot/core/persona_runtime/models.py`，与 persona runtime 契约归属一致。
+
+插件 SDK 仍从 `astrbot.api.provider` 导出 `Personality`。`astrbot.core.db.po` 不再导出这两个名字，也不为旧导入提供垫片。
+
+### 授权持久化
+
+角色绑定和 capability 是当前状态表：同一规范化作用域只保留一行，撤销或过期后重新授权执行 revive/upsert；完整变更历史写入 `AuthAuditLog`。
+
+- 角色绑定的全局作用域使用 `GLOBAL_SCOPE_ID`（`__global__`），唯一键为 `(subject_id, scope_type, scope_id, config_id)`，不包含 `role`。
+- capability 的“适用于所有配置”使用 `ANY_CONFIG_SCOPE_ID`（`__any_config__`）；具体配置仍保存真实 config id。唯一键为 `(subject_id, action, resource_type, resource_id, config_id)`。
+- 领域对象可以用 `None` 表达“未指定”，进入数据库前必须归一化为非空 scope key。不要依赖 SQLite 把多个 `NULL` 当作互不相等。
+- `ApiKeyStore` 是 capability 的唯一写入者和事务所有者；`create_api_key()` / `revoke_api_key()` 与派生 capability 必须在同一事务中完成。`AuthorizationService.grant_capability()` 委托 `upsert_capability()`，不得直接 `session.add(AuthCapability(...))`。
+- 角色绑定、平台事实、step-up 和审计仍由授权服务通过 `DatabaseSessionStore.get_db()` 操作，不进入 `SQLiteDatabase` 的域方法。
+
+### 测试
+
+测试按协议分文件，位于 `tests/unit/db/`。`test_schema.py` 只锁 schema 契约：35 张表、`platform_message_history` 列与索引、授权唯一约束、WAL/`busy_timeout` 以及幂等初始化。授权行为断言放在 `tests/unit/test_authorization_service.py` 和 `tests/unit/db/test_api_key_store.py`。`tests/conftest.py` 的 `temp_db` 仍是 `SQLiteDatabase`。
+
 ## 消息处理链
 
 平台适配器将消息规范化为 `AstrMessageEvent`，写入最大长度为 1024 的共享事件队列。`EventBus` 根据消息命中的配置文件选择对应的 `PipelineScheduler`，并在并发信号量保护下执行完整流水线。
@@ -183,7 +271,7 @@ guest:<id>
 
 拒绝、高风险 allow、step-up 和绑定变更写脱敏审计。高风险 allow 在有界审计队列已满时 fail closed；绑定变更与 step-up 签发在同一业务事务中落库。
 
-API Key 只认显式 capability，运行时不再把 `*` 或 `NULL` scope 扩权。历史 `NULL` 按冻结的 `DEFAULT_API_KEY_SCOPES` 解释，但高风险动作对 API Key 一律拒绝。API Key 不能访问 `system` scope，也不能进入数据文件管理器。完整 Dashboard 授权契约在 `openspec/openapi-v1.yaml`；公开 `docs/public/openapi.json` 只包含 API Key 面向路径。
+API Key 只认显式 capability，运行时不再把 `*` 或 `NULL` scope 扩权。历史 `NULL` 按冻结的 `DEFAULT_API_KEY_SCOPES` 解释，但高风险动作对 API Key 一律拒绝。API Key 不能访问 `system` scope，也不能进入数据文件管理器。capability 写入由 `ApiKeyStore.upsert_capability()` 独占，作用域键在持久化前归一化为非空 sentinel。完整 Dashboard 授权契约在 `openspec/openapi-v1.yaml`；公开 `docs/public/openapi.json` 只包含 API Key 面向路径。授权表的当前状态与审计分离见[主 SQLite 库](#主-sqlite-库)。
 
 平台成员事实只从入站载荷归一化：NapCat/aiocqhttp 使用群消息 `sender.role`；Discord 使用消息上的 `guild.owner_id` 与 `administrator`；Telegram 仅在已带 `status` 时映射；Misskey 仅在房间 owner 匹配时映射。Lark、DingTalk、Kook、Slack、Mattermost、Satori 保持 `member`/`unknown`。QQ 官方、微信公众号、企业微信、个微、Line 和 WebChat 不从平台事实提升。
 
@@ -261,5 +349,6 @@ Dashboard 在 `/data` 提供原生运行时 `data/` 文件管理器，不是 ifr
 | Live Chat 协议    | `live_chat_service.py`、`webchat/`                           | request identity、并发、interrupt、前端状态测试             |
 | 插件 SDK/页面协议 | `astrbot/api/`、`astrbot/core/star/`                         | import boundary、插件指南、Vitest、Playwright               |
 | 配置持久化        | `astrbot/core/config/`                                       | 默认值/metadata、revision、并发保存测试                     |
+| 主 SQLite 库      | `astrbot/core/db/`                                           | 域协议、SQLModel 表、schema 初始化、`tests/unit/db/`        |
 | 知识库写入        | `knowledge_base/`、`db/vec_db/`                              | 多存储回滚、失败注入、残留文件与可检索性                    |
 | NapCat 事件模型   | `scripts/napcat/`                                            | 运行 `make napcat-check`，不要手改 generated model          |

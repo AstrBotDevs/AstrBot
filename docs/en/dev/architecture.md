@@ -46,6 +46,94 @@ The source and CLI entry points have different preparation paths, but both event
 
 `AstrBotCoreLifecycle` builds Provider, Platform, Conversation, Persona, Memory, Knowledge Base, Cron, Plugin, SubAgent, and Pipeline managers on top of those services in dependency order. Pass shared capabilities through their existing owners; do not restore process-global service singletons.
 
+The main SQLite database uses SQLModel tables as the schema source of truth. Access ports are the domain store protocols; `SQLiteDatabase` is only the composite implementation. Details are in [Main SQLite database](#main-sqlite-database) below. The knowledge-base SQLite file and FAISS document store stay separate from the main database.
+
+## Main SQLite database
+
+The main database file is `data/data_v4.db` under the runtime root. SQLModel tables are the only schema source of truth: tables, columns, ordinary unique constraints, and ordinary indexes live on the models. Access ports are the domain store protocols in `astrbot/core/db/protocols.py`. `SQLiteDatabase` composes those protocols with mixins; callers still import that class. This fork does not add Alembic, sqlc, or a main-database `.sql` schema.
+
+`create_runtime_services()` constructs `SQLiteDatabase(DB_PATH)`. The lifecycle explicitly calls `db.initialize()`; `get_db()` keeps lazy initialization as a fallback. Explicit initialization, the first `get_db()`, and concurrent initialization share one lock, so schema work runs once.
+
+### Layout
+
+```text
+astrbot/core/db/
+  __init__.py              # BaseDatabase and engine lifecycle
+  protocols.py             # Domain and composite protocols
+  schema.py                # registry + create_all + PRAGMA
+  sqlite.py                # SQLiteDatabase facade
+  po/
+    __init__.py            # Re-export table=True models
+    registry.py            # Explicitly import every table model
+    mixins.py              # TimestampMixin
+    ...                    # Table modules split by domain
+  stores/
+    session.py             # Session and transaction-scope helpers
+    ...                    # One mixin per domain protocol
+```
+
+`po/__init__.py` re-exporting table models is a package entry point. New code may import `from astrbot.core.db.po.memory import MemoryFact`; `from astrbot.core.db.po import MemoryFact` stays valid. Model registration is owned by `po.registry.import_all_models()` and must not rely on a business module happening to import models. `schema.py` must call it before `SQLModel.metadata.create_all`. `tests/unit/db/test_schema.py` compares initialized table names with a source-level `EXPECTED_TABLE_NAMES` constant (currently 35 tables); a registry omission must fail the test.
+
+`initialize()` only:
+
+1. `import_all_models()`
+2. `SQLModel.metadata.create_all`
+3. WAL / `busy_timeout` / `synchronous` / `cache_size` / `temp_store` / `mmap_size` / `optimize`
+
+It does not probe `PRAGMA table_info` and does not run `ALTER TABLE`. `create_all` creates missing tables only; it does not add columns to existing tables. After a schema change, rebuild an empty database: stop the process, delete `data/data_v4.db*`, then start again. Tests keep using temporary databases. If a SQLite `WHERE` index is genuinely needed later, declare `Index(..., sqlite_where=...)` on the model so `create_all` builds it on an empty database.
+
+Mixins obtain sessions only through `self.get_db()` and must not hold the engine or import each other's query helpers. A composite store or application/domain service owns one transaction boundary for cross-domain writes.
+
+### Protocol-to-table map
+
+| Protocol               | Tables                                                                                                                                                                           | Store module                                                    |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `StatisticsStore`      | `platform_stats`, `provider_stats`                                                                                                                                               | `stores/statistics.py`                                          |
+| `PersonaRuntimeStore`  | `persona_session_states`, expression/jargon/behavior                                                                                                                             | `stores/persona_runtime.py`                                     |
+| `MemoryStore`          | fact/profile/episode/scope policy/tuning task/operation log                                                                                                                      | `stores/memory.py`                                              |
+| `ConversationStore`    | `conversations`; read-only session projection joins `preferences` and `personas`                                                                                                 | `stores/conversations.py`                                       |
+| `MessageHistoryStore`  | `platform_message_history`                                                                                                                                                       | `stores/message_history.py`                                     |
+| `WebChatThreadStore`   | `webchat_threads`                                                                                                                                                                | `stores/webchat.py`                                             |
+| `AttachmentStore`      | `attachments`                                                                                                                                                                    | `stores/attachments.py`                                         |
+| `ApiKeyStore`          | `api_keys` + derived `auth_capabilities`                                                                                                                                         | `stores/api_keys.py` (one transaction)                          |
+| `PersonaStore`         | `personas`, `persona_folders`                                                                                                                                                    | `stores/personas.py`                                            |
+| `PreferenceStore`      | `preferences`                                                                                                                                                                    | `stores/preferences.py`                                         |
+| `CommandStore`         | `command_configs`, `command_conflicts`                                                                                                                                           | `stores/commands.py`                                            |
+| `CronStore`            | `cron_jobs`                                                                                                                                                                      | `stores/cron.py`                                                |
+| `PlatformSessionStore` | `platform_sessions`                                                                                                                                                              | `stores/sessions.py`                                            |
+| `UmoAliasStore`        | `umo_aliases`                                                                                                                                                                    | `stores/aliases.py`                                             |
+| `ChatProjectStore`     | `chatui_projects`, `session_project_relations`                                                                                                                                   | `stores/projects.py`                                            |
+| (no SQLite methods)    | `dashboard_accounts`, `auth_role_bindings`, `auth_platform_membership_facts`, `auth_step_up_credentials`, `auth_policy_overrides`, `auth_audit_log`, `dashboard_trusted_devices` | `po/auth.py` tables only; authorization service owns operations |
+
+Composite protocols (`ChatStore`, `DashboardStore`, `PluginRuntimeStore`, and similar) add no methods. `tests/unit/db/test_protocols.py` requires every public coroutine to belong to a domain protocol.
+
+`get_session_conversations()` is owned by `ConversationStore`. It is an explicitly documented cross-domain read exception that joins `Preference`, `ConversationV2`, and `Persona`; do not add a projection protocol for it.
+
+`platform_message_history.role`, `is_group`, and `ix_platform_message_history_scope_order` exist only on the model; there is no “add the column if missing” path.
+
+### Runtime DTOs
+
+`Conversation` and `Personality` are not tables:
+
+- `Conversation` lives in `astrbot/core/conversation_models.py` as the neutral runtime contract shared by conversation, platform, and agent code.
+- `Personality` lives in `astrbot/core/persona_runtime/models.py` with the persona-runtime contracts.
+
+The plugin SDK still exports `Personality` from `astrbot.api.provider`. `astrbot.core.db.po` no longer exports either name and does not provide shims for the old imports.
+
+### Authorization persistence
+
+Role bindings and capabilities are current-state tables: one row per normalized scope, with revoke or expiry followed by a new grant implemented as revive/upsert. Complete change history goes to `AuthAuditLog`.
+
+- Global role bindings use `GLOBAL_SCOPE_ID` (`__global__`). The unique key is `(subject_id, scope_type, scope_id, config_id)` and does not include `role`.
+- A capability that applies to every config uses `ANY_CONFIG_SCOPE_ID` (`__any_config__`); config-specific capabilities store a real config id. The unique key is `(subject_id, action, resource_type, resource_id, config_id)`.
+- Domain objects may still use `None` for “unspecified”, but persist a non-null scope key. Do not rely on SQLite treating multiple `NULL` values as distinct.
+- `ApiKeyStore` is the sole capability writer and transaction owner; `create_api_key()` / `revoke_api_key()` and derived capabilities must complete in one transaction. `AuthorizationService.grant_capability()` delegates to `upsert_capability()` and must not call `session.add(AuthCapability(...))` directly.
+- Role bindings, platform facts, step-up records, and audit records continue through `DatabaseSessionStore.get_db()` in the authorization service; they are not domain methods on `SQLiteDatabase`.
+
+### Tests
+
+Tests are split by protocol under `tests/unit/db/`. `test_schema.py` locks only the schema contract: the 35 tables, `platform_message_history` columns and index, authorization unique constraints, WAL/`busy_timeout`, and idempotent initialization. Behavior assertions live in `tests/unit/test_authorization_service.py` and `tests/unit/db/test_api_key_store.py`. `temp_db` in `tests/conftest.py` remains a `SQLiteDatabase`.
+
 ## Message Pipeline
 
 Platform adapters normalize inbound messages into `AstrMessageEvent` and enqueue them in a shared queue capped at 1024 items. `EventBus` selects the `PipelineScheduler` for the message's config profile and executes it under a concurrency semaphore.
@@ -183,7 +271,7 @@ Global high-risk operations accept only a one-time Dashboard password/TOTP step-
 
 Denials, high-risk allows, step-up, and binding mutations write redacted audit events. A full bounded audit queue fails closed for high-risk allows. Binding mutations and step-up issuance commit in the same business transaction.
 
-API keys use explicit capabilities only. Runtime authorization no longer expands `*` or `NULL` scopes. Historical `NULL` still means the frozen `DEFAULT_API_KEY_SCOPES` set, but high-risk actions always deny API keys. API keys cannot use the `system` scope or the data-file manager. `openspec/openapi-v1.yaml` is the complete Dashboard contract; public `docs/public/openapi.json` contains only API-key-facing paths.
+API keys use explicit capabilities only. Runtime authorization no longer expands `*` or `NULL` scopes. Historical `NULL` still means the frozen `DEFAULT_API_KEY_SCOPES` set, but high-risk actions always deny API keys. API keys cannot use the `system` scope or the data-file manager. Capability writes go only through `ApiKeyStore.upsert_capability()`, and scope keys are normalized to non-null sentinels before persistence. `openspec/openapi-v1.yaml` is the complete Dashboard contract; public `docs/public/openapi.json` contains only API-key-facing paths. Current-state tables versus audit history are in [Main SQLite database](#main-sqlite-database).
 
 Platform membership facts come only from inbound payloads: NapCat/aiocqhttp use group `sender.role`; Discord uses `guild.owner_id` and `administrator` already on the message; Telegram maps `status` only when present; Misskey maps a matching room owner. Lark, DingTalk, Kook, Slack, Mattermost, and Satori stay `member`/`unknown`. QQ Official, WeChat Official Account, WeCom, personal WeChat, Line, and WebChat never elevate from platform facts.
 
@@ -261,5 +349,6 @@ Runtime-root helpers in `astrbot.core.utils.astrbot_path` currently return strin
 | Live Chat protocol         | `live_chat_service.py`, `webchat/`                           | request identity, concurrency, interrupts, frontend state tests         |
 | Plugin SDK/page protocol   | `astrbot/api/`, `astrbot/core/star/`                         | import boundaries, plugin docs, Vitest, Playwright                      |
 | Configuration persistence  | `astrbot/core/config/`                                       | defaults/metadata, revisions, concurrent-save tests                     |
+| Main SQLite database       | `astrbot/core/db/`                                           | domain protocols, SQLModel tables, schema init, `tests/unit/db/`        |
 | Knowledge-base writes      | `knowledge_base/`, `db/vec_db/`                              | multi-store rollback, failure injection, residual/query checks          |
 | NapCat event models        | `scripts/napcat/`                                            | run `make napcat-check`; do not edit generated models                   |

@@ -93,6 +93,12 @@ uv run python scripts/sync_dashboard_dist.py
 
 Read the intervening files under `changelogs/` and current unreleased commits first. Do not use `uv tool upgrade astrbot` for this fork; the `astrbot` package on PyPI is upstream. The Dashboard one-click Core updater currently has no fork release assets; do not use it to install an upstream zip.
 
+### The main database fails to start after upgrading to 4.27.5
+
+4.27.5 rebuilds the main SQLite schema from the current SQLModel tables. It does not run `ALTER TABLE` on an old file or migrate data. `create_all` creates missing tables only; it does not add columns or indexes to an existing `data_v4.db`.
+
+Stop the process, back up `data/`, then delete `data/data_v4.db`, `data/data_v4.db-wal`, and `data/data_v4.db-shm` under the runtime root before starting again. Conversations, long-term memory, authorization bindings, and API keys in the old main database are not migrated. `data/knowledge_base/` is not part of this cutover. See [Project Architecture](/en/dev/architecture#main-sqlite-database).
+
 ## Agent behavior, permissions, and output
 
 ### The bot does not answer in a group
