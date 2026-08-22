@@ -293,3 +293,67 @@ async def test_import_documents_invalid_input(
     data = await response.get_json()
     assert data["status"] == "error"
     assert "chunks 必须是非空字符串列表" in data["message"]
+
+
+def _make_service_with_mock_kb_helper():
+    """Create a KnowledgeBaseService whose kb_manager returns a mock kb_helper.
+
+    Returns:
+        Tuple of (service, kb_helper).
+    """
+    from unittest.mock import AsyncMock, MagicMock
+
+    kb_helper = AsyncMock()
+    kb_helper.list_documents = AsyncMock()
+    kb_helper.count_documents = AsyncMock()
+
+    kb_manager = MagicMock()
+    kb_manager.get_kb = AsyncMock(return_value=kb_helper)
+
+    service = KnowledgeBaseService.__new__(KnowledgeBaseService)
+    service.core_lifecycle = MagicMock()
+    service.core_lifecycle.kb_manager = kb_manager
+    service.upload_progress = {}
+    service.upload_tasks = {}
+    return service, kb_helper
+
+
+@pytest.mark.asyncio
+async def test_list_documents_clamps_page_and_page_size_below_one():
+    """page and page_size below 1 are clamped to 1 before calling kb_helper."""
+    service, kb_helper = _make_service_with_mock_kb_helper()
+    kb_helper.list_documents.return_value = []
+    kb_helper.count_documents.return_value = 0
+
+    await service.list_documents(kb_id="kb1", page=0, page_size=-5)
+
+    kb_helper.list_documents.assert_awaited_once_with(offset=0, limit=1, search=None)
+
+
+@pytest.mark.asyncio
+async def test_list_documents_trims_search_and_turns_empty_to_none():
+    """search is stripped; whitespace-only search becomes None."""
+    service, kb_helper = _make_service_with_mock_kb_helper()
+    kb_helper.list_documents.return_value = []
+    kb_helper.count_documents.return_value = 0
+
+    await service.list_documents(kb_id="kb1", page=1, page_size=10, search="   ")
+
+    kb_helper.list_documents.assert_awaited_once_with(
+        offset=0, limit=10, search=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_list_documents_total_comes_from_count_documents():
+    """total uses count_documents(search=normalized_search), not stale kb.doc_count."""
+    service, kb_helper = _make_service_with_mock_kb_helper()
+    kb_helper.list_documents.return_value = []
+    kb_helper.count_documents.return_value = 42
+
+    result = await service.list_documents(
+        kb_id="kb1", page=1, page_size=10, search="  foo  ",
+    )
+
+    assert result["total"] == 42
+    kb_helper.count_documents.assert_awaited_once_with(search="foo")

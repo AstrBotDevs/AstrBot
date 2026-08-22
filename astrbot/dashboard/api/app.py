@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from astrbot.core import LogBroker
+from astrbot.core import DEMO_MODE, LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
+from astrbot.core.log import LogManager
 from astrbot.dashboard.responses import ApiError, error
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.auth_service import AuthService
@@ -43,10 +45,7 @@ from astrbot.dashboard.services.subagent_service import SubAgentService
 from astrbot.dashboard.services.t2i_service import T2iService
 from astrbot.dashboard.services.tools_service import ToolsService
 from astrbot.dashboard.services.update_service import (
-    DEMO_MODE,
     UpdateService,
-    call_download_dashboard,
-    call_extract_dashboard,
     call_get_dashboard_version,
     call_pip_install,
 )
@@ -135,10 +134,8 @@ def create_dashboard_asgi_app(
         t2i=T2iService(core_lifecycle),
         tools=ToolsService(core_lifecycle),
         updates=UpdateService(
-            core_lifecycle.astrbot_updator,
+            core_lifecycle.astrbot_updater,
             core_lifecycle,
-            download_dashboard_func=call_download_dashboard,
-            extract_dashboard_func=call_extract_dashboard,
             get_dashboard_version_func=call_get_dashboard_version,
             pip_install_func=call_pip_install,
             demo_mode=DEMO_MODE,
@@ -157,10 +154,30 @@ def create_dashboard_asgi_app(
     async def value_error_handler(_request: Request, exc: ValueError):
         return JSONResponse(error(str(exc)), status_code=400)
 
-    @app.exception_handler(HTTPException)
-    async def http_error_handler(_request: Request, exc: HTTPException):
-        detail = exc.detail if isinstance(exc.detail, str) else "Request failed"
-        return JSONResponse(error(detail), status_code=exc.status_code)
+    @app.exception_handler(StarletteHTTPException)
+    async def starlette_http_error_handler(
+        _request: Request, exc: StarletteHTTPException
+    ):
+        if isinstance(exc.detail, str):
+            return JSONResponse(
+                error(exc.detail), status_code=exc.status_code, headers=exc.headers
+            )
+        return JSONResponse(
+            error("Request failed", exc.detail),
+            status_code=exc.status_code,
+            headers=exc.headers,
+        )
+
+    @app.exception_handler(Exception)
+    async def catch_all_handler(_request: Request, exc: Exception):
+        LogManager.GetLogger("astrbot.dashboard").error(
+            "Unhandled exception in dashboard API",
+            exc_info=exc,
+        )
+        return JSONResponse(
+            error("Internal server error"),
+            status_code=500,
+        )
 
     # Legacy dashboard routes keep old /api/* callers working without entering OpenAPI.
     app.include_router(legacy_api_keys_router)

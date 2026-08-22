@@ -9,18 +9,13 @@
   "webhookCopyFailed": "Copy failed, please copy manually",
   "webhookDialog": {
     "title": "Webhook Callback URL",
-    "description": "The callback address is as follows, please ensure that the network environment can be accessed. You can also view the callback address information in the logs.",
+    "description": "The callback address is as follows, please ensure that the network environment can be publicly accessible. You can also view the callback address information in the logs. It is recommended to fill in the \"Externally Accessible Callback API Address\" in Settings -> General.",
     "close": "Close"
   },
   "details": {
     "adapterType": "Adapter Type",
     "token": "Token",
     "description": "Description"
-  },
-  "logs": {
-    "title": "Platform Logs",
-    "expand": "Expand",
-    "collapse": "Collapse"
   },
   "dialog": {
     "add": "Add",
@@ -49,6 +44,12 @@
     "step1Title": "Choose Platform Category",
     "step1Hint": "Where do you want to connect the bot? e.g. QQ, WeCom, Feishu, Discord, Telegram.",
     "platformTypeLabel": "Platform Category",
+    "platformTooltips": {
+      "qq_official": "QQ's official bot platform. Supports private chats, joining QQ group chats (you only need to be the group owner), Markdown rendering in QQ, and one-click QR setup.",
+      "qq_official_webhook": "QQ's official bot platform. Supports private chats, joining QQ group chats (you only need to be the group owner), Markdown rendering in QQ, and one-click QR setup. This Webhook method requires a public IP address, so the WebSocket method above is recommended.",
+      "aiocqhttp": "A well-known instant messaging protocol. Connect through third-party services such as NapCat to integrate instant messaging apps.",
+      "weixin_oc": "WeChat's official bot integration. Supports private chats only and one-click QR setup."
+    },
     "configFileTitle": "Config File",
     "optional": "Optional",
     "configHint": "How do you want to configure the bot? The config file includes model, persona, knowledge base, plugins, and more.",
@@ -181,6 +182,9 @@
     "created": "Setup Complete",
     "startFailed": "Failed to start QR setup",
     "pollFailed": "Failed to poll QR setup status",
+    "platformIdLabel": "Bot ID",
+    "platformIdRequired": "Bot ID is required",
+    "platformIdInvalid": "Bot ID cannot contain spaces, ':' or '!'",
     "mode": {
       "title": "Choose setup method",
       "scan": "One-click QR setup",

@@ -95,6 +95,17 @@ class ChatProjectRequest(OpenModel):
     title: str | None = None
     emoji: str | None = None
     description: str | None = None
+    workspace_type: str | None = Field(
+        default=None,
+        description=(
+            "Workspace mode. API key callers may use only session or project; "
+            "project is the default."
+        ),
+    )
+    workspace_path: str | None = Field(
+        default=None,
+        description="Dashboard-only custom workspace path.",
+    )
 
 
 class ChatProjectSessionRequest(OpenModel):
@@ -114,10 +125,17 @@ class ChatMessagePatchRequest(OpenModel):
     content: dict[str, Any]
 
 
+class ChatFlags(BaseModel):
+    enable_inline_genui: bool = True
+    enable_default_system_prompt: bool = True
+    enable_streaming: bool = True
+
+
 class ChatMessageRegenerateRequest(OpenModel):
     selected_provider: str | None = None
     selected_model: str | None = None
     enable_streaming: bool | None = None
+    flags: ChatFlags | None = None
 
 
 class ChatThreadCreateRequest(OpenModel):
@@ -131,6 +149,7 @@ class ChatThreadMessageRequest(OpenModel):
     selected_provider: str | None = None
     selected_model: str | None = None
     enable_streaming: bool | None = None
+    flags: ChatFlags | None = None
 
 
 class CronJobRequest(OpenModel):
@@ -186,16 +205,15 @@ class OpenApiChatRequest(OpenModel):
     username: str | None = Field(
         default=None,
         description=(
-            "Caller-declared WebChat sender/session owner. This value is used "
-            "as the message sender identity and may participate in "
-            "sender-ID-based permission checks; trusted integrations should "
-            "validate or map it before accepting end-user input."
+            "Caller-declared WebChat sender/session owner. Configured AstrBot "
+            "administrator IDs require the chat:admin API key subscope."
         ),
     )
     config_id: str | None = None
     config_name: str | None = None
     platform_id: str | None = None
     enable_streaming: bool | None = None
+    flags: ChatFlags | None = None
 
 
 class ImMessageRequest(OpenModel):
@@ -205,13 +223,49 @@ class ImMessageRequest(OpenModel):
 
 
 class KnowledgeBaseRequest(OpenModel):
-    kb_id: str | None = None
-    name: str | None = None
+    kb_name: str | None = Field(None, alias="name")
     description: str | None = None
+    emoji: str | None = None
     embedding_provider_id: str | None = None
     rerank_provider_id: str | None = None
     chunk_size: int | None = None
     chunk_overlap: int | None = None
+    top_k_dense: int | None = None
+    top_k_sparse: int | None = None
+    top_m_final: int | None = None
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    def canonical_payload(self) -> dict[str, Any]:
+        """Return the service-facing knowledge base payload.
+
+        Returns:
+            Dictionary accepted by KnowledgeBaseService.
+        """
+        return self.model_dump(
+            exclude_unset=True,
+            include={
+                "kb_name",
+                "description",
+                "emoji",
+                "embedding_provider_id",
+                "rerank_provider_id",
+                "chunk_size",
+                "chunk_overlap",
+                "top_k_dense",
+                "top_k_sparse",
+                "top_m_final",
+            },
+            by_alias=False,
+        )
+
+
+class KnowledgeBaseCreateRequest(KnowledgeBaseRequest):
+    model_config = ConfigDict(
+        populate_by_name=True,
+        extra="allow",
+        json_schema_extra={"required": ["name", "embedding_provider_id"]},
+    )
 
 
 class KnowledgeBaseImportRequest(OpenModel):
@@ -504,6 +558,18 @@ class PluginInstallRequest(OpenModel):
     ignore_version_check: bool | None = None
 
 
+class PluginValidateRepoRequest(OpenModel):
+    repository: str | None = None
+    url: str | None = None
+    proxy: str | None = None
+
+
+class PluginSourceBindRequest(OpenModel):
+    install_method: str | None = None
+    registry_url: str | None = None
+    market_plugin_id: str | None = None
+
+
 class PluginUpdateRequest(OpenModel):
     plugin_id: str | None = None
     plugin_ids: list[str] | None = None
@@ -528,6 +594,11 @@ class PluginConfigUpdateRequest(PluginByIdRequest):
 
 class PluginConfigPayload(OpenModel):
     config: dict[str, Any] | None = None
+
+
+class PluginLogLevelPayload(OpenModel):
+    level: str | None = None
+    """Log level name (DEBUG/INFO/WARNING/ERROR/CRITICAL), or null to follow the global level."""
 
 
 class PluginSourceRequest(OpenModel):

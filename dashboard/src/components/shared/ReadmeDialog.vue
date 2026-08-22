@@ -411,8 +411,8 @@ const showActionArea = computed(() => {
 <template>
   <v-dialog v-model="_show" width="800">
     <v-card>
-      <v-card-title class="d-flex justify-space-between align-center">
-        <span class="text-h2 pa-2">{{ modeConfig.title }}</span>
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex justify-space-between align-center">
+        <span>{{ modeConfig.title }}</span>
         <v-btn icon @click="_show = false" variant="text">
           <v-icon>mdi-close</v-icon>
         </v-btn>
@@ -422,6 +422,7 @@ const showActionArea = computed(() => {
           <v-btn
             v-if="modeConfig.showGithubButton && repoUrl"
             color="primary"
+            variant="tonal"
             prepend-icon="mdi-github"
             @click="openExternalLink(repoUrl)"
           >
@@ -430,6 +431,7 @@ const showActionArea = computed(() => {
           <v-btn
             v-if="modeConfig.showRefreshButton"
             color="secondary"
+            variant="tonal"
             prepend-icon="mdi-refresh"
             @click="fetchContent"
           >

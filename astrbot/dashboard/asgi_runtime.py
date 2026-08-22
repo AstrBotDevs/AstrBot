@@ -193,6 +193,14 @@ class DashboardRequest:
         assert self._files_cache is not None
         return self._files_cache
 
+    async def get_data(self) -> bytes:
+        """Return the raw request body as bytes.
+
+        Returns:
+            The raw body bytes of the request.
+        """
+        return await self._request.body()
+
 
 class DashboardWebSocket:
     def __init__(self, websocket: WebSocket) -> None:

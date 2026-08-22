@@ -9,7 +9,7 @@
         "handlersOperation": "Управление поведением"
     },
     "titles": {
-        "installedAstrBotPlugins": "Установленные плагины AstrBot"
+        "installedAstrBotPlugins": "Установленные"
     },
     "failedPlugins": {
         "title": "Ошибка загрузки ({count})",
@@ -39,6 +39,8 @@
         "reload": "Перезагрузить",
         "enable": "Включить",
         "disable": "Выключить",
+        "load": "Открыть плагин",
+        "stop": "Закрыть плагин",
         "configure": "Настроить",
         "viewInfo": "Детали",
         "viewDocs": "Документация",
@@ -50,6 +52,7 @@
         "save": "Сохранить",
         "saveAndClose": "Сохранить и закрыть",
         "cancel": "Отмена",
+        "next": "Далее",
         "actions": "Действия",
         "back": "Назад",
         "selectFile": "Выбрать файл",
@@ -63,9 +66,12 @@
     "status": {
         "enabled": "Включен",
         "disabled": "Выключен",
+        "loaded": "Открыт",
+        "stopped": "Закрыт",
         "system": "Системный",
         "loading": "Загрузка...",
         "installed": "Установлен",
+        "preset": "Предустановлен",
         "unknown": "Неизвестно",
         "unsupported": "Не поддерживается"
     },
@@ -126,6 +132,7 @@
             "author": "Автор",
             "category": "Категория",
             "stars": "Звезды",
+            "updatedAt": "Обновлено",
             "tags": "Теги",
             "astrbotVersion": "Требуемая версия AstrBot",
             "supportPlatforms": "Поддерживаемые платформы",
@@ -167,6 +174,7 @@
         "sourceUpdated": "Источник обновлен",
         "defaultOfficialSource": "Официальный источник",
         "sourceExists": "Этот источник уже есть в списке",
+        "sourceResolved": "Источник успешно проверен",
         "installPlugin": "Установить плагин",
         "randomPlugins": "🎲 Случайные плагины",
         "sourceSafetyWarning": "Даже при использовании источников по умолчанию мы не можем гарантировать 100% безопасность и стабильность сторонних плагинов. Пожалуйста, будьте внимательны."
@@ -177,6 +185,7 @@
         "installTime": "Дате установки",
         "name": "Имени",
         "stars": "Звездам",
+        "downloads": "Количеству скачиваний",
         "author": "Автору",
         "updated": "Дате обновления",
         "updateStatus": "Статусу обновления",
@@ -193,7 +202,12 @@
         },
         "config": {
             "title": "Настройка плагина",
-            "noConfig": "У этого плагина нет настраиваемых параметров"
+            "noConfig": "У этого плагина нет других настраиваемых параметров",
+            "coreSettings": {
+                "logLevel": "Уровень логирования",
+                "logLevelHint": "Влияет только на логи этого плагина. Применяется сразу, перезапуск не требуется.",
+                "followGlobal": "Как глобально"
+            }
         },
         "loading": {
             "title": "Загрузка...",
@@ -205,7 +219,7 @@
             "deleteConfig": "Удалить файл конфигурации плагина",
             "deleteData": "Удалить сохраненные данные плагина",
             "configHint": "Конфиг находится в data/config",
-            "dataHint": "Данные находятся в data/plugin_data и data/plugins_data"
+            "dataHint": "Данные находятся в data/plugin_data и data/plugins_data, а также KV-данные в базе данных"
         },
         "install": {
             "title": "Установка плагина",
@@ -214,7 +228,7 @@
             "supportPlatformsCount": "Поддерживает платформ: {count}",
             "sectionTitle": "Установка",
             "downloadSource": "Пакет плагина будет установлен из:",
-            "githubSecurityWarning": "AstrBot не может гарантировать безопасность плагинов, загруженных с GitHub. Устанавливайте только если доверяете источнику плагина."
+            "repositorySecurityWarning": "AstrBot не может гарантировать безопасность плагинов, загруженных из репозитория кода. Устанавливайте только если доверяете источнику плагина."
         },
         "update": {
             "title": "Обновление плагина",
@@ -243,6 +257,16 @@
             "title": "Обновить всё",
             "message": "Обновить все плагины ({count} шт.)? Это может занять некоторое время.",
             "confirm": "Подтвердить"
+        },
+        "sourceBinding": {
+            "title": "Сменить источник плагина",
+            "selectTitle": "Выбрать источник установки",
+            "noCandidates": "В настроенных источниках не найдена подходящая запись, и у плагина нет пригодного URL репозитория.",
+            "repoOption": "Использовать URL репозитория",
+            "repoOptionId": "Переустановить из repo",
+            "installDestination": "Место установки",
+            "confirm": "Использовать источник",
+            "confirmAndContinue": "Использовать и продолжить"
         }
     },
     "messages": {
@@ -251,6 +275,7 @@
         "refreshSuccess": "Список плагинов обновлен",
         "refreshFailed": "Ошибка при обновлении списка",
         "operationFailed": "Ошибка операции",
+        "logLevelUpdated": "Уровень логирования обновлён и применён сразу",
         "reloadSuccess": "Перезагрузка завершена",
         "reloadFailed": "Ошибка перезагрузки",
         "updateSuccess": "Обновление завершено",
@@ -269,9 +294,20 @@
         "updateAllSuccess": "Все плагины успешно обновлены",
         "updateAllFailed": "Ошибок при обновлении: {failed} из {total}:",
         "noUpdatesAvailable": "Нет плагинов с доступными обновлениями",
-        "fillSourceNameAndUrl": "Пожалуйста, введите имя и адрес источника",
+        "updateDisabled": "У плагина нет пригодного источника установки или URL репозитория, поэтому его нельзя обновить или переустановить",
+        "changeSourceDisabled": "У плагина нет пригодного URL репозитория, поэтому источник нельзя изменить",
+        "fillSourceUrl": "Введите URL источника",
+        "fillSourceName": "Введите имя источника",
+        "resolveSourceFirst": "Сначала проверьте URL источника",
+        "sourceResolveFailed": "Не удалось проверить источник",
         "invalidUrl": "Введите корректный URL",
-        "enterJsonUrl": "Введите URL, возвращающий список плагинов в формате JSON"
+        "invalidRepositoryUrl": "Введите корректный URL Git-репозитория",
+        "enterJsonUrl": "Введите URL, возвращающий список плагинов в формате JSON",
+        "missingMarketPluginId": "Эта запись источника не содержит идентификаторов плагина, поэтому его нельзя установить из магазина",
+        "sourceBindSuccess": "Источник плагина обновлен",
+        "validatingPlugin": "Проверка плагина...",
+        "pluginValidateSuccess": "Плагин успешно проверен",
+        "pluginValidateFailed": "Не удалось проверить плагин"
     },
     "upload": {
         "fromFile": "Загрузить файл",
@@ -283,6 +319,8 @@
         "modeLocal": "Локальные навыки",
         "modeNeo": "Навыки Neo",
         "actions": "Действия",
+        "enable": "Включить навык",
+        "disable": "Отключить навык",
         "upload": "Загрузить навыки",
         "refresh": "Обновить",
         "empty": "Навыки не найдены",
@@ -377,6 +415,7 @@
         "sandboxDiscoveryPending": "Предустановленные Sandbox навыки не найдены. Запустите сессию Sandbox хотя бы один раз.",
         "sandboxPresetReadonly": "Предустановленные навыки Sandbox доступны только для чтения и не могут быть удалены здесь.",
         "pluginReadonly": "Навыки из плагинов управляются плагином и не могут быть удалены или скачаны здесь.",
+        "pluginDisabled": "Плагин отключён",
         "openEditor": "Просмотр/правка",
         "editorTitle": "Редактировать навык",
         "editorLoadFailed": "Не удалось открыть файл навыка",
@@ -391,16 +430,17 @@
     "card": {
         "actions": {
             "pluginConfig": "Настройки",
-            "uninstallPlugin": "Удалить",
+            "uninstallPlugin": "Удалить плагин",
             "reloadPlugin": "Перезагрузить",
             "togglePlugin": "Плагин",
             "viewHandlers": "Действия",
             "updateTo": "Обновить до",
-            "reinstall": "Переустановить"
+            "reinstall": "Переустановить",
+            "changeSource": "Сменить источник"
         },
         "status": {
             "hasUpdate": "Доступно обновление",
-            "disabled": "Плагин выключен",
+            "disabled": "Плагин закрыт",
             "handlersCount": "действий",
             "supportPlatform": "Платформы",
             "supportPlatformsCount": "Платформ: {count}",

@@ -18,6 +18,15 @@ const { tm } = useModuleI18n('features/console');
       </div>
       <div class="d-flex align-center">
         <v-switch
+          v-model="hideUserChatEnabled"
+          :label="hideUserChatEnabled ? tm('hideUserChat.enabled') : tm('hideUserChat.disabled')"
+          hide-details
+          density="compact"
+          inset
+          color="primary"
+          style="margin-right: 16px;"
+        ></v-switch>
+        <v-switch
           v-model="autoScrollEnabled"
           :label="autoScrollEnabled ? tm('autoScroll.enabled') : tm('autoScroll.disabled')"
           hide-details
@@ -28,11 +37,11 @@ const { tm } = useModuleI18n('features/console');
         ></v-switch>
         <v-dialog v-model="pipDialog" width="400">
           <template v-slot:activator="{ props }">
-            <v-btn variant="plain" v-bind="props">{{ tm('pipInstall.button') }}</v-btn>
+            <v-btn variant="text" v-bind="props">{{ tm('pipInstall.button') }}</v-btn>
           </template>
           <v-card>
-            <v-card-title>
-              <span class="text-h5">{{ tm('pipInstall.dialogTitle') }}</span>
+            <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+              <span>{{ tm('pipInstall.dialogTitle') }}</span>
             </v-card-title>
             <v-card-text>
               <v-text-field v-model="pipInstallPayload.package" :label="tm('pipInstall.packageLabel')" variant="outlined"></v-text-field>
@@ -49,7 +58,7 @@ const { tm } = useModuleI18n('features/console');
         </v-dialog>
       </div>
     </div>
-    <ConsoleDisplayer ref="consoleDisplayer" class="console-display" />
+    <ConsoleDisplayer ref="consoleDisplayer" class="console-display" :hide-user-chat="hideUserChatEnabled" />
   </div>
 </template>
 <script>
@@ -61,6 +70,7 @@ export default {
   data() {
     return {
       autoScrollEnabled: localStorage.getItem('console_auto_scroll') !== 'false',
+      hideUserChatEnabled: localStorage.getItem('console_hide_user_chat') === 'true',
       pipDialog: false,
       pipInstallPayload: {
         package: '',
@@ -80,6 +90,9 @@ export default {
       if (this.$refs.consoleDisplayer) {
         this.$refs.consoleDisplayer.autoScroll = val;
       }
+    },
+    hideUserChatEnabled(val) {
+      localStorage.setItem('console_hide_user_chat', val);
     }
   },
   methods: {
@@ -108,7 +121,9 @@ export default {
 
 <style scoped>
 .console-page {
-  height: 100%;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 67px);
   margin: 0 auto;
   max-width: 1400px;
   padding: 24px;
@@ -118,12 +133,14 @@ export default {
 .console-header {
   align-items: flex-start;
   display: flex;
+  flex-shrink: 0;
   justify-content: space-between;
   margin-bottom: 24px;
 }
 
 .console-display {
-  height: calc(100vh - 190px);
+  flex: 1;
+  min-height: 0;
   width: 100%;
 }
 

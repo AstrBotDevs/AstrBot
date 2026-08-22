@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 import traceback
 import uuid
 from pathlib import Path
@@ -11,7 +12,8 @@ import aiofiles
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
+from astrbot.dashboard.schemas import KnowledgeBaseRequest
 from astrbot.dashboard.utils import generate_tsne_visualization
 
 
@@ -28,6 +30,19 @@ class KnowledgeBaseService:
     @staticmethod
     def _payload(data: object) -> dict[str, Any]:
         return data if isinstance(data, dict) else {}
+
+    @staticmethod
+    def _canonical_kb_payload(data: object) -> dict[str, Any]:
+        """Normalize knowledge base create/update payloads.
+
+        Uses KnowledgeBaseRequest to handle the legacy ``name`` →
+        ``kb_name`` migration while preserving operational fields
+        like ``kb_id``.
+        """
+        raw = KnowledgeBaseService._payload(data)
+        canonical = KnowledgeBaseRequest(**raw).canonical_payload()
+        raw.update(canonical)
+        return raw
 
     def get_kb_manager(self):
         return self.core_lifecycle.kb_manager
@@ -102,17 +117,45 @@ class KnowledgeBaseService:
             return message
         return f"{file_name}: {message}"
 
+    @staticmethod
+    def _cleanup_staging_dir(staging_dir: Path) -> None:
+        """Remove a knowledge base upload staging directory.
+
+        Args:
+            staging_dir: Task-specific system temporary directory to remove.
+        """
+        try:
+            shutil.rmtree(staging_dir)
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            logger.warning(f"Failed to clean upload staging directory: {exc}")
+
     async def background_upload_task(
         self,
         task_id: str,
         kb_helper,
         files_to_upload: list[dict[str, Any]],
+        staging_dir: Path,
         chunk_size: int,
         chunk_overlap: int,
         batch_size: int,
         tasks_limit: int,
         max_retries: int,
     ) -> None:
+        """Process staged knowledge base files one at a time.
+
+        Args:
+            task_id: Identifier used to report upload progress and results.
+            kb_helper: Knowledge base helper that parses and stores documents.
+            files_to_upload: Metadata and temporary paths for staged files.
+            staging_dir: Task-specific system temporary directory.
+            chunk_size: Maximum size of each generated document chunk.
+            chunk_overlap: Number of overlapping characters between chunks.
+            batch_size: Number of chunks sent in each embedding batch.
+            tasks_limit: Maximum number of concurrent embedding tasks.
+            max_retries: Maximum retries for embedding operations.
+        """
         try:
             self.init_task(task_id, status="processing")
             self.upload_progress[task_id] = {
@@ -128,7 +171,11 @@ class KnowledgeBaseService:
             failed_docs = []
 
             for file_idx, file_info in enumerate(files_to_upload):
+                file_content = None
                 try:
+                    temp_file_path = Path(file_info["temp_file_path"])
+                    async with aiofiles.open(temp_file_path, "rb") as file_obj:
+                        file_content = await file_obj.read()
                     self.update_progress(
                         task_id,
                         status="processing",
@@ -143,7 +190,7 @@ class KnowledgeBaseService:
                     )
                     doc = await kb_helper.upload_document(
                         file_name=file_info["file_name"],
-                        file_content=file_info["file_content"],
+                        file_content=file_content,
                         file_type=file_info["file_type"],
                         chunk_size=chunk_size,
                         chunk_overlap=chunk_overlap,
@@ -163,6 +210,10 @@ class KnowledgeBaseService:
                             ),
                         },
                     )
+                finally:
+                    # Release the current file before reading the next one.
+                    file_content = None
+                    Path(file_info["temp_file_path"]).unlink(missing_ok=True)
 
             self.set_task_result(
                 task_id,
@@ -180,6 +231,8 @@ class KnowledgeBaseService:
             logger.error(f"后台上传任务 {task_id} 失败: {exc}")
             logger.error(traceback.format_exc())
             self.set_task_result(task_id, "failed", error=str(exc))
+        finally:
+            self._cleanup_staging_dir(staging_dir)
 
     async def background_import_task(
         self,
@@ -266,16 +319,24 @@ class KnowledgeBaseService:
     async def list_kbs(self, *, page: int, page_size: int) -> dict[str, Any]:
         kb_manager = self.get_kb_manager()
         kbs = await kb_manager.list_kbs()
+        total = len(kbs)
+
+        # Clamp page and page_size to at least 1 before calculating offsets/slices.
+        page = max(page, 1)
+        page_size = max(page_size, 1)
+        start = (page - 1) * page_size
+        end = start + page_size
+        paged_kbs = kbs[start:end]
 
         kb_list = []
-        for kb in kbs:
+        for kb in paged_kbs:
             kb_dict = kb.model_dump()
             kb_helper = await kb_manager.get_kb(kb.kb_id)
             if kb_helper and kb_helper.init_error:
                 kb_dict["init_error"] = kb_helper.init_error
             kb_list.append(kb_dict)
 
-        return {"items": kb_list, "page": page, "page_size": page_size}
+        return {"items": kb_list, "page": page, "page_size": page_size, "total": total}
 
     async def list_kbs_from_dashboard_query(self, *, page, page_size) -> dict[str, Any]:
         return await self.list_kbs(
@@ -285,7 +346,7 @@ class KnowledgeBaseService:
 
     async def create_kb(self, data: object) -> tuple[dict[str, Any], str]:
         kb_manager = self.get_kb_manager()
-        payload = self._payload(data)
+        payload = self._canonical_kb_payload(data)
         kb_name = payload.get("kb_name")
         if not kb_name:
             raise KnowledgeBaseServiceError("知识库名称不能为空")
@@ -355,7 +416,7 @@ class KnowledgeBaseService:
         return await self.get_kb(kb_id)
 
     async def update_kb(self, data: object) -> tuple[dict[str, Any], str]:
-        payload = self._payload(data)
+        payload = self._canonical_kb_payload(data)
         kb_id = payload.get("kb_id")
         if not kb_id:
             raise KnowledgeBaseServiceError("缺少参数 kb_id")
@@ -372,28 +433,20 @@ class KnowledgeBaseService:
             "top_k_sparse",
             "top_m_final",
         ]
-        if all(payload.get(key) is None for key in update_keys):
+        provided_updates = {key: payload[key] for key in update_keys if key in payload}
+        if not provided_updates:
             raise KnowledgeBaseServiceError("至少需要提供一个更新字段")
 
         current_kb = await self.get_kb_manager().get_kb(kb_id)
-        kb_name = payload.get("kb_name")
-        if kb_name is None:
-            if not current_kb:
-                raise KnowledgeBaseServiceError("知识库不存在")
-            kb_name = current_kb.kb.kb_name
+        if not current_kb:
+            raise KnowledgeBaseServiceError("知识库不存在")
+        current = current_kb.kb
+        update_data = {key: getattr(current, key, None) for key in update_keys}
+        update_data.update(provided_updates)
 
         kb_helper = await self.get_kb_manager().update_kb(
             kb_id=kb_id,
-            kb_name=kb_name,
-            description=payload.get("description"),
-            emoji=payload.get("emoji"),
-            embedding_provider_id=payload.get("embedding_provider_id"),
-            rerank_provider_id=payload.get("rerank_provider_id"),
-            chunk_size=payload.get("chunk_size"),
-            chunk_overlap=payload.get("chunk_overlap"),
-            top_k_dense=payload.get("top_k_dense"),
-            top_k_sparse=payload.get("top_k_sparse"),
-            top_m_final=payload.get("top_m_final"),
+            **update_data,
         )
         if not kb_helper:
             raise KnowledgeBaseServiceError("知识库不存在")
@@ -437,6 +490,7 @@ class KnowledgeBaseService:
         kb_id: str | None,
         page: int,
         page_size: int,
+        search: str | None = None,
     ) -> dict[str, Any]:
         if not kb_id:
             raise KnowledgeBaseServiceError("缺少参数 kb_id")
@@ -444,12 +498,25 @@ class KnowledgeBaseService:
         if not kb_helper:
             raise KnowledgeBaseServiceError("知识库不存在")
 
+        if search is not None:
+            search = search.strip()
+            if not search:
+                search = None
+
+        page = max(page, 1)
+        page_size = max(page_size, 1)
         offset = (page - 1) * page_size
-        doc_list = await kb_helper.list_documents(offset=offset, limit=page_size)
+        doc_list = await kb_helper.list_documents(
+            offset=offset,
+            limit=page_size,
+            search=search,
+        )
+        total = await kb_helper.count_documents(search=search)
         return {
             "items": [doc.model_dump() for doc in doc_list],
             "page": page,
             "page_size": page_size,
+            "total": total,
         }
 
     async def list_documents_from_dashboard_query(
@@ -458,11 +525,13 @@ class KnowledgeBaseService:
         kb_id: str | None,
         page,
         page_size,
+        search: str | None = None,
     ) -> dict[str, Any]:
         return await self.list_documents(
             kb_id=kb_id,
             page=self._to_int(page, 1),
             page_size=self._to_int(page_size, 100),
+            search=search,
         )
 
     async def upload_document(
@@ -490,52 +559,62 @@ class KnowledgeBaseService:
                 file_list.extend(files.getlist(key))
         if not file_list:
             raise KnowledgeBaseServiceError("缺少文件")
-        if len(file_list) > 10:
-            raise KnowledgeBaseServiceError("最多只能上传10个文件")
 
+        task_id = str(uuid.uuid4())
+        system_temp_root = Path(get_astrbot_system_tmp_path())
+        system_temp_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        staging_dir = system_temp_root / f"kb_upload_{task_id}"
+        staging_dir.mkdir(mode=0o700)
         files_to_upload = []
-        for file in file_list:
-            file_name = Path(str(file.filename or "document").replace("\\", "/")).name
-            if file_name in {"", ".", ".."}:
-                file_name = "document"
-            temp_file_path = (
-                Path(get_astrbot_temp_path()) / f"kb_upload_{uuid.uuid4()}_{file_name}"
-            )
-            await file.save(temp_file_path)
-            try:
-                async with aiofiles.open(temp_file_path, "rb") as file_obj:
-                    file_content = await file_obj.read()
+        try:
+            for file in file_list:
+                file_name = Path(
+                    str(file.filename or "document").replace("\\", "/")
+                ).name
+                if file_name in {"", ".", ".."}:
+                    file_name = "document"
+                temp_file_path = staging_dir / f"{uuid.uuid4()}_{file_name}"
                 file_type = (
                     file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
                 )
                 files_to_upload.append(
                     {
                         "file_name": file_name,
-                        "file_content": file_content,
+                        "temp_file_path": temp_file_path,
                         "file_type": file_type,
                     },
                 )
-            finally:
-                temp_file_path.unlink(missing_ok=True)
+                await file.save(temp_file_path)
+        except Exception:
+            self._cleanup_staging_dir(staging_dir)
+            raise
 
-        kb_helper = await self.get_kb_manager().get_kb(kb_id)
-        if not kb_helper:
-            raise KnowledgeBaseServiceError("知识库不存在")
+        try:
+            kb_helper = await self.get_kb_manager().get_kb(kb_id)
+            if not kb_helper:
+                raise KnowledgeBaseServiceError("知识库不存在")
+        except Exception:
+            self._cleanup_staging_dir(staging_dir)
+            raise
 
-        task_id = str(uuid.uuid4())
-        self.init_task(task_id, status="pending")
-        asyncio.create_task(
-            self.background_upload_task(
-                task_id=task_id,
-                kb_helper=kb_helper,
-                files_to_upload=files_to_upload,
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-                batch_size=batch_size,
-                tasks_limit=tasks_limit,
-                max_retries=max_retries,
-            ),
-        )
+        try:
+            self.init_task(task_id, status="pending")
+            asyncio.create_task(
+                self.background_upload_task(
+                    task_id=task_id,
+                    kb_helper=kb_helper,
+                    files_to_upload=files_to_upload,
+                    staging_dir=staging_dir,
+                    chunk_size=chunk_size,
+                    chunk_overlap=chunk_overlap,
+                    batch_size=batch_size,
+                    tasks_limit=tasks_limit,
+                    max_retries=max_retries,
+                ),
+            )
+        except Exception:
+            self._cleanup_staging_dir(staging_dir)
+            raise
         return {
             "task_id": task_id,
             "file_count": len(files_to_upload),
@@ -738,11 +817,11 @@ class KnowledgeBaseService:
 
         if not query:
             raise KnowledgeBaseServiceError("缺少参数 query")
+        kb_manager = self.get_kb_manager()
         if not kb_names or not isinstance(kb_names, list):
             raise KnowledgeBaseServiceError("缺少参数 kb_names 或格式错误")
 
         top_k = payload.get("top_k", 5)
-        kb_manager = self.get_kb_manager()
         results = await kb_manager.retrieve(
             query=query,
             kb_names=kb_names,

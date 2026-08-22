@@ -228,7 +228,8 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                         await self.send(MessageChain(chain=[comp]))
                         await asyncio.sleep(1.5)  # 限速
 
-        if buffer.strip():
+        buffer = buffer.strip()
+        if buffer:
             await self.send(MessageChain([Plain(buffer)]))
         return await super().send_streaming(generator, use_fallback)
 

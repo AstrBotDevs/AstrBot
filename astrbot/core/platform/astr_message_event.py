@@ -8,6 +8,8 @@ from collections.abc import AsyncGenerator
 from time import time
 from typing import Any
 
+from deprecated import deprecated
+
 from astrbot import logger
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
@@ -166,8 +168,7 @@ class AstrMessageEvent(abc.ABC):
                     parts.append("[引用消息]")
             else:
                 parts.append(f"[{i.type}]")
-            parts.append(" ")
-        return "".join(parts)
+        return " ".join(parts)
 
     def get_message_outline(self) -> str:
         """获取消息概要。
@@ -269,10 +270,11 @@ class AstrMessageEvent(abc.ABC):
             match = re.search(pattern, buffer)
             if not match:
                 break
-            matched_text = match.group()
-            await self.send(MessageChain([Plain(matched_text)]))
+            matched_text = match.group().strip()
+            if matched_text:
+                await self.send(MessageChain([Plain(matched_text)]))
+                await asyncio.sleep(1.5)  # 限速
             buffer = buffer[match.end() :]
-            await asyncio.sleep(1.5)  # 限速
         return buffer
 
     async def send_streaming(
@@ -301,9 +303,11 @@ class AstrMessageEvent(abc.ABC):
         默认实现为空，由具体平台按需重写。
         """
 
+    @deprecated(version="3.5.18", reason="No longer invoked by the message scheduler.")
     async def _pre_send(self) -> None:
         """调度器会在执行 send() 前调用该方法 deprecated in v3.5.18"""
 
+    @deprecated(version="3.5.18", reason="No longer invoked by the message scheduler.")
     async def _post_send(self) -> None:
         """调度器会在执行 send() 后调用该方法 deprecated in v3.5.18"""
 

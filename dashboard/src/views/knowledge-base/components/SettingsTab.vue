@@ -125,7 +125,7 @@
     <!-- Embedding Provider修改确认对话框 -->
     <v-dialog v-model="embeddingChangeDialog" max-width="500px" persistent>
       <v-card>
-        <v-card-title class="bg-warning text-white">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           <v-icon class="mr-2">mdi-alert</v-icon>
           确认修改嵌入模型
         </v-card-title>
@@ -148,7 +148,7 @@
           <v-btn variant="text" @click="cancelEmbeddingChange">
             取消
           </v-btn>
-          <v-btn color="warning" variant="elevated" @click="confirmEmbeddingChange">
+          <v-btn color="warning" variant="tonal" @click="confirmEmbeddingChange">
             确认修改
           </v-btn>
         </v-card-actions>

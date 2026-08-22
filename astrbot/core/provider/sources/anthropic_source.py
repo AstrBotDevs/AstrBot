@@ -35,6 +35,8 @@ from .request_retry import retry_provider_request, retry_provider_request_contex
     "Anthropic Claude API 提供商适配器",
 )
 class ProviderAnthropic(Provider):
+    _PROMPT_CACHE_CONTROL = {"type": "ephemeral"}
+
     @staticmethod
     def _ensure_usable_response(
         llm_response: LLMResponse,
@@ -305,6 +307,131 @@ class ProviderAnthropic(Provider):
 
         return system_prompt, new_messages
 
+    @staticmethod
+    def _merge_consecutive_anthropic_messages(messages: list[Any]) -> list[Any]:
+        """Merge adjacent Anthropic messages with the same role.
+
+        Args:
+            messages: Anthropic messages to merge.
+
+        Returns:
+            Merged Anthropic messages. When merging user messages, tool result
+            blocks are moved before other blocks to satisfy Anthropic ordering.
+        """
+        merged: list[Any] = []
+        for msg in messages:
+            if not isinstance(msg, dict):
+                merged.append(msg)
+                continue
+
+            if (
+                msg.get("role")
+                and merged
+                and isinstance(merged[-1], dict)
+                and merged[-1].get("role") == msg.get("role")
+            ):
+                prev = merged[-1]
+                prev_content = prev.get("content") or []
+                if isinstance(prev_content, str):
+                    prev_content = [{"type": "text", "text": prev_content}]
+                elif isinstance(prev_content, list):
+                    prev_content = list(prev_content)
+                else:
+                    prev_content = [prev_content]
+
+                cur_content = msg.get("content") or []
+                if isinstance(cur_content, str):
+                    cur_content = [{"type": "text", "text": cur_content}]
+                elif isinstance(cur_content, list):
+                    cur_content = list(cur_content)
+                else:
+                    cur_content = [cur_content]
+
+                combined_content = prev_content + cur_content
+                if msg.get("role") == "user":
+                    tool_results = [
+                        block
+                        for block in combined_content
+                        if isinstance(block, dict)
+                        and block.get("type") == "tool_result"
+                    ]
+                    if tool_results:
+                        combined_content = tool_results + [
+                            block
+                            for block in combined_content
+                            if not (
+                                isinstance(block, dict)
+                                and block.get("type") == "tool_result"
+                            )
+                        ]
+
+                merged[-1] = {**prev, "content": combined_content}
+            else:
+                merged.append(msg)
+
+        return merged
+
+    @staticmethod
+    def _sanitize_assistant_messages(payloads: dict) -> None:
+        """Remove orphaned tool results from Anthropic messages.
+
+        Args:
+            payloads: Anthropic request payload containing a messages list.
+
+        Returns:
+            None. The messages list is updated in place on ``payloads``.
+        """
+        messages = payloads.get("messages")
+        if not isinstance(messages, list):
+            return
+
+        merged = ProviderAnthropic._merge_consecutive_anthropic_messages(messages)
+        sanitized: list[Any] = []
+        pending_tool_use_ids: set[str] = set()
+        for msg in merged:
+            if not isinstance(msg, dict):
+                sanitized.append(msg)
+                pending_tool_use_ids = set()
+                continue
+
+            role = msg.get("role")
+            content = msg.get("content")
+            if role == "assistant":
+                pending_tool_use_ids = set()
+                if isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "tool_use":
+                            tool_use_id = block.get("id")
+                            if tool_use_id:
+                                pending_tool_use_ids.add(tool_use_id)
+                sanitized.append(msg)
+                continue
+
+            if role == "user" and isinstance(content, list):
+                tool_results: list[Any] = []
+                other_blocks: list[Any] = []
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "tool_result":
+                        tool_use_id = block.get("tool_use_id")
+                        if tool_use_id in pending_tool_use_ids:
+                            tool_results.append(block)
+                            pending_tool_use_ids.remove(tool_use_id)
+                        continue
+                    other_blocks.append(block)
+
+                cleaned_content = tool_results + other_blocks
+                if cleaned_content:
+                    sanitized.append({**msg, "content": cleaned_content})
+                pending_tool_use_ids = set()
+                continue
+
+            sanitized.append(msg)
+            pending_tool_use_ids = set()
+
+        payloads["messages"] = ProviderAnthropic._merge_consecutive_anthropic_messages(
+            sanitized
+        )
+
     def _extract_usage(self, usage: Usage | None) -> TokenUsage:
         if usage is None:
             return TokenUsage()
@@ -354,6 +481,16 @@ class ProviderAnthropic(Provider):
         logger.warning(f"未知的 tool_choice 值: {tool_choice}，已回退为 'auto'")
         return {"type": "auto"}
 
+    @classmethod
+    def _apply_explicit_prompt_cache_breakpoints(cls, payloads: dict) -> None:
+        system_blocks = payloads.get("system")
+        if not isinstance(system_blocks, list) or not system_blocks:
+            return
+
+        last_block = system_blocks[-1]
+        if isinstance(last_block, dict) and "cache_control" not in last_block:
+            last_block["cache_control"] = dict(cls._PROMPT_CACHE_CONTROL)
+
     async def _query(
         self,
         payloads: dict,
@@ -372,7 +509,9 @@ class ProviderAnthropic(Provider):
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 65536
+        self._apply_explicit_prompt_cache_breakpoints(payloads)
         self._apply_thinking_config(payloads)
+        self._sanitize_assistant_messages(payloads)
 
         try:
             completion = await retry_provider_request(
@@ -472,7 +611,9 @@ class ProviderAnthropic(Provider):
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 65536
+        self._apply_explicit_prompt_cache_breakpoints(payloads)
         self._apply_thinking_config(payloads)
+        self._sanitize_assistant_messages(payloads)
 
         async with retry_provider_request_context(
             "Anthropic",

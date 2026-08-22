@@ -63,6 +63,8 @@ const {
   sourceToRemove,
   editingSource,
   originalSourceUrl,
+  sourceBindingDialog,
+  selectedSourceBindingCandidate,
   extension_url,
   dialog,
   upload_file,
@@ -122,11 +124,13 @@ const {
   addCustomSource,
   openSourceManagerDialog,
   selectPluginSource,
-  sourceSelectItems,
   editCustomSource,
   removeCustomSource,
   confirmRemoveSource,
   saveCustomSource,
+  openPluginSourceBindingDialog,
+  closePluginSourceBindingDialog,
+  confirmPluginSourceBinding,
   trimExtensionName,
   checkAlreadyInstalled,
   showVersionSupportWarning,
@@ -148,7 +152,6 @@ const openPluginDetail = (extension) => {
   router.push({
     name: "ExtensionDetails",
     params: { pluginId: extension.name },
-    hash: "#installed",
   });
 };
 
@@ -219,10 +222,32 @@ const togglePinnedExtension = (extension) => {
 <template>
   <v-tab-item v-show="activeTab === 'installed'">
     <div class="mb-4 pt-4 pb-4">
-      <div class="d-flex align-center flex-wrap" style="gap: 12px">
-        <h2 class="text-h2 mb-0">{{ tm("titles.installedAstrBotPlugins") }}</h2>
+      <div class="installed-header-row d-flex align-center flex-wrap">
+        <v-tabs
+          model-value="installed"
+          bg-color="transparent"
+          class="plugin-view-tabs"
+          height="42"
+        >
+          <v-tab
+            value="installed"
+            :to="{ name: 'Extensions' }"
+            class="plugin-view-tab text-none"
+            :ripple="false"
+          >
+            {{ tm("titles.installedAstrBotPlugins") }}
+          </v-tab>
+          <v-tab
+            value="market"
+            :to="{ name: 'ExtensionMarketplace' }"
+            class="plugin-view-tab text-none"
+            :ripple="false"
+          >
+            {{ tm("tabs.market") }}
+          </v-tab>
+        </v-tabs>
 
-        <div class="d-flex align-center flex-wrap ml-auto" style="gap: 8px">
+        <div class="installed-search-wrap d-flex align-center ml-auto">
           <v-text-field
             :model-value="pluginSearch"
             @update:model-value="pluginSearch = normalizeTextInput($event)"
@@ -234,7 +259,7 @@ const togglePinnedExtension = (extension) => {
             flat
             hide-details
             single-line
-            style="min-width: 220px; max-width: 340px"
+            class="plugin-search-field"
           >
           </v-text-field>
         </div>
@@ -357,12 +382,143 @@ const togglePinnedExtension = (extension) => {
               @view-readme="viewReadme(extension)"
               @view-changelog="viewChangelog(extension)"
               @open-webui="openPluginWebui(extension)"
+              @change-source="openPluginSourceBindingDialog(extension)"
             >
             </ExtensionCard>
           </v-col>
         </v-row>
       </div>
     </v-fade-transition>
+
+    <v-dialog v-model="sourceBindingDialog.show" max-width="680">
+      <v-card>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
+          {{
+            sourceBindingDialog.pendingUpdate
+              ? tm("dialogs.sourceBinding.selectTitle")
+              : tm("dialogs.sourceBinding.title")
+          }}
+        </v-card-title>
+        <v-card-text>
+          <div
+            v-if="sourceBindingDialog.extension"
+            class="text-body-2 text-medium-emphasis mb-3"
+          >
+            {{
+              sourceBindingDialog.extension.display_name ||
+              sourceBindingDialog.extension.name
+            }}
+          </div>
+
+          <v-progress-linear
+            v-if="sourceBindingDialog.loading"
+            color="primary"
+            indeterminate
+          />
+
+          <v-alert
+            v-else-if="sourceBindingDialog.candidates.length === 0"
+            type="info"
+            variant="tonal"
+            density="comfortable"
+          >
+            {{ tm("dialogs.sourceBinding.noCandidates") }}
+          </v-alert>
+
+          <v-radio-group
+            v-else
+            v-model="sourceBindingDialog.selectedKey"
+            hide-details
+          >
+            <v-radio
+              v-for="candidate in sourceBindingDialog.candidates"
+              :key="candidate.key"
+              :value="candidate.key"
+              color="primary"
+            >
+              <template #label>
+                <div class="py-2">
+                  <div class="font-weight-medium">
+                    {{ candidate.registry_name }}
+                  </div>
+                </div>
+              </template>
+            </v-radio>
+          </v-radio-group>
+          <div
+            v-if="selectedSourceBindingCandidate"
+            class="text-caption text-medium-emphasis mt-2"
+          >
+            <div>
+              {{ tm("dialogs.sourceBinding.installDestination") }}:
+              {{
+                selectedSourceBindingCandidate.download_url ||
+                selectedSourceBindingCandidate.repo
+              }}
+            </div>
+            <div class="d-flex align-center" style="gap: 4px">
+              <span>{{ tm("table.headers.version") }}:</span>
+              <span
+                v-if="
+                  selectedSourceBindingCandidate.validation_status === 'loading'
+                "
+                class="d-inline-flex align-center"
+                style="height: 16px"
+              >
+                <v-progress-circular
+                  indeterminate
+                  size="14"
+                  width="1"
+                  color="primary"
+                />
+              </span>
+              <span v-else>
+                {{
+                  selectedSourceBindingCandidate.version ||
+                  tm("status.unknown")
+                }}
+              </span>
+            </div>
+          </div>
+          <v-alert
+            v-if="
+              selectedSourceBindingCandidate?.validation_status === 'error'
+            "
+            type="error"
+            variant="tonal"
+            density="compact"
+            class="mt-3"
+          >
+            {{ selectedSourceBindingCandidate.validation_message }}
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="closePluginSourceBindingDialog">
+            {{ tm("buttons.cancel") }}
+          </v-btn>
+          <v-btn
+            color="primary"
+            variant="tonal"
+            :loading="sourceBindingDialog.saving"
+            :disabled="
+              sourceBindingDialog.loading ||
+              sourceBindingDialog.candidates.length === 0 ||
+              !sourceBindingDialog.selectedKey ||
+              (selectedSourceBindingCandidate?.install_method === 'repository' &&
+                selectedSourceBindingCandidate?.validation_status !== 'valid')
+            "
+            @click="confirmPluginSourceBinding"
+          >
+            {{
+              sourceBindingDialog.pendingUpdate
+                ? tm("dialogs.sourceBinding.confirmAndContinue")
+                : tm("dialogs.sourceBinding.confirm")
+            }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <v-tooltip :text="tm('market.installPlugin')" location="left">
       <template v-slot:activator="{ props }">
@@ -410,6 +566,64 @@ const togglePinnedExtension = (extension) => {
 </template>
 
 <style scoped>
+.plugin-view-tabs {
+  background: transparent;
+  flex: 0 0 auto;
+}
+
+.plugin-view-tab {
+  color: rgba(var(--v-theme-on-surface), 0.54);
+  font-size: 1.25rem;
+  font-weight: 650;
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.plugin-view-tab:first-child {
+  padding-left: 0;
+}
+
+.plugin-view-tab.v-tab--selected {
+  color: rgba(var(--v-theme-on-surface), 0.92);
+}
+
+.plugin-view-tabs :deep(.v-tabs-slider) {
+  background: rgba(var(--v-theme-on-surface), 0.5);
+  height: 2px;
+}
+
+.installed-header-row {
+  gap: 12px;
+}
+
+.installed-search-wrap {
+  flex: 0 1 340px;
+  min-width: 220px;
+}
+
+.plugin-search-field {
+  width: 100%;
+}
+
+@media (max-width: 700px) {
+  .installed-header-row {
+    align-items: stretch !important;
+    flex-direction: column;
+  }
+
+  .installed-search-wrap {
+    flex: none;
+    margin-left: 0 !important;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .plugin-view-tab {
+    font-size: 1.125rem;
+    padding-inline: 8px;
+  }
+}
+
 .fab-button {
   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);

@@ -54,8 +54,11 @@ class TestLocalBooterLifecycle:
     async def test_shutdown(self):
         """Test LocalBooter shutdown method."""
         booter = LocalBooter()
-        # Should not raise any exception
+        booter._shell.shutdown_sessions = AsyncMock()
+
         await booter.shutdown()
+
+        booter._shell.shutdown_sessions.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_available(self):
@@ -503,6 +506,20 @@ class TestComputerClient:
 
         # Reset for other tests
         computer_client.local_booter = None
+
+    @pytest.mark.asyncio
+    async def test_shutdown_local_booter_clears_singleton(self):
+        """Test local managed resources are released during lifecycle shutdown."""
+        from astrbot.core.computer import computer_client
+
+        booter = MagicMock(spec=LocalBooter)
+        booter.shutdown = AsyncMock()
+        computer_client.local_booter = booter
+
+        await computer_client.shutdown_local_booter()
+
+        booter.shutdown.assert_awaited_once()
+        assert computer_client.local_booter is None
 
     @pytest.mark.asyncio
     async def test_get_booter_shipyard(self):

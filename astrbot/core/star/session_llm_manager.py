@@ -136,7 +136,8 @@ class SessionServiceManager:
         )
 
         logger.info(
-            f"会话 {session_id} 的TTS状态已更新为: {'启用' if enabled else '禁用'}",
+            f"TTS status for session {session_id} was updated to "
+            f"{'enabled' if enabled else 'disabled'}.",
         )
 
     @staticmethod
