@@ -143,6 +143,10 @@
                 "websearch_exa_key": {
                     "description": "API-ключ Exa",
                     "hint": "Можно добавить несколько ключей для ротации. Получить ключ: https://dashboard.exa.ai"
+                },
+                "websearch_anysearch_key": {
+                    "description": "AnySearch API-ключ",
+                    "hint": "Можно добавить несколько ключей для ротации. Оставьте пустым для анонимного режима с ежедневной бесплатной квотой."
                 }
             }
         },

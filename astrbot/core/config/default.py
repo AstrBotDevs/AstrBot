@@ -116,6 +116,7 @@ DEFAULT_CONFIG = {
         "websearch_baidu_app_builder_key": "",
         "websearch_firecrawl_key": [],
         "websearch_exa_key": [],
+        "websearch_anysearch_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -3395,6 +3396,7 @@ CONFIG_METADATA_3 = {
                             "brave",
                             "firecrawl",
                             "exa",
+                            "anysearch",
                         ],
                         "condition": {
                             "provider_settings.web_search": True,
@@ -3456,6 +3458,16 @@ CONFIG_METADATA_3 = {
                         "hint": "可添加多个 Key 进行轮询。Get a key at https://dashboard.exa.ai",
                         "condition": {
                             "provider_settings.websearch_provider": "exa",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_anysearch_key": {
+                        "description": "AnySearch API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "可添加多个 Key 进行轮询。留空则使用匿名模式（每日免费额度）。申请地址：https://anysearch.com/console/api-keys",
+                        "condition": {
+                            "provider_settings.websearch_provider": "anysearch",
                             "provider_settings.web_search": True,
                         },
                     },

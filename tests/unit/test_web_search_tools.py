@@ -1,10 +1,79 @@
 import json
 from types import SimpleNamespace
-
 import pytest
-
 from astrbot.core.tools import web_search_tools as tools
 
+from astrbot.core.tools.web_search_tools import (
+    _anysearch_search,
+    AnySearchWebSearchTool,
+    normalize_legacy_web_search_config,
+)
+
+class _FakeAnysearchResponse:
+    """Fake HTTP response for AnySearch API tests."""
+    def __init__(self, status=200, json_data=None, text_data=""):
+        self.status = status
+        self.json_data = json_data or {}
+        self.text_data = text_data
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return None
+
+    async def json(self):
+        return self.json_data
+
+    async def text(self):
+        return self.text_data
+
+
+class _FakeAnysearchSession:
+    """Fake ClientSession for AnySearch API tests."""
+    def __init__(self, response):
+        self.response = response
+        self.trust_env = None
+        self.entered = False
+        self.exited = False
+        self.posted = None
+
+    async def __aenter__(self):
+        self.entered = True
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        self.exited = True
+        return None
+
+    def post(self, url, json, headers):
+        self.posted = {"url": url, "json": json, "headers": headers}
+        return self.response
+
+
+class _FakeAnysearchCycleSession:
+    """Return the next response for each post() call in key rotation tests."""
+    def __init__(self, responses: list):
+        self.responses = responses
+        self.cursor = 0
+        self.trust_env = None
+        self.entered = False
+        self.exited = False
+        self.calls: list[dict] = []
+
+    async def __aenter__(self):
+        self.entered = True
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        self.exited = True
+        return None
+
+    def post(self, url, json, headers):
+        resp = self.responses[self.cursor]
+        self.cursor = (self.cursor + 1) % len(self.responses)
+        self.calls.append({"url": url, "json": json, "headers": headers})
+        return resp
 
 class _FakeConfig(dict):
     def __init__(self, *args, **kwargs):
@@ -805,3 +874,199 @@ async def test_exa_get_contents_raises_on_http_error(monkeypatch):
             {"websearch_exa_key": ["exa-key"]},
             {"ids": ["https://example.com"]},
         )
+
+
+
+# ============================================================================
+# AnySearch provider tests
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_anysearch_search_maps_results(monkeypatch):
+    """Results nested under `data` are normalized into SearchResult items."""
+    session = _FakeAnysearchSession(
+        _FakeAnysearchResponse(
+            status=200,
+            json_data={
+                "code": 0,
+                "message": "success",
+                "request_id": "req_12345",
+                "data": {
+                    "results": [
+                        {
+                            "title": "AstrBot - AI Chatbot Framework",
+                            "url": "https://github.com/AstrBotDevs/AstrBot",
+                            "snippet": "A powerful AI chatbot framework for Python",
+                            "content": "AstrBot is a flexible AI chatbot framework..."
+                        },
+                        {
+                            "title": "AstrBot Documentation",
+                            "url": "https://astrbot.dev/docs",
+                            "snippet": "Official documentation for AstrBot",
+                            "content": "Getting started with AstrBot..."
+                        }
+                    ],
+                    "metadata": {
+                        "total_results": 100,
+                        "search_time_ms": 150
+                    }
+                }
+            }
+        )
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    provider_settings = {"websearch_anysearch_key": ["test-key"]}
+    results = await _anysearch_search(provider_settings, {"query": "AstrBot"})
+
+    assert len(results) == 2
+    assert results[0].title == "AstrBot - AI Chatbot Framework"
+    assert results[0].url == "https://github.com/AstrBotDevs/AstrBot"
+    assert results[0].snippet == "A powerful AI chatbot framework for Python"
+    assert results[1].title == "AstrBot Documentation"
+    assert results[1].url == "https://astrbot.dev/docs"
+    assert results[1].snippet == "Official documentation for AstrBot"
+    for result in results:
+        assert result.url is not None
+        assert result.url != ""
+
+
+@pytest.mark.asyncio
+async def test_anysearch_search_supports_anonymous_mode(monkeypatch):
+    """An empty key list issues one request without an Authorization header."""
+    session = _FakeAnysearchSession(
+        _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}})
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    provider_settings = {"websearch_anysearch_key": []}  # ���б�
+    await _anysearch_search(provider_settings, {"query": "test"})
+
+    # ��֤û�� Authorization header
+    assert session.posted is not None
+    headers = session.posted.get("headers", {})
+    assert "Authorization" not in headers
+
+
+@pytest.mark.asyncio
+async def test_anysearch_search_key_failover_on_quota_exhausted_402(monkeypatch):
+    """A 402 response retries with the next configured key."""
+    session = _FakeAnysearchCycleSession([
+        _FakeAnysearchResponse(status=402, text_data="quota exhausted"),
+        _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}}),
+    ])
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    provider_settings = {"websearch_anysearch_key": ["key1", "key2"]}
+    await _anysearch_search(provider_settings, {"query": "test"})
+
+    assert len(session.calls) == 2  # ��һ�� 402 ʧ�ܣ��ڶ��γɹ�
+
+
+@pytest.mark.asyncio
+async def test_anysearch_search_does_not_failover_on_server_error_500(monkeypatch):
+    """A 500 response fails fast instead of burning through keys."""
+    session = _FakeAnysearchCycleSession([
+        _FakeAnysearchResponse(status=500, text_data="internal server error"),
+        _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}}),
+    ])
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    provider_settings = {"websearch_anysearch_key": ["key1", "key2"]}
+
+    with pytest.raises(Exception) as exc_info:
+        await _anysearch_search(provider_settings, {"query": "test"})
+
+    assert "internal server error" in str(exc_info.value)
+    assert len(session.calls) == 1  # 500 �����ԣ�ֻ�� 1 ��
+
+
+@pytest.mark.asyncio
+async def test_anysearch_search_tool_clamps_max_results(monkeypatch):
+    """max_results is clamped into the documented 1-20 range."""
+    session = _FakeAnysearchSession(
+        _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}})
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    tool = AnySearchWebSearchTool()
+    context = _context_with_provider_settings({"websearch_anysearch_key": ["test-key"]})
+
+    # �� 99 �� Ӧ�ñ�� 20
+    await tool.call(context, query="test", max_results=99)
+    payload = session.posted.get("json", {})
+    assert payload.get("max_results") == 20
+
+    # �� 0 �� Ӧ�ñ�� 1
+    await tool.call(context, query="test", max_results=0)
+    payload = session.posted.get("json", {})
+    assert payload.get("max_results") == 1
+
+
+def test_normalize_legacy_config_converts_anysearch_string_key():
+    """A legacy string key is migrated to a single-element list."""
+    config = _FakeConfig({"provider_settings": {"websearch_anysearch_key": "old-string-key"}})
+    normalize_legacy_web_search_config(config)  # ֱ�ӵ��ã������շ���ֵ
+    assert config["provider_settings"]["websearch_anysearch_key"] == ["old-string-key"]
+
+
+@pytest.mark.asyncio
+async def test_anysearch_search_falls_back_to_content_for_snippet(monkeypatch):
+    """When snippet is missing, content is used as the fallback."""
+    session = _FakeAnysearchSession(
+        _FakeAnysearchResponse(
+            status=200,
+            json_data={
+                "data": {
+                    "results": [
+                        {
+                            "title": "Test Title",
+                            "url": "https://example.com",
+                            "content": "Full content text here"
+                            # ע�⣺û�� snippet �ֶ�
+                        }
+                    ]
+                }
+            }
+        )
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    provider_settings = {"websearch_anysearch_key": ["test-key"]}
+    results = await _anysearch_search(provider_settings, {"query": "test"})
+
+    assert len(results) == 1
+    assert results[0].snippet == "Full content text here"
+    assert results[0].title == "Test Title"
+    assert results[0].url == "https://example.com"
+
