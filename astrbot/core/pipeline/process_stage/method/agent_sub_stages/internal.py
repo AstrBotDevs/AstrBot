@@ -150,7 +150,10 @@ class InternalAgentSubStage(Stage):
             add_cron_tools=self.add_cron_tools,
             provider_settings=settings,
             subagent_orchestrator=conf.get("subagent_orchestrator", {}),
-            timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
+            # Use this pipeline's own config profile so that the time
+            # awareness matches the timezone used for per-profile cron
+            # scheduling; both must not silently diverge (#9706).
+            timezone=conf.get("timezone"),
             max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
         )
 
