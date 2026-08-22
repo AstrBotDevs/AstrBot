@@ -447,6 +447,9 @@ class CronJobManager:
             llm_safety_mode=False,
             streaming_response=False,
             provider_settings=provider_settings,
+            # Keep the agent's time awareness consistent with the timezone
+            # used to schedule this job (#9706).
+            timezone=cfg.get("timezone"),
         )
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
