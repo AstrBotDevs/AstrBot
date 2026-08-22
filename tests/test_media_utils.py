@@ -902,11 +902,29 @@ def test_normalize_image_for_provider_returns_none_for_unparseable_image():
     assert media_utils.normalize_image_for_provider(data) is None
 
 
-def test_normalize_image_for_provider_preserves_supported_mime():
+def test_normalize_image_for_provider_rejects_invalid_supported_mime():
     data = media_utils.ResolvedMediaData(
-        base64_data="abcd",
+        base64_data=base64.b64encode(b"not-an-image").decode("ascii"),
         mime_type="image/png",
         format=None,
     )
 
-    assert media_utils.normalize_image_for_provider(data) is data
+    assert media_utils.normalize_image_for_provider(data) is None
+
+
+def test_normalize_image_for_provider_preserves_supported_mime():
+    from PIL import Image as PILImage
+
+    buffer = BytesIO()
+    PILImage.new("RGB", (2, 2), (1, 2, 3)).save(buffer, format="PNG")
+    data = media_utils.ResolvedMediaData(
+        base64_data=base64.b64encode(buffer.getvalue()).decode("ascii"),
+        mime_type="image/jpg",  # Mislabeled alias should be corrected.
+        format=None,
+    )
+
+    normalized = media_utils.normalize_image_for_provider(data)
+
+    assert normalized is not None
+    assert normalized.mime_type == "image/png"
+    assert normalized.base64_data == data.base64_data

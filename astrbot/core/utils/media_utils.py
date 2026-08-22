@@ -160,54 +160,50 @@ def normalize_image_for_provider(
         return None
 
     supported = supported_mimes or IMAGE_PROVIDER_SUPPORTED_MIME_TYPES
-    mime = (getattr(image_data, "mime_type", "") or "").lower()
-    if mime in supported:
-        return image_data
 
     try:
         raw = image_data.to_bytes()
         with PILImage.open(io.BytesIO(raw)) as img:
             actual_fmt = str(img.format or "").upper()
-            # Re-label already supported formats so providers that validate the
-            # MIME header do not reject a mislabeled payload.
-            if actual_fmt == "JPEG":
+            actual_mime_by_fmt = {
+                "JPEG": "image/jpeg",
+                "PNG": "image/png",
+                "WEBP": "image/webp",
+                "GIF": "image/gif",
+            }
+            actual_mime = actual_mime_by_fmt.get(actual_fmt)
+            if actual_mime in supported:
+                # Still validate bytes; return the re-labeled payload so a
+                # mislabeled provider-safe MIME header is corrected.
                 return ResolvedMediaData(
                     base64_data=image_data.base64_data,
-                    mime_type="image/jpeg",
-                    format=image_data.format,
-                )
-            if actual_fmt == "PNG":
-                return ResolvedMediaData(
-                    base64_data=image_data.base64_data,
-                    mime_type="image/png",
-                    format=image_data.format,
-                )
-            if actual_fmt == "WEBP":
-                return ResolvedMediaData(
-                    base64_data=image_data.base64_data,
-                    mime_type="image/webp",
-                    format=image_data.format,
-                )
-            if actual_fmt == "GIF":
-                return ResolvedMediaData(
-                    base64_data=image_data.base64_data,
-                    mime_type="image/gif",
+                    mime_type=actual_mime,
                     format=image_data.format,
                 )
 
-            # Convert genuinely unsupported formats to a lossless or lossy
-            # provider-safe representation. Preserve transparency with PNG.
-            output = io.BytesIO()
+            # Convert unsupported formats to a provider-safe representation.
+            # Preserve transparency with PNG; otherwise use JPEG when available.
             has_alpha = img.mode in ("RGBA", "LA", "P") or "transparency" in img.info
-            if has_alpha:
-                img = img.convert("RGBA")
-                img.save(output, format="PNG")
+            if has_alpha and "image/png" in supported:
                 converted_mime = "image/png"
-            else:
-                img = img.convert("RGB")
-                img.save(output, format="JPEG", quality=95)
+                output_format = "PNG"
+                img = img.convert("RGBA")
+            elif "image/jpeg" in supported:
                 converted_mime = "image/jpeg"
+                output_format = "JPEG"
+                img = img.convert("RGB")
+            elif "image/png" in supported:
+                converted_mime = "image/png"
+                output_format = "PNG"
+                img = img.convert("RGB")
+            else:
+                return None
 
+            output = io.BytesIO()
+            save_kwargs = {}
+            if output_format == "JPEG":
+                save_kwargs["quality"] = 95
+            img.save(output, format=output_format, **save_kwargs)
             return ResolvedMediaData(
                 base64_data=base64.b64encode(output.getvalue()).decode("utf-8"),
                 mime_type=converted_mime,
