@@ -85,6 +85,39 @@ ACTIONS = frozenset(
 )
 
 GLOBAL_SCOPE_ID = "__global__"
+ANY_CONFIG_SCOPE_ID = "__any_config__"
+
+
+def persist_capability_config_id(config_id: str | None) -> str:
+    """Normalize a domain config id for capability uniqueness.
+
+    Args:
+        config_id: Domain config id, or None when the capability applies to every
+            config.
+
+    Returns:
+        A non-null persistence key. Unspecified domain config becomes
+        ``ANY_CONFIG_SCOPE_ID``.
+    """
+    if config_id is None:
+        return ANY_CONFIG_SCOPE_ID
+    return config_id
+
+
+def restore_capability_config_id(config_id: str | None) -> str | None:
+    """Restore a persisted capability config key to domain meaning.
+
+    Args:
+        config_id: Stored config key, including ``ANY_CONFIG_SCOPE_ID``.
+
+    Returns:
+        The concrete config id, or None when the capability applies to every
+        config.
+    """
+    if config_id is None or config_id == ANY_CONFIG_SCOPE_ID:
+        return None
+    return config_id
+
 
 HIGH_RISK_ACTIONS = frozenset(
     {

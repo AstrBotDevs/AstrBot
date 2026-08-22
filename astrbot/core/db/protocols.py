@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from astrbot.core.db.po import (
         ApiKey,
         Attachment,
+        AuthCapability,
         ChatUIProject,
         CommandConfig,
         CommandConflict,
@@ -574,6 +575,18 @@ class ApiKeyStore(Protocol):
     async def revoke_api_key(self, key_id: str) -> bool: ...
 
     async def delete_api_key(self, key_id: str) -> bool: ...
+
+    async def upsert_capability(
+        self,
+        *,
+        subject_id: str,
+        action: str,
+        resource_type: str,
+        resource_id: str,
+        config_id: str | None = None,
+        created_by: str | None = None,
+        expires_at: datetime.datetime | None = None,
+    ) -> AuthCapability: ...
 
 
 @runtime_checkable

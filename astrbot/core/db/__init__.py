@@ -98,6 +98,7 @@ class BaseDatabase(abc.ABC):
             expire_on_commit=False,
         )
         self._active_sessions: WeakSet[AsyncSession] = WeakSet()
+        self._init_lock = asyncio.Lock()
         self.inited = False
 
     @abc.abstractmethod
@@ -109,7 +110,6 @@ class BaseDatabase(abc.ABC):
         """Yield a tracked database session."""
         if not self.inited:
             await self.initialize()
-            self.inited = True
         session = self.AsyncSessionLocal()
         self._active_sessions.add(session)
         try:

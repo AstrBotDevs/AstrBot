@@ -9,7 +9,7 @@ import uuid
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import update
 from sqlmodel import col, delete, select
@@ -28,6 +28,7 @@ from astrbot.core.auth.models import (
     Subject,
     canonical_session_resource,
     parse_canonical_session_resource,
+    restore_capability_config_id,
     utc_now,
 )
 from astrbot.core.auth.registry import ActionPolicy, policy_for
@@ -40,7 +41,7 @@ from astrbot.core.db.po import (
     AuthStepUpCredential,
     DashboardAccount,
 )
-from astrbot.core.db.protocols import DatabaseSessionStore
+from astrbot.core.db.protocols import ApiKeyStore, DatabaseSessionStore
 from astrbot.core.utils.error_redaction import redact_sensitive_text
 
 _AUDIT_QUEUE_SIZE = 2048
@@ -447,26 +448,18 @@ class AuthorizationService:
                             raise AuthorizationValueError(
                                 "Global control-plane roles require an active Dashboard account"
                             )
-                    query = select(AuthRoleBinding).where(
-                        col(AuthRoleBinding.subject_id) == subject_id,
-                        col(AuthRoleBinding.scope_type) == scope_type,
-                        col(AuthRoleBinding.scope_id) == scope_id,
-                        col(AuthRoleBinding.config_id) == config_id,
-                    )
-                    existing_bindings = list((await session.execute(query)).scalars())
-                    binding = next(
-                        (item for item in existing_bindings if item.role == role.value),
-                        None,
-                    )
-                    if binding is None and existing_bindings:
-                        binding = next(
-                            (
-                                item
-                                for item in existing_bindings
-                                if item.revoked_at is None
-                            ),
-                            existing_bindings[0],
+                    if not config_id:
+                        raise AuthorizationValueError("Binding requires a config id")
+                    binding = (
+                        await session.execute(
+                            select(AuthRoleBinding).where(
+                                col(AuthRoleBinding.subject_id) == subject_id,
+                                col(AuthRoleBinding.scope_type) == scope_type,
+                                col(AuthRoleBinding.scope_id) == scope_id,
+                                col(AuthRoleBinding.config_id) == config_id,
+                            )
                         )
+                    ).scalar_one_or_none()
                     if binding is None:
                         binding = AuthRoleBinding(
                             subject_id=subject_id,
@@ -487,11 +480,6 @@ class AuthorizationService:
                         binding.revoked_at = None
                         binding.revoked_by = None
                         binding.metadata_json = _sanitize_metadata(metadata or {})
-                    for existing in existing_bindings:
-                        if existing is binding or existing.revoked_at is not None:
-                            continue
-                        existing.revoked_at = utc_now()
-                        existing.revoked_by = actor.id
                     await session.flush()
                     audit_context = context or AuthContext(
                         subject=actor,
@@ -1255,7 +1243,7 @@ class AuthorizationService:
         policy = policy_for(action)
         if policy is None:
             raise AuthorizationValueError("Unknown action")
-        record = AuthCapability(
+        return await cast(ApiKeyStore, self._db).upsert_capability(
             subject_id=subject.id,
             action=action,
             resource_type=resource.type,
@@ -1264,10 +1252,6 @@ class AuthorizationService:
             created_by=created_by,
             expires_at=expires_at,
         )
-        async with self._db.get_db() as session:
-            async with session.begin():
-                session.add(record)
-        return record
 
     async def _capability_allows(
         self, subject: Subject, action: str, resource: Resource
@@ -1290,10 +1274,13 @@ class AuthorizationService:
                     continue
                 if capability.resource_id != resource.id:
                     continue
+                capability_config_id = restore_capability_config_id(
+                    capability.config_id
+                )
                 if (
-                    capability.config_id is not None
+                    capability_config_id is not None
                     and resource.config_id is not None
-                    and capability.config_id != resource.config_id
+                    and capability_config_id != resource.config_id
                 ):
                     continue
                 return True
