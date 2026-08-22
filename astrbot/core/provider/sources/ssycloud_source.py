@@ -12,6 +12,9 @@ from .request_retry import retry_provider_request
 class ProviderSSYCloud(ProviderOpenAIOfficial):
     """SSYCloud provider using its OpenAI-compatible Chat Completions API."""
 
+    # Aggregator gateway: do not inherit the official OpenAI format set.
+    supported_image_formats = None
+
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         """Initialize the SSYCloud client with provider defaults.
 

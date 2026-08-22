@@ -871,3 +871,271 @@ async def test_wav_to_tencent_silk_skips_resample_for_supported_rate(
 
     assert len(fake.calls) == 1
     assert fake.calls[0]["sample_rate"] == 24000
+
+
+def _make_image_bytes(
+    fmt: str = "PNG",
+    mode: str = "RGB",
+    size: tuple[int, int] = (8, 8),
+    color=(255, 0, 0, 255),
+) -> bytes:
+    from PIL import Image as PILImage
+
+    image = PILImage.new(mode, size, color)
+    buffer = BytesIO()
+    image.save(buffer, fmt)
+    return buffer.getvalue()
+
+
+def _make_animated_gif_bytes(colors: list[tuple[int, int, int]]) -> bytes:
+    from PIL import Image as PILImage
+
+    frames = [PILImage.new("RGB", (8, 8), color) for color in colors]
+    buffer = BytesIO()
+    frames[0].save(
+        buffer,
+        "GIF",
+        save_all=True,
+        append_images=frames[1:],
+        duration=50,
+        loop=0,
+    )
+    return buffer.getvalue()
+
+
+def _image_data_uri(mime_type: str, payload: bytes) -> str:
+    return f"data:{mime_type};base64,{base64.b64encode(payload).decode()}"
+
+
+@pytest.mark.asyncio
+async def test_resolve_images_compatible_passes_through_without_cache(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    png_bytes = _make_image_bytes("PNG")
+
+    images = await media_utils.resolve_image_ref_to_images(
+        _image_data_uri("image/png", png_bytes),
+        allowed_mime_types={"image/png"},
+    )
+
+    assert len(images) == 1
+    assert images[0].mime_type == "image/png"
+    assert images[0].to_bytes() == png_bytes
+    # Compatible images never touch the conversion cache.
+    assert not (tmp_path / media_utils.CONVERT_CACHE_DIR_NAME).exists()
+
+
+@pytest.mark.asyncio
+async def test_resolve_images_converts_bmp_to_jpeg_and_caches(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    from PIL import Image as PILImage
+
+    bmp_bytes = _make_image_bytes("BMP")
+
+    images = await media_utils.resolve_image_ref_to_images(
+        _image_data_uri("image/bmp", bmp_bytes),
+        allowed_mime_types={"image/jpeg", "image/png"},
+    )
+
+    assert len(images) == 1
+    assert images[0].mime_type == "image/jpeg"
+    with PILImage.open(BytesIO(images[0].to_bytes())) as converted:
+        assert converted.format == "JPEG"
+    cache_dir = tmp_path / media_utils.CONVERT_CACHE_DIR_NAME
+    assert len(list(cache_dir.glob("*.jpg"))) == 1
+
+
+@pytest.mark.asyncio
+async def test_resolve_images_alpha_source_prefers_png(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    from PIL import Image as PILImage
+
+    webp_bytes = _make_image_bytes("WEBP", mode="RGBA", color=(10, 20, 30, 128))
+
+    images = await media_utils.resolve_image_ref_to_images(
+        _image_data_uri("image/webp", webp_bytes),
+        allowed_mime_types={"image/jpeg", "image/png"},
+    )
+
+    assert len(images) == 1
+    assert images[0].mime_type == "image/png"
+    with PILImage.open(BytesIO(images[0].to_bytes())) as converted:
+        assert converted.format == "PNG"
+        assert converted.mode == "RGBA"
+        assert converted.getpixel((0, 0))[3] == 128
+
+
+@pytest.mark.asyncio
+async def test_resolve_images_animated_first_frame(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    gif_bytes = _make_animated_gif_bytes(
+        [(255, 0, 0), (0, 255, 0), (0, 0, 255)],
+    )
+
+    images = await media_utils.resolve_image_ref_to_images(
+        _image_data_uri("image/gif", gif_bytes),
+        allowed_mime_types={"image/jpeg", "image/png"},
+        animated_strategy=media_utils.ANIMATED_STRATEGY_FIRST_FRAME,
+    )
+
+    assert len(images) == 1
+    assert images[0].mime_type == "image/jpeg"
+
+
+@pytest.mark.asyncio
+async def test_resolve_images_multi_frame_evenly_spaced(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    from PIL import Image as PILImage
+
+    colors = [
+        (255, 0, 0),
+        (0, 255, 0),
+        (0, 0, 255),
+        (255, 255, 0),
+        (0, 255, 255),
+        (255, 0, 255),
+    ]
+    gif_bytes = _make_animated_gif_bytes(colors)
+
+    images = await media_utils.resolve_image_ref_to_images(
+        _image_data_uri("image/gif", gif_bytes),
+        allowed_mime_types={"image/png"},
+        animated_strategy=media_utils.ANIMATED_STRATEGY_MULTI_FRAME,
+        animated_max_frames=4,
+    )
+
+    # 6 frames, 4 picks -> indices 0, 2, 3, 5 (evenly spaced).
+    expected_indices = [0, 2, 3, 5]
+    assert len(images) == len(expected_indices)
+    for image_data, frame_index in zip(images, expected_indices, strict=True):
+        assert image_data.mime_type == "image/png"
+        with PILImage.open(BytesIO(image_data.to_bytes())) as frame:
+            assert frame.convert("RGB").getpixel((0, 0)) == colors[frame_index]
+
+
+@pytest.mark.asyncio
+async def test_resolve_images_multi_frame_clamps_to_limit(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    colors = [(i * 12 % 256, 0, 0) for i in range(20)]
+    gif_bytes = _make_animated_gif_bytes(colors)
+
+    images = await media_utils.resolve_image_ref_to_images(
+        _image_data_uri("image/gif", gif_bytes),
+        allowed_mime_types={"image/png"},
+        animated_strategy=media_utils.ANIMATED_STRATEGY_MULTI_FRAME,
+        animated_max_frames=100,
+    )
+
+    assert len(images) == media_utils.ANIMATED_MAX_FRAMES_LIMIT
+
+
+@pytest.mark.asyncio
+async def test_resolve_images_ignores_stale_staging_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    gif_bytes = _make_animated_gif_bytes([(255, 0, 0), (0, 255, 0), (0, 0, 255)])
+
+    # Simulate a crash mid-extraction: a staging dir with a partial frame set.
+    cache_dir = tmp_path / media_utils.CONVERT_CACHE_DIR_NAME
+    cache_dir.mkdir(parents=True)
+    staging = cache_dir / ".stale_staging"
+    staging.mkdir()
+    (staging / "f0.png").write_bytes(b"partial")
+
+    images = await media_utils.resolve_image_ref_to_images(
+        _image_data_uri("image/gif", gif_bytes),
+        allowed_mime_types={"image/png"},
+        animated_strategy=media_utils.ANIMATED_STRATEGY_MULTI_FRAME,
+        animated_max_frames=3,
+    )
+
+    assert len(images) == 3
+    # The published frame set lives in a dedicated dir, not the staging dir.
+    assert all(image_data.to_bytes() != b"partial" for image_data in images)
+    assert list(cache_dir.glob("*_frames"))
+
+
+@pytest.mark.asyncio
+async def test_resolve_images_cache_hit_skips_reencode(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    bmp_bytes = _make_image_bytes("BMP")
+    image_ref = _image_data_uri("image/bmp", bmp_bytes)
+
+    save_calls = 0
+    real_save = media_utils._save_current_image_frame
+
+    def counting_save(*args, **kwargs):
+        nonlocal save_calls
+        save_calls += 1
+        return real_save(*args, **kwargs)
+
+    monkeypatch.setattr(media_utils, "_save_current_image_frame", counting_save)
+
+    first = await media_utils.resolve_image_ref_to_images(
+        image_ref, allowed_mime_types={"image/jpeg"}
+    )
+    assert save_calls == 1
+
+    second = await media_utils.resolve_image_ref_to_images(
+        image_ref, allowed_mime_types={"image/jpeg"}
+    )
+    assert save_calls == 1  # cache hit: no re-encode
+    assert second[0].base64_data == first[0].base64_data
+
+    # After the cache is cleaned, conversion runs again.
+    cache_dir = tmp_path / media_utils.CONVERT_CACHE_DIR_NAME
+    for cached_file in cache_dir.iterdir():
+        cached_file.unlink()
+    await media_utils.resolve_image_ref_to_images(
+        image_ref, allowed_mime_types={"image/jpeg"}
+    )
+    assert save_calls == 2
+
+
+@pytest.mark.asyncio
+async def test_resolve_images_unrestricted_passes_any_format(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    bmp_bytes = _make_image_bytes("BMP")
+    image_ref = _image_data_uri("image/bmp", bmp_bytes)
+
+    for allowed in (None, {"*"}):
+        images = await media_utils.resolve_image_ref_to_images(
+            image_ref, allowed_mime_types=allowed
+        )
+        assert len(images) == 1
+        assert images[0].mime_type == "image/bmp"
+        assert images[0].to_bytes() == bmp_bytes
+
+
+@pytest.mark.asyncio
+async def test_resolve_images_undecodable_skipped_or_passed(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    svg_ref = _image_data_uri(
+        "image/svg+xml", b'<svg xmlns="http://www.w3.org/2000/svg"/>'
+    )
+
+    # Restricted providers skip undecodable images instead of mislabeling them.
+    assert (
+        await media_utils.resolve_image_ref_to_images(
+            svg_ref, allowed_mime_types={"image/jpeg", "image/png"}
+        )
+        == []
+    )
+    # Unrestricted resolution keeps the legacy pass-through behavior.
+    images = await media_utils.resolve_image_ref_to_images(svg_ref)
+    assert len(images) == 1
+    assert images[0].mime_type == "image/svg+xml"
+
+
+@pytest.mark.asyncio
+async def test_resolve_image_ref_to_base64_data_delegates(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    png_bytes = _make_image_bytes("PNG")
+
+    resolved = await media_utils.resolve_image_ref_to_base64_data(
+        _image_data_uri("image/png", png_bytes)
+    )
+
+    assert resolved is not None
+    assert resolved.mime_type == "image/png"
+    assert resolved.to_bytes() == png_bytes

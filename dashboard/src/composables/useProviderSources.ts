@@ -613,7 +613,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       model: modelName,
       modalities,
       custom_extra_body: {},
-      max_context_tokens: max_context_tokens
+      max_context_tokens: max_context_tokens,
+      image_formats: [],
+      animated_image_strategy: 'first_frame',
+      animated_image_max_frames: 4
     }
   }
 

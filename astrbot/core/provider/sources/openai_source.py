@@ -30,7 +30,9 @@ from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
 from astrbot.core.utils.media_utils import (
+    ResolvedMediaData,
     describe_media_ref,
+    resolve_image_ref_to_images,
     resolve_media_ref_to_base64_data,
 )
 from astrbot.core.utils.network_utils import (
@@ -50,6 +52,11 @@ from .request_retry import retry_provider_request
 )
 class ProviderOpenAIOfficial(Provider):
     _ERROR_TEXT_CANDIDATE_MAX_CHARS = 4096
+
+    supported_image_formats = frozenset(
+        {"image/png", "image/jpeg", "image/webp", "image/gif"}
+    )
+    """Formats accepted by the official OpenAI vision API (non-animated GIF)."""
 
     @classmethod
     def _truncate_error_text_candidate(cls, text: str) -> str:
@@ -176,37 +183,53 @@ class ProviderOpenAIOfficial(Provider):
             return True
         return False
 
+    async def _image_ref_to_images(
+        self,
+        image_ref: str,
+        *,
+        mode: Literal["safe", "strict"] = "safe",
+    ) -> list[ResolvedMediaData]:
+        """Resolve an image ref with this provider's format adaptation applied."""
+        strategy, max_frames = self.get_animated_image_strategy()
+        return await resolve_image_ref_to_images(
+            image_ref,
+            allowed_mime_types=self.resolve_allowed_image_formats(),
+            animated_strategy=strategy,
+            animated_max_frames=max_frames,
+            strict=mode == "strict",
+        )
+
     async def _image_ref_to_data_url(
         self,
         image_ref: str,
         *,
         mode: Literal["safe", "strict"] = "safe",
     ) -> str | None:
-        image_data = await resolve_media_ref_to_base64_data(
-            image_ref,
-            media_type="image",
-            strict=mode == "strict",
-        )
-        return image_data.to_data_url() if image_data else None
+        images = await self._image_ref_to_images(image_ref, mode=mode)
+        return images[0].to_data_url() if images else None
 
-    async def _resolve_image_part(
+    async def _resolve_image_parts(
         self,
         image_url: str,
         *,
         image_detail: str | None = None,
-    ) -> dict | None:
-        image_data = await self._image_ref_to_data_url(image_url, mode="safe")
-        if not image_data:
+    ) -> list[dict]:
+        images = await self._image_ref_to_images(image_url, mode="safe")
+        if not images:
             logger.warning("图片预处理结果为空，将忽略。")
-            return None
-        image_payload = {"url": image_data}
-
-        if image_detail:
-            image_payload["detail"] = image_detail
-        return {
-            "type": "image_url",
-            "image_url": image_payload,
-        }
+            return []
+        parts = []
+        for image_data in images:
+            image_payload = {"url": image_data.to_data_url()}
+            if image_detail:
+                image_payload["detail"] = image_detail
+            parts.append(
+                {
+                    "type": "image_url",
+                    "image_url": image_payload,
+                }
+            )
+        return parts
 
     def _extract_image_part_info(self, part: dict) -> tuple[str | None, str | None]:
         if not isinstance(part, dict) or part.get("type") != "image_url":
@@ -266,17 +289,17 @@ class ProviderOpenAIOfficial(Provider):
             },
         }
 
-    async def _transform_content_part(self, part: dict) -> dict:
+    async def _transform_content_part(self, part: dict) -> list[dict]:
         if not isinstance(part, dict):
-            return part
+            return [part]
 
         if part.get("type") == "image_url":
             url, image_detail = self._extract_image_part_info(part)
             if not url:
-                return part
+                return [part]
 
             try:
-                resolved_part = await self._resolve_image_part(
+                resolved_parts = await self._resolve_image_parts(
                     url, image_detail=image_detail
                 )
             except Exception as exc:
@@ -285,25 +308,27 @@ class ProviderOpenAIOfficial(Provider):
                     url,
                     exc,
                 )
-                return part
+                return [part]
 
-            return resolved_part or part
+            return resolved_parts or [part]
 
         if part.get("type") == "audio_url":
             audio_ref = self._extract_audio_part_info(part)
             if not audio_ref:
-                return part
+                return [part]
             resolved_part = await self._resolve_audio_part(audio_ref)
-            return resolved_part or part
+            return [resolved_part] if resolved_part else [part]
 
-        return part
+        return [part]
 
     async def _materialize_message_image_parts(self, message: dict) -> dict:
         content = message.get("content")
         if not isinstance(content, list):
             return {**message}
 
-        new_content = [await self._transform_content_part(part) for part in content]
+        new_content: list[dict] = []
+        for part in content:
+            new_content.extend(await self._transform_content_part(part))
         return {**message, "content": new_content}
 
     async def _materialize_context_image_parts(
@@ -1394,11 +1419,10 @@ class ProviderOpenAIOfficial(Provider):
                 if isinstance(part, TextPart):
                     content_blocks.append({"type": "text", "text": part.text})
                 elif isinstance(part, ImageURLPart):
-                    image_part = await self._resolve_image_part(
+                    image_parts = await self._resolve_image_parts(
                         part.image_url.url,
                     )
-                    if image_part:
-                        content_blocks.append(image_part)
+                    content_blocks.extend(image_parts)
                 elif isinstance(part, AudioURLPart):
                     audio_part = await self._resolve_audio_part(part.audio_url.url)
                     if audio_part:
@@ -1409,9 +1433,8 @@ class ProviderOpenAIOfficial(Provider):
         # 3. 图片内容
         if image_urls:
             for image_url in image_urls:
-                image_part = await self._resolve_image_part(image_url)
-                if image_part:
-                    content_blocks.append(image_part)
+                image_parts = await self._resolve_image_parts(image_url)
+                content_blocks.extend(image_parts)
 
         if audio_urls:
             for audio_path in audio_urls:

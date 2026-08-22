@@ -6,6 +6,10 @@ from .openai_source import ProviderOpenAIOfficial
     "openrouter_chat_completion", "OpenRouter Chat Completion Provider Adapter"
 )
 class ProviderOpenRouter(ProviderOpenAIOfficial):
+    # Aggregator gateway: the backend model varies, so do not inherit the
+    # official OpenAI format set; use the conservative fallback instead.
+    supported_image_formats = None
+
     def __init__(
         self,
         provider_config: dict,

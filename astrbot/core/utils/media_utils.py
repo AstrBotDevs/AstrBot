@@ -7,12 +7,14 @@ probing, and image compression helpers.
 import asyncio
 import base64
 import binascii
+import hashlib
 import io
 import mimetypes
 import os
 import shutil
 import subprocess
-from collections.abc import AsyncIterator
+import tempfile
+from collections.abc import AsyncIterator, Collection
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -68,6 +70,49 @@ IMAGE_FORMAT_MIME_TYPES = {
     "BMP": "image/bmp",
     "TIFF": "image/tiff",
     "AVIF": "image/avif",
+}
+
+IMAGE_SHORT_MIME_TYPES = {
+    "jpeg": "image/jpeg",
+    "jpg": "image/jpeg",
+    "png": "image/png",
+    "gif": "image/gif",
+    "webp": "image/webp",
+    "bmp": "image/bmp",
+    "tif": "image/tiff",
+    "tiff": "image/tiff",
+    "avif": "image/avif",
+    "heic": "image/heic",
+    "heif": "image/heif",
+}
+"""User-facing short image format names mapped to MIME types."""
+
+ANIMATED_STRATEGY_FIRST_FRAME = "first_frame"
+"""Keep only the first frame of an animated image."""
+
+ANIMATED_STRATEGY_MULTI_FRAME = "multi_frame"
+"""Extract multiple evenly spaced frames from an animated image."""
+
+ANIMATED_DEFAULT_MAX_FRAMES = 4
+ANIMATED_MAX_FRAMES_LIMIT = 16
+
+CONVERT_CACHE_DIR_NAME = "media_convert_cache"
+"""Cache directory (under the AstrBot temp dir) for converted images and frames."""
+
+_MIME_PIL_FORMAT = {
+    "image/jpeg": "JPEG",
+    "image/png": "PNG",
+    "image/webp": "WEBP",
+    "image/gif": "GIF",
+    "image/bmp": "BMP",
+}
+
+_MIME_FILE_SUFFIX = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+    "image/bmp": ".bmp",
 }
 
 AUDIO_FORMAT_MIME_TYPES = {
@@ -894,7 +939,257 @@ async def resolve_image_ref_to_base64_data(
     assembly can skip bad image refs without failing the whole request.
     """
 
-    return await MediaResolver(
+    images = await resolve_image_ref_to_images(
+        image_ref,
+        strict=strict,
+        default_mime_type=default_mime_type,
+    )
+    return images[0] if images else None
+
+
+def _image_convert_cache_dir() -> Path:
+    cache_dir = Path(get_astrbot_temp_path()) / CONVERT_CACHE_DIR_NAME
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+
+def _image_convert_cache_key(source_bytes: bytes, params: str) -> str:
+    """Build a content-addressed cache key for a converted image or frame set."""
+    source_digest = hashlib.sha256(source_bytes).hexdigest()[:32]
+    params_digest = hashlib.sha256(params.encode()).hexdigest()[:8]
+    return f"{source_digest}_{params_digest}"
+
+
+def _image_has_alpha(image: PILImage.Image) -> bool:
+    return image.mode in {"RGBA", "LA"} or (
+        image.mode == "P" and "transparency" in image.info
+    )
+
+
+def _inspect_image(image_bytes: bytes) -> tuple[bool, int]:
+    """Inspect decodable image bytes.
+
+    Args:
+        image_bytes: Encoded image bytes.
+
+    Returns:
+        Tuple of ``(has_alpha, frame_count)``.
+
+    Raises:
+        Exception: Raised by Pillow when the bytes are not a decodable image.
+    """
+    with PILImage.open(io.BytesIO(image_bytes)) as image:
+        return _image_has_alpha(image), getattr(image, "n_frames", 1)
+
+
+def _pick_target_image_mime_type(
+    has_alpha: bool,
+    allowed_mime_types: Collection[str] | None,
+) -> str:
+    """Pick the best Pillow-savable target MIME type within the allowed set.
+
+    Alpha images prefer PNG to preserve transparency; opaque images prefer JPEG.
+    """
+    preferred = ["image/png"] if has_alpha else ["image/jpeg"]
+    preferred += ["image/jpeg", "image/png", "image/webp"]
+    for mime_type in preferred:
+        if allowed_mime_types is None or mime_type in allowed_mime_types:
+            return mime_type
+    for mime_type in allowed_mime_types or ():
+        if mime_type in _MIME_PIL_FORMAT:
+            return mime_type
+    return "image/png"
+
+
+def _save_current_image_frame(
+    image: PILImage.Image,
+    target_mime_type: str,
+    output_path: Path,
+) -> None:
+    """Save the currently selected frame of an opened image."""
+    working: PILImage.Image | None = None
+    try:
+        frame = image
+        if target_mime_type == "image/jpeg" and image.mode != "RGB":
+            working = image.convert("RGB")
+            frame = working
+        elif (
+            target_mime_type == "image/png"
+            and image.mode == "P"
+            and "transparency" in image.info
+        ):
+            working = image.convert("RGBA")
+            frame = working
+        save_kwargs: dict[str, int] = {}
+        if target_mime_type == "image/jpeg":
+            save_kwargs = {
+                "quality": IMAGE_COMPRESS_DEFAULT_QUALITY,
+                "subsampling": 0,
+            }
+        frame.save(output_path, _MIME_PIL_FORMAT[target_mime_type], **save_kwargs)
+    finally:
+        if working is not None:
+            working.close()
+
+
+def _save_image_frame_atomic(
+    image: PILImage.Image,
+    target_mime_type: str,
+    output_path: Path,
+) -> None:
+    """Save via a unique temp file then atomically replace the cache entry.
+
+    Concurrent readers never observe a partially written cache file.
+    """
+    fd, tmp_name = tempfile.mkstemp(dir=output_path.parent, suffix=".tmp")
+    os.close(fd)
+    tmp_path = Path(tmp_name)
+    try:
+        _save_current_image_frame(image, target_mime_type, tmp_path)
+        os.replace(tmp_path, output_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
+def _convert_image_bytes_sync(
+    source_bytes: bytes,
+    target_mime_type: str,
+    *,
+    frame_index: int | None = None,
+) -> Path:
+    """Convert image bytes to the target format, cached under the temp dir.
+
+    Args:
+        source_bytes: Encoded source image bytes.
+        target_mime_type: Target MIME type; must be Pillow-savable.
+        frame_index: Frame to extract first, for animated sources.
+
+    Returns:
+        Path of the converted (or previously cached) image.
+    """
+    cache_key = _image_convert_cache_key(
+        source_bytes, f"convert|{target_mime_type}|frame={frame_index}"
+    )
+    output_path = _image_convert_cache_dir() / (
+        cache_key + _MIME_FILE_SUFFIX[target_mime_type]
+    )
+    if output_path.exists():
+        return output_path
+    with PILImage.open(io.BytesIO(source_bytes)) as image:
+        if frame_index is not None:
+            image.seek(frame_index)
+        _save_image_frame_atomic(image, target_mime_type, output_path)
+    return output_path
+
+
+def _even_frame_indices(total_frames: int, max_frames: int) -> list[int]:
+    """Pick up to ``max_frames`` frame indices evenly spaced over the animation."""
+    count = min(max_frames, total_frames)
+    if count <= 1:
+        return [0]
+    return sorted({round(i * (total_frames - 1) / (count - 1)) for i in range(count)})
+
+
+def _extract_animation_frames_sync(
+    source_bytes: bytes,
+    target_mime_type: str,
+    max_frames: int,
+) -> tuple[list[Path], bool]:
+    """Extract evenly spaced frames from an animated image, with caching.
+
+    Args:
+        source_bytes: Encoded animated image bytes.
+        target_mime_type: MIME type each extracted frame is saved as.
+        max_frames: Maximum number of frames to extract.
+
+    Returns:
+        Tuple of frame paths in playback order and whether extraction actually
+        ran (``False`` when the cached frame set was served).
+    """
+    suffix = _MIME_FILE_SUFFIX[target_mime_type]
+    cache_key = _image_convert_cache_key(
+        source_bytes, f"frames|{target_mime_type}|n={max_frames}"
+    )
+    cache_dir = _image_convert_cache_dir()
+    frames_dir = cache_dir / f"{cache_key}_frames"
+    if frames_dir.is_dir():
+        cached = sorted(frames_dir.glob(f"*{suffix}"))
+        if cached:
+            return cached, False
+    # Extract into a staging dir and publish it with one atomic rename, so a
+    # crash mid-extraction never leaves a partial frame set behind.
+    staging_dir = Path(tempfile.mkdtemp(dir=cache_dir, prefix=f".{cache_key}_"))
+    published = True
+    try:
+        with PILImage.open(io.BytesIO(source_bytes)) as image:
+            total_frames = getattr(image, "n_frames", 1)
+            for out_index, frame_index in enumerate(
+                _even_frame_indices(total_frames, max_frames)
+            ):
+                frame_path = staging_dir / f"f{out_index}{suffix}"
+                image.seek(frame_index)
+                _save_current_image_frame(image, target_mime_type, frame_path)
+        try:
+            os.replace(staging_dir, frames_dir)
+        except OSError:
+            # Lost a concurrent publish race; use the winner's complete set.
+            shutil.rmtree(staging_dir, ignore_errors=True)
+            if not frames_dir.is_dir():
+                raise
+            published = False
+    except BaseException:
+        shutil.rmtree(staging_dir, ignore_errors=True)
+        raise
+    return sorted(frames_dir.glob(f"*{suffix}")), published
+
+
+async def _path_to_resolved_media_data(path: Path, mime_type: str) -> ResolvedMediaData:
+    data = await asyncio.to_thread(path.read_bytes)
+    return ResolvedMediaData(
+        base64_data=base64.b64encode(data).decode("utf-8"),
+        mime_type=mime_type,
+    )
+
+
+async def resolve_image_ref_to_images(
+    image_ref: MediaRefStr,
+    *,
+    allowed_mime_types: Collection[str] | None = None,
+    animated_strategy: str = ANIMATED_STRATEGY_FIRST_FRAME,
+    animated_max_frames: int = ANIMATED_DEFAULT_MAX_FRAMES,
+    strict: bool = False,
+    default_mime_type: str | None = "image/jpeg",
+) -> list[ResolvedMediaData]:
+    """Resolve an image reference into provider-ready images.
+
+    Applies per-provider format adaptation: still images whose detected MIME type
+    is not in ``allowed_mime_types`` are converted via Pillow (cached under the
+    AstrBot temp directory, so a source is only converted once until the cache is
+    cleaned), and animated images are reduced to still frames according to
+    ``animated_strategy``. Compatible images are returned untouched without any
+    conversion or cache write.
+
+    Args:
+        image_ref: Image reference in any form accepted by ``MediaResolver``.
+        allowed_mime_types: MIME types accepted by the target provider. ``None``
+            or a collection containing ``"*"`` disables adaptation.
+        animated_strategy: ``first_frame`` keeps only the first frame;
+            ``multi_frame`` extracts up to ``animated_max_frames`` evenly spaced
+            frames as separate images.
+        animated_max_frames: Maximum frames for ``multi_frame``, clamped to
+            ``[1, 16]``.
+        strict: Raise on invalid or undecodable images instead of skipping them.
+        default_mime_type: Fallback MIME type for legacy base64 payloads.
+
+    Returns:
+        List of resolved images; empty when the reference is invalid and
+        ``strict`` is False.
+
+    Raises:
+        ValueError: Raised in strict mode when the image is invalid or cannot be
+            decoded by Pillow.
+    """
+    media_data = await MediaResolver(
         image_ref,
         media_type="image",
         default_suffix=".bin",
@@ -902,6 +1197,75 @@ async def resolve_image_ref_to_base64_data(
         strict=strict,
         default_mime_type=default_mime_type,
     )
+    if media_data is None:
+        return []
+
+    image_bytes = media_data.to_bytes()
+    unrestricted = allowed_mime_types is None or "*" in allowed_mime_types
+    try:
+        has_alpha, frame_count = await asyncio.to_thread(_inspect_image, image_bytes)
+    except Exception as exc:
+        # Pillow cannot decode some provider-supported formats (e.g. HEIC without
+        # pillow-heif); pass them through when the provider accepts them.
+        if unrestricted or (
+            media_data.mime_type and media_data.mime_type in allowed_mime_types
+        ):
+            return [media_data]
+        if strict:
+            raise ValueError(
+                f"Invalid image file: {describe_media_ref(image_ref)}"
+            ) from exc
+        logger.warning(
+            "Image %s cannot be decoded and will be skipped.",
+            describe_media_ref(image_ref),
+        )
+        return []
+
+    if frame_count > 1 and (
+        not unrestricted or animated_strategy == ANIMATED_STRATEGY_MULTI_FRAME
+    ):
+        max_frames = min(max(int(animated_max_frames), 1), ANIMATED_MAX_FRAMES_LIMIT)
+        target_mime_type = _pick_target_image_mime_type(
+            has_alpha,
+            None if unrestricted else allowed_mime_types,
+        )
+        if animated_strategy == ANIMATED_STRATEGY_MULTI_FRAME:
+            frame_paths, extracted = await asyncio.to_thread(
+                _extract_animation_frames_sync,
+                image_bytes,
+                target_mime_type,
+                max_frames,
+            )
+            if extracted:
+                logger.info(
+                    "Animated image %s extracted into %d frame(s) for the provider.",
+                    describe_media_ref(image_ref),
+                    len(frame_paths),
+                )
+        else:
+            frame_paths = [
+                await asyncio.to_thread(
+                    _convert_image_bytes_sync,
+                    image_bytes,
+                    target_mime_type,
+                    frame_index=0,
+                )
+            ]
+        return [
+            await _path_to_resolved_media_data(path, target_mime_type)
+            for path in frame_paths
+        ]
+
+    if unrestricted or media_data.mime_type in allowed_mime_types:
+        return [media_data]
+
+    target_mime_type = _pick_target_image_mime_type(has_alpha, allowed_mime_types)
+    converted_path = await asyncio.to_thread(
+        _convert_image_bytes_sync,
+        image_bytes,
+        target_mime_type,
+    )
+    return [await _path_to_resolved_media_data(converted_path, target_mime_type)]
 
 
 async def resolve_audio_ref_to_base64_data(

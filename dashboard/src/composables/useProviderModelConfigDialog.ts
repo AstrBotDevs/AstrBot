@@ -59,6 +59,16 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
 
   function openProviderEdit(provider: any) {
     const editableProvider = JSON.parse(JSON.stringify(provider))
+    // Materialize schema-declared defaults for keys missing from stored configs,
+    // so fields introduced after the provider was created become editable.
+    const items = configSchema.value?.provider?.items
+    if (items) {
+      for (const [key, item] of Object.entries<any>(items)) {
+        if (editableProvider[key] === undefined && item && typeof item === 'object' && 'default' in item) {
+          editableProvider[key] = JSON.parse(JSON.stringify(item.default))
+        }
+      }
+    }
     if (editableProvider.provider_source_id) {
       delete editableProvider.reasoning
     }
