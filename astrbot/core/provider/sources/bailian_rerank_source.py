@@ -79,6 +79,12 @@ class BailianRerankProvider(RerankProvider):
         logger.info(f"AstrBot 百炼 Rerank 初始化完成。模型: {self.model}")
 
     def _uses_compatible_api(self) -> bool:
+        """判断当前 base_url 是否为 compatible-api/compatible-mode 端点。
+
+        通过解析 URL path 而非简单的字符串包含判断，
+        避免 query string 中出现 "compatible-api" 导致误判，
+        同时支持中国站（compatible-api）和新加坡站（compatible-mode）两种路径。
+        """
         base_url_path = urlsplit(self.base_url).path.rstrip("/")
         return base_url_path.endswith(self.COMPATIBLE_API_PATH_SUFFIXES)
 
@@ -97,40 +103,39 @@ class BailianRerankProvider(RerankProvider):
         """
         normalized_model = self.model.strip().lower()
         normalized_top_n = top_n if top_n is not None and top_n > 0 else None
+        is_qwen3_rerank = normalized_model == self.QWEN3_RERANK_MODEL
         is_compatible_api = self._uses_compatible_api()
 
-        if normalized_model == self.QWEN3_RERANK_MODEL and is_compatible_api:
-            payload = {
+        if is_qwen3_rerank and self.return_documents:
+            logger.warning(
+                "qwen3-rerank does not support return_documents; "
+                "this option will be ignored."
+            )
+
+        if is_compatible_api:
+            payload: dict[str, Any] = {
                 "model": self.model,
                 "query": query,
                 "documents": documents,
             }
             if normalized_top_n is not None:
                 payload["top_n"] = normalized_top_n
-            if self.instruct:
+            # instruct 仅 qwen3-rerank 支持
+            if is_qwen3_rerank and self.instruct:
                 payload["instruct"] = self.instruct
-            if self.return_documents:
-                logger.warning(
-                    "qwen3-rerank does not support return_documents; "
-                    "this option will be ignored."
-                )
+            if self.return_documents and not is_qwen3_rerank:
+                payload["return_documents"] = True
             return payload
 
-        payload_input = {"query": query, "documents": documents}
-        params = {
-            k: v
-            for k, v in [
-                ("top_n", normalized_top_n),
-                ("return_documents", True if self.return_documents else None),
-                (
-                    "instruct",
-                    self.instruct
-                    if self.instruct and normalized_model == self.QWEN3_RERANK_MODEL
-                    else None,
-                ),
-            ]
-            if v is not None
-        }
+        # 原生端点：input 包装格式
+        payload_input: dict[str, Any] = {"query": query, "documents": documents}
+        params: dict[str, Any] = {}
+        if normalized_top_n is not None:
+            params["top_n"] = normalized_top_n
+        if self.return_documents and not is_qwen3_rerank:
+            params["return_documents"] = True
+        if is_qwen3_rerank and self.instruct:
+            params["instruct"] = self.instruct
 
         base: dict[str, Any] = {"model": self.model, "input": payload_input}
         if params:
@@ -151,9 +156,7 @@ class BailianRerankProvider(RerankProvider):
             BailianAPIError: API返回错误
             KeyError: 结果缺少必要字段
         """
-        is_compatible_api = self._uses_compatible_api()
-
-        if is_compatible_api:
+        if self._uses_compatible_api():
             code = data.get("code")
             if code:
                 raise BailianAPIError(
