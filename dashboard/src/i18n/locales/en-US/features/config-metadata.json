@@ -143,6 +143,10 @@
         "websearch_exa_key": {
           "description": "Exa API Key",
           "hint": "Multiple keys can be added for rotation. Get a key at https://dashboard.exa.ai"
+        },
+        "websearch_anysearch_key": {
+          "description": "AnySearch API Key",
+          "hint": "Multiple keys can be added for rotation. Leave empty to use anonymous mode with a daily free quota."
         }
       }
     },
