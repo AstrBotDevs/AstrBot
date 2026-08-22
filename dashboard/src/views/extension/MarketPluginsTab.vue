@@ -355,13 +355,30 @@ const openMarketPluginDetail = (plugin) => {
         </v-col>
       </v-row>
 
-      <div class="d-flex justify-center mt-4" v-if="totalPages > 1">
-        <v-pagination
-          v-model="currentPage"
-          :length="totalPages"
-          :total-visible="7"
-          size="small"
-        ></v-pagination>
+      <div v-if="sortedPlugins.length > 0" class="market-pagination-footer">
+        <div class="market-pagination-footer__spacer"></div>
+        <div class="market-pagination-footer__pagination">
+          <v-pagination
+            v-if="totalPages > 1"
+            v-model="currentPage"
+            :length="totalPages"
+            :total-visible="7"
+            size="small"
+          ></v-pagination>
+        </div>
+        <div class="market-pagination-footer__page-size">
+          <span class="text-caption text-medium-emphasis">
+            {{ tm("market.itemsPerPage") }}
+          </span>
+          <v-select
+            v-model="marketItemsPerPage"
+            :items="marketItemsPerPageOptions"
+            density="compact"
+            variant="outlined"
+            hide-details
+            class="market-pagination-footer__select"
+          ></v-select>
+        </div>
       </div>
 
       <v-expand-transition>
@@ -470,6 +487,45 @@ const openMarketPluginDetail = (plugin) => {
 .market-filter-control :deep(.v-field__prepend-inner) {
   font-size: 0.875rem;
 }
+.market-pagination-footer {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.market-pagination-footer__pagination {
+  display: flex;
+  justify-content: center;
+}
+
+.market-pagination-footer__page-size {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+.market-pagination-footer__select {
+  width: 110px;
+}
+
+@media (max-width: 960px) {
+  .market-pagination-footer {
+    grid-template-columns: 1fr;
+  }
+
+  .market-pagination-footer__spacer {
+    display: none;
+  }
+
+  .market-pagination-footer__pagination,
+  .market-pagination-footer__page-size {
+    justify-content: center;
+  }
+}
+
 
 @media (max-width: 700px) {
   .market-header-row {

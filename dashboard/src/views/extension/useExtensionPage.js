@@ -206,6 +206,17 @@ export const useExtensionPage = (initialTab = "installed") => {
   const upload_file = ref(null);
   const uploadTab = ref("file");
   const showPluginFullName = ref(false);
+  const marketItemsPerPageOptions = [9, 25, 50, 100];
+  const getInitialMarketItemsPerPage = () => {
+    if (typeof window !== "undefined" && window.localStorage) {
+      const rawValue = Number(localStorage.getItem("pluginMarketItemsPerPage"));
+      if (marketItemsPerPageOptions.includes(rawValue)) {
+        return rawValue;
+      }
+    }
+    return 9;
+  };
+  const marketItemsPerPage = ref(getInitialMarketItemsPerPage());
   const marketSearch = ref("");
   const debouncedMarketSearch = ref("");
   const refreshingMarket = ref(false);
@@ -469,12 +480,12 @@ export const useExtensionPage = (initialTab = "installed") => {
   const displayItemsPerPage = 9; // 固定每页显示9个卡片（3行）
 
   const totalPages = computed(() => {
-    return Math.ceil(sortedPlugins.value.length / displayItemsPerPage);
+    return Math.ceil(sortedPlugins.value.length / marketItemsPerPage.value);
   });
 
   const paginatedPlugins = computed(() => {
-    const start = (currentPage.value - 1) * displayItemsPerPage;
-    const end = start + displayItemsPerPage;
+    const start = (currentPage.value - 1) * marketItemsPerPage.value;
+    const end = start + marketItemsPerPage.value;
     return sortedPlugins.value.slice(start, end);
   });
 
@@ -2424,6 +2435,13 @@ export const useExtensionPage = (initialTab = "installed") => {
     }, 300); // 300ms 防抖延迟
   });
 
+  watch(marketItemsPerPage, (newVal) => {
+    currentPage.value = 1;
+    if (typeof window !== "undefined" && window.localStorage) {
+      localStorage.setItem("pluginMarketItemsPerPage", String(newVal));
+    }
+  });
+
   watch(
     [() => dialog.value, () => extension_url.value, () => uploadTab.value],
     async ([dialogOpen, _, currentUploadTab]) => {
@@ -2578,6 +2596,8 @@ export const useExtensionPage = (initialTab = "installed") => {
     randomPlugins,
     shufflePlugins,
     refreshRandomPlugins,
+    marketItemsPerPage,
+    marketItemsPerPageOptions,
     displayItemsPerPage,
     totalPages,
     paginatedPlugins,
