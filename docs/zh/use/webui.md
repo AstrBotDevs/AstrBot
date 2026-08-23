@@ -170,6 +170,8 @@ WebUI 支持多个 Dashboard 账户。首次启动会创建 bootstrap `root` 账
 
 可以对每个指令启用/禁用、重命名并修改别名。保存后，插件生命周期持有的不可变指令 catalog 会立即重建；已启用原生命令注册的 Telegram 和 Discord 适配器也会立即刷新菜单或 slash commands，不需要等待下一次消息处理。
 
+指令以稳定 `command_id` 标识，格式为 `插件名:原指令路径`（空格换成点），例如 `builtin_commands:plugin.list`。权限覆盖只读写该键；Python 方法名和历史短名键会被忽略。未在 Dashboard 手动重命名的内置指令始终使用当前声明名。无法按 `handler_full_name` 或 `command_id` 认领的旧 `command_configs` 行会在同步时删除。
+
 ## 数据文件
 
 侧栏 **更多 → 数据文件** 打开 `/data`，用于浏览和编辑当前运行时 `data/` 目录。它不是远程 IDE：没有终端、代码执行、Git 或任意宿主机路径。

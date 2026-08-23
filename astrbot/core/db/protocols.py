@@ -717,7 +717,6 @@ class CommandStore(Protocol):
         previous_handler_full_name: str | None = None,
         resolved_command: str | None = None,
         enabled: bool | None = None,
-        keep_original_alias: bool | None = None,
         conflict_key: str | None = None,
         resolution_strategy: str | None = None,
         note: str | None = None,

@@ -114,6 +114,10 @@ uv run python scripts/sync_dashboard_dist.py
 
 使用 `/session info` 查看当前用户 ID，然后通过 Dashboard [权限页面](/use/webui#账户与权限)或 `/admin grant` 授予当前会话的 `session_admin`。这不是全局 operator。配置档可能按平台、群或私聊分别绑定，修改默认配置档不一定影响当前会话。
 
+### 以前的 `/plugin ls`、`/reset` 等指令无效
+
+内置指令已改为完整 CLI 路径，例如 `/plugin list`、`/conversation reset`。旧短名不是别名，不会匹配。用 `/help` 查看当前启用的声明名；Dashboard 里手动重命名过的名字仍然有效。详见[内置指令](/use/command)。
+
 ### 如何使用电脑能力
 
 在 **配置 → Agent Computer Use** 中选择：

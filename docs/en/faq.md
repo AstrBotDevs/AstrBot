@@ -114,6 +114,10 @@ To avoid flooding group chats, mentioning the bot or replying to the bot does no
 
 Use `/session info` to inspect the current user ID, then grant current-session `session_admin` through the Dashboard [authorization page](/en/use/webui#accounts-and-authorization) or `/admin grant`. That is not a global operator. Profiles can be bound separately to platforms, groups, or direct messages, so editing the default profile may not affect the current session.
 
+### Older commands such as `/plugin ls` or `/reset` do nothing
+
+Built-in commands now use full CLI paths such as `/plugin list` and `/conversation reset`. Former short names are not aliases and do not match. Use `/help` for currently enabled declared names; names after an explicit Dashboard rename still apply. See [Built-in Commands](/en/use/command).
+
 ### How do I enable Computer Use?
 
 Under **Config → Agent Computer Use**, select:

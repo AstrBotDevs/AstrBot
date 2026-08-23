@@ -1,6 +1,6 @@
 # 内置指令
 
-AstrBot 的指令通过插件机制注册。内置指令统一采用“单数名词根命令 + 完整动词子命令 + 长选项”的 CLI 命名方式，例如 `/plugin list`、`/conversation create` 和 `/provider set llm 1`。
+AstrBot 的指令通过插件机制注册。内置指令统一采用“单数名词根命令 + 完整动词子命令 + 长选项”的 CLI 命名方式，例如 `/plugin list`、`/conversation create` 和 `/provider set llm 1`。旧短名（`/plugin ls`、`/op`、`/reset`、`/flow on` 等）不是别名，不会匹配。`/help` 只列出当前启用的声明名，或 Dashboard 手动重命名后的名字。
 
 使用 `/help` 查看当前已经启用的根指令及其一层子命令；使用 `/help --image` 或 `/help -i` 请求图片版帮助。如果修改了唤醒前缀，所有示例中的 `/` 也要替换为实际前缀。
 

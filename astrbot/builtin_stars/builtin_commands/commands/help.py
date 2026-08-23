@@ -39,10 +39,8 @@ class HelpCommand:
                 if item.get("parent_signature"):
                     continue
 
-                effective = (
-                    item.get("effective_command")
-                    or item.get("original_command")
-                    or item.get("handler_name")
+                effective = item.get("effective_command") or item.get(
+                    "original_command"
                 )
                 if not effective or effective == "help":
                     continue
@@ -53,10 +51,8 @@ class HelpCommand:
                 for sub in item.get("sub_commands") or []:
                     if not sub.get("enabled"):
                         continue
-                    sub_effective = (
-                        sub.get("effective_command")
-                        or sub.get("original_command")
-                        or sub.get("handler_name")
+                    sub_effective = sub.get("effective_command") or sub.get(
+                        "original_command"
                     )
                     if not sub_effective:
                         continue

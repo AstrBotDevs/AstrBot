@@ -175,6 +175,8 @@ Filter by plugin, type (command / command group / subcommand), permission, and s
 
 You can enable/disable, rename, and edit aliases for each command. Saving immediately rebuilds the immutable command catalog owned by the plugin lifecycle. Telegram and Discord adapters with native command registration enabled also refresh their menus or slash commands immediately instead of waiting for the next message.
 
+Commands are identified by a stable `command_id` of the form `plugin-name:original-command-path` with spaces replaced by dots, for example `builtin_commands:plugin.list`. Permission overrides are read and written only under that key; Python method names and historical short-name keys are ignored. Built-in commands without an explicit Dashboard rename keep their current declared names. Unmatched `command_configs` rows that cannot be claimed by `handler_full_name` or `command_id` are deleted during sync.
+
 ## Data files
 
 **More → Data files** opens `/data` to browse and edit the active runtime `data/` directory. It is not a remote IDE: there is no terminal, code execution, Git, or arbitrary host-path access.

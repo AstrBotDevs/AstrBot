@@ -153,7 +153,7 @@ Mixin 只通过 `self.get_db()` 拿会话，不直接持有 engine，也不互�
 
 `GroupMessageHistoryStage` 在插件处理前持久化非 WebChat 的入站群消息，供 `GetGroupMessageHistoryTool` 使用；私聊和 WebChat 会跳过。`ProcessStage` 负责插件处理与 Agent 调用；`ResultDecorateStage` 处理前缀、分段、TTS、本地文转图、引用等结果装饰；`RespondStage` 统一调用平台发送接口。流水线同时支持普通异步 stage 和用异步生成器实现的洋葱式前后处理，修改时必须保留停止传播和收尾语义。
 
-群聊唤醒规则是显式配置。`platform_settings.group_wake_policy` 分别控制“提及机器人”和“回复机器人”是否唤醒，默认都关闭；`WakingCheckStage` 会把实际原因写入事件的 `wake_reasons`。内置命令是否可用则按 handler 存储在命令数据库中；`disable_builtin_commands` 不迁移、不接受配置写入，也不被 Pipeline 读取。
+群聊唤醒规则是显式配置。`platform_settings.group_wake_policy` 分别控制“提及机器人”和“回复机器人”是否唤醒，默认都关闭；`WakingCheckStage` 会把实际原因写入事件的 `wake_reasons`。内置命令是否可用则按 handler 存储在命令数据库中；`disable_builtin_commands` 不迁移、不接受配置写入，也不被 Pipeline 读取。指令配置以 `command_id`（`{plugin}:{original path}`，空格换成点）为稳定标识；同步时按 `handler_full_name` 再按 `command_id` 认领活 handler，认领失败的行删除。`alter_cmd` 只读取 `command_id` 键，不从 Python 方法名或历史短名迁移。内置指令在 `resolution_strategy` 不是 `manual_rename` 时忽略库中的名字和别名覆盖。未使用的 `keep_original_alias` 列在独立事务中删除，失败不影响启动。
 
 `platform_settings.group_sender_concurrency` 是实验性开关，默认关闭。启用且未开 `unique_session` 时，群聊 LLM 锁可按发送者拆分，不同群友可并行生成；整轮出站仍按群 UMO 排队，本轮强制非流式。对话历史在 `AssistantHistoryCommitter` 内合并并发完整轮次，不复活已截断历史。私聊、WebChat、live、定时任务和主动回复保持原 UMO 串行。
 

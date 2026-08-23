@@ -229,7 +229,12 @@ controls whether mentioning or replying to the bot wakes a group message, and
 restore implicit mention/reply wakeups. Built-in command availability is stored
 per handler in the command database; the removed `disable_builtin_commands`
 field is not migrated or read by runtime code and must not become a pipeline
-switch again.
+switch again. Command identity is `command_id`
+(`{plugin}:{original path with dots}`). Do not restore handler-name or fossil
+short-name lookup for `alter_cmd` or `command_configs`. Built-in names and
+aliases stay as declared unless the row has `resolution_strategy=manual_rename`.
+Unmatched command_config rows are deleted. Drop unused `keep_original_alias` in
+a separate transaction; a drop failure must not roll back schema creation.
 
 ### Agents, providers, and runners
 

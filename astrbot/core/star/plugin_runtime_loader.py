@@ -691,11 +691,7 @@ class PluginRuntimeLoader:
         ):
             full_names.append(handler.handler_full_name)
             command_id = command_id_for_handler(metadata.name or "", handler)
-            command = take_alter_cmd_entry(
-                plugin_cfg,
-                command_id,
-                handler.handler_name,
-            )
+            command = take_alter_cmd_entry(plugin_cfg, command_id)
             configured_action = (
                 command.get("permission_action") if isinstance(command, dict) else None
             )

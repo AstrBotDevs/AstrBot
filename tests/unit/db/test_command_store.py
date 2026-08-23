@@ -15,7 +15,6 @@ async def test_command_config_upsert_applies_defaults_and_preserves_on_none_upda
     )
 
     assert created.enabled is True
-    assert created.keep_original_alias is False
     assert created.conflict_key == "hello"
     assert created.auto_managed is False
     assert created.command_id == "Alpha:hello"

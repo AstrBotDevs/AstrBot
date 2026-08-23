@@ -5,10 +5,14 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import inspect as sa_inspect
+from sqlalchemy.exc import OperationalError
 from sqlmodel import text
 
 from astrbot.core.db import is_aiosqlite_worker_thread
-from astrbot.core.db.schema import initialize_sqlite_schema
+from astrbot.core.db.schema import (
+    _drop_keep_original_alias_column,
+    initialize_sqlite_schema,
+)
 from astrbot.core.db.sqlite import SQLiteDatabase
 
 EXPECTED_TABLE_NAMES = frozenset(
@@ -197,8 +201,54 @@ async def test_command_configs_have_unique_command_id(
 
     assert "command_id" in config_columns
     assert config_columns["command_id"]["nullable"] is False
+    assert "keep_original_alias" not in config_columns
     assert "command_id" in conflict_columns
     assert ("command_id",) in config_uniques
+
+
+@pytest.mark.asyncio
+async def test_initialize_drops_keep_original_alias_column(
+    temp_db: SQLiteDatabase,
+):
+    await temp_db.initialize()
+    async with temp_db.engine.begin() as conn:
+        await conn.execute(
+            text(
+                "ALTER TABLE command_configs "
+                "ADD COLUMN keep_original_alias BOOLEAN NOT NULL DEFAULT 0"
+            )
+        )
+
+    await initialize_sqlite_schema(temp_db.engine)
+
+    async with temp_db.engine.connect() as conn:
+        columns = await conn.run_sync(
+            lambda sync_conn: _column_map(sync_conn, "command_configs")
+        )
+
+    assert "keep_original_alias" not in columns
+
+
+@pytest.mark.asyncio
+async def test_drop_keep_original_alias_swallows_operational_error():
+    class BoomConnection:
+        async def run_sync(self, fn):
+            return True
+
+        async def execute(self, _stmt):
+            raise OperationalError("DROP COLUMN", {}, Exception("unsupported"))
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class BoomEngine:
+        def begin(self):
+            return BoomConnection()
+
+    await _drop_keep_original_alias_column(BoomEngine())
 
 
 @pytest.mark.asyncio

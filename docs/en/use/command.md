@@ -1,6 +1,6 @@
 # Built-in Commands
 
-AstrBot commands are registered through the plugin system. Built-in commands now follow a consistent CLI convention: a singular noun root command, a full-word verb subcommand, and long options. Examples include `/plugin list`, `/conversation create`, and `/provider set llm 1`.
+AstrBot commands are registered through the plugin system. Built-in commands now follow a consistent CLI convention: a singular noun root command, a full-word verb subcommand, and long options. Examples include `/plugin list`, `/conversation create`, and `/provider set llm 1`. Former short names such as `/plugin ls`, `/op`, `/reset`, and `/flow on` are not aliases and do not match. `/help` lists currently enabled declared names, or names after an explicit Dashboard rename.
 
 Use `/help` to show enabled root commands and their first-level subcommands. Use `/help --image` or `/help -i` for image-formatted help. If the wake prefix changes, replace `/` in every example with the configured prefix.
 

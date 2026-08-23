@@ -19,7 +19,6 @@ class CommandConfig(TimestampMixin, SQLModel, table=True):
     original_command: str = Field(nullable=False, max_length=255)
     resolved_command: str | None = Field(default=None, max_length=255)
     enabled: bool = Field(default=True, nullable=False)
-    keep_original_alias: bool = Field(default=False, nullable=False)
     conflict_key: str | None = Field(default=None, max_length=255)
     resolution_strategy: str | None = Field(default=None, max_length=64)
     note: str | None = Field(default=None, sa_type=Text)
