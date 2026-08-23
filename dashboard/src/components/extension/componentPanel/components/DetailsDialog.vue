@@ -147,7 +147,7 @@ const getTypeInfo = (type: string): TypeInfo => {
               <div class="d-flex flex-wrap ga-1 mt-1">
                 <v-chip
                   v-for="sub in command.sub_commands"
-                  :key="sub.handler_full_name"
+                  :key="sub.command_id"
                   size="small"
                   variant="outlined"
                 >

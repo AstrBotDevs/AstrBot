@@ -392,6 +392,7 @@ describe('ts gap coverage', () => {
     const filters = useCommandFilters(
       ref([
         {
+          command_id: 'core:help',
           handler_full_name: 'core.help',
           current_fragment: 'help',
           aliases: ['h'],
@@ -406,6 +407,7 @@ describe('ts gap coverage', () => {
           display_signature: '/help',
         },
         {
+          command_id: 'core:group',
           handler_full_name: 'core.group',
           current_fragment: 'g',
           aliases: [],
@@ -418,6 +420,7 @@ describe('ts gap coverage', () => {
           action: 'command',
           sub_commands: [
             {
+              command_id: 'core:group.sub',
               handler_full_name: 'core.group.sub',
               current_fragment: 'sub',
               aliases: [],
@@ -444,6 +447,7 @@ describe('ts gap coverage', () => {
     filters.searchQuery.value = 'g';
     filters.toggleGroupExpand({
       is_group: true,
+      command_id: 'core:group',
       handler_full_name: 'core.group',
     } as never);
     void filters.filteredCommands.value;

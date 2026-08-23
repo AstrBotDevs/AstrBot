@@ -62,7 +62,7 @@ const commandHeaders = computed(() => [
 
 // 检查组是否展开
 const isGroupExpanded = (cmd: CommandItem): boolean => {
-  return props.expandedGroups.has(cmd.handler_full_name);
+  return props.expandedGroups.has(cmd.command_id);
 };
 
 // 获取类型信息
@@ -121,7 +121,7 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
     <v-data-table
       :headers="commandHeaders"
       :items="items"
-      item-key="handler_full_name"
+      item-key="command_id"
       hover
       :row-props="getRowProps"
       :loading="props.loading"

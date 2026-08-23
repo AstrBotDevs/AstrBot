@@ -358,11 +358,12 @@ describe('error-path coverage', () => {
     await data.fetchCommands('err');
     const actions = useCommandActions(toast, vi.fn());
     await actions.toggleCommand(
-      { handler_full_name: 'a.b', enabled: true } as never,
+      { command_id: 'a.b', handler_full_name: 'a.b', enabled: true } as never,
       'ok',
       'err',
     );
     actions.openRenameDialog({
+      command_id: 'a.b',
       handler_full_name: 'a.b',
       current_fragment: 'a',
       aliases: ['b'],

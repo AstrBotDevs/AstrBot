@@ -40,7 +40,7 @@ export function useCommandActions(
     errorMessage: string,
   ) => {
     try {
-      const res = await commandApi.update(cmd.handler_full_name, {
+      const res = await commandApi.update(cmd.command_id, {
         enabled: !cmd.enabled,
       });
       if (res.data.status === 'ok') {
@@ -75,13 +75,10 @@ export function useCommandActions(
 
     renameDialog.loading = true;
     try {
-      const res = await commandApi.update(
-        renameDialog.command.handler_full_name,
-        {
-          alias: renameDialog.newName.trim(),
-          aliases: renameDialog.aliases.filter((a) => a.trim()),
-        },
-      );
+      const res = await commandApi.update(renameDialog.command.command_id, {
+        alias: renameDialog.newName.trim(),
+        aliases: renameDialog.aliases.filter((a) => a.trim()),
+      });
       if (res.data.status === 'ok') {
         toast(successMessage, 'success');
         renameDialog.show = false;

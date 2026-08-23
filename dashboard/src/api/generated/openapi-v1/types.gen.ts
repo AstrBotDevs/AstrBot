@@ -527,6 +527,13 @@ export type CommandSummary = {
 };
 
 export type CommandItem = {
+  /**
+   * Stable command identifier `{plugin_name}:{original_command}` with spaces replaced by dots.
+   */
+  command_id: string;
+  /**
+   * Runtime handler locator. Read-only.
+   */
   handler_full_name?: string;
   handler_name?: string;
   plugin?: string;
@@ -1022,7 +1029,7 @@ export type BotId = string;
 export type ChunkId = string;
 
 /**
- * URL-encoded command handler full name.
+ * Stable command identifier `{plugin_name}:{original_command}` with spaces replaced by dots.
  */
 export type CommandId = string;
 
@@ -4204,7 +4211,7 @@ export type UpdateCommandData = {
   body: CommandPatchRequest;
   path: {
     /**
-     * URL-encoded command handler full name.
+     * Stable command identifier `{plugin_name}:{original_command}` with spaces replaced by dots.
      */
     command_id: string;
   };

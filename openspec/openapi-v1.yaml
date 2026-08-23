@@ -5113,7 +5113,7 @@ components:
       name: command_id
       in: path
       required: true
-      description: URL-encoded command handler full name.
+      description: Stable command identifier `{plugin_name}:{original_command}` with spaces replaced by dots.
       schema:
         type: string
     ConfigId:
@@ -6374,9 +6374,14 @@ components:
 
     CommandItem:
       type: object
+      required: [command_id]
       properties:
+        command_id:
+          type: string
+          description: Stable command identifier `{plugin_name}:{original_command}` with spaces replaced by dots.
         handler_full_name:
           type: string
+          description: Runtime handler locator. Read-only.
         handler_name:
           type: string
         plugin:

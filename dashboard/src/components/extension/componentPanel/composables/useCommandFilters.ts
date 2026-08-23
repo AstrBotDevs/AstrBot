@@ -127,7 +127,7 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
           }
 
           // 如果组已展开，添加匹配的子指令
-          if (expandedGroups.value.has(cmd.handler_full_name)) {
+          if (expandedGroups.value.has(cmd.command_id)) {
             const subsToShow = query ? matchingSubCmds : cmd.sub_commands || [];
             for (const sub of subsToShow) {
               if (sub.has_conflict) {
@@ -163,10 +163,10 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
    */
   const toggleGroupExpand = (cmd: CommandItem) => {
     if (!cmd.is_group) return;
-    if (expandedGroups.value.has(cmd.handler_full_name)) {
-      expandedGroups.value.delete(cmd.handler_full_name);
+    if (expandedGroups.value.has(cmd.command_id)) {
+      expandedGroups.value.delete(cmd.command_id);
     } else {
-      expandedGroups.value.add(cmd.handler_full_name);
+      expandedGroups.value.add(cmd.command_id);
     }
   };
 
@@ -174,7 +174,7 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
    * 检查指令组是否已展开
    */
   const isGroupExpanded = (cmd: CommandItem): boolean => {
-    return expandedGroups.value.has(cmd.handler_full_name);
+    return expandedGroups.value.has(cmd.command_id);
   };
 
   return {

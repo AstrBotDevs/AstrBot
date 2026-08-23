@@ -207,6 +207,7 @@ describe('high-value coverage mounts', () => {
     const fetchCommands = vi.fn().mockResolvedValue(undefined);
     const actions = useCommandActions(toast, fetchCommands);
     const command = {
+      command_id: 'demo:cmd',
       handler_full_name: 'demo.cmd',
       current_fragment: 'cmd',
       aliases: ['c'],

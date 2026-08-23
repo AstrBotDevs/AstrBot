@@ -7,6 +7,7 @@
 export type CommandType = 'command' | 'group' | 'sub_command';
 
 export interface CommandItem {
+  command_id: string;
   handler_full_name: string;
   handler_name: string;
   plugin: string;
