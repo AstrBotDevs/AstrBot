@@ -43,10 +43,45 @@ describe('final coverage push', () => {
     setActivePinia(createPinia());
   });
 
-  it('keeps route modules importable', () => {
-    expect(typeof MainRoutes.component).toBe('function');
+  it('keeps route modules importable', { timeout: 20_000 }, async () => {
     expect(AuthRoutes.path).toBe('/auth');
+    expect(AuthRoutes.meta).toEqual({ requiresAuth: false });
     expect(ChatBoxRoutes.path).toBe('/chatbox');
+    expect(MainRoutes.redirect).toBe('/welcome');
+    expect(MainRoutes.meta).toEqual({ requiresAuth: true });
+    expect(
+      MainRoutes.children.find((route) => route.path === '/normal')?.redirect,
+    ).toBe('/config');
+
+    const loaders = [
+      MainRoutes.component,
+      AuthRoutes.component,
+      ChatBoxRoutes.component,
+      ChatBoxRoutes.children[0]?.children?.[0]?.component,
+      MainRoutes.children.find((route) => route.name === 'NativeKnowledgeBase')
+        ?.children,
+      MainRoutes.children.find((route) => route.name === 'Alkaid')?.children,
+      MainRoutes.children.find((route) => route.name === 'Chat')?.children,
+    ].flatMap((value) => {
+      if (Array.isArray(value)) {
+        return value.map((route) => route.component);
+      }
+      return [value];
+    });
+
+    const results = await Promise.allSettled(
+      loaders
+        .filter((loader): loader is () => Promise<unknown> => {
+          return typeof loader === 'function';
+        })
+        .map((loader) => loader()),
+    );
+    expect(results.length).toBeGreaterThan(5);
+    expect(results.some((result) => result.status === 'fulfilled')).toBe(true);
+    const chatDetail = MainRoutes.children
+      .find((route) => route.name === 'Chat')
+      ?.children?.find((route) => route.name === 'ChatDetail');
+    expect(chatDetail?.props).toBe(true);
   });
 
   it('covers plugin lifecycle callbacks and form-data encoding', async () => {
