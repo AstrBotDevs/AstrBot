@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from astrbot.core.config.astrbot_config import AstrBotConfig
     from astrbot.core.star.register import register_agent as agent
     from astrbot.core.star.register import register_llm_tool as llm_tool
+    from astrbot.core.utils.error_redaction import safe_error
 
 _EXPORTS = {
     "AuthContext": ("astrbot.core.auth", "AuthContext"),
@@ -26,6 +27,7 @@ _EXPORTS = {
     "AstrBotConfig": ("astrbot.core.config.astrbot_config", "AstrBotConfig"),
     "agent": ("astrbot.core.star.register", "register_agent"),
     "llm_tool": ("astrbot.core.star.register", "register_llm_tool"),
+    "safe_error": ("astrbot.core.utils.error_redaction", "safe_error"),
 }
 
 
@@ -78,4 +80,5 @@ __all__ = [
     "agent",
     "llm_tool",
     "logger",
+    "safe_error",
 ]

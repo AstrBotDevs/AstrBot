@@ -64,10 +64,12 @@ def is_group_sender_concurrent(event: object, config: object | None) -> bool:
     if platform_settings.get("unique_session"):
         return False
     get_extra = getattr(event, "get_extra", None)
-    extra = get_extra if callable(get_extra) else lambda _key, default=None: default
-    if extra("action_type") == "live":
+    event_extra = (
+        get_extra if callable(get_extra) else lambda _key, default=None: default
+    )
+    if event_extra("action_type") == "live":
         return False
-    if extra("active_reply") or extra("cron_job"):
+    if event_extra("active_reply") or event_extra("cron_job"):
         return False
     platform_meta = getattr(event, "platform_meta", None)
     if getattr(platform_meta, "name", "") == "cron":

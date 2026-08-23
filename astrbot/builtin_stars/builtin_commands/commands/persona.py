@@ -2,7 +2,9 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from astrbot.api import star
-from astrbot.api.event import AstrMessageEvent, MessageEventResult
+from astrbot.api.event import AstrMessageEvent
+
+from .reply import reply_i18n
 
 if TYPE_CHECKING:
     from astrbot.core.db.po import Persona
@@ -19,18 +21,18 @@ class PersonaCommands:
         depth: int = 0,
     ) -> list[str]:
         lines: list[str] = []
-        prefix = "│ " * depth
+        prefix = "| " * depth
 
         for folder in folder_tree:
-            lines.append(f"{prefix}├ 📁 {folder['name']}/")
+            lines.append(f"{prefix}+ {folder['name']}/")
             folder_personas = [
                 persona
                 for persona in all_personas
                 if persona.folder_id == folder["folder_id"]
             ]
-            child_prefix = "│ " * (depth + 1)
+            child_prefix = "| " * (depth + 1)
             for persona in folder_personas:
-                lines.append(f"{child_prefix}├ 👤 {persona.persona_id}")
+                lines.append(f"{child_prefix}- {persona.persona_id}")
 
             children = folder.get("children", [])
             if children:
@@ -40,8 +42,9 @@ class PersonaCommands:
 
     async def status(self, message: AstrMessageEvent) -> None:
         umo = message.unified_msg_origin
-        current_persona = "none"
-        conversation_title = "none"
+        none_label = await self.context.i18n.t(message, "persona.status.none")
+        current_persona = none_label
+        conversation_title = none_label
 
         conversation_id = await self.context.conversations.current_id(umo)
         default_persona = await self.context.personas.default(umo=umo)
@@ -53,10 +56,8 @@ class PersonaCommands:
                 create_if_missing=True,
             )
             if conversation is None:
-                message.set_result(
-                    MessageEventResult().message(
-                        "Current conversation does not exist. Use /conversation create first."
-                    )
+                await reply_i18n(
+                    self.context, message, "persona.status.no_conversation"
                 )
                 return
 
@@ -75,109 +76,93 @@ class PersonaCommands:
                 provider_settings=provider_settings,
             )
             if selected_persona_id == "[%None]":
-                current_persona = "none"
+                current_persona = none_label
             elif selected_persona_id:
                 current_persona = selected_persona_id
             if force_applied_persona_id:
-                current_persona += " (session rule)"
+                current_persona += " " + await self.context.i18n.t(
+                    message, "persona.status.session_rule"
+                )
 
-            conversation_title = conversation.title or "new conversation"
+            new_title = await self.context.i18n.t(message, "persona.status.new")
+            conversation_title = conversation.title or new_title
             conversation_title += f" ({conversation_id[:4]})"
 
-        message.set_result(
-            MessageEventResult()
-            .message(
-                "\n".join(
-                    [
-                        "[Persona]",
-                        "",
-                        f"Default persona: {default_persona['name']}",
-                        f"Current conversation {conversation_title} persona: {current_persona}",
-                        "",
-                        "Create or edit personas in WebUI -> Persona.",
-                    ]
-                )
-            )
-            .use_t2i(False)
+        await reply_i18n(
+            self.context,
+            message,
+            "persona.status.body",
+            default_persona=default_persona["name"],
+            conversation_title=conversation_title,
+            current_persona=current_persona,
         )
 
     async def list_personas(self, message: AstrMessageEvent) -> None:
         folder_tree = await self.context.personas.folders()
         all_personas = self.context.personas.all()
-
-        lines = ["📂 Personas:\n"]
         tree_lines = self._build_tree_output(folder_tree, all_personas)
-        lines.extend(tree_lines)
-
         root_personas = [
             persona for persona in all_personas if persona.folder_id is None
         ]
+        extra_lines: list[str] = []
         if root_personas:
             if tree_lines:
-                lines.append("")
+                extra_lines.append("")
             for persona in root_personas:
-                lines.append(f"👤 {persona.persona_id}")
-
-        lines.append(f"\nTotal: {len(all_personas)}")
-        lines.append("\n*Use `/persona set <persona_id>` to set a persona")
-        lines.append("*Use `/persona show <persona_id>` to inspect details")
-        message.set_result(
-            MessageEventResult().message("\n".join(lines)).use_t2i(False)
+                extra_lines.append(f"- {persona.persona_id}")
+        listing = "\n".join([*tree_lines, *extra_lines])
+        await reply_i18n(
+            self.context,
+            message,
+            "persona.list.body",
+            listing=listing,
+            total=len(all_personas),
         )
 
     async def show(self, message: AstrMessageEvent, persona_id: str) -> None:
         persona = self.context.personas.get(persona_id.strip())
         if persona is None:
-            message.set_result(
-                MessageEventResult().message(f"Persona `{persona_id}` does not exist.")
+            await reply_i18n(
+                self.context,
+                message,
+                "persona.show.missing",
+                persona_id=persona_id,
             )
             return
-
-        prompt = persona["prompt"] or "(empty prompt)"
-        message.set_result(
-            MessageEventResult().message(f"Persona `{persona_id}`:\n{prompt}")
+        prompt = persona["prompt"] or await self.context.i18n.t(
+            message, "persona.show.empty_prompt"
+        )
+        await reply_i18n(
+            self.context,
+            message,
+            "persona.show.body",
+            persona_id=persona_id,
+            prompt=prompt,
         )
 
     async def unset(self, message: AstrMessageEvent) -> None:
         umo = message.unified_msg_origin
         conversation_id = await self.context.conversations.current_id(umo)
         if not conversation_id:
-            message.set_result(
-                MessageEventResult().message(
-                    "There is no active conversation to unset a persona from."
-                )
-            )
+            await reply_i18n(self.context, message, "persona.unset.none")
             return
-
         await self.context.conversations.update(
             umo,
             persona_id="[%None]",
         )
-        message.set_result(
-            MessageEventResult().message(
-                "✅ Persona unset for the current conversation."
-            )
-        )
+        await reply_i18n(self.context, message, "persona.unset.ok")
 
     async def set_persona(self, message: AstrMessageEvent, persona_id: str) -> None:
         persona_id = persona_id.strip()
         umo = message.unified_msg_origin
         conversation_id = await self.context.conversations.current_id(umo)
         if not conversation_id:
-            message.set_result(
-                MessageEventResult().message(
-                    "There is no active conversation. Use /conversation create first."
-                )
-            )
+            await reply_i18n(self.context, message, "persona.set.none")
             return
 
         persona = self.context.personas.get(persona_id)
         if persona is None:
-            message.set_result(
-                MessageEventResult().message(
-                    "Persona does not exist. Use /persona list to inspect available personas."
-                )
-            )
+            await reply_i18n(self.context, message, "persona.set.missing")
             return
 
         conversation = await self.context.conversations.get(
@@ -186,11 +171,7 @@ class PersonaCommands:
             create_if_missing=True,
         )
         if conversation is None:
-            message.set_result(
-                MessageEventResult().message(
-                    "Current conversation does not exist. Use /conversation create first."
-                )
-            )
+            await reply_i18n(self.context, message, "persona.set.no_conversation")
             return
 
         provider_settings = self.context.config.get(umo=umo).get(
@@ -207,20 +188,18 @@ class PersonaCommands:
             platform_name=message.get_platform_name(),
             provider_settings=provider_settings,
         )
-
         await self.context.conversations.update(
             umo,
             persona_id=persona_id,
         )
         force_warning = ""
         if force_applied_persona_id:
-            force_warning = (
-                " A session rule is forcing another persona, so this selection "
-                "will not take effect yet."
+            force_warning = await self.context.i18n.t(
+                message, "persona.set.force_warning"
             )
-        message.set_result(
-            MessageEventResult().message(
-                "✅ Persona updated. Use /conversation reset if you need a clean context after "
-                "switching personas." + force_warning
-            )
+        await reply_i18n(
+            self.context,
+            message,
+            "persona.set.ok",
+            force_warning=force_warning,
         )

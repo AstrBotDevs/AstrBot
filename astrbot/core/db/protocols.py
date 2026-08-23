@@ -702,6 +702,10 @@ class CommandStore(Protocol):
         self, handler_full_name: str
     ) -> CommandConfig | None: ...
 
+    async def get_command_config_by_command_id(
+        self, command_id: str
+    ) -> CommandConfig | None: ...
+
     async def upsert_command_config(
         self,
         handler_full_name: str,
@@ -709,6 +713,8 @@ class CommandStore(Protocol):
         module_path: str,
         original_command: str,
         *,
+        command_id: str | None = None,
+        previous_handler_full_name: str | None = None,
         resolved_command: str | None = None,
         enabled: bool | None = None,
         keep_original_alias: bool | None = None,
@@ -734,6 +740,7 @@ class CommandStore(Protocol):
         handler_full_name: str,
         plugin_name: str,
         *,
+        command_id: str | None = None,
         status: str | None = None,
         resolution: str | None = None,
         resolved_command: str | None = None,

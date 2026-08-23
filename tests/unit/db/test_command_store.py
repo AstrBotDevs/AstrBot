@@ -18,6 +18,7 @@ async def test_command_config_upsert_applies_defaults_and_preserves_on_none_upda
     assert created.keep_original_alias is False
     assert created.conflict_key == "hello"
     assert created.auto_managed is False
+    assert created.command_id == "Alpha:hello"
 
     updated = await temp_db.upsert_command_config(
         handler_full_name="plugin.alpha.handler",
@@ -54,6 +55,39 @@ async def test_command_config_upsert_applies_defaults_and_preserves_on_none_upda
     await temp_db.delete_command_configs(["plugin.alpha.handler"])
     assert await temp_db.get_command_config("plugin.alpha.handler") is None
     await temp_db.delete_command_configs([])
+
+
+@pytest.mark.asyncio
+async def test_command_config_relinks_handler_full_name_and_keeps_command_id(
+    temp_db: SQLiteDatabase,
+):
+    created = await temp_db.upsert_command_config(
+        handler_full_name="plugin.alpha.old",
+        plugin_name="Alpha",
+        module_path="plugin.alpha",
+        original_command="hello",
+        enabled=False,
+        extra_data={"resolved_aliases": ["hi"]},
+    )
+    relinked = await temp_db.upsert_command_config(
+        handler_full_name="plugin.alpha.new",
+        previous_handler_full_name="plugin.alpha.old",
+        command_id="Alpha:hello",
+        plugin_name="Alpha",
+        module_path="plugin.alpha",
+        original_command="hello",
+        enabled=False,
+        extra_data={"resolved_aliases": ["hi"]},
+    )
+
+    assert created.command_id == "Alpha:hello"
+    assert relinked.handler_full_name == "plugin.alpha.new"
+    assert relinked.command_id == "Alpha:hello"
+    assert relinked.enabled is False
+    assert await temp_db.get_command_config("plugin.alpha.old") is None
+    by_id = await temp_db.get_command_config_by_command_id("Alpha:hello")
+    assert by_id is not None
+    assert by_id.handler_full_name == "plugin.alpha.new"
 
 
 @pytest.mark.asyncio

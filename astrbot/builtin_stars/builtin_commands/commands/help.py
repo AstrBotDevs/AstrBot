@@ -2,12 +2,10 @@ from html import escape
 
 import aiohttp
 
-from astrbot import logger
-from astrbot.api import star
-from astrbot.api.event import AstrMessageEvent, MessageEventResult
-from astrbot.core.config import AstrBotConfig
-from astrbot.core.config.default import VERSION
-from astrbot.core.utils.io import get_dashboard_version
+from astrbot.api import logger, star
+from astrbot.api.event import AstrMessageEvent
+
+from .reply import reply_image_file, reply_image_url, reply_text
 
 
 class HelpCommand:
@@ -16,25 +14,15 @@ class HelpCommand:
 
     async def _query_astrbot_notice(self):
         try:
-            from astrbot.core.utils.proxy_route import (
-                create_aiohttp_session,
-                current_aiohttp_proxy,
-            )
-
-            async with create_aiohttp_session() as session:
-                async with session.get(
-                    "https://astrbot.app/notice.json",
-                    timeout=aiohttp.ClientTimeout(total=2),
-                    proxy=current_aiohttp_proxy(),
-                ) as resp:
+            timeout = aiohttp.ClientTimeout(total=2)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get("https://astrbot.app/notice.json") as resp:
                     return (await resp.json())["notice"]
         except Exception:
             return ""
 
     async def _build_reserved_commands(self) -> list[tuple[str, str]]:
-        """
-        使用实时指令配置生成内置指令清单，确保重命名/禁用后与实际生效状态保持一致。
-        """
+        """Build the enabled reserved command list from live command configs."""
         try:
             commands = await self.context.runtime_info.commands()
         except Exception:
@@ -42,11 +30,10 @@ class HelpCommand:
 
         lines: list[tuple[str, str]] = []
 
-        def walk(items: list[dict], indent: int = 0) -> None:
+        def walk(items: list[dict]) -> None:
             for item in items:
                 if not item.get("reserved") or not item.get("enabled"):
                     continue
-                # 仅展示顶级指令或指令组
                 if item.get("type") == "sub_command":
                     continue
                 if item.get("parent_signature"):
@@ -57,50 +44,73 @@ class HelpCommand:
                     or item.get("original_command")
                     or item.get("handler_name")
                 )
-                if not effective or effective in {"help", "variable"}:
+                if not effective or effective == "help":
                     continue
 
                 description = item.get("description") or ""
                 desc_text = f" - {description}" if description else ""
-                indent_prefix = "  " * indent
-                lines.append((f"{indent_prefix}/{effective}", desc_text))
+                lines.append((f"/{effective}", desc_text))
+                for sub in item.get("sub_commands") or []:
+                    if not sub.get("enabled"):
+                        continue
+                    sub_effective = (
+                        sub.get("effective_command")
+                        or sub.get("original_command")
+                        or sub.get("handler_name")
+                    )
+                    if not sub_effective:
+                        continue
+                    sub_description = sub.get("description") or ""
+                    sub_desc = f" - {sub_description}" if sub_description else ""
+                    lines.append((f"  /{sub_effective}", sub_desc))
 
         walk(commands)
         return lines
 
-    def _build_plain_text_message(
+    async def _build_plain_text_message(
         self,
+        event: AstrMessageEvent,
         *,
         dashboard_version: str | None,
         commands: list[tuple[str, str]],
         notice: str,
     ) -> str:
-        dashboard_label = dashboard_version or "unknown"
-        commands_section = (
-            "\n".join(f"{command}{desc}" for command, desc in commands)
-            if commands
-            else "No enabled built-in commands."
+        dashboard_label = dashboard_version or await self.context.i18n.t(
+            event, "help.unknown"
         )
-        msg_parts = [
-            f"AstrBot v{VERSION}(WebUI: {dashboard_label})",
-            commands_section,
-            "Tip: use `/help --image` to render the visual help card.",
-        ]
+        if commands:
+            commands_section = "\n".join(
+                f"{command}{desc}" for command, desc in commands
+            )
+        else:
+            commands_section = await self.context.i18n.t(event, "help.empty")
+        header = await self.context.i18n.t(
+            event,
+            "help.header",
+            version=self.context.runtime_info.version,
+            dashboard=dashboard_label,
+        )
+        tip = await self.context.i18n.t(event, "help.tip")
+        msg_parts = [header, commands_section, tip]
         if notice:
             msg_parts.append(notice)
         return "\n".join(msg_parts)
 
-    def _build_image_markup(
+    async def _build_image_markup(
         self,
+        event: AstrMessageEvent,
         *,
         dashboard_version: str | None,
         commands: list[tuple[str, str]],
         notice: str,
     ) -> str:
-        dashboard_label = dashboard_version or "unknown"
+        dashboard_label = dashboard_version or await self.context.i18n.t(
+            event, "help.unknown"
+        )
+        empty_desc = await self.context.i18n.t(event, "help.no_description")
         cards = []
         for command, desc in commands:
-            description = escape(desc.removeprefix(" - ").strip() or "No description")
+            description = escape(desc.removeprefix(" - ").strip() or empty_desc)
             cards.append(
                 "\n".join(
                     [
@@ -113,83 +123,93 @@ class HelpCommand:
             )
 
         if not cards:
+            empty = await self.context.i18n.t(event, "help.empty")
             cards.append(
                 "\n".join(
                     [
                         '<div class="help-card">',
                         '  <div class="help-card__command"><code>/help</code></div>',
-                        "  <p>No enabled built-in commands.</p>",
+                        f"  <p>{escape(empty)}</p>",
                         "</div>",
                     ]
                 )
             )
 
+        core_label = await self.context.i18n.t(event, "help.meta_core")
+        version_pill = await self.context.i18n.t(
+            event,
+            "help.image_version",
+            version=self.context.runtime_info.version,
+        )
+        webui_pill = await self.context.i18n.t(
+            event,
+            "help.image_webui",
+            dashboard=dashboard_label,
+        )
+        callout = await self.context.i18n.t(event, "help.image_callout")
+        section_title = await self.context.i18n.t(event, "help.section_title")
         lines = [
             '<div class="help-meta">',
-            '  <span class="help-pill">Core Commands</span>',
-            f'  <span class="help-pill">AstrBot v{escape(str(VERSION))}</span>',
-            f'  <span class="help-pill">WebUI {escape(str(dashboard_label))}</span>',
+            f'  <span class="help-pill">{escape(core_label)}</span>',
+            f'  <span class="help-pill">{escape(version_pill)}</span>',
+            f'  <span class="help-pill">{escape(webui_pill)}</span>',
             "</div>",
-            '<div class="help-callout">Use <code>/help</code> for the compact text version.</div>',
+            f'<div class="help-callout">{escape(callout)}</div>',
             '<section class="help-section">',
-            "  <h2>Built-in Commands</h2>",
+            f"  <h2>{escape(section_title)}</h2>",
             '  <div class="help-grid">',
             "\n".join(cards),
             "  </div>",
             "</section>",
         ]
         if notice:
+            notice_title = await self.context.i18n.t(event, "help.notice_title")
             lines.extend(
                 [
                     '<section class="notice-box">',
-                    "  <h2>Notice</h2>",
+                    f"  <h2>{escape(notice_title)}</h2>",
                     f"  <p>{escape(notice)}</p>",
                     "</section>",
                 ],
             )
         return "\n".join(lines)
 
-    def _get_event_config(self, event: AstrMessageEvent) -> AstrBotConfig | None:
-        try:
-            return self.context.config.get(umo=event.unified_msg_origin)
-        except Exception:
-            return None
-
     def _get_callback_base(self, event: AstrMessageEvent) -> str:
-        config = self._get_event_config(event)
-        if config is not None:
-            try:
-                callback_api_base = str(
-                    config.get("callback_api_base", "") or ""
-                ).strip()
-                if callback_api_base:
-                    return callback_api_base.rstrip("/")
-            except Exception:
-                pass
+        try:
+            config = self.context.config.get(umo=event.unified_msg_origin)
+        except Exception:
+            return ""
+        try:
+            callback_api_base = str(config.get("callback_api_base", "") or "").strip()
+            if callback_api_base:
+                return callback_api_base.rstrip("/")
+        except Exception:
+            return ""
         return ""
 
     async def help(self, event: AstrMessageEvent, image: bool = False) -> None:
-        """查看帮助。"""
-        event.should_call_llm(True)
+        """Show help for enabled built-in commands."""
         notice = ""
         try:
             notice = await self._query_astrbot_notice()
         except Exception:
             pass
 
-        dashboard_version = await get_dashboard_version()
+        dashboard_version = await self.context.runtime_info.dashboard_version()
         commands = await self._build_reserved_commands()
-        plain_text = self._build_plain_text_message(
+        plain_text = await self._build_plain_text_message(
+            event,
             dashboard_version=dashboard_version,
             commands=commands,
             notice=notice,
         )
 
         if not image:
-            event.set_result(MessageEventResult().message(plain_text).use_t2i(False))
+            reply_text(event, plain_text)
             return
 
-        image_markup = self._build_image_markup(
+        image_markup = await self._build_image_markup(
+            event,
             dashboard_version=dashboard_version,
             commands=commands,
             notice=notice,
@@ -201,13 +221,11 @@ class HelpCommand:
             )
         except Exception as exc:
             logger.warning("Failed to render help image: %s", exc)
-            event.set_result(MessageEventResult().message(plain_text).use_t2i(False))
+            reply_text(event, plain_text)
             return
 
         if rendered_image.startswith(("http://", "https://")):
-            event.set_result(
-                MessageEventResult().url_image(rendered_image).use_t2i(False)
-            )
+            reply_image_url(event, rendered_image)
             return
 
         if hasattr(event, "track_temporary_local_file"):
@@ -218,9 +236,7 @@ class HelpCommand:
             try:
                 token = await self.context.files.publish(rendered_image)
                 image_url = f"{callback_base}/api/v1/files/tokens/{token}"
-                event.set_result(
-                    MessageEventResult().url_image(image_url).use_t2i(False)
-                )
+                reply_image_url(event, image_url)
                 return
             except Exception as exc:
                 logger.warning(
@@ -231,4 +247,4 @@ class HelpCommand:
             "Sending local help image without a callback URL: %s",
             rendered_image,
         )
-        event.set_result(MessageEventResult().file_image(rendered_image).use_t2i(False))
+        reply_image_file(event, rendered_image)

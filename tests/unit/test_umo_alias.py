@@ -13,6 +13,7 @@ from astrbot.core.umo_alias import (
     parse_umo,
     serialize_umo_alias,
 )
+from tests.unit.builtin_command_fakes import FakeI18n
 
 
 def make_group_event() -> SimpleNamespace:
@@ -38,7 +39,13 @@ def make_session_context(db) -> SimpleNamespace:
         return await db.upsert_umo_alias(**kwargs)
 
     return SimpleNamespace(
-        sessions=SimpleNamespace(alias=alias, set_alias=set_alias),
+        sessions=SimpleNamespace(
+            alias=alias,
+            set_alias=set_alias,
+            auto_name=get_event_auto_name,
+            normalize_name=normalize_umo_name,
+        ),
+        i18n=FakeI18n(),
     )
 
 
@@ -116,7 +123,9 @@ async def test_session_name_without_alias_shows_current_names(temp_db):
 def test_session_name_requires_session_manage_action():
     from astrbot.builtin_stars.builtin_commands.main import Main
 
-    declaration = get_handler_declaration(Main.name, EventType.AdapterMessageEvent)
+    declaration = get_handler_declaration(
+        Main.session_name, EventType.AdapterMessageEvent
+    )
 
     assert any(
         isinstance(filter_, ActionPermissionFilter)
@@ -125,7 +134,7 @@ def test_session_name_requires_session_manage_action():
     )
 
 
-@pytest.mark.parametrize("handler_name", ["reset", "delete"])
+@pytest.mark.parametrize("handler_name", ["conversation_reset", "conversation_delete"])
 def test_conversation_mutations_require_session_manage_action(handler_name: str):
     from astrbot.builtin_stars.builtin_commands.main import Main
 

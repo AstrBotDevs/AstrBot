@@ -61,9 +61,9 @@ class CommandService:
             self.handler_registry,
         )
 
-    async def toggle_command(self, handler_full_name: str | None, enabled) -> dict:
-        if handler_full_name is None or enabled is None:
-            raise CommandServiceError("handler_full_name 与 enabled 均为必填。")
+    async def toggle_command(self, command_id: str | None, enabled) -> dict:
+        if command_id is None or enabled is None:
+            raise CommandServiceError("command_id 与 enabled 均为必填。")
 
         if isinstance(enabled, str):
             enabled = enabled.lower() in ("1", "true", "yes", "on")
@@ -72,14 +72,14 @@ class CommandService:
             await toggle_command(
                 self.db,
                 self.handler_registry,
-                handler_full_name,
+                command_id,
                 bool(enabled),
             )
         except ValueError as exc:
             raise CommandServiceError(str(exc)) from exc
 
         await self._refresh_command_surfaces()
-        return await self._get_command_payload(handler_full_name)
+        return await self._get_command_payload(command_id)
 
     async def bulk_toggle_builtin_commands(self, enabled: bool) -> dict:
         """Set enabled state for every built-in command in the command DB."""
@@ -92,33 +92,33 @@ class CommandService:
                 != "astrbot.builtin_stars.builtin_commands.main"
             ):
                 continue
-            handler_full_name = command.get("handler_full_name")
-            if not isinstance(handler_full_name, str):
+            command_id = command.get("command_id")
+            if not isinstance(command_id, str):
                 continue
             await toggle_command(
                 db,
                 self.handler_registry,
-                handler_full_name,
+                command_id,
                 enabled,
             )
-            updated.append(handler_full_name)
+            updated.append(command_id)
         await self._refresh_command_surfaces()
         return {"enabled": enabled, "updated": updated}
 
     async def rename_command(
         self,
-        handler_full_name: str | None,
+        command_id: str | None,
         new_name: str | None,
         aliases=None,
     ) -> dict:
-        if not handler_full_name or not new_name:
-            raise CommandServiceError("handler_full_name 与 new_name 均为必填。")
+        if not command_id or not new_name:
+            raise CommandServiceError("command_id 与 new_name 均为必填。")
 
         try:
             await rename_command(
                 self.db,
                 self.handler_registry,
-                handler_full_name,
+                command_id,
                 new_name,
                 aliases=aliases,
             )
@@ -126,27 +126,27 @@ class CommandService:
             raise CommandServiceError(str(exc)) from exc
 
         await self._refresh_command_surfaces()
-        return await self._get_command_payload(handler_full_name)
+        return await self._get_command_payload(command_id)
 
     async def update_permission(
         self,
-        handler_full_name: str | None,
+        command_id: str | None,
         action: str | None,
     ) -> dict:
-        if not handler_full_name or not action:
-            raise CommandServiceError("handler_full_name 与 action 均为必填。")
+        if not command_id or not action:
+            raise CommandServiceError("command_id 与 action 均为必填。")
 
         try:
             await update_command_permission(
                 self.preferences,
                 self.handler_registry,
-                handler_full_name,
+                command_id,
                 action,
             )
         except ValueError as exc:
             raise CommandServiceError(str(exc)) from exc
 
-        return await self._get_command_payload(handler_full_name)
+        return await self._get_command_payload(command_id)
 
     def _get_wake_prefix(self, config_id: str) -> list:
         wake_prefix = self.config.get("wake_prefix", ["/"])
@@ -155,10 +155,10 @@ class CommandService:
             return self.config_manager.confs[config_id].get("wake_prefix", wake_prefix)
         return wake_prefix
 
-    async def _get_command_payload(self, handler_full_name: str) -> dict:
+    async def _get_command_payload(self, command_id: str) -> dict:
         commands = await list_commands(self.db, self.handler_registry)
         for cmd in commands:
-            found = CommandService._find_command_payload(cmd, handler_full_name)
+            found = CommandService._find_command_payload(cmd, command_id)
             if found:
                 return found
         return {}
@@ -170,14 +170,14 @@ class CommandService:
             yield from CommandService._iter_commands(command.get("sub_commands", []))
 
     @staticmethod
-    def _find_command_payload(command: dict, handler_full_name: str) -> dict | None:
-        if command.get("handler_full_name") == handler_full_name:
+    def _find_command_payload(command: dict, command_id: str) -> dict | None:
+        if command.get("command_id") == command_id:
             return command
 
         for sub_command in command.get("sub_commands", []):
             found = CommandService._find_command_payload(
                 sub_command,
-                handler_full_name,
+                command_id,
             )
             if found:
                 return found

@@ -4,11 +4,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from astrbot import logger
-from astrbot.api import star
-from astrbot.api.event import AstrMessageEvent, MessageEventResult
+from astrbot.api import logger, safe_error, star
+from astrbot.api.event import AstrMessageEvent
 from astrbot.api.provider import Provider, ProviderType
-from astrbot.core.utils.error_redaction import safe_error
+
+from .reply import reply_i18n, reply_text, send_i18n
 
 MODEL_LIST_CACHE_TTL_SECONDS_DEFAULT = 30.0
 MODEL_LOOKUP_MAX_CONCURRENCY_DEFAULT = 4
@@ -178,8 +178,9 @@ class ProviderCommands:
 
         return None
 
-    def _apply_model(
+    async def _apply_model(
         self,
+        event: AstrMessageEvent,
         provider: Provider,
         model_name: str,
         *,
@@ -187,10 +188,11 @@ class ProviderCommands:
     ) -> str:
         provider.set_model(model_name)
         self.invalidate_provider_models_cache(provider.meta().id, umo=umo)
-        return (
-            f"✅ Switched model successfully.\n"
-            f"Provider: {provider.meta().id}\n"
-            f"Model: {provider.get_model()}"
+        return await self.context.i18n.t(
+            event,
+            "provider.models.switched",
+            provider_id=provider.meta().id,
+            model=provider.get_model(),
         )
 
     async def _get_provider_models(
@@ -226,8 +228,6 @@ class ProviderCommands:
         provider: Provider,
         config: _ModelLookupConfig,
         *,
-        error_prefix: str,
-        disable_t2i: bool = False,
         warning_log: str | None = None,
     ) -> list[str] | None:
         try:
@@ -237,10 +237,12 @@ class ProviderCommands:
         except Exception as exc:
             if warning_log is not None:
                 logger.warning(warning_log, provider.meta().id, safe_error("", exc))
-            result = MessageEventResult().message(safe_error(error_prefix, exc))
-            if disable_t2i:
-                result = result.use_t2i(False)
-            event.set_result(result)
+            await reply_i18n(
+                self.context,
+                event,
+                "provider.models.fetch_failed",
+                error=safe_error("", exc),
+            )
             return None
 
     async def _find_provider_for_model(
@@ -346,8 +348,27 @@ class ProviderCommands:
             )
             return False, err_code, err_reason
 
+    async def _reachability_mark(
+        self,
+        event: AstrMessageEvent,
+        reachable_flag: bool | None,
+        error_code: str | None,
+    ) -> str:
+        if reachable_flag is True:
+            return await self.context.i18n.t(event, "provider.list.ok")
+        if reachable_flag is False:
+            if error_code:
+                return await self.context.i18n.t(
+                    event,
+                    "provider.list.fail_code",
+                    error_code=error_code,
+                )
+            return await self.context.i18n.t(event, "provider.list.fail")
+        return ""
+
     async def _build_provider_display_data(
         self,
+        event: AstrMessageEvent,
         providers,
         provider_type: str,
         reachability_check_enabled: bool,
@@ -390,20 +411,14 @@ class ProviderCommands:
             else:
                 info = f"{id_}"
 
-            if reachable_flag is True:
-                mark = " ✅"
-            elif reachable_flag is False:
-                if error_code:
-                    mark = f" ❌(errcode: {error_code})"
-                else:
-                    mark = " ❌"
-            else:
-                mark = ""
-
             display_data.append(
                 {
                     "info": info,
-                    "mark": mark,
+                    "mark": await self._reachability_mark(
+                        event,
+                        reachable_flag,
+                        error_code,
+                    ),
                     "provider": provider,
                 },
             )
@@ -416,28 +431,30 @@ class ProviderCommands:
         cfg = self.context.config.get(umo).get("provider_settings", {})
         reachability_check_enabled = cfg.get("reachability_check", True)
 
-        parts = ["LLM Providers\n"]
+        llm_header = await self.context.i18n.t(event, "provider.list.llm_header")
+        parts = [f"{llm_header}\n"]
         llms = list(self.context.models.chat())
         ttss = self.context.models.text_to_speech()
         stts = self.context.models.speech_to_text()
 
         if reachability_check_enabled and (llms or ttss or stts):
-            await event.send(
-                MessageEventResult().message("👀 Testing provider reachability...")
-            )
+            await send_i18n(self.context, event, "provider.list.testing")
 
         llm_data, tts_data, stt_data = await asyncio.gather(
             self._build_provider_display_data(
+                event,
                 llms,
                 "llm",
                 reachability_check_enabled,
             ),
             self._build_provider_display_data(
+                event,
                 ttss,
                 "tts",
                 reachability_check_enabled,
             ),
             self._build_provider_display_data(
+                event,
                 stts,
                 "stt",
                 reachability_check_enabled,
@@ -451,33 +468,43 @@ class ProviderCommands:
                 provider_using
                 and provider_using.meta().id == data["provider"].meta().id
             ):
-                line += " 👈"
+                line += " " + await self.context.i18n.t(event, "provider.list.current")
             parts.append(line + "\n")
 
         if tts_data:
-            parts.append("\n## TTS Providers\n")
+            tts_header = await self.context.i18n.t(event, "provider.list.tts_header")
+            parts.append(f"\n## {tts_header}\n")
             tts_using = self.context.models.using_text_to_speech(umo=umo)
             for index, data in enumerate(tts_data):
                 line = f"{index + 1}. {data['info']}{data['mark']}"
                 if tts_using and tts_using.meta().id == data["provider"].meta().id:
-                    line += " 👈"
+                    line += " " + await self.context.i18n.t(
+                        event, "provider.list.current"
+                    )
                 parts.append(line + "\n")
 
         if stt_data:
-            parts.append("\n## STT Providers\n")
+            stt_header = await self.context.i18n.t(event, "provider.list.stt_header")
+            parts.append(f"\n## {stt_header}\n")
             stt_using = self.context.models.using_speech_to_text(umo=umo)
             for index, data in enumerate(stt_data):
                 line = f"{index + 1}. {data['info']}{data['mark']}"
                 if stt_using and stt_using.meta().id == data["provider"].meta().id:
-                    line += " 👈"
+                    line += " " + await self.context.i18n.t(
+                        event, "provider.list.current"
+                    )
                 parts.append(line + "\n")
 
-        parts.append("\nUse /provider set llm <index> to switch LLM providers.")
+        parts.append("\n" + await self.context.i18n.t(event, "provider.list.llm_hint"))
         if ttss:
-            parts.append("\nUse /provider set tts <index> to switch TTS providers.")
+            parts.append(
+                "\n" + await self.context.i18n.t(event, "provider.list.tts_hint")
+            )
         if stts:
-            parts.append("\nUse /provider set stt <index> to switch STT providers.")
-        event.set_result(MessageEventResult().message("".join(parts)))
+            parts.append(
+                "\n" + await self.context.i18n.t(event, "provider.list.stt_hint")
+            )
+        reply_text(event, "".join(parts))
 
     async def set_llm_provider(self, event: AstrMessageEvent, index: int) -> None:
         await self._set_provider_by_index(
@@ -511,7 +538,7 @@ class ProviderCommands:
         provider_type: ProviderType,
     ) -> None:
         if index < 1 or index > len(providers):
-            event.set_result(MessageEventResult().message("❌ Invalid provider index."))
+            await reply_i18n(self.context, event, "provider.set.invalid")
             return
         provider = providers[index - 1]
         provider_id = provider.meta().id
@@ -520,8 +547,8 @@ class ProviderCommands:
             provider_type=provider_type,
             umo=event.unified_msg_origin,
         )
-        event.set_result(
-            MessageEventResult().message(f"✅ Successfully switched to {provider_id}.")
+        await reply_i18n(
+            self.context, event, "provider.set.ok", provider_id=provider_id
         )
 
     async def _switch_model_by_name(
@@ -532,9 +559,7 @@ class ProviderCommands:
     ) -> None:
         model_name = model_name.strip()
         if not model_name:
-            event.set_result(
-                MessageEventResult().message("Model name cannot be empty."),
-            )
+            await reply_i18n(self.context, event, "provider.models.empty_name")
             return
 
         umo = event.unified_msg_origin
@@ -545,7 +570,6 @@ class ProviderCommands:
             event,
             provider,
             config,
-            error_prefix="Failed to fetch models from the current provider: ",
             warning_log="Failed to fetch models from provider %s: %s",
         )
         if models is None:
@@ -553,10 +577,9 @@ class ProviderCommands:
 
         matched_model_name = self._resolve_model_name(model_name, models)
         if matched_model_name is not None:
-            event.set_result(
-                MessageEventResult().message(
-                    self._apply_model(provider, matched_model_name, umo=umo),
-                ),
+            reply_text(
+                event,
+                await self._apply_model(event, provider, matched_model_name, umo=umo),
             )
             return
 
@@ -569,10 +592,11 @@ class ProviderCommands:
             config=config,
         )
         if target_provider is None or matched_target_model_name is None:
-            event.set_result(
-                MessageEventResult().message(
-                    f"❌ Model `{model_name}` was not found in any configured provider.",
-                ),
+            await reply_i18n(
+                self.context,
+                event,
+                "provider.models.not_found",
+                model_name=model_name,
             )
             return
 
@@ -583,30 +607,31 @@ class ProviderCommands:
                 provider_type=ProviderType.CHAT_COMPLETION,
                 umo=umo,
             )
-            self._apply_model(target_provider, matched_target_model_name, umo=umo)
-            event.set_result(
-                MessageEventResult().message(
-                    f"✅ Switched provider to {target_id} and selected model {matched_target_model_name}.",
-                ),
+            await self._apply_model(
+                event, target_provider, matched_target_model_name, umo=umo
+            )
+            await reply_i18n(
+                self.context,
+                event,
+                "provider.models.switched_provider",
+                provider_id=target_id,
+                model=matched_target_model_name,
             )
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            event.set_result(
-                MessageEventResult().message(
-                    safe_error("Failed to switch provider and model: ", exc),
-                ),
+            await reply_i18n(
+                self.context,
+                event,
+                "provider.models.switch_failed",
+                error=safe_error("", exc),
             )
 
     async def list_models(self, event: AstrMessageEvent) -> None:
         """List models for the current chat provider."""
         provider = self.context.models.using_chat(event.unified_msg_origin)
         if not provider:
-            event.set_result(
-                MessageEventResult().message(
-                    "❌ Cannot find any LLM provider. Configure one first.",
-                ),
-            )
+            await reply_i18n(self.context, event, "provider.models.none")
             return
 
         config = self._get_model_lookup_config(event.unified_msg_origin)
@@ -614,32 +639,31 @@ class ProviderCommands:
             event,
             provider,
             config,
-            error_prefix="Failed to fetch model list: ",
-            disable_t2i=True,
         )
         if models is None:
             return
 
-        parts = ["Available models for the current provider:"]
+        header = await self.context.i18n.t(event, "provider.models.header")
+        parts = [header]
         for index, model in enumerate(models, 1):
             parts.append(f"\n{index}. {model}")
-        current_model = provider.get_model() or "(empty)"
-        parts.append(f"\nCurrent model: {current_model}")
-        parts.append(
-            "\nUse /model set <name-or-index> to switch models. Model names can "
-            "be resolved across configured providers."
+        current_model = provider.get_model() or await self.context.i18n.t(
+            event, "provider.models.empty_current"
         )
-        event.set_result(MessageEventResult().message("".join(parts)).use_t2i(False))
+        parts.append(
+            "\n"
+            + await self.context.i18n.t(
+                event, "provider.models.current", model=current_model
+            )
+        )
+        parts.append("\n" + await self.context.i18n.t(event, "provider.models.hint"))
+        reply_text(event, "".join(parts))
 
     async def set_model(self, event: AstrMessageEvent, name_or_index: str) -> None:
         """Switch the current chat model by name or list index."""
         provider = self.context.models.using_chat(event.unified_msg_origin)
         if not provider:
-            event.set_result(
-                MessageEventResult().message(
-                    "❌ Cannot find any LLM provider. Configure one first."
-                )
-            )
+            await reply_i18n(self.context, event, "provider.models.none")
             return
 
         config = self._get_model_lookup_config(event.unified_msg_origin)
@@ -649,32 +673,30 @@ class ProviderCommands:
                 event,
                 provider,
                 config,
-                error_prefix="Failed to fetch model list: ",
             )
             if models is None:
                 return
             if model_index < 1 or model_index > len(models):
-                event.set_result(
-                    MessageEventResult().message("❌ Invalid model index."),
-                )
+                await reply_i18n(self.context, event, "provider.models.invalid_index")
                 return
 
             try:
                 new_model = models[model_index - 1]
-                event.set_result(
-                    MessageEventResult().message(
-                        self._apply_model(
-                            provider,
-                            new_model,
-                            umo=event.unified_msg_origin,
-                        ),
+                reply_text(
+                    event,
+                    await self._apply_model(
+                        event,
+                        provider,
+                        new_model,
+                        umo=event.unified_msg_origin,
                     ),
                 )
             except Exception as exc:
-                event.set_result(
-                    MessageEventResult().message(
-                        safe_error("Failed to switch model: ", exc),
-                    ),
+                await reply_i18n(
+                    self.context,
+                    event,
+                    "provider.models.switch_failed",
+                    error=safe_error("", exc),
                 )
             return
 

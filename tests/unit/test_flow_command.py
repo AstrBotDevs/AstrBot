@@ -33,6 +33,18 @@ class _FakePreferences:
     async def session_remove(self, umo, key) -> None:
         self.values.pop((umo, key), None)
 
+    async def streaming_override(self, umo: str):
+        value = await self.session_get(umo, STREAMING_OVERRIDE_KEY, None)
+        if value is None:
+            return None
+        return bool(value)
+
+    async def set_streaming_override(self, umo: str, enabled: bool) -> None:
+        await self.session_put(umo, STREAMING_OVERRIDE_KEY, enabled)
+
+    async def clear_streaming_override(self, umo: str) -> None:
+        await self.session_remove(umo, STREAMING_OVERRIDE_KEY)
+
 
 @pytest.mark.asyncio
 async def test_unset_follows_global() -> None:
@@ -112,16 +124,21 @@ async def test_flow_command_writes_and_removes_override() -> None:
     from astrbot.builtin_stars.builtin_commands.commands.flow import FlowCommands
 
     prefs = _FakePreferences()
+    from tests.unit.builtin_command_fakes import FakeI18n
+
     context = SimpleNamespace(
         preferences=prefs,
         config=SimpleNamespace(
             get=lambda umo=None: {"provider_settings": {"streaming_response": False}}
         ),
+        i18n=FakeI18n(),
     )
     commands = FlowCommands(context)
     event = _FakeEvent()
     event.set_result = lambda result: setattr(event, "result", result)
     await commands.set_override(event, True)
     assert prefs.values[(event.unified_msg_origin, STREAMING_OVERRIDE_KEY)] is True
+    await commands.set_override(event, False)
+    assert prefs.values[(event.unified_msg_origin, STREAMING_OVERRIDE_KEY)] is False
     await commands.unset(event)
     assert (event.unified_msg_origin, STREAMING_OVERRIDE_KEY) not in prefs.values

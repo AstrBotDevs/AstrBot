@@ -332,7 +332,7 @@ class CommandUpdateRequest(BaseModel):
 
 
 class CommandToggleRequest(BaseModel):
-    handler_full_name: str
+    command_id: str
     enabled: bool
 
 
@@ -341,13 +341,13 @@ class BuiltinCommandBulkToggleRequest(BaseModel):
 
 
 class CommandRenameRequest(BaseModel):
-    handler_full_name: str
+    command_id: str
     new_name: str
     aliases: list[str] | None = None
 
 
 class CommandPermissionRequest(BaseModel):
-    handler_full_name: str
+    command_id: str
     action: str
 
 

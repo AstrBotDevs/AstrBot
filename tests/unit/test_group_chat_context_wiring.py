@@ -269,7 +269,7 @@ async def test_on_message_skips_recording_when_command_handler_matched():
     )
     event = make_event(
         handlers_parsed_params={
-            "astrbot.builtin_stars.builtin_commands.main_reset": {}
+            "astrbot.builtin_stars.builtin_commands.main_conversation_reset": {}
         },
     )
 

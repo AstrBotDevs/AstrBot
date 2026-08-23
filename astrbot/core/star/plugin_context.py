@@ -360,6 +360,27 @@ class PreferenceCapability:
         """Remove a global preference."""
         await self._preferences.global_remove(key)
 
+    async def streaming_override(self, umo: str) -> bool | None:
+        """Return the session streaming override, or None when unset."""
+        from astrbot.core.streaming_override import STREAMING_OVERRIDE_KEY
+
+        value = await self.session_get(umo, STREAMING_OVERRIDE_KEY, None)
+        if value is None:
+            return None
+        return bool(value)
+
+    async def set_streaming_override(self, umo: str, enabled: bool) -> None:
+        """Force streaming on or off for one session."""
+        from astrbot.core.streaming_override import STREAMING_OVERRIDE_KEY
+
+        await self.session_put(umo, STREAMING_OVERRIDE_KEY, enabled)
+
+    async def clear_streaming_override(self, umo: str) -> None:
+        """Remove the session streaming override."""
+        from astrbot.core.streaming_override import STREAMING_OVERRIDE_KEY
+
+        await self.session_remove(umo, STREAMING_OVERRIDE_KEY)
+
 
 class PluginStorageCapability:
     """Persistent plugin KV data and plugin-owned filesystem paths."""
@@ -611,6 +632,101 @@ class ConversationCapability:
             output=int(stats.total_output or 0),
         )
 
+    _THIRD_PARTY_AGENT_RUNNER_KEYS = {
+        "dify": "dify_conversation_id",
+        "coze": "coze_conversation_id",
+        "dashscope": "dashscope_conversation_id",
+        "deerflow": "deerflow_thread_id",
+    }
+
+    def third_party_agent_runner(self, umo: str) -> str | None:
+        """Return the third-party agent runner type for a session, if any."""
+        cfg = self._execution_context.astrbot_config_mgr.get_conf(umo)
+        runner = str(
+            cfg.get("provider_settings", {}).get("agent_runner_type", "") or ""
+        )
+        if runner in self._THIRD_PARTY_AGENT_RUNNER_KEYS:
+            return runner
+        return None
+
+    def third_party_agent_runner_names(self) -> str:
+        """Return a comma-separated list of third-party agent runner types."""
+        return ", ".join(self._THIRD_PARTY_AGENT_RUNNER_KEYS)
+
+    async def reset_session_state(self, umo: str) -> None:
+        """Clear third-party agent runner session state for one UMO."""
+        runner = self.third_party_agent_runner(umo)
+        if not runner:
+            return
+        session_key = self._THIRD_PARTY_AGENT_RUNNER_KEYS[runner]
+        if runner == "deerflow":
+            await self._cleanup_deerflow_thread(umo)
+        await self._execution_context.preferences.session_remove(umo, session_key)
+
+    async def _cleanup_deerflow_thread(self, umo: str) -> None:
+        from astrbot.core.agent.runners.deerflow.constants import (
+            DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
+            DEERFLOW_THREAD_ID_KEY,
+        )
+        from astrbot.core.agent.runners.deerflow.deerflow_api_client import (
+            DeerFlowAPIClient,
+        )
+        from astrbot.core.utils.proxy_route import resolve_proxy_route
+
+        try:
+            thread_id = await self._execution_context.preferences.session_get(
+                umo,
+                DEERFLOW_THREAD_ID_KEY,
+                "",
+            )
+            if not thread_id:
+                return
+            cfg = self._execution_context.astrbot_config_mgr.get_conf(umo)
+            provider_id = cfg["provider_settings"].get(
+                DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
+                "",
+            )
+            if not provider_id:
+                return
+            merged_provider_config = (
+                self._execution_context.provider_manager.get_provider_config_by_id(
+                    provider_id,
+                    merged=True,
+                )
+            )
+            if not merged_provider_config:
+                logger.warning(
+                    "Failed to resolve DeerFlow provider config for remote thread cleanup: provider_id=%s",
+                    provider_id,
+                )
+                return
+            client = DeerFlowAPIClient(
+                api_base=merged_provider_config.get(
+                    "deerflow_api_base",
+                    "http://127.0.0.1:2026",
+                ),
+                api_key=merged_provider_config.get("deerflow_api_key", ""),
+                auth_header=merged_provider_config.get("deerflow_auth_header", ""),
+                proxy=resolve_proxy_route(local_config=merged_provider_config).proxy_url
+                or "",
+            )
+            try:
+                await client.delete_thread(thread_id)
+            finally:
+                try:
+                    await client.close()
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to close DeerFlow API client after thread cleanup: %s",
+                        exc,
+                    )
+        except Exception as exc:
+            logger.warning(
+                "Failed to clean up DeerFlow thread for session %s: %s",
+                umo,
+                exc,
+            )
+
 
 class PersonaCapability:
     """Read and select personas without exposing PersonaManager."""
@@ -806,6 +922,18 @@ class SessionCapability:
     async def alias(self, umo: str) -> Any:
         """Return the optional display alias for one UMO."""
         return await self._store.get_umo_alias(umo)
+
+    def auto_name(self, event: AstrMessageEvent) -> str:
+        """Return the automatic display name for the current event session."""
+        from astrbot.core.umo_alias import get_event_auto_name
+
+        return get_event_auto_name(event)
+
+    def normalize_name(self, name: Any) -> str:
+        """Normalize a user-supplied UMO display name."""
+        from astrbot.core.umo_alias import normalize_umo_name
+
+        return normalize_umo_name(name)
 
     async def set_alias(
         self,
@@ -1054,6 +1182,19 @@ class RuntimeInfoCapability:
         """Whether this runtime is running in restricted demo mode."""
         return self._demo_mode
 
+    @property
+    def version(self) -> str:
+        """Return the running AstrBot version string."""
+        from astrbot.core.config.default import VERSION
+
+        return str(VERSION)
+
+    async def dashboard_version(self) -> str | None:
+        """Return the effective Dashboard version for this runtime."""
+        from astrbot.core.utils.io import get_dashboard_version
+
+        return await get_dashboard_version()
+
     def plugins(self) -> tuple[PluginInfo, ...]:
         """Return a read-only snapshot of published plugins."""
         return tuple(
@@ -1131,6 +1272,97 @@ class RuntimeInfoCapability:
         )
 
 
+class I18nCapability:
+    """Translate plugin-owned strings from StarMetadata.i18n catalogs."""
+
+    __slots__ = ("_catalogs", "_plugin_id", "_preferences")
+
+    def __init__(
+        self,
+        catalogs: RuntimeCatalogs,
+        preferences: SharedPreferences,
+        plugin_id: str | None = None,
+    ) -> None:
+        self._catalogs = catalogs
+        self._preferences = preferences
+        self._plugin_id = plugin_id
+
+    def for_plugin(self, plugin_id: str) -> I18nCapability:
+        """Return a view bound to one plugin's i18n catalog."""
+        return I18nCapability(self._catalogs, self._preferences, plugin_id)
+
+    async def t(
+        self,
+        event: AstrMessageEvent | None,
+        message_key: str,
+        **kwargs: Any,
+    ) -> str:
+        """Translate one key for the resolved locale.
+
+        Locale order: event extra `locale`, session preference `locale`, then
+        `zh-CN`. Missing keys fall back to `en-US`, then the key itself.
+        """
+        locale = await self._locale(event)
+        text = self._lookup(locale, message_key)
+        if text is None and locale != "en-US":
+            text = self._lookup("en-US", message_key)
+        if text is None:
+            return message_key
+        if not kwargs:
+            return text
+        try:
+            return text.format(**kwargs)
+        except KeyError, IndexError, ValueError:
+            return text
+
+    async def _locale(self, event: AstrMessageEvent | None) -> str:
+        if event is not None:
+            extra = event.get_extra("locale")
+            if extra:
+                return str(extra)
+            umo = getattr(event, "unified_msg_origin", None)
+            if umo:
+                stored = await self._preferences.session_get(umo, "locale", None)
+                if stored:
+                    return str(stored)
+        return "zh-CN"
+
+    def _lookup(self, locale: str, key: str) -> str | None:
+        metadata = self._plugin_metadata()
+        if metadata is None:
+            return None
+        bundle = metadata.i18n.get(locale) or {}
+        if key.startswith("metadata."):
+            value = _nested_i18n_value(bundle, key)
+            return value if isinstance(value, str) else None
+        commands = bundle.get("commands")
+        if isinstance(commands, dict) and key in commands:
+            value = commands[key]
+            return value if isinstance(value, str) else None
+        value = _nested_i18n_value(bundle, key)
+        return value if isinstance(value, str) else None
+
+    def _plugin_metadata(self) -> StarMetadata | None:
+        if not self._plugin_id:
+            return None
+        for metadata in self._catalogs.plugins:
+            if (
+                metadata.plugin_id == self._plugin_id
+                or metadata.name == self._plugin_id
+            ):
+                return metadata
+        return None
+
+
+def _nested_i18n_value(bundle: dict, key: str) -> Any:
+    current: Any = bundle
+    for part in key.split("."):
+        if not isinstance(current, dict) or part not in current:
+            return None
+        current = current[part]
+    return current
+
+
 class PluginContext:
     """Public, capability-scoped context passed to every :class:`Star`.
 
@@ -1158,6 +1390,7 @@ class PluginContext:
         "files",
         "sessions",
         "authz",
+        "i18n",
     )
 
     def __init__(
@@ -1181,6 +1414,7 @@ class PluginContext:
         files: FileCapability,
         sessions: SessionCapability,
         authz: AuthorizationCapability,
+        i18n: I18nCapability,
     ) -> None:
         self.messages = messages
         self.models = models
@@ -1200,6 +1434,7 @@ class PluginContext:
         self.files = files
         self.sessions = sessions
         self.authz = authz
+        self.i18n = i18n
 
     @classmethod
     def from_execution_context(cls, execution: CoreExecutionContext) -> PluginContext:
@@ -1240,6 +1475,7 @@ class PluginContext:
             files=FileCapability(execution.file_token_service),
             sessions=SessionCapability(execution.database),
             authz=AuthorizationCapability(getattr(execution, "authorization", None)),
+            i18n=I18nCapability(catalogs, execution.preferences),
         )
 
     def _bind_plugin_lifecycle_control(self, control: PluginLifecycleControl) -> None:
@@ -1278,18 +1514,20 @@ class PluginContext:
                 declared_actions,
                 allow_core_actions=allow_core_actions,
             ),
+            i18n=self.i18n.for_plugin(plugin_id),
         )
 
     def _rebind_runtime_catalogs(self, catalogs: RuntimeCatalogs) -> None:
         """Move a staged context's catalog-facing capabilities to live state.
 
         Plugin reload initializes a replacement against isolated catalogs. Once
-        that generation is published, only these two capability facades retain
-        a direct catalog reference; the remaining facades call their execution
-        context and therefore follow its live catalog assignment.
+        that generation is published, only these catalog-facing capability
+        facades retain a direct catalog reference; the remaining facades call
+        their execution context and therefore follow its live catalog assignment.
         """
         self.storage._catalogs = catalogs
         self.runtime_info._catalogs = catalogs
+        self.i18n._catalogs = catalogs
 
 
 __all__ = [
@@ -1298,6 +1536,7 @@ __all__ = [
     "ConversationCapability",
     "CronCapability",
     "FileCapability",
+    "I18nCapability",
     "KnowledgeCapability",
     "MessageCapability",
     "ModelCapability",

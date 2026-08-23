@@ -14,6 +14,7 @@ if TYPE_CHECKING:
         Group,
         MessageMember,
     )
+    from astrbot.core.platform.message_session import MessageSession
     from astrbot.core.platform.message_type import MessageType
     from astrbot.core.platform.platform import Platform
     from astrbot.core.platform.platform_metadata import PlatformMetadata
@@ -36,6 +37,7 @@ _EXPORTS = {
         "PlatformRouteIdentity",
     ),
     "PlatformSendResult": ("astrbot.core.platform.send_result", "PlatformSendResult"),
+    "MessageSession": ("astrbot.core.platform.message_session", "MessageSession"),
 }
 
 
@@ -59,4 +61,5 @@ __all__ = [
     "PlatformMetadata",
     "PlatformRouteIdentity",
     "PlatformSendResult",
+    "MessageSession",
 ]

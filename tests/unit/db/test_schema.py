@@ -178,6 +178,30 @@ async def test_platform_message_history_has_required_columns_and_index(
 
 
 @pytest.mark.asyncio
+async def test_command_configs_have_unique_command_id(
+    temp_db: SQLiteDatabase,
+):
+    await temp_db.initialize()
+
+    def inspect_commands(sync_conn):
+        return (
+            _column_map(sync_conn, "command_configs"),
+            _column_map(sync_conn, "command_conflicts"),
+            _unique_column_sets(sync_conn, "command_configs"),
+        )
+
+    async with temp_db.engine.connect() as conn:
+        config_columns, conflict_columns, config_uniques = await conn.run_sync(
+            inspect_commands
+        )
+
+    assert "command_id" in config_columns
+    assert config_columns["command_id"]["nullable"] is False
+    assert "command_id" in conflict_columns
+    assert ("command_id",) in config_uniques
+
+
+@pytest.mark.asyncio
 async def test_auth_unique_keys_use_non_null_normalized_scope(
     temp_db: SQLiteDatabase,
 ):

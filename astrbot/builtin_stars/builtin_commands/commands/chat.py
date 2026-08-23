@@ -1,5 +1,7 @@
 from astrbot.api import star
-from astrbot.api.event import AstrMessageEvent, MessageEventResult
+from astrbot.api.event import AstrMessageEvent
+
+from .reply import reply_i18n
 
 
 class ChatCommands:
@@ -15,11 +17,10 @@ class ChatCommands:
             {},
         )
         enabled = settings.get("llm_enabled", True)
-        status = "enabled" if enabled else "disabled"
-        event.set_result(
-            MessageEventResult().message(
-                f"LLM chat is {status} for the current session.",
-            ),
+        await reply_i18n(
+            self.context,
+            event,
+            "chat.status.enabled" if enabled else "chat.status.disabled",
         )
 
     async def set_enabled(
@@ -41,9 +42,8 @@ class ChatCommands:
             "session_service_config",
             settings,
         )
-        status = "enabled" if enabled else "disabled"
-        event.set_result(
-            MessageEventResult().message(
-                f"✅ LLM chat is now {status} for the current session.",
-            ),
+        await reply_i18n(
+            self.context,
+            event,
+            "chat.set.enabled" if enabled else "chat.set.disabled",
         )

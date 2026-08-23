@@ -1,3 +1,4 @@
+from pydantic import model_validator
 from sqlmodel import JSON, Field, SQLModel, Text, UniqueConstraint
 
 from astrbot.core.db.po.mixins import TimestampMixin
@@ -12,6 +13,7 @@ class CommandConfig(TimestampMixin, SQLModel, table=True):
         primary_key=True,
         max_length=512,
     )
+    command_id: str = Field(default="", nullable=False, max_length=512, unique=True)
     plugin_name: str = Field(nullable=False, max_length=255)
     module_path: str = Field(nullable=False, max_length=255)
     original_command: str = Field(nullable=False, max_length=255)
@@ -24,6 +26,13 @@ class CommandConfig(TimestampMixin, SQLModel, table=True):
     extra_data: dict | None = Field(default=None, sa_type=JSON)
     auto_managed: bool = Field(default=False, nullable=False)
 
+    @model_validator(mode="after")
+    def _fill_command_id(self) -> CommandConfig:
+        if not self.command_id:
+            fragment = (self.original_command or "").replace(" ", ".")
+            self.command_id = f"{self.plugin_name}:{fragment}"
+        return self
+
 
 class CommandConflict(TimestampMixin, SQLModel, table=True):
     """Conflict tracking for duplicated command names."""
@@ -35,6 +44,7 @@ class CommandConflict(TimestampMixin, SQLModel, table=True):
     )
     conflict_key: str = Field(nullable=False, max_length=255)
     handler_full_name: str = Field(nullable=False, max_length=512)
+    command_id: str | None = Field(default=None, max_length=512)
     plugin_name: str = Field(nullable=False, max_length=255)
     status: str = Field(default="pending", max_length=32)
     resolution: str | None = Field(default=None, max_length=64)

@@ -26,7 +26,8 @@ from astrbot.core.execution_context import CoreExecutionContext
 from astrbot.core.utils.requirements_utils import plan_missing_requirements_install
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
-from .command_management import sync_command_configs
+from .command_ids import take_alter_cmd_entry
+from .command_management import command_id_for_handler, sync_command_configs
 from .dashboard_extension import validate_dashboard_manifest
 from .filter.permission import ActionPermissionFilter
 from .plugin_catalog import PluginCatalog
@@ -682,13 +683,19 @@ class PluginRuntimeLoader:
     ) -> list[str]:
         assert metadata.module_path is not None
         full_names: list[str] = []
+        plugin_cfg = alter_cmd.setdefault(metadata.name, {})
         for (
             handler
         ) in self._catalog.runtime_catalogs.handlers.get_handlers_by_module_name(
             metadata.module_path,
         ):
             full_names.append(handler.handler_full_name)
-            command = alter_cmd.get(metadata.name, {}).get(handler.handler_name)
+            command_id = command_id_for_handler(metadata.name or "", handler)
+            command = take_alter_cmd_entry(
+                plugin_cfg,
+                command_id,
+                handler.handler_name,
+            )
             configured_action = (
                 command.get("permission_action") if isinstance(command, dict) else None
             )
@@ -965,6 +972,7 @@ class PluginRuntimeLoader:
             logging.root.removeHandler(handler)
         if sync_command_configs_after_load:
             await self.sync_command_configs()
+        await self._preferences.global_put("alter_cmd", alter_cmd)
         self._rebuild_failed_plugin_info()
         return (False, self._failed_plugin_info) if has_load_error else (True, None)
 

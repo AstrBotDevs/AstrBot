@@ -8,9 +8,14 @@ from astrbot.api.event.filter import option
 from astrbot.core.command import CommandResolutionKind, build_command_catalog
 from astrbot.core.db.po import CommandConfig
 from astrbot.core.runtime_catalogs import RuntimeCatalogs
-from astrbot.core.star.command_management import list_commands, sync_command_configs
+from astrbot.core.star.command_management import (
+    list_commands,
+    sync_command_configs,
+    update_command_permission,
+)
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
+from astrbot.core.star.filter.permission import ActionPermissionFilter
 from astrbot.core.star.star import StarMetadata
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
 from astrbot.dashboard.services.command_service import CommandService
@@ -207,9 +212,11 @@ async def test_command_service_finds_nested_subcommand_payload(monkeypatch):
     async def fake_list_commands(_db, _handlers):
         return [
             {
+                "command_id": "demo:tools",
                 "handler_full_name": "plugin.demo_tools",
                 "sub_commands": [
                     {
+                        "command_id": "demo:tools.greet",
                         "handler_full_name": "plugin.demo_greet",
                         "sub_commands": [],
                     }
@@ -231,9 +238,10 @@ async def test_command_service_finds_nested_subcommand_payload(monkeypatch):
         SimpleNamespace(refresh_registered_commands=AsyncMock()),
         SimpleNamespace(confs={}),
     )
-    payload = await service._get_command_payload("plugin.demo_greet")
+    payload = await service._get_command_payload("demo:tools.greet")
 
     assert payload == {
+        "command_id": "demo:tools.greet",
         "handler_full_name": "plugin.demo_greet",
         "sub_commands": [],
     }
@@ -243,15 +251,18 @@ async def test_command_service_finds_nested_subcommand_payload(monkeypatch):
 async def test_bulk_toggle_builtin_commands_only_updates_builtin_handlers(monkeypatch):
     commands = [
         {
+            "command_id": "builtin_commands:help",
             "handler_full_name": "builtin.help",
             "module_path": "astrbot.builtin_stars.builtin_commands.main",
             "sub_commands": [],
         },
         {
+            "command_id": "demo:command",
             "handler_full_name": "plugin.command",
             "module_path": "plugin.demo",
             "sub_commands": [
                 {
+                    "command_id": "builtin_commands:nested",
                     "handler_full_name": "builtin.nested",
                     "module_path": "astrbot.builtin_stars.builtin_commands.main",
                     "sub_commands": [],
@@ -264,8 +275,8 @@ async def test_bulk_toggle_builtin_commands_only_updates_builtin_handlers(monkey
     async def fake_list_commands(_db, _handlers):
         return commands
 
-    async def fake_toggle_command(_db, _handlers, handler_full_name, enabled):
-        toggled.append((handler_full_name, enabled))
+    async def fake_toggle_command(_db, _handlers, command_id, enabled):
+        toggled.append((command_id, enabled))
 
     monkeypatch.setattr(
         "astrbot.dashboard.services.command_service.list_commands", fake_list_commands
@@ -291,8 +302,14 @@ async def test_bulk_toggle_builtin_commands_only_updates_builtin_handlers(monkey
 
     result = await service.bulk_toggle_builtin_commands(False)
 
-    assert toggled == [("builtin.help", False), ("builtin.nested", False)]
-    assert result == {"enabled": False, "updated": ["builtin.help", "builtin.nested"]}
+    assert toggled == [
+        ("builtin_commands:help", False),
+        ("builtin_commands:nested", False),
+    ]
+    assert result == {
+        "enabled": False,
+        "updated": ["builtin_commands:help", "builtin_commands:nested"],
+    }
     assert catalog_refreshes == [True]
     refresh_registered_commands.assert_awaited_once()
 
@@ -412,6 +429,7 @@ async def test_sync_migrates_builtin_defaults_and_preserves_manual_renames():
     configs = [
         CommandConfig(
             handler_full_name=list_md.handler_full_name,
+            command_id="builtin_commands:plugin.list",
             plugin_name="builtin_commands",
             module_path=module_path,
             original_command="plugin ls",
@@ -420,6 +438,7 @@ async def test_sync_migrates_builtin_defaults_and_preserves_manual_renames():
         ),
         CommandConfig(
             handler_full_name=show_md.handler_full_name,
+            command_id="builtin_commands:plugin.show",
             plugin_name="builtin_commands",
             module_path=module_path,
             original_command="plugin help",
@@ -433,7 +452,12 @@ async def test_sync_migrates_builtin_defaults_and_preserves_manual_renames():
 
     async def upsert_command_config(**kwargs):
         upserts.append(kwargs)
-        return CommandConfig(**kwargs)
+        data = {
+            key: value
+            for key, value in kwargs.items()
+            if key != "previous_handler_full_name"
+        }
+        return CommandConfig(**data)
 
     db = SimpleNamespace(
         get_command_configs=AsyncMock(return_value=configs),
@@ -450,6 +474,166 @@ async def test_sync_migrates_builtin_defaults_and_preserves_manual_renames():
     assert upserts[0]["original_command"] == "plugin list"
     assert upserts[0]["resolved_command"] == "list"
     assert upserts[0]["enabled"] is False
+    assert upserts[0]["command_id"] == "builtin_commands:plugin.list"
     assert list_filter.command_name == "list"
     assert show_filter.command_name == "inspect"
     assert deleted == []
+
+
+@pytest.mark.asyncio
+async def test_sync_claims_renamed_builtin_handler_full_name_and_keeps_manual_rename():
+    catalogs = RuntimeCatalogs()
+    module_path = "astrbot.builtin_stars.builtin_commands.main"
+    catalogs.plugins.publish(
+        StarMetadata(
+            name="builtin_commands",
+            module_path=module_path,
+            activated=True,
+            reserved=True,
+        )
+    )
+
+    def group_handler(self) -> None: ...
+
+    group_handler.__module__ = module_path
+    group = CommandGroupFilter("plugin")
+    group_md = StarHandlerMetadata(
+        EventType.AdapterMessageEvent,
+        f"{module_path}_plugin",
+        "plugin",
+        module_path,
+        group_handler,
+        [group],
+    )
+    catalogs.handlers.append(group_md)
+
+    async def list_handler(self, event) -> None: ...
+
+    list_filter = CommandFilter("list", parent_command_names=["plugin"])
+    list_md = StarHandlerMetadata(
+        EventType.AdapterMessageEvent,
+        f"{module_path}_plugin_list",
+        "plugin_list",
+        module_path,
+        list_handler,
+        [],
+        extras_configs={"sub_command": True},
+    )
+    list_filter.init_handler_md(list_md)
+    list_md.event_filters.append(list_filter)
+    group.add_sub_command_filter(list_filter)
+    catalogs.handlers.append(list_md)
+
+    configs = [
+        CommandConfig(
+            handler_full_name=f"{module_path}_plugin_ls",
+            plugin_name="builtin_commands",
+            module_path=module_path,
+            original_command="plugin ls",
+            resolved_command="ls",
+            enabled=False,
+            resolution_strategy="manual_rename",
+            extra_data={"resolved_aliases": ["plist"]},
+        )
+    ]
+    upserts: list[dict] = []
+
+    async def upsert_command_config(**kwargs):
+        upserts.append(kwargs)
+        data = {
+            key: value
+            for key, value in kwargs.items()
+            if key != "previous_handler_full_name"
+        }
+        return CommandConfig(**data)
+
+    async def get_command_config(handler_full_name: str):
+        if handler_full_name == list_md.handler_full_name:
+            return None
+        return None
+
+    db = SimpleNamespace(
+        get_command_configs=AsyncMock(return_value=configs),
+        get_command_config=get_command_config,
+        upsert_command_config=upsert_command_config,
+        delete_command_config=AsyncMock(),
+        delete_command_configs=AsyncMock(),
+    )
+
+    await sync_command_configs(db, catalogs.handlers)
+
+    assert len(upserts) == 1
+    assert upserts[0]["handler_full_name"] == list_md.handler_full_name
+    assert upserts[0]["previous_handler_full_name"] == f"{module_path}_plugin_ls"
+    assert upserts[0]["command_id"] == "builtin_commands:plugin.list"
+    assert upserts[0]["enabled"] is False
+    assert upserts[0]["resolution_strategy"] == "manual_rename"
+    assert upserts[0]["resolved_command"] == "ls"
+    assert upserts[0]["extra_data"] == {"resolved_aliases": ["plist"]}
+
+
+@pytest.mark.asyncio
+async def test_update_command_permission_migrates_fossil_alter_cmd_key():
+    catalogs = RuntimeCatalogs()
+    module_path = "astrbot.builtin_stars.builtin_commands.main"
+    catalogs.plugins.publish(
+        StarMetadata(
+            name="builtin_commands",
+            module_path=module_path,
+            activated=True,
+            reserved=True,
+        )
+    )
+
+    async def list_handler(self, event) -> None: ...
+
+    list_filter = CommandFilter("list", parent_command_names=["plugin"])
+    list_md = StarHandlerMetadata(
+        EventType.AdapterMessageEvent,
+        f"{module_path}_plugin_list",
+        "plugin_list",
+        module_path,
+        list_handler,
+        [ActionPermissionFilter("extension.read")],
+        extras_configs={"sub_command": True},
+    )
+    list_filter.init_handler_md(list_md)
+    list_md.event_filters.append(list_filter)
+    catalogs.handlers.append(list_md)
+
+    stored = {
+        "builtin_commands": {
+            "plugin_ls": {"permission_action": "extension.read"},
+        }
+    }
+
+    async def global_get(key, default=None):
+        assert key == "alter_cmd"
+        return stored
+
+    writes: list[dict] = []
+
+    async def global_put(key, value):
+        assert key == "alter_cmd"
+        writes.append(value)
+
+    preferences = SimpleNamespace(global_get=global_get, global_put=global_put)
+
+    descriptor = await update_command_permission(
+        preferences,
+        catalogs.handlers,
+        "builtin_commands:plugin.list",
+        "extension.manage",
+    )
+
+    assert descriptor.command_id == "builtin_commands:plugin.list"
+    assert writes[0]["builtin_commands"] == {
+        "builtin_commands:plugin.list": {"permission_action": "extension.manage"}
+    }
+    assert "plugin_ls" not in writes[0]["builtin_commands"]
+    permission = next(
+        filter_
+        for filter_ in list_md.event_filters
+        if isinstance(filter_, ActionPermissionFilter)
+    )
+    assert permission.action == "extension.manage"

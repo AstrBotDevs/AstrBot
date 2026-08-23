@@ -46,9 +46,7 @@ async def _list_command_conflicts(service: CommandService):
 
 async def _toggle_command(payload: CommandToggleRequest, service: CommandService):
     try:
-        return ok(
-            await service.toggle_command(payload.handler_full_name, payload.enabled)
-        )
+        return ok(await service.toggle_command(payload.command_id, payload.enabled))
     except CommandServiceError as exc:
         _raise_command_error(exc)
 
@@ -67,7 +65,7 @@ async def _rename_command(payload: CommandRenameRequest, service: CommandService
     try:
         return ok(
             await service.rename_command(
-                payload.handler_full_name,
+                payload.command_id,
                 payload.new_name,
                 aliases=payload.aliases,
             )
@@ -81,9 +79,7 @@ async def _update_command_permission(
     service: CommandService,
 ):
     try:
-        return ok(
-            await service.update_permission(payload.handler_full_name, payload.action)
-        )
+        return ok(await service.update_permission(payload.command_id, payload.action))
     except CommandServiceError as exc:
         _raise_command_error(exc)
 
@@ -124,7 +120,7 @@ async def update_command(
     if payload.enabled is not None:
         return await _toggle_command(
             CommandToggleRequest(
-                handler_full_name=command_id,
+                command_id=command_id,
                 enabled=payload.enabled,
             ),
             service,
@@ -132,7 +128,7 @@ async def update_command(
     if payload.alias is not None:
         return await _rename_command(
             CommandRenameRequest(
-                handler_full_name=command_id,
+                command_id=command_id,
                 new_name=payload.alias,
                 aliases=payload.aliases,
             ),
@@ -140,7 +136,7 @@ async def update_command(
         )
     return await _update_command_permission(
         CommandPermissionRequest(
-            handler_full_name=command_id,
+            command_id=command_id,
             action=payload.action or "",
         ),
         service,

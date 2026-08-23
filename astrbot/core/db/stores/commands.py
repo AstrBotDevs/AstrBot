@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import col, delete, select
+from sqlmodel import col, delete, select, text
 
 from astrbot.core.db.po import CommandConfig, CommandConflict
 from astrbot.core.db.stores.session import run_in_tx
@@ -19,6 +19,7 @@ class CommandStoreMixin:
         module_path: str,
         original_command: str,
         *,
+        command_id: str | None = None,
         resolved_command: str | None = None,
         enabled: bool | None = None,
         keep_original_alias: bool | None = None,
@@ -28,8 +29,12 @@ class CommandStoreMixin:
         extra_data: dict | None = None,
         auto_managed: bool | None = None,
     ) -> CommandConfig:
+        resolved_id = command_id or (
+            f"{plugin_name}:{(original_command or '').replace(' ', '.')}"
+        )
         return CommandConfig(
             handler_full_name=handler_full_name,
+            command_id=resolved_id,
             plugin_name=plugin_name,
             module_path=module_path,
             original_command=original_command,
@@ -51,6 +56,7 @@ class CommandStoreMixin:
         handler_full_name: str,
         plugin_name: str,
         *,
+        command_id: str | None = None,
         status: str | None = None,
         resolution: str | None = None,
         resolved_command: str | None = None,
@@ -61,6 +67,7 @@ class CommandStoreMixin:
         return CommandConflict(
             conflict_key=conflict_key,
             handler_full_name=handler_full_name,
+            command_id=command_id,
             plugin_name=plugin_name,
             status=status or "pending",
             resolution=resolution,
@@ -84,6 +91,17 @@ class CommandStoreMixin:
             session: AsyncSession
             return await session.get(CommandConfig, handler_full_name)
 
+    async def get_command_config_by_command_id(
+        self,
+        command_id: str,
+    ) -> CommandConfig | None:
+        async with self.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(CommandConfig).where(CommandConfig.command_id == command_id),
+            )
+            return result.scalar_one_or_none()
+
     async def upsert_command_config(
         self,
         handler_full_name: str,
@@ -91,6 +109,8 @@ class CommandStoreMixin:
         module_path: str,
         original_command: str,
         *,
+        command_id: str | None = None,
+        previous_handler_full_name: str | None = None,
         resolved_command: str | None = None,
         enabled: bool | None = None,
         keep_original_alias: bool | None = None,
@@ -102,12 +122,33 @@ class CommandStoreMixin:
     ) -> CommandConfig:
         async def _op(session: AsyncSession) -> CommandConfig:
             config = await session.get(CommandConfig, handler_full_name)
+            if (
+                config is None
+                and previous_handler_full_name
+                and previous_handler_full_name != handler_full_name
+            ):
+                old = await session.get(CommandConfig, previous_handler_full_name)
+                if old is not None:
+                    await session.execute(
+                        text(
+                            "UPDATE command_configs SET handler_full_name = :new "
+                            "WHERE handler_full_name = :old"
+                        ),
+                        {
+                            "new": handler_full_name,
+                            "old": previous_handler_full_name,
+                        },
+                    )
+                    await session.flush()
+                    session.expire_all()
+                    config = await session.get(CommandConfig, handler_full_name)
             if not config:
                 config = self._new_command_config(
                     handler_full_name,
                     plugin_name,
                     module_path,
                     original_command,
+                    command_id=command_id,
                     resolved_command=resolved_command,
                     enabled=enabled,
                     keep_original_alias=keep_original_alias,
@@ -121,6 +162,7 @@ class CommandStoreMixin:
             else:
                 self._apply_updates(
                     config,
+                    command_id=command_id,
                     plugin_name=plugin_name,
                     module_path=module_path,
                     original_command=original_command,
@@ -173,6 +215,7 @@ class CommandStoreMixin:
         handler_full_name: str,
         plugin_name: str,
         *,
+        command_id: str | None = None,
         status: str | None = None,
         resolution: str | None = None,
         resolved_command: str | None = None,
@@ -193,6 +236,7 @@ class CommandStoreMixin:
                     conflict_key,
                     handler_full_name,
                     plugin_name,
+                    command_id=command_id,
                     status=status,
                     resolution=resolution,
                     resolved_command=resolved_command,
@@ -204,6 +248,7 @@ class CommandStoreMixin:
             else:
                 self._apply_updates(
                     record,
+                    command_id=command_id,
                     plugin_name=plugin_name,
                     status=status,
                     resolution=resolution,

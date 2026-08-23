@@ -1,5 +1,7 @@
 from astrbot.api import star
-from astrbot.api.event import AstrMessageEvent, MessageEventResult
+from astrbot.api.event import AstrMessageEvent
+
+from .reply import reply_i18n
 
 
 class VariableCommands:
@@ -7,7 +9,7 @@ class VariableCommands:
         self.context = context
 
     async def set_variable(self, event: AstrMessageEvent, key: str, value: str) -> None:
-        """设置会话变量"""
+        """Store a session variable."""
         uid = event.unified_msg_origin
         session_var = await self.context.preferences.session_get(
             uid, "session_variables", {}
@@ -16,31 +18,31 @@ class VariableCommands:
         await self.context.preferences.session_put(
             uid, "session_variables", session_var
         )
-
-        event.set_result(
-            MessageEventResult().message(
-                f"会话 {uid} 变量 {key} 存储成功。使用 /variable unset 移除。",
-            ),
+        await reply_i18n(
+            self.context,
+            event,
+            "variable.set.ok",
+            uid=uid,
+            key=key,
         )
 
     async def unset_variable(self, event: AstrMessageEvent, key: str) -> None:
-        """移除会话变量"""
+        """Remove a session variable."""
         uid = event.unified_msg_origin
         session_var = await self.context.preferences.session_get(
             uid, "session_variables", {}
         )
-
         if key not in session_var:
-            event.set_result(
-                MessageEventResult().message(
-                    "没有那个变量名。格式：/variable unset <变量名>。"
-                ),
-            )
-        else:
-            del session_var[key]
-            await self.context.preferences.session_put(
-                uid, "session_variables", session_var
-            )
-            event.set_result(
-                MessageEventResult().message(f"会话 {uid} 变量 {key} 移除成功。"),
-            )
+            await reply_i18n(self.context, event, "variable.unset.missing")
+            return
+        del session_var[key]
+        await self.context.preferences.session_put(
+            uid, "session_variables", session_var
+        )
+        await reply_i18n(
+            self.context,
+            event,
+            "variable.unset.ok",
+            uid=uid,
+            key=key,
+        )

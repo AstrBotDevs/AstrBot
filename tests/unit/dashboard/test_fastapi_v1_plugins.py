@@ -822,9 +822,9 @@ async def test_v1_command_patch_updates_service(
     asgi_client: httpx.AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    async def fake_toggle(handler_full_name: str | None, enabled):
+    async def fake_toggle(command_id: str | None, enabled):
         return {
-            "handler_full_name": handler_full_name,
+            "command_id": command_id,
             "enabled": enabled,
         }
 
@@ -835,7 +835,7 @@ async def test_v1_command_patch_updates_service(
     )
 
     response = await asgi_client.patch(
-        "/api/v1/commands/plugin.handler",
+        "/api/v1/commands/demo:hello",
         json={"enabled": False},
         headers=_jwt_headers(),
     )
@@ -844,7 +844,7 @@ async def test_v1_command_patch_updates_service(
     data = response.json()
     assert data["status"] == "ok"
     assert data["data"] == {
-        "handler_full_name": "plugin.handler",
+        "command_id": "demo:hello",
         "enabled": False,
     }
 

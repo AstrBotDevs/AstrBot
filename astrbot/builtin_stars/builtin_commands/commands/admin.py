@@ -1,5 +1,7 @@
 from astrbot.api import star
-from astrbot.api.event import AstrMessageEvent, MessageEventResult
+from astrbot.api.event import AstrMessageEvent
+
+from .reply import reply_i18n
 
 
 class AdminCommands:
@@ -9,24 +11,30 @@ class AdminCommands:
     async def list_admins(self, event: AstrMessageEvent) -> None:
         """List current authorization bindings without exposing credentials."""
         bindings = await self.context.authz.list_bindings(event)
-        entries = [
-            f"- {binding.subject_id}: {binding.role} ({binding.scope_type})"
-            for binding in bindings
-        ]
-        message = "✅ Authorization bindings:\n" + ("\n".join(entries) or "- none")
-
-        event.set_result(MessageEventResult().message(message).use_t2i(False))
+        if not bindings:
+            entries = await self.context.i18n.t(event, "admin.list.none")
+        else:
+            lines = [
+                await self.context.i18n.t(
+                    event,
+                    "admin.list.item",
+                    subject_id=binding.subject_id,
+                    role=binding.role,
+                    scope_type=binding.scope_type,
+                )
+                for binding in bindings
+            ]
+            entries = "\n".join(lines)
+        await reply_i18n(self.context, event, "admin.list.header", entries=entries)
 
     async def grant(self, event: AstrMessageEvent, admin_id: str) -> None:
         """Grant a session-scoped administrator binding."""
         try:
             await self.context.authz.grant_session_admin(event, str(admin_id))
         except PermissionError, ValueError:
-            event.set_result(MessageEventResult().message("❌ Authorization denied."))
+            await reply_i18n(self.context, event, "admin.grant.denied")
             return
-        event.set_result(
-            MessageEventResult().message("✅ Session administrator granted.")
-        )
+        await reply_i18n(self.context, event, "admin.grant.ok")
 
     async def revoke(self, event: AstrMessageEvent, admin_id: str) -> None:
         """Revoke a session-scoped administrator binding."""
@@ -35,12 +43,10 @@ class AdminCommands:
                 event, str(admin_id)
             )
         except PermissionError, ValueError:
-            event.set_result(MessageEventResult().message("❌ Authorization denied."))
+            await reply_i18n(self.context, event, "admin.revoke.denied")
             return
-        event.set_result(
-            MessageEventResult().message(
-                "✅ Session administrator revoked."
-                if revoked
-                else "❌ Binding not found."
-            )
+        await reply_i18n(
+            self.context,
+            event,
+            "admin.revoke.ok" if revoked else "admin.revoke.none",
         )

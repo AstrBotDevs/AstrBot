@@ -31,6 +31,7 @@ from astrbot.core.star.star_handler import (
     StarHandlerMetadata,
     materialize_handler_declarations,
 )
+from tests.unit.builtin_command_fakes import FakeI18n
 
 
 class DummyEvent:
@@ -56,6 +57,11 @@ class DummyEvent:
         self.extras: dict[str, object] = {}
         self.temporary_files: list[str] = []
         self.call_llm = False
+
+    def get_extra(self, key: str | None = None, default=None):
+        if key is None:
+            return self.extras
+        return self.extras.get(key, default)
 
     def set_result(self, result) -> None:
         self.result = result
@@ -92,62 +98,67 @@ def _plain_text(result) -> str:
 def test_all_builtin_extension_commands_use_native_command_schemas():
     expected_handlers = {
         "admin_list",
-        "delete",
-        "deop",
-        "groupnew",
+        "admin_grant",
+        "admin_revoke",
+        "conversation_create",
+        "conversation_create_for",
+        "conversation_delete",
+        "conversation_history",
+        "conversation_list",
+        "conversation_rename",
+        "conversation_reset",
+        "conversation_stats",
+        "conversation_switch",
         "help",
-        "history",
         "chat_disable",
         "chat_enable",
         "chat_status",
         "model_list",
         "model_set",
-        "name",
-        "new_conv",
-        "op",
+        "session_name",
+        "session_info",
         "persona_list",
         "persona_set",
         "persona_status",
         "persona_unset",
-        "persona_view",
-        "plugin_get",
-        "plugin_help",
-        "plugin_ls",
-        "plugin_off",
-        "plugin_on",
+        "persona_show",
+        "plugin_install",
+        "plugin_show",
+        "plugin_list",
+        "plugin_disable",
+        "plugin_enable",
         "provider_list",
-        "provider_llm",
-        "provider_stt",
-        "provider_tts",
-        "rename",
-        "reset",
-        "set_variable",
-        "sid",
-        "stats",
-        "stop",
-        "switch",
-        "unset_variable",
+        "provider_set_llm",
+        "provider_set_stt",
+        "provider_set_tts",
+        "task_stop",
+        "variable_set",
+        "variable_unset",
+        "flow_enable",
+        "flow_disable",
+        "flow_unset",
+        "flow_status",
     }
     assert expected_handlers <= vars(Main).keys()
 
     required_params = {
-        "deop": ("user_id",),
-        "groupnew": ("session_id",),
+        "admin_revoke": ("user_id",),
+        "conversation_create_for": ("session_id",),
         "model_set": ("model_or_index",),
-        "op": ("user_id",),
+        "admin_grant": ("user_id",),
         "persona_set": ("persona_id",),
-        "persona_view": ("persona_id",),
-        "plugin_get": ("repository_url",),
-        "plugin_help": ("plugin_name",),
-        "plugin_off": ("plugin_name",),
-        "plugin_on": ("plugin_name",),
-        "provider_llm": ("index",),
-        "provider_stt": ("index",),
-        "provider_tts": ("index",),
-        "rename": ("title",),
-        "set_variable": ("key", "value"),
-        "switch": ("index",),
-        "unset_variable": ("key",),
+        "persona_show": ("persona_id",),
+        "plugin_install": ("repository_url",),
+        "plugin_show": ("plugin_name",),
+        "plugin_disable": ("plugin_name",),
+        "plugin_enable": ("plugin_name",),
+        "provider_set_llm": ("index",),
+        "provider_set_stt": ("index",),
+        "provider_set_tts": ("index",),
+        "conversation_rename": ("title",),
+        "variable_set": ("key", "value"),
+        "conversation_switch": ("index",),
+        "variable_unset": ("key",),
     }
     for handler_name, names in required_params.items():
         params = compile_command_schema(getattr(Main, handler_name)).params
@@ -165,21 +176,22 @@ async def test_admin_list_reports_authorization_bindings():
         )
     ]
     authz = SimpleNamespace(list_bindings=AsyncMock(return_value=bindings))
-    context = SimpleNamespace(authz=authz)
+    context = SimpleNamespace(authz=authz, i18n=FakeI18n())
     command = AdminCommands(context)
 
     event = DummyEvent(message_str="admin list")
     await command.list_admins(event)
     assert _plain_text(event.result) == (
-        "✅ Authorization bindings:\n- im:napcat:bot:42: session_admin (session)"
+        "Authorization bindings:\n- im:napcat:bot:42: session_admin (session)"
     )
+    assert event.result.is_stopped()
     authz.list_bindings.assert_awaited_once_with(event)
 
     authz.list_bindings.reset_mock(return_value=True)
     authz.list_bindings.return_value = []
     empty_event = DummyEvent(message_str="admin list")
     await command.list_admins(empty_event)
-    assert _plain_text(empty_event.result) == "✅ Authorization bindings:\n- none"
+    assert _plain_text(empty_event.result) == "Authorization bindings:\n- none"
 
 
 @pytest.mark.asyncio
@@ -188,18 +200,18 @@ async def test_admin_grant_and_revoke_delegate_to_authorization_capability():
         grant_session_admin=AsyncMock(),
         revoke_session_admin=AsyncMock(return_value=True),
     )
-    context = SimpleNamespace(authz=authz)
+    context = SimpleNamespace(authz=authz, i18n=FakeI18n())
     command = AdminCommands(context)
 
-    grant_event = DummyEvent(message_str="admin op 42")
-    revoke_event = DummyEvent(message_str="admin deop 42")
+    grant_event = DummyEvent(message_str="admin grant 42")
+    revoke_event = DummyEvent(message_str="admin revoke 42")
     await command.grant(grant_event, "42")
     await command.revoke(revoke_event, "42")
 
     authz.grant_session_admin.assert_awaited_once_with(grant_event, "42")
     authz.revoke_session_admin.assert_awaited_once_with(revoke_event, "42")
-    assert _plain_text(grant_event.result) == "✅ Session administrator granted."
-    assert _plain_text(revoke_event.result) == "✅ Session administrator revoked."
+    assert _plain_text(grant_event.result) == "Session administrator granted."
+    assert _plain_text(revoke_event.result) == "Session administrator revoked."
 
 
 @pytest.mark.asyncio
@@ -208,18 +220,18 @@ async def test_admin_commands_report_authorization_denial():
         grant_session_admin=AsyncMock(side_effect=PermissionError),
         revoke_session_admin=AsyncMock(side_effect=PermissionError),
     )
-    context = SimpleNamespace(authz=authz)
+    context = SimpleNamespace(authz=authz, i18n=FakeI18n())
     command = AdminCommands(context)
 
-    grant_event = DummyEvent(message_str="admin op 42")
+    grant_event = DummyEvent(message_str="admin grant 42")
     await command.grant(grant_event, "42")
 
-    assert _plain_text(grant_event.result) == "❌ Authorization denied."
+    assert _plain_text(grant_event.result) == "Authorization denied."
 
-    revoke_event = DummyEvent(message_str="admin deop 42")
+    revoke_event = DummyEvent(message_str="admin revoke 42")
     await command.revoke(revoke_event, "42")
 
-    assert _plain_text(revoke_event.result) == "❌ Authorization denied."
+    assert _plain_text(revoke_event.result) == "Authorization denied."
 
 
 @pytest.mark.asyncio
@@ -250,18 +262,36 @@ async def test_help_command_defaults_to_plain_text(monkeypatch):
                 "effective_command": "model",
                 "description": "View or switch the current model",
             },
+            {
+                "reserved": True,
+                "enabled": True,
+                "type": "group",
+                "parent_signature": None,
+                "effective_command": "variable",
+                "description": "Manage session variables",
+                "sub_commands": [
+                    {
+                        "reserved": True,
+                        "enabled": True,
+                        "effective_command": "variable set",
+                        "description": "Set a session variable",
+                    }
+                ],
+            },
         ]
 
     async def fake_dashboard_version():
         return "test-ui"
 
-    monkeypatch.setattr(
-        "astrbot.builtin_stars.builtin_commands.commands.help.get_dashboard_version",
-        fake_dashboard_version,
-    )
-
     command = HelpCommand(
-        SimpleNamespace(runtime_info=SimpleNamespace(commands=fake_list_commands))
+        SimpleNamespace(
+            runtime_info=SimpleNamespace(
+                commands=fake_list_commands,
+                version="9.9.9",
+                dashboard_version=fake_dashboard_version,
+            ),
+            i18n=FakeI18n(),
+        )
     )
     event = DummyEvent(message_str="help")
     await command.help(event)
@@ -271,9 +301,12 @@ async def test_help_command_defaults_to_plain_text(monkeypatch):
     assert "/persona - View or switch persona" in text
     assert "/plugin - Plugin management" in text
     assert "/model - View or switch the current model" in text
+    assert "/variable - Manage session variables" in text
+    assert "  /variable set - Set a session variable" in text
     assert "/help --image" in text
     assert event.result.use_t2i_ is False
-    assert event.call_llm is True
+    assert event.result.is_stopped()
+    assert event.call_llm is False
 
 
 @pytest.mark.asyncio
@@ -293,10 +326,6 @@ async def test_help_command_supports_image_mode(monkeypatch):
     async def fake_dashboard_version():
         return "test-ui"
 
-    monkeypatch.setattr(
-        "astrbot.builtin_stars.builtin_commands.commands.help.get_dashboard_version",
-        fake_dashboard_version,
-    )
     render_calls: list[dict[str, object]] = []
 
     async def fake_render_t2i(
@@ -318,7 +347,12 @@ async def test_help_command_supports_image_mode(monkeypatch):
 
     command = HelpCommand(
         SimpleNamespace(
-            runtime_info=SimpleNamespace(commands=fake_list_commands),
+            runtime_info=SimpleNamespace(
+                commands=fake_list_commands,
+                version="9.9.9",
+                dashboard_version=fake_dashboard_version,
+            ),
+            i18n=FakeI18n(),
             config=SimpleNamespace(
                 get=lambda umo=None: {"callback_api_base": "http://127.0.0.1:6185"},
             ),
@@ -331,7 +365,10 @@ async def test_help_command_supports_image_mode(monkeypatch):
 
     assert len(render_calls) == 1
     assert render_calls[0]["template_name"] == "astrbot_help"
-    assert "help-grid" in str(render_calls[0]["text"])
+    markup = str(render_calls[0]["text"])
+    assert "help-grid" in markup
+    assert "AstrBot v9.9.9" in markup
+    assert "WebUI test-ui" in markup
 
     assert event.result.chain[0].file == (
         "http://127.0.0.1:6185/api/v1/files/tokens/token-123"
@@ -341,7 +378,8 @@ async def test_help_command_supports_image_mode(monkeypatch):
     assert event.temporary_files == [
         "D:/Documents/Github/AstrBot/data/temp/help-card.png"
     ]
-    assert event.call_llm is True
+    assert event.call_llm is False
+    assert event.result.is_stopped()
 
 
 @pytest.mark.asyncio
@@ -374,13 +412,14 @@ async def test_help_command_sends_local_image_when_callback_url_is_unavailable(
         _ = text, template_name
         return str(image_path)
 
-    monkeypatch.setattr(
-        "astrbot.builtin_stars.builtin_commands.commands.help.get_dashboard_version",
-        fake_dashboard_version,
-    )
     command = HelpCommand(
         SimpleNamespace(
-            runtime_info=SimpleNamespace(commands=fake_list_commands),
+            runtime_info=SimpleNamespace(
+                commands=fake_list_commands,
+                version="9.9.9",
+                dashboard_version=fake_dashboard_version,
+            ),
+            i18n=FakeI18n(),
             config=SimpleNamespace(get=lambda umo=None: {}),
             rendering=SimpleNamespace(text_to_image=fake_render_t2i),
             files=SimpleNamespace(publish=AsyncMock()),
@@ -429,13 +468,14 @@ async def test_help_command_sends_local_image_when_file_token_registration_fails
         assert path == str(image_path)
         raise RuntimeError("file service unavailable")
 
-    monkeypatch.setattr(
-        "astrbot.builtin_stars.builtin_commands.commands.help.get_dashboard_version",
-        fake_dashboard_version,
-    )
     command = HelpCommand(
         SimpleNamespace(
-            runtime_info=SimpleNamespace(commands=fake_list_commands),
+            runtime_info=SimpleNamespace(
+                commands=fake_list_commands,
+                version="9.9.9",
+                dashboard_version=fake_dashboard_version,
+            ),
+            i18n=FakeI18n(),
             config=SimpleNamespace(
                 get=lambda umo=None: {"callback_api_base": "http://127.0.0.1:6185"},
             ),
@@ -482,13 +522,14 @@ async def test_help_command_uses_file_token_for_local_image_when_callback_is_ava
         assert path == "D:/Documents/Github/AstrBot/data/temp/help-card.png"
         return "token-123"
 
-    monkeypatch.setattr(
-        "astrbot.builtin_stars.builtin_commands.commands.help.get_dashboard_version",
-        fake_dashboard_version,
-    )
     command = HelpCommand(
         SimpleNamespace(
-            runtime_info=SimpleNamespace(commands=fake_list_commands),
+            runtime_info=SimpleNamespace(
+                commands=fake_list_commands,
+                version="9.9.9",
+                dashboard_version=fake_dashboard_version,
+            ),
+            i18n=FakeI18n(),
             config=SimpleNamespace(
                 get=lambda umo=None: {"callback_api_base": "http://127.0.0.1:6185"},
             ),
@@ -564,6 +605,7 @@ async def test_plugin_show_lists_command_signatures_and_aliases():
             MagicMock(),
             demo_mode=False,
         ),
+        i18n=FakeI18n(),
     )
     command = PluginCommands(context)
     event = DummyEvent(message_str="plugin show demo")
@@ -602,6 +644,7 @@ async def test_chat_commands_report_and_set_session_service_status():
                 session_get=session_get,
                 session_put=session_put,
             ),
+            i18n=FakeI18n(),
         )
     )
     status_event = DummyEvent(message_str="chat status")
@@ -655,6 +698,7 @@ async def test_persona_command_switches_current_conversation_persona():
             ),
         ),
         config=SimpleNamespace(get=lambda umo=None: {"provider_settings": {}}),
+        i18n=FakeI18n(),
     )
 
     command = PersonaCommands(context)
@@ -746,6 +790,7 @@ def test_builtin_command_names_follow_grouped_cli_conventions():
         "model": {"list", "set"},
         "variable": {"set", "unset"},
         "chat": {"disable", "enable", "status"},
+        "flow": {"disable", "enable", "status", "unset"},
         "admin": {"grant", "list", "revoke"},
         "persona": {"list", "set", "show", "status", "unset"},
         "plugin": {"disable", "enable", "install", "list", "show"},
@@ -755,8 +800,8 @@ def test_builtin_command_names_follow_grouped_cli_conventions():
         assert group.group_name == attribute
         assert command_names(group) == expected
 
-    history_param = compile_command_schema(Main.history).params[0]
-    list_param = compile_command_schema(Main.convs).params[0]
+    history_param = compile_command_schema(Main.conversation_history).params[0]
+    list_param = compile_command_schema(Main.conversation_list).params[0]
     assert history_param.option.names == ("--page", "-p")
     assert list_param.option.names == ("--page", "-p")
     assert history_param.default == 1
@@ -781,20 +826,20 @@ def test_non_public_builtin_commands_declare_the_planned_actions():
     }
 
     assert {
-        "sid": "session.read",
-        "stop": "session.manage",
-        "new_conv": "session.manage",
-        "stats": "session.read",
-        "history": "session.read",
-        "convs": "session.read",
-        "switch": "session.manage",
-        "rename": "session.manage",
-        "set_variable": "session.manage",
-        "unset_variable": "session.manage",
-        "plugin_ls": "extension.read",
-        "plugin_help": "extension.read",
+        "session_info": "session.read",
+        "task_stop": "session.manage",
+        "conversation_create": "session.manage",
+        "conversation_stats": "session.read",
+        "conversation_history": "session.read",
+        "conversation_list": "session.read",
+        "conversation_switch": "session.manage",
+        "conversation_rename": "session.manage",
+        "variable_set": "session.manage",
+        "variable_unset": "session.manage",
+        "plugin_list": "extension.read",
+        "plugin_show": "extension.read",
+        "conversation_create_for": "session.assign",
     }.items() <= actions.items()
-    assert actions["groupnew"] is None
 
 
 def test_normalized_builtin_paths_resolve_and_legacy_subcommands_do_not():
@@ -816,9 +861,16 @@ def test_normalized_builtin_paths_resolve_and_legacy_subcommands_do_not():
     entry = conversations.resolution.entries[0]
     assert dict(engine.bind(entry, conversations).values) == {"page": 3}
 
+    flow = engine.resolve("flow enable")
+    assert flow.resolution.command_path == ("flow", "enable")
+
     with pytest.raises(CommandError) as legacy:
         engine.resolve("plugin ls")
     assert legacy.value.diagnostic.code is CommandErrorCode.UNKNOWN_SUBCOMMAND
+
+    with pytest.raises(CommandError) as flow_legacy:
+        engine.resolve("flow on")
+    assert flow_legacy.value.diagnostic.code is CommandErrorCode.UNKNOWN_SUBCOMMAND
 
 
 class DummyProvider:
@@ -858,6 +910,7 @@ async def test_provider_native_switch_methods_use_explicit_provider_types():
             text_to_speech=lambda: (provider,),
             speech_to_text=lambda: (provider,),
         ),
+        i18n=FakeI18n(),
     )
     command = ProviderCommands(context)
 
@@ -893,6 +946,7 @@ async def test_provider_model_commands_list_and_switch_by_index():
             using_speech_to_text=lambda umo=None: None,
         ),
         config=SimpleNamespace(get=lambda umo=None: {"provider_settings": {}}),
+        i18n=FakeI18n(),
     )
 
     command = ProviderCommands(context)
@@ -905,4 +959,4 @@ async def test_provider_model_commands_list_and_switch_by_index():
     switch_event = DummyEvent(message_str="model 2")
     await command.set_model(switch_event, "2")
     assert provider.model == "model-b"
-    assert "Switched model successfully" in _plain_text(switch_event.result)
+    assert "Switched model." in _plain_text(switch_event.result)

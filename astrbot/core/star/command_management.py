@@ -5,6 +5,12 @@ from typing import Any
 from astrbot import logger
 from astrbot.core.db.po import CommandConfig
 from astrbot.core.db.protocols import CommandStore
+from astrbot.core.star.command_ids import (
+    BUILTIN_COMMANDS_MODULE,
+    BUILTIN_HANDLER_FULL_NAME_MIGRATION,
+    compute_command_id,
+    take_alter_cmd_entry,
+)
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import ActionPermissionFilter
@@ -19,6 +25,7 @@ class CommandDescriptor:
         default=None,
         repr=False,
     )
+    command_id: str = ""
     handler_full_name: str = ""
     handler_name: str = ""
     plugin_name: str = ""
@@ -52,47 +59,39 @@ async def sync_command_configs(
     """同步指令配置，清理过期配置。"""
     descriptors = _collect_descriptors(handler_registry, include_sub_commands=True)
     config_records = await db.get_command_configs()
-    descriptor_map = {desc.handler_full_name: desc for desc in descriptors}
+    live_by_full_name = {desc.handler_full_name: desc for desc in descriptors}
+    live_by_command_id = {desc.command_id: desc for desc in descriptors}
+    live_by_plugin_original = {
+        (desc.plugin_name, desc.original_command): desc for desc in descriptors
+    }
+    claimed_names: set[str] = set()
     migrated_records: list[CommandConfig] = []
     for config in config_records:
-        descriptor = descriptor_map.get(config.handler_full_name)
-        desired_fragment = descriptor.raw_command_name if descriptor else None
-        desired_original = descriptor.original_command if descriptor else None
-        if (
-            descriptor is not None
-            and descriptor.module_path == "astrbot.builtin_stars.builtin_commands.main"
-            and config.resolution_strategy != "manual_rename"
-            and desired_fragment
-            and desired_original
-            and (
-                config.resolved_command != desired_fragment
-                or config.original_command != desired_original
-            )
-        ):
-            config = await db.upsert_command_config(
-                handler_full_name=config.handler_full_name,
-                plugin_name=descriptor.plugin_name or config.plugin_name,
-                module_path=descriptor.module_path,
-                original_command=desired_original,
-                resolved_command=desired_fragment,
-                enabled=config.enabled,
-                keep_original_alias=False,
-                conflict_key=desired_original,
-                resolution_strategy=config.resolution_strategy,
-                note=config.note,
-                extra_data=config.extra_data,
-                auto_managed=config.auto_managed,
-            )
+        descriptor = _claim_descriptor(
+            config,
+            live_by_full_name,
+            live_by_command_id,
+            live_by_plugin_original,
+        )
+        if descriptor is None:
+            continue
+        claimed_names.add(config.handler_full_name)
+        claimed_names.add(descriptor.handler_full_name)
+        config = await _relink_and_correct_config(db, config, descriptor)
         migrated_records.append(config)
     config_records = migrated_records
-    config_map = _bind_configs_to_descriptors(
+    _bind_configs_to_descriptors(
         handler_registry,
         descriptors,
         config_records,
     )
     live_handlers = {desc.handler_full_name for desc in descriptors}
-
-    stale_configs = [key for key in config_map if key not in live_handlers]
+    stale_configs = [
+        config.handler_full_name
+        for config in await db.get_command_configs()
+        if config.handler_full_name not in live_handlers
+        and config.handler_full_name not in claimed_names
+    ]
     if stale_configs:
         await db.delete_command_configs(stale_configs)
 
@@ -100,16 +99,20 @@ async def sync_command_configs(
 async def toggle_command(
     db: CommandStore,
     handler_registry: HandlerRegistry,
-    handler_full_name: str,
+    command_id: str,
     enabled: bool,
 ) -> CommandDescriptor:
-    descriptor = _build_descriptor_by_full_name(handler_registry, handler_full_name)
+    descriptor = _build_descriptor_by_command_id(handler_registry, command_id)
     if not descriptor:
         raise ValueError("指定的处理函数不存在或不是指令。")
 
-    existing_cfg = await db.get_command_config(handler_full_name)
+    existing_cfg = await _load_command_config(db, descriptor)
     config = await db.upsert_command_config(
-        handler_full_name=handler_full_name,
+        handler_full_name=descriptor.handler_full_name,
+        command_id=descriptor.command_id,
+        previous_handler_full_name=(
+            existing_cfg.handler_full_name if existing_cfg else None
+        ),
         plugin_name=descriptor.plugin_name or "",
         module_path=descriptor.module_path,
         original_command=descriptor.original_command or descriptor.handler_name,
@@ -136,11 +139,11 @@ async def toggle_command(
 async def rename_command(
     db: CommandStore,
     handler_registry: HandlerRegistry,
-    handler_full_name: str,
+    command_id: str,
     new_fragment: str,
     aliases: list[str] | None = None,
 ) -> CommandDescriptor:
-    descriptor = _build_descriptor_by_full_name(handler_registry, handler_full_name)
+    descriptor = _build_descriptor_by_command_id(handler_registry, command_id)
     if not descriptor:
         raise ValueError("指定的处理函数不存在或不是指令。")
 
@@ -150,7 +153,9 @@ async def rename_command(
 
     # 校验主指令名
     candidate_full = _compose_command(descriptor.parent_signature, new_fragment)
-    if _is_command_in_use(handler_registry, handler_full_name, candidate_full):
+    if _is_command_in_use(
+        handler_registry, descriptor.handler_full_name, candidate_full
+    ):
         raise ValueError(f"指令名 '{candidate_full}' 已被其他指令占用。")
 
     # 校验别名
@@ -160,15 +165,21 @@ async def rename_command(
             if not alias:
                 continue
             alias_full = _compose_command(descriptor.parent_signature, alias)
-            if _is_command_in_use(handler_registry, handler_full_name, alias_full):
+            if _is_command_in_use(
+                handler_registry, descriptor.handler_full_name, alias_full
+            ):
                 raise ValueError(f"别名 '{alias_full}' 已被其他指令占用。")
 
-    existing_cfg = await db.get_command_config(handler_full_name)
+    existing_cfg = await _load_command_config(db, descriptor)
     merged_extra = dict(existing_cfg.extra_data or {}) if existing_cfg else {}
     merged_extra["resolved_aliases"] = aliases or []
 
     config = await db.upsert_command_config(
-        handler_full_name=handler_full_name,
+        handler_full_name=descriptor.handler_full_name,
+        command_id=descriptor.command_id,
+        previous_handler_full_name=(
+            existing_cfg.handler_full_name if existing_cfg else None
+        ),
         plugin_name=descriptor.plugin_name or "",
         module_path=descriptor.module_path,
         original_command=descriptor.original_command or descriptor.handler_name,
@@ -190,10 +201,10 @@ async def rename_command(
 async def update_command_permission(
     preferences: SharedPreferences,
     handler_registry: HandlerRegistry,
-    handler_full_name: str,
+    command_id: str,
     action: str,
 ) -> CommandDescriptor:
-    descriptor = _build_descriptor_by_full_name(handler_registry, handler_full_name)
+    descriptor = _build_descriptor_by_command_id(handler_registry, command_id)
     if not descriptor:
         raise ValueError("指定的处理函数不存在或不是指令。")
 
@@ -207,11 +218,18 @@ async def update_command_permission(
 
     # 1. Update Persistent Config (alter_cmd)
     alter_cmd_cfg = await preferences.global_get("alter_cmd", {})
-    plugin_ = alter_cmd_cfg.get(found_plugin.name, {})
-    cfg = plugin_.get(handler.handler_name, {})
+    plugin_ = dict(alter_cmd_cfg.get(found_plugin.name, {}))
+    cfg = dict(
+        take_alter_cmd_entry(
+            plugin_,
+            descriptor.command_id,
+            handler.handler_name,
+        )
+        or {}
+    )
     cfg["permission_action"] = action
     cfg.pop("permission", None)
-    plugin_[handler.handler_name] = cfg
+    plugin_[descriptor.command_id] = cfg
     alter_cmd_cfg[found_plugin.name] = plugin_
 
     await preferences.global_put("alter_cmd", alter_cmd_cfg)
@@ -287,6 +305,7 @@ async def list_command_conflicts(
             "conflict_key": key,
             "handlers": [
                 {
+                    "command_id": item.command_id,
                     "handler_full_name": item.handler_full_name,
                     "plugin": item.plugin_name,
                     "current_name": item.effective_command,
@@ -385,6 +404,7 @@ def _build_descriptor(
     descriptor = CommandDescriptor(
         handler=handler,
         filter_ref=filter_ref,
+        command_id=compute_command_id(plugin_name, original_command),
         handler_full_name=handler.handler_full_name,
         handler_name=handler.handler_name,
         plugin_name=plugin_name,
@@ -422,6 +442,140 @@ def _build_descriptor_by_full_name(
     if not handler:
         return None
     return _build_descriptor(handler_registry, handler)
+
+
+def _build_descriptor_by_command_id(
+    handler_registry: HandlerRegistry,
+    command_id: str,
+) -> CommandDescriptor | None:
+    for handler in handler_registry:
+        descriptor = _build_descriptor(handler_registry, handler)
+        if descriptor is not None and descriptor.command_id == command_id:
+            return descriptor
+    return _build_descriptor_by_full_name(handler_registry, command_id)
+
+
+def command_id_for_handler(plugin_name: str, handler: StarHandlerMetadata) -> str:
+    """Return the stable command ID for one materialized handler."""
+    original_command = _original_command_for_handler(handler)
+    if not original_command:
+        original_command = handler.handler_name
+    return compute_command_id(plugin_name, original_command)
+
+
+def _original_command_for_handler(handler: StarHandlerMetadata) -> str:
+    filter_ref = _locate_primary_filter(handler)
+    if filter_ref is None:
+        return handler.handler_name
+    if isinstance(filter_ref, CommandFilter):
+        raw_fragment = getattr(
+            filter_ref, "_original_command_name", filter_ref.command_name
+        )
+        original_parent_signature = (filter_ref.parent_command_names or [""])[0].strip()
+    else:
+        raw_fragment = getattr(
+            filter_ref, "_original_group_name", filter_ref.group_name
+        )
+        original_parent_signature = _resolve_group_parent_signature(
+            filter_ref,
+            original=True,
+        )
+    return _compose_command(original_parent_signature, raw_fragment)
+
+
+def _claim_descriptor(
+    config: CommandConfig,
+    live_by_full_name: dict[str, CommandDescriptor],
+    live_by_command_id: dict[str, CommandDescriptor],
+    live_by_plugin_original: dict[tuple[str, str | None], CommandDescriptor],
+) -> CommandDescriptor | None:
+    if config.handler_full_name in live_by_full_name:
+        return live_by_full_name[config.handler_full_name]
+    if config.command_id and config.command_id in live_by_command_id:
+        return live_by_command_id[config.command_id]
+    mapped = BUILTIN_HANDLER_FULL_NAME_MIGRATION.get(config.handler_full_name)
+    if mapped and mapped in live_by_command_id:
+        return live_by_command_id[mapped]
+    key = (config.plugin_name, config.original_command)
+    return live_by_plugin_original.get(key)
+
+
+async def _load_command_config(
+    db: CommandStore,
+    descriptor: CommandDescriptor,
+) -> CommandConfig | None:
+    existing = await db.get_command_config(descriptor.handler_full_name)
+    if existing is not None:
+        return existing
+    getter = getattr(db, "get_command_config_by_command_id", None)
+    if callable(getter):
+        return await getter(descriptor.command_id)
+    return None
+
+
+async def _relink_and_correct_config(
+    db: CommandStore,
+    config: CommandConfig,
+    descriptor: CommandDescriptor,
+) -> CommandConfig:
+    desired_fragment = descriptor.raw_command_name
+    desired_original = descriptor.original_command
+    should_correct_builtin = (
+        descriptor.module_path == BUILTIN_COMMANDS_MODULE
+        and config.resolution_strategy != "manual_rename"
+        and desired_fragment
+        and desired_original
+        and (
+            config.resolved_command != desired_fragment
+            or config.original_command != desired_original
+        )
+    )
+    needs_relink = config.handler_full_name != descriptor.handler_full_name
+    needs_command_id = config.command_id != descriptor.command_id
+    if not (needs_relink or needs_command_id or should_correct_builtin):
+        return config
+
+    if needs_relink:
+        existing_new = await db.get_command_config(descriptor.handler_full_name)
+        if (
+            existing_new is not None
+            and existing_new.handler_full_name != config.handler_full_name
+        ):
+            await db.delete_command_config(config.handler_full_name)
+            config = existing_new
+            needs_relink = False
+
+    original_command = (
+        desired_original
+        if should_correct_builtin and desired_original
+        else config.original_command
+    )
+    resolved_command = (
+        desired_fragment
+        if should_correct_builtin and desired_fragment
+        else config.resolved_command
+    )
+    conflict_key = (
+        desired_original
+        if should_correct_builtin and desired_original
+        else config.conflict_key
+    )
+    return await db.upsert_command_config(
+        handler_full_name=descriptor.handler_full_name,
+        command_id=descriptor.command_id,
+        previous_handler_full_name=(config.handler_full_name if needs_relink else None),
+        plugin_name=descriptor.plugin_name or config.plugin_name,
+        module_path=descriptor.module_path,
+        original_command=original_command,
+        resolved_command=resolved_command,
+        enabled=config.enabled,
+        keep_original_alias=False if should_correct_builtin else None,
+        conflict_key=conflict_key,
+        resolution_strategy=config.resolution_strategy,
+        note=config.note,
+        extra_data=config.extra_data,
+        auto_managed=config.auto_managed,
+    )
 
 
 def _locate_primary_filter(
@@ -564,21 +718,32 @@ def _apply_config_to_runtime(
             )
 
 
+def _config_for_descriptor(
+    descriptor: CommandDescriptor,
+    config_map: dict[str, CommandConfig],
+    config_by_id: dict[str, CommandConfig],
+) -> CommandConfig | None:
+    return config_map.get(descriptor.handler_full_name) or config_by_id.get(
+        descriptor.command_id,
+    )
+
+
 def _bind_configs_to_descriptors(
     handler_registry: HandlerRegistry,
     descriptors: list[CommandDescriptor],
     config_records: list[CommandConfig],
 ) -> dict[str, CommandConfig]:
     config_map = {cfg.handler_full_name: cfg for cfg in config_records}
+    config_by_id = {cfg.command_id: cfg for cfg in config_records if cfg.command_id}
     for desc in descriptors:
-        if cfg := config_map.get(desc.handler_full_name):
+        if cfg := _config_for_descriptor(desc, config_map, config_by_id):
             _apply_config_to_runtime(desc, cfg)
 
     for index, desc in enumerate(descriptors):
         rebuilt = _build_descriptor(handler_registry, desc.handler)
         if rebuilt is None:
             continue
-        if cfg := config_map.get(rebuilt.handler_full_name):
+        if cfg := _config_for_descriptor(rebuilt, config_map, config_by_id):
             _apply_config_to_descriptor(rebuilt, cfg)
         descriptors[index] = rebuilt
     return config_map
@@ -641,6 +806,7 @@ def _is_command_in_use(
 
 def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:
     result = {
+        "command_id": desc.command_id,
         "handler_full_name": desc.handler_full_name,
         "handler_name": desc.handler_name,
         "plugin": desc.plugin_name,
