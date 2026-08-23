@@ -936,6 +936,25 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     logger.warning(
                         "skills_like tool re-query returned no tool calls; fallback to assistant response."
                     )
+                    if llm_resp.role == "err":
+                        # The re-query returned a provider error instead of a normal
+                        # assistant response; route it through error handling instead
+                        # of finalizing it as assistant content.
+                        self.final_llm_resp = llm_resp
+                        self.stats.end_time = time.time()
+                        self._transition_state(AgentState.ERROR)
+                        self._resolve_unconsumed_follow_ups()
+                        custom_error_message = self._get_persona_custom_error_message()
+                        error_text = custom_error_message or (
+                            f"LLM 响应错误: {llm_resp.completion_text or '未知错误'}"
+                        )
+                        yield AgentResponse(
+                            type="err",
+                            data=AgentResponseData(
+                                chain=MessageChain().message(error_text),
+                            ),
+                        )
+                        return
                     # Finalize before yielding so response hooks can review or rewrite
                     # the fallback text before downstream stages send it.
                     await self._complete_with_assistant_response(llm_resp)

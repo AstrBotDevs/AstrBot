@@ -445,3 +445,26 @@ async def test_provider_error_does_not_create_assistant_history(
     assert "contract provider failure" in event.sent_texts[0]
     assert after_texts == event.sent_texts
     assert "history_save" not in lifecycle
+
+
+@pytest.mark.asyncio
+async def test_skills_like_error_requery_uses_error_handling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Route an err-role re-query response through error handling, not fallback."""
+    event, runner_stage, provider, lifecycle, after_texts = await _run_lifecycle(
+        monkeypatch,
+        [
+            _tool_call("contract_tool", "select-1"),
+            LLMResponse(role="err", completion_text="requery provider failure"),
+        ],
+        tool_schema_mode="skills_like",
+    )
+
+    assert provider.call_count == 2
+    assert runner_stage.saved_tail_text is None
+    assert len(event.sent_texts) == 1
+    assert "requery provider failure" in event.sent_texts[0]
+    assert after_texts == event.sent_texts
+    assert "agent_done_hook" not in lifecycle
+    assert "history_save" not in lifecycle
