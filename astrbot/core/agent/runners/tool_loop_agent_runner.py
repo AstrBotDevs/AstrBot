@@ -936,6 +936,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     logger.warning(
                         "skills_like tool re-query returned no tool calls; fallback to assistant response."
                     )
+                    # Finalize before yielding so response hooks can review or rewrite
+                    # the fallback text before downstream stages send it.
+                    await self._complete_with_assistant_response(llm_resp)
                     if llm_resp.reasoning_content:
                         yield AgentResponse(
                             type="llm_result",
@@ -958,7 +961,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             ),
                         )
 
-                    await self._complete_with_assistant_response(llm_resp)
                     return
                 else:
                     llm_resp.tools_call_name = requery_resp.tools_call_name
