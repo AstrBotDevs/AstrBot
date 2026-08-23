@@ -540,11 +540,11 @@ class ProviderAnthropic(Provider):
             )
 
         llm_response = LLMResponse(role="assistant")
+        completion_text_parts: list[str] = []
 
         for content_block in completion.content:
             if content_block.type == "text":
-                completion_text = str(content_block.text).strip()
-                llm_response.completion_text = completion_text
+                completion_text_parts.append(str(content_block.text))
 
             if content_block.type == "thinking":
                 reasoning_content = str(content_block.thinking).strip()
@@ -556,6 +556,7 @@ class ProviderAnthropic(Provider):
                 llm_response.tools_call_name.append(content_block.name)
                 llm_response.tools_call_ids.append(content_block.id)
 
+        llm_response.completion_text = "".join(completion_text_parts).strip()
         llm_response.id = completion.id
         llm_response.usage = self._extract_usage(completion.usage)
 
