@@ -24,6 +24,7 @@ class _Event:
         self._result = result
         self._extras = {}
         self._send_results = iter(send_results)
+        self.unified_msg_origin = "test:FriendMessage:user"
         self.plugins_name = []
         self.send = AsyncMock(side_effect=self._send)
         self.send_streaming = AsyncMock()
