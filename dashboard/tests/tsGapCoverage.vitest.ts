@@ -37,6 +37,7 @@ import {
   buildSearchQuery,
   matchesPluginSearch,
   matchesText,
+  normalizeLoose,
   toInitials,
   toPinyinText,
 } from '@/utils/pluginSearch';
@@ -57,11 +58,20 @@ import {
 } from '@/components/chat/commandSuggestion';
 import { copyToClipboard } from '@/utils/clipboard';
 import { getDesktopRuntimeInfo } from '@/utils/desktopRuntime';
-import { readGitHubProxyState } from '@/utils/githubProxyStorage';
+import {
+  readGitHubProxyState,
+  writeGitHubProxyControl,
+  writeGitHubProxyRadioValue,
+  writeSelectedGitHubProxy,
+} from '@/utils/githubProxyStorage';
 import {
   getStoredDashboardUsername,
   getStoredSelectedChatConfigId,
+  setStoredSelectedChatConfigId,
 } from '@/utils/chatConfigBinding';
+import { generateMissingKeys } from '@/i18n/tools';
+import { formatTokenCount } from '@/utils/providerMetadata';
+import { collectDroppedKnowledgeBaseFiles } from '@/utils/knowledgeBaseUploadFiles';
 import { runProviderMutationWithStepUp } from '@/utils/providerStepUp';
 import { runConfigMutationWithStepUp } from '@/utils/configStepUp';
 import { isDashboardStepUpRequired } from '@/composables/useDashboardStepUp';
@@ -158,6 +168,19 @@ describe('ts gap coverage', () => {
     expect(resolveUiTheme('dark')).toBe(themeNames.dark);
     expect(resolveUiTheme('system')).toBeDefined();
     expect(getSystemUiTheme()).toBeDefined();
+    const matchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    expect(getSystemUiTheme()).toBe(themeNames.dark);
+    window.matchMedia = matchMedia;
     expect(typeof getInitialSystemPrefersDark()).toBe('boolean');
 
     const toast = useToastStore();
@@ -525,5 +548,189 @@ describe('ts gap coverage', () => {
     await new Promise((resolve) => setTimeout(resolve, 40));
     common.closeEventSource();
     vi.unstubAllGlobals();
+  });
+
+  it('covers remaining i18n, storage, and helper branches', async () => {
+    expect(generateMissingKeys({ a: '1', nested: { b: '2' } }, {})).toEqual([
+      'a',
+      'nested',
+    ]);
+    await initI18n('en-US');
+    mergeDynamicTranslations('brand.new.module', {
+      'en-US': { title: 'Fresh' },
+    });
+    const { t } = useI18n();
+    expect(t('brand.new.module.title')).toBe('Fresh');
+
+    const loader = new I18nLoader();
+    (
+      loader as unknown as {
+        moduleRegistry: Map<
+          string,
+          { name: string; path: string; loaded: boolean }
+        >;
+      }
+    ).moduleRegistry.set('ghost', {
+      name: 'ghost',
+      path: 'does-not-exist.json',
+      loaded: false,
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () => new Response('nope', { status: 404, statusText: 'NF' }),
+      ),
+    );
+    expect(await loader.loadModule('zh-CN', 'ghost')).toEqual({});
+    vi.unstubAllGlobals();
+    const cache = (
+      loader as unknown as { cache: Map<string, Record<string, unknown>> }
+    ).cache;
+    cache.set('zh-CN:core/common', { hello: 'ok' });
+    cache.set('en-US:core/common', { hello: 'ok' });
+    loader.clearCache('zh-CN');
+    expect(cache.has('zh-CN:core/common')).toBe(false);
+    expect(cache.has('en-US:core/common')).toBe(true);
+    loader.clearCache();
+    expect(cache.size).toBe(0);
+    const duplicateLoader = new I18nLoader();
+    await duplicateLoader.loadFeatureModules('zh-CN', [
+      'features/chat',
+      'features/chat',
+    ]);
+
+    const validator = new I18nValidator();
+    vi.spyOn(validator, 'validateCompleteness').mockImplementationOnce(() => {
+      throw new Error('broken pack');
+    });
+    const errorReport = await validator.validateLocales(['zh-CN']);
+    expect(errorReport.details[0]?.isValid).toBe(false);
+    expect(errorReport.details[0]?.errors[0]?.message).toBe('broken pack');
+    vi.spyOn(validator, 'validateCompleteness').mockImplementationOnce(() => {
+      throw 'nope';
+    });
+    const unknownReport = await validator.validateLocales(['en-US']);
+    expect(unknownReport.details[0]?.errors[0]?.message).toBe('未知错误');
+
+    expect(formatTokenCount(2_500_000)).toBe('2.5M');
+    expect(formatTokenCount(12)).toBe('12');
+    expect(formatTokenCount(Number.NaN)).toBe('');
+
+    await expect(
+      runConfigMutationWithStepUp(async () => {
+        throw new Error('plain');
+      }, 'cfg-1'),
+    ).rejects.toThrow('plain');
+
+    const customizer = useCustomizerStore();
+    customizer.SET_THEME_MODE('dark');
+    expect(customizer.uiTheme).toBe(themeNames.dark);
+
+    window.astrbotDesktop = {
+      isDesktop: false,
+      isDesktopRuntime: vi.fn(async () => {
+        throw new Error('probe failed');
+      }),
+      restartBackend: vi.fn(),
+    } as never;
+    const desktop = await getDesktopRuntimeInfo();
+    expect(desktop.hasDesktopRuntimeProbe).toBe(true);
+    expect(desktop.isDesktopRuntime).toBe(false);
+    delete window.astrbotDesktop;
+
+    expect(
+      getPluginConfigDefaultValue({
+        type: 'object',
+        items: { a: { type: 'unknown' } },
+      }),
+    ).toBeUndefined();
+
+    expect(
+      await collectDroppedKnowledgeBaseFiles({
+        items: [{ webkitGetAsEntry: () => null }],
+        files: [],
+      } as unknown as DataTransfer),
+    ).toEqual([]);
+    expect(
+      await collectDroppedKnowledgeBaseFiles({
+        items: [
+          {
+            webkitGetAsEntry: () => ({
+              isFile: false,
+              isDirectory: false,
+              name: 'skip',
+            }),
+          },
+        ],
+        files: [],
+      } as unknown as DataTransfer),
+    ).toEqual([]);
+
+    expect(normalizeLoose('Hello_World')).toBe('helloworld');
+    expect(buildSearchQuery('   ')).toBeNull();
+    const query = buildSearchQuery('cs');
+    expect(matchesText('测试', query)).toBeTypeOf('boolean');
+    expect(matchesText('pre-cs-fix', query)).toBe(true);
+    expect(matchesText(null, query)).toBe(false);
+    expect(
+      matchesPluginSearch(
+        { name: 'plain-english', tags: 'nope' as never },
+        query,
+      ),
+    ).toBe(false);
+
+    const getItem = vi.spyOn(localStorage, 'getItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    expect(getStoredDashboardUsername()).toBe('guest');
+    getItem.mockRestore();
+    const setItem = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    setStoredSelectedChatConfigId('profile-2');
+    setItem.mockRestore();
+
+    const bindingStorage = globalThis.localStorage;
+    vi.stubGlobal('localStorage', undefined);
+    try {
+      expect(getStoredDashboardUsername()).toBe('guest');
+      setStoredSelectedChatConfigId('ignored');
+    } finally {
+      vi.unstubAllGlobals();
+      Object.defineProperty(window, 'localStorage', {
+        configurable: true,
+        value: bindingStorage,
+      });
+      Object.defineProperty(globalThis, 'localStorage', {
+        configurable: true,
+        value: bindingStorage,
+      });
+    }
+
+    const storage = globalThis.localStorage;
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new Error('blocked');
+      },
+    });
+    try {
+      expect(readGitHubProxyState()).toEqual({
+        radioValue: '0',
+        control: '0',
+        selectedProxy: '',
+      });
+      writeSelectedGitHubProxy('https://ghproxy');
+      writeGitHubProxyRadioValue('1');
+      writeGitHubProxyControl('1');
+      expect(getStoredDashboardUsername()).toBe('guest');
+      expect(getStoredSelectedChatConfigId()).toBe('default');
+      setStoredSelectedChatConfigId('profile-1');
+    } finally {
+      Object.defineProperty(window, 'localStorage', {
+        configurable: true,
+        value: storage,
+      });
+    }
   });
 });

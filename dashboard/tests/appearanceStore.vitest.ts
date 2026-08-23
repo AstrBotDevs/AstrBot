@@ -32,6 +32,31 @@ describe('appearance store', () => {
     expect(restored.settings.portraitWallpaperId).toBe('b'.repeat(32));
   });
 
+  it('clamps non-numeric appearance fields to defaults', () => {
+    localStorage.setItem(
+      'astrbot:appearance:v1',
+      JSON.stringify({
+        enabled: true,
+        blur: 'nope',
+        brightness: 'x',
+        dim: 'nope',
+        surfaceOpacity: {},
+      }),
+    );
+    const store = useAppearanceStore();
+    expect(store.settings.blur).toBe(0);
+    expect(store.settings.brightness).toBe(1);
+    expect(store.settings.dim).toBe(0.5);
+    expect(store.settings.surfaceOpacity).toBe(1);
+  });
+
+  it('falls back to defaults when stored appearance JSON is invalid', () => {
+    localStorage.setItem('astrbot:appearance:v1', '{not-json');
+    const store = useAppearanceStore();
+    expect(store.settings.enabled).toBe(false);
+    expect(store.settings.fit).toBe('cover');
+  });
+
   it('resets to a non-invasive default appearance', () => {
     const store = useAppearanceStore();
     store.update({ enabled: true, surfaceOpacity: 0 });

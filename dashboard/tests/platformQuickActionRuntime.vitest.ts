@@ -79,4 +79,17 @@ describe('platformQuickActionRuntime', () => {
       { label: 'message_id', value: '12345' },
     ]);
   });
+
+  it('rejects arrays, skips blank numbers, and returns no summary for invalid JSON', () => {
+    expect(tryParseJsonRecord('[1]')).toBeNull();
+    expect(buildQuickActionResultSummary('not-json', tm)).toEqual([]);
+    expect(
+      buildQuickActionPayload(
+        'send_like',
+        { user_id: '1', times: '   ' },
+        definitions,
+        tm,
+      ),
+    ).toEqual({ user_id: '1' });
+  });
 });

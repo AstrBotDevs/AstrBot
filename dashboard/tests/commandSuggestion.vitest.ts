@@ -34,6 +34,9 @@ describe('commandSuggestion', () => {
         'music play',
       ),
     ).toBe('/mp (name(str),force(bool)=False)');
+    expect(buildSuggestionSignature('/mp', '', '/mp')).toBe('/mp');
+    expect(buildSuggestionSignature('/mp', '/mp', '/mp')).toBe('/mp');
+    expect(buildSuggestionSignature('/mp', '/other', '/mp')).toBe('/other');
   });
 
   it('ranks exact matches first, then reserved commands, then shorter signatures', () => {
@@ -114,5 +117,74 @@ describe('commandSuggestion', () => {
         (command) => command.effective_command,
       ),
     ).toEqual(['/alpha']);
+
+    expect(
+      rankSuggestionCommands(
+        [
+          makeCommand('/zzz', {
+            plugin_display_name: 'My Helper Pack',
+            description: '',
+          }),
+        ],
+        'helper',
+        normalizeText,
+      ).map((command) => command.effective_command),
+    ).toEqual(['/zzz']);
+  });
+
+  it('breaks remaining ties by command length then lexicographic order', () => {
+    const emptyQuery = [
+      makeCommand('/ab', {
+        reserved: true,
+        display_signature: '/x',
+      }),
+      makeCommand('/aa', {
+        reserved: true,
+        display_signature: '/x',
+      }),
+      makeCommand('/b', {
+        reserved: true,
+        display_signature: '/x',
+      }),
+    ];
+    expect(
+      rankSuggestionCommands(emptyQuery, '', normalizeText).map(
+        (command) => command.effective_command,
+      ),
+    ).toEqual(['/b', '/aa', '/ab']);
+
+    expect(
+      rankSuggestionCommands(
+        [
+          makeCommand('/long-name', {
+            reserved: true,
+            display_signature: '',
+          }),
+          makeCommand('/z', { reserved: true, display_signature: '' }),
+        ],
+        '',
+        normalizeText,
+      ).map((command) => command.effective_command),
+    ).toEqual(['/z', '/long-name']);
+
+    const ranked = [
+      makeCommand('/help-b', {
+        reserved: true,
+        display_signature: '/help',
+      }),
+      makeCommand('/help-a', {
+        reserved: true,
+        display_signature: '/help',
+      }),
+      makeCommand('/h', {
+        reserved: true,
+        display_signature: '/help',
+      }),
+    ];
+    expect(
+      rankSuggestionCommands(ranked, 'h', normalizeText).map(
+        (command) => command.effective_command,
+      ),
+    ).toEqual(['/h', '/help-a', '/help-b']);
   });
 });

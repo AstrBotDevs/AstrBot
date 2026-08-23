@@ -18,4 +18,32 @@ describe('resolveErrorMessage', () => {
 
     expect(message).toBe('body.config: Field required');
   });
+
+  it('skips non-object validation items and uses message or loc alone', () => {
+    expect(
+      resolveErrorMessage({
+        response: {
+          data: {
+            detail: [
+              null,
+              'plain',
+              { loc: [], msg: 'only-message' },
+              { loc: ['query'], msg: '' },
+            ],
+          },
+        },
+      }),
+    ).toBe('only-message; query');
+  });
+
+  it('prefers string error fields and falls back when no message keys exist', () => {
+    expect(
+      resolveErrorMessage({
+        response: { data: { error: '  boom  ' } },
+      }),
+    ).toBe('boom');
+    expect(
+      resolveErrorMessage({ response: { data: { foo: 1 } } }, 'fallback'),
+    ).toBe('fallback');
+  });
 });
