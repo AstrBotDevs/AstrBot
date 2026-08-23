@@ -197,7 +197,6 @@
             <v-menu
               location="end"
               offset="8"
-              open-on-hover
               :close-on-content-click="true"
             >
               <template #activator="{ props: transportMenuProps }">
@@ -251,7 +250,6 @@
             <v-menu
               location="end"
               offset="8"
-              open-on-hover
               :close-on-content-click="true"
             >
               <template #activator="{ props: languageMenuProps }">
