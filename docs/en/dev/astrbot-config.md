@@ -132,7 +132,7 @@ See [Automatic Context Compression](../use/context-compress) for the full behavi
 
 - `streaming_response` enables Provider streaming.
 - `unsupported_streaming_strategy` uses `realtime_segmenting` on platforms without native streaming or `turn_off` to disable streaming for that response.
-- Session `/flow on|off|unset|status` can override the global value. Priority is `event.extra["enable_streaming"]` > session override > `provider_settings.streaming_response`. The effective value is pinned when a request starts.
+- Session `/flow enable|disable|unset|status` can override the global value. Priority is `event.extra["enable_streaming"]` > session override > `provider_settings.streaming_response`. The effective value is pinned when a request starts.
 
 The old `provider_settings.streaming_segmented` field has been removed. Do not add it back.
 

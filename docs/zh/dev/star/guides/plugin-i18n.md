@@ -76,6 +76,24 @@ AstrBot 仅支持 `zh-CN.json` 和 `en-US.json`。文件内容必须是 JSON obj
 
 `options` 是配置保存值，不应翻译。当前 i18n 解析器只稳定返回字符串，不能翻译 `labels` 数组；下拉框的 `labels` 请直接放在 `_conf_schema.json`，或暂时保持与保存值相同。
 
+## 指令回复
+
+`commands` 用于运行时指令回复。通过 `context.i18n.t(event, message_key, **kwargs)` 读取，locale 顺序为 `event` extra `locale`、会话 preference `locale`，然后默认 `zh-CN`。缺键先回退 `en-US`，再回退到 key 本身。
+
+```json
+{
+  "commands": {
+    "variable.set.ok": "已为当前会话存储 {key}。使用 /variable unset 移除。"
+  }
+}
+```
+
+```python
+text = await self.context.i18n.t(event, "variable.set.ok", key=key)
+```
+
+Python 源码不要写死用户可见中英混排。指令 handler 回复后应 `stop_event()`。
+
 ## 插件 Dashboard Pages
 
 插件 Dashboard Pages（插件在 `pages/` 目录下提供的自定义 Web UI 页面）的标题和描述也可以通过 `pages` 字段翻译，按页面名称嵌套：

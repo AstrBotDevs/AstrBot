@@ -150,6 +150,7 @@ Plugin commands should follow these conventions:
 - Treat handler annotations as the parameter schema. Use only supported scalars, `Enum`, `Literal`, Optional, `GreedyStr`, and `Annotated[..., option(...)]`; an unsupported signature fails when the plugin registers.
 - Apply the same naming constraints to aliases and reserve them for genuine synonymous entries. Help text and documentation should use the primary name.
 - Give each handler a short, self-contained docstring; Telegram and Discord use it for native command descriptions. An entry outside a platform's naming constraints can still work in text messages but is not registered as that platform's native command.
+- After a command handler replies, it should stop event propagation (`stop_event()`) so later stages do not keep processing the same message.
 
 For example, a resource-oriented plugin can expose `/project list`, `/project show <name>`, `/project create <name> --template <id>`, and `/project delete <name> --force`. When `$`, `#`, globs, URL query strings, or operators are data, the caller quotes them according to Orbit rules. The plugin receives the deterministically tokenized value and must not perform shell expansion.
 

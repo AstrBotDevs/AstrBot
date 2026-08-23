@@ -134,7 +134,7 @@ Persona 的选择优先级和权限语义见 [Persona 人格设定](../use/perso
 
 - `streaming_response`：启用 Provider 流式响应。
 - `unsupported_streaming_strategy`：平台不支持原生流式回复时，使用 `realtime_segmenting` 实时分段，或 `turn_off` 关闭该次流式回复。
-- 会话级 `/flow on|off|unset|status` 可覆盖全局值。有效优先级为 `event.extra["enable_streaming"]` > 会话覆盖 > `provider_settings.streaming_response`。请求开始时固定有效值，运行中的 Agent 不会因中途执行 `/flow` 改变模式。
+- 会话级 `/flow enable|disable|unset|status` 可覆盖全局值。有效优先级为 `event.extra["enable_streaming"]` > 会话覆盖 > `provider_settings.streaming_response`。请求开始时固定有效值，运行中的 Agent 不会因中途执行 `/flow` 改变模式。
 
 旧字段 `provider_settings.streaming_segmented` 已删除，不要重新加入。
 

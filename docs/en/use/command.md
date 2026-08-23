@@ -2,7 +2,7 @@
 
 AstrBot commands are registered through the plugin system. Built-in commands now follow a consistent CLI convention: a singular noun root command, a full-word verb subcommand, and long options. Examples include `/plugin list`, `/conversation create`, and `/provider set llm 1`.
 
-Use `/help` to show enabled root commands. Use `/help --image` or `/help -i` for image-formatted help. If the wake prefix changes, replace `/` in every example with the configured prefix.
+Use `/help` to show enabled root commands and their first-level subcommands. Use `/help --image` or `/help -i` for image-formatted help. If the wake prefix changes, replace `/` in every example with the configured prefix.
 
 ## Orbit Command Argument Syntax
 
@@ -36,7 +36,7 @@ Declared options can appear before or after positional arguments and support `--
 
 ### Help
 
-- `/help`: Show enabled root commands and version information.
+- `/help`: Show enabled root commands, first-level subcommands, and version information.
 - `/help --image` or `/help -i`: Generate image-formatted help.
 
 ### Session Information
@@ -91,8 +91,8 @@ These commands require `session.manage`. Both `enable` and `disable` are idempot
 
 ### Session streaming
 
-- `/flow on`: Force streaming for the current session.
-- `/flow off`: Force non-streaming for the current session.
+- `/flow enable`: Force streaming for the current session.
+- `/flow disable`: Force non-streaming for the current session.
 - `/flow unset`: Remove the session override and follow global `provider_settings.streaming_response`.
 - `/flow status`: Show the override and effective mode.
 

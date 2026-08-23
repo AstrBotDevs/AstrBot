@@ -2,7 +2,7 @@
 
 AstrBot 的指令通过插件机制注册。内置指令统一采用“单数名词根命令 + 完整动词子命令 + 长选项”的 CLI 命名方式，例如 `/plugin list`、`/conversation create` 和 `/provider set llm 1`。
 
-使用 `/help` 查看当前已经启用的根指令；使用 `/help --image` 或 `/help -i` 请求图片版帮助。如果修改了唤醒前缀，所有示例中的 `/` 也要替换为实际前缀。
+使用 `/help` 查看当前已经启用的根指令及其一层子命令；使用 `/help --image` 或 `/help -i` 请求图片版帮助。如果修改了唤醒前缀，所有示例中的 `/` 也要替换为实际前缀。
 
 ## Orbit 指令参数语法
 
@@ -36,7 +36,7 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 
 ### 帮助
 
-- `/help`：显示当前启用的根指令和版本信息。
+- `/help`：显示当前启用的根指令、一层子命令和版本信息。
 - `/help --image` 或 `/help -i`：生成图片版帮助。
 
 ### 会话信息
@@ -91,8 +91,8 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 
 ### 会话流式输出
 
-- `/flow on`：当前会话强制流式。
-- `/flow off`：当前会话强制非流式。
+- `/flow enable`：当前会话强制流式。
+- `/flow disable`：当前会话强制非流式。
 - `/flow unset`：删除会话覆盖，重新跟随全局 `provider_settings.streaming_response`。
 - `/flow status`：查看覆盖值和当前有效模式。
 

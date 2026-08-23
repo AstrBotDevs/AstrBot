@@ -76,6 +76,24 @@ Corresponding `.astrbot-plugin/i18n/zh-CN.json`:
 
 `options` are stored configuration values and must not be translated. The current i18n resolver reliably returns strings only and cannot translate a `labels` array. Keep select `labels` directly in `_conf_schema.json`, or use the stored values as display text for now.
 
+## Command Replies
+
+`commands` holds runtime command replies. Read them with `context.i18n.t(event, message_key, **kwargs)`. Locale order is the event extra `locale`, then the session preference `locale`, then `zh-CN`. A missing key falls back to `en-US`, then to the key itself.
+
+```json
+{
+  "commands": {
+    "variable.set.ok": "Stored {key} for this session. Use /variable unset to remove it."
+  }
+}
+```
+
+```python
+text = await self.context.i18n.t(event, "variable.set.ok", key=key)
+```
+
+Do not hardcode mixed Chinese/English user-visible strings in Python. Command handlers should `stop_event()` after they reply.
+
 ## Plugin Dashboard Pages
 
 Titles and descriptions for plugin Dashboard Pages (custom WebUI pages a plugin provides under its `pages/` directory) can also be translated through the `pages` field, nested by page name:

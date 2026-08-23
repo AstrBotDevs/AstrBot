@@ -150,6 +150,7 @@ Orbit 只定义已注册指令头之后的参数语言；唤醒前缀、根指�
 - handler 的类型标注就是参数 schema。只使用受支持的标量、`Enum`、`Literal`、Optional、`GreedyStr` 和 `Annotated[..., option(...)]`；不支持的签名会在插件注册时失败。
 - 别名也应遵守同样的命名约束，并只用于真实同义入口。帮助文本和文档应始终使用主名称。
 - 为 handler 编写简短、可独立理解的 docstring；Telegram 和 Discord 会用它生成原生指令描述。不满足平台名称约束的入口仍可用于文本消息，但不会注册为对应平台的原生指令。
+- 指令 handler 回复后应终止事件传播（`stop_event()`），避免后续阶段继续处理同一条消息。
 
 例如，资源型插件可以使用 `/project list`、`/project show <name>`、`/project create <name> --template <id>` 和 `/project delete <name> --force`。参数中的 `$`、`#`、glob、URL 查询串或 operator 是数据时，由调用者按 Orbit 规则引用；插件收到的是已经完成确定性分词的值，不应再进行 shell 展开。
 
