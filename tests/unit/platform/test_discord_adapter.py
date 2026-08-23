@@ -474,6 +474,7 @@ async def test_discord_event_send_uses_reference_for_regular_messages_only(monke
     regular_event._client = client
     regular_event.interaction_followup_webhook = None
     regular_event._background_tasks = set()
+    regular_event._extras = {}
     regular_event.session = MessageSession(
         "discord",
         discord_platform_adapter.MessageType.GROUP_MESSAGE,
@@ -503,6 +504,7 @@ async def test_discord_event_send_uses_reference_for_regular_messages_only(monke
     followup_event._client = client
     followup_event.interaction_followup_webhook = followup
     followup_event._background_tasks = set()
+    followup_event._extras = {}
     followup_event.session = MessageSession(
         "discord",
         discord_platform_adapter.MessageType.GROUP_MESSAGE,
