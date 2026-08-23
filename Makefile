@@ -192,7 +192,9 @@ quality-bandit: quality-sync
 	PYTHONIOENCODING=utf-8 uv run bandit -ll -ii -r $(QUALITY_SECURITY_TARGETS) -c pyproject.toml
 
 quality-audit: quality-sync
-	uv run pip-audit --strict
+	# Local checkout is an unpublished editable install. --strict treats that
+	# skip as a collection failure, so only skip-editable is used.
+	uv run pip-audit --skip-editable
 
 quality-web-audit:
 	cd $(DASHBOARD_DIR) && $(PNPM) install --frozen-lockfile
@@ -223,7 +225,7 @@ quality-report-bandit: quality-sync
 	PYTHONIOENCODING=utf-8 uv run bandit -ll -ii -r astrbot -c pyproject.toml
 
 quality-report-audit: quality-sync
-	uv run pip-audit --strict
+	uv run pip-audit --skip-editable
 
 quality-report-radon-cc: quality-sync
 	uv run radon cc astrbot -s -n C
