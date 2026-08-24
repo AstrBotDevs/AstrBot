@@ -1,39 +1,49 @@
 # When connecting to OneBot v11 Napcat, please use this compose file for one-click deployment: https://github.com/NapNeko/NapCat-Docker/blob/main/compose/astrbot.yml
 
+x-astrbot: &astrbot
+  build:
+    context: .
+    dockerfile: Dockerfile
+    target: runtime
+    args:
+      ASTRBOT_FEATURES: '${ASTRBOT_FEATURES:-full}'
+  image: astrbot:local
+  restart: always
+  init: true
+  ports:
+    - '${ASTRBOT_BIND_ADDRESS:-127.0.0.1}:6185:6185' # AstrBot WebUI
+    - '${ASTRBOT_BIND_ADDRESS:-127.0.0.1}:6199:6199' # Optional. OneBot v11 Napcat Websocket Port
+  environment:
+    TZ: '${TZ:-Asia/Shanghai}'
+    ASTRBOT_DASHBOARD_HOST: '0.0.0.0'
+  healthcheck:
+    test:
+      - CMD
+      - python
+      - -c
+      - >-
+        import urllib.request;
+        urllib.request.urlopen('http://127.0.0.1:6185/api/v1/openapi.json', timeout=3)
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    start_period: 30s
+
 services:
   astrbot:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: runtime
-      args:
-        ASTRBOT_FEATURES: '${ASTRBOT_FEATURES:-full}'
-    image: astrbot:local
-    restart: always
-    # Computer tools and Docker-backed integrations intentionally require full
-    # container capabilities for this deployment profile.
-    privileged: true
-    init: true
-    ports:
-      - '${ASTRBOT_BIND_ADDRESS:-127.0.0.1}:6185:6185' # AstrBot WebUI
-      - '${ASTRBOT_BIND_ADDRESS:-127.0.0.1}:6199:6199' # Optional. OneBot v11 Napcat Websocket Port
-    environment:
-      TZ: '${TZ:-Asia/Shanghai}'
-      ASTRBOT_DASHBOARD_HOST: '0.0.0.0'
+    <<: *astrbot
     volumes:
       - ./data:/AstrBot/data
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - >-
-          import urllib.request;
-          urllib.request.urlopen('http://127.0.0.1:6185/api/v1/openapi.json', timeout=3)
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+
+  # Opt-in computer-tool Docker access. Default `docker compose up` does not
+  # start this service. Use:
+  #   docker compose --profile computer up -d --build computer
+  computer:
+    <<: *astrbot
+    profiles: ['computer']
+    volumes:
+      - ./data:/AstrBot/data
+      - /var/run/docker.sock:/var/run/docker.sock
 
   docs:
     build:

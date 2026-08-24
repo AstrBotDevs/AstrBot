@@ -28,6 +28,40 @@ def test_compose_keeps_astrbot_as_a_local_source_build(compose_name: str) -> Non
     assert "./data:/AstrBot/data" in astrbot["volumes"]
 
 
+def _is_unprivileged(service: dict) -> bool:
+    return service.get("privileged") in (None, False)
+
+
+def test_default_compose_astrbot_is_unprivileged() -> None:
+    """Default `docker compose up` must not run AstrBot as privileged."""
+    compose = _load_compose("compose.yml")
+    astrbot = compose["services"]["astrbot"]
+    assert _is_unprivileged(astrbot)
+    assert not any(
+        "docker.sock" in str(volume) for volume in astrbot.get("volumes", [])
+    )
+
+
+def test_compose_computer_profile_mounts_docker_sock() -> None:
+    """Computer-tool Docker access is an explicit Compose profile."""
+    compose = _load_compose("compose.yml")
+    computer = compose["services"]["computer"]
+    assert computer["profiles"] == ["computer"]
+    assert "./data:/AstrBot/data" in computer["volumes"]
+    assert "/var/run/docker.sock:/var/run/docker.sock" in computer["volumes"]
+    assert _is_unprivileged(computer)
+    assert computer["image"] == "astrbot:local"
+
+
+def test_napcat_compose_keeps_astrbot_unprivileged_and_napcat_privileged() -> None:
+    compose = _load_compose("compose-with-napcat.yml")
+    astrbot = compose["services"]["astrbot"]
+    napcat = compose["services"]["napcat"]
+    assert _is_unprivileged(astrbot)
+    assert "/var/run/docker.sock:/var/run/docker.sock" in astrbot["volumes"]
+    assert napcat["privileged"] is True
+
+
 @pytest.mark.parametrize("compose_name", ["compose.yml", "compose-with-napcat.yml"])
 def test_compose_docs_service_uses_the_local_docs_image(compose_name: str) -> None:
     """Documentation uses the checked-out Dockerfile and remains read-only."""

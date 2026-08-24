@@ -22,9 +22,6 @@ services:
         ASTRBOT_FEATURES: '${ASTRBOT_FEATURES:-full}'
     image: astrbot:local
     restart: always
-    # Computer tools and Docker-backed integrations intentionally require full
-    # container capabilities for this deployment profile.
-    privileged: true
     init: true
     ports:
       - '${ASTRBOT_BIND_ADDRESS:-127.0.0.1}:6185:6185' # AstrBot WebUI

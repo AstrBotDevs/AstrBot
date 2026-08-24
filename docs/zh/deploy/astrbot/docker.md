@@ -37,9 +37,17 @@ ASTRBOT_BIND_ADDRESS=0.0.0.0 docker compose up -d --build
 > [!CAUTION]
 > `0.0.0.0` 会让 WebUI 监听容器的所有网络接口。不要把管理面板无保护地暴露到公网；至少应限制防火墙来源，并使用反向代理、HTTPS、强密码和 TOTP。
 
-AstrBot 服务按当前部署需求显式使用 `privileged: true`；NapCat 组合还会挂载
-`/var/run/docker.sock`。这些设置是所选计算机工具和 Docker 集成所需的，并赋予容器
-主机级控制能力。请仅加载可信插件并保护宿主机；静态文档服务仍保持只读、非特权运行。
+默认 AstrBot 服务不以 `privileged` 运行，也不挂载 `/var/run/docker.sock`。NapCat
+组合中 NapCat 仍使用 `privileged: true`（QQ/桌面运行时需要）；该组合里的 AstrBot
+本身不特权，但会挂载 `/var/run/docker.sock`。计算机工具如需访问宿主机 Docker，请使用
+`computer` profile：
+
+```bash
+docker compose --profile computer up -d --build computer
+```
+
+该命令启动带 `docker.sock` 的 `computer` 服务，而不是默认的 `astrbot` 服务。请勿与默认
+`astrbot` 同时运行以免端口冲突。静态文档服务仍保持只读、非特权运行。
 
 ## 启动 AstrBot 和文档
 

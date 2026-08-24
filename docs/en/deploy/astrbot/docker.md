@@ -38,11 +38,19 @@ ASTRBOT_BIND_ADDRESS=0.0.0.0 docker compose up -d --build
 > [!CAUTION]
 > `0.0.0.0` makes the WebUI listen on every container interface. Do not expose the admin panel directly to the public internet. Restrict firewall access and use a reverse proxy, HTTPS, a strong password, and TOTP.
 
-The AstrBot service intentionally uses `privileged: true`; the NapCat variant
-also mounts `/var/run/docker.sock`. These settings are required by the selected
-computer and Docker-backed integrations and grant host-level control. Run only
-trusted plugins and protect the host. The static documentation service remains
-read-only and unprivileged.
+The default AstrBot service is unprivileged and does not mount
+`/var/run/docker.sock`. In the NapCat Compose file, NapCat remains
+`privileged: true` for its QQ/desktop runtime; AstrBot itself is unprivileged
+but keeps the docker.sock mount. Computer-tool Docker access is opt-in via the
+`computer` profile:
+
+```bash
+docker compose --profile computer up -d --build computer
+```
+
+That starts the `computer` service (AstrBot plus docker.sock) instead of the
+default `astrbot` service. Do not run both at once or the published ports will
+conflict. The static documentation service remains read-only and unprivileged.
 
 ## Start AstrBot and the Documentation Site
 
