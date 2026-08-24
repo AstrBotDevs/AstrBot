@@ -42,7 +42,6 @@ export default defineConfig({
             items: [
               { text: '源码部署', link: '/astrbot/cli' },
               { text: 'Docker 部署', link: '/astrbot/docker' },
-              { text: 'Kubernetes 部署', link: '/astrbot/kubernetes' },
             ],
           },
           {
@@ -289,7 +288,6 @@ export default defineConfig({
             items: [
               { text: 'Source Deployment', link: '/astrbot/cli' },
               { text: 'Docker', link: '/astrbot/docker' },
-              { text: 'Kubernetes', link: '/astrbot/kubernetes' },
             ],
           },
           {

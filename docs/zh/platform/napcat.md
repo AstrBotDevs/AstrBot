@@ -72,5 +72,5 @@ AstrBot 启动后应看到类似日志：
   - 检查 NapCat 是否已经登录并对外提供 WebSocket
   - 检查地址是否填成了 HTTP 地址
   - 如果使用 `wss://`，检查证书与 `verify_ssl` 配置
-- Docker / Kubernetes 内连不上
+- Docker 内连不上
   - 优先使用容器内网络地址，例如 `ws://napcat:3001` 或 `ws://localhost:3001`

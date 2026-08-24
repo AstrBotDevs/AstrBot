@@ -72,5 +72,5 @@ Then send a QQ message and confirm AstrBot receives and replies to it.
   - make sure NapCat is logged in and serving WebSocket
   - make sure you did not enter an HTTP URL by mistake
   - if you use `wss://`, verify the certificate and `verify_ssl`
-- Docker / Kubernetes networking fails
+- Docker networking fails
   - prefer container-local addresses such as `ws://napcat:3001` or `ws://localhost:3001`

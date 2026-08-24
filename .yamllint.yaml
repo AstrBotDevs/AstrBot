@@ -9,7 +9,7 @@ yaml-files:
 rules:
   # Prettier owns line wrapping; do not double-enforce length.
   line-length: disable
-  # Many config files (k8s, compose) legitimately omit the leading `---`.
+  # Many config files (compose) legitimately omit the leading `---`.
   document-start: disable
   # GitHub Actions and similar use `on:` which yamllint flags as truthy.
   truthy:
@@ -17,7 +17,7 @@ rules:
     check-keys: false
   comments:
     min-spaces-from-content: 1
-  # Commented-out k8s/CI config alternatives are indented to where the real
+  # Commented-out CI config alternatives are indented to where the real
   # key would sit once uncommented; do not flag that convention.
   comments-indentation: disable
   braces:

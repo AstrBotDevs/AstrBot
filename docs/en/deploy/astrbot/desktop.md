@@ -8,7 +8,6 @@ If you are using this repository, do not treat the desktop client as a supported
 
 - [Docker](/en/deploy/astrbot/docker)
 - [Manual Deployment](/en/deploy/astrbot/cli)
-- [Kubernetes](/en/deploy/astrbot/kubernetes)
 
 ## Why
 

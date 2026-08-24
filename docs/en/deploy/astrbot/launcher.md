@@ -12,6 +12,5 @@ This fork does not support deployment through AstrBot Launcher or the legacy ins
 
 - [Docker](/en/deploy/astrbot/docker)
 - [Manual Deployment](/en/deploy/astrbot/cli)
-- [Kubernetes](/en/deploy/astrbot/kubernetes)
 
 If you want a local-source + container workflow, use the Docker Compose path maintained in this repository.

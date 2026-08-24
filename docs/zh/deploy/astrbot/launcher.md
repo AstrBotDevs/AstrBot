@@ -12,6 +12,5 @@
 
 - [Docker 部署](/deploy/astrbot/docker)
 - [手动部署](/deploy/astrbot/cli)
-- [Kubernetes 部署](/deploy/astrbot/kubernetes)
 
 如果你需要的是“本地源码 + 容器”方式，请优先使用本仓库维护的 Docker Compose 路径。

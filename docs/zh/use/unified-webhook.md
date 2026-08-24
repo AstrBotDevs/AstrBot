@@ -30,7 +30,7 @@
 2. 配置有效的 HTTPS 证书。
 3. 将外部请求反向代理到 AstrBot 的 `6185` 端口。回调路由需要同时允许 `GET` 和 `POST`。
 
-如果反向代理和 AstrBot 位于同一主机，代理可以连接默认的 `127.0.0.1:6185`。如果 AstrBot 位于另一个容器或 Pod，则还必须让 WebUI 监听对应网络接口；参见 [Docker 部署](/deploy/astrbot/docker) 或 [Kubernetes 部署](/deploy/astrbot/kubernetes)。只发布端口但保留容器内的环回监听无法工作。
+如果反向代理和 AstrBot 位于同一主机，代理可以连接默认的 `127.0.0.1:6185`。如果 AstrBot 位于另一个容器，则还必须让 WebUI 监听对应网络接口；参见 [Docker 部署](/deploy/astrbot/docker) 或 [源码部署](/deploy/astrbot/cli)。只发布端口但保留容器内的环回监听无法工作。
 
 > [!CAUTION]
 > 统一 Webhook 与管理面板共用 `6185`。请限制管理页面的公网访问，使用强密码和 TOTP，并在反向代理或防火墙中实施适当的访问控制。
@@ -65,7 +65,7 @@ https://astrbot.example.com
 ## 故障排查
 
 - 回调 URL 显示 `http(s)://<your-astrbot-domain>`：尚未正确填写 `callback_api_base`，或平台尚未重新加载配置。
-- 外部请求超时：检查 DNS、证书、反向代理、云安全组和防火墙；容器/Kubernetes 还要检查 WebUI 监听地址。
+- 外部请求超时：检查 DNS、证书、反向代理、云安全组和防火墙；容器还要检查 WebUI 监听地址。
 - 返回 404：确认代理没有丢失 `/api/v1/webhooks/platforms/<uuid>` 路径，且 UUID 来自当前平台实例。
 - 企业微信智能机器人返回长连接模式不接受回调：把连接模式切换为 `webhook`，或者继续使用推荐的长连接而不要配置入站 URL。
 - 平台验证签名失败：统一入口只负责路由，请继续核对该平台自己的 Secret、Token、EncodingAESKey 或签名密钥。

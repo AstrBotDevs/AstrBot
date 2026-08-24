@@ -30,7 +30,7 @@ Other HTTP-based platforms do not join this endpoint merely because a similarly 
 2. Configure a valid HTTPS certificate.
 3. Reverse-proxy external requests to AstrBot port `6185`. Allow both `GET` and `POST` for callback routes.
 
-When the reverse proxy and AstrBot run on the same host, the proxy can reach the default `127.0.0.1:6185` listener. When AstrBot runs in another container or Pod, the WebUI must also listen on the relevant network interface; see [Docker Deployment](/en/deploy/astrbot/docker) or [Kubernetes Deployment](/en/deploy/astrbot/kubernetes). Publishing a port while retaining a loopback-only listener inside the container does not work.
+When the reverse proxy and AstrBot run on the same host, the proxy can reach the default `127.0.0.1:6185` listener. When AstrBot runs in another container, the WebUI must also listen on the relevant network interface; see [Docker Deployment](/en/deploy/astrbot/docker) or [Source Deployment](/en/deploy/astrbot/cli). Publishing a port while retaining a loopback-only listener inside the container does not work.
 
 > [!CAUTION]
 > Unified Webhook shares port `6185` with the admin panel. Restrict public access to management pages, use a strong password and TOTP, and apply suitable reverse-proxy or firewall controls.
@@ -65,7 +65,7 @@ Do not manually reuse another bot instance's `webhook_uuid`. Multiple instances 
 ## Troubleshooting
 
 - The URL shows `http(s)://<your-astrbot-domain>`: `callback_api_base` is missing or the platform has not reloaded its configuration.
-- External requests time out: check DNS, certificates, reverse proxy, cloud security groups, and firewall rules. For containers and Kubernetes, also check the WebUI bind address.
+- External requests time out: check DNS, certificates, reverse proxy, cloud security groups, and firewall rules. For containers, also check the WebUI bind address.
 - The platform gets 404: make sure the proxy preserves `/api/v1/webhooks/platforms/<uuid>` and that the UUID belongs to the current instance.
 - WeCom AI Bot says long-connection mode does not accept callbacks: switch its connection mode to `webhook`, or keep the recommended long connection and do not configure an inbound URL.
 - Signature verification fails: the unified endpoint only routes the request. Recheck the platform-specific Secret, Token, EncodingAESKey, or signing secret.

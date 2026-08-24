@@ -8,7 +8,6 @@
 
 - [Docker 部署](/deploy/astrbot/docker)
 - [手动部署](/deploy/astrbot/cli)
-- [Kubernetes 部署](/deploy/astrbot/kubernetes)
 
 ## 原因
 

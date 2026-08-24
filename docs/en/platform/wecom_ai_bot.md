@@ -58,7 +58,7 @@ Use this only when callback mode is specifically required.
 2. Reverse-proxy it to the AstrBot WebUI on port `6185`.
 3. In the WebUI, open `Settings` -> `General` and set `Externally Accessible Callback API Address`, for example `https://astrbot.example.com`.
 
-For Docker or Kubernetes, the WebUI must also listen on the container or Pod network interface; see the relevant deployment guide. Publishing a port while retaining the `127.0.0.1` listener is not sufficient.
+For Docker, the WebUI must also listen on the container network interface; see [Docker Deployment](/en/deploy/astrbot/docker). Publishing a port while retaining the `127.0.0.1` listener is not sufficient.
 
 ### 2. Configure WeCom and AstrBot
 

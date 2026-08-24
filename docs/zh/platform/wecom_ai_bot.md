@@ -58,7 +58,7 @@
 2. 将反向代理转发到 AstrBot WebUI 端口 `6185`。
 3. 在 WebUI 的 `设置` -> `常规` 中填写 `对外可达的回调接口地址`，例如 `https://astrbot.example.com`。
 
-如果 AstrBot 运行在 Docker 或 Kubernetes 中，还必须让 WebUI 监听容器/Pod 网络接口；参见对应部署文档。不要只发布端口而保留 `127.0.0.1` 监听。
+如果 AstrBot 运行在 Docker 中，还必须让 WebUI 监听容器网络接口；参见 [Docker 部署](/deploy/astrbot/docker)。不要只发布端口而保留 `127.0.0.1` 监听。
 
 ### 2. 配置企业微信和 AstrBot
 

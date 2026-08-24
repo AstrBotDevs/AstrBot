@@ -21,7 +21,7 @@
 - 复现步骤
 - 预期行为和实际行为
 - 日志、截图、配置片段或调用示例
-- 运行方式：`uv`、Docker、Kubernetes、Launcher 或 Desktop
+- 运行方式：`uv`、Docker 或源码
 
 ### 开发环境
 
@@ -99,7 +99,7 @@ Include:
 - reproduction steps
 - expected and actual behavior
 - logs, screenshots, config snippets, or API examples
-- deployment mode: `uv`, Docker, Kubernetes, Launcher, or Desktop
+- deployment mode: `uv`, Docker, or source
 
 ### Development Setup
 

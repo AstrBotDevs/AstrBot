@@ -52,11 +52,11 @@ Use the bug-report template and include:
 - Expected vs. actual behavior.
 - Debug-level logs, screenshots, and config snippets — **redact secrets and API
   keys**.
-- Deployment mode: `uv`, Docker, Kubernetes, Launcher, or Desktop.
+- Deployment mode: `uv`, Docker, or source.
 - Version — the latest [changelog](changelogs/) entry that matches your
   checkout (this fork publishes no versioned releases).
 
-> 使用 bug 模板并附：复现步骤；预期与实际行为；Debug 级别日志、截图与配置片段（**请脱敏密钥与 API Key**）；部署方式（`uv`/Docker/Kubernetes/Launcher/Desktop）；版本（与本 checkout 对应的最新 [changelog](changelogs/) 条目，本 fork 不发布版本化 Release）。
+> 使用 bug 模板并附：复现步骤；预期与实际行为；Debug 级别日志、截图与配置片段（**请脱敏密钥与 API Key**）；部署方式（`uv`/Docker/源码）；版本（与本 checkout 对应的最新 [changelog](changelogs/) 条目，本 fork 不发布版本化 Release）。
 
 ## Response expectations / 响应预期
 
