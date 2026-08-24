@@ -317,7 +317,10 @@
 
     <!-- 对话详情对话框 -->
     <v-dialog v-model="dialogView" max-width="900px" scrollable>
-      <v-card class="app-dialog conversation-detail-card">
+      <v-card
+        class="app-dialog conversation-detail-card"
+        :class="{ 'conversation-detail-card--edit': isEditingHistory }"
+      >
         <v-card-title class="ml-2 mt-2 conversation-detail-title">
           <div class="conversation-detail-heading">
             <span class="text-truncate">{{
@@ -1695,7 +1698,8 @@ function handleTableOptions(options: TableOptionsLike) {
 }
 
 .monaco-editor-container {
-  height: 500px;
+  flex: 1;
+  min-height: 0;
   border-radius: 8px;
   overflow: hidden;
 }
@@ -1732,6 +1736,17 @@ function handleTableOptions(options: TableOptionsLike) {
   max-height: 90vh;
   display: flex;
   flex-direction: column;
+}
+
+.conversation-detail-card--edit > .v-card-text {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.v-dialog > .v-overlay__content > .conversation-detail-card--edit {
+  flex: 0 0 90vh;
 }
 
 .conversation-modal-card {

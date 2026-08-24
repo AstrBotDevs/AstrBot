@@ -198,6 +198,7 @@ type ConversationPageVm = {
   dialogDelete: boolean;
   dialogBatchDelete: boolean;
   dialogView: boolean;
+  isEditingHistory: boolean;
 };
 
 describe('view dialog layouts', () => {
@@ -463,6 +464,32 @@ describe('view dialog layouts', () => {
     preview?.dispatchEvent(wheelEvent);
 
     expect(wheelEvent.defaultPrevented).toBe(false);
+
+    wrapper.unmount();
+  });
+
+  it('lets the conversation editor fill remaining dialog height', async () => {
+    const wrapper = mountWithVuetify(ConversationPage);
+    const vm = wrapper.vm as unknown as ConversationPageVm;
+
+    await flushPromises();
+
+    vm.dialogView = true;
+    vm.isEditingHistory = true;
+    await flushPromises();
+
+    const detailCard = document.body.querySelector(
+      '.conversation-detail-card.conversation-detail-card--edit',
+    );
+    const cardText = detailCard?.querySelector('.v-card-text');
+    const editor = cardText?.querySelector('.monaco-editor-container');
+    const preview = cardText?.querySelector('.conversation-messages-container');
+
+    expect(detailCard).not.toBeNull();
+    expect(cardText).not.toBeNull();
+    expect(editor).not.toBeNull();
+    expect(preview).toBeNull();
+    expect(cardText?.contains(editor ?? null)).toBe(true);
 
     wrapper.unmount();
   });
