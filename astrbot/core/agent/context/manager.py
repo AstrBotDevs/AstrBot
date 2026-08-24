@@ -46,14 +46,14 @@ class ContextManager:
     async def process(
         self,
         messages: list[Message],
-        trusted_token_usage: int = 0,
+        reported_token_usage: int = 0,
         force_compress: bool = False,
     ) -> list[Message]:
         """Process the messages.
 
         Args:
             messages: The original message list.
-            trusted_token_usage: Token usage reported by the previous provider call.
+            reported_token_usage: Token usage reported by the previous provider call.
             force_compress: Whether to bypass automatic limits and run the configured
                 compressor immediately without a truncation fallback.
 
@@ -82,7 +82,7 @@ class ContextManager:
             # 2. 基于 token 的压缩
             if self.config.max_context_tokens > 0:
                 total_tokens = self.token_counter.count_tokens(
-                    result, trusted_token_usage
+                    result, reported_token_usage
                 )
 
                 if self.compressor.should_compress(
@@ -119,7 +119,19 @@ class ContextManager:
         # double check
         tokens_after_summary = self.token_counter.count_tokens(messages)
 
-        logger.info("Compress completed.")
+        if self.config.max_context_tokens > 0:
+            compress_rate = (
+                tokens_after_summary / self.config.max_context_tokens
+            ) * 100
+            logger.info(
+                f"Compress completed."
+                f" {prev_tokens} -> {tokens_after_summary} tokens,"
+                f" compression rate: {compress_rate:.2f}%.",
+            )
+        else:
+            logger.info(
+                f"Compress completed. {prev_tokens} -> {tokens_after_summary} tokens."
+            )
 
         # last check
         if allow_halving_fallback and self.compressor.should_compress(
