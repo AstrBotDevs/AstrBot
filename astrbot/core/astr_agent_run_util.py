@@ -2,6 +2,7 @@ import asyncio
 import re
 import time
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from typing import Any
 
 from astrbot import logger
@@ -23,9 +24,20 @@ from astrbot.core.utils.error_redaction import safe_error
 
 AgentRunner = ToolLoopAgentRunner[AstrAgentContext]
 
+# Live TTS is a 3-stage pipeline: feeder -> text_queue -> TTS -> audio_queue.
+# Bound the queues so a fast producer cannot grow memory without bound.
+# Sentinel None occupies one slot, so maxsize must be >= 2.
+_LIVE_TTS_TEXT_QUEUE_MAXSIZE = 16
+_LIVE_TTS_AUDIO_QUEUE_MAXSIZE = 8
+
 
 def _should_stop_agent(astr_event) -> bool:
     return astr_event.is_stopped() or bool(astr_event.get_extra("agent_stop_requested"))
+
+
+def _current_task_cancelling() -> bool:
+    task = asyncio.current_task()
+    return task is not None and task.cancelling() > 0
 
 
 def _truncate_tool_result(text: str, limit: int = 70) -> str:
@@ -452,9 +464,13 @@ async def run_live_agent(
     first_chunk_received = False
 
     # 创建队列
-    text_queue: asyncio.Queue[str | None] = asyncio.Queue()
+    text_queue: asyncio.Queue[str | None] = asyncio.Queue(
+        maxsize=_LIVE_TTS_TEXT_QUEUE_MAXSIZE
+    )
     # audio_queue stored bytes or (text, bytes)
-    audio_queue: asyncio.Queue[bytes | tuple[str, bytes] | None] = asyncio.Queue()
+    audio_queue: asyncio.Queue[bytes | tuple[str, bytes] | None] = asyncio.Queue(
+        maxsize=_LIVE_TTS_AUDIO_QUEUE_MAXSIZE
+    )
 
     # 1. 启动 Agent Feeder 任务：负责运行 Agent 并将文本分句喂给 text_queue
     feeder_task = asyncio.create_task(
@@ -607,11 +623,13 @@ async def _run_agent_feeder(
         if buffer.strip():
             await text_queue.put(buffer)
 
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.error("[Live Agent Feeder] Error: %s", safe_error("", e))
     finally:
-        # 发送结束信号
-        await text_queue.put(None)
+        if not _current_task_cancelling():
+            await text_queue.put(None)
 
 
 async def _safe_tts_stream_wrapper(
@@ -622,10 +640,13 @@ async def _safe_tts_stream_wrapper(
     """包装原生流式 TTS 确保异常处理和队列关闭"""
     try:
         await tts_provider.get_audio_stream(text_queue, audio_queue)
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.error("[Live TTS Stream] Error: %s", safe_error("", e))
     finally:
-        await audio_queue.put(None)
+        if not _current_task_cancelling():
+            await audio_queue.put(None)
 
 
 async def _simulated_stream_tts(
@@ -654,8 +675,7 @@ async def _simulated_stream_tts(
                 audio_path = await tts_provider.get_audio(text)
 
                 if audio_path:
-                    with open(audio_path, "rb") as f:
-                        audio_data = f.read()
+                    audio_data = await asyncio.to_thread(Path(audio_path).read_bytes)
                     astr_event.track_temporary_local_file(audio_path)
                     await audio_queue.put((text, audio_data))
             except Exception as e:
@@ -665,7 +685,10 @@ async def _simulated_stream_tts(
                 )
                 # 继续处理下一句
 
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.error("[Live TTS Simulated] Critical Error: %s", safe_error("", e))
     finally:
-        await audio_queue.put(None)
+        if not _current_task_cancelling():
+            await audio_queue.put(None)

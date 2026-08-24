@@ -108,6 +108,65 @@ async def test_flush_preserves_write_order(preferences):
 
 
 @pytest.mark.asyncio
+async def test_bounded_write_queue_backpressures_and_persists(tmp_path):
+    database = SQLiteDatabase(str(tmp_path / "preferences.db"))
+    await database.initialize()
+    store = SharedPreferences(database, tmp_path / "preferences.json")
+    await store.initialize()
+    store._write_queue = asyncio.Queue(maxsize=1)
+
+    resume = asyncio.Event()
+    entered = asyncio.Event()
+    original_insert = database.insert_preference_or_update
+
+    async def stalled_insert(scope, scope_id, key, value):
+        entered.set()
+        await resume.wait()
+        return await original_insert(scope, scope_id, key, value)
+
+    database.insert_preference_or_update = stalled_insert
+    try:
+        first = asyncio.create_task(store.put_async("global", "global", "k1", "v1"))
+        await asyncio.wait_for(entered.wait(), timeout=1)
+        assert not first.done()
+        assert await store.get_async("global", "global", "k1") == "v1"
+
+        second = asyncio.create_task(store.put_async("global", "global", "k2", "v2"))
+        await asyncio.sleep(0.05)
+        assert not second.done()
+
+        resume.set()
+        await asyncio.gather(first, second)
+
+        assert await store.get_async("global", "global", "k1") == "v1"
+        assert await store.get_async("global", "global", "k2") == "v2"
+        persisted_first = await database.get_preference("global", "global", "k1")
+        persisted_second = await database.get_preference("global", "global", "k2")
+        assert persisted_first is not None
+        assert persisted_first.value == {"val": "v1"}
+        assert persisted_second is not None
+        assert persisted_second.value == {"val": "v2"}
+    finally:
+        resume.set()
+        await store.terminate()
+        await database.close()
+
+
+@pytest.mark.asyncio
+async def test_initialize_creates_bounded_write_queue(tmp_path):
+    database = SQLiteDatabase(str(tmp_path / "preferences.db"))
+    await database.initialize()
+    store = SharedPreferences(database, tmp_path / "preferences.json")
+    try:
+        await store.initialize()
+        assert store._write_queue is not None
+        assert store._write_queue.maxsize == 1024
+    finally:
+        await store.terminate()
+        await database.close()
+
+
+@pytest.mark.asyncio
 async def test_terminate_stops_scheduler_thread_once(tmp_path):
     preferences = SharedPreferences(
         db_helper=MagicMock(),

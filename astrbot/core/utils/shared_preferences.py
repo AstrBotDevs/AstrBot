@@ -15,6 +15,9 @@ from .astrbot_path import get_astrbot_data_path
 
 _VT = TypeVar("_VT")
 _MISSING = object()
+# Preference writes wait rather than drop. Bound the queue so a stuck DB
+# helper cannot grow memory without bound; producers await put().
+_WRITE_QUEUE_MAXSIZE = 1024
 _WriteAction = Literal["put", "remove", "clear"]
 _WriteOperation = tuple[
     _WriteAction,
@@ -78,14 +81,14 @@ class SharedPreferences:
                         "SharedPreferences is already bound to another running event loop."
                     )
                 self._loop = loop
-                self._write_queue = asyncio.Queue()
+                self._write_queue = asyncio.Queue(maxsize=_WRITE_QUEUE_MAXSIZE)
                 self._writer_task = None
                 return
 
             with self._cache_lock:
                 self._cache_initialized = True
             self._loop = loop
-            self._write_queue = asyncio.Queue()
+            self._write_queue = asyncio.Queue(maxsize=_WRITE_QUEUE_MAXSIZE)
 
     def _apply_cache_operation(self, operation: _WriteOperation) -> None:
         """Apply a queued mutation to the in-memory write overlay."""
@@ -104,8 +107,22 @@ class SharedPreferences:
                 for cache_key in stale_keys:
                     self._cache.pop(cache_key, None)
 
-    def _submit_write(self, operation: _WriteOperation) -> None:
-        """Update the cache and enqueue its matching persistent mutation."""
+    def _ensure_writer(self) -> None:
+        loop = self._loop
+        if loop is None:
+            raise RuntimeError("SharedPreferences has not been initialized.")
+        if self._writer_task is None or self._writer_task.done():
+            self._writer_task = loop.create_task(
+                self._drain_write_queue(),
+                name="shared_preferences_writer",
+            )
+
+    async def _submit_write(self, operation: _WriteOperation) -> None:
+        """Enqueue a persistent mutation, then apply the in-memory overlay.
+
+        The cache is updated only after the item is queued so readers never
+        observe a value that was dropped by a full queue.
+        """
         queue = self._write_queue
         loop = self._loop
         if queue is None or loop is None:
@@ -115,13 +132,10 @@ class SharedPreferences:
                 "SharedPreferences writes must run on their owning event loop."
             )
 
+        self._ensure_writer()
+        await queue.put(operation)
         self._apply_cache_operation(operation)
-        queue.put_nowait(operation)
-        if self._writer_task is None or self._writer_task.done():
-            self._writer_task = loop.create_task(
-                self._drain_write_queue(),
-                name="shared_preferences_writer",
-            )
+        self._ensure_writer()
 
     async def _drain_write_queue(self) -> None:
         """Persist queued preference mutations in FIFO order."""
@@ -268,7 +282,9 @@ class SharedPreferences:
         """Store one preference and wait for durable persistence."""
         await self.initialize()
         completion = asyncio.get_running_loop().create_future()
-        self._submit_write(("put", scope, scope_id, key, deepcopy(value), completion))
+        await self._submit_write(
+            ("put", scope, scope_id, key, deepcopy(value), completion)
+        )
         await completion
 
     async def session_put(self, umo: str, key: str, value: Any) -> None:
@@ -281,7 +297,7 @@ class SharedPreferences:
         """Remove one preference and wait for durable persistence."""
         await self.initialize()
         completion = asyncio.get_running_loop().create_future()
-        self._submit_write(("remove", scope, scope_id, key, None, completion))
+        await self._submit_write(("remove", scope, scope_id, key, None, completion))
         await completion
 
     async def session_remove(self, umo: str, key: str) -> None:
@@ -294,5 +310,5 @@ class SharedPreferences:
         """Clear one preference scope and wait for durable persistence."""
         await self.initialize()
         completion = asyncio.get_running_loop().create_future()
-        self._submit_write(("clear", scope, scope_id, None, None, completion))
+        await self._submit_write(("clear", scope, scope_id, None, None, completion))
         await completion

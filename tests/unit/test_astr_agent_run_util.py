@@ -956,6 +956,81 @@ async def test_simulated_stream_tts_closes_queue_when_text_queue_get_fails(monke
 
 
 @pytest.mark.asyncio
+async def test_run_live_agent_constructs_bounded_tts_queues(monkeypatch):
+    captured: list[dict] = []
+    real_queue = asyncio.Queue
+
+    def tracking_queue(*args, **kwargs):
+        captured.append(kwargs)
+        return real_queue(*args, **kwargs)
+
+    async def fake_feeder(*args, **kwargs):
+        return None
+
+    async def fake_get_audio_stream(_text_queue, audio_queue) -> None:
+        await audio_queue.put(None)
+
+    tts_provider = SimpleNamespace(
+        support_stream=lambda: True,
+        get_audio_stream=fake_get_audio_stream,
+        meta=lambda: SimpleNamespace(type="fake-tts"),
+    )
+    monkeypatch.setattr(util.asyncio, "Queue", tracking_queue)
+    monkeypatch.setattr(util, "_run_agent_feeder", fake_feeder)
+
+    outputs = [
+        chain
+        async for chain in util.run_live_agent(
+            FakeRunner([], event=FakeEvent()),
+            tts_provider=tts_provider,
+            max_step=1,
+        )
+    ]
+
+    assert outputs == []
+    assert captured == [
+        {"maxsize": util._LIVE_TTS_TEXT_QUEUE_MAXSIZE},
+        {"maxsize": util._LIVE_TTS_AUDIO_QUEUE_MAXSIZE},
+    ]
+    assert util._LIVE_TTS_TEXT_QUEUE_MAXSIZE >= 2
+    assert util._LIVE_TTS_AUDIO_QUEUE_MAXSIZE >= 2
+
+
+@pytest.mark.asyncio
+async def test_run_agent_feeder_backpressure_unblocks_on_cancel(monkeypatch):
+    async def fake_run_agent(*args, **kwargs):
+        yield MessageChain().message("Sentence number one.")
+        yield MessageChain().message("Sentence number two.")
+        yield MessageChain().message("Sentence number three.")
+
+    monkeypatch.setattr(util, "run_agent", fake_run_agent)
+    text_queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=2)
+
+    feeder = asyncio.create_task(
+        util._run_agent_feeder(
+            SimpleNamespace(),
+            text_queue,
+            max_step=3,
+            show_tool_use=True,
+            show_tool_call_result=False,
+            show_reasoning=False,
+            buffer_intermediate_messages=False,
+        )
+    )
+
+    deadline = asyncio.get_running_loop().time() + 1
+    while not text_queue.full():
+        if asyncio.get_running_loop().time() > deadline:
+            raise TimeoutError("feeder did not fill the bounded queue")
+        assert not feeder.done()
+        await asyncio.sleep(0.01)
+
+    feeder.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await feeder
+
+
+@pytest.mark.asyncio
 async def test_run_agent_streaming_hides_reasoning_and_sends_webchat_stats():
     event = FakeEvent(platform_name="webchat")
     reasoning = MessageChain(type="reasoning").message("thinking")
@@ -1678,10 +1753,10 @@ async def test_run_live_agent_logs_runtime_error_and_cancels_pending_tasks(
     real_queue = asyncio.Queue
     queue_calls = {"count": 0}
 
-    def fake_queue():
+    def fake_queue(*args, **kwargs):
         queue_calls["count"] += 1
         if queue_calls["count"] == 1:
-            return real_queue()
+            return real_queue(*args, **kwargs)
         return ExplodingQueue()
 
     tts_provider = SimpleNamespace(
