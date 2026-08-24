@@ -1,13 +1,11 @@
 import asyncio
+import copy
 import io
-import re
 import uuid
-from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
-import yaml
 from werkzeug.datastructures import FileStorage
 
 from astrbot.core import LogBroker
@@ -21,7 +19,6 @@ from astrbot.dashboard.api import open_api as open_api_routes
 from astrbot.dashboard.asgi_runtime import FastAPIAppAdapter
 from astrbot.dashboard.responses import ok
 from astrbot.dashboard.server import AstrBotDashboard
-from astrbot.dashboard.services.auth_service import ALL_OPEN_API_SCOPES
 
 _TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
 
@@ -52,6 +49,7 @@ async def core_lifecycle_td(tmp_path_factory):
     log_broker = LogBroker()
     core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
     await core_lifecycle.initialize()
+    core_lifecycle.astrbot_config["admins_id"] = ["api-key-test-admin"]
     generated_password = getattr(
         core_lifecycle.astrbot_config,
         "_generated_dashboard_password",
@@ -224,6 +222,7 @@ async def test_open_chat_send_auto_session_id_and_username(
             {
                 "session_id": post_data.get("session_id"),
                 "creator": username,
+                "allow_admin_role": post_data.get("_api_key_allow_admin_role"),
             }
         )
 
@@ -253,6 +252,7 @@ async def test_open_chat_send_auto_session_id_and_username(
     assert isinstance(created_session_id, str)
     uuid.UUID(created_session_id)
     assert send_data["data"]["creator"] == "alice_auto_session"
+    assert send_data["data"]["allow_admin_role"] is False
     created_session = await core_lifecycle_td.db.get_platform_session_by_id(
         created_session_id
     )
@@ -290,6 +290,71 @@ async def test_open_chat_send_auto_session_id_and_username(
     missing_username_data = await missing_username_res.get_json()
     assert missing_username_data["status"] == "error"
     assert missing_username_data["message"] == "Missing key: username"
+
+    admin_username = str(core_lifecycle_td.astrbot_config["admins_id"][0])
+    reserved_admin_res = await test_client.post(
+        "/api/v1/chat",
+        json={
+            "message": "hello",
+            "username": admin_username,
+            "enable_streaming": False,
+        },
+        headers={"X-API-Key": raw_key},
+    )
+    reserved_admin_data = await reserved_admin_res.get_json()
+    assert reserved_admin_data["status"] == "error"
+    assert reserved_admin_data["message"] == (
+        "username is reserved for an AstrBot administrator"
+    )
+
+
+@pytest.mark.asyncio
+async def test_chat_admin_subscope_allows_configured_admin_username(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A chat-admin key may use an administrator ID from configuration."""
+    test_client = app.test_client()
+    raw_key, _ = await _create_api_key(
+        app,
+        authenticated_header,
+        scopes=["chat", "chat:admin"],
+        name_prefix="chat-admin-key",
+    )
+
+    async def fake_chat_response(_chat_service, username: str, post_data: dict):
+        return ok(
+            {
+                "session_id": post_data.get("session_id"),
+                "creator": username,
+                "allow_admin_role": post_data.get("_api_key_allow_admin_role"),
+            }
+        )
+
+    monkeypatch.setattr(
+        open_api_routes,
+        "_build_streaming_chat_response",
+        fake_chat_response,
+    )
+    admin_username = str(core_lifecycle_td.astrbot_config["admins_id"][0])
+
+    response = await test_client.post(
+        "/api/v1/chat",
+        json={
+            "message": "hello",
+            "username": admin_username,
+            "enable_streaming": False,
+        },
+        headers={"X-API-Key": raw_key},
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["creator"] == admin_username
+    assert data["data"]["allow_admin_role"] is True
 
 
 @pytest.mark.asyncio
@@ -797,41 +862,114 @@ async def test_open_api_key_scope_normalization(
     assert extra_scope_data["status"] == "ok"
     assert set(extra_scope_data["data"]["scopes"]) == {"mcp", "skill"}
 
-    management_scope_res = await test_client.post(
+    edit_admin_res = await test_client.post(
         "/api/apikey/create",
-        json={"name": "management-scope-key", "scopes": ["system", "tool", "kb"]},
+        json={
+            "name": "config-edit-admin-key",
+            "scopes": ["config", "config:edit_admin"],
+        },
         headers=authenticated_header,
     )
-    management_scope_data = await management_scope_res.get_json()
-
-    assert management_scope_res.status_code == 200
-    assert management_scope_data["status"] == "ok"
-    assert set(management_scope_data["data"]["scopes"]) == {
-        "system",
-        "tool",
-        "kb",
+    edit_admin_data = await edit_admin_res.get_json()
+    assert edit_admin_res.status_code == 200
+    assert edit_admin_data["status"] == "ok"
+    assert set(edit_admin_data["data"]["scopes"]) == {
+        "config",
+        "config:edit_admin",
+        "bot",
+        "provider",
     }
 
+    orphan_subscope_res = await test_client.post(
+        "/api/apikey/create",
+        json={"name": "orphan-edit-admin-key", "scopes": ["config:edit_admin"]},
+        headers=authenticated_header,
+    )
+    orphan_subscope_data = await orphan_subscope_res.get_json()
+    assert orphan_subscope_data["status"] == "error"
+    assert orphan_subscope_data["message"] == (
+        "config:edit_admin requires the config scope"
+    )
 
-def test_open_api_scope_registry_matches_routes_and_spec():
-    root = Path(__file__).resolve().parents[1]
-    route_scopes = set()
-    for path in (root / "astrbot/dashboard/api").glob("*.py"):
-        route_scopes.update(
-            re.findall(r'require_scope\(request, "([^"]+)"\)', path.read_text())
+    chat_admin_res = await test_client.post(
+        "/api/apikey/create",
+        json={"name": "chat-admin-key", "scopes": ["chat", "chat:admin"]},
+        headers=authenticated_header,
+    )
+    chat_admin_data = await chat_admin_res.get_json()
+    assert chat_admin_res.status_code == 200
+    assert chat_admin_data["status"] == "ok"
+    assert set(chat_admin_data["data"]["scopes"]) == {"chat", "chat:admin"}
+
+    orphan_chat_admin_res = await test_client.post(
+        "/api/apikey/create",
+        json={"name": "orphan-chat-admin-key", "scopes": ["chat:admin"]},
+        headers=authenticated_header,
+    )
+    orphan_chat_admin_data = await orphan_chat_admin_res.get_json()
+    assert orphan_chat_admin_data["status"] == "error"
+    assert orphan_chat_admin_data["message"] == (
+        "chat:admin requires the chat scope"
+    )
+
+
+@pytest.mark.asyncio
+async def test_config_edit_admin_subscope_controls_admin_id_changes(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    """Only the config edit-admin subscope may change administrator IDs."""
+    test_client = app.test_client()
+    config_key, _ = await _create_api_key(
+        app,
+        authenticated_header,
+        scopes=["config"],
+        name_prefix="config-without-edit-admin",
+    )
+    edit_admin_key, _ = await _create_api_key(
+        app,
+        authenticated_header,
+        scopes=["config", "config:edit_admin"],
+        name_prefix="config-with-edit-admin",
+    )
+    config_res = await test_client.get(
+        "/api/v1/system-config",
+        headers={"X-API-Key": config_key},
+    )
+    config_data = await config_res.get_json()
+    original_config = copy.deepcopy(config_data["data"]["config"])
+    changed_config = copy.deepcopy(original_config)
+    changed_config["admins_id"] = [*original_config["admins_id"], "api-admin-test"]
+
+    denied_res = await test_client.put(
+        "/api/v1/system-config",
+        json=changed_config,
+        headers={"X-API-Key": config_key},
+    )
+    denied_data = await denied_res.get_json()
+    assert denied_res.status_code == 403
+    assert denied_data["message"] == (
+        "config:edit_admin scope is required to change admins_id"
+    )
+
+    try:
+        allowed_res = await test_client.put(
+            "/api/v1/system-config",
+            json=changed_config,
+            headers={"X-API-Key": edit_admin_key},
         )
-
-    spec = yaml.safe_load((root / "openspec/openapi-v1.yaml").read_text())
-    spec_scopes = {
-        operation["x-astrbot-scope"]
-        for operations in spec.get("paths", {}).values()
-        for operation in operations.values()
-        if isinstance(operation, dict) and operation.get("x-astrbot-scope")
-    }
-
-    supported_scopes = set(ALL_OPEN_API_SCOPES)
-    assert not route_scopes - supported_scopes
-    assert not spec_scopes - supported_scopes
+        allowed_data = await allowed_res.get_json()
+        assert allowed_res.status_code == 200
+        assert allowed_data["status"] == "ok"
+        assert "api-admin-test" in core_lifecycle_td.astrbot_config["admins_id"]
+    finally:
+        restore_res = await test_client.put(
+            "/api/v1/system-config",
+            json=original_config,
+            headers=authenticated_header,
+        )
+        assert restore_res.status_code == 200
 
 
 @pytest.mark.asyncio

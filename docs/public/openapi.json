@@ -3,7 +3,85 @@
   "info": {
     "title": "AstrBot OpenAPI v1",
     "version": "0.1.0",
-    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, persona, im, config, chat, data, file, plugin, kb, mcp, sandbox, skill, system, tool. The config scope also grants bot and provider access.\n"
+    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, persona, im, config, chat, data, file, plugin, kb, mcp, sandbox, skill, system, tool, plus the sensitive config:edit_admin and chat:admin sub-scopes. The config scope also grants bot and provider access, but no parent scope grants a sensitive sub-scope.\n"
+  },
+  "x-astrbot-scope-definitions": {
+    "bot": {
+      "description": "Manage bot and platform configurations.",
+      "description_zh": "管理机器人及平台配置。"
+    },
+    "provider": {
+      "description": "Manage model providers and provider sources.",
+      "description_zh": "管理模型服务提供商和提供商源。"
+    },
+    "persona": {
+      "description": "Manage personas and persona folders.",
+      "description_zh": "管理人格设定和人格文件夹。"
+    },
+    "im": {
+      "description": "Send proactive IM messages and query bot or platform identifiers.",
+      "description_zh": "主动发送 IM 消息，并查询机器人或平台标识。"
+    },
+    "config": {
+      "description": "Manage configuration profiles, system configuration, and shared configuration, excluding changes to `admins_id`.",
+      "description_zh": "管理配置文件、系统配置和通用配置，但不包含修改 `admins_id` 的能力。",
+      "includes": [
+        "bot",
+        "provider"
+      ]
+    },
+    "config:edit_admin": {
+      "description": "Allow a `config`-scoped key to change `admins_id`. This sub-scope must be granted explicitly.",
+      "description_zh": "允许具有 `config` 权限的 Key 修改 `admins_id`。该子权限必须显式授予。",
+      "parent": "config",
+      "sensitive": true
+    },
+    "chat": {
+      "description": "Use chat capabilities and manage ChatUI sessions and projects.",
+      "description_zh": "调用对话能力，并管理 ChatUI 会话和项目。"
+    },
+    "chat:admin": {
+      "description": "Allow `username` to use a configured AstrBot administrator ID. This sub-scope must be granted explicitly.",
+      "description_zh": "允许 `username` 使用 AstrBot 中已配置的管理员 ID。该子权限必须显式授予。",
+      "parent": "chat",
+      "sensitive": true
+    },
+    "data": {
+      "description": "Manage conversations and platform-session data.",
+      "description_zh": "管理对话记录和平台会话数据。"
+    },
+    "file": {
+      "description": "Upload and download chat attachments.",
+      "description_zh": "上传和下载对话附件。"
+    },
+    "plugin": {
+      "description": "Manage plugins, plugin configuration, plugin sources, and marketplace data.",
+      "description_zh": "管理插件、插件配置、插件源和插件市场数据。"
+    },
+    "kb": {
+      "description": "Manage knowledge bases and documents.",
+      "description_zh": "管理知识库及其文档。"
+    },
+    "mcp": {
+      "description": "Manage MCP server configuration and provider synchronization.",
+      "description_zh": "管理 MCP 服务器配置和服务端同步。"
+    },
+    "sandbox": {
+      "description": "Manage runtime sandboxes and execute sandbox operations.",
+      "description_zh": "管理运行时沙盒并执行沙盒操作。"
+    },
+    "skill": {
+      "description": "Manage Skills, archives, files, and Shipyard Neo Skill workflows.",
+      "description_zh": "管理 Skills、Skill 压缩包、Skill 文件和 Shipyard Neo Skill 流程。"
+    },
+    "system": {
+      "description": "Access system status and administrative system operations.",
+      "description_zh": "访问系统状态及系统管理操作。"
+    },
+    "tool": {
+      "description": "Manage LLM tools, commands, and tool permissions.",
+      "description_zh": "管理 LLM 工具、命令及工具权限。"
+    }
   },
   "servers": [
     {
@@ -19,6 +97,12 @@
   "tags": [
     {
       "name": "Open API"
+    },
+    {
+      "name": "Auth"
+    },
+    {
+      "name": "API Keys"
     },
     {
       "name": "System Config"
@@ -57,13 +141,43 @@
       "name": "Plugin Pages"
     },
     {
+      "name": "Commands"
+    },
+    {
+      "name": "Tools"
+    },
+    {
       "name": "MCP"
     },
     {
       "name": "Skills"
     },
     {
+      "name": "Knowledge Base"
+    },
+    {
       "name": "Personas"
+    },
+    {
+      "name": "Sessions"
+    },
+    {
+      "name": "Conversations"
+    },
+    {
+      "name": "Stats"
+    },
+    {
+      "name": "Backups"
+    },
+    {
+      "name": "Updates"
+    },
+    {
+      "name": "Cron"
+    },
+    {
+      "name": "Logs"
     },
     {
       "name": "T2I"
@@ -73,6 +187,156 @@
     }
   ],
   "paths": {
+    "/api/v1/auth/totp/setup": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Start or refresh TOTP setup",
+        "operationId": "setupTotp",
+        "x-astrbot-scope": "system",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TotpSetupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/auth/totp/recovery": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Generate or rotate TOTP recovery codes",
+        "operationId": "recoverTotp",
+        "x-astrbot-scope": "system",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/auth/account": {
+      "patch": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Update dashboard account credentials",
+        "operationId": "updateAuthAccount",
+        "x-astrbot-scope": "system",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAccountRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/api-keys": {
+      "get": {
+        "tags": [
+          "API Keys"
+        ],
+        "summary": "List OpenAPI keys",
+        "operationId": "listApiKeys",
+        "x-astrbot-scope": "system",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      },
+      "post": {
+        "tags": [
+          "API Keys"
+        ],
+        "summary": "Create an OpenAPI key",
+        "operationId": "createApiKey",
+        "x-astrbot-scope": "system",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApiKeyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/api-keys/{key_id}/revoke": {
+      "post": {
+        "tags": [
+          "API Keys"
+        ],
+        "summary": "Revoke an OpenAPI key",
+        "operationId": "revokeApiKey",
+        "x-astrbot-scope": "system",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KeyId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/api-keys/{key_id}": {
+      "delete": {
+        "tags": [
+          "API Keys"
+        ],
+        "summary": "Delete an OpenAPI key",
+        "operationId": "deleteApiKey",
+        "x-astrbot-scope": "system",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KeyId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
     "/api/v1/system-config/schema": {
       "get": {
         "tags": [
@@ -85,7 +349,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       }
     },
     "/api/v1/system-config": {
@@ -100,7 +365,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       },
       "put": {
         "tags": [
@@ -109,6 +375,9 @@
         "summary": "Replace the system configuration",
         "operationId": "updateSystemConfig",
         "x-astrbot-scope": "config",
+        "x-astrbot-sensitive-scopes": [
+          "config:edit_admin"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -123,7 +392,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`\n\n**Conditional sensitive scope:** `config:edit_admin`"
       }
     },
     "/api/v1/system-config/runtime": {
@@ -138,7 +408,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       }
     },
     "/api/v1/config-profiles/schema": {
@@ -153,7 +424,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       }
     },
     "/api/v1/config-profiles": {
@@ -168,7 +440,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       },
       "post": {
         "tags": [
@@ -177,6 +450,9 @@
         "summary": "Create a configuration profile",
         "operationId": "createConfigProfile",
         "x-astrbot-scope": "config",
+        "x-astrbot-sensitive-scopes": [
+          "config:edit_admin"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -191,7 +467,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`\n\n**Conditional sensitive scope:** `config:edit_admin`"
       }
     },
     "/api/v1/config-profiles/{config_id}": {
@@ -211,7 +488,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       },
       "put": {
         "tags": [
@@ -220,6 +498,9 @@
         "summary": "Replace a configuration profile",
         "operationId": "updateConfigProfileContent",
         "x-astrbot-scope": "config",
+        "x-astrbot-sensitive-scopes": [
+          "config:edit_admin"
+        ],
         "parameters": [
           {
             "$ref": "#/components/parameters/ConfigId"
@@ -239,7 +520,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`\n\n**Conditional sensitive scope:** `config:edit_admin`"
       },
       "patch": {
         "tags": [
@@ -267,7 +549,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       },
       "delete": {
         "tags": [
@@ -285,7 +568,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       }
     },
     "/api/v1/config-routes": {
@@ -300,7 +584,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       },
       "put": {
         "tags": [
@@ -323,7 +608,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       }
     },
     "/api/v1/config-routes/{umo}": {
@@ -353,7 +639,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       },
       "delete": {
         "tags": [
@@ -371,7 +658,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       }
     },
     "/api/v1/bot-types": {
@@ -386,7 +674,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `bot`"
       }
     },
     "/api/v1/bot-types/{bot_type}/registration": {
@@ -396,7 +685,7 @@
         ],
         "summary": "Run a bot type registration flow action",
         "operationId": "registerBotType",
-        "x-astrbot-scope": "bot",
+        "x-astrbot-scope": "config",
         "parameters": [
           {
             "name": "bot_type",
@@ -421,7 +710,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       }
     },
     "/api/v1/bots": {
@@ -452,7 +742,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `bot`"
       },
       "post": {
         "tags": [
@@ -475,7 +766,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `bot`"
       }
     },
     "/api/v1/bots/stats": {
@@ -490,7 +782,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `bot`"
       }
     },
     "/api/v1/bots/by-id": {
@@ -515,7 +808,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `bot`"
       },
       "put": {
         "tags": [
@@ -551,7 +845,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `bot`"
       },
       "delete": {
         "tags": [
@@ -574,7 +869,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `bot`"
       }
     },
     "/api/v1/bots/enabled": {
@@ -612,7 +908,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `bot`"
       }
     },
     "/api/v1/bots/test": {
@@ -646,7 +943,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `bot`"
       }
     },
     "/api/v1/bots/{bot_id}": {
@@ -666,7 +964,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `bot`"
       },
       "put": {
         "tags": [
@@ -694,7 +993,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `bot`"
       },
       "delete": {
         "tags": [
@@ -712,7 +1012,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `bot`"
       }
     },
     "/api/v1/bots/{bot_id}/enabled": {
@@ -742,7 +1043,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `bot`"
       }
     },
     "/api/v1/bots/{bot_id}/test": {
@@ -762,7 +1064,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `bot`"
       }
     },
     "/api/v1/providers/schema": {
@@ -777,7 +1080,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       }
     },
     "/api/v1/provider-sources": {
@@ -792,7 +1096,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       },
       "post": {
         "tags": [
@@ -815,7 +1120,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       }
     },
     "/api/v1/provider-sources/by-id": {
@@ -840,7 +1146,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       },
       "put": {
         "tags": [
@@ -876,7 +1183,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       },
       "delete": {
         "tags": [
@@ -899,7 +1207,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       }
     },
     "/api/v1/provider-sources/models": {
@@ -931,7 +1240,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       }
     },
     "/api/v1/provider-sources/providers": {
@@ -963,7 +1273,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       },
       "post": {
         "tags": [
@@ -999,7 +1310,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       }
     },
     "/api/v1/provider-sources/{source_id}": {
@@ -1019,7 +1331,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       },
       "put": {
         "tags": [
@@ -1047,7 +1360,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       },
       "delete": {
         "tags": [
@@ -1065,7 +1379,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       }
     },
     "/api/v1/provider-sources/{source_id}/models": {
@@ -1092,7 +1407,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       }
     },
     "/api/v1/provider-sources/{source_id}/providers": {
@@ -1119,7 +1435,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       },
       "post": {
         "tags": [
@@ -1147,7 +1464,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       }
     },
     "/api/v1/providers": {
@@ -1185,7 +1503,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       },
       "post": {
         "tags": [
@@ -1208,7 +1527,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       }
     },
     "/api/v1/providers/by-id": {
@@ -1241,7 +1561,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       },
       "put": {
         "tags": [
@@ -1277,7 +1598,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       },
       "delete": {
         "tags": [
@@ -1300,7 +1622,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       }
     },
     "/api/v1/providers/enabled": {
@@ -1338,7 +1661,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       }
     },
     "/api/v1/providers/test": {
@@ -1372,7 +1696,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       }
     },
     "/api/v1/providers/embedding-dimension": {
@@ -1409,7 +1734,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       }
     },
     "/api/v1/providers/{provider_id}": {
@@ -1437,7 +1763,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       },
       "put": {
         "tags": [
@@ -1465,7 +1792,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       },
       "delete": {
         "tags": [
@@ -1493,7 +1821,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       }
     },
     "/api/v1/providers/{provider_id}/enabled": {
@@ -1523,7 +1852,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       }
     },
     "/api/v1/providers/{provider_id}/test": {
@@ -1543,7 +1873,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       }
     },
     "/api/v1/providers/{provider_id}/embedding-dimension": {
@@ -1573,7 +1904,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `provider`"
       }
     },
     "/api/v1/chat": {
@@ -1584,6 +1916,9 @@
         "summary": "Send a webchat message",
         "operationId": "sendChatMessage",
         "x-astrbot-scope": "chat",
+        "x-astrbot-sensitive-scopes": [
+          "chat:admin"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -1598,7 +1933,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`\n\n**Conditional sensitive scope:** `chat:admin`"
       }
     },
     "/api/v1/chat/ws": {
@@ -1610,6 +1946,9 @@
         "operationId": "openChatWebSocket",
         "x-websocket": true,
         "x-astrbot-scope": "chat",
+        "x-astrbot-sensitive-scopes": [
+          "chat:admin"
+        ],
         "parameters": [
           {
             "name": "api_key",
@@ -1630,7 +1969,8 @@
           "101": {
             "description": "WebSocket upgrade accepted"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`\n\n**Conditional sensitive scope:** `chat:admin`"
       }
     },
     "/api/v1/chat/sessions": {
@@ -1660,7 +2000,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`"
       }
     },
     "/api/v1/chat/sessions/new": {
@@ -1685,7 +2026,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`"
       }
     },
     "/api/v1/chat/sessions/batch-delete": {
@@ -1710,7 +2052,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`"
       }
     },
     "/api/v1/chat/sessions/{session_id}": {
@@ -1730,7 +2073,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`"
       },
       "patch": {
         "tags": [
@@ -1758,7 +2102,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`"
       },
       "delete": {
         "tags": [
@@ -1776,7 +2121,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`"
       }
     },
     "/api/v1/chat/sessions/{session_id}/stop": {
@@ -1796,7 +2142,34 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`"
+      }
+    },
+    "/api/v1/chat/runs/{run_id}/stream": {
+      "get": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "Resume an active webchat run as an SSE stream",
+        "operationId": "resumeChatRun",
+        "x-astrbot-scope": "chat",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumed server-sent chat stream or an error envelope"
+          }
+        },
+        "description": "**Required scope:** `chat`"
       }
     },
     "/api/v1/chat/sessions/{session_id}/messages/{message_id}": {
@@ -1834,7 +2207,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`"
       }
     },
     "/api/v1/chat/sessions/{session_id}/messages/{message_id}/regenerate": {
@@ -1872,7 +2246,8 @@
           "200": {
             "description": "Server-sent chat stream or an error envelope"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`"
       }
     },
     "/api/v1/chat/configs": {
@@ -1882,12 +2257,13 @@
         ],
         "summary": "List chat-selectable configuration profiles",
         "operationId": "listChatConfigs",
-        "x-astrbot-scope": "config",
+        "x-astrbot-scope": "chat",
         "responses": {
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`"
       }
     },
     "/api/v1/chat/threads": {
@@ -1912,7 +2288,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`"
       }
     },
     "/api/v1/chat/threads/{thread_id}": {
@@ -1937,7 +2314,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`"
       },
       "delete": {
         "tags": [
@@ -1960,7 +2338,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`"
       }
     },
     "/api/v1/chat/threads/{thread_id}/messages": {
@@ -1995,7 +2374,8 @@
           "200": {
             "description": "Server-sent chat stream or an error envelope"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`"
       }
     },
     "/api/v1/chat/projects": {
@@ -2010,7 +2390,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`"
       },
       "post": {
         "tags": [
@@ -2033,7 +2414,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`"
       }
     },
     "/api/v1/chat/projects/{project_id}": {
@@ -2058,7 +2440,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`"
       },
       "patch": {
         "tags": [
@@ -2091,7 +2474,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`"
       },
       "delete": {
         "tags": [
@@ -2114,7 +2498,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`"
       }
     },
     "/api/v1/chat/projects/{project_id}/sessions": {
@@ -2139,7 +2524,119 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`"
+      }
+    },
+    "/api/v1/chat/projects/{project_id}/workspace/files": {
+      "get": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "List files in a ChatUI project workspace directory",
+        "operationId": "listChatProjectWorkspaceFiles",
+        "x-astrbot-scope": "chat",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `chat`"
+      }
+    },
+    "/api/v1/chat/projects/{project_id}/workspace/file": {
+      "get": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "Read a file in a ChatUI project workspace",
+        "operationId": "getChatProjectWorkspaceFile",
+        "x-astrbot-scope": "chat",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `chat`"
+      }
+    },
+    "/api/v1/chat/projects/{project_id}/workspace/file/download": {
+      "get": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "Download a file from a ChatUI project workspace",
+        "operationId": "downloadChatProjectWorkspaceFile",
+        "x-astrbot-scope": "chat",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workspace file content",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        },
+        "description": "**Required scope:** `chat`"
       }
     },
     "/api/v1/chat/projects/{project_id}/sessions/{session_id}": {
@@ -2167,7 +2664,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`"
       }
     },
     "/api/v1/chat/projects/sessions/{session_id}": {
@@ -2187,7 +2685,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `chat`"
       }
     },
     "/api/v1/im/messages": {
@@ -2212,7 +2711,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `im`"
       }
     },
     "/api/v1/im/bots": {
@@ -2227,7 +2727,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `im`"
       }
     },
     "/api/v1/files": {
@@ -2252,7 +2753,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `file`"
       }
     },
     "/api/v1/file": {
@@ -2277,7 +2779,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `file`"
       },
       "get": {
         "tags": [
@@ -2303,7 +2806,8 @@
               }
             }
           }
-        }
+        },
+        "description": "**Required scope:** `file`"
       }
     },
     "/api/v1/files/content": {
@@ -2336,40 +2840,8 @@
               }
             }
           }
-        }
-      }
-    },
-    "/api/v1/files/tokens/{file_token}": {
-      "get": {
-        "tags": [
-          "Files"
-        ],
-        "summary": "Get a tokenized public file",
-        "operationId": "getTokenFile",
-        "x-astrbot-scope": "file",
-        "parameters": [
-          {
-            "name": "file_token",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Tokenized file bytes or an error envelope",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
-          }
-        }
+        },
+        "description": "**Required scope:** `file`"
       }
     },
     "/api/v1/files/{attachment_id}": {
@@ -2389,7 +2861,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `file`"
       },
       "delete": {
         "tags": [
@@ -2407,7 +2880,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `file`"
       }
     },
     "/api/v1/files/{attachment_id}/content": {
@@ -2435,7 +2909,8 @@
               }
             }
           }
-        }
+        },
+        "description": "**Required scope:** `file`"
       }
     },
     "/api/v1/plugins": {
@@ -2467,7 +2942,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/by-id": {
@@ -2492,7 +2968,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       },
       "delete": {
         "tags": [
@@ -2534,7 +3011,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/config": {
@@ -2559,7 +3037,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       },
       "put": {
         "tags": [
@@ -2595,7 +3074,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/config/schema": {
@@ -2620,7 +3100,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/config-files": {
@@ -2653,7 +3134,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       },
       "post": {
         "tags": [
@@ -2695,7 +3177,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       },
       "delete": {
         "tags": [
@@ -2728,7 +3211,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/readme": {
@@ -2753,7 +3237,8 @@
           "200": {
             "$ref": "#/components/responses/Text"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/changelog": {
@@ -2778,7 +3263,8 @@
           "200": {
             "$ref": "#/components/responses/Text"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/reload": {
@@ -2812,7 +3298,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/enabled": {
@@ -2850,7 +3337,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/pages": {
@@ -2875,7 +3363,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/page": {
@@ -2908,7 +3397,8 @@
           "200": {
             "$ref": "#/components/responses/Html"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/page/assets": {
@@ -2949,7 +3439,8 @@
           "200": {
             "description": "Plugin asset content"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/{plugin_id}": {
@@ -2988,7 +3479,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       },
       "delete": {
         "tags": [
@@ -3025,7 +3517,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/{plugin_id}/config": {
@@ -3045,7 +3538,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       },
       "put": {
         "tags": [
@@ -3065,6 +3559,54 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/DynamicConfig"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `plugin`"
+      }
+    },
+    "/api/v1/plugins/{plugin_id}/log-level": {
+      "put": {
+        "tags": [
+          "Plugins"
+        ],
+        "summary": "Set plugin log level",
+        "description": "Set the log level of a plugin. Pass null to follow the global log level.\n\n**Required scope:** `plugin`",
+        "operationId": "updatePluginLogLevel",
+        "x-astrbot-scope": "plugin",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PluginId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "level": {
+                    "type": "string",
+                    "nullable": true,
+                    "enum": [
+                      "DEBUG",
+                      "INFO",
+                      "WARNING",
+                      "ERROR",
+                      "CRITICAL",
+                      null
+                    ],
+                    "description": "Log level name, or null to follow the global level."
+                  }
+                },
+                "additionalProperties": true
               }
             }
           }
@@ -3093,7 +3635,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/{plugin_id}/config-files/{config_key}": {
@@ -3122,7 +3665,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       },
       "post": {
         "tags": [
@@ -3160,7 +3704,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/{plugin_id}/config-files": {
@@ -3190,7 +3735,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/{plugin_id}/readme": {
@@ -3210,7 +3756,8 @@
           "200": {
             "$ref": "#/components/responses/Text"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/{plugin_id}/changelog": {
@@ -3230,7 +3777,8 @@
           "200": {
             "$ref": "#/components/responses/Text"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/{plugin_id}/reload": {
@@ -3250,7 +3798,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/{plugin_id}/source": {
@@ -3280,7 +3829,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/{plugin_id}/enabled": {
@@ -3310,7 +3860,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/{plugin_id}/update": {
@@ -3340,7 +3891,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/update": {
@@ -3365,7 +3917,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/version-support/check": {
@@ -3390,7 +3943,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/validate/repo": {
@@ -3398,7 +3952,7 @@
         "tags": [
           "Plugins"
         ],
-        "summary": "Validate a GitHub plugin repository before installation",
+        "summary": "Validate a plugin repository before installation",
         "operationId": "validatePluginRepo",
         "x-astrbot-scope": "plugin",
         "requestBody": {
@@ -3415,7 +3969,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/failed": {
@@ -3430,7 +3985,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/failed/{plugin_id}": {
@@ -3469,7 +4025,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/failed/{plugin_id}/reload": {
@@ -3489,7 +4046,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/install/github": {
@@ -3505,7 +4063,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PluginGithubInstallRequest"
+                "$ref": "#/components/schemas/PluginRepositoryInstallRequest"
               }
             }
           }
@@ -3514,7 +4072,34 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
+      }
+    },
+    "/api/v1/plugins/install/git": {
+      "post": {
+        "tags": [
+          "Plugins"
+        ],
+        "summary": "Install a plugin with a shallow Git clone",
+        "operationId": "installPluginFromGit",
+        "x-astrbot-scope": "plugin",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginRepositoryInstallRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/install/url": {
@@ -3539,7 +4124,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/install/upload": {
@@ -3564,7 +4150,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/market": {
@@ -3628,7 +4215,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/market/categories": {
@@ -3643,7 +4231,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugin-sources": {
@@ -3658,7 +4247,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       },
       "post": {
         "tags": [
@@ -3681,7 +4271,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       },
       "put": {
         "tags": [
@@ -3715,7 +4306,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugin-sources/{source_id}": {
@@ -3735,7 +4327,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugin-sources/by-id": {
@@ -3760,7 +4353,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/{plugin_id}/pages": {
@@ -3780,7 +4374,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/{plugin_id}/pages/{page_name}": {
@@ -3808,7 +4403,8 @@
           "200": {
             "$ref": "#/components/responses/Html"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/{plugin_id}/pages/{page_name}/assets/{asset_path}": {
@@ -3845,7 +4441,8 @@
           "200": {
             "description": "Plugin asset content"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/page-bridge-sdk.js": {
@@ -3867,7 +4464,8 @@
               }
             }
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       }
     },
     "/api/v1/plugins/extensions/{plugin_path}": {
@@ -3893,7 +4491,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       },
       "post": {
         "tags": [
@@ -3933,7 +4532,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       },
       "put": {
         "tags": [
@@ -3966,7 +4566,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       },
       "patch": {
         "tags": [
@@ -3999,7 +4600,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
       },
       "delete": {
         "tags": [
@@ -4022,7 +4624,179 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `plugin`"
+      }
+    },
+    "/api/v1/commands": {
+      "get": {
+        "tags": [
+          "Commands"
+        ],
+        "summary": "List plugin commands",
+        "operationId": "listCommands",
+        "x-astrbot-scope": "tool",
+        "parameters": [
+          {
+            "name": "config_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `tool`"
+      }
+    },
+    "/api/v1/commands/{command_id}": {
+      "patch": {
+        "tags": [
+          "Commands"
+        ],
+        "summary": "Update command enabled state, alias, or permission group",
+        "operationId": "updateCommand",
+        "x-astrbot-scope": "tool",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CommandId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommandPatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `tool`"
+      }
+    },
+    "/api/v1/commands/conflicts": {
+      "get": {
+        "tags": [
+          "Commands"
+        ],
+        "summary": "List command conflicts",
+        "operationId": "listCommandConflicts",
+        "x-astrbot-scope": "tool",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `tool`"
+      }
+    },
+    "/api/v1/tools": {
+      "get": {
+        "tags": [
+          "Tools"
+        ],
+        "summary": "List LLM tools",
+        "operationId": "listTools",
+        "x-astrbot-scope": "tool",
+        "parameters": [
+          {
+            "name": "origin",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "builtin",
+                "plugin",
+                "mcp"
+              ]
+            }
+          },
+          {
+            "name": "enabled",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `tool`"
+      }
+    },
+    "/api/v1/tools/{tool_id}/enabled": {
+      "patch": {
+        "tags": [
+          "Tools"
+        ],
+        "summary": "Enable or disable an LLM tool",
+        "operationId": "setToolEnabled",
+        "x-astrbot-scope": "tool",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ToolId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnabledPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `tool`"
+      }
+    },
+    "/api/v1/tools/{tool_id}/permission": {
+      "patch": {
+        "tags": [
+          "Tools"
+        ],
+        "summary": "Update an LLM tool permission",
+        "operationId": "setToolPermission",
+        "x-astrbot-scope": "tool",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ToolId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolPermissionPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `tool`"
       }
     },
     "/api/v1/mcp/servers": {
@@ -4037,7 +4811,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `mcp`"
       },
       "post": {
         "tags": [
@@ -4060,7 +4835,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `mcp`"
       }
     },
     "/api/v1/mcp/servers/by-name": {
@@ -4100,7 +4876,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `mcp`"
       },
       "delete": {
         "tags": [
@@ -4123,7 +4900,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `mcp`"
       }
     },
     "/api/v1/mcp/servers/enabled": {
@@ -4161,7 +4939,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `mcp`"
       }
     },
     "/api/v1/mcp/servers/test": {
@@ -4201,7 +4980,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `mcp`"
       }
     },
     "/api/v1/mcp/servers/{server_name}": {
@@ -4231,7 +5011,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `mcp`"
       },
       "delete": {
         "tags": [
@@ -4249,7 +5030,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `mcp`"
       }
     },
     "/api/v1/mcp/servers/{server_name}/enabled": {
@@ -4279,7 +5061,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `mcp`"
       }
     },
     "/api/v1/mcp/servers/{server_name}/test": {
@@ -4316,7 +5099,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `mcp`"
       }
     },
     "/api/v1/mcp/providers/modelscope/sync": {
@@ -4341,7 +5125,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `mcp`"
       }
     },
     "/api/v1/skills": {
@@ -4372,7 +5157,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `skill`"
       },
       "post": {
         "tags": [
@@ -4395,7 +5181,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `skill`"
       }
     },
     "/api/v1/skills/batch": {
@@ -4432,7 +5219,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `skill`"
       }
     },
     "/api/v1/skills/by-name": {
@@ -4472,7 +5260,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `skill`"
       },
       "delete": {
         "tags": [
@@ -4495,7 +5284,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `skill`"
       }
     },
     "/api/v1/skills/archive": {
@@ -4528,7 +5318,8 @@
               }
             }
           }
-        }
+        },
+        "description": "**Required scope:** `skill`"
       }
     },
     "/api/v1/skills/files": {
@@ -4560,7 +5351,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `skill`"
       }
     },
     "/api/v1/skills/file": {
@@ -4593,7 +5385,8 @@
           "200": {
             "$ref": "#/components/responses/Text"
           }
-        }
+        },
+        "description": "**Required scope:** `skill`"
       },
       "put": {
         "tags": [
@@ -4633,7 +5426,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `skill`"
       }
     },
     "/api/v1/skills/{skill_name}": {
@@ -4663,7 +5457,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `skill`"
       },
       "delete": {
         "tags": [
@@ -4681,7 +5476,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `skill`"
       }
     },
     "/api/v1/skills/{skill_name}/archive": {
@@ -4709,7 +5505,8 @@
               }
             }
           }
-        }
+        },
+        "description": "**Required scope:** `skill`"
       }
     },
     "/api/v1/skills/{skill_name}/files": {
@@ -4736,7 +5533,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `skill`"
       }
     },
     "/api/v1/skills/{skill_name}/files/{file_path}": {
@@ -4759,7 +5557,8 @@
           "200": {
             "$ref": "#/components/responses/Text"
           }
-        }
+        },
+        "description": "**Required scope:** `skill`"
       },
       "put": {
         "tags": [
@@ -4790,7 +5589,690 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `skill`"
+      }
+    },
+    "/api/v1/skills/neo/candidates": {
+      "get": {
+        "tags": [
+          "Skills"
+        ],
+        "summary": "List Shipyard Neo skill candidates",
+        "operationId": "listNeoSkillCandidates",
+        "x-astrbot-scope": "skill",
+        "parameters": [
+          {
+            "name": "skill_key",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `skill`"
+      }
+    },
+    "/api/v1/skills/neo/releases": {
+      "get": {
+        "tags": [
+          "Skills"
+        ],
+        "summary": "List Shipyard Neo skill releases",
+        "operationId": "listNeoSkillReleases",
+        "x-astrbot-scope": "skill",
+        "parameters": [
+          {
+            "name": "skill_key",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "stage",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `skill`"
+      }
+    },
+    "/api/v1/skills/neo/payload": {
+      "get": {
+        "tags": [
+          "Skills"
+        ],
+        "summary": "Get a Shipyard Neo skill payload",
+        "operationId": "getNeoSkillPayload",
+        "x-astrbot-scope": "skill",
+        "parameters": [
+          {
+            "name": "payload_ref",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `skill`"
+      }
+    },
+    "/api/v1/skills/neo/evaluate": {
+      "post": {
+        "tags": [
+          "Skills"
+        ],
+        "summary": "Evaluate a Shipyard Neo skill candidate",
+        "operationId": "evaluateNeoSkillCandidate",
+        "x-astrbot-scope": "skill",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NeoCandidateActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `skill`"
+      }
+    },
+    "/api/v1/skills/neo/promote": {
+      "post": {
+        "tags": [
+          "Skills"
+        ],
+        "summary": "Promote a Shipyard Neo skill candidate",
+        "operationId": "promoteNeoSkillCandidate",
+        "x-astrbot-scope": "skill",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NeoCandidateActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `skill`"
+      }
+    },
+    "/api/v1/skills/neo/rollback": {
+      "post": {
+        "tags": [
+          "Skills"
+        ],
+        "summary": "Roll back a Shipyard Neo skill release",
+        "operationId": "rollbackNeoSkillRelease",
+        "x-astrbot-scope": "skill",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NeoReleaseActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `skill`"
+      }
+    },
+    "/api/v1/skills/neo/sync": {
+      "post": {
+        "tags": [
+          "Skills"
+        ],
+        "summary": "Sync a Shipyard Neo skill release",
+        "operationId": "syncNeoSkillRelease",
+        "x-astrbot-scope": "skill",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NeoReleaseActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `skill`"
+      }
+    },
+    "/api/v1/skills/neo/candidates/delete": {
+      "post": {
+        "tags": [
+          "Skills"
+        ],
+        "summary": "Delete a Shipyard Neo skill candidate",
+        "operationId": "deleteNeoSkillCandidate",
+        "x-astrbot-scope": "skill",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NeoCandidateActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `skill`"
+      }
+    },
+    "/api/v1/skills/neo/releases/delete": {
+      "post": {
+        "tags": [
+          "Skills"
+        ],
+        "summary": "Delete a Shipyard Neo skill release",
+        "operationId": "deleteNeoSkillRelease",
+        "x-astrbot-scope": "skill",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NeoReleaseActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `skill`"
+      }
+    },
+    "/api/v1/knowledge-bases": {
+      "get": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "List knowledge bases",
+        "operationId": "listKnowledgeBases",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "name": "refresh_stats",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      },
+      "post": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Create a knowledge base",
+        "operationId": "createKnowledgeBase",
+        "x-astrbot-scope": "kb",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeBaseCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}": {
+      "get": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Get a knowledge base",
+        "operationId": "getKnowledgeBase",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      },
+      "put": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Update a knowledge base",
+        "operationId": "updateKnowledgeBase",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeBaseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      },
+      "delete": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Delete a knowledge base",
+        "operationId": "deleteKnowledgeBase",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/stats": {
+      "get": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Get knowledge base stats",
+        "operationId": "getKnowledgeBaseStats",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/documents": {
+      "get": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "List knowledge base documents",
+        "operationId": "listKnowledgeDocuments",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter documents by name (case-insensitive partial match)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      },
+      "post": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Upload a document to a knowledge base",
+        "operationId": "uploadKnowledgeDocument",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeDocumentUploadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/documents/import": {
+      "post": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Import documents already available on the server",
+        "operationId": "importKnowledgeDocuments",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeDocumentImportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/documents/import-url": {
+      "post": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Import a document from URL",
+        "operationId": "importKnowledgeDocumentFromUrl",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeDocumentUrlImportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/documents/{document_id}": {
+      "get": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Get a knowledge base document",
+        "operationId": "getKnowledgeDocument",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          },
+          {
+            "$ref": "#/components/parameters/DocumentId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      },
+      "delete": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Delete a knowledge base document",
+        "operationId": "deleteKnowledgeDocument",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          },
+          {
+            "$ref": "#/components/parameters/DocumentId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/chunks": {
+      "get": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "List document chunks",
+        "operationId": "listKnowledgeChunks",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          },
+          {
+            "name": "document_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/chunks/{chunk_id}": {
+      "delete": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Delete a document chunk",
+        "operationId": "deleteKnowledgeChunk",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          },
+          {
+            "$ref": "#/components/parameters/ChunkId"
+          },
+          {
+            "name": "document_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/retrieve": {
+      "post": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Retrieve knowledge base chunks",
+        "operationId": "retrieveKnowledgeBase",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KbId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeRetrieveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
+      }
+    },
+    "/api/v1/knowledge-bases/tasks/{task_id}": {
+      "get": {
+        "tags": [
+          "Knowledge Base"
+        ],
+        "summary": "Get knowledge base import task progress",
+        "operationId": "getKnowledgeTask",
+        "x-astrbot-scope": "kb",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TaskId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `kb`"
       }
     },
     "/api/v1/personas/tree": {
@@ -4805,7 +6287,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `persona`"
       }
     },
     "/api/v1/personas": {
@@ -4829,7 +6312,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `persona`"
       },
       "post": {
         "tags": [
@@ -4852,7 +6336,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `persona`"
       }
     },
     "/api/v1/personas/by-id": {
@@ -4877,7 +6362,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `persona`"
       },
       "put": {
         "tags": [
@@ -4909,7 +6395,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `persona`"
       },
       "delete": {
         "tags": [
@@ -4932,7 +6419,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `persona`"
       }
     },
     "/api/v1/personas/{persona_id}": {
@@ -4952,7 +6440,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `persona`"
       },
       "put": {
         "tags": [
@@ -4980,7 +6469,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `persona`"
       },
       "delete": {
         "tags": [
@@ -4998,7 +6488,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `persona`"
       }
     },
     "/api/v1/persona-folders": {
@@ -5022,7 +6513,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `persona`"
       },
       "post": {
         "tags": [
@@ -5045,7 +6537,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `persona`"
       }
     },
     "/api/v1/persona-folders/{folder_id}": {
@@ -5075,7 +6568,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `persona`"
       },
       "delete": {
         "tags": [
@@ -5093,7 +6587,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `persona`"
       }
     },
     "/api/v1/personas/move": {
@@ -5118,7 +6613,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `persona`"
       }
     },
     "/api/v1/personas/reorder": {
@@ -5143,7 +6639,1453 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `persona`"
+      }
+    },
+    "/api/v1/sessions": {
+      "get": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "List active UMOs and session status",
+        "operationId": "listSessions",
+        "x-astrbot-scope": "data",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "platform",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "message_type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "group",
+                "private"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      }
+    },
+    "/api/v1/sessions/active-umos": {
+      "get": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "List active and known UMOs",
+        "operationId": "listActiveUmos",
+        "x-astrbot-scope": "data",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      }
+    },
+    "/api/v1/sessions/rules": {
+      "get": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "List session rules",
+        "operationId": "listSessionRules",
+        "x-astrbot-scope": "data",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      },
+      "post": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Update or create a session rule",
+        "operationId": "upsertSessionRule",
+        "x-astrbot-scope": "data",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionRuleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      }
+    },
+    "/api/v1/sessions/rules/delete": {
+      "post": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Delete one or more session rules",
+        "operationId": "deleteSessionRules",
+        "x-astrbot-scope": "data",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UmoListRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      }
+    },
+    "/api/v1/sessions/provider": {
+      "patch": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Batch update session provider selection",
+        "operationId": "batchUpdateSessionProvider",
+        "x-astrbot-scope": "data",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchSessionProviderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      }
+    },
+    "/api/v1/sessions/service": {
+      "patch": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Batch update session service settings",
+        "operationId": "batchUpdateSessionService",
+        "x-astrbot-scope": "data",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchSessionServiceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      }
+    },
+    "/api/v1/session-groups": {
+      "get": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "List session groups",
+        "operationId": "listSessionGroups",
+        "x-astrbot-scope": "data",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      },
+      "post": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Create a session group",
+        "operationId": "createSessionGroup",
+        "x-astrbot-scope": "data",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionGroupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      }
+    },
+    "/api/v1/session-groups/{group_id}": {
+      "put": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Update a session group",
+        "operationId": "updateSessionGroup",
+        "x-astrbot-scope": "data",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/GroupId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionGroupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      },
+      "delete": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Delete a session group",
+        "operationId": "deleteSessionGroup",
+        "x-astrbot-scope": "data",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/GroupId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      }
+    },
+    "/api/v1/conversations": {
+      "get": {
+        "tags": [
+          "Conversations"
+        ],
+        "summary": "List conversation history data",
+        "operationId": "listConversations",
+        "x-astrbot-scope": "data",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "name": "platform_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "platforms",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Comma-separated platform IDs."
+          },
+          {
+            "name": "message_types",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Comma-separated message types."
+          },
+          {
+            "name": "exclude_ids",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Comma-separated user IDs to exclude."
+          },
+          {
+            "name": "exclude_platforms",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Comma-separated platforms to exclude."
+          },
+          {
+            "name": "include_history",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Include full message history in each conversation."
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      }
+    },
+    "/api/v1/conversations/batch-delete": {
+      "post": {
+        "tags": [
+          "Conversations"
+        ],
+        "summary": "Delete multiple conversations",
+        "operationId": "batchDeleteConversations",
+        "x-astrbot-scope": "data",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationBatchDeleteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      }
+    },
+    "/api/v1/conversations/{conversation_id}": {
+      "get": {
+        "tags": [
+          "Conversations"
+        ],
+        "summary": "Get conversation details and messages",
+        "operationId": "getConversation",
+        "x-astrbot-scope": "data",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ConversationId"
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      },
+      "patch": {
+        "tags": [
+          "Conversations"
+        ],
+        "summary": "Update conversation metadata",
+        "operationId": "updateConversation",
+        "x-astrbot-scope": "data",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ConversationId"
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationPatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      },
+      "delete": {
+        "tags": [
+          "Conversations"
+        ],
+        "summary": "Delete a conversation",
+        "operationId": "deleteConversation",
+        "x-astrbot-scope": "data",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ConversationId"
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/messages": {
+      "put": {
+        "tags": [
+          "Conversations"
+        ],
+        "summary": "Replace conversation message history",
+        "operationId": "replaceConversationMessages",
+        "x-astrbot-scope": "data",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ConversationId"
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationMessagesReplaceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      }
+    },
+    "/api/v1/conversations/export": {
+      "post": {
+        "tags": [
+          "Conversations"
+        ],
+        "summary": "Export conversations",
+        "operationId": "exportConversations",
+        "x-astrbot-scope": "data",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationExportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Exported conversation data"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      }
+    },
+    "/api/v1/stats": {
+      "get": {
+        "tags": [
+          "Stats"
+        ],
+        "summary": "Get runtime statistics",
+        "operationId": "getStats",
+        "x-astrbot-scope": "system",
+        "parameters": [
+          {
+            "name": "offset_sec",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 86400
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/stats/provider-tokens": {
+      "get": {
+        "tags": [
+          "Stats"
+        ],
+        "summary": "Get provider token usage statistics",
+        "operationId": "getProviderTokenStats",
+        "x-astrbot-scope": "system",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/stats/version": {
+      "get": {
+        "tags": [
+          "Stats"
+        ],
+        "summary": "Get AstrBot version",
+        "operationId": "getVersion",
+        "x-astrbot-scope": "system",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/stats/first-notice": {
+      "get": {
+        "tags": [
+          "Stats"
+        ],
+        "summary": "Get first-run dashboard notice content",
+        "operationId": "getFirstNotice",
+        "x-astrbot-scope": "system",
+        "parameters": [
+          {
+            "name": "locale",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/stats/ghproxy/test": {
+      "post": {
+        "tags": [
+          "Stats"
+        ],
+        "summary": "Test a GitHub proxy endpoint",
+        "operationId": "testGhproxyConnection",
+        "x-astrbot-scope": "system",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GhproxyTestRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/changelogs": {
+      "get": {
+        "tags": [
+          "Stats"
+        ],
+        "summary": "List available changelog versions",
+        "operationId": "listChangelogVersions",
+        "x-astrbot-scope": "system",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/changelogs/{version}": {
+      "get": {
+        "tags": [
+          "Stats"
+        ],
+        "summary": "Get changelog content for a version",
+        "operationId": "getChangelog",
+        "x-astrbot-scope": "system",
+        "parameters": [
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/stats/storage": {
+      "get": {
+        "tags": [
+          "Stats"
+        ],
+        "summary": "Get storage status",
+        "operationId": "getStorageStatus",
+        "x-astrbot-scope": "system",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/stats/storage/cleanup": {
+      "post": {
+        "tags": [
+          "Stats"
+        ],
+        "summary": "Clean storage",
+        "operationId": "cleanupStorage",
+        "x-astrbot-scope": "system",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DynamicConfig"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/system/restart": {
+      "post": {
+        "tags": [
+          "Stats"
+        ],
+        "summary": "Restart AstrBot core",
+        "operationId": "restartCore",
+        "x-astrbot-scope": "system",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/backups": {
+      "get": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "List backups",
+        "operationId": "listBackups",
+        "x-astrbot-scope": "system",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      },
+      "post": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Export a backup",
+        "operationId": "createBackup",
+        "x-astrbot-scope": "system",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupExportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/backups/upload": {
+      "post": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Upload a backup file",
+        "operationId": "uploadBackup",
+        "x-astrbot-scope": "system",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupUploadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/backups/upload/init": {
+      "post": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Initialize chunked backup upload",
+        "operationId": "initBackupUpload",
+        "x-astrbot-scope": "system",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupUploadInitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/backups/upload/chunk": {
+      "post": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Upload a backup chunk",
+        "operationId": "uploadBackupChunk",
+        "x-astrbot-scope": "system",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupChunkUploadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/backups/upload/complete": {
+      "post": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Complete chunked backup upload",
+        "operationId": "completeBackupUpload",
+        "x-astrbot-scope": "system",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupUploadSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/backups/upload/abort": {
+      "post": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Abort chunked backup upload",
+        "operationId": "abortBackupUpload",
+        "x-astrbot-scope": "system",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupUploadSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/backups/tasks/{task_id}": {
+      "get": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Get backup task progress",
+        "operationId": "getBackupProgress",
+        "x-astrbot-scope": "system",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/backups/{filename}": {
+      "patch": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Rename a backup",
+        "operationId": "renameBackup",
+        "x-astrbot-scope": "system",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Filename"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupRenameRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      },
+      "delete": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Delete a backup",
+        "operationId": "deleteBackup",
+        "x-astrbot-scope": "system",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Filename"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/backups/{filename}/check": {
+      "post": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Check a backup before import",
+        "operationId": "checkBackup",
+        "x-astrbot-scope": "system",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Filename"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/backups/{filename}/import": {
+      "post": {
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Import a backup",
+        "operationId": "importBackup",
+        "x-astrbot-scope": "system",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Filename"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupImportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/updates/check": {
+      "get": {
+        "tags": [
+          "Updates"
+        ],
+        "summary": "Check for updates",
+        "operationId": "checkUpdate",
+        "x-astrbot-scope": "system",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/updates/releases": {
+      "get": {
+        "tags": [
+          "Updates"
+        ],
+        "summary": "List releases",
+        "operationId": "listReleases",
+        "x-astrbot-scope": "system",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "core",
+                "dashboard"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/updates/core": {
+      "post": {
+        "tags": [
+          "Updates"
+        ],
+        "summary": "Update AstrBot core",
+        "operationId": "updateCore",
+        "x-astrbot-scope": "system",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/updates/dashboard": {
+      "post": {
+        "tags": [
+          "Updates"
+        ],
+        "summary": "Update dashboard assets",
+        "operationId": "updateDashboard",
+        "x-astrbot-scope": "system",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/updates/progress/{task_id}": {
+      "get": {
+        "tags": [
+          "Updates"
+        ],
+        "summary": "Get update progress",
+        "operationId": "getUpdateProgress",
+        "x-astrbot-scope": "system",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TaskId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/pip/install": {
+      "post": {
+        "tags": [
+          "Updates"
+        ],
+        "summary": "Install a Python package",
+        "operationId": "installPipPackage",
+        "x-astrbot-scope": "system",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PipInstallRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/cron/jobs": {
+      "get": {
+        "tags": [
+          "Cron"
+        ],
+        "summary": "List cron jobs",
+        "operationId": "listCronJobs",
+        "x-astrbot-scope": "system",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      },
+      "post": {
+        "tags": [
+          "Cron"
+        ],
+        "summary": "Create a cron job",
+        "operationId": "createCronJob",
+        "x-astrbot-scope": "system",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CronJobRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/cron/jobs/{job_id}": {
+      "patch": {
+        "tags": [
+          "Cron"
+        ],
+        "summary": "Update a cron job",
+        "operationId": "updateCronJob",
+        "x-astrbot-scope": "system",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CronJobPatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      },
+      "delete": {
+        "tags": [
+          "Cron"
+        ],
+        "summary": "Delete a cron job",
+        "operationId": "deleteCronJob",
+        "x-astrbot-scope": "system",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/cron/jobs/{job_id}/run": {
+      "post": {
+        "tags": [
+          "Cron"
+        ],
+        "summary": "Run a cron job immediately",
+        "operationId": "runCronJob",
+        "x-astrbot-scope": "system",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/logs/live": {
+      "get": {
+        "tags": [
+          "Logs"
+        ],
+        "summary": "Stream live logs",
+        "operationId": "streamLiveLogs",
+        "x-astrbot-scope": "system",
+        "responses": {
+          "200": {
+            "description": "Server-sent log stream",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/logs/history": {
+      "get": {
+        "tags": [
+          "Logs"
+        ],
+        "summary": "Get log history",
+        "operationId": "getLogHistory",
+        "x-astrbot-scope": "system",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Text"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      }
+    },
+    "/api/v1/trace/settings": {
+      "get": {
+        "tags": [
+          "Logs"
+        ],
+        "summary": "Get trace settings",
+        "operationId": "getTraceSettings",
+        "x-astrbot-scope": "system",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
+      },
+      "put": {
+        "tags": [
+          "Logs"
+        ],
+        "summary": "Update trace settings",
+        "operationId": "updateTraceSettings",
+        "x-astrbot-scope": "system",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TraceSettingsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `system`"
       }
     },
     "/api/v1/t2i/templates": {
@@ -5158,7 +8100,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       },
       "post": {
         "tags": [
@@ -5181,7 +8124,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       }
     },
     "/api/v1/t2i/templates/active": {
@@ -5196,7 +8140,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       },
       "put": {
         "tags": [
@@ -5219,7 +8164,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       }
     },
     "/api/v1/t2i/templates/default/reset": {
@@ -5234,7 +8180,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       }
     },
     "/api/v1/t2i/templates/{name}": {
@@ -5254,7 +8201,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       },
       "put": {
         "tags": [
@@ -5282,7 +8230,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       },
       "delete": {
         "tags": [
@@ -5300,7 +8249,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       }
     },
     "/api/v1/subagents/config": {
@@ -5315,7 +8265,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       },
       "put": {
         "tags": [
@@ -5338,7 +8289,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       }
     },
     "/api/v1/subagents/available-tools": {
@@ -5353,7 +8305,8 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        }
+        },
+        "description": "**Required scope:** `config`"
       }
     }
   },
@@ -5377,6 +8330,16 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/SuccessEnvelope"
+            }
+          }
+        }
+      },
+      "Error": {
+        "description": "Standard AstrBot error response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
             }
           }
         }
@@ -5432,8 +8395,41 @@
           "type": "string"
         }
       },
+      "ChunkId": {
+        "name": "chunk_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "CommandId": {
+        "name": "command_id",
+        "in": "path",
+        "required": true,
+        "description": "URL-encoded command handler full name.",
+        "schema": {
+          "type": "string"
+        }
+      },
       "ConfigId": {
         "name": "config_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "ConversationId": {
+        "name": "conversation_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "DocumentId": {
+        "name": "document_id",
         "in": "path",
         "required": true,
         "schema": {
@@ -5449,8 +8445,40 @@
           "type": "string"
         }
       },
+      "Filename": {
+        "name": "filename",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
       "FolderId": {
         "name": "folder_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "GroupId": {
+        "name": "group_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "KbId": {
+        "name": "kb_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "KeyId": {
+        "name": "key_id",
         "in": "path",
         "required": true,
         "schema": {
@@ -5540,6 +8568,22 @@
           "type": "string"
         }
       },
+      "TaskId": {
+        "name": "task_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "ToolId": {
+        "name": "tool_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
       "Umo": {
         "name": "umo",
         "in": "path",
@@ -5569,6 +8613,24 @@
         },
         "additionalProperties": false
       },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": [
+          "status",
+          "message"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "error"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {}
+        },
+        "additionalProperties": false
+      },
       "DynamicConfig": {
         "type": "object",
         "additionalProperties": true
@@ -5583,6 +8645,103 @@
           "embedding",
           "rerank"
         ]
+      },
+      "UpdateAccountRequest": {
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "new_password": {
+            "type": "string"
+          },
+          "confirm_password": {
+            "type": "string"
+          },
+          "new_username": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TotpSetupRequest": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "secret": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateApiKeyRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "bot",
+                "provider",
+                "persona",
+                "im",
+                "config",
+                "config:edit_admin",
+                "chat",
+                "chat:admin",
+                "data",
+                "file",
+                "plugin",
+                "kb",
+                "mcp",
+                "sandbox",
+                "skill",
+                "system",
+                "tool"
+              ]
+            },
+            "example": [
+              "bot",
+              "provider",
+              "persona",
+              "im",
+              "config",
+              "config:edit_admin",
+              "chat",
+              "chat:admin",
+              "data",
+              "file",
+              "plugin",
+              "kb",
+              "mcp",
+              "sandbox",
+              "skill",
+              "system",
+              "tool"
+            ]
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_in_days": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
       },
       "CreateConfigProfileRequest": {
         "type": "object",
@@ -5715,6 +8874,22 @@
         },
         "additionalProperties": false
       },
+      "ToolPermissionPatch": {
+        "type": "object",
+        "required": [
+          "permission"
+        ],
+        "properties": {
+          "permission": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "member"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
       "ProviderSourceConfigRequest": {
         "type": "object",
         "required": [
@@ -5755,6 +8930,28 @@
         },
         "additionalProperties": false
       },
+      "ChatFlags": {
+        "type": "object",
+        "description": "Per-request ChatUI feature flags. A value here takes priority over its legacy top-level field, followed by the documented default.",
+        "properties": {
+          "enable_inline_genui": {
+            "type": "boolean",
+            "default": true,
+            "description": "Inject the inline HTML GenUI system prompt for this request."
+          },
+          "enable_default_system_prompt": {
+            "type": "boolean",
+            "default": true,
+            "description": "Allow the ChatUI default system prompt when no persona overrides it."
+          },
+          "enable_streaming": {
+            "type": "boolean",
+            "default": true,
+            "description": "Enable streaming model output for this request. This value takes priority over the legacy top-level enable_streaming field."
+          }
+        },
+        "additionalProperties": false
+      },
       "ChatRequest": {
         "type": "object",
         "required": [
@@ -5763,7 +8960,7 @@
         "properties": {
           "username": {
             "type": "string",
-            "description": "Caller-declared WebChat sender/session owner. This value is used as the message sender identity and may participate in sender-ID-based command permission checks. Treat chat-scoped API keys as trusted backend credentials and map or validate usernames before accepting end-user input."
+            "description": "Caller-declared WebChat sender/session owner. Configured AstrBot administrator IDs require the chat:admin API key sub-scope."
           },
           "session_id": {
             "type": "string"
@@ -5799,7 +8996,12 @@
           },
           "enable_streaming": {
             "type": "boolean",
-            "default": true
+            "default": true,
+            "deprecated": true,
+            "description": "Deprecated compatibility field. It is used only when flags.enable_streaming is absent; otherwise flags.enable_streaming takes priority."
+          },
+          "flags": {
+            "$ref": "#/components/schemas/ChatFlags"
           },
           "_skip_user_history": {
             "type": "boolean",
@@ -5868,7 +9070,12 @@
           },
           "enable_streaming": {
             "type": "boolean",
-            "default": true
+            "default": true,
+            "deprecated": true,
+            "description": "Deprecated compatibility field. It is used only when flags.enable_streaming is absent; otherwise flags.enable_streaming takes priority."
+          },
+          "flags": {
+            "$ref": "#/components/schemas/ChatFlags"
           }
         },
         "additionalProperties": false
@@ -5927,7 +9134,12 @@
           },
           "enable_streaming": {
             "type": "boolean",
-            "default": true
+            "default": true,
+            "deprecated": true,
+            "description": "Deprecated compatibility field. It is used only when flags.enable_streaming is absent; otherwise flags.enable_streaming takes priority."
+          },
+          "flags": {
+            "$ref": "#/components/schemas/ChatFlags"
           }
         },
         "additionalProperties": false
@@ -5950,10 +9162,12 @@
               "session",
               "project",
               "custom"
-            ]
+            ],
+            "description": "Workspace mode. API key callers may use only session or project; project is the default."
           },
           "workspace_path": {
-            "type": "string"
+            "type": "string",
+            "description": "Dashboard-only custom workspace path. API key callers cannot set this field."
           }
         },
         "additionalProperties": false
@@ -6095,7 +9309,7 @@
         },
         "additionalProperties": false
       },
-      "PluginGithubInstallRequest": {
+      "PluginRepositoryInstallRequest": {
         "type": "object",
         "required": [
           "repository"
@@ -6103,14 +9317,14 @@
         "properties": {
           "repository": {
             "type": "string",
-            "description": "GitHub URL or owner/repository slug."
+            "description": "GitHub shorthand, HTTP(S), SSH, or SCP-style Git repository locator."
           },
           "ref": {
             "type": "string"
           },
           "download_url": {
             "type": "string",
-            "description": "Optional downloadable ZIP URL to use instead of GitHub archive resolution."
+            "description": "Optional downloadable ZIP URL to use instead of repository archive resolution."
           },
           "proxy": {
             "type": "string"
@@ -6223,6 +9437,27 @@
         },
         "additionalProperties": false
       },
+      "CommandPatchRequest": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "alias": {
+            "type": "string"
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "permission_group": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "McpServerConfig": {
         "type": "object",
         "required": [
@@ -6304,6 +9539,159 @@
           },
           "description": {
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "NeoCandidateActionRequest": {
+        "type": "object",
+        "required": [
+          "candidate_id"
+        ],
+        "properties": {
+          "candidate_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "NeoReleaseActionRequest": {
+        "type": "object",
+        "required": [
+          "release_id"
+        ],
+        "properties": {
+          "release_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "KnowledgeBaseRequest": {
+        "type": "object",
+        "properties": {
+          "kb_name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "emoji": {
+            "type": "string"
+          },
+          "embedding_provider_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rerank_provider_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "chunk_size": {
+            "type": "integer"
+          },
+          "chunk_overlap": {
+            "type": "integer"
+          },
+          "top_k_dense": {
+            "type": "integer"
+          },
+          "top_k_sparse": {
+            "type": "integer"
+          },
+          "top_m_final": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false
+      },
+      "KnowledgeBaseCreateRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/KnowledgeBaseRequest"
+          },
+          {
+            "type": "object",
+            "required": [
+              "kb_name",
+              "embedding_provider_id"
+            ],
+            "properties": {
+              "kb_name": {
+                "type": "string"
+              },
+              "embedding_provider_id": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "KnowledgeDocumentUploadRequest": {
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary"
+          }
+        }
+      },
+      "KnowledgeDocumentImportRequest": {
+        "type": "object",
+        "required": [
+          "paths"
+        ],
+        "properties": {
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "parser": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "KnowledgeDocumentUrlImportRequest": {
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "parser": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "KnowledgeRetrieveRequest": {
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "top_k": {
+            "type": "integer",
+            "default": 5
+          },
+          "score_threshold": {
+            "type": "number"
           }
         },
         "additionalProperties": false
@@ -6412,6 +9800,434 @@
           }
         },
         "additionalProperties": false
+      },
+      "SessionRuleRequest": {
+        "type": "object",
+        "required": [
+          "umo",
+          "rule_key"
+        ],
+        "properties": {
+          "umo": {
+            "type": "string"
+          },
+          "rule_key": {
+            "type": "string"
+          },
+          "rule_value": {
+            "$ref": "#/components/schemas/DynamicConfig"
+          }
+        },
+        "additionalProperties": true
+      },
+      "UmoListRequest": {
+        "type": "object",
+        "properties": {
+          "umo": {
+            "type": "string"
+          },
+          "umos": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "all",
+              "group",
+              "private",
+              "custom_group"
+            ]
+          },
+          "group_id": {
+            "type": "string"
+          },
+          "rule_key": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BatchSessionProviderRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/UmoListRequest"
+          },
+          {
+            "type": "object",
+            "required": [
+              "provider_id",
+              "provider_type"
+            ],
+            "properties": {
+              "provider_id": {
+                "type": "string"
+              },
+              "provider_type": {
+                "type": "string",
+                "enum": [
+                  "chat_completion",
+                  "speech_to_text",
+                  "text_to_speech"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "BatchSessionServiceRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/UmoListRequest"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "session_enabled": {
+                "type": "boolean"
+              },
+              "llm_enabled": {
+                "type": "boolean"
+              },
+              "tts_enabled": {
+                "type": "boolean"
+              }
+            }
+          }
+        ]
+      },
+      "SessionGroupRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "umos": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "add_umos": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "remove_umos": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConversationPatchRequest": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "persona_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConversationMessagesReplaceRequest": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConversationRef": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "cid"
+        ],
+        "properties": {
+          "user_id": {
+            "type": "string"
+          },
+          "cid": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConversationBatchDeleteRequest": {
+        "type": "object",
+        "required": [
+          "conversations"
+        ],
+        "properties": {
+          "conversations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConversationRef"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConversationExportRequest": {
+        "type": "object",
+        "properties": {
+          "conversations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConversationRef"
+            }
+          },
+          "conversation_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "json",
+              "markdown"
+            ],
+            "default": "json"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CronJobRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "cron_expression": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "session": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "persona_id": {
+            "type": "string"
+          },
+          "provider_id": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "run_once": {
+            "type": "boolean",
+            "default": false
+          },
+          "run_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      },
+      "CronJobPatchRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CronJobRequest"
+          }
+        ]
+      },
+      "BackupExportRequest": {
+        "type": "object",
+        "properties": {
+          "include": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "exclude": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "BackupUploadRequest": {
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary"
+          }
+        }
+      },
+      "BackupUploadInitRequest": {
+        "type": "object",
+        "required": [
+          "filename",
+          "total_size"
+        ],
+        "properties": {
+          "filename": {
+            "type": "string"
+          },
+          "total_size": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "BackupUploadSessionRequest": {
+        "type": "object",
+        "required": [
+          "upload_id"
+        ],
+        "properties": {
+          "upload_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BackupChunkUploadRequest": {
+        "type": "object",
+        "required": [
+          "upload_id",
+          "chunk_index",
+          "chunk"
+        ],
+        "properties": {
+          "upload_id": {
+            "type": "string"
+          },
+          "chunk_index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "chunk": {
+            "type": "string",
+            "format": "binary"
+          }
+        }
+      },
+      "BackupRenameRequest": {
+        "type": "object",
+        "required": [
+          "new_name"
+        ],
+        "properties": {
+          "new_name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BackupImportRequest": {
+        "type": "object",
+        "properties": {
+          "confirmed": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateRequest": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "proxy": {
+            "type": "string"
+          },
+          "reboot": {
+            "type": "boolean"
+          },
+          "progress_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PipInstallRequest": {
+        "type": "object",
+        "required": [
+          "package"
+        ],
+        "properties": {
+          "package": {
+            "type": "string"
+          },
+          "mirror": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "GhproxyTestRequest": {
+        "type": "object",
+        "required": [
+          "proxy_url"
+        ],
+        "properties": {
+          "proxy_url": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TraceSettingsRequest": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "level": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
       },
       "T2iTemplateRequest": {
         "type": "object",

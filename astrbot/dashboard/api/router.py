@@ -1,8 +1,10 @@
 """FastAPI HTTP API surface for the AstrBot dashboard."""
 
 from fastapi import APIRouter
+from fastapi.routing import APIRoute
 
 from .api_keys import router as api_keys_router
+from .auth import ScopeDependency
 from .auth import router as auth_router
 from .backups import router as backups_router
 from .bots import router as bots_router
@@ -30,16 +32,16 @@ from .tools import router as tools_router
 from .updates import router as updates_router
 
 API_V1_PREFIX = "/api/v1"
+SCOPE_DEPENDENCY_NAMES = {
+    "require_kb_scope": "kb",
+    "require_system_scope": "system",
+    "require_tool_scope": "tool",
+}
 
 
 def build_api_router() -> APIRouter:
-    """Build the versioned dashboard API router.
-
-    Returns:
-        APIRouter containing all `/api/v1` dashboard routes.
-    """
-    router = APIRouter()
-    for api_router in (
+    router = APIRouter(prefix=API_V1_PREFIX)
+    child_routers = (
         auth_router,
         backups_router,
         config_profiles_router,
@@ -66,6 +68,40 @@ def build_api_router() -> APIRouter:
         updates_router,
         open_api_router,
         live_chat_router,
-    ):
-        router.include_router(api_router, prefix=API_V1_PREFIX)
+    )
+    for child_router in child_routers:
+        for route in child_router.routes:
+            if not isinstance(route, APIRoute) or not route.include_in_schema:
+                continue
+            required_scopes = {
+                dependency.call.scope
+                for dependency in route.dependant.dependencies
+                if isinstance(dependency.call, ScopeDependency)
+            }
+            required_scopes.update(
+                SCOPE_DEPENDENCY_NAMES[dependency.call.__name__]
+                for dependency in route.dependant.dependencies
+                if getattr(dependency.call, "__name__", "") in SCOPE_DEPENDENCY_NAMES
+            )
+            if len(required_scopes) != 1:
+                continue
+            required_scope = required_scopes.pop()
+            route.openapi_extra = {
+                **(route.openapi_extra or {}),
+                "x-astrbot-scope": required_scope,
+            }
+            scope_description = f"**Required scope:** `{required_scope}`"
+            sensitive_scopes = route.openapi_extra.get("x-astrbot-sensitive-scopes", [])
+            if sensitive_scopes:
+                formatted_scopes = ", ".join(f"`{scope}`" for scope in sensitive_scopes)
+                scope_description += (
+                    "\n\n**Conditional sensitive scope:** " + formatted_scopes
+                )
+            if scope_description not in route.description:
+                route.description = "\n\n".join(
+                    part
+                    for part in (route.description.strip(), scope_description)
+                    if part
+                )
+        router.include_router(child_router)
     return router

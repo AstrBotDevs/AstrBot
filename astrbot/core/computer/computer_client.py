@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import shutil
 import uuid
 from pathlib import Path
@@ -336,6 +337,8 @@ def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
 
 def _collect_sync_skill_dirs() -> list[tuple[str, Path]]:
     """Collect local and plugin-provided skills that should be synced."""
+    from astrbot.core.star.star import star_registry
+
     skills_root = Path(get_astrbot_skills_path())
     if not skills_root.is_dir():
         return []
@@ -346,6 +349,11 @@ def _collect_sync_skill_dirs() -> list[tuple[str, Path]]:
         logger.warning("[Computer] Failed to initialize skill manager: %s", exc)
         return []
 
+    active_plugin_root_names = {
+        plugin.root_dir_name
+        for plugin in star_registry
+        if plugin.activated and plugin.root_dir_name
+    }
     sync_dirs: list[tuple[str, Path]] = []
     for skill in skill_manager.list_skills(
         active_only=False,
@@ -353,6 +361,11 @@ def _collect_sync_skill_dirs() -> list[tuple[str, Path]]:
         show_sandbox_path=False,
     ):
         if skill.source_type == "sandbox_only":
+            continue
+        if (
+            skill.source_type == "plugin"
+            and skill.plugin_name not in active_plugin_root_names
+        ):
             continue
         skill_md = Path(skill.path)
         if not skill_md.is_file():
@@ -365,6 +378,50 @@ def _normalize_shell_exec_result(result: object) -> dict:
     if isinstance(result, dict):
         return result
     return {"exit_code": 0, "stdout": "", "stderr": ""}
+
+
+def _discover_bay_credentials(endpoint: str) -> str:
+    """Discover Bay API credentials from known local locations.
+
+    Args:
+        endpoint: Configured Bay endpoint used for mismatch diagnostics.
+
+    Returns:
+        Discovered API key, or an empty string when unavailable.
+    """
+    candidates: list[Path] = []
+    bay_data_dir = os.environ.get("BAY_DATA_DIR")
+    if bay_data_dir:
+        candidates.append(Path(bay_data_dir) / "credentials.json")
+    astrbot_root = Path(__file__).resolve().parents[3]
+    candidates.append(astrbot_root.parent / "pkgs" / "bay" / "credentials.json")
+    candidates.append(Path.cwd() / "credentials.json")
+
+    for credential_path in candidates:
+        if not credential_path.is_file():
+            continue
+        try:
+            data = json.loads(credential_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.debug("[Computer] Failed to read %s: %s", credential_path, exc)
+            continue
+        api_key = str(data.get("api_key") or "")
+        if not api_key:
+            continue
+        credential_endpoint = str(data.get("endpoint") or "")
+        if (
+            credential_endpoint
+            and endpoint
+            and credential_endpoint.rstrip("/") != endpoint.rstrip("/")
+        ):
+            logger.warning(
+                "[Computer] credentials.json endpoint mismatch: file=%s, configured=%s",
+                credential_endpoint,
+                endpoint,
+            )
+        logger.info("[Computer] Auto-discovered Bay API key from %s", credential_path)
+        return api_key
+    return ""
 
 
 def _build_python_exec_command(script: str) -> str:
@@ -825,3 +882,16 @@ def get_local_booter() -> ComputerBooter:
     if local_booter is None:
         local_booter = LocalBooter()
     return local_booter
+
+
+async def shutdown_local_booter() -> None:
+    """Shut down managed local computer resources without creating a booter."""
+    global local_booter
+    if local_booter is None:
+        return
+    booter = local_booter
+    local_booter = None
+    try:
+        await booter.shutdown()
+    except Exception as exc:
+        logger.warning("[Computer] Failed to shut down local booter: %s", exc)

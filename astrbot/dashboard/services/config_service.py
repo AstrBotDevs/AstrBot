@@ -5,8 +5,10 @@ import copy
 import inspect
 import os
 import traceback
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from astrbot.core import file_token_service, logger
 from astrbot.core.computer import computer_client
@@ -456,13 +458,66 @@ class ConfigProfileService:
         }
 
     def get_system_config(self) -> dict:
-        return self.get_system_schema()
+        """Return the system configuration with the server's effective time.
+
+        Returns:
+            System configuration metadata, an aware UTC timestamp, and the
+            effective UTC offset in minutes.
+        """
+        data = self.get_system_schema()
+        server_utc_time = datetime.now(timezone.utc)
+        timezone_name = str(data["config"].get("timezone") or "").strip()
+        if timezone_name:
+            try:
+                configured_time = server_utc_time.astimezone(ZoneInfo(timezone_name))
+            except (ValueError, ZoneInfoNotFoundError):
+                configured_time = server_utc_time.astimezone()
+        else:
+            configured_time = server_utc_time.astimezone()
+        utc_offset = configured_time.utcoffset()
+        data["server_utc_time"] = server_utc_time.isoformat()
+        data["server_utc_offset_minutes"] = (
+            int(utc_offset.total_seconds() / 60) if utc_offset else 0
+        )
+        return data
 
     def list_profiles(self) -> dict:
         return {"info_list": self.acm.get_conf_list()}
 
-    async def create_profile(self, name: str | None, config: dict | None) -> dict:
-        conf_id = self.acm.create_conf(name=name, config=config or DEFAULT_CONFIG)
+    async def create_profile(
+        self,
+        name: str | None,
+        config: dict | None,
+        *,
+        allow_admin_id_change: bool = True,
+    ) -> dict:
+        """Create a config profile with explicit admin-ID permission.
+
+        Args:
+            name: Display name for the new profile.
+            config: Optional initial config content.
+            allow_admin_id_change: Whether caller may define non-default admin IDs.
+
+        Returns:
+            Identifier of the created config profile.
+
+        Raises:
+            ApiError: If caller attempts to define administrator IDs without scope.
+        """
+        if (
+            not allow_admin_id_change
+            and isinstance(config, dict)
+            and config.get("admins_id", DEFAULT_CONFIG.get("admins_id"))
+            != DEFAULT_CONFIG.get("admins_id")
+        ):
+            raise ApiError(
+                "config:edit_admin scope is required to change admins_id",
+                status_code=403,
+            )
+        conf_id = await self.acm.create_conf(
+            name=name,
+            config=config or DEFAULT_CONFIG,
+        )
         await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
         return {"conf_id": conf_id}
 
@@ -515,7 +570,23 @@ class ConfigProfileService:
         config: dict,
         *,
         two_factor_code: str | None = None,
+        allow_admin_id_change: bool = True,
     ) -> str | None:
+        """Update a config profile with explicit admin-ID permission.
+
+        Args:
+            config_id: Identifier of the profile to update.
+            config: Complete replacement config content.
+            two_factor_code: Optional TOTP code for protected dashboard changes.
+            allow_admin_id_change: Whether caller may change administrator IDs.
+
+        Returns:
+            Success message, optionally including a connectivity warning.
+
+        Raises:
+            ApiError: If admin IDs change without permission or TOTP is invalid.
+            ValueError: If the requested config profile does not exist.
+        """
         if config_id not in self.acm.confs:
             raise ValueError(f"Config file {config_id} does not exist")
         config = copy.deepcopy(config)
@@ -525,6 +596,15 @@ class ConfigProfileService:
                 config[key] = default_conf.get(key, [])
 
         current_config = self.acm.confs[config_id]
+        if (
+            not allow_admin_id_change
+            and "admins_id" in config
+            and config.get("admins_id") != current_config.get("admins_id")
+        ):
+            raise ApiError(
+                "config:edit_admin scope is required to change admins_id",
+                status_code=403,
+            )
         protected_2fa_changed = _protected_2fa_config_changed(current_config, config)
         if (
             is_totp_enabled(current_config)
@@ -602,33 +682,33 @@ class ConfigProfileService:
         booter["labels"] = options.copy()
         return metadata
 
-    def rename_profile(self, config_id: str, name: str | None) -> None:
-        if not self.acm.update_conf_info(config_id, name=name):
+    async def rename_profile(self, config_id: str, name: str | None) -> None:
+        if not await self.acm.update_conf_info(config_id, name=name):
             raise ValueError("Failed to update config profile")
 
-    def rename_profile_from_dashboard_payload(self, payload: object) -> str:
+    async def rename_profile_from_dashboard_payload(self, payload: object) -> str:
         data = payload if isinstance(payload, dict) else {}
         if not data:
             raise ValueError("缺少配置数据")
         conf_id = data.get("id")
         if not conf_id:
             raise ValueError("缺少配置文件 ID")
-        self.rename_profile(str(conf_id), name=data.get("name"))
+        await self.rename_profile(str(conf_id), name=data.get("name"))
         return "更新成功"
 
-    def delete_profile(self, config_id: str) -> None:
-        if not self.acm.delete_conf(config_id):
+    async def delete_profile(self, config_id: str) -> None:
+        if not await self.acm.delete_conf(config_id):
             raise ValueError("Failed to delete config profile")
         self.core_lifecycle.pipeline_scheduler_mapping.pop(config_id, None)
 
-    def delete_profile_from_dashboard_payload(self, payload: object) -> str:
+    async def delete_profile_from_dashboard_payload(self, payload: object) -> str:
         data = payload if isinstance(payload, dict) else {}
         if not data:
             raise ValueError("缺少配置数据")
         conf_id = data.get("id")
         if not conf_id:
             raise ValueError("缺少配置文件 ID")
-        self.delete_profile(str(conf_id))
+        await self.delete_profile(str(conf_id))
         return "删除成功"
 
 
@@ -1280,6 +1360,20 @@ class ProviderConfigService:
         self.config = core_lifecycle.astrbot_config
         self.provider_manager = core_lifecycle.provider_manager
 
+    @staticmethod
+    def _strip_legacy_reasoning_metadata(provider: dict) -> dict:
+        """Remove reasoning metadata accidentally stored as provider configuration.
+
+        Args:
+            provider: Provider configuration to sanitize in place.
+
+        Returns:
+            The sanitized provider configuration.
+        """
+        if provider.get("provider_source_id"):
+            provider.pop("reasoning", None)
+        return provider
+
     def get_provider_schema(self) -> dict:
         provider_metadata = ConfigMetadataI18n.convert_to_i18n_keys(
             {
@@ -1299,10 +1393,20 @@ class ProviderConfigService:
         for provider in provider_registry:
             if provider.default_config_tmpl:
                 provider_default_tmpl[provider.type] = provider.default_config_tmpl
+        providers = copy.deepcopy(self.config.get("provider", []))
+        from astrbot.core.utils.llm_metadata import LLM_METADATAS
+
+        model_metadata = {}
+        for provider in providers:
+            self._strip_legacy_reasoning_metadata(provider)
+            model_id = provider.get("model")
+            if isinstance(model_id, str) and model_id in LLM_METADATAS:
+                model_metadata[model_id] = LLM_METADATAS[model_id]
         return {
             "config_schema": config_schema,
-            "providers": self.config.get("provider", []),
+            "providers": providers,
             "provider_sources": self.config.get("provider_sources", []),
+            "model_metadata": model_metadata,
         }
 
     def list_provider_sources(self) -> dict:
@@ -1545,8 +1649,11 @@ class ProviderConfigService:
         source_id: str | None = None,
         enabled: bool | None = None,
     ) -> dict:
+        from astrbot.core.utils.llm_metadata import LLM_METADATAS
+
         provider_type = self._resolve_provider_type(capability)
         providers = []
+        model_metadata = {}
         source_provider_type = {
             source["id"]: source.get("provider_type", "chat_completion")
             for source in self.provider_manager.provider_sources_config
@@ -1564,12 +1671,17 @@ class ProviderConfigService:
             if provider_type and effective_type != provider_type:
                 continue
             if provider.get("provider_source_id"):
-                providers.append(
-                    self.provider_manager.get_merged_provider_config(provider)
+                provider_response = self.provider_manager.get_merged_provider_config(
+                    provider
                 )
             else:
-                providers.append(copy.deepcopy(provider))
-        return {"providers": providers}
+                provider_response = copy.deepcopy(provider)
+            self._strip_legacy_reasoning_metadata(provider_response)
+            model_id = provider_response.get("model")
+            if isinstance(model_id, str) and model_id in LLM_METADATAS:
+                model_metadata[model_id] = LLM_METADATAS[model_id]
+            providers.append(provider_response)
+        return {"providers": providers, "model_metadata": model_metadata}
 
     def list_providers_for_dashboard_types(
         self, provider_type: str | None
@@ -1599,17 +1711,28 @@ class ProviderConfigService:
         )
         if provider is None:
             raise ValueError(f"Provider {provider_id} not found")
-        return {"provider": provider}
+        provider_response = copy.deepcopy(provider)
+        self._strip_legacy_reasoning_metadata(provider_response)
+        from astrbot.core.utils.llm_metadata import LLM_METADATAS
+
+        model_id = provider_response.get("model")
+        model_metadata = {}
+        if isinstance(model_id, str) and model_id in LLM_METADATAS:
+            model_metadata[model_id] = LLM_METADATAS[model_id]
+        return {"provider": provider_response, "model_metadata": model_metadata}
 
     async def create_provider(self, config: dict, source_id: str | None = None) -> None:
         config = copy.deepcopy(config)
         if source_id:
             config["provider_source_id"] = source_id
+        self._strip_legacy_reasoning_metadata(config)
         await self.provider_manager.create_provider(config)
 
     async def update_provider(self, provider_id: str, config: dict) -> None:
+        config = copy.deepcopy(config)
         if not config.get("id"):
             config["id"] = provider_id
+        self._strip_legacy_reasoning_metadata(config)
         await self.provider_manager.update_provider(provider_id, config)
 
     async def set_provider_enabled(self, provider_id: str, enabled: bool) -> None:

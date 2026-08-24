@@ -8,9 +8,10 @@ from docs.scripts.update_openapi_json import (
     render_scope_reference,
 )
 
-
 SPEC_PATH = Path(__file__).resolve().parents[2] / "openspec" / "openapi-v1.yaml"
-PUBLIC_SPEC_PATH = Path(__file__).resolve().parents[2] / "docs" / "public" / "openapi.json"
+PUBLIC_SPEC_PATH = (
+    Path(__file__).resolve().parents[2] / "docs" / "public" / "openapi.json"
+)
 ZH_REFERENCE_PATH = (
     Path(__file__).resolve().parents[2] / "docs" / "zh" / "dev" / "openapi-scopes.md"
 )
@@ -23,12 +24,9 @@ def test_public_openapi_is_filtered_by_supported_scope() -> None:
     spec = filter_public_openapi(load_yaml(SPEC_PATH))
 
     assert "/api/v1/conversations" in spec["paths"]
-    assert spec["paths"]["/api/v1/conversations"]["get"][
-        "x-astrbot-scope"
-    ] == "data"
-    assert "/api/v1/commands" not in spec["paths"]
+    assert spec["paths"]["/api/v1/conversations"]["get"]["x-astrbot-scope"] == "data"
+    assert spec["paths"]["/api/v1/commands"]["get"]["x-astrbot-scope"] == "tool"
     assert "/api/v1/files/tokens/{file_token}" not in spec["paths"]
-    assert "/api/v1/stats/versions" not in spec["paths"]
 
     for methods in spec["paths"].values():
         for operation in methods.values():
@@ -42,14 +40,11 @@ def test_public_openapi_documents_sensitive_subscopes() -> None:
     chat_send = spec["paths"]["/api/v1/chat"]["post"]
     assert chat_send["x-astrbot-sensitive-scopes"] == ["chat:admin"]
     assert chat_send["description"] == (
-        "**Required scope:** `chat`\n\n"
-        "**Conditional sensitive scope:** `chat:admin`"
+        "**Required scope:** `chat`\n\n**Conditional sensitive scope:** `chat:admin`"
     )
 
     system_config_update = spec["paths"]["/api/v1/system-config"]["put"]
-    assert system_config_update["x-astrbot-sensitive-scopes"] == [
-        "config:edit_admin"
-    ]
+    assert system_config_update["x-astrbot-sensitive-scopes"] == ["config:edit_admin"]
     assert "`config:edit_admin`" in system_config_update["description"]
 
 

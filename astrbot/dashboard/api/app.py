@@ -252,7 +252,7 @@ def create_dashboard_asgi_app(
     app.include_router(legacy_t2i_router)
     app.include_router(legacy_personas_router)
     app.include_router(legacy_updates_router)
-    app.router.routes.extend(build_api_router().routes)
+    app.include_router(build_api_router())
     app.include_router(static_files_router)
     _materialize_included_routes(app)
     return app

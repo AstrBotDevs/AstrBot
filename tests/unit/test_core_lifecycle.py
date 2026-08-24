@@ -275,6 +275,7 @@ class TestAstrBotCoreLifecycleSandboxRestore:
         mock_umop_config_router = MagicMock()
         mock_umop_config_router.initialize = AsyncMock()
         mock_astrbot_config_mgr = MagicMock()
+        mock_astrbot_config_mgr.initialize = AsyncMock()
         mock_astrbot_config_mgr.default_conf = {}
         mock_astrbot_config_mgr.confs = {}
         mock_persona_mgr = MagicMock(initialize=AsyncMock())
@@ -287,7 +288,7 @@ class TestAstrBotCoreLifecycleSandboxRestore:
         mock_star_context = MagicMock(_register_tasks=[])
         mock_plugin_manager = MagicMock(reload=AsyncMock())
         mock_pipeline_scheduler = MagicMock(initialize=AsyncMock())
-        mock_astrbot_updator = MagicMock()
+        mock_astrbot_updater = MagicMock()
         mock_event_bus = MagicMock()
         with (
             patch("astrbot.core.core_lifecycle.astrbot_config", mock_astrbot_config),
@@ -340,8 +341,8 @@ class TestAstrBotCoreLifecycleSandboxRestore:
                 return_value=mock_pipeline_scheduler,
             ),
             patch(
-                "astrbot.core.core_lifecycle.AstrBotUpdator",
-                return_value=mock_astrbot_updator,
+                "astrbot.core.core_lifecycle.AstrBotUpdater",
+                return_value=mock_astrbot_updater,
             ),
             patch("astrbot.core.core_lifecycle.EventBus", return_value=mock_event_bus),
             patch("astrbot.core.core_lifecycle.migra", new_callable=AsyncMock),

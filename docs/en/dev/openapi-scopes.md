@@ -274,6 +274,29 @@ Manage plugins, plugin configuration, plugin sources, and marketplace data.
 | `POST` | `/api/v1/plugins/{plugin_id}/source` | — |
 | `POST` | `/api/v1/plugins/{plugin_id}/update` | — |
 
+## `kb`
+
+Manage knowledge bases and documents.
+
+| Method | Endpoint | Conditional sensitive sub-scope |
+| --- | --- | --- |
+| `GET` | `/api/v1/knowledge-bases` | — |
+| `POST` | `/api/v1/knowledge-bases` | — |
+| `GET` | `/api/v1/knowledge-bases/tasks/{task_id}` | — |
+| `GET` | `/api/v1/knowledge-bases/{kb_id}` | — |
+| `PUT` | `/api/v1/knowledge-bases/{kb_id}` | — |
+| `DELETE` | `/api/v1/knowledge-bases/{kb_id}` | — |
+| `GET` | `/api/v1/knowledge-bases/{kb_id}/chunks` | — |
+| `DELETE` | `/api/v1/knowledge-bases/{kb_id}/chunks/{chunk_id}` | — |
+| `GET` | `/api/v1/knowledge-bases/{kb_id}/documents` | — |
+| `POST` | `/api/v1/knowledge-bases/{kb_id}/documents` | — |
+| `POST` | `/api/v1/knowledge-bases/{kb_id}/documents/import` | — |
+| `POST` | `/api/v1/knowledge-bases/{kb_id}/documents/import-url` | — |
+| `GET` | `/api/v1/knowledge-bases/{kb_id}/documents/{document_id}` | — |
+| `DELETE` | `/api/v1/knowledge-bases/{kb_id}/documents/{document_id}` | — |
+| `POST` | `/api/v1/knowledge-bases/{kb_id}/retrieve` | — |
+| `GET` | `/api/v1/knowledge-bases/{kb_id}/stats` | — |
+
 ## `mcp`
 
 Manage MCP server configuration and provider synchronization.
@@ -291,6 +314,13 @@ Manage MCP server configuration and provider synchronization.
 | `DELETE` | `/api/v1/mcp/servers/{server_name}` | — |
 | `PATCH` | `/api/v1/mcp/servers/{server_name}/enabled` | — |
 | `POST` | `/api/v1/mcp/servers/{server_name}/test` | — |
+
+## `sandbox`
+
+Manage runtime sandboxes and execute sandbox operations.
+
+| Method | Endpoint | Conditional sensitive sub-scope |
+| --- | --- | --- |
 
 ## `skill`
 
@@ -322,3 +352,67 @@ Manage Skills, archives, files, and Shipyard Neo Skill workflows.
 | `GET` | `/api/v1/skills/{skill_name}/files` | — |
 | `GET` | `/api/v1/skills/{skill_name}/files/{file_path}` | — |
 | `PUT` | `/api/v1/skills/{skill_name}/files/{file_path}` | — |
+
+## `system`
+
+Access system status and administrative system operations.
+
+| Method | Endpoint | Conditional sensitive sub-scope |
+| --- | --- | --- |
+| `GET` | `/api/v1/api-keys` | — |
+| `POST` | `/api/v1/api-keys` | — |
+| `DELETE` | `/api/v1/api-keys/{key_id}` | — |
+| `POST` | `/api/v1/api-keys/{key_id}/revoke` | — |
+| `PATCH` | `/api/v1/auth/account` | — |
+| `POST` | `/api/v1/auth/totp/recovery` | — |
+| `POST` | `/api/v1/auth/totp/setup` | — |
+| `GET` | `/api/v1/backups` | — |
+| `POST` | `/api/v1/backups` | — |
+| `GET` | `/api/v1/backups/tasks/{task_id}` | — |
+| `POST` | `/api/v1/backups/upload` | — |
+| `POST` | `/api/v1/backups/upload/abort` | — |
+| `POST` | `/api/v1/backups/upload/chunk` | — |
+| `POST` | `/api/v1/backups/upload/complete` | — |
+| `POST` | `/api/v1/backups/upload/init` | — |
+| `PATCH` | `/api/v1/backups/{filename}` | — |
+| `DELETE` | `/api/v1/backups/{filename}` | — |
+| `POST` | `/api/v1/backups/{filename}/check` | — |
+| `POST` | `/api/v1/backups/{filename}/import` | — |
+| `GET` | `/api/v1/changelogs` | — |
+| `GET` | `/api/v1/changelogs/{version}` | — |
+| `GET` | `/api/v1/cron/jobs` | — |
+| `POST` | `/api/v1/cron/jobs` | — |
+| `PATCH` | `/api/v1/cron/jobs/{job_id}` | — |
+| `DELETE` | `/api/v1/cron/jobs/{job_id}` | — |
+| `POST` | `/api/v1/cron/jobs/{job_id}/run` | — |
+| `GET` | `/api/v1/logs/history` | — |
+| `GET` | `/api/v1/logs/live` | — |
+| `POST` | `/api/v1/pip/install` | — |
+| `GET` | `/api/v1/stats` | — |
+| `GET` | `/api/v1/stats/first-notice` | — |
+| `POST` | `/api/v1/stats/ghproxy/test` | — |
+| `GET` | `/api/v1/stats/provider-tokens` | — |
+| `GET` | `/api/v1/stats/storage` | — |
+| `POST` | `/api/v1/stats/storage/cleanup` | — |
+| `GET` | `/api/v1/stats/version` | — |
+| `POST` | `/api/v1/system/restart` | — |
+| `GET` | `/api/v1/trace/settings` | — |
+| `PUT` | `/api/v1/trace/settings` | — |
+| `GET` | `/api/v1/updates/check` | — |
+| `POST` | `/api/v1/updates/core` | — |
+| `POST` | `/api/v1/updates/dashboard` | — |
+| `GET` | `/api/v1/updates/progress/{task_id}` | — |
+| `GET` | `/api/v1/updates/releases` | — |
+
+## `tool`
+
+Manage LLM tools, commands, and tool permissions.
+
+| Method | Endpoint | Conditional sensitive sub-scope |
+| --- | --- | --- |
+| `GET` | `/api/v1/commands` | — |
+| `GET` | `/api/v1/commands/conflicts` | — |
+| `PATCH` | `/api/v1/commands/{command_id}` | — |
+| `GET` | `/api/v1/tools` | — |
+| `PATCH` | `/api/v1/tools/{tool_id}/enabled` | — |
+| `PATCH` | `/api/v1/tools/{tool_id}/permission` | — |
