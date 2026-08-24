@@ -431,6 +431,84 @@ async def test_background_wakeup_passes_provider_settings_to_main_agent(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("provider_settings", "expected_max_step"),
+    [
+        pytest.param({"max_agent_step": 50}, 50, id="configured"),
+        pytest.param({}, 30, id="missing_falls_back_to_default"),
+        pytest.param({"max_agent_step": True}, 30, id="boolean_falls_back_to_default"),
+        pytest.param({"max_agent_step": "50"}, 50, id="numeric_string_coerced"),
+    ],
+)
+async def test_background_wakeup_applies_max_agent_step(
+    monkeypatch: pytest.MonkeyPatch,
+    provider_settings: dict,
+    expected_max_step: int,
+):
+    class _StepCapturingRunner:
+        def __init__(self):
+            self.captured_max_step = None
+
+        async def step_until_done(self, max_step):
+            self.captured_max_step = max_step
+            if False:
+                yield
+
+        def get_final_llm_resp(self):
+            return SimpleNamespace(role="assistant", completion_text="done")
+
+    runner = _StepCapturingRunner()
+
+    async def _fake_get_session_conv(**_kwargs):
+        return SimpleNamespace(history="[]")
+
+    async def _fake_build_main_agent(**_kwargs):
+        return SimpleNamespace(agent_runner=runner)
+
+    monkeypatch.setattr(
+        "astrbot.core.astr_main_agent._get_session_conv",
+        _fake_get_session_conv,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_main_agent.build_main_agent",
+        _fake_build_main_agent,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_tool_exec.persist_agent_history",
+        AsyncMock(),
+    )
+
+    send_tool = FunctionTool(
+        name="send_message_to_user",
+        description="send",
+        parameters={"type": "object", "properties": {}},
+    )
+    context = SimpleNamespace(
+        get_config=lambda **_kwargs: {"provider_settings": dict(provider_settings)},
+        get_llm_tool_manager=lambda: SimpleNamespace(
+            get_builtin_tool=lambda _tool_cls: send_tool
+        ),
+        conversation_manager=SimpleNamespace(),
+    )
+    run_context = ContextWrapper(
+        context=SimpleNamespace(event=_DummyEvent([]), context=context),
+        tool_call_timeout=120,
+    )
+
+    await FunctionToolExecutor._wake_main_agent_for_background_result(
+        run_context,
+        task_id="task-id",
+        tool_name="long_tool",
+        result_text="ok",
+        tool_args={},
+        note="task finished",
+        summary_name="BackgroundTask",
+    )
+
+    assert runner.captured_max_step == expected_max_step
+
+
+@pytest.mark.asyncio
 async def test_collect_handoff_image_urls_filters_extensionless_file_outside_temp_root(
     monkeypatch: pytest.MonkeyPatch,
 ):
