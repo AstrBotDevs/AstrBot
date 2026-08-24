@@ -22,7 +22,10 @@ class SessionStatusCheckStage(Stage):
     ) -> None | AsyncGenerator[None, None]:
         # 检查会话是否整体启用
         if not await SessionServiceManager.is_session_enabled(event.unified_msg_origin):
-            logger.debug(f"会话 {event.unified_msg_origin} 已被关闭，已终止事件传播。")
+            logger.debug(
+                f"Session {event.unified_msg_origin} is disabled; event propagation "
+                "was stopped."
+            )
 
             # workaround for #2309
             conv_id = await self.conv_mgr.get_curr_conversation_id(

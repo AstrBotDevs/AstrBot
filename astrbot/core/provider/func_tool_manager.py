@@ -12,6 +12,7 @@ from types import MappingProxyType
 from typing import Any
 
 import aiohttp
+from deprecated import deprecated
 
 from astrbot import logger
 from astrbot.core import sp
@@ -245,7 +246,7 @@ class _PermissionGuardedTool(FunctionTool):
     async def call(self, context: Any, **kwargs: Any) -> Any:
         import inspect as _inspect
 
-        error = self._mgr._check_tool_permission(self.name, context)
+        error = await self._mgr._check_tool_permission(self.name, context)
         if error is not None:
             return error
 
@@ -328,6 +329,7 @@ class FunctionToolManager:
         return self._mcp_server_runtime_view
 
     @property
+    @deprecated(reason="Use mcp_server_runtime_view instead.")
     def mcp_server_runtime(self) -> Mapping[str, _MCPServerRuntime]:
         """Backward-compatible read-only view (deprecated). Do not mutate.
 
@@ -467,7 +469,7 @@ class FunctionToolManager:
         Builtin tools are never routed through this method."""
         return "member"
 
-    def _check_tool_permission(
+    async def _check_tool_permission(
         self,
         tool_name: str,
         context: Any,
@@ -479,9 +481,7 @@ class FunctionToolManager:
         no explicit entry exists the tool inherits the fallback
         ``_default_permission``."""
         try:
-            perms_raw = sp.get(
-                "tool_permissions", {}, scope="global", scope_id="global"
-            )
+            perms_raw = await sp.global_get("tool_permissions", {})
         except Exception:
             perms_raw = {}
         defaults = perms_raw.get("_default", {}) if isinstance(perms_raw, dict) else {}
@@ -735,8 +735,21 @@ class FunctionToolManager:
                 logger.debug(f"MCP client {name} task was cancelled")
                 raise
             finally:
-                # Cleanup in the same task that entered the anyio contexts
-                await asyncio.shield(self._terminate_mcp_client(name))
+                # Cleanup in the same task that entered the anyio contexts:
+                # asyncio.shield() would schedule the coroutine as a separate
+                # Task, and anyio cancel scopes cannot exit across tasks (#9068).
+                # Absorb late cancellations so a forced shutdown cannot abort
+                # the cleanup halfway.
+                task = asyncio.current_task()
+                while True:
+                    try:
+                        await self._terminate_mcp_client(name)
+                        break
+                    except asyncio.CancelledError:
+                        # Task.uncancel() is 3.11+; on 3.10 absorbing the
+                        # cancellation is sufficient.
+                        if task is not None and hasattr(task, "uncancel"):
+                            task.uncancel()
 
         lifecycle_task = asyncio.create_task(
             connect_and_lifecycle(), name=f"mcp-client:{name}"
@@ -982,6 +995,7 @@ class FunctionToolManager:
         toolset = ToolSet(tools)
         return toolset.google_schema()
 
+    @deprecated(reason="Use deactivate_llm_tool_async() instead.")
     def deactivate_llm_tool(self, name: str) -> bool:
         """停用一个已经注册的函数调用工具。
 
@@ -1011,7 +1025,39 @@ class FunctionToolManager:
             return True
         return False
 
+    async def deactivate_llm_tool_async(self, name: str) -> bool:
+        """Asynchronously deactivate a registered function-calling tool.
+
+        Args:
+            name: Tool name.
+
+        Returns:
+            True when the tool was deactivated, or False when it was not found.
+        """
+        func_tool = self.get_func(name)
+        if func_tool is not None:
+            func_tool.active = False
+
+            inactivated_llm_tools: list = await sp.get_async(
+                "global",
+                "global",
+                "inactivated_llm_tools",
+                [],
+            )
+            if name not in inactivated_llm_tools:
+                inactivated_llm_tools.append(name)
+                await sp.put_async(
+                    "global",
+                    "global",
+                    "inactivated_llm_tools",
+                    inactivated_llm_tools,
+                )
+
+            return True
+        return False
+
     # 因为不想解决循环引用，所以这里直接传入 star_map 先了...
+    @deprecated(reason="Use activate_llm_tool_async() instead.")
     def activate_llm_tool(self, name: str, star_map: dict) -> bool:
         func_tool = self.get_func(name)
         if func_tool is not None:
@@ -1036,6 +1082,47 @@ class FunctionToolManager:
                     inactivated_llm_tools,
                     scope="global",
                     scope_id="global",
+                )
+
+            return True
+        return False
+
+    async def activate_llm_tool_async(self, name: str, star_map: dict) -> bool:
+        """Asynchronously activate a registered function-calling tool.
+
+        Args:
+            name: Tool name.
+            star_map: Loaded plugins indexed by module path.
+
+        Returns:
+            True when the tool was activated, or False when it was not found.
+
+        Raises:
+            ValueError: If the plugin that owns the tool is disabled.
+        """
+        func_tool = self.get_func(name)
+        if func_tool is not None:
+            if func_tool.handler_module_path in star_map:
+                if not star_map[func_tool.handler_module_path].activated:
+                    raise ValueError(
+                        f"此函数调用工具所属的插件 {star_map[func_tool.handler_module_path].name} 已被禁用，请先在管理面板启用再激活此工具。",
+                    )
+
+            func_tool.active = True
+
+            inactivated_llm_tools: list = await sp.get_async(
+                "global",
+                "global",
+                "inactivated_llm_tools",
+                [],
+            )
+            if name in inactivated_llm_tools:
+                inactivated_llm_tools.remove(name)
+                await sp.put_async(
+                    "global",
+                    "global",
+                    "inactivated_llm_tools",
+                    inactivated_llm_tools,
                 )
 
             return True

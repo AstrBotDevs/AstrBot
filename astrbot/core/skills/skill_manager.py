@@ -16,6 +16,7 @@ from pathlib import Path, PurePosixPath
 import yaml
 
 from astrbot.core.utils.astrbot_path import (
+    get_astrbot_builtin_plugin_path,
     get_astrbot_data_path,
     get_astrbot_plugin_path,
     get_astrbot_skills_path,
@@ -114,6 +115,7 @@ class SkillInfo:
     sandbox_exists: bool = False
     plugin_name: str = ""
     readonly: bool = False
+    preset: bool = False
 
 
 def _parse_frontmatter_description(text: str) -> str:
@@ -303,16 +305,36 @@ class SkillManager:
         self.sandbox_skills_cache_path = str(data_path / SANDBOX_SKILLS_CACHE_FILENAME)
         os.makedirs(self.skills_root, exist_ok=True)
 
-    def _iter_plugin_skill_dirs(self) -> list[tuple[str, str, Path]]:
-        """Return plugin-provided skill directories as (skill, plugin, dir)."""
+    def _iter_plugin_skill_dirs(self) -> list[tuple[str, str, Path, bool]]:
+        """Return plugin-provided skill directories and preset status."""
+        plugin_dirs: list[tuple[Path, bool]] = []
         plugins_root = Path(self.plugins_root)
-        if not plugins_root.is_dir():
-            return []
+        if plugins_root.is_dir():
+            plugin_dirs.extend(
+                (plugin_dir, False)
+                for plugin_dir in plugins_root.iterdir()
+                if plugin_dir.is_dir()
+            )
 
-        result: list[tuple[str, str, Path]] = []
-        for plugin_dir in sorted(plugins_root.iterdir(), key=lambda item: item.name):
-            if not plugin_dir.is_dir():
-                continue
+        from astrbot.core.star.star import star_registry
+
+        builtin_plugins_root = Path(get_astrbot_builtin_plugin_path())
+        builtin_plugin_names = {
+            metadata.root_dir_name
+            for metadata in star_registry
+            if metadata.reserved and metadata.root_dir_name
+        }
+        plugin_dirs.extend(
+            (builtin_plugins_root / plugin_name, True)
+            for plugin_name in builtin_plugin_names
+            if (builtin_plugins_root / plugin_name).is_dir()
+        )
+
+        result: list[tuple[str, str, Path, bool]] = []
+        for plugin_dir, preset in sorted(
+            plugin_dirs,
+            key=lambda item: (not item[1], item[0].name),
+        ):
             plugin_name = plugin_dir.name
             skills_dir = plugin_dir / "skills"
             if not skills_dir.is_dir():
@@ -323,7 +345,7 @@ class SkillManager:
                 rename_legacy=False,
             )
             if direct_skill_md is not None and _SKILL_NAME_RE.match(plugin_name):
-                result.append((plugin_name, plugin_name, skills_dir))
+                result.append((plugin_name, plugin_name, skills_dir, preset))
 
             for skill_dir in sorted(skills_dir.iterdir(), key=lambda item: item.name):
                 if not skill_dir.is_dir():
@@ -336,11 +358,16 @@ class SkillManager:
                     is None
                 ):
                     continue
-                result.append((skill_name, plugin_name, skill_dir))
+                result.append((skill_name, plugin_name, skill_dir, preset))
         return result
 
     def _get_plugin_skill_dir(self, name: str) -> Path | None:
-        for skill_name, _plugin_name, skill_dir in self._iter_plugin_skill_dirs():
+        for (
+            skill_name,
+            _plugin_name,
+            skill_dir,
+            _preset,
+        ) in self._iter_plugin_skill_dirs():
             if skill_name == name:
                 return skill_dir
         return None
@@ -650,7 +677,12 @@ class SkillManager:
                 sandbox_exists=sandbox_exists,
             )
 
-        for skill_name, plugin_name, skill_dir in self._iter_plugin_skill_dirs():
+        for (
+            skill_name,
+            plugin_name,
+            skill_dir,
+            preset,
+        ) in self._iter_plugin_skill_dirs():
             if skill_name in skills_by_name:
                 continue
             skill_md = _normalize_skill_markdown_path(skill_dir, rename_legacy=False)
@@ -688,6 +720,7 @@ class SkillManager:
                 sandbox_exists=sandbox_exists,
                 plugin_name=plugin_name,
                 readonly=True,
+                preset=preset,
             )
 
         if runtime == "sandbox":

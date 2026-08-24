@@ -14,9 +14,11 @@ Behavior when `provider_settings.computer_use_require_admin=True`:
   implement them and the main agent does not expose them in local mode.
 - Member + local: read/grep are restricted to `data/skills`,
   plugin-provided `data/plugins/*/skills`,
+  built-in plugin `astrbot/builtin_stars/*/skills`,
   the current session or project workspace, and `/tmp/.astrbot`; write/edit are
-  restricted to the same local roots except plugin-provided Skills, which are
-  read-only. Upload/download are denied by `check_admin_permission` if invoked.
+  restricted to the current workspace and temporary directories. Globally
+  installed and plugin-provided Skills are read-only. Upload/download are denied
+  by `check_admin_permission` if invoked.
 - Admin + sandbox: read/write/edit/grep are not path-restricted by this
   module;
   sandbox filesystem boundaries are enforced by the sandbox runtime. Upload and
@@ -47,6 +49,7 @@ from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.computer.file_read_utils import read_file_tool_result
 from astrbot.core.message.components import File, Image
 from astrbot.core.utils.astrbot_path import (
+    get_astrbot_builtin_plugin_path,
     get_astrbot_plugin_path,
     get_astrbot_skills_path,
     get_astrbot_system_tmp_path,
@@ -80,15 +83,19 @@ def _remote_basename(path: str) -> str:
 def _restricted_env_path_labels(
     umo: str,
     *,
-    include_plugin_skills: bool,
+    include_global_skills: bool,
     current_workspace_root: Path | None = None,
 ) -> list[str]:
     """Labels for the allowed directories in a local(not sandbox) and restricted(not admin) environment"""
-    labels = [
-        "data/skills",
-    ]
-    if include_plugin_skills:
-        labels.append("data/plugins/*/skills")
+    labels = []
+    if include_global_skills:
+        labels.extend(
+            [
+                "data/skills",
+                "data/plugins/*/skills",
+                "astrbot/builtin_stars/*/skills",
+            ]
+        )
     labels.extend(
         [
             str(current_workspace_root or _workspace_root(umo)),
@@ -111,14 +118,19 @@ def _workspace_root(umo: str) -> Path:
 
 
 def _plugin_skill_roots() -> tuple[Path, ...]:
-    plugins_root = Path(get_astrbot_plugin_path())
-    if not plugins_root.exists():
-        return ()
-    return tuple(
-        (plugin_dir / "skills").resolve(strict=False)
-        for plugin_dir in plugins_root.iterdir()
-        if plugin_dir.is_dir() and (plugin_dir / "skills").is_dir()
-    )
+    roots: list[Path] = []
+    for plugins_root in (
+        Path(get_astrbot_plugin_path()),
+        Path(get_astrbot_builtin_plugin_path()),
+    ):
+        if not plugins_root.is_dir():
+            continue
+        roots.extend(
+            (plugin_dir / "skills").resolve(strict=False)
+            for plugin_dir in plugins_root.iterdir()
+            if plugin_dir.is_dir() and (plugin_dir / "skills").is_dir()
+        )
+    return tuple(roots)
 
 
 def _read_allowed_roots(
@@ -139,9 +151,8 @@ def _write_allowed_roots(
     umo: str,
     current_workspace_root: Path | None = None,
 ) -> tuple[Path, ...]:
-    """Non-admin users cannot modify plugin-provided Skills."""
+    """Non-admin users can modify only workspace and temporary files."""
     return (
-        Path(get_astrbot_skills_path()).resolve(strict=False),
         current_workspace_root or _workspace_root(umo),
         Path(get_astrbot_system_tmp_path()).resolve(strict=False),
         Path(get_astrbot_temp_path()).resolve(strict=False),
@@ -268,7 +279,7 @@ def _normalize_rw_path(
         allowed = ", ".join(
             _restricted_env_path_labels(
                 umo,
-                include_plugin_skills=not write,
+                include_global_skills=not write,
                 current_workspace_root=current_workspace_root,
             )
         )
@@ -702,7 +713,7 @@ class GrepTool(FunctionTool):
                 allowed = ", ".join(
                     _restricted_env_path_labels(
                         umo,
-                        include_plugin_skills=True,
+                        include_global_skills=True,
                         current_workspace_root=current_workspace_root,
                     )
                 )

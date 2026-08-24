@@ -20,7 +20,7 @@ from astrbot.dashboard.services.chat_service import (
     ChatServiceError,
 )
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, ScopeDependency, require_dashboard_user
 from .multipart import single_upload
 
 router = APIRouter(tags=["Chat"])
@@ -35,8 +35,7 @@ def get_service(request: Request) -> ChatService:
     return request.app.state.services.chat
 
 
-async def require_chat_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "chat")
+require_chat_scope = ScopeDependency("chat")
 
 
 async def _json_or_empty(request: Request) -> dict[str, Any]:
@@ -176,6 +175,28 @@ async def stop_chat_session(
     service: ChatService = Depends(get_service),
 ):
     return await _run(lambda: service.stop_session(auth.username, session_id))
+
+
+@router.get("/chat/runs/{run_id}/stream")
+async def resume_chat_run(
+    run_id: str,
+    auth: AuthContext = Depends(require_chat_scope),
+    service: ChatService = Depends(get_service),
+):
+    try:
+        stream = await service.build_chat_run_stream(auth.username, run_id)
+    except ChatServiceError:
+        return JSONResponse(error("Chat run is unavailable"))
+
+    return StreamingResponse(
+        stream,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Transfer-Encoding": "chunked",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @router.patch("/chat/sessions/{session_id}/messages/{message_id}")

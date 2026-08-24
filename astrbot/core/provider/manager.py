@@ -5,6 +5,8 @@ import traceback
 from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
+from deprecated import deprecated
+
 from astrbot.core import astrbot_config, logger, sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
@@ -50,28 +52,28 @@ class ProviderManager:
         self.default_persona_name = persona_mgr.default_persona
 
         self.provider_insts: list[Provider] = []
-        """加载的 Provider 的实例"""
+        """Loaded Provider instances."""
         self.stt_provider_insts: list[STTProvider] = []
-        """加载的 Speech To Text Provider 的实例"""
+        """Loaded speech-to-text Provider instances."""
         self.tts_provider_insts: list[TTSProvider] = []
-        """加载的 Text To Speech Provider 的实例"""
+        """Loaded text-to-speech Provider instances."""
         self.embedding_provider_insts: list[EmbeddingProvider] = []
-        """加载的 Embedding Provider 的实例"""
+        """Loaded Embedding Provider instances."""
         self.rerank_provider_insts: list[RerankProvider] = []
-        """加载的 Rerank Provider 的实例"""
+        """Loaded Rerank Provider instances."""
         self.inst_map: dict[
             str,
             Providers,
         ] = {}
-        """Provider 实例映射. key: provider_id, value: Provider 实例"""
+        """Provider instance map. Key: provider_id; value: Provider instance."""
         self.llm_tools = llm_tools
 
         self.curr_provider_inst: Provider | None = None
-        """默认的 Provider 实例。已弃用，请使用 get_using_provider() 方法获取当前使用的 Provider 实例。"""
+        """Default Provider instance. Deprecated; use get_using_provider()."""
         self.curr_stt_provider_inst: STTProvider | None = None
-        """默认的 Speech To Text Provider 实例。已弃用，请使用 get_using_provider() 方法获取当前使用的 Provider 实例。"""
+        """Default speech-to-text Provider. Deprecated; use get_using_provider()."""
         self.curr_tts_provider_inst: TTSProvider | None = None
-        """默认的 Text To Speech Provider 实例。已弃用，请使用 get_using_provider() 方法获取当前使用的 Provider 实例。"""
+        """Default text-to-speech Provider. Deprecated; use get_using_provider()."""
         self.db_helper = db_helper
         self._provider_change_callback: (
             Callable[[str, ProviderType, str | None], None] | None
@@ -107,7 +109,7 @@ class ProviderManager:
                 self._provider_change_callback(provider_id, provider_type, umo)
             except Exception as e:
                 logger.warning(
-                    "调用 provider 变更回调失败: provider_id=%s, type=%s, err=%s",
+                    "Provider change callback failed: provider_id=%s, type=%s, err=%s",
                     provider_id,
                     provider_type,
                     safe_error("", e),
@@ -119,7 +121,7 @@ class ProviderManager:
                 hook(provider_id, provider_type, umo)
             except Exception as e:
                 logger.warning(
-                    "调用 provider 变更钩子失败: provider_id=%s, type=%s, err=%s",
+                    "Provider change hook failed: provider_id=%s, type=%s, err=%s",
                     provider_id,
                     provider_type,
                     safe_error("", e),
@@ -136,6 +138,7 @@ class ProviderManager:
         return self.persona_mgr.personas_v3
 
     @property
+    @deprecated(reason="Use persona_mgr.get_default_persona_v3() instead.")
     def selected_default_persona(self):
         """动态获取最新的默认选中 persona。已弃用，请使用 context.persona_mgr.get_default_persona_v3()"""
         return self.persona_mgr.selected_default_persona_v3
@@ -157,7 +160,9 @@ class ProviderManager:
 
         """
         if provider_id not in self.inst_map:
-            raise ValueError(f"提供商 {provider_id} 不存在，无法设置。")
+            raise ValueError(
+                f"Provider {provider_id} does not exist and cannot be set."
+            )
         if umo:
             await sp.session_put(
                 umo,
@@ -210,30 +215,27 @@ class ProviderManager:
         """根据提供商 ID 获取提供商实例"""
         return self.inst_map.get(provider_id)
 
-    def get_using_provider(
-        self, provider_type: ProviderType, umo=None
+    def _resolve_using_provider(
+        self,
+        provider_type: ProviderType,
+        umo: str | None,
+        provider_id: str | None,
     ) -> Providers | None:
-        """获取正在使用的提供商实例。
+        """Resolve a provider preference with configuration fallbacks.
 
         Args:
-            provider_type (ProviderType): 提供商类型。
-            umo (str, optional): 用户会话 ID，用于提供商会话隔离。
+            provider_type: Provider type to resolve.
+            umo: User message origin used to load session configuration.
+            provider_id: Preferred provider ID, if one is configured.
 
         Returns:
-            Provider: 正在使用的提供商实例。
+            Resolved provider instance, or None when the provider type is disabled
+            or no provider is available.
 
+        Raises:
+            ValueError: If provider_type is unsupported.
         """
-        provider = None
-        provider_id = None
-        if umo:
-            provider_id = sp.get(
-                f"provider_perf_{provider_type.value}",
-                None,
-                scope="umo",
-                scope_id=umo,
-            )
-            if provider_id:
-                provider = self.inst_map.get(provider_id)
+        provider = self.inst_map.get(provider_id) if provider_id else None
         if not provider:
             # default setting
             config = self.acm.get_conf(umo)
@@ -269,10 +271,60 @@ class ProviderManager:
 
         if not provider and provider_id:
             logger.warning(
-                f"没有找到 ID 为 {provider_id} 的提供商，这可能是由于您修改了提供商（模型）ID 导致的。"
+                f"Provider {provider_id} was not found. Its provider or model ID "
+                "may have been changed."
             )
 
         return provider
+
+    @deprecated(reason="Use get_using_provider_async() instead.")
+    def get_using_provider(
+        self,
+        provider_type: ProviderType,
+        umo: str | None = None,
+    ) -> Providers | None:
+        """获取正在使用的提供商实例。
+
+        Args:
+            provider_type: 提供商类型。
+            umo: 用户会话 ID，用于提供商会话隔离。
+
+        Returns:
+            正在使用的提供商实例。
+        """
+        provider_id = None
+        if umo:
+            provider_id = sp.get(
+                f"provider_perf_{provider_type.value}",
+                None,
+                scope="umo",
+                scope_id=umo,
+            )
+        return self._resolve_using_provider(provider_type, umo, provider_id)
+
+    async def get_using_provider_async(
+        self,
+        provider_type: ProviderType,
+        umo: str | None = None,
+    ) -> Providers | None:
+        """Asynchronously get the provider currently in use.
+
+        Args:
+            provider_type: Provider type to resolve.
+            umo: User message origin used for session-specific preferences.
+
+        Returns:
+            Provider instance currently in use, or None if unavailable.
+        """
+        provider_id = None
+        if umo:
+            provider_id = await sp.get_async(
+                "umo",
+                umo,
+                f"provider_perf_{provider_type.value}",
+                None,
+            )
+        return self._resolve_using_provider(provider_type, umo, provider_id)
 
     async def initialize(self) -> None:
         # 逐个初始化提供商
@@ -361,6 +413,10 @@ class ProviderManager:
                 from .sources.openai_source import (
                     ProviderOpenAIOfficial as ProviderOpenAIOfficial,
                 )
+            case "openai_responses":
+                from .sources.openai_responses_source import (
+                    ProviderOpenAIResponses as ProviderOpenAIResponses,
+                )
             case "longcat_chat_completion":
                 from .sources.longcat_source import ProviderLongCat as ProviderLongCat
             case "minimax_token_plan":
@@ -386,6 +442,10 @@ class ProviderManager:
             case "openrouter_chat_completion":
                 from .sources.openrouter_source import (
                     ProviderOpenRouter as ProviderOpenRouter,
+                )
+            case "ssycloud_chat_completion":
+                from .sources.ssycloud_source import (
+                    ProviderSSYCloud as ProviderSSYCloud,
                 )
             case "anthropic_chat_completion":
                 from .sources.anthropic_source import (
@@ -487,6 +547,10 @@ class ProviderManager:
                 from .sources.ollama_embedding_source import (
                     OllamaEmbeddingProvider as OllamaEmbeddingProvider,
                 )
+            case "dashscope_embedding":
+                from .sources.dashscope_embedding_source import (
+                    DashScopeEmbeddingProvider as DashScopeEmbeddingProvider,
+                )
             case "vllm_rerank":
                 from .sources.vllm_rerank_source import (
                     VLLMRerankProvider as VLLMRerankProvider,
@@ -502,6 +566,10 @@ class ProviderManager:
             case "nvidia_rerank":
                 from .sources.nvidia_rerank_source import (
                     NvidiaRerankProvider as NvidiaRerankProvider,
+                )
+            case "tei_rerank":
+                from .sources.tei_rerank_source import (
+                    TEIRerankProvider as TEIRerankProvider,
                 )
 
     def get_merged_provider_config(self, provider_config: dict) -> dict:
@@ -562,7 +630,9 @@ class ProviderManager:
                     if env_val is None:
                         provider_id = provider_config.get("id")
                         logger.warning(
-                            f"Provider {provider_id} 配置项 key[{idx}] 使用环境变量 {env_key} 但未设置。",
+                            f"Provider {provider_id} configuration key[{idx}] "
+                            f"references environment variable {env_key}, but it is "
+                            "not set.",
                         )
                         resolved_keys.append("")
                     else:
@@ -606,13 +676,15 @@ class ProviderManager:
             self.dynamic_import_provider(provider_config["type"])
         except (ImportError, ModuleNotFoundError) as e:
             logger.critical(
-                f"加载 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}。可能是因为有未安装的依赖。",
+                f"Failed to load provider adapter {provider_config['type']}"
+                f"({provider_config['id']}): {e}. A dependency may be missing.",
                 exc_info=True,
             )
             return
         except Exception as e:
             logger.critical(
-                f"加载 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}。未知原因",
+                f"Failed to load provider adapter {provider_config['type']}"
+                f"({provider_config['id']}): {e}. Unknown cause.",
                 exc_info=True,
             )
             return
@@ -629,7 +701,7 @@ class ProviderManager:
             # 按任务实例化提供商
             cls_type = provider_metadata.cls_type
             if not cls_type:
-                logger.error(f"无法找到 {provider_metadata.type} 的类")
+                logger.error(f"Could not find a class for {provider_metadata.type}")
                 return
 
             provider_metadata.id = provider_config["id"]
@@ -729,16 +801,18 @@ class ProviderManager:
                     # 未知供应商抛出异常，确保inst初始化
                     # Should be unreachable
                     raise Exception(
-                        f"未知的提供商类型：{provider_metadata.provider_type}"
+                        f"Unknown provider type: {provider_metadata.provider_type}"
                     )
 
             self.inst_map[provider_config["id"]] = inst
         except Exception as e:
             logger.error(
-                f"实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}",
+                f"Failed to instantiate provider adapter {provider_config['type']}"
+                f"({provider_config['id']}): {e}",
             )
             raise Exception(
-                f"实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}",
+                f"Failed to instantiate provider adapter {provider_config['type']}"
+                f"({provider_config['id']}): {e}",
             )
 
     async def reload(self, provider_config: dict) -> None:
@@ -761,7 +835,8 @@ class ProviderManager:
             elif self.curr_provider_inst is None and len(self.provider_insts) > 0:
                 self.curr_provider_inst = self.provider_insts[0]
                 logger.info(
-                    f"自动选择 {self.curr_provider_inst.meta().id} 作为当前提供商适配器。",
+                    f"Automatically selected {self.curr_provider_inst.meta().id} "
+                    "as the current provider adapter.",
                 )
 
             if len(self.stt_provider_insts) == 0:
@@ -771,7 +846,8 @@ class ProviderManager:
             ):
                 self.curr_stt_provider_inst = self.stt_provider_insts[0]
                 logger.info(
-                    f"自动选择 {self.curr_stt_provider_inst.meta().id} 作为当前语音转文本提供商适配器。",
+                    f"Automatically selected {self.curr_stt_provider_inst.meta().id} "
+                    "as the current speech-to-text provider adapter.",
                 )
 
             if len(self.tts_provider_insts) == 0:
@@ -781,7 +857,8 @@ class ProviderManager:
             ):
                 self.curr_tts_provider_inst = self.tts_provider_insts[0]
                 logger.info(
-                    f"自动选择 {self.curr_tts_provider_inst.meta().id} 作为当前文本转语音提供商适配器。",
+                    f"Automatically selected {self.curr_tts_provider_inst.meta().id} "
+                    "as the current text-to-speech provider adapter.",
                 )
 
     def get_insts(self):
@@ -790,7 +867,9 @@ class ProviderManager:
     async def terminate_provider(self, provider_id: str) -> None:
         if provider_id in self.inst_map:
             logger.info(
-                f"终止 {provider_id} 提供商适配器({len(self.provider_insts)}, {len(self.stt_provider_insts)}, {len(self.tts_provider_insts)}) ...",
+                f"Terminating provider adapter {provider_id} "
+                f"({len(self.provider_insts)}, {len(self.stt_provider_insts)}, "
+                f"{len(self.tts_provider_insts)}) ...",
             )
 
             if self.inst_map[provider_id] in self.provider_insts:
@@ -817,7 +896,9 @@ class ProviderManager:
                 await self.inst_map[provider_id].terminate()  # type: ignore
 
             logger.info(
-                f"{provider_id} 提供商适配器已终止({len(self.provider_insts)}, {len(self.stt_provider_insts)}, {len(self.tts_provider_insts)})",
+                f"Provider adapter {provider_id} terminated "
+                f"({len(self.provider_insts)}, {len(self.stt_provider_insts)}, "
+                f"{len(self.tts_provider_insts)})",
             )
             del self.inst_map[provider_id]
 
@@ -841,7 +922,9 @@ class ProviderManager:
                     prov for prov in config["provider"] if prov.get("id") != tpid
                 ]
             config.save_config()
-            logger.info(f"Provider {target_prov_ids} 已从配置中删除。")
+            # sync in-memory config for API queries (e.g., provider list)
+            self.providers_config = config["provider"]
+            logger.info(f"Providers {target_prov_ids} were removed from configuration.")
 
     async def update_provider(self, origin_provider_id: str, new_config: dict) -> None:
         """Update provider config and reload the instance. Config will be saved after update."""

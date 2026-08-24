@@ -35,7 +35,8 @@ from astrbot.core.star.star_handler import EventType, star_handlers_registry, st
 from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.umop_config_router import UmopConfigRouter
-from astrbot.core.updator import AstrBotUpdator
+from astrbot.core.process_restart import restart_process
+from astrbot.core.updater import AstrBotUpdater
 from astrbot.core.utils.llm_metadata import update_llm_metadata
 from astrbot.core.utils.migra_helper import migra
 from astrbot.core.utils.temp_dir_cleaner import TempDirCleaner
@@ -266,7 +267,9 @@ class AstrBotCoreLifecycle:
         self.pipeline_scheduler_mapping = await self.load_pipeline_scheduler()
 
         # 初始化更新器
-        self.astrbot_updator = AstrBotUpdator()
+        self.astrbot_updater = AstrBotUpdater()
+        # Keep legacy attribute for plugins and integrations using older lifecycle API.
+        self.astrbot_updator = self.astrbot_updater
 
         # 初始化事件总线
         self.event_bus = EventBus(
@@ -495,7 +498,7 @@ class AstrBotCoreLifecycle:
         await self.kb_manager.terminate()
         self.dashboard_shutdown_event.set()
         threading.Thread(
-            target=self.astrbot_updator._reboot,
+            target=restart_process,
             name="restart",
             daemon=True,
         ).start()

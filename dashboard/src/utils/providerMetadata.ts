@@ -9,7 +9,6 @@ export interface ProviderMetadataSource {
   model?: string
   modalities?: string[]
   max_context_tokens?: number
-  reasoning?: boolean
 }
 
 export interface ProviderCapabilityBadge {
@@ -23,7 +22,7 @@ export function contextLimit(
   provider: ProviderMetadataSource | null | undefined,
   metadata?: ProviderModelMetadata | null
 ): number {
-  const context = Number(metadata?.limit?.context || provider?.max_context_tokens || 0)
+  const context = Number(provider?.max_context_tokens) || Number(metadata?.limit?.context) || 0
   return Number.isFinite(context) && context > 0 ? context : 0
 }
 
@@ -77,7 +76,7 @@ export function providerCapabilityBadges(
       key: 'reasoning',
       icon: 'mdi-brain',
       supported: Boolean(metadata?.reasoning),
-      enabled: Boolean(provider?.reasoning),
+      enabled: Boolean(metadata?.reasoning),
       label: tm('models.metadata.reasoning')
     }
   ]

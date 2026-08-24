@@ -16,6 +16,11 @@ from astrbot.core.platform.sources.webchat.message_parts_helper import (
 async def test_webchat_file_send_keeps_original_filename(tmp_path, monkeypatch):
     """WebChat file payloads should carry both stored and display filenames."""
     queue = asyncio.Queue()
+
+    async def put_back_queue(_request_id, payload):
+        await queue.put(payload)
+        return True
+
     attachments_dir = tmp_path / "attachments"
     attachments_dir.mkdir()
     source_file = tmp_path / "source.txt"
@@ -23,8 +28,8 @@ async def test_webchat_file_send_keeps_original_filename(tmp_path, monkeypatch):
     monkeypatch.setattr(webchat_event, "attachments_dir", str(attachments_dir))
     monkeypatch.setattr(
         webchat_event.webchat_queue_mgr,
-        "get_or_create_back_queue",
-        lambda *_args: queue,
+        "put_back_queue",
+        put_back_queue,
     )
 
     await webchat_event.WebChatMessageEvent._send(
