@@ -227,7 +227,7 @@
 
         <!-- 对话详情对话框 -->
         <v-dialog v-model="dialogView" max-width="900px" scrollable>
-            <v-card class="conversation-detail-card">
+            <v-card class="conversation-detail-card" :class="{ 'conversation-detail-card--edit': isEditingHistory }">
                 <v-card-title class="text-h3 pa-4 pb-0 pl-6 conversation-detail-title">
                     <div class="conversation-detail-heading">
                         <span class="text-truncate">{{ selectedConversation?.title || tm('status.noTitle') }}</span>
@@ -1284,8 +1284,17 @@ export default {
     font-weight: 500;
 }
 
+/* 编辑模式：编辑器填满剩余高度，避免与外层滚动条叠加 */
+.conversation-detail-card--edit > .v-card-text {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
 .monaco-editor-container {
-    height: 500px;
+    flex: 1;
+    min-height: 0;
     border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
@@ -1320,6 +1329,11 @@ export default {
     max-height: 90vh;
     display: flex;
     flex-direction: column;
+}
+
+/* 编辑模式：卡片固定高度，让 flex 链完整，Monaco 填满剩余空间 */
+.v-dialog > .v-overlay__content > .conversation-detail-card--edit {
+    flex: 0 0 90vh;
 }
 
 .conversation-detail-title {
