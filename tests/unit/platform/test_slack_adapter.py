@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import time
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -225,6 +226,8 @@ async def test_slack_convert_message_uses_blocks_and_attachment_parsing():
     assert isinstance(result.message[3], Comp.Image)
     assert isinstance(result.message[4], Comp.File)
     assert result.message[3].file == ""
+    assert result.message[4].url == ""
+    assert result.message[4].file_ == ""
     adapter._parse_blocks.assert_called_once_with([{"type": "rich_text"}])
     adapter.get_file_base64.assert_not_awaited()
 
@@ -232,6 +235,236 @@ async def test_slack_convert_message_uses_blocks_and_attachment_parsing():
 
     adapter.get_file_base64.assert_awaited_once_with("https://files.example.com/image")
     assert result.message[3].file == "base64://base64-image"
+
+
+class _FakeSlackFileResponse:
+    def __init__(
+        self,
+        *,
+        status: int = 200,
+        body: bytes = b"payload",
+        headers: dict[str, str] | None = None,
+        text: str = "ok",
+        chunks: list[bytes] | None = None,
+    ):
+        self.status = status
+        self._body = body
+        self.headers = headers or {}
+        self._text = text
+        self._chunks = chunks if chunks is not None else [body]
+        self.content = SimpleNamespace(iter_chunked=self._iter_chunked)
+
+    async def read(self):
+        return self._body
+
+    async def text(self):
+        return self._text
+
+    async def _iter_chunked(self, _size: int):
+        for chunk in self._chunks:
+            yield chunk
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+class _FakeSlackFileSession:
+    def __init__(self, response: _FakeSlackFileResponse):
+        self.response = response
+        self.calls: list[tuple[str, dict[str, str] | None]] = []
+
+    def get(self, url, headers=None):
+        self.calls.append((url, headers))
+        return self.response
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+@pytest.mark.asyncio
+async def test_slack_non_image_file_downloads_lazily_with_bearer(monkeypatch, tmp_path):
+    adapter = _build_adapter()
+    adapter.bot_self_id = "B1"
+    session = _FakeSlackFileSession(_FakeSlackFileResponse(body=b"pdf-bytes"))
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.slack.slack_adapter.aiohttp.ClientSession",
+        lambda: session,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.slack.slack_adapter.get_astrbot_temp_path",
+        lambda: str(tmp_path),
+    )
+
+    result = await adapter.convert_message(
+        {
+            "user": "U1",
+            "channel": "D1",
+            "text": "notes",
+            "files": [
+                {
+                    "name": "notes.pdf",
+                    "url_private": "https://files.example.com/notes",
+                    "mimetype": "application/pdf",
+                },
+            ],
+        }
+    )
+
+    file_component = next(c for c in result.message if isinstance(c, Comp.File))
+    assert file_component.url == ""
+    assert file_component.file_ == ""
+    assert session.calls == []
+
+    path = await file_component.get_file()
+
+    assert session.calls == [
+        (
+            "https://files.example.com/notes",
+            {"Authorization": "Bearer xoxb-test"},
+        )
+    ]
+    assert path
+    assert Path(path).read_bytes() == b"pdf-bytes"
+    assert file_component.url == ""
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [401, 403])
+async def test_slack_non_image_file_auth_failure_does_not_backfill_url(
+    monkeypatch, tmp_path, status
+):
+    adapter = _build_adapter()
+    adapter.bot_self_id = "B1"
+    session = _FakeSlackFileSession(
+        _FakeSlackFileResponse(status=status, text="forbidden")
+    )
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.slack.slack_adapter.aiohttp.ClientSession",
+        lambda: session,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.slack.slack_adapter.get_astrbot_temp_path",
+        lambda: str(tmp_path),
+    )
+
+    result = await adapter.convert_message(
+        {
+            "user": "U1",
+            "channel": "D1",
+            "text": "notes",
+            "files": [
+                {
+                    "name": "notes.pdf",
+                    "url_private": "https://files.example.com/notes",
+                    "mimetype": "application/pdf",
+                },
+            ],
+        }
+    )
+    file_component = next(c for c in result.message if isinstance(c, Comp.File))
+
+    path = await file_component.get_file()
+
+    assert path == ""
+    assert file_component.url == ""
+    assert file_component.file_ == ""
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.asyncio
+async def test_slack_non_image_file_oversize_download_is_rejected(
+    monkeypatch, tmp_path
+):
+    adapter = _build_adapter()
+    adapter.bot_self_id = "B1"
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.slack.slack_adapter._SLACK_FILE_MAX_BYTES",
+        8,
+    )
+    session = _FakeSlackFileSession(
+        _FakeSlackFileResponse(body=b"0123456789", chunks=[b"0123456789"])
+    )
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.slack.slack_adapter.aiohttp.ClientSession",
+        lambda: session,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.slack.slack_adapter.get_astrbot_temp_path",
+        lambda: str(tmp_path),
+    )
+
+    result = await adapter.convert_message(
+        {
+            "user": "U1",
+            "channel": "D1",
+            "text": "notes",
+            "files": [
+                {
+                    "name": "notes.pdf",
+                    "url_private": "https://files.example.com/notes",
+                    "mimetype": "application/pdf",
+                },
+            ],
+        }
+    )
+    file_component = next(c for c in result.message if isinstance(c, Comp.File))
+
+    path = await file_component.get_file()
+
+    assert path == ""
+    assert file_component.url == ""
+    assert file_component.file_ == ""
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.asyncio
+async def test_slack_non_image_file_oversize_content_length_is_rejected(
+    monkeypatch, tmp_path
+):
+    adapter = _build_adapter()
+    adapter.bot_self_id = "B1"
+    session = _FakeSlackFileSession(
+        _FakeSlackFileResponse(
+            headers={"Content-Length": str(32 * 1024 * 1024 + 1)},
+            body=b"should-not-be-written",
+        )
+    )
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.slack.slack_adapter.aiohttp.ClientSession",
+        lambda: session,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.slack.slack_adapter.get_astrbot_temp_path",
+        lambda: str(tmp_path),
+    )
+
+    result = await adapter.convert_message(
+        {
+            "user": "U1",
+            "channel": "D1",
+            "text": "notes",
+            "files": [
+                {
+                    "name": "notes.pdf",
+                    "url_private": "https://files.example.com/notes",
+                    "mimetype": "application/pdf",
+                },
+            ],
+        }
+    )
+
+    file_component = next(c for c in result.message if isinstance(c, Comp.File))
+    path = await file_component.get_file()
+
+    assert path == ""
+    assert file_component.url == ""
+    assert list(tmp_path.iterdir()) == []
 
 
 @pytest.mark.asyncio
@@ -475,6 +708,7 @@ async def test_slack_get_file_base64_returns_base64_for_success(monkeypatch):
 
     class FakeResponse:
         status = 200
+        headers: dict[str, str] = {}
 
         async def read(self):
             return b"file-bytes"
@@ -522,6 +756,7 @@ async def test_slack_get_file_base64_raises_on_non_200(monkeypatch):
 
     class FakeResponse:
         status = 403
+        headers: dict[str, str] = {}
 
         async def text(self):
             return "forbidden"

@@ -3,6 +3,9 @@ import base64
 import re
 import time
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, cast
 
 import aiohttp
@@ -20,11 +23,26 @@ from astrbot.core.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
 from .client import SlackSocketClient, SlackWebhookClient
 from .slack_event import SlackMessageEvent
+
+# Slack private-file downloads are capped so large PDFs/zips are neither
+# fully buffered nor written as a successful File payload.
+_SLACK_FILE_MAX_BYTES = 32 * 1024 * 1024
+
+
+def _slack_declared_size_exceeds_limit(resp: aiohttp.ClientResponse) -> bool:
+    content_length = resp.headers.get("Content-Length")
+    if not content_length:
+        return False
+    try:
+        return int(content_length) > _SLACK_FILE_MAX_BYTES
+    except ValueError:
+        return False
 
 
 @register_platform_adapter(
@@ -177,10 +195,16 @@ class SlackAdapter(Platform):
                     )
                     abm.message.append(image)
                 else:
-                    # TODO: 下载鉴权
-                    abm.message.append(
-                        File(name=file_name, file=file_url, url=file_url),
+                    file_component = File(name=file_name)
+                    file_component.set_file_resolver(
+                        lambda file_url=file_url, file_name=file_name: (
+                            self._resolve_slack_file(
+                                file_url,
+                                file_name,
+                            )
+                        )
                     )
+                    abm.message.append(file_component)
 
         abm.raw_message = event
         return abm
@@ -190,6 +214,58 @@ class SlackAdapter(Platform):
             return None
         file_base64 = await self.get_file_base64(url)
         return f"base64://{file_base64}"
+
+    async def _resolve_slack_file(self, url: str, file_name: str) -> str | None:
+        """Download a Slack non-image file to a temp path with Bearer auth.
+
+        Args:
+            url: Slack `url_private`. Not stored on File.url.
+            file_name: Original filename, used only for the temp suffix.
+
+        Returns:
+            Local path on success, or None if the request fails or exceeds
+            the 32 MiB cap. Partial files are deleted.
+        """
+        if not url:
+            return None
+        temp_dir = Path(get_astrbot_temp_path())
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        dest_path = temp_dir / f"slack_{uuid.uuid4().hex}{Path(file_name).suffix}"
+        completed = False
+        try:
+            async with self._slack_private_request(url) as resp:
+                if resp.status != 200:
+                    logger.error(
+                        "Failed to download slack file: %s %s",
+                        resp.status,
+                        await resp.text(),
+                    )
+                    return None
+                if _slack_declared_size_exceeds_limit(resp):
+                    logger.warning(
+                        "Rejecting Slack file over %s bytes",
+                        _SLACK_FILE_MAX_BYTES,
+                    )
+                    return None
+                written = 0
+                with dest_path.open("wb") as handle:
+                    async for chunk in resp.content.iter_chunked(8192):
+                        written += len(chunk)
+                        if written > _SLACK_FILE_MAX_BYTES:
+                            logger.warning(
+                                "Rejecting Slack file over %s bytes",
+                                _SLACK_FILE_MAX_BYTES,
+                            )
+                            return None
+                        handle.write(chunk)
+                completed = True
+                return str(dest_path)
+        except Exception:
+            logger.exception("Slack file download failed")
+            return None
+        finally:
+            if not completed and dest_path.exists():
+                dest_path.unlink(missing_ok=True)
 
     def _parse_blocks(self, blocks: list) -> list:
         """解析 Slack blocks 格式的消息内容"""
@@ -296,19 +372,48 @@ class SlackAdapter(Platform):
         auth_info = await self.web_client.auth_test()
         return auth_info.get("user_id")
 
-    async def get_file_base64(self, url: str) -> str:
-        """下载 Slack 文件并返回 Base64 编码的内容"""
+    @asynccontextmanager
+    async def _slack_private_request(
+        self, url: str
+    ) -> AsyncIterator[aiohttp.ClientResponse]:
+        """GET a Slack private file URL with Bearer authentication.
+
+        Args:
+            url: Slack `url_private`.
+
+        Yields:
+            The HTTP response. The caller must consume the body before
+            leaving the context.
+        """
         headers = {"Authorization": f"Bearer {self.bot_token}"}
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers) as resp:
-                if resp.status == 200:
-                    content = await resp.read()
-                    base64_content = base64.b64encode(content).decode("utf-8")
-                    return base64_content
+                yield resp
+
+    async def get_file_base64(self, url: str) -> str:
+        """下载 Slack 文件并返回 Base64 编码的内容"""
+        async with self._slack_private_request(url) as resp:
+            if resp.status != 200:
                 logger.error(
-                    f"Failed to download slack file: {resp.status} {await resp.text()}",
+                    "Failed to download slack file: %s %s",
+                    resp.status,
+                    await resp.text(),
                 )
                 raise Exception(f"下载文件失败: {resp.status}")
+            if _slack_declared_size_exceeds_limit(resp):
+                logger.warning(
+                    "Rejecting Slack file over %s bytes",
+                    _SLACK_FILE_MAX_BYTES,
+                )
+                raise Exception("下载文件失败: size limit exceeded")
+            content = await resp.read()
+            if len(content) > _SLACK_FILE_MAX_BYTES:
+                logger.warning(
+                    "Rejecting Slack file over %s bytes",
+                    _SLACK_FILE_MAX_BYTES,
+                )
+                raise Exception("下载文件失败: size limit exceeded")
+            return base64.b64encode(content).decode("utf-8")
 
     async def run(self) -> None:
         self.bot_self_id = await self.get_bot_user_id()
