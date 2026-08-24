@@ -1,16 +1,29 @@
+import json
+
 from sqlalchemy import case, func, select
 from sqlmodel import col
 
 from astrbot.api import sp, star
-from astrbot.api.event import AstrMessageEvent, MessageEventResult
+from astrbot.api.event import AstrMessageEvent, MessageChain, MessageEventResult
+from astrbot.api.message_components import Json
 from astrbot.core import logger
+from astrbot.core.agent.context.config import ContextConfig
+from astrbot.core.agent.context.manager import ContextManager
+from astrbot.core.agent.context.round_utils import split_into_rounds
+from astrbot.core.agent.message import (
+    bind_checkpoint_messages,
+    dump_messages_with_checkpoints,
+)
+from astrbot.core.agent.response import AgentStats
 from astrbot.core.agent.runners.deerflow.constants import (
     DEERFLOW_PROVIDER_TYPE,
     DEERFLOW_THREAD_ID_KEY,
 )
 from astrbot.core.agent.runners.deerflow.deerflow_api_client import DeerFlowAPIClient
+from astrbot.core.astr_main_agent import get_context_compression_provider
 from astrbot.core.db.po import ProviderStat
 from astrbot.core.utils.active_event_registry import active_event_registry
+from astrbot.core.utils.session_lock import session_lock_manager
 
 from .utils.rst_scene import RstScene
 
@@ -206,6 +219,221 @@ class ConversationCommands:
         message.set_result(
             MessageEventResult().message("✅ No running tasks in the current session.")
         )
+
+    async def compact(self, message: AstrMessageEvent) -> None:
+        """Compress the persisted history of the current local conversation."""
+
+        def reply(text: str) -> None:
+            """Set a plain-text command result.
+
+            Args:
+                text: Message shown to the user.
+            """
+            message.set_result(message.plain_result(text))
+
+        preserved = "❌ Context compression failed; the original context was preserved."
+        cancelled = "⚠️ Compression cancelled; original context was preserved."
+        unknown = "⚠️ Context state is unknown. Check the conversation before retrying."
+        umo = message.unified_msg_origin
+        cfg = self.context.get_config(umo=umo)
+        provider_settings = cfg.get("provider_settings", {})
+        conversation_manager = self.context.conversation_manager
+
+        is_unique_session = cfg.get("platform_settings", {}).get(
+            "unique_session",
+            False,
+        )
+        is_shared_group = bool(message.get_group_id()) and not is_unique_session
+        if is_shared_group and message.role != "admin":
+            reply(
+                "❌ Context compression requires admin permission in a shared "
+                "group conversation."
+            )
+            return
+
+        if not provider_settings.get("enable", True):
+            reply("❌ AI features are disabled for this session.")
+            return
+
+        if not provider_settings.get("enable_manual_context_compression", False):
+            reply(
+                "❌ Manual context compression is disabled. Enable it in Context "
+                "Management first."
+            )
+            return
+
+        if provider_settings.get("agent_runner_type", "local") != "local":
+            reply("❌ /compact is supported only by the local agent runner.")
+            return
+
+        strategy = provider_settings.get("context_limit_reached_strategy")
+        if strategy != "llm_compress":
+            reply("❌ /compact requires the LLM context compression strategy.")
+            return
+
+        initial_cid = await conversation_manager.get_curr_conversation_id(umo)
+        if not initial_cid:
+            reply("❌ You are not in a conversation. Use /new to create one.")
+            return
+
+        compression_provider = await get_context_compression_provider(
+            strategy,
+            provider_settings.get("llm_compress_provider_id", ""),
+            self.context,
+            message,
+        )
+        if not compression_provider:
+            reply("❌ No LLM provider is available for context compression.")
+            return
+
+        await message.send(MessageChain().message("⏳ Compressing context..."))
+
+        try:
+            async with session_lock_manager.acquire_lock(umo):
+                if message.is_stopped():
+                    return
+                if message.get_extra("agent_stop_requested"):
+                    reply(cancelled)
+                    return
+
+                cid = await conversation_manager.get_curr_conversation_id(umo)
+                if not cid or cid != initial_cid:
+                    reply("⚠️ The active conversation changed; no changes were saved.")
+                    return
+
+                conversation = await conversation_manager.get_conversation(umo, cid)
+                if not conversation:
+                    reply(
+                        "❌ The current conversation could not be loaded; the "
+                        "original context was preserved."
+                    )
+                    return
+
+                original_history_text = conversation.history
+                original_history = json.loads(conversation.history)
+                if not isinstance(original_history, list) or not original_history:
+                    reply("ℹ️ There is not enough conversation history to compress.")
+                    return
+
+                messages = bind_checkpoint_messages(original_history)
+                complete_rounds = sum(
+                    any(segment.role == "user" for segment in round_)
+                    and any(segment.role == "assistant" for segment in round_)
+                    for round_ in split_into_rounds(messages)
+                )
+                if complete_rounds <= 1:
+                    reply("ℹ️ There is not enough conversation history to compress.")
+                    return
+
+                context_manager = ContextManager(
+                    ContextConfig(
+                        llm_compress_instruction=provider_settings.get(
+                            "llm_compress_instruction"
+                        ),
+                        llm_compress_keep_recent_ratio=provider_settings.get(
+                            "llm_compress_keep_recent_ratio",
+                            0.15,
+                        ),
+                        llm_compress_preserve_latest_round=True,
+                        llm_compress_provider=compression_provider,
+                    )
+                )
+                tokens_before = context_manager.token_counter.count_tokens(messages)
+                if tokens_before <= 0:
+                    reply("ℹ️ There is not enough conversation history to compress.")
+                    return
+
+                compressed_messages = await context_manager.process(
+                    messages,
+                    force_compress=True,
+                )
+                tokens_after = context_manager.token_counter.count_tokens(
+                    compressed_messages
+                )
+                if compressed_messages == messages or tokens_after >= tokens_before:
+                    reply(preserved)
+                    return
+
+                target_history = dump_messages_with_checkpoints(compressed_messages)
+                latest_cid = await conversation_manager.get_curr_conversation_id(umo)
+                latest_conversation = await conversation_manager.get_conversation(
+                    umo, cid
+                )
+                if (
+                    latest_cid != cid
+                    or not latest_conversation
+                    or latest_conversation.history != original_history_text
+                ):
+                    reply(
+                        "⚠️ Context changed during compression; no changes were saved."
+                    )
+                    return
+
+                if message.is_stopped():
+                    return
+                if message.get_extra("agent_stop_requested"):
+                    reply(cancelled)
+                    return
+
+                try:
+                    await conversation_manager.update_conversation(
+                        umo,
+                        cid,
+                        history=target_history,
+                        token_usage=0,
+                    )
+                except Exception as update_error:
+                    logger.error(
+                        "Context compression storage update failed: %s.",
+                        type(update_error).__name__,
+                    )
+                    try:
+                        stored_conversation = (
+                            await conversation_manager.get_conversation(umo, cid)
+                        )
+                        stored_history = json.loads(stored_conversation.history)
+                    except Exception as verify_error:
+                        logger.error(
+                            "Context compression storage verification failed: %s.",
+                            type(verify_error).__name__,
+                        )
+                        reply(unknown)
+                        return
+
+                    if stored_history != target_history:
+                        reply(
+                            preserved if stored_history == original_history else unknown
+                        )
+                        return
+        except Exception as error:
+            logger.error(
+                "Context compression failed before storage update: %s.",
+                type(error).__name__,
+            )
+            reply(preserved)
+            return
+
+        if message.get_platform_name() == "webchat":
+            try:
+                await message.send(
+                    MessageChain(
+                        type="agent_stats",
+                        chain=[
+                            Json(
+                                data=AgentStats(
+                                    current_context_tokens=tokens_after,
+                                ).to_dict()
+                            )
+                        ],
+                    )
+                )
+            except Exception as error:
+                logger.warning(
+                    "Failed to send context compression stats: %s.",
+                    type(error).__name__,
+                )
+
+        reply("✅ Context compressed.")
 
     async def new_conv(self, message: AstrMessageEvent) -> None:
         """创建新对话"""
