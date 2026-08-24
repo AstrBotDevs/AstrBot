@@ -1,5 +1,6 @@
 """Regression coverage for local container build entry points."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -41,6 +42,28 @@ def test_compose_docs_service_uses_the_local_docs_image(compose_name: str) -> No
     assert docs["read_only"] is True
     assert docs["security_opt"] == ["no-new-privileges:true"]
     assert docs["tmpfs"] == ["/tmp:mode=1777"]
+
+
+def test_dockerfile_playwright_version_matches_requirements() -> None:
+    """Image Playwright must match the locked runtime specifier, not downgrade it."""
+    dockerfile = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    docker_match = re.search(
+        r"^    PLAYWRIGHT_VERSION=([0-9]+\.[0-9]+\.[0-9]+) \\$",
+        dockerfile,
+        re.MULTILINE,
+    )
+    assert docker_match is not None
+    docker_version = docker_match.group(1)
+
+    requirements = (REPO_ROOT / "requirements.txt").read_text(encoding="utf-8")
+    req_match = re.search(
+        r"^playwright>=([0-9]+\.[0-9]+\.[0-9]+)$",
+        requirements,
+        re.MULTILINE,
+    )
+    assert req_match is not None
+    assert docker_version == req_match.group(1)
+    assert docker_version.startswith("1.62.")
 
 
 def test_runtime_image_copies_changelogs() -> None:
