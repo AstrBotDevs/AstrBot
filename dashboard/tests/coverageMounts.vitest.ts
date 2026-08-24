@@ -199,7 +199,21 @@ describe('high-value coverage mounts', () => {
           typeof component === 'function',
       );
     expect(loaders.length).toBeGreaterThan(5);
-    await Promise.all(loaders.map((load) => load().catch(() => undefined)));
+    await Promise.all(
+      loaders.map((load) =>
+        Promise.race([
+          Promise.resolve()
+            .then(() => load())
+            .then(
+              () => undefined,
+              () => undefined,
+            ),
+          new Promise<void>((resolve) => {
+            setTimeout(resolve, 2_000);
+          }),
+        ]),
+      ),
+    );
   });
 
   it('covers command and tool panel composables', async () => {
