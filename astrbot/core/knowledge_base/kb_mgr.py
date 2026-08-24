@@ -68,13 +68,7 @@ class KnowledgeBaseManager:
         """加载所有知识库实例"""
         kb_records = await self.kb_db.list_kbs()
         for record in kb_records:
-            kb_helper = KBHelper(
-                kb_db=self.kb_db,
-                kb=record,
-                provider_manager=self.provider_manager,
-                kb_root_dir=FILES_PATH,
-                chunker=CHUNKER,
-            )
+            kb_helper = self._build_kb_helper(record)
             try:
                 await kb_helper.initialize()
             except Exception as exc:
@@ -120,13 +114,7 @@ class KnowledgeBaseManager:
                 session.add(kb)
                 await session.flush()
 
-                kb_helper = KBHelper(
-                    kb_db=self.kb_db,
-                    kb=kb,
-                    provider_manager=self.provider_manager,
-                    kb_root_dir=FILES_PATH,
-                    chunker=CHUNKER,
-                )
+                kb_helper = self._build_kb_helper(kb)
                 await kb_helper.initialize()
                 await session.commit()
                 self.kb_insts[kb.kb_id] = kb_helper
@@ -246,13 +234,17 @@ class KnowledgeBaseManager:
             kb.top_m_final = top_m_final
 
     def _build_kb_helper(self, kb: KnowledgeBase) -> KBHelper:
-        return KBHelper(
+        kb_helper = KBHelper(
             kb_db=self.kb_db,
             kb=kb,
             provider_manager=self.provider_manager,
             kb_root_dir=FILES_PATH,
             chunker=CHUNKER,
         )
+        retrieval_manager = getattr(self, "retrieval_manager", None)
+        if retrieval_manager is not None:
+            kb_helper.sparse_retriever = retrieval_manager.sparse_retriever
+        return kb_helper
 
     async def _persist_kb_changes(self, kb: KnowledgeBase) -> None:
         async with self.kb_db.get_db() as session:

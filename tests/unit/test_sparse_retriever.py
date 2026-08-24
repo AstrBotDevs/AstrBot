@@ -147,3 +147,96 @@ async def test_sparse_retriever_preserves_per_kb_fts_ranks():
         "large-2": 2,
         "small-exact": 1,
     }
+
+
+class CountingFallbackStorage:
+    def __init__(self, documents: list[dict]) -> None:
+        self.documents = documents
+        self.search_sparse_calls = 0
+        self.get_documents_calls = 0
+
+    async def search_sparse(self, query_tokens: list[str], limit: int):
+        del query_tokens, limit
+        self.search_sparse_calls += 1
+        return None
+
+    async def get_documents(self, metadata_filters: dict, limit: int | None, offset):
+        del metadata_filters, limit, offset
+        self.get_documents_calls += 1
+        return self.documents
+
+
+def _fallback_vec_db(
+    documents: list[dict],
+) -> tuple[SimpleNamespace, CountingFallbackStorage]:
+    storage = CountingFallbackStorage(documents)
+    return SimpleNamespace(document_storage=storage), storage
+
+
+@pytest.mark.asyncio
+async def test_bm25_fallback_keeps_per_kb_top_k_and_ranks():
+    kb_a_db, _ = _fallback_vec_db(
+        [
+            make_doc("a-1", "apple apple apple", 0),
+            make_doc("a-2", "apple fruit", 1),
+            make_doc("a-3", "unrelated zebra", 2),
+        ]
+    )
+    kb_b_db, _ = _fallback_vec_db(
+        [
+            make_doc("b-1", "apple pie", 0),
+            make_doc("b-2", "banana boat", 1),
+            make_doc("b-3", "carrot cake", 2),
+        ]
+    )
+    retriever = SparseRetriever(kb_db=None)
+
+    results = await retriever.retrieve(
+        query="apple",
+        kb_ids=["kb-a", "kb-b"],
+        kb_options={
+            "kb-a": {"vec_db": kb_a_db, "top_k_sparse": 2},
+            "kb-b": {"vec_db": kb_b_db, "top_k_sparse": 1},
+        },
+    )
+
+    assert len(results) == 3
+    a_ranks = [result.rank for result in results if result.kb_id == "kb-a"]
+    b_ranks = [result.rank for result in results if result.kb_id == "kb-b"]
+    assert sorted(a_ranks) == [1, 2]
+    assert b_ranks == [1]
+
+
+@pytest.mark.asyncio
+async def test_bm25_fallback_reuses_cached_index_per_kb():
+    kb_a_db, storage_a = _fallback_vec_db([make_doc("a-1", "apple banana", 0)])
+    kb_b_db, storage_b = _fallback_vec_db([make_doc("b-1", "apple pie", 0)])
+    retriever = SparseRetriever(kb_db=None)
+    options = {
+        "kb-a": {"vec_db": kb_a_db, "top_k_sparse": 1},
+        "kb-b": {"vec_db": kb_b_db, "top_k_sparse": 1},
+    }
+
+    await retriever.retrieve(query="apple", kb_ids=["kb-a", "kb-b"], kb_options=options)
+    await retriever.retrieve(query="apple", kb_ids=["kb-a", "kb-b"], kb_options=options)
+
+    assert storage_a.get_documents_calls == 1
+    assert storage_b.get_documents_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_bm25_fallback_invalidate_rebuilds_only_that_kb():
+    kb_a_db, storage_a = _fallback_vec_db([make_doc("a-1", "apple banana", 0)])
+    kb_b_db, storage_b = _fallback_vec_db([make_doc("b-1", "apple pie", 0)])
+    retriever = SparseRetriever(kb_db=None)
+    options = {
+        "kb-a": {"vec_db": kb_a_db, "top_k_sparse": 1},
+        "kb-b": {"vec_db": kb_b_db, "top_k_sparse": 1},
+    }
+
+    await retriever.retrieve(query="apple", kb_ids=["kb-a", "kb-b"], kb_options=options)
+    retriever.invalidate("kb-a")
+    await retriever.retrieve(query="apple", kb_ids=["kb-a", "kb-b"], kb_options=options)
+
+    assert storage_a.get_documents_calls == 2
+    assert storage_b.get_documents_calls == 1

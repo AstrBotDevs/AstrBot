@@ -6,7 +6,7 @@
 import json
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
 from astrbot.core.knowledge_base.retrieval.tokenizer import (
@@ -16,6 +16,8 @@ from astrbot.core.knowledge_base.retrieval.tokenizer import (
 
 if TYPE_CHECKING:
     from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
+
+_BM25Index = tuple[Any, list[dict[str, Any]]]
 
 
 @dataclass
@@ -47,7 +49,8 @@ class SparseRetriever:
 
         """
         self.kb_db = kb_db
-        self._index_cache = {}  # 缓存 BM25 索引
+        # BM25 fallback indexes are keyed by kb_id and dropped on document writes.
+        self._index_cache: dict[str, _BM25Index] = {}
 
         self.hit_stopwords = load_stopwords(
             os.path.join(os.path.dirname(__file__), "hit_stopwords.txt"),
@@ -113,25 +116,32 @@ class SparseRetriever:
         results.sort(key=lambda x: x.score, reverse=True)
         return results
 
-    async def _retrieve_with_bm25(
+    def invalidate(self, kb_id: str) -> None:
+        """Drop the cached BM25 index after insert, delete, or rebuild.
+
+        Args:
+            kb_id: Knowledge base whose fallback index is stale.
+        """
+        self._index_cache.pop(kb_id, None)
+
+    async def _get_or_build_bm25_index(
         self,
-        query: str,
-        kb_ids: list[str],
-        kb_options: dict,
-    ) -> list[SparseResult]:
-        top_k_sparse = 0
-        chunks = []
-        for kb_id in kb_ids:
-            vec_db: FaissVecDB | None = kb_options.get(kb_id, {}).get("vec_db")
-            if not vec_db:
-                continue
-            result = await vec_db.document_storage.get_documents(
-                metadata_filters={},
-                limit=None,
-                offset=None,
-            )
-            chunk_mds = [json.loads(doc["metadata"]) for doc in result]
-            result = [
+        kb_id: str,
+        vec_db: FaissVecDB,
+    ) -> _BM25Index:
+        cached = self._index_cache.get(kb_id)
+        if cached is not None:
+            return cached
+
+        documents = await vec_db.document_storage.get_documents(
+            metadata_filters={},
+            limit=None,
+            offset=None,
+        )
+        chunks: list[dict[str, Any]] = []
+        for doc in documents:
+            chunk_md = json.loads(doc["metadata"])
+            chunks.append(
                 {
                     "chunk_id": doc["doc_id"],
                     "chunk_index": chunk_md["chunk_index"],
@@ -139,32 +149,39 @@ class SparseRetriever:
                     "kb_id": kb_id,
                     "text": doc["text"],
                 }
-                for doc, chunk_md in zip(result, chunk_mds)
-            ]
-            chunks.extend(result)
-            top_k_sparse += kb_options.get(kb_id, {}).get("top_k_sparse", 50)
-
+            )
         if not chunks:
-            return []
+            index: _BM25Index = (None, [])
+            self._index_cache[kb_id] = index
+            return index
 
-        # 2. 准备文档和索引
-        corpus = [chunk["text"] for chunk in chunks]
-        tokenized_corpus = [tokenize_text(doc, self.hit_stopwords) for doc in corpus]
-
-        # 3. 构建 BM25 索引
         from rank_bm25 import BM25Okapi
 
-        bm25 = BM25Okapi(tokenized_corpus)
+        tokenized_corpus = [
+            tokenize_text(chunk["text"], self.hit_stopwords) for chunk in chunks
+        ]
+        index = (BM25Okapi(tokenized_corpus), chunks)
+        self._index_cache[kb_id] = index
+        return index
 
-        # 4. 执行检索
+    async def _retrieve_with_bm25(
+        self,
+        query: str,
+        kb_ids: list[str],
+        kb_options: dict,
+    ) -> list[SparseResult]:
         tokenized_query = tokenize_text(query, self.hit_stopwords)
-        scores = bm25.get_scores(tokenized_query)
-
-        # 5. 排序并返回 Top-K
-        results = []
-        for idx, score in enumerate(scores):
-            chunk = chunks[idx]
-            results.append(
+        results: list[SparseResult] = []
+        for kb_id in kb_ids:
+            vec_db: FaissVecDB | None = kb_options.get(kb_id, {}).get("vec_db")
+            if not vec_db:
+                continue
+            top_k_sparse = kb_options.get(kb_id, {}).get("top_k_sparse", 50)
+            bm25, chunks = await self._get_or_build_bm25_index(kb_id, vec_db)
+            if bm25 is None or not chunks:
+                continue
+            scores = bm25.get_scores(tokenized_query)
+            kb_results = [
                 SparseResult(
                     chunk_id=chunk["chunk_id"],
                     chunk_index=chunk["chunk_index"],
@@ -172,11 +189,12 @@ class SparseRetriever:
                     kb_id=chunk["kb_id"],
                     content=chunk["text"],
                     score=float(score),
-                ),
-            )
-
-        results.sort(key=lambda x: x.score, reverse=True)
-        for rank, result in enumerate(results, start=1):
-            result.rank = rank
-        # return results[: len(results) // len(kb_ids)]
-        return results[:top_k_sparse]
+                )
+                for chunk, score in zip(chunks, scores)
+            ]
+            kb_results.sort(key=lambda item: item.score, reverse=True)
+            kb_results = kb_results[:top_k_sparse]
+            for rank, result in enumerate(kb_results, start=1):
+                result.rank = rank
+            results.extend(kb_results)
+        return results

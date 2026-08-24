@@ -100,6 +100,12 @@ class KBHelper:
 
         self.kb_medias_dir.mkdir(parents=True, exist_ok=True)
         self.kb_files_dir.mkdir(parents=True, exist_ok=True)
+        self.sparse_retriever = None
+
+    def _invalidate_bm25_cache(self) -> None:
+        retriever = self.sparse_retriever
+        if retriever is not None:
+            retriever.invalidate(self.kb.kb_id)
 
     async def initialize(self) -> None:
         await self._ensure_vec_db()
@@ -398,6 +404,7 @@ class KBHelper:
                 max_retries=max_retries,
                 progress_callback=embedding_progress_callback,
             )
+            self._invalidate_bm25_cache()
         except KnowledgeBaseUploadError:
             raise
         except Exception as exc:
@@ -478,6 +485,7 @@ class KBHelper:
 
         try:
             await self.vec_db.delete_documents(metadata_filters={"kb_doc_id": doc_id})
+            self._invalidate_bm25_cache()
         except Exception as exc:
             logger.warning(
                 "Failed to roll back chunks and vectors for document %s: %s",
@@ -648,6 +656,7 @@ class KBHelper:
             doc_id=doc_id,
             vec_db=self.vec_db,  # type: ignore
         )
+        self._invalidate_bm25_cache()
         await self.kb_db.update_kb_stats(
             kb_id=self.kb.kb_id,
             vec_db=self.vec_db,  # type: ignore
@@ -658,6 +667,7 @@ class KBHelper:
         """删除单个文本块及其相关数据"""
         vec_db: FaissVecDB = self.vec_db  # type: ignore
         await vec_db.delete(chunk_id)
+        self._invalidate_bm25_cache()
         await self.kb_db.update_kb_stats(
             kb_id=self.kb.kb_id,
             vec_db=self.vec_db,  # type: ignore
