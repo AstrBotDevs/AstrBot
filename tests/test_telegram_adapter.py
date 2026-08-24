@@ -215,6 +215,101 @@ async def test_telegram_video_caption_populates_message_text_and_plain():
     )
 
 
+_STICKER_URL = "https://api.telegram.org/file/test/sticker_1.webp"
+_ANIMATED_URL = "https://api.telegram.org/file/test/sticker_1.tgs"
+_VIDEO_URL = "https://api.telegram.org/file/test/sticker_1.webm"
+_THUMBNAIL_URL = "https://api.telegram.org/file/test/thumb_1.webp"
+
+
+def _make_sticker(
+    file_path: str,
+    *,
+    is_animated: bool = False,
+    is_video: bool = False,
+    thumbnail_path: str | None = None,
+):
+    sticker = create_mock_file(file_path)
+    sticker.emoji = "🙄"
+    sticker.is_animated = is_animated
+    sticker.is_video = is_video
+    sticker.thumbnail = (
+        create_mock_file(thumbnail_path) if thumbnail_path is not None else None
+    )
+    return sticker
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("file_path", "flags", "expected_url"),
+    [
+        (_STICKER_URL, {}, _STICKER_URL),
+        (_ANIMATED_URL, {"is_animated": True}, _THUMBNAIL_URL),
+        (_VIDEO_URL, {"is_video": True}, _THUMBNAIL_URL),
+    ],
+    ids=["static", "animated", "video"],
+)
+async def test_telegram_sticker_uses_thumbnail_only_when_animated(
+    file_path, flags, expected_url
+):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    sticker = _make_sticker(file_path, thumbnail_path=_THUMBNAIL_URL, **flags)
+    update = create_mock_update(message_text=None, sticker=sticker)
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    images = [c for c in result.message if isinstance(c, Comp.Image)]
+    assert len(images) == 1
+    assert images[0].url == expected_url
+    assert result.message_str == "Sticker: 🙄"
+
+
+@pytest.mark.asyncio
+async def test_telegram_animated_sticker_without_thumbnail_skips_image():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    sticker = _make_sticker(_ANIMATED_URL, is_animated=True, thumbnail_path=None)
+    update = create_mock_update(message_text=None, sticker=sticker)
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert not any(isinstance(c, Comp.Image) for c in result.message)
+    assert result.message_str == "Sticker: 🙄"
+
+
+@pytest.mark.asyncio
+async def test_telegram_video_note_becomes_video_component():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    file_path = "https://api.telegram.org/file/test/note.mp4"
+    update = create_mock_update(
+        message_text=None,
+        video_note=create_mock_file(file_path),
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert len(result.message) == 1
+    assert isinstance(result.message[0], Comp.Video)
+    assert result.message[0].file == file_path
+    assert result.message[0].path == file_path
+
+
 @pytest.mark.asyncio
 async def test_telegram_voice_message_creates_record_component(tmp_path):
     TelegramPlatformAdapter = _load_telegram_adapter()
@@ -252,6 +347,49 @@ async def test_telegram_voice_message_creates_record_component(tmp_path):
     assert result.message[0].file == str(wav_path)
     assert result.message[0].path == str(wav_path)
     assert result.message[0].url == str(wav_path)
+
+
+@pytest.mark.asyncio
+async def test_telegram_audio_caption_populates_message_text_and_plain(tmp_path):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    audio = create_mock_file("https://api.telegram.org/file/test/song.mp3")
+    update = create_mock_update(
+        message_text=None,
+        audio=audio,
+        caption="这首歌是什么",
+    )
+    wav_path = tmp_path / "song.mp3.wav"
+    convert_message_globals = adapter.convert_message.__func__.__globals__
+
+    with (
+        patch.dict(
+            convert_message_globals,
+            {
+                "get_astrbot_temp_path": MagicMock(return_value=str(tmp_path)),
+                "download_file": AsyncMock(),
+            },
+        ),
+        patch(
+            "astrbot.core.utils.media_utils.ensure_wav",
+            AsyncMock(return_value=str(wav_path)),
+        ),
+    ):
+        result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert result.message_str == "这首歌是什么"
+    assert len(result.message) == 2
+    assert isinstance(result.message[0], Comp.Record)
+    assert result.message[0].file == str(wav_path)
+    assert result.message[0].path == str(wav_path)
+    assert result.message[0].url == str(wav_path)
+    assert isinstance(result.message[1], Comp.Plain)
+    assert result.message[1].text == "这首歌是什么"
 
 
 @pytest.mark.asyncio

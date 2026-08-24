@@ -298,10 +298,8 @@ class InternalAgentSubStage(Stage):
                         )
 
                         # 获取 TTS Provider
-                        tts_provider = (
-                            self.ctx.plugin_manager.context.get_using_tts_provider(
-                                event.unified_msg_origin
-                            )
+                        tts_provider = await self.ctx.plugin_manager.context.get_using_tts_provider_async(
+                            event.unified_msg_origin
                         )
 
                         if not tts_provider:
@@ -472,21 +470,24 @@ class InternalAgentSubStage(Stage):
             messages_to_save.append(message)
 
         checkpoint_id = event.get_extra("llm_checkpoint_id")
+        has_checkpoint = isinstance(checkpoint_id, str) and bool(checkpoint_id)
         message_to_save = dump_messages_with_checkpoints(messages_to_save)
         if not user_aborted and (
             llm_response is None or llm_response.role != "assistant"
         ):
-            if isinstance(checkpoint_id, str) and checkpoint_id:
+            if has_checkpoint:
                 message_to_save.append(
                     CheckpointMessageSegment(
                         content=CheckpointData(id=checkpoint_id),
                     ).model_dump()
                 )
+            if has_checkpoint or (llm_response is None and req.tool_calls_result):
+                token_usage = None if has_checkpoint else req.conversation.token_usage
                 await self.conv_manager.update_conversation(
                     event.unified_msg_origin,
                     req.conversation.cid,
                     history=message_to_save,
-                    token_usage=None,
+                    token_usage=token_usage,
                 )
             return
 

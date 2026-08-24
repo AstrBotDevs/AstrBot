@@ -276,7 +276,18 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
   if (type === "complete" || type === "break") {
     markMessageStarted(botRecord);
     const finalText = payloadText(data);
-    if (finalText && !hasPlainText(botRecord)) {
+    const existingText = botRecord.content.message
+      .filter((part) => part.type === "plain")
+      .map((part) => part.text || "")
+      .join("");
+    const missingText = finalText.slice(existingText.length);
+    if (
+      type === "complete" &&
+      missingText &&
+      finalText.startsWith(existingText)
+    ) {
+      appendPlain(botRecord, missingText);
+    } else if (finalText && !hasPlainText(botRecord)) {
       appendPlain(botRecord, finalText, false);
     }
     return;

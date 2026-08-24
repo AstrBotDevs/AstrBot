@@ -57,7 +57,8 @@ class AstrBotConfig(dict):
         object.__setattr__(self, "_save_revision", 0)
         object.__setattr__(self, "_save_committed_revision", 0)
 
-        if schema:
+        # An empty schema ({}) is falsy but valid: zero config items, not the global defaults.
+        if schema is not None:
             default_config = self._config_schema_to_default_config(schema)
 
         if not self.check_exist():
@@ -94,14 +95,6 @@ class AstrBotConfig(dict):
             and isinstance(conf["dashboard"], dict)
             and not conf["dashboard"].get("pbkdf2_password")
             and not conf["dashboard"].get("password")
-        ):
-            self._reset_generated_dashboard_password(conf)
-            has_new = True
-        elif (
-            "dashboard" in conf
-            and isinstance(conf["dashboard"], dict)
-            and stored_dashboard_password_change_required
-            and conf["dashboard"].get("pbkdf2_password")
         ):
             self._reset_generated_dashboard_password(conf)
             has_new = True

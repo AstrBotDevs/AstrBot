@@ -3,6 +3,7 @@
   "subtitle": "与AI助手进行对话",
   "input": {
     "placeholder": "想问什么都可以",
+    "projectPlaceholder": "接下来做点什么？",
     "send": "发送",
     "clear": "清空",
     "upload": "上传文件",
@@ -143,6 +144,24 @@
     "noSessions": "该项目暂无对话",
     "noProjects": "暂无项目",
     "confirmDelete": "确定要删除项目 \"{title}\" 吗？项目中的对话不会被删除。"
+  },
+  "workspaceFiles": {
+    "title": "工作区文件",
+    "open": "打开工作区文件",
+    "close": "关闭工作区文件",
+    "refresh": "刷新文件树",
+    "filter": "筛选文件...",
+    "clearFilter": "清除文件筛选",
+    "empty": "工作区暂无文件",
+    "noMatches": "没有匹配的文件",
+    "loadFailed": "加载工作区文件失败",
+    "previewFailed": "读取文件失败",
+    "tooLarge": "文件过大，无法预览",
+    "download": "下载文件",
+    "downloadFailed": "下载文件失败",
+    "dialogPreview": "放大预览",
+    "closePreview": "关闭文件预览",
+    "closeDialogPreview": "关闭放大预览"
   },
   "time": {
     "today": "今天",

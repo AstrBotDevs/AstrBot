@@ -161,6 +161,11 @@ export interface ToolListParams {
   enabled?: boolean;
 }
 
+export interface SkillListParams extends Record<string, unknown> {
+  enabled?: boolean;
+  source?: string;
+}
+
 export interface BackupListParams {
   page?: number;
   page_size?: number;
@@ -924,6 +929,29 @@ export const chatApi = {
       openApiV1.listChatProjectSessions({ path: { project_id: projectId } }),
     );
   },
+  listProjectWorkspaceFiles(projectId: string, path = '') {
+    return typed<any>(
+      openApiV1.listChatProjectWorkspaceFiles({
+        path: { project_id: projectId },
+        query: path ? { path } : undefined,
+      }),
+    );
+  },
+  getProjectWorkspaceFile(projectId: string, path: string) {
+    return typed<any>(
+      openApiV1.getChatProjectWorkspaceFile({
+        path: { project_id: projectId },
+        query: { path },
+      }),
+    );
+  },
+  downloadProjectWorkspaceFile(projectId: string, path: string) {
+    return openApiV1.downloadChatProjectWorkspaceFile({
+      path: { project_id: projectId },
+      query: { path },
+      responseType: 'blob',
+    }) as Promise<AxiosResponse<Blob>>;
+  },
   addProjectSession(projectId: string, sessionId: string) {
     return typed<any>(
       openApiV1.addChatProjectSession({
@@ -1340,6 +1368,11 @@ export const pluginApi = {
       openApiV1.installPluginFromGithub({ body: body as any }),
     );
   },
+  installGit(body: OpenConfig) {
+    return typed<OpenConfig>(
+      openApiV1.installPluginFromGit({ body: body as any }),
+    );
+  },
   installUrl(body: OpenConfig) {
     return typed<OpenConfig>(
       openApiV1.installPluginFromUrl({ body: body as any }),
@@ -1507,7 +1540,7 @@ export const knowledgeApi = {
 };
 
 export const skillApi = {
-  list(params?: { enabled?: boolean; source?: string }) {
+  list(params?: SkillListParams) {
     return typed<any>(openApiV1.listSkills({ query: params }));
   },
   uploadBatch(files: File[]) {

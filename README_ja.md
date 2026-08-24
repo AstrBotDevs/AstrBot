@@ -22,7 +22,7 @@
 <img src="https://img.shields.io/github/v/release/AstrBotDevs/AstrBot?color=76bad9" href="https://github.com/AstrBotDevs/AstrBot/releases/latest">
 <img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="python">
 <img src="https://deepwiki.com/badge.svg" href="https://deepwiki.com/AstrBotDevs/AstrBot">
-<a href="https://zread.ai/AstrBotDevs/AstrBot" target="_blank"><img src="https://img.shields.io/badge/Ask_Zread-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFZIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0LjYxNTZDNS4zMTUwMiAxNC4zOTk5IDUuNjAxNTYgMTQuMTEzNCA1LjYwMTU2IDEzLjc1OTlWMTEuMDM5OUM1LjYwMTU2IDEwLjY4NjQgNS4zMTUwMiAxMC4zOTk5IDQuOTYxNTYgMTAuMzk5OVoiIGZpbGw9IiNmZmYiLz4KPHBhdGggZD0iTTEzLjc1ODQgMS42MDAxSDExLjAzODRDMTAuNjg1IDEuNjAwMSAxMC4zOTg0IDEuODg2NjQgMTAuMzk4NCAyLjI0MDFWNC45NjAxQzEwLjM5ODQgNS4zMTM1NiAxMC42ODUgNS42MDAxIDExLjAzODQgNS42MDAxSDEzLjc1ODRDMTQuMTExOSA1LjYwMDEgMTQuMzk4NCA1LjMxMzU2IDE0LjM5ODQgNC45NjAxVjIuMjQwMUMxNC4zOTg0IDEuODg2NjQgMTQuMTExOSAxLjYwMDEgMTMuNzU4NCAxLjYwMDFZIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDRMNCAxMlpFIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff" alt="zread"/></a>
+<a href="https://zread.ai/AstrBotDevs/AstrBot" target="_blank"><img src="https://img.shields.io/badge/Ask_Zread-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff" alt="zread"/></a>
 <a href="https://hub.docker.com/r/soulter/astrbot"><img alt="Docker pull" src="https://img.shields.io/docker/pulls/soulter/astrbot.svg?color=76bad9"/></a>
 <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.soulter.top%2Fastrbot%2Fplugin-num&query=%24.result&suffix=%20&label=%E3%83%97%E3%83%A9%E3%82%B0%E3%82%A4%E3%83%B3%E3%83%9E%E3%83%BC%E3%82%B1%E3%83%83%E3%83%88&cacheSeconds=3600">
 <img src="https://gitcode.com/Soulter/AstrBot/star/badge.svg" href="https://gitcode.com/Soulter/AstrBot">
@@ -33,7 +33,7 @@
 <a href="https://astrbot.app/">ドキュメント</a> ｜
 <a href="https://blog.astrbot.app/">Blog</a> ｜
 <a href="https://astrbot.featurebase.app/roadmap">ロードマップ</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/issues">Issue</a>
+<a href="https://github.com/AstrBotDevs/AstrBot/issues">Issue</a> ｜
 <a href="mailto:community@astrbot.app">Email Support</a>
 </div>
 
@@ -53,26 +53,19 @@ AstrBot は、主要なインスタントメッセージングアプリと統合
 8. 🌈 Web ChatUI 対応：ChatUI内にAgent Sandboxやウェブ検索などを内蔵。
 9. 🌐 多言語対応（i18n）。
 
-<br>
-
-<table align="center">
-  <tr align="center">
-    <th>💙 ロールプレイ & 感情的な対話</th>
-    <th>✨ プロアクティブ・エージェント (Proactive Agent)</th>
-    <th>🚀 汎用 エージェント的能力</th>
-    <th>🧩 1000+ コミュニティプラグイン</th>
-  </tr>
-  <tr>
-    <td align="center"><p align="center"><img width="984" height="1746" alt="99b587c5d35eea09d84f33e6cf6cfd4f" src="https://github.com/user-attachments/assets/89196061-3290-458d-b51f-afa178049f84" /></p></td>
-    <td align="center"><p align="center"><img width="976" height="1612" alt="c449acd838c41d0915cc08a3824025b1" src="https://github.com/user-attachments/assets/f75368b4-e022-41dc-a9e0-131c3e73e32e" /></p></td>
-    <td align="center"><p align="center"><img width="974" height="1732" alt="image" src="https://github.com/user-attachments/assets/e22a3968-87d7-4708-a7cd-e7f198c7c32e" /></p></td>
-    <td align="center"><p align="center"><img width="976" height="1734" alt="image" src="https://github.com/user-attachments/assets/0952b395-6b4a-432a-8a50-c294b7f89750" /></p></td>
-  </tr>
-</table>
-
 ## クイックスタート
 
+### RainYun ワンクリッククラウドデプロイ
+
+AstrBot をワンクリックで 24 時間稼働させたいものの、サーバーを自分で管理したくないユーザーには、RainYun のワンクリッククラウドデプロイサービスをおすすめします ☁️:
+
+[![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
+
 ### ワンクリックデプロイ
+
+> [!NOTE]
+> [uv](https://docs.astral.sh/uv/) のインストールが必要です。
+> macOS ユーザーの場合：macOS のセキュリティチェックにより、`astrbot` コマンドの初回実行に時間がかかる場合があります（約 10〜20 秒）。
 
 AstrBot を素早く試したいユーザーで、コマンドラインに慣れており `uv` 環境を自分でインストールできる場合は、`uv` のワンクリックデプロイをおすすめします ⚡️:
 
@@ -82,32 +75,17 @@ astrbot init # 初回のみ実行して環境を初期化します
 astrbot run
 ```
 
-> [uv](https://docs.astral.sh/uv/) のインストールが必要です。
-> AstrBot には Python 3.12 以降が必要です。`--python 3.12` を指定すると、`uv` は Python 3.12 で tool 環境を作成します。
-
-> [!NOTE]
-> macOS ユーザーの場合：macOS のセキュリティチェックにより、`astrbot` コマンドの初回実行に時間がかかる場合があります（約 10〜20 秒）。
-
 `astrbot` の更新：
 
 ```bash
 uv tool upgrade astrbot --python 3.12
 ```
 
-> [!WARNING]
-> `uv` 経由でデプロイした AstrBot は、**WebUI からのバージョンアップグレードに対応していません**。更新するには、上記のコマンドをコマンドラインで実行してください。
-
 ### Docker デプロイ
 
 コンテナ運用に慣れており、より安定した本番向けのデプロイ方法を求めるユーザーには、Docker / Docker Compose での AstrBot デプロイをおすすめします。
 
 公式ドキュメント [Docker を使用した AstrBot のデプロイ](https://docs.astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot) をご参照ください。
-
-### 雨云でのデプロイ
-
-AstrBot をワンクリックでデプロイしたく、サーバーを自分で管理したくないユーザーには、雨云のワンクリッククラウドデプロイサービスをおすすめします ☁️:
-
-[![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
 ### デスクトップアプリのデプロイ
 
@@ -121,25 +99,19 @@ AstrBot をワンクリックでデプロイしたく、サーバーを自分で
 
 [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) からダウンロードしてインストールしてください。
 
-### Replit でのデプロイ
-
-Replit デプロイはコミュニティ提供の方式で、オンラインデモや軽量な試用に向いています。
-
-[![Run on Repl.it](https://repl.it/badge/github/AstrBotDevs/AstrBot)](https://repl.it/github/AstrBotDevs/AstrBot)
-
-### AUR
-
-AUR 方式は Arch Linux ユーザー向けで、システムのパッケージ運用に合わせて AstrBot を導入したい場合に適しています。
-
-次のコマンドで `astrbot-git` をインストールし、ローカル環境で AstrBot を起動してください。
-
-```bash
-yay -S astrbot-git
-```
-
 **その他のデプロイ方法**
 
 パネル操作での導入やより高度なカスタマイズが必要な場合は、[宝塔パネルデプロイ](https://docs.astrbot.app/deploy/astrbot/btpanel.html)（BT Panel 経由の導入）、[1Panel デプロイ](https://docs.astrbot.app/deploy/astrbot/1panel.html)（1Panel アプリマーケット経由）、[CasaOS デプロイ](https://docs.astrbot.app/deploy/astrbot/casaos.html)（NAS / ホームサーバー向け可視化導入）、[手動デプロイ](https://docs.astrbot.app/deploy/astrbot/cli.html)（`uv` とソースベースのフルカスタム導入）を参照してください。
+
+## ❤️ スポンサー
+
+[Afdian](https://afdian.com/a/astrbot_team) または[メール](mailto:community@astrbot.app)からのご支援を歓迎します。
+
+<p align="center">
+  <a target="_blank" href="https://astrbot.app/#/sponsors">
+    <img alt="sponsors" src="https://sponsors.astrbot.app/?v=1">
+  </a>
+</p>
 
 ## サポートされているメッセージプラットフォーム
 
@@ -151,7 +123,7 @@ AstrBot をよく使うチャットプラットフォームに接続できます
 | OneBot v11 プロトコル実装 | 公式 |
 | Telegram | 公式 |
 | WeChat Work アプリケーション & WeChat Work インテリジェントボット | 公式 |
-| WeChat カスタマーサービス & WeChat 公式アカウント | 公式 |
+| WeChat 公式アカウント | 公式 |
 | Feishu (Lark) | 公式 |
 | DingTalk | 公式 |
 | Slack | 公式 |
@@ -227,19 +199,7 @@ pre-commit install
 
 ### QQ グループ
 
-- 12群: 916228568 (新)
-- 9群: 1076659624 (満員)
-- 10群: 1078079676 (満員)
-- 11群: 704659519 (満員)
-- 1群: 322154837 (満員)
-- 3群: 630166526 (満員)
-- 4群: 1077826412 (満員)
-- 5群: 822130018 (満員)
-- 6群: 753075035 (満員)
-- 7群: 743746109 (満員)
-- 8群: 1030353265 (満員)
-- 開発者群: 975206796
-- 開発者群（正式）: 1039761811
+15 以上のチャットグループがあります。詳細は[コミュニティ](https://docs.astrbot.app/community.html)をご覧ください。
 
 ### Discord サーバー
 
@@ -253,9 +213,10 @@ AstrBot への貢献をしていただいたすべてのコントリビュータ
   <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=300&columns=15" />
 </a>
 
-また、このプロジェクトの誕生は以下のオープンソースプロジェクトの助けなしには実現できませんでした:
+オープンソースの仲間たち ❤️
 
-- [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ) - 素晴らしい猫猫フレームワーク
+- [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ) - 素晴らしい猫フレームワーク
+- [Mai-with-u/MaiBot](https://github.com/Mai-with-u/MaiBot) - QQ 上の強力な「デジタル生命」！
 
 ## ⭐ Star History
 

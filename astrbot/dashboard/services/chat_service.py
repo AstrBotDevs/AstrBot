@@ -28,7 +28,7 @@ from astrbot.core.platform.sources.webchat.request_flags import (
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-from astrbot.core.utils.datetime_utils import to_utc_isoformat
+from astrbot.core.utils.datetime_utils import generate_timestamp_id, to_utc_isoformat
 from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
     detect_image_mime_type_async,
@@ -47,11 +47,11 @@ WEBCHAT_IMAGE_MIME_TYPES = {
 
 def sanitize_upload_filename(filename: str | None) -> str:
     if not filename:
-        return f"{uuid.uuid4()!s}"
+        return generate_timestamp_id()
     normalized = filename.replace("\\", "/")
     name = PurePosixPath(normalized).name.replace("\x00", "").strip()
     if name in ("", ".", ".."):
-        return f"{uuid.uuid4()!s}"
+        return generate_timestamp_id()
     return name
 
 
@@ -626,7 +626,8 @@ class ChatService:
                     target_path = file_path.with_suffix(detected_suffix)
                     if target_path.exists():
                         target_path = (
-                            attachments_dir / f"{uuid.uuid4().hex}{detected_suffix}"
+                            attachments_dir
+                            / f"{generate_timestamp_id()}{detected_suffix}"
                         )
                     await asyncio.to_thread(file_path.rename, target_path)
                     file_path = target_path
@@ -1114,6 +1115,25 @@ class ChatService:
                 "Message content is empty (reply only is not allowed)"
             )
 
+        if platform_history_id == "webchat":
+            try:
+                platform_session = await self.db.get_platform_session_by_id(
+                    webchat_conv_id
+                )
+                if platform_session is None:
+                    await self.db.create_platform_session(
+                        creator=username,
+                        platform_id="webchat",
+                        session_id=webchat_conv_id,
+                        is_group=0,
+                    )
+            except Exception as exc:
+                logger.warning(
+                    "Failed to ensure WebChat platform session %s: %s",
+                    webchat_conv_id,
+                    exc,
+                )
+
         message_id = str(uuid.uuid4())
         llm_checkpoint_id = post_data.get("_llm_checkpoint_id") or str(uuid.uuid4())
         skip_user_history = bool(post_data.get("_skip_user_history"))
@@ -1168,6 +1188,9 @@ class ChatService:
                         "message_id": message_id,
                         "llm_checkpoint_id": llm_checkpoint_id,
                         "thread_selected_text": thread_selected_text,
+                        "_api_key_allow_admin_role": post_data.get(
+                            "_api_key_allow_admin_role"
+                        ),
                     },
                 ),
             )

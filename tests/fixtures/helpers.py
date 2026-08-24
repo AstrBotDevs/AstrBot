@@ -98,7 +98,9 @@ def create_mock_update(
     video: MagicMock | None = None,
     document: MagicMock | None = None,
     voice: MagicMock | None = None,
+    audio: MagicMock | None = None,
     sticker: MagicMock | None = None,
+    video_note: MagicMock | None = None,
     reply_to_message: MagicMock | None = None,
     quote: MagicMock | None = None,
     caption: str | None = None,
@@ -121,7 +123,9 @@ def create_mock_update(
         video: 视频对象
         document: 文档对象
         voice: 语音对象
+        audio: 音频文件对象
         sticker: 贴纸对象
+        video_note: 圆形视频消息对象
         reply_to_message: 回复的消息
         quote: 回复消息中的部分引用
         caption: 说明文字
@@ -158,7 +162,9 @@ def create_mock_update(
     message.video = video
     message.document = document
     message.voice = voice
+    message.audio = audio
     message.sticker = sticker
+    message.video_note = video_note
     message.reply_to_message = reply_to_message
     message.quote = quote
     message.caption = caption
@@ -577,9 +583,14 @@ def create_mock_updater_update(
         Callable: 异步函数，可用于 monkeypatch.setattr
     """
 
-    async def mock_update(plugin, proxy: str = "", download_url: str = "") -> None:
+    async def mock_update(
+        plugin,
+        proxy: str = "",
+        download_url: str = "",
+        repo_url: str = "",
+    ) -> None:
         """Mock updater.update 方法。"""
-        del proxy, download_url
+        del proxy, download_url, repo_url
         plugin_dir = plugin_builder.get_plugin_path(plugin.name)
 
         # 创建更新标记文件

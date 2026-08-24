@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from astrbot.core import LogBroker
+from astrbot.core import DEMO_MODE, LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.log import LogManager
@@ -45,10 +45,7 @@ from astrbot.dashboard.services.subagent_service import SubAgentService
 from astrbot.dashboard.services.t2i_service import T2iService
 from astrbot.dashboard.services.tools_service import ToolsService
 from astrbot.dashboard.services.update_service import (
-    DEMO_MODE,
     UpdateService,
-    call_download_dashboard,
-    call_extract_dashboard,
     call_get_dashboard_version,
     call_pip_install,
 )
@@ -137,10 +134,8 @@ def create_dashboard_asgi_app(
         t2i=T2iService(core_lifecycle),
         tools=ToolsService(core_lifecycle),
         updates=UpdateService(
-            core_lifecycle.astrbot_updator,
+            core_lifecycle.astrbot_updater,
             core_lifecycle,
-            download_dashboard_func=call_download_dashboard,
-            extract_dashboard_func=call_extract_dashboard,
             get_dashboard_version_func=call_get_dashboard_version,
             pip_install_func=call_pip_install,
             demo_mode=DEMO_MODE,

@@ -4,6 +4,10 @@
     "enabled": "自动滚动已开启",
     "disabled": "自动滚动已关闭"
   },
+  "hideUserChat": {
+    "enabled": "已排除用户对话",
+    "disabled": "排除用户对话"
+  },
   "pipInstall": {
     "button": "安装 pip 库",
     "dialogTitle": "安装 Pip 库",

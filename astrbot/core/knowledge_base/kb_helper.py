@@ -323,16 +323,28 @@ class KBHelper:
                     await progress_callback("chunking", 0, 100)
 
                 try:
-                    # 根据文件类型选择分块器：Markdown 文件使用结构感知分块
+                    # These parsers return Markdown, so retain their heading hierarchy.
                     effective_chunker = self.chunker
                     file_ext = Path(file_name).suffix.lower() if file_name else ""
-                    if file_ext in (".md", ".markdown", ".mkd", ".mdx"):
+                    if file_ext in {
+                        ".adoc",
+                        ".docx",
+                        ".epub",
+                        ".markdown",
+                        ".md",
+                        ".mdx",
+                        ".mkd",
+                        ".rst",
+                        ".xls",
+                        ".xlsx",
+                    }:
                         effective_chunker = MarkdownChunker(
                             chunk_size=chunk_size,
                             chunk_overlap=chunk_overlap,
                         )
                         logger.info(
-                            f"检测到 Markdown 文件 '{file_name}'，使用 MarkdownChunker 进行结构化分块"
+                            f"Using MarkdownChunker for structured document "
+                            f"'{file_name}'."
                         )
 
                     chunks_text = await effective_chunker.chunk(
@@ -380,6 +392,12 @@ class KBHelper:
                         "chunk_index": idx,
                     },
                 )
+            document_title = Path(file_name).stem.strip()
+            embedding_contents = (
+                [f"{document_title}\n\n{chunk_text}" for chunk_text in chunks_text]
+                if document_title
+                else contents
+            )
 
             if progress_callback:
                 await progress_callback("chunking", 100, 100)
@@ -397,6 +415,7 @@ class KBHelper:
                     tasks_limit=tasks_limit,
                     max_retries=max_retries,
                     progress_callback=embedding_progress_callback,
+                    embedding_contents=embedding_contents,
                 )
             except KnowledgeBaseUploadError:
                 raise
