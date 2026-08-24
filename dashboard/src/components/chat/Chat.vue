@@ -197,6 +197,8 @@
             <v-menu
               location="end"
               offset="8"
+              open-on-hover
+              :open-on-click="isTouchDevice"
               :close-on-content-click="true"
             >
               <template #activator="{ props: transportMenuProps }">
@@ -250,6 +252,8 @@
             <v-menu
               location="end"
               offset="8"
+              open-on-hover
+              :open-on-click="isTouchDevice"
               :close-on-content-click="true"
             >
               <template #activator="{ props: languageMenuProps }">
@@ -815,6 +819,14 @@ const transportMode = ref<TransportMode>(
     ? "websocket"
     : "sse",
 );
+
+const isTouchDevice = (
+  navigator.maxTouchPoints > 0 ||
+  'ontouchstart' in window ||
+  // @ts-ignore
+  (window.DocumentTouch && document instanceof DocumentTouch)
+);
+
 const transportOptions: Array<{ value: TransportMode; labelKey: string }> = [
   { value: "sse", labelKey: "transport.sse" },
   { value: "websocket", labelKey: "transport.websocket" },
