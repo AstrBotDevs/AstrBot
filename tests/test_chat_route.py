@@ -127,17 +127,36 @@ async def test_chat_stream_disconnect_does_not_own_run_lifecycle(
             run.run_id,
             {
                 "type": "plain",
-                "data": "completed after refresh",
-                "streaming": True,
+                "data": "⏳ Compressing context...",
+                "streaming": False,
+                "chain_type": "webchat_ephemeral",
+                "message_id": run.run_id,
+            },
+        )
+        for _ in range(10):
+            if run.message_parts:
+                break
+            await asyncio.sleep(0)
+        assert run.message_parts == [
+            {"type": "plain", "text": "⏳ Compressing context..."}
+        ]
+
+        await chat_service.webchat_queue_mgr.put_back_queue(
+            run.run_id,
+            {
+                "type": "plain",
+                "data": json.dumps({"current_context_tokens": 42}),
+                "streaming": False,
+                "chain_type": "agent_stats",
                 "message_id": run.run_id,
             },
         )
         await chat_service.webchat_queue_mgr.put_back_queue(
             run.run_id,
             {
-                "type": "complete",
-                "data": "completed after refresh",
-                "streaming": True,
+                "type": "plain",
+                "data": "✅ Context compressed.",
+                "streaming": False,
                 "message_id": run.run_id,
             },
         )
@@ -152,8 +171,13 @@ async def test_chat_stream_disconnect_does_not_own_run_lifecycle(
         )
         await asyncio.wait_for(run.task, timeout=1)
 
-        saved_parts = service.save_bot_message.await_args.args[1]
-        assert saved_parts == [{"type": "plain", "text": "completed after refresh"}]
+        service.save_bot_message.assert_awaited_once()
+        save_args = service.save_bot_message.await_args.args
+        assert save_args[1] == [{"type": "plain", "text": "✅ Context compressed."}]
+        assert save_args[2] == {"current_context_tokens": 42}
+        assert run.message_parts == [
+            {"type": "plain", "text": "✅ Context compressed."}
+        ]
         assert run.run_id not in service.chat_runs
     finally:
         if run.task and not run.task.done():

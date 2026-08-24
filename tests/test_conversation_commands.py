@@ -355,7 +355,7 @@ async def test_compact_rejects_unsupported_configuration_and_shared_group_member
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("platform_name", "sent_types"),
-    [("webchat", [None, "agent_stats"]), ("telegram", [None])],
+    [("webchat", ["webchat_ephemeral", "agent_stats"]), ("telegram", [None])],
 )
 async def test_compact_writes_reduced_checkpoint_history_and_expected_stats(
     monkeypatch: pytest.MonkeyPatch,
@@ -419,7 +419,7 @@ async def test_compact_does_not_write_when_summary_fails_or_is_unchanged(
 
     manager.update_conversation.assert_not_awaited()
     assert "original context was preserved" in _result_text(event)
-    assert [chain.type for chain in event.sent] == [None]
+    assert [chain.type for chain in event.sent] == ["webchat_ephemeral"]
 
 
 @pytest.mark.asyncio
@@ -584,7 +584,7 @@ async def test_compact_force_stop_returns_without_setting_a_result(
 
     manager.update_conversation.assert_not_awaited()
     assert event.result is None
-    assert [chain.type for chain in event.sent] == [None]
+    assert [chain.type for chain in event.sent] == ["webchat_ephemeral"]
 
 
 @pytest.mark.asyncio
@@ -646,9 +646,12 @@ async def test_compact_verifies_history_after_storage_update_error(
     manager.update_conversation.assert_awaited_once()
     assert expected in _result_text(event)
     if verification_state == "target":
-        assert [chain.type for chain in event.sent] == [None, "agent_stats"]
+        assert [chain.type for chain in event.sent] == [
+            "webchat_ephemeral",
+            "agent_stats",
+        ]
     else:
-        assert [chain.type for chain in event.sent] == [None]
+        assert [chain.type for chain in event.sent] == ["webchat_ephemeral"]
     assert "secret-history" not in caplog.text
     assert "Traceback" not in caplog.text
     assert event.unified_msg_origin not in caplog.text
@@ -706,5 +709,8 @@ async def test_compact_stats_failure_does_not_change_success_result(
     await conversation_module.ConversationCommands(context).compact(event)
 
     manager.update_conversation.assert_awaited_once()
-    assert [chain.type for chain in event.sent] == [None, "agent_stats"]
+    assert [chain.type for chain in event.sent] == [
+        "webchat_ephemeral",
+        "agent_stats",
+    ]
     assert _result_text(event) == "✅ Context compressed."

@@ -286,7 +286,12 @@ class ConversationCommands:
             reply("❌ No LLM provider is available for context compression.")
             return
 
-        await message.send(MessageChain().message("⏳ Compressing context..."))
+        progress_type = (
+            "webchat_ephemeral" if message.get_platform_name() == "webchat" else None
+        )
+        await message.send(
+            MessageChain(type=progress_type).message("⏳ Compressing context...")
+        )
 
         try:
             async with session_lock_manager.acquire_lock(umo):

@@ -30,6 +30,7 @@ from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queu
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id, to_utc_isoformat
 from astrbot.dashboard.services.chat_service import (
+    WEBCHAT_EPHEMERAL_CHAIN_TYPE,
     BotMessageAccumulator,
     build_bot_history_content,
     collect_plain_text_from_message_parts,
@@ -704,7 +705,10 @@ class LiveChatService:
                 outgoing = {"ct": "chat", **result}
                 await self.send_chat_payload(session, outgoing, send_json)
 
-                if result_type == "plain":
+                if (
+                    result_type == "plain"
+                    and chain_type != WEBCHAT_EPHEMERAL_CHAIN_TYPE
+                ):
                     message_accumulator.add_plain(
                         result_text,
                         chain_type=chain_type,
@@ -755,6 +759,7 @@ class LiveChatService:
                         "tool_call",
                         "tool_call_result",
                         "agent_stats",
+                        WEBCHAT_EPHEMERAL_CHAIN_TYPE,
                     ):
                         should_save = True
 
