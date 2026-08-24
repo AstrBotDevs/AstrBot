@@ -252,6 +252,11 @@ async def test_resumed_stream_starts_with_full_snapshot(chat_service_instance):
         ):
             await chat_service.webchat_queue_mgr.put_back_queue(run.run_id, payload)
         await asyncio.wait_for(run.task, timeout=1)
+        service.save_bot_message.assert_awaited_once()
+        saved_parts = service.save_bot_message.await_args.args[1]
+        assert saved_parts == [
+            {"type": "plain", "text": "before refresh and after refresh"},
+        ]
     finally:
         if run.task and not run.task.done():
             run.task.cancel()
