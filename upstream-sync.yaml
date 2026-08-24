@@ -5,15 +5,15 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 19d00fb1f0d822690a467e8dca498adebbb2d67b
-  synced_at_utc: 2026-08-21T13:55:06Z
-  sync_method: cherry-pick
-  source_pr: '9750, 9735'
+  commit: c6a14e0600485293bd88cf78c04ecec967b21b50
+  synced_at_utc: 2026-08-24T13:48:50Z
+  sync_method: manual-adaptation
+  source_pr: '9791, 9752'
   note: >-
-    Reviewed the interval from 4fe29759758255a35ad01ea6177a91c2293bfcd3
-    through 19d00fb1f0d822690a467e8dca498adebbb2d67b. Cherry-picked the
-    NVIDIA retrieval default-model update (#9750) and the Windows SVG MIME
-    override (#9735) with no conflicts. Existing saved NVIDIA provider
-    configs and knowledge-base indexes are not migrated. Validation passed:
-    95 focused pytest cases covering NVIDIA contracts, Dashboard static
-    files, and startup MIME registration.
+    Reviewed the interval from 19d00fb1f0d822690a467e8dca498adebbb2d67b
+    through c6a14e0600485293bd88cf78c04ecec967b21b50. Adapted the Anthropic
+    httpx/httpx2 module resolution (#9791) onto the relocated provider test
+    and the conversation-detail edit-mode scrollbar fix (#9752) onto the
+    composition-based ConversationPage. Validation passed: 27 focused pytest
+    cases and 6 Dashboard Vitest layout cases. No upstream version bump
+    occurred in this interval, so 4.27.4 and its changelog remain unchanged.
