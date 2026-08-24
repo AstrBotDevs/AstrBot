@@ -1,0 +1,47 @@
+# CODEOWNERS for Xero-Team/AstrBot
+#
+# GitHub uses this file to automatically request reviews from the owners of
+# changed paths. One review is requested per group; team reviews must use
+# @org/team handles. See:
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# The fork is maintained by BegoniaHe (lead) and YUZHEthefool. Update this file
+# when ownership boundaries change.
+
+# Global default owners for anything not matched below.
+# Every path falls back here, so unlisted areas are never orphaned.
+*                           @BegoniaHe @YUZHEthefool
+
+# Backend core runtime (event bus, pipeline, providers, platforms, plugins,
+# agents, dashboard API). Lead: BegoniaHe.
+/astrbot/                   @BegoniaHe
+/main.py                    @BegoniaHe
+/runtime_bootstrap.py       @BegoniaHe
+
+# Dashboard frontend (Vue + Vite, generated API client, locale sources).
+/dashboard/                 @BegoniaHe
+
+# Documentation site (VitePress sources, bilingual zh/en, OpenAPI publish).
+/docs/                      @BegoniaHe @YUZHEthefool
+
+# Repo tooling, CI, and quality gates.
+/.github/                   @BegoniaHe @YUZHEthefool
+/Makefile                   @BegoniaHe
+/pyproject.toml             @BegoniaHe
+/requirements.txt           @BegoniaHe
+/uv.lock                    @BegoniaHe
+
+# Deployment manifests.
+/Dockerfile                 @BegoniaHe
+/Dockerfile.docs            @BegoniaHe
+/compose.yml                @BegoniaHe
+/compose-with-napcat.yml    @BegoniaHe
+/k8s/                       @BegoniaHe
+
+# Upstream-sync tracking and fork governance records.
+/upstream-sync.yaml         @BegoniaHe @YUZHEthefool
+/upstream-decisions.jsonl   @BegoniaHe @YUZHEthefool
+/AGENTS.md                  @BegoniaHe @YUZHEthefool
+
+# Per-version changelog entries.
+/changelogs/                @BegoniaHe @YUZHEthefool

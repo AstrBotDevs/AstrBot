@@ -1,0 +1,36 @@
+# GitHub Issue template chooser configuration.
+# https://docs.github.com/communities/using-templates-to-encourage-useful-issues-and-pull-requests/configuring-issue-templates-for-your-repository
+
+# Blank issues are disabled so that every report goes through a structured
+# template (bug / feature) or a contact link. This keeps issue triage focused
+# and routes questions, security reports, and discussions to the right place
+# instead of the issue tracker.
+blank_issues_enabled: false
+
+contact_links:
+  - name: 📖 Documentation / 文档
+    url: https://docs.astrbot.app
+    about: |
+      Please read the documentation and FAQ before opening an issue.
+      提问前请先查阅文档与常见问题。
+      English: https://docs.astrbot.app/en/ ｜ 简体中文: https://docs.astrbot.app/
+
+  - name: ❓ Ask a Question / 提问与讨论
+    url: https://github.com/Xero-Team/AstrBot/blob/master/SUPPORT.md
+    about: |
+      Usage questions and discussions belong in community channels (Discord / QQ
+      groups), not the issue tracker. See SUPPORT.md for where to ask.
+      使用问题与讨论请走社区渠道（Discord / QQ 群），不要发到 Issue 列表，详见 SUPPORT.md。
+
+  - name: 🔒 Report a Security Vulnerability / 报告安全漏洞
+    url: https://github.com/Xero-Team/AstrBot/security/policy
+    about: |
+      Report security issues privately. Do NOT open a public issue for
+      vulnerabilities. See SECURITY.md.
+      安全漏洞请私密报告，切勿在公开 Issue 中提交，详见 SECURITY.md。
+
+  - name: 💬 Community Channels / 社区渠道
+    url: https://github.com/Xero-Team/AstrBot/blob/master/docs/en/community.md
+    about: |
+      Discord, QQ groups, and other community channels.
+      Discord、QQ 群及其他社区渠道。
