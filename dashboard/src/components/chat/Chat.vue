@@ -820,12 +820,7 @@ const transportMode = ref<TransportMode>(
     : "sse",
 );
 
-const isTouchDevice = (
-  navigator.maxTouchPoints > 0 ||
-  'ontouchstart' in window ||
-  // @ts-ignore
-  (window.DocumentTouch && document instanceof DocumentTouch)
-);
+const isTouchDevice = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
 
 const transportOptions: Array<{ value: TransportMode; labelKey: string }> = [
   { value: "sse", labelKey: "transport.sse" },
