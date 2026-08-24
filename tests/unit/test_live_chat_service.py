@@ -253,6 +253,9 @@ async def test_handle_chat_message_scopes_events_to_request_by_default():
         return_value=[{"type": "plain", "text": "hello"}]
     )
     service.ensure_chat_subscription = AsyncMock(return_value="subscription-1")
+    service.save_bot_message = AsyncMock(
+        return_value=SimpleNamespace(id=2, created_at=datetime.now(UTC))
+    )
 
     async def send_json(payload: dict) -> None:
         sent.append(payload)
@@ -277,6 +280,25 @@ async def test_handle_chat_message_scopes_events_to_request_by_default():
         await webchat_queue_mgr.put_back_queue(
             message_id,
             {
+                "type": "plain",
+                "data": "⏳ Compressing context...",
+                "streaming": False,
+                "chain_type": "webchat_ephemeral",
+                "message_id": message_id,
+            },
+        )
+        await webchat_queue_mgr.put_back_queue(
+            message_id,
+            {
+                "type": "plain",
+                "data": "✅ Context compressed.",
+                "streaming": False,
+                "message_id": message_id,
+            },
+        )
+        await webchat_queue_mgr.put_back_queue(
+            message_id,
+            {
                 "type": "end",
                 "data": "",
                 "streaming": False,
@@ -289,6 +311,12 @@ async def test_handle_chat_message_scopes_events_to_request_by_default():
         assert sent[0]["message_id"] == message_id
         assert sent[-1]["type"] == "end"
         assert sent[-1]["message_id"] == message_id
+        assert [
+            payload["data"] for payload in sent if payload.get("type") == "plain"
+        ] == ["⏳ Compressing context...", "✅ Context compressed."]
+        service.save_bot_message.assert_awaited_once()
+        saved_parts = service.save_bot_message.await_args.args[1]
+        assert saved_parts == [{"type": "plain", "text": "✅ Context compressed."}]
     finally:
         if not task.done():
             task.cancel()
