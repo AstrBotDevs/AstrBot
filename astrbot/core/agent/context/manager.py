@@ -37,6 +37,7 @@ class ContextManager:
                 keep_recent_ratio=config.llm_compress_keep_recent_ratio,
                 instruction_text=config.llm_compress_instruction,
                 token_counter=self.token_counter,
+                preserve_latest_round=config.llm_compress_preserve_latest_round,
             )
         else:
             self.compressor = TruncateByTurnsCompressor(
@@ -44,12 +45,18 @@ class ContextManager:
             )
 
     async def process(
-        self, messages: list[Message], trusted_token_usage: int = 0
+        self,
+        messages: list[Message],
+        trusted_token_usage: int = 0,
+        force_compress: bool = False,
     ) -> list[Message]:
         """Process the messages.
 
         Args:
             messages: The original message list.
+            trusted_token_usage: Token usage reported by the previous provider call.
+            force_compress: Whether to bypass automatic limits and run the configured
+                compressor immediately without a truncation fallback.
 
         Returns:
             The processed message list.
@@ -58,11 +65,19 @@ class ContextManager:
             result = messages
 
             # 1. 基于轮次的截断 (Enforce max turns)
-            if self.config.enforce_max_turns != -1:
+            if not force_compress and self.config.enforce_max_turns != -1:
                 result = self.truncator.truncate_by_turns(
                     result,
                     keep_most_recent_turns=self.config.enforce_max_turns,
                     drop_turns=self.config.truncate_turns,
+                )
+
+            if force_compress:
+                total_tokens = self.token_counter.count_tokens(result)
+                return await self._run_compression(
+                    result,
+                    total_tokens,
+                    allow_halving_fallback=False,
                 )
 
             # 2. 基于 token 的压缩
@@ -78,14 +93,16 @@ class ContextManager:
 
             return result
         except Exception as e:
-            logger.error(f"Error during context processing: {e}", exc_info=True)
+            logger.error("Context processing failed: %s.", type(e).__name__)
             return messages
 
     async def _run_compression(
-        self, messages: list[Message], prev_tokens: int
+        self,
+        messages: list[Message],
+        prev_tokens: int,
+        allow_halving_fallback: bool = True,
     ) -> list[Message]:
-        """
-        Compress/truncate the messages.
+        """Compress or truncate the messages.
 
         If the context still exceeds the limit after compression (for example
         because the summary request failed), whole rounds are dropped, oldest
@@ -95,6 +112,8 @@ class ContextManager:
         Args:
             messages: The original message list.
             prev_tokens: The token count before compression.
+            allow_halving_fallback: Whether to drop oldest rounds if the result still
+                exceeds the automatic compression threshold.
 
         Returns:
             The compressed/truncated message list.
@@ -106,16 +125,22 @@ class ContextManager:
         # double check
         tokens_after_summary = self.token_counter.count_tokens(messages)
 
-        # calculate compress rate
-        compress_rate = (tokens_after_summary / self.config.max_context_tokens) * 100
-        logger.info(
-            f"Compress completed."
-            f" {prev_tokens} -> {tokens_after_summary} tokens,"
-            f" compression rate: {compress_rate:.2f}%.",
-        )
+        if self.config.max_context_tokens > 0:
+            compress_rate = (
+                tokens_after_summary / self.config.max_context_tokens
+            ) * 100
+            logger.info(
+                f"Compress completed."
+                f" {prev_tokens} -> {tokens_after_summary} tokens,"
+                f" compression rate: {compress_rate:.2f}%.",
+            )
+        else:
+            logger.info(
+                f"Compress completed. {prev_tokens} -> {tokens_after_summary} tokens."
+            )
 
         # last check
-        if not self.compressor.should_compress(
+        if not allow_halving_fallback or not self.compressor.should_compress(
             messages, tokens_after_summary, self.config.max_context_tokens
         ):
             return messages
