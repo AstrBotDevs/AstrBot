@@ -25,6 +25,7 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from ...register import register_platform_adapter
 from .aiocqhttp_message_event import *
 from .aiocqhttp_message_event import AiocqhttpMessageEvent
+from .guarded_cqhttp import GuardedCQHttp
 
 
 @register_platform_adapter(
@@ -52,10 +53,15 @@ class AiocqhttpAdapter(Platform):
             support_streaming_message=False,
         )
 
-        self.bot = CQHttp(
+        self.bot = GuardedCQHttp(
             use_ws_reverse=True,
             import_name="aiocqhttp",
             api_timeout_sec=180,
+            ws_receive_timeout_sec=platform_config.get(
+                "ws_reverse_idle_timeout",
+                60,
+            ),
+            connection_label=self.metadata.id,
             access_token=platform_config.get(
                 "ws_reverse_token",
             ),  # 以防旧版本配置不存在

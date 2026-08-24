@@ -362,6 +362,7 @@ CONFIG_METADATA_2 = {
                         "ws_reverse_host": "0.0.0.0",
                         "ws_reverse_port": 6199,
                         "ws_reverse_token": "",
+                        "ws_reverse_idle_timeout": 60,
                     },
                     "个人微信": {
                         "id": "weixin_personal",
@@ -824,6 +825,11 @@ CONFIG_METADATA_2 = {
                         "description": "反向 Websocket Token",
                         "type": "string",
                         "hint": "反向 Websocket Token。未设置则不启用 Token 验证。",
+                    },
+                    "ws_reverse_idle_timeout": {
+                        "description": "反向 Websocket 入站帧超时",
+                        "type": "int",
+                        "hint": "超过该秒数未收到任何帧时关闭连接并等待协议端重连；设为 0 可禁用。",
                     },
                     "wecom_ai_bot_name": {
                         "description": "企业微信智能机器人的名字",
