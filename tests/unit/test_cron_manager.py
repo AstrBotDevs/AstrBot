@@ -656,6 +656,7 @@ class TestRunActiveAgentJob:
                 {"max_agent_step": True}, 30, id="boolean_falls_back_to_default"
             ),
             pytest.param({"max_agent_step": "50"}, 50, id="numeric_string_coerced"),
+            pytest.param({"max_agent_step": 0}, 1, id="zero_clamped_to_min"),
         ],
     )
     async def test_woke_main_agent_applies_max_agent_step(

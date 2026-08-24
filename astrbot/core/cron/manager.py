@@ -446,6 +446,7 @@ class CronJobManager:
         agent_max_step = coerce_int_config(
             provider_settings.get("max_agent_step", 30),
             default=30,
+            min_value=1,
             field_name="provider_settings.max_agent_step",
         )
         config = MainAgentBuildConfig(

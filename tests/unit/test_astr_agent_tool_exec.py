@@ -438,6 +438,7 @@ async def test_background_wakeup_passes_provider_settings_to_main_agent(
         pytest.param({}, 30, id="missing_falls_back_to_default"),
         pytest.param({"max_agent_step": True}, 30, id="boolean_falls_back_to_default"),
         pytest.param({"max_agent_step": "50"}, 50, id="numeric_string_coerced"),
+        pytest.param({"max_agent_step": 0}, 1, id="zero_clamped_to_min"),
     ],
 )
 async def test_background_wakeup_applies_max_agent_step(
