@@ -197,7 +197,7 @@
             <v-menu
               location="end"
               offset="8"
-              open-on-hover
+              :open-on-hover="!isTouchDevice"
               :open-on-click="isTouchDevice"
               :close-on-content-click="true"
             >
@@ -252,7 +252,7 @@
             <v-menu
               location="end"
               offset="8"
-              open-on-hover
+              :open-on-hover="!isTouchDevice"
               :open-on-click="isTouchDevice"
               :close-on-content-click="true"
             >
@@ -820,7 +820,7 @@ const transportMode = ref<TransportMode>(
     : "sse",
 );
 
-const isTouchDevice = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
+const isTouchDevice: boolean = window.matchMedia('(pointer: coarse)').matches;
 
 const transportOptions: Array<{ value: TransportMode; labelKey: string }> = [
   { value: "sse", labelKey: "transport.sse" },
