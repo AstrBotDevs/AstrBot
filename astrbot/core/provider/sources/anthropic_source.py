@@ -131,7 +131,14 @@ class ProviderAnthropic(Provider):
         try:
             from anthropic import _base_client as anthropic_base_client
 
-            httpx_module = getattr(anthropic_base_client, "httpx", httpx)
+            # anthropic <1.0.0 exposes the bundled httpx as ``_base_client.httpx``;
+            # 1.0.0+ renamed it to ``_base_client.httpx2``. Prefer the SDK's own
+            # module in either case and fall back to the global httpx import.
+            httpx_module = getattr(
+                anthropic_base_client,
+                "httpx",
+                getattr(anthropic_base_client, "httpx2", httpx),
+            )
         except ImportError:
             pass
         return create_proxy_client(
