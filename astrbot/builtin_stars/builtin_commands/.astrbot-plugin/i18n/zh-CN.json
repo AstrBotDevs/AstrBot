@@ -1,7 +1,7 @@
 {
   "metadata": {
     "display_name": "内置指令",
-    "desc": "AstrBot 内置的会话、对话、Provider、Persona 与插件指令。"
+    "desc": "AstrBot 内置的会话、对话、Provider、Persona、插件与机器人指令。"
   },
   "commands": {
     "help.header": "AstrBot v{version}（WebUI：{dashboard}）",
@@ -15,6 +15,16 @@
     "help.notice_title": "公告",
     "help.image_version": "AstrBot v{version}",
     "help.image_webui": "WebUI {dashboard}",
+    "bot.status.on": "启用",
+    "bot.status.off": "停用",
+    "bot.status.body": "AstrBot v{version}\n会话：{session}\nLLM：{llm}\nTTS：{tts}",
+    "bot.set.enabled": "当前会话已启用。",
+    "bot.set.disabled": "当前会话已停用。",
+    "bot.leave.private": "退群只能在群聊中使用。",
+    "bot.leave.unsupported": "当前平台不支持退群。",
+    "bot.leave.confirm": "这会让机器人退出当前群。确认请再次发送 `/bot leave --confirm`。",
+    "bot.leave.ok": "正在退出当前群。",
+    "bot.leave.failed": "退群失败。",
     "session.info.body": "UMO：{umo}\nUID：{user_id}\nUMO 用于设置白名单和配置路由，UID 用于设置管理员列表。\n\n当前会话信息：\nBot ID：{platform_id}\n消息类型：{message_type}\n会话 ID：{session_id}{group_note}",
     "session.info.group": "\n\n群 ID：{group_id}。将该 ID 加入白名单即可允许整个群。",
     "session.name.empty": "（空）",

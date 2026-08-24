@@ -39,6 +39,16 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 - `/help`：显示当前启用的根指令、一层子命令和版本信息。
 - `/help --image` 或 `/help -i`：生成图片版帮助。
 
+### 机器人状态
+
+- `/bot status`：显示版本，以及当前会话的整体开关、LLM 开关和 TTS 开关。需要 `session.read`。
+- `/bot enable`：启用当前会话。需要 `session.manage`。
+- `/bot disable`：停用当前会话。需要 `session.manage`。
+- `/bot leave`：提示退群确认。需要 `session.manage`，且只能在群聊中使用。
+- `/bot leave --confirm` 或 `/bot leave -c`：确认后退出当前群。当前平台未声明 `leave_group` 时会拒绝。
+
+`enable` 和 `disable` 都是幂等操作，写入已有的 `session_enabled`，作用范围是当前 UMO（与 `/chat` 相同）。会话关闭后，流水线会停止普通事件，但仍放行 `/bot status` 和 `/bot enable`，以便从聊天重新打开。裸 `/bot` 只显示子指令树。
+
 ### 会话信息
 
 - `/session info`：显示 UMO、用户 ID、平台 ID、消息类型和会话 ID。

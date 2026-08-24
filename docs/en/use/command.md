@@ -39,6 +39,16 @@ Declared options can appear before or after positional arguments and support `--
 - `/help`: Show enabled root commands, first-level subcommands, and version information.
 - `/help --image` or `/help -i`: Generate image-formatted help.
 
+### Bot Presence
+
+- `/bot status`: Show the version plus the current session, LLM, and TTS switches. Requires `session.read`.
+- `/bot enable`: Enable the current session. Requires `session.manage`.
+- `/bot disable`: Disable the current session. Requires `session.manage`.
+- `/bot leave`: Prompt for leave confirmation. Requires `session.manage` and only works in group chats.
+- `/bot leave --confirm` or `/bot leave -c`: Leave the current group after confirmation. Rejected when the platform does not declare `leave_group`.
+
+Both `enable` and `disable` are idempotent. They write the existing `session_enabled` flag for the current UMO, same scope as `/chat`. When the session is disabled, the pipeline stops ordinary events but still allows `/bot status` and `/bot enable` so the session can be turned back on from chat. A bare `/bot` only shows the subcommand tree.
+
 ### Session Information
 
 - `/session info`: Show the UMO, user ID, platform ID, message type, and session ID.

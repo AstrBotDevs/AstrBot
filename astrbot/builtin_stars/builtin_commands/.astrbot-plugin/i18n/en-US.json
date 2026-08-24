@@ -1,7 +1,7 @@
 {
   "metadata": {
     "display_name": "Built-in Commands",
-    "desc": "AstrBot built-in session, conversation, provider, persona, and plugin commands."
+    "desc": "AstrBot built-in session, conversation, provider, persona, plugin, and bot commands."
   },
   "commands": {
     "help.header": "AstrBot v{version} (WebUI: {dashboard})",
@@ -15,6 +15,16 @@
     "help.notice_title": "Notice",
     "help.image_version": "AstrBot v{version}",
     "help.image_webui": "WebUI {dashboard}",
+    "bot.status.on": "enabled",
+    "bot.status.off": "disabled",
+    "bot.status.body": "AstrBot v{version}\nSession: {session}\nLLM: {llm}\nTTS: {tts}",
+    "bot.set.enabled": "The current session is now enabled.",
+    "bot.set.disabled": "The current session is now disabled.",
+    "bot.leave.private": "Leave is only available in group chats.",
+    "bot.leave.unsupported": "The current platform does not support leaving a group.",
+    "bot.leave.confirm": "This will make the bot leave the current group. Re-run `/bot leave --confirm` to proceed.",
+    "bot.leave.ok": "Leaving the current group.",
+    "bot.leave.failed": "Failed to leave the group.",
     "session.info.body": "UMO: {umo}\nUID: {user_id}\nUse UMO to set whitelist and configure routing. Use UID to set the admin list.\n\nYour session information:\nBot ID: {platform_id}\nMessage Type: {message_type}\nSession ID: {session_id}{group_note}",
     "session.info.group": "\n\nGroup ID: {group_id}. Set this ID to whitelist to allow the entire group.",
     "session.name.empty": "(empty)",

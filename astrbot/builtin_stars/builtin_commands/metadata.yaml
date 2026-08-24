@@ -1,4 +1,4 @@
 name: builtin_commands
-desc: AstrBot built-in session, conversation, provider, persona, and plugin commands.
+desc: AstrBot built-in session, conversation, provider, persona, plugin, and bot commands.
 author: Soulter, Begonia
 version: 0.0.1

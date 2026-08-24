@@ -6,6 +6,10 @@ import pytest
 
 from astrbot.api.event.filter import option
 from astrbot.builtin_stars.builtin_commands.commands.admin import AdminCommands
+from astrbot.builtin_stars.builtin_commands.commands.bot import (
+    BotCommands,
+    _flag_enabled,
+)
 from astrbot.builtin_stars.builtin_commands.commands.chat import ChatCommands
 from astrbot.builtin_stars.builtin_commands.commands.help import HelpCommand
 from astrbot.builtin_stars.builtin_commands.commands.persona import PersonaCommands
@@ -45,6 +49,7 @@ class DummyEvent:
         role: str = "admin",
         group_id: str | None = None,
         sender_id: str = "42",
+        supported_actions: tuple[str, ...] = (),
     ) -> None:
         self.message_str = message_str
         self.unified_msg_origin = unified_msg_origin
@@ -57,6 +62,9 @@ class DummyEvent:
         self.extras: dict[str, object] = {}
         self.temporary_files: list[str] = []
         self.call_llm = False
+        self.stopped = False
+        self.sent: list[object] = []
+        self._supported_actions = supported_actions
 
     def get_extra(self, key: str | None = None, default=None):
         if key is None:
@@ -67,6 +75,7 @@ class DummyEvent:
         self.result = result
 
     async def send(self, result) -> None:
+        self.sent.append(result)
         self.result = result
 
     def get_platform_name(self) -> str:
@@ -90,6 +99,23 @@ class DummyEvent:
     def should_call_llm(self, call_llm: bool) -> None:
         self.call_llm = call_llm
 
+    def supports_platform_action(self, action_name: str) -> bool:
+        return action_name in self._supported_actions
+
+    def clear_result(self) -> None:
+        self.result = None
+
+    def stop_event(self) -> None:
+        self.stopped = True
+        if self.result is not None and hasattr(self.result, "stop_event"):
+            self.result.stop_event()
+
+    def is_stopped(self) -> bool:
+        if self.stopped:
+            return True
+        checker = getattr(self.result, "is_stopped", None)
+        return bool(callable(checker) and checker())
+
 
 def _plain_text(result) -> str:
     return result.chain[0].text
@@ -110,6 +136,10 @@ def test_all_builtin_extension_commands_use_native_command_schemas():
         "conversation_stats",
         "conversation_switch",
         "help",
+        "bot_status",
+        "bot_enable",
+        "bot_disable",
+        "bot_leave",
         "chat_disable",
         "chat_enable",
         "chat_status",
@@ -664,6 +694,123 @@ async def test_chat_commands_report_and_set_session_service_status():
     assert "enabled" in _plain_text(enable_event.result)
 
 
+def test_bot_flag_enabled_defaults_missing_and_invalid_values():
+    assert _flag_enabled({}, "session_enabled") is True
+    assert _flag_enabled({"session_enabled": False}, "session_enabled") is False
+    assert _flag_enabled({"session_enabled": "no"}, "session_enabled") is True
+
+
+@pytest.mark.asyncio
+async def test_bot_commands_report_and_set_session_enabled():
+    settings = {"llm_enabled": False, "tts_enabled": True}
+
+    async def session_get(umo: str, key: str, default: dict) -> dict:
+        assert umo == "napcat:FriendMessage:42"
+        assert key == "session_service_config"
+        return dict(settings)
+
+    async def session_put(umo: str, key: str, value: dict) -> None:
+        assert umo == "napcat:FriendMessage:42"
+        assert key == "session_service_config"
+        settings.clear()
+        settings.update(value)
+
+    command = BotCommands(
+        SimpleNamespace(
+            preferences=SimpleNamespace(
+                session_get=session_get,
+                session_put=session_put,
+            ),
+            i18n=FakeI18n(),
+            runtime_info=SimpleNamespace(version="9.9.9"),
+        )
+    )
+    status_event = DummyEvent(message_str="bot status")
+    await command.status(status_event)
+    status_text = _plain_text(status_event.result)
+    assert "v9.9.9" in status_text
+    assert "Session: enabled" in status_text
+    assert "LLM: disabled" in status_text
+    assert "TTS: enabled" in status_text
+
+    disable_event = DummyEvent(message_str="bot disable")
+    await command.set_enabled(disable_event, False)
+    enable_event = DummyEvent(message_str="bot enable")
+    await command.set_enabled(enable_event, True)
+
+    assert settings["session_enabled"] is True
+    assert "disabled" in _plain_text(disable_event.result)
+    assert "enabled" in _plain_text(enable_event.result)
+
+
+@pytest.mark.asyncio
+async def test_bot_leave_requires_group_support_and_confirmation():
+    invokes: list[tuple[object, str, dict]] = []
+
+    async def invoke_for_event(event, action_name: str, **kwargs):
+        invokes.append((event, action_name, kwargs))
+
+    command = BotCommands(
+        SimpleNamespace(
+            i18n=FakeI18n(),
+            platform_actions=SimpleNamespace(invoke_for_event=invoke_for_event),
+        )
+    )
+
+    private_event = DummyEvent(message_str="bot leave --confirm")
+    await command.leave(private_event, confirm=True)
+    assert "group chats" in _plain_text(private_event.result)
+    assert invokes == []
+
+    unsupported = DummyEvent(message_str="bot leave --confirm", group_id="99")
+    await command.leave(unsupported, confirm=True)
+    assert "does not support" in _plain_text(unsupported.result)
+    assert invokes == []
+
+    unconfirmed = DummyEvent(
+        message_str="bot leave",
+        group_id="99",
+        supported_actions=("leave_group",),
+    )
+    await command.leave(unconfirmed, confirm=False)
+    assert "--confirm" in _plain_text(unconfirmed.result)
+    assert invokes == []
+
+    confirmed = DummyEvent(
+        message_str="bot leave --confirm",
+        group_id="99",
+        supported_actions=("leave_group",),
+    )
+    await command.leave(confirmed, confirm=True)
+    assert invokes == [(confirmed, "leave_group", {"group_id": "99"})]
+    assert confirmed.stopped is True
+    assert confirmed.result is None
+    assert "Leaving" in confirmed.sent[0].chain[0].text
+
+
+@pytest.mark.asyncio
+async def test_bot_leave_reports_failure_without_leaving_result():
+    async def invoke_for_event(event, action_name: str, **kwargs):
+        raise RuntimeError("adapter down")
+
+    command = BotCommands(
+        SimpleNamespace(
+            i18n=FakeI18n(),
+            platform_actions=SimpleNamespace(invoke_for_event=invoke_for_event),
+        )
+    )
+    event = DummyEvent(
+        message_str="bot leave --confirm",
+        group_id="99",
+        supported_actions=("leave_group",),
+    )
+    await command.leave(event, confirm=True)
+    assert "Leaving" in event.sent[0].chain[0].text
+    assert "Failed to leave" in event.sent[1].chain[0].text
+    assert event.stopped is True
+    assert event.result is None
+
+
 @pytest.mark.asyncio
 async def test_persona_command_switches_current_conversation_persona():
     updates: list[tuple[str, str]] = []
@@ -774,6 +921,7 @@ def test_builtin_command_names_follow_grouped_cli_conventions():
         }
 
     expected_groups = {
+        "bot": {"disable", "enable", "leave", "status"},
         "session": {"info", "name"},
         "conversation": {
             "create",
@@ -802,10 +950,13 @@ def test_builtin_command_names_follow_grouped_cli_conventions():
 
     history_param = compile_command_schema(Main.conversation_history).params[0]
     list_param = compile_command_schema(Main.conversation_list).params[0]
+    leave_param = compile_command_schema(Main.bot_leave).params[0]
     assert history_param.option.names == ("--page", "-p")
     assert list_param.option.names == ("--page", "-p")
     assert history_param.default == 1
     assert list_param.default == 1
+    assert leave_param.option.names == ("--confirm", "-c")
+    assert leave_param.default is False
 
 
 def test_non_public_builtin_commands_declare_the_planned_actions():
@@ -827,6 +978,10 @@ def test_non_public_builtin_commands_declare_the_planned_actions():
 
     assert {
         "session_info": "session.read",
+        "bot_status": "session.read",
+        "bot_enable": "session.manage",
+        "bot_disable": "session.manage",
+        "bot_leave": "session.manage",
         "task_stop": "session.manage",
         "conversation_create": "session.manage",
         "conversation_stats": "session.read",
@@ -863,6 +1018,11 @@ def test_normalized_builtin_paths_resolve_and_legacy_subcommands_do_not():
 
     flow = engine.resolve("flow enable")
     assert flow.resolution.command_path == ("flow", "enable")
+
+    bot_leave = engine.resolve("bot leave --confirm")
+    assert bot_leave.resolution.command_path == ("bot", "leave")
+    bot_entry = bot_leave.resolution.entries[0]
+    assert dict(engine.bind(bot_entry, bot_leave).values) == {"confirm": True}
 
     with pytest.raises(CommandError) as legacy:
         engine.resolve("plugin ls")

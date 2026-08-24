@@ -6,6 +6,7 @@ from astrbot.api.event.filter import GreedyStr, option
 
 from .commands import (
     AdminCommands,
+    BotCommands,
     ChatCommands,
     ConversationCommands,
     FlowCommands,
@@ -23,6 +24,7 @@ class Main(star.Star):
         self.context = context
 
         self.admin_c = AdminCommands(self.context)
+        self.bot_c = BotCommands(self.context)
         self.chat_c = ChatCommands(self.context)
         self.conversation_c = ConversationCommands(self.context)
         self.flow_c = FlowCommands(self.context)
@@ -41,6 +43,38 @@ class Main(star.Star):
     ) -> None:
         """Show help for enabled built-in commands"""
         await self.help_c.help(event, image=image)
+
+    @filter.command_group("bot")
+    def bot(self) -> None:
+        """Manage bot presence in the current session"""
+
+    @filter.permission("session.read")
+    @bot.command("status")
+    async def bot_status(self, event: AstrMessageEvent) -> None:
+        """Show version and session, LLM, and TTS switches"""
+        await self.bot_c.status(event)
+
+    @filter.permission("session.manage")
+    @bot.command("enable")
+    async def bot_enable(self, event: AstrMessageEvent) -> None:
+        """Enable the current session"""
+        await self.bot_c.set_enabled(event, True)
+
+    @filter.permission("session.manage")
+    @bot.command("disable")
+    async def bot_disable(self, event: AstrMessageEvent) -> None:
+        """Disable the current session"""
+        await self.bot_c.set_enabled(event, False)
+
+    @filter.permission("session.manage")
+    @bot.command("leave")
+    async def bot_leave(
+        self,
+        event: AstrMessageEvent,
+        confirm: Annotated[bool, option("--confirm", "-c")] = False,
+    ) -> None:
+        """Leave the current group after confirmation"""
+        await self.bot_c.leave(event, confirm=confirm)
 
     @filter.command_group("session")
     def session(self) -> None:
