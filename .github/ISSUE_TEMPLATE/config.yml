@@ -1,36 +1,31 @@
 # GitHub Issue template chooser configuration.
 # https://docs.github.com/communities/using-templates-to-encourage-useful-issues-and-pull-requests/configuring-issue-templates-for-your-repository
 
-# Blank issues are disabled so that every report goes through a structured
-# template (bug / feature) or a contact link. This keeps issue triage focused
-# and routes questions, security reports, and discussions to the right place
-# instead of the issue tracker.
-blank_issues_enabled: false
+# Keep the bug and feature templates in the chooser. Blank issues stay enabled
+# because this fork has no first-party chat channel; usage questions belong on
+# GitHub. Contact links still route documentation, security reports, and the
+# upstream community page out of the default bug/feature flow.
+blank_issues_enabled: true
 
 contact_links:
   - name: 📖 Documentation / 文档
-    url: https://docs.astrbot.app
+    url: https://github.com/Xero-Team/AstrBot/tree/master/docs
     about: |
-      Please read the documentation and FAQ before opening an issue.
-      提问前请先查阅文档与常见问题。
-      English: https://docs.astrbot.app/en/ ｜ 简体中文: https://docs.astrbot.app/
-
-  - name: ❓ Ask a Question / 提问与讨论
-    url: https://github.com/Xero-Team/AstrBot/blob/master/SUPPORT.md
-    about: |
-      Usage questions and discussions belong in community channels (Discord / QQ
-      groups), not the issue tracker. See SUPPORT.md for where to ask.
-      使用问题与讨论请走社区渠道（Discord / QQ 群），不要发到 Issue 列表，详见 SUPPORT.md。
+      In-repository docs (docs/zh, docs/en). This fork has no published docs
+      site. https://docs.astrbot.app describes upstream AstrBot.
+      文档源在本仓库 docs/zh 与 docs/en。本 fork 没有独立文档站点。
+      https://docs.astrbot.app 描述的是上游 AstrBot。
 
   - name: 🔒 Report a Security Vulnerability / 报告安全漏洞
-    url: https://github.com/Xero-Team/AstrBot/security/policy
+    url: https://github.com/Xero-Team/AstrBot/security/advisories/new
     about: |
       Report security issues privately. Do NOT open a public issue for
       vulnerabilities. See SECURITY.md.
       安全漏洞请私密报告，切勿在公开 Issue 中提交，详见 SECURITY.md。
 
-  - name: 💬 Community Channels / 社区渠道
+  - name: 💬 Upstream Community Channels / 上游社区渠道
     url: https://github.com/Xero-Team/AstrBot/blob/master/docs/en/community.md
     about: |
-      Discord, QQ groups, and other community channels.
-      Discord、QQ 群及其他社区渠道。
+      Upstream AstrBot Discord and QQ groups. They do not provide support
+      for this fork. See community.md.
+      上游 AstrBot 的 Discord 与 QQ 群，不代表本 fork 支持，详见 community.md。

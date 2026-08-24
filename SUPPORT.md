@@ -8,34 +8,41 @@ stays focused on real bugs and feature work.
 
 ## Before you ask / 提问之前
 
-1. Read the docs — <https://docs.astrbot.app> (English / 简体中文).
+1. Read the in-repo docs — [`docs/zh/`](docs/zh/) / [`docs/en/`](docs/en/).
+   This fork has no published docs site. <https://docs.astrbot.app> describes
+   **upstream** AstrBot, not this branch.
 2. Check the FAQ — [docs/en/faq.md](docs/en/faq.md) / [docs/zh/faq.md](docs/zh/faq.md).
 3. Search existing issues — <https://github.com/Xero-Team/AstrBot/issues?q=is%3Aissue>.
 4. Check the latest changes — [CHANGELOG.md](CHANGELOG.md).
 
-> 提问前请先：阅读文档、查看 FAQ、搜索已有 Issue、查看最新 CHANGELOG。
+> 提问前请先：阅读本仓库 `docs/`（本 fork 没有独立文档站点；<https://docs.astrbot.app> 描述的是**上游** AstrBot）、查看 FAQ、搜索已有 Issue、查看最新 CHANGELOG。
 
 ## Choose the right channel / 选择正确的渠道
 
-| You want to… / 你想……              | Go to / 去这里                                                                                           | Do NOT / 不要                           |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| Ask a usage question / 使用问题    | Discord, QQ groups — see [Community](docs/en/community.md) / [社区](docs/zh/community.md)                | GitHub issues / GitHub Issue            |
-| Report a bug / 报 bug              | [Bug report template](https://github.com/Xero-Team/AstrBot/issues/new?template=bug-report.yml)           | Discord / QQ                            |
-| Suggest a feature / 建议新功能     | [Feature request template](https://github.com/Xero-Team/AstrBot/issues/new?template=feature-request.yml) | —                                       |
-| Report a security issue / 安全问题 | [SECURITY.md](SECURITY.md) — private report / 私密报告                                                   | Public issues / Discord / QQ / 公开渠道 |
-| Contribute code / 贡献代码         | [CONTRIBUTING.md](CONTRIBUTING.md)                                                                       | —                                       |
-| Report an upstream bug / 上游问题  | <https://github.com/AstrBotDevs/AstrBot>                                                                 | This fork's issues / 本 fork 的 Issue   |
+| You want to… / 你想……              | Go to / 去这里                                                                                           | Do NOT / 不要                                                          |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Ask a usage question / 使用问题    | [GitHub issues](https://github.com/Xero-Team/AstrBot/issues) — this fork has no first-party chat channel | Treat upstream Discord / QQ as fork support / 把上游群当作本 fork 支持 |
+| Report a bug / 报 bug              | [Bug report template](https://github.com/Xero-Team/AstrBot/issues/new?template=bug-report.yml)           | —                                                                      |
+| Suggest a feature / 建议新功能     | [Feature request template](https://github.com/Xero-Team/AstrBot/issues/new?template=feature-request.yml) | —                                                                      |
+| Report a security issue / 安全问题 | [SECURITY.md](SECURITY.md) — private report / 私密报告                                                   | Public issues / Discord / QQ / 公开渠道                                |
+| Contribute code / 贡献代码         | [CONTRIBUTING.md](CONTRIBUTING.md)                                                                       | —                                                                      |
+| Report an upstream bug / 上游问题  | <https://github.com/AstrBotDevs/AstrBot>                                                                 | This fork's issues / 本 fork 的 Issue                                  |
 
-> 把问题发到对的地方：使用问题走社区渠道；bug 用 bug 模板；新功能用 feature 模板；安全问题按 SECURITY.md 私密报告；贡献代码看 CONTRIBUTING；在本 fork 无法复现的上游问题报上游仓库。
+> 把问题发到对的地方：本 fork 的协作入口是 GitHub Issue；bug 用 bug 模板；新功能用 feature 模板；安全问题按 SECURITY.md 私密报告；贡献代码看 CONTRIBUTING；在本 fork 无法复现的上游问题报上游仓库。上游 Discord / QQ 群不代表本 fork 支持。
 
 ## Community channels / 社区渠道
 
-See [Community](docs/en/community.md) / [社区](docs/zh/community.md) for the
-full, up-to-date list:
+The collaboration entry point for this fork is GitHub:
 
-- Discord — <https://discord.gg/hAVk6tgV36>
-- QQ groups — see the community page for current group numbers
 - GitHub — <https://github.com/Xero-Team/AstrBot>
+
+QQ groups, Discord, Astrbook, and related links on
+[Community](docs/en/community.md) / [社区](docs/zh/community.md) are **upstream
+AstrBot community channels**. They do not represent support or on-call
+coverage for this fork. If you ask there, say that you are running the
+Xero-Team fork so the discussion is not mixed with upstream behavior.
+
+> 本 fork 的协作入口是 GitHub。社区页上的 QQ 群、Discord、Astrbook 等是**上游 AstrBot 社区渠道**，不代表本 fork 支持或值班。若在那些渠道提问，请标明你运行的是 Xero-Team fork，以免和上游行为混淆。
 
 ## Reporting a bug / 报 bug
 
@@ -53,9 +60,9 @@ Use the bug-report template and include:
 
 ## Response expectations / 响应预期
 
-AstrBot is maintained by volunteers on a best-effort basis. Community channels
-often respond faster than issues for quick questions. Issues that lack logs or
-repro steps may be closed without action — see the bug-report template. Please
-be patient and respectful, and follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+This fork is maintained by volunteers on a best-effort basis. Issues that
+lack logs or repro steps may be closed without action — see the bug-report
+template. Please be patient and respectful, and follow the
+[Code of Conduct](CODE_OF_CONDUCT.md).
 
-> AstrBot 由志愿者尽力维护。简单问题在社区渠道通常更快得到回复。缺少日志或复现步骤的 Issue 可能被直接关闭（见 bug 模板）。请保持耐心与尊重，遵守[行为准则](CODE_OF_CONDUCT.md)。
+> 本 fork 由志愿者尽力维护。缺少日志或复现步骤的 Issue 可能被直接关闭（见 bug 模板）。请保持耐心与尊重，遵守[行为准则](CODE_OF_CONDUCT.md)。

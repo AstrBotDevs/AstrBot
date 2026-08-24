@@ -10,8 +10,8 @@ authoritative release record for this branch.
 
 ## Where the notes live / 说明文件位置
 
-- Per-version entries: [`changelogs/`](./changelogs/) — 200 files, spanning
-  `v3.4.0` through `v4.27.4`.
+- Per-version entries: [`changelogs/`](./changelogs/) — spanning `v3.4.0`
+  through the current `v4.27.x` series.
 - Each entry is **bilingual**: English first, followed by a `## 中文` section
   that mirrors the same categories.
 
@@ -33,7 +33,8 @@ fork behavior apart from upstream merges:
 
 ### v4.27.x
 
-- [v4.27.4](./changelogs/v4.27.4.md) — `[WIP]`
+- [v4.27.5](./changelogs/v4.27.5.md) — `[WIP]`
+- [v4.27.4](./changelogs/v4.27.4.md)
 - [v4.27.3](./changelogs/v4.27.3.md)
 - [v4.27.2](./changelogs/v4.27.2.md)
 - [v4.27.1](./changelogs/v4.27.1.md)

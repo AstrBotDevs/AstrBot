@@ -55,8 +55,10 @@ representative at an online or offline event.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the community leaders responsible for enforcement at
-<SoulterL@outlook.com>.
+reported to the community leaders responsible for enforcement by contacting
+the maintainers [@BegoniaHe](https://github.com/BegoniaHe) or
+[@YUZHEthefool](https://github.com/YUZHEthefool) through GitHub. Do not file
+a public issue for private reports.
 All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the
