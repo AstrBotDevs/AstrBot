@@ -12,6 +12,7 @@ from astrbot import logger
 from astrbot.core import DEMO_MODE
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.db import BaseDatabase
+from astrbot.core.utils.io import normalize_host_list
 from astrbot.core.desktop_runtime import (
     is_desktop_session_auth_enabled,
     is_loopback_client_host,
@@ -482,12 +483,17 @@ class AuthService:
     def can_skip_default_password_auth(self) -> bool:
         if not self.env_flag_enabled(SKIP_DEFAULT_PASSWORD_AUTH_ENV):
             return False
-        host = (
+        host_raw = (
             os.environ.get("DASHBOARD_HOST")
             or os.environ.get("ASTRBOT_DASHBOARD_HOST")
             or self.config["dashboard"].get("host", "")
         )
-        return str(host).strip().lower() in LOCAL_DASHBOARD_HOSTS
+        hosts = normalize_host_list(host_raw)
+        if not hosts:
+            return False
+        return all(
+            str(h).strip().lower() in LOCAL_DASHBOARD_HOSTS for h in hosts
+        )
 
     @staticmethod
     def env_flag_enabled(name: str) -> bool:
