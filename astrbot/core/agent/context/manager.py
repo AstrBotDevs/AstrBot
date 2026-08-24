@@ -125,19 +125,7 @@ class ContextManager:
         # double check
         tokens_after_summary = self.token_counter.count_tokens(messages)
 
-        if self.config.max_context_tokens > 0:
-            compress_rate = (
-                tokens_after_summary / self.config.max_context_tokens
-            ) * 100
-            logger.info(
-                f"Compress completed."
-                f" {prev_tokens} -> {tokens_after_summary} tokens,"
-                f" compression rate: {compress_rate:.2f}%.",
-            )
-        else:
-            logger.info(
-                f"Compress completed. {prev_tokens} -> {tokens_after_summary} tokens."
-            )
+        logger.info("Compress completed.")
 
         # last check
         if not allow_halving_fallback or not self.compressor.should_compress(
