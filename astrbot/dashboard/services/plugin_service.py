@@ -1921,14 +1921,31 @@ class PluginService:
             raise PluginServiceError(f"无法找到插件 {plugin_name} 的目录")
         return plugin_dir
 
-    def get_plugin_readme(self, plugin_name: str | None) -> tuple[dict, str]:
+    def get_plugin_readme(
+        self, plugin_name: str | None, file: str = "README.md"
+    ) -> tuple[dict, str]:
         if not plugin_name:
             logger.warning("The plugin name is empty.")
             raise PluginServiceError("插件名称不能为空")
 
         plugin_dir = self.resolve_plugin_dir(plugin_name)
-        readme_path = plugin_dir / "README.md"
+        # 语言切换：仅允许读取插件目录下的 README*.md，且禁止路径穿越
+        if (
+            "/" in file
+            or "\\" in file
+            or ".." in file
+            or not (file.lower().startswith("readme") and file.lower().endswith(".md"))
+        ):
+            raise PluginServiceError("非法的 README 文件名")
+        # 解析符号链接，防止 README*.md 链接指向插件目录之外
+        plugin_dir = plugin_dir.resolve()
+        readme_path = (plugin_dir / file).resolve()
+        if plugin_dir not in readme_path.parents:
+            raise PluginServiceError("非法的 README 文件名")
 
+        if not readme_path.is_file():
+            # 指定语言文件不存在时回退默认 README.md，行为与旧版一致
+            readme_path = plugin_dir / "README.md"
         if not readme_path.is_file():
             logger.warning(f"Plugin {plugin_name} has no README file.")
             raise PluginServiceError(f"插件 {plugin_name} 没有README文件")

@@ -92,6 +92,8 @@ const readmeLoading = ref(false);
 const readmeError = ref("");
 const readmeEmpty = ref(false);
 const renderedReadme = ref("");
+const readmeFile = ref("README.md");
+let readmeRequestId = 0;
 const changelogLoading = ref(false);
 const changelogError = ref("");
 const changelogEmpty = ref(false);
@@ -582,6 +584,15 @@ const renderMarkdown = (source) => {
     if (href.startsWith("http") || href.startsWith("//")) {
       link.setAttribute("target", "_blank");
       link.setAttribute("rel", "noopener noreferrer");
+      return;
+    }
+    // README 语言切换链接（相对路径 README*.md）：预览内本地切换，不跳转
+    const fileName = href.split("/").pop() || "";
+    if (!isMarketDetail.value && /^README[^/]*\.md$/i.test(fileName)) {
+      link.addEventListener("click", (e) => {
+        e.preventDefault();
+        void switchReadmeFile(fileName);
+      });
     }
   });
 
@@ -639,6 +650,7 @@ const fetchReadme = async () => {
   const plugin = pluginData.value || {};
   if (!plugin?.name) return;
 
+  readmeFile.value = "README.md";
   readmeLoading.value = true;
   readmeError.value = "";
   readmeEmpty.value = false;
@@ -700,6 +712,36 @@ const fetchReadme = async () => {
 
     renderedReadme.value = renderMarkdown(content);
   } catch (err) {
+    readmeError.value = err?.message || String(err);
+  } finally {
+    readmeLoading.value = false;
+  }
+};
+
+const switchReadmeFile = async (fileName) => {
+  if (!fileName || fileName === readmeFile.value) return;
+  const plugin = pluginData.value || {};
+  if (!plugin?.name || isMarketDetail.value) return; // 市场来源用远端 URL，无法本地切换
+  const requestId = ++readmeRequestId;
+  readmeLoading.value = true;
+  readmeError.value = "";
+  readmeEmpty.value = false;
+  try {
+    const res = await pluginApi.readme(plugin.name, fileName);
+    if (requestId !== readmeRequestId) return; // 丢弃过期响应，防止旧结果覆盖新选择
+    if (res.data.status !== "ok") {
+      readmeError.value = res.data.message || tm("messages.operationFailed");
+      return;
+    }
+    const content = res.data.data?.content || "";
+    if (!content) {
+      readmeError.value = `${fileName} 内容为空`;
+      return;
+    }
+    readmeFile.value = fileName;
+    renderedReadme.value = renderMarkdown(content);
+  } catch (err) {
+    if (requestId !== readmeRequestId) return;
     readmeError.value = err?.message || String(err);
   } finally {
     readmeLoading.value = false;

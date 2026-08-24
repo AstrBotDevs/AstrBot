@@ -1797,6 +1797,7 @@ export type DeletePluginConfigFileByIdError = unknown;
 export type GetPluginReadmeByIdData = {
     query: {
         plugin_id: string;
+        file?: string;
     };
 };
 
@@ -1991,6 +1992,7 @@ export type DeletePluginConfigFileError = unknown;
 export type GetPluginReadmeData = {
     path: {
         plugin_id: string;
+        file?: string;
     };
 };
 

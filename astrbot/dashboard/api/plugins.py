@@ -813,11 +813,12 @@ async def delete_plugin_config_file_by_id(
 @router.get("/plugins/readme")
 async def get_plugin_readme_by_id(
     plugin_id: str = Query(...),
+    file: str | None = Query(None),
     _auth: AuthContext = Depends(require_plugin_scope),
     service: PluginService = Depends(get_service),
 ):
     return await _run_service(
-        lambda: service.get_plugin_readme(plugin_id),
+        lambda: service.get_plugin_readme(plugin_id, file) if file else service.get_plugin_readme(plugin_id),
         log_label="/api/plugin/readme",
     )
 
@@ -1080,11 +1081,12 @@ async def delete_plugin_config_file(
 @router.get("/plugins/{plugin_id}/readme")
 async def get_plugin_readme(
     plugin_id: str,
+    file: str | None = None,
     _auth: AuthContext = Depends(require_plugin_scope),
     service: PluginService = Depends(get_service),
 ):
     return await _run_service(
-        lambda: service.get_plugin_readme(plugin_id),
+        lambda: service.get_plugin_readme(plugin_id, file) if file else service.get_plugin_readme(plugin_id),
         log_label="/api/plugin/readme",
     )
 

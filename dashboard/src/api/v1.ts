@@ -1321,9 +1321,9 @@ export const pluginApi = {
       }),
     );
   },
-  readme(pluginId: string) {
+  readme(pluginId: string, file?: string) {
     return typed<OpenConfig>(
-      openApiV1.getPluginReadmeById({ query: { plugin_id: pluginId } }),
+      openApiV1.getPluginReadmeById({ query: { plugin_id: pluginId, file } }),
     );
   },
   changelog(pluginId: string) {
