@@ -151,7 +151,7 @@ Mixin 只通过 `self.get_db()` 拿会话，不直接持有 engine，也不互�
 9. `ResultDecorateStage`
 10. `RespondStage`
 
-`GroupMessageHistoryStage` 在插件处理前持久化非 WebChat 的入站群消息，供 `GetGroupMessageHistoryTool` 使用；私聊和 WebChat 会跳过。`ProcessStage` 负责插件处理与 Agent 调用；`ResultDecorateStage` 处理前缀、分段、TTS、本地文转图、引用等结果装饰；`RespondStage` 统一调用平台发送接口。流水线同时支持普通异步 stage 和用异步生成器实现的洋葱式前后处理，修改时必须保留停止传播和收尾语义。
+`GroupMessageHistoryStage` 在插件处理前持久化非 WebChat 的入站群消息，供 `GetGroupMessageHistoryTool` 使用；私聊和 WebChat 会跳过。`ProcessStage` 负责插件处理与 Agent 调用；`ResultDecorateStage` 处理前缀、分段、TTS、本地文转图、引用等结果装饰；`RespondStage` 统一调用平台发送接口。流水线同时支持普通异步 stage 和用异步生成器实现的洋葱式前后处理，修改时必须保留停止传播和收尾语义。`SessionStatusCheckStage` 在会话关闭时停止事件，但放行已激活的 `/bot status` 和 `/bot enable`，以便从聊天重新打开会话。
 
 群聊唤醒规则是显式配置。`platform_settings.group_wake_policy` 分别控制“提及机器人”和“回复机器人”是否唤醒，默认都关闭；`WakingCheckStage` 会把实际原因写入事件的 `wake_reasons`。内置命令是否可用则按 handler 存储在命令数据库中；`disable_builtin_commands` 不迁移、不接受配置写入，也不被 Pipeline 读取。指令配置以 `command_id`（`{plugin}:{original path}`，空格换成点）为稳定标识；同步时按 `handler_full_name` 再按 `command_id` 认领活 handler，认领失败的行删除。`alter_cmd` 只读取 `command_id` 键，不从 Python 方法名或历史短名迁移。内置指令在 `resolution_strategy` 不是 `manual_rename` 时忽略库中的名字和别名覆盖。未使用的 `keep_original_alias` 列在独立事务中删除，失败不影响启动。
 
