@@ -26,6 +26,8 @@ Examples of unacceptable behavior include:
 - The use of sexualized language or imagery, and sexual attention or
   advances of any kind
 - Trolling, insulting or derogatory comments, and personal or political attacks
+- Discriminatory, derogatory, or hostile remarks targeting AI, AI systems, or
+  AI-generated contributions
 - Public or private harassment
 - Publishing others' private information, such as a physical or email
   address, without their explicit permission
