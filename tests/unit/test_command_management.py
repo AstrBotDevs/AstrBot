@@ -726,3 +726,93 @@ async def test_update_command_permission_writes_command_id_without_migrating_fos
         if isinstance(filter_, ActionPermissionFilter)
     )
     assert permission.action == "extension.manage"
+
+
+def _append_named_command(
+    catalogs: RuntimeCatalogs, *, module_path: str, command_name: str
+) -> None:
+    async def handler(self, event) -> None: ...
+
+    handler.__module__ = module_path
+    metadata = StarHandlerMetadata(
+        EventType.AdapterMessageEvent,
+        f"{module_path}_{command_name}",
+        command_name,
+        module_path,
+        handler,
+        [],
+    )
+    metadata.event_filters.append(CommandFilter(command_name))
+    catalogs.handlers.append(metadata)
+
+
+@pytest.mark.asyncio
+async def test_list_commands_serializes_plugin_activation_without_mutating_enabled():
+    catalogs = RuntimeCatalogs()
+    catalogs.plugins.publish(
+        StarMetadata(
+            name="foo",
+            module_path="data.plugins.foo.main",
+            activated=True,
+        )
+    )
+    catalogs.plugins.publish(
+        StarMetadata(
+            name="bar",
+            module_path="data.plugins.bar.main",
+            activated=False,
+        )
+    )
+    _append_named_command(
+        catalogs, module_path="data.plugins.foo.main", command_name="alpha"
+    )
+    _append_named_command(
+        catalogs, module_path="data.plugins.bar.main", command_name="beta"
+    )
+    _append_named_command(
+        catalogs, module_path="data.plugins.missing.main", command_name="gamma"
+    )
+
+    commands = await list_commands(
+        SimpleNamespace(get_command_configs=AsyncMock(return_value=[])),
+        catalogs.handlers,
+    )
+    by_plugin = {item["plugin"]: item for item in commands}
+
+    assert by_plugin["foo"]["enabled"] is True
+    assert by_plugin["foo"]["plugin_activated"] is True
+    assert by_plugin["bar"]["enabled"] is True
+    assert by_plugin["bar"]["plugin_activated"] is False
+    assert by_plugin["data.plugins.missing.main"]["plugin_activated"] is True
+
+
+@pytest.mark.asyncio
+async def test_inactive_plugin_commands_are_excluded_from_conflicts():
+    catalogs = RuntimeCatalogs()
+    catalogs.plugins.publish(
+        StarMetadata(
+            name="foo",
+            module_path="data.plugins.foo.main",
+            activated=True,
+        )
+    )
+    catalogs.plugins.publish(
+        StarMetadata(
+            name="bar",
+            module_path="data.plugins.bar.main",
+            activated=False,
+        )
+    )
+    _append_named_command(
+        catalogs, module_path="data.plugins.foo.main", command_name="demo"
+    )
+    _append_named_command(
+        catalogs, module_path="data.plugins.bar.main", command_name="demo"
+    )
+
+    commands = await list_commands(
+        SimpleNamespace(get_command_configs=AsyncMock(return_value=[])),
+        catalogs.handlers,
+    )
+
+    assert all(item["has_conflict"] is False for item in commands)

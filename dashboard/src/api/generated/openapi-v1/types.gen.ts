@@ -551,6 +551,10 @@ export type CommandItem = {
   aliases?: Array<string>;
   action?: string;
   enabled?: boolean;
+  /**
+   * Whether the owning plugin is currently activated.
+   */
+  plugin_activated?: boolean;
   is_group?: boolean;
   has_conflict?: boolean;
   reserved?: boolean;

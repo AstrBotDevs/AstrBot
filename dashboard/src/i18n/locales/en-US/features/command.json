@@ -29,13 +29,15 @@
   "status": {
     "enabled": "Enabled",
     "disabled": "Disabled",
+    "pluginDisabled": "Plugin off",
     "conflict": "Conflict"
   },
   "tooltips": {
     "enable": "Enable command",
     "disable": "Disable command",
     "rename": "Rename command",
-    "viewDetails": "View details"
+    "viewDetails": "View details",
+    "pluginInactive": "Enable the plugin first"
   },
   "dialogs": {
     "rename": {

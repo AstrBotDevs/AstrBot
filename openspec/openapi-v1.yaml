@@ -6419,6 +6419,9 @@ components:
           nullable: true
         enabled:
           type: boolean
+        plugin_activated:
+          type: boolean
+          description: Whether the owning plugin is currently activated.
         is_group:
           type: boolean
         has_conflict:

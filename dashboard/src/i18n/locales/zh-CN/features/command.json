@@ -29,13 +29,15 @@
   "status": {
     "enabled": "已启用",
     "disabled": "已禁用",
+    "pluginDisabled": "未启用",
     "conflict": "有冲突"
   },
   "tooltips": {
     "enable": "启用指令",
     "disable": "禁用指令",
     "rename": "重命名指令",
-    "viewDetails": "查看详情"
+    "viewDetails": "查看详情",
+    "pluginInactive": "请先启用所属插件"
   },
   "dialogs": {
     "rename": {

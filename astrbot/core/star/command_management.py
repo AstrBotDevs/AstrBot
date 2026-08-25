@@ -43,6 +43,7 @@ class CommandDescriptor:
     aliases: list[str] = field(default_factory=list)
     action: str | None = None
     enabled: bool = True
+    plugin_activated: bool = True
     is_group: bool = False
     is_sub_command: bool = False
     reserved: bool = False
@@ -416,6 +417,7 @@ def _build_descriptor(
         aliases=sorted(getattr(filter_ref, "alias", set())),
         action=_determine_action(handler),
         enabled=handler.enabled,
+        plugin_activated=plugin_meta.activated if plugin_meta else True,
         is_group=isinstance(filter_ref, CommandGroupFilter),
         is_sub_command=is_sub_command,
         reserved=plugin_meta.reserved if plugin_meta else False,
@@ -707,7 +709,7 @@ def _group_conflicts(
 ) -> dict[str, list[CommandDescriptor]]:
     conflicts: dict[str, list[CommandDescriptor]] = defaultdict(list)
     for desc in descriptors:
-        if desc.effective_command and desc.enabled:
+        if desc.effective_command and desc.enabled and desc.plugin_activated:
             conflicts[desc.effective_command].append(desc)
     return {k: v for k, v in conflicts.items() if len(v) > 1}
 
@@ -777,6 +779,7 @@ def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:
         "aliases": desc.aliases,
         "action": desc.action,
         "enabled": desc.enabled,
+        "plugin_activated": desc.plugin_activated,
         "is_group": desc.is_group,
         "has_conflict": desc.has_conflict,
         "reserved": desc.reserved,

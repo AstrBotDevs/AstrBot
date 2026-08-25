@@ -173,7 +173,7 @@ Use the `Command Management` menu on the left to centrally manage all registered
 
 Filter by plugin, type (command / command group / subcommand), permission, and status, and combine with the search box for quick lookup. Command group rows can expand to show subcommands, badges display the subcommand count, and subcommand rows are indented to indicate hierarchy.
 
-You can enable/disable, rename, and edit aliases for each command. Saving immediately rebuilds the immutable command catalog owned by the plugin lifecycle. Telegram and Discord adapters with native command registration enabled also refresh their menus or slash commands immediately instead of waiting for the next message.
+You can enable/disable, rename, and edit aliases for each command. Commands from a deactivated plugin appear as Plugin off: enable/disable and rename stay blocked until the plugin is enabled, but details remain available, and those commands are excluded from conflict detection. Saving immediately rebuilds the immutable command catalog owned by the plugin lifecycle. Telegram and Discord adapters with native command registration enabled also refresh their menus or slash commands immediately instead of waiting for the next message.
 
 Commands are identified by a stable `command_id` of the form `plugin-name:original-command-path` with spaces replaced by dots, for example `builtin_commands:plugin.list`. Permission overrides are read and written only under that key; Python method names and historical short-name keys are ignored. Built-in commands without an explicit Dashboard rename keep their current declared names. Unmatched `command_configs` rows that cannot be claimed by `handler_full_name` or `command_id` are deleted during sync.
 
