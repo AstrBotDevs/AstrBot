@@ -107,8 +107,7 @@ def test_configure_logger_syncs_console_and_root_level(
     root_logger = logging.getLogger()
     previous_root_level = root_logger.level
     previous_noisy_levels = {
-        name: logging.getLogger(name).level
-        for name in LogManager._NOISY_LOGGER_LEVELS
+        name: logging.getLogger(name).level for name in LogManager._NOISY_LOGGER_LEVELS
     }
     global_logger = logging.Logger("console-level-sync")
 
