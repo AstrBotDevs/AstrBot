@@ -41,7 +41,7 @@ Do not copy old `provider` objects by hand. The current WebUI coordinates model 
 
 - Use **OpenAI Chat Completions** or a matching preset when the service explicitly exposes a compatible Chat Completions endpoint.
 - Use **OpenAI Responses** when you need its remote state modes, background responses, or native Web Search. It is not an alias for Chat Completions.
-- Prefer native Anthropic and Gemini adapters to retain thinking, native search, image output, or safety settings.
+- Prefer native Anthropic and Gemini adapters to retain thinking, native search, image output, or safety settings. For Anthropic, set API Base to `https://api.anthropic.com` without `/v1`.
 - “OpenAI compatible” only means the request protocol is similar. It does not guarantee compatible tools, vision, audio, streaming usage, or reasoning fields. Test each required capability.
 
 See [Provider Configuration](./llm) for field details. For local models, see [Ollama](./provider-ollama) and [LM Studio](./provider-lmstudio). For external orchestration, see [Agent Runners](./agent-runners).

@@ -11,7 +11,7 @@
 新增来源时重点核对：
 
 - **类型**：决定加载哪个适配器和哪些专用字段；不要仅凭服务名称选择。
-- **API Base**：通常应包含服务要求的版本路径，例如 OpenAI 兼容服务常见 `/v1`。这是 AstrBot 的出站请求地址，不是 WebUI 回调地址。
+- **API Base**：通常应包含服务要求的版本路径，例如 OpenAI 兼容服务常见 `/v1`。这是 AstrBot 的出站请求地址，不是 WebUI 回调地址。原生 Anthropic 适配器应填写 `https://api.anthropic.com`，不要带 `/v1`；已保存的 `/v1` 后缀会在运行时去掉。
 - **API Key**：可以填写多个 Key 或 `$ENV_NAME` 引用；不要在日志和截图中暴露。
 - **Timeout / Proxy / Custom Headers**：由来源统一继承到模型。自定义 Header 可能包含凭据，也应按 secret 处理。
 

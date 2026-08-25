@@ -11,7 +11,7 @@ Manage Provider sources and models on the **Providers** page, then select defaul
 When adding a source, verify:
 
 - **Type** selects the adapter and its specialized fields. Do not choose from the service name alone.
-- **API Base** normally includes the version path required by the service, such as `/v1` for many OpenAI-compatible APIs. It is AstrBot's outbound endpoint, not a WebUI callback URL.
+- **API Base** normally includes the version path required by the service, such as `/v1` for many OpenAI-compatible APIs. It is AstrBot's outbound endpoint, not a WebUI callback URL. For the native Anthropic adapter, use `https://api.anthropic.com` without `/v1`; a saved `/v1` suffix is stripped at runtime.
 - **API Key** can contain multiple keys or an `$ENV_NAME` reference. Never expose it in logs or screenshots.
 - **Timeout, proxy, and custom headers** are shared by models from the source. Treat credential-bearing custom headers as secrets too.
 

@@ -41,7 +41,7 @@ Provider 数据保存在配置档的两个数组中：
 
 - 服务明确提供 OpenAI Chat Completions 兼容端点时，使用 **OpenAI Chat Completions** 或对应预设。
 - 需要 OpenAI Responses 的远端会话状态、后台响应或原生 Web Search 时，选择 **OpenAI Responses**；它不是 Chat Completions 的同义名称。
-- Anthropic 和 Gemini 应优先使用各自原生适配器，以保留 thinking、原生搜索、图片输出或安全设置。
+- Anthropic 和 Gemini 应优先使用各自原生适配器，以保留 thinking、原生搜索、图片输出或安全设置。Anthropic 的 API Base 填 `https://api.anthropic.com`，不要带 `/v1`。
 - “OpenAI 兼容”只表示请求协议相近，不保证工具调用、视觉、音频、流式 usage 或 reasoning 字段都兼容。逐项测试实际模型能力。
 
 详细字段见 [Provider 配置](./llm)。本地模型见 [Ollama](./provider-ollama) 和 [LM Studio](./provider-lmstudio)，外部编排服务见 [Agent 执行器](./agent-runners)。
