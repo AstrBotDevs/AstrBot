@@ -98,6 +98,39 @@ def test_invalid_plugin_log_level_is_rejected(monkeypatch: pytest.MonkeyPatch) -
         LogManager.set_plugin_log_level("example", "VERBOSE")
 
 
+def test_configure_logger_syncs_console_and_root_level(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Terminal and root loggers follow the configured log_level."""
+    previous_console_sink = LogManager._console_sink_id
+    previous_configured = LogManager._configured
+    root_logger = logging.getLogger()
+    previous_root_level = root_logger.level
+    previous_noisy_levels = {
+        name: logging.getLogger(name).level
+        for name in LogManager._NOISY_LOGGER_LEVELS
+    }
+    global_logger = logging.Logger("console-level-sync")
+
+    try:
+        monkeypatch.setattr(LogManager, "_configured", False)
+        monkeypatch.setattr(LogManager, "_console_sink_id", None)
+        LogManager._setup_loguru()
+        LogManager.configure_logger(global_logger, {"log_level": "WARNING"})
+
+        assert global_logger.level == logging.WARNING
+        assert logging.getLogger().level == logging.WARNING
+        assert LogManager._console_sink_id is not None
+    finally:
+        if LogManager._console_sink_id not in {None, previous_console_sink}:
+            LogManager._remove_sink(LogManager._console_sink_id)
+        LogManager._console_sink_id = previous_console_sink
+        LogManager._configured = previous_configured
+        root_logger.setLevel(previous_root_level)
+        for name, noisy_level in previous_noisy_levels.items():
+            logging.getLogger(name).setLevel(noisy_level)
+
+
 def test_global_level_sync_updates_plugins_without_overrides(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

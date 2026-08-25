@@ -553,6 +553,34 @@ class LogManager:
             except Exception:
                 logger.setLevel(logging.INFO)
 
+            configured_level = logging.getLevelName(logger.level)
+            if cls._console_sink_id is not None and isinstance(configured_level, str):
+                try:
+                    new_sink_id = _loguru.add(
+                        _SafeConsoleStream(sys.stdout),
+                        level=configured_level,
+                        colorize=True,
+                        filter=lambda record: (
+                            not record["extra"].get("is_trace", False)
+                        ),
+                        format=(
+                            "<green>[{time:HH:mm:ss.SSS}]</green> {extra[plugin_tag]} "
+                            "<level>[{extra[short_levelname]}]</level>"
+                            "{extra[astrbot_version_tag]} "
+                            "[{extra[source_file]}:{extra[source_line]}]: "
+                            "<level>{message}</level>"
+                        ),
+                    )
+                    cls._remove_sink(cls._console_sink_id)
+                    cls._console_sink_id = new_sink_id
+                except Exception as e:
+                    logger.warning("Failed to replace console sink: %s", e)
+
+            root_logger = logging.getLogger()
+            root_logger.setLevel(logger.level)
+            for name, noisy_level in cls._NOISY_LOGGER_LEVELS.items():
+                logging.getLogger(name).setLevel(noisy_level)
+
             overrides = cls._load_plugin_level_overrides()
             for name in cls._plugin_logger_names:
                 if name not in overrides:
