@@ -65,8 +65,13 @@ const getPermissionLabel = (permission: string): string => {
   }
 };
 
+const isPluginInactive = (cmd: CommandItem) => !cmd.plugin_activated;
+
 // 获取状态信息
 const getStatusInfo = (cmd: CommandItem): StatusInfo => {
+  if (isPluginInactive(cmd)) {
+    return { text: tm('status.pluginDisabled'), color: 'default', variant: 'outlined' };
+  }
   if (cmd.has_conflict) {
     return { text: tm('status.conflict'), color: 'warning', variant: 'flat' };
   }
@@ -87,6 +92,9 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
   }
   if (item.is_group) {
     classes.push('group-row');
+  }
+  if (isPluginInactive(item)) {
+    classes.push('plugin-inactive-row');
   }
   return classes.length > 0 ? { class: classes.join(' ') } : {};
 };
@@ -154,6 +162,7 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
               :color="getPermissionColor(item.permission)"
               size="small"
               class="font-weight-medium cursor-pointer"
+              :disabled="isPluginInactive(item)"
               link
             >
               {{ getPermissionLabel(item.permission) }}
@@ -193,31 +202,37 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
       <template v-slot:item.actions="{ item }">
         <div class="d-flex align-center">
           <v-btn-group density="default" variant="text" color="primary">
-            <v-btn
-              v-if="!item.enabled"
-              icon
-              size="small"
-              color="success"
-              @click="emit('toggle-command', item)"
-            >
-              <v-icon size="22">mdi-play</v-icon>
-              <v-tooltip activator="parent" location="top">{{ tm('tooltips.enable') }}</v-tooltip>
-            </v-btn>
-            <v-btn
-              v-else
-              icon
-              size="small"
-              color="error"
-              @click="emit('toggle-command', item)"
-            >
-              <v-icon size="22">mdi-pause</v-icon>
-              <v-tooltip activator="parent" location="top">{{ tm('tooltips.disable') }}</v-tooltip>
-            </v-btn>
+            <span v-if="!item.enabled" class="command-action-tooltip">
+              <v-btn
+                icon
+                size="small"
+                color="success"
+                :disabled="isPluginInactive(item)"
+                @click="emit('toggle-command', item)"
+              >
+                <v-icon size="22">mdi-play</v-icon>
+              </v-btn>
+              <v-tooltip activator="parent" location="top">{{ isPluginInactive(item) ? tm('tooltips.pluginInactive') : tm('tooltips.enable') }}</v-tooltip>
+            </span>
+            <span v-else class="command-action-tooltip">
+              <v-btn
+                icon
+                size="small"
+                color="error"
+                :disabled="isPluginInactive(item)"
+                @click="emit('toggle-command', item)"
+              >
+                <v-icon size="22">mdi-pause</v-icon>
+              </v-btn>
+              <v-tooltip activator="parent" location="top">{{ isPluginInactive(item) ? tm('tooltips.pluginInactive') : tm('tooltips.disable') }}</v-tooltip>
+            </span>
 
-            <v-btn icon size="small" color="warning" @click="emit('rename', item)">
-              <v-icon size="22">mdi-pencil</v-icon>
-              <v-tooltip activator="parent" location="top">{{ tm('tooltips.rename') }}</v-tooltip>
-            </v-btn>
+            <span class="command-action-tooltip">
+              <v-btn icon size="small" color="warning" :disabled="isPluginInactive(item)" @click="emit('rename', item)">
+                <v-icon size="22">mdi-pencil</v-icon>
+              </v-btn>
+              <v-tooltip activator="parent" location="top">{{ isPluginInactive(item) ? tm('tooltips.pluginInactive') : tm('tooltips.rename') }}</v-tooltip>
+            </span>
 
             <v-btn icon size="small" @click="emit('view-details', item)">
               <v-icon size="22">mdi-information</v-icon>
@@ -285,5 +300,41 @@ code.sub-command-code {
 .cursor-pointer {
   cursor: pointer;
 }
-</style>
 
+.command-action-tooltip {
+  display: inline-flex;
+  height: 100%;
+}
+
+.v-btn-group .command-action-tooltip .v-btn {
+  border-radius: 0;
+  height: 100%;
+}
+
+.v-data-table .plugin-inactive-row,
+.v-data-table .plugin-inactive-row td,
+.v-data-table .plugin-inactive-row .v-data-table__td {
+  background-color: rgba(var(--v-theme-on-surface), 0.06) !important;
+  color: rgba(var(--v-theme-on-surface), 0.72) !important;
+}
+
+.v-data-table .plugin-inactive-row:hover,
+.v-data-table .plugin-inactive-row:hover td,
+.v-data-table .plugin-inactive-row:hover .v-data-table__td {
+  background-color: rgba(var(--v-theme-on-surface), 0.09) !important;
+}
+
+.v-data-table .plugin-inactive-row .v-chip,
+.v-data-table .plugin-inactive-row code,
+.v-data-table .plugin-inactive-row .text-body-2,
+.v-data-table .plugin-inactive-row .text-subtitle-1 {
+  color: rgba(var(--v-theme-on-surface), 0.72) !important;
+  filter: grayscale(1);
+  opacity: 1;
+}
+
+.v-data-table .plugin-inactive-row .command-action-tooltip,
+.v-data-table .plugin-inactive-row .v-chip.cursor-pointer.v-chip--disabled {
+  cursor: not-allowed !important;
+}
+</style>

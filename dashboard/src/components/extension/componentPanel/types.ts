@@ -19,6 +19,7 @@ export interface CommandItem {
   aliases: string[];
   permission: PermissionType;
   enabled: boolean;
+  plugin_activated: boolean;
   is_group: boolean;
   has_conflict: boolean;
   reserved: boolean;
