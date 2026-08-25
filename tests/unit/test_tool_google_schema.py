@@ -24,3 +24,34 @@ def test_google_schema_fills_missing_array_items_with_string_schema():
 
     assert source_uuids["type"] == "array"
     assert source_uuids["items"] == {"type": "string"}
+
+
+def test_openai_schema_sorts_tools_by_name_without_mutating_toolset_order():
+    toolset = ToolSet(
+        [
+            FunctionTool(
+                name="zebra",
+                description="Zebra tool.",
+                parameters={"type": "object", "properties": {}},
+            ),
+            FunctionTool(
+                name="alpha",
+                description="Alpha tool.",
+                parameters={"type": "object", "properties": {}},
+            ),
+            FunctionTool(
+                name="middle",
+                description="Middle tool.",
+                parameters={"type": "object", "properties": {}},
+            ),
+        ]
+    )
+
+    schema = toolset.openai_chat_completions_schema()
+
+    assert [tool["function"]["name"] for tool in schema] == [
+        "alpha",
+        "middle",
+        "zebra",
+    ]
+    assert [tool.name for tool in toolset.tools] == ["zebra", "alpha", "middle"]
