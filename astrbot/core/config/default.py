@@ -1249,7 +1249,7 @@ CONFIG_METADATA_2 = {
                         "provider_type": "chat_completion",
                         "enable": True,
                         "key": [],
-                        "api_base": "https://api.anthropic.com/v1",
+                        "api_base": "https://api.anthropic.com",
                         "timeout": 120,
                         "proxy_mode": "inherit",
                         "proxy_url": "",
