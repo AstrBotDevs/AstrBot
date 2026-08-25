@@ -503,13 +503,12 @@ class LogManager:
             try:
                 configured_level = logging.getLevelName(logger.level)
                 if isinstance(configured_level, str):
-                    _loguru.remove(cls._console_sink_id)
-                    cls._console_sink_id = _loguru.add(
+                    new_sink_id = _loguru.add(
                         sys.stdout,
                         level=configured_level,
                         colorize=True,
-                        filter=lambda record: not record["extra"].get(
-                            "is_trace", False
+                        filter=lambda record: (
+                            not record["extra"].get("is_trace", False)
                         ),
                         format=(
                             "<green>[{time:HH:mm:ss.SSS}]</green> {extra[plugin_tag]} "
@@ -517,6 +516,8 @@ class LogManager:
                             "[{extra[source_file]}:{extra[source_line]}]: <level>{message}</level>"
                         ),
                     )
+                    _loguru.remove(cls._console_sink_id)
+                    cls._console_sink_id = new_sink_id
             except Exception:
                 pass
 
