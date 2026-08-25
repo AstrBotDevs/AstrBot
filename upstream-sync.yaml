@@ -22,5 +22,5 @@ last_synced:
     skipped the WeCom receive-loop offload (#9759) because
     _start_message_task already keeps the ACK path responsive. Validation
     covered focused pytest and Dashboard Vitest cases. No upstream version
-    bump occurred in this interval, so 4.27.4 and its changelog remain
-    unchanged.
+    bump occurred in this interval; absorbed user-visible fixes were added
+    to the in-progress 4.27.5 changelog.
