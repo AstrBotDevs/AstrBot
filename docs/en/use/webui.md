@@ -77,7 +77,7 @@ ChatUI supports these common workflows:
 - View model thinking, tool-call status, knowledge-base or web-search references, and per-message token and latency statistics.
 - Copy or regenerate existing replies, including regenerating with another model.
 - Edit a user message and continue generation from that point, or start a thread from a specific excerpt.
-- Switch between streaming/normal response modes and SSE/WebSocket transport modes.
+- Switch between streaming/normal response modes and SSE/WebSocket transport modes. On touch or other coarse-pointer devices, the nested Transport and Language menus open on click instead of hover.
 
 ### High-risk tools in ChatUI
 
