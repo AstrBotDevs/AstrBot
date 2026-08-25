@@ -19,6 +19,38 @@ class _FakeAsyncAnthropic:
         return None
 
 
+@pytest.mark.parametrize(
+    ("api_base", "expected_base_url"),
+    [
+        ("https://api.anthropic.com", "https://api.anthropic.com"),
+        ("https://api.anthropic.com/", "https://api.anthropic.com"),
+        ("https://api.anthropic.com/v1", "https://api.anthropic.com"),
+        ("https://api.anthropic.com/v1/", "https://api.anthropic.com"),
+        ("https://gateway.example.com/anthropic", "https://gateway.example.com/anthropic"),
+    ],
+)
+def test_anthropic_provider_normalizes_api_base(
+    monkeypatch,
+    api_base,
+    expected_base_url,
+):
+    monkeypatch.setattr(anthropic_source, "AsyncAnthropic", _FakeAsyncAnthropic)
+
+    provider = anthropic_source.ProviderAnthropic(
+        provider_config={
+            "id": "anthropic-test",
+            "type": "anthropic_chat_completion",
+            "model": "claude-test",
+            "key": ["test-key"],
+            "api_base": api_base,
+        },
+        provider_settings={},
+    )
+
+    assert provider.base_url == expected_base_url
+    assert provider.client.kwargs["base_url"] == expected_base_url
+
+
 def test_anthropic_provider_passes_custom_headers_via_default_headers(monkeypatch):
     monkeypatch.setattr(anthropic_source, "AsyncAnthropic", _FakeAsyncAnthropic)
 
@@ -134,14 +166,18 @@ def test_create_http_client_uses_anthropic_httpx_module(monkeypatch):
 
     from anthropic import _base_client as anthropic_base_client
 
+    # anthropic <1.0.0 exposes the bundled httpx as ``_base_client.httpx``;
+    # 1.0.0+ renamed it to ``_base_client.httpx2``. Resolve the SDK's own module
+    # the same way the production code does so the assertion stays version-agnostic.
+    expected_httpx_module = getattr(
+        anthropic_base_client,
+        "httpx",
+        getattr(anthropic_base_client, "httpx2", None),
+    )
+
     assert captured["provider_label"] == "Anthropic"
     assert captured["proxy"] == "http://127.0.0.1:7890"
     assert captured["headers"] == {"X-Trace-Id": "trace-1"}
-    expected_httpx_module = getattr(
-        anthropic_base_client,
-        "httpx2",
-        getattr(anthropic_base_client, "httpx", anthropic_source.httpx),
-    )
     assert captured["httpx_module"] is expected_httpx_module
 
 
