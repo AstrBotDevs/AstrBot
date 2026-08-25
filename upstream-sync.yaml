@@ -5,15 +5,22 @@ upstream:
   branch: master
 
 last_synced:
-  commit: c6a14e0600485293bd88cf78c04ecec967b21b50
-  synced_at_utc: 2026-08-24T13:48:50Z
+  commit: 4d877c9919e58008f6f2cf4b19e18f9c48e4338f
+  synced_at_utc: 2026-08-25T22:16:00Z
   sync_method: manual-adaptation
-  source_pr: '9791, 9752'
+  source_pr: '9799, 9782, 9802, 9664, 9798, 9805, 9808'
   note: >-
-    Reviewed the interval from 19d00fb1f0d822690a467e8dca498adebbb2d67b
-    through c6a14e0600485293bd88cf78c04ecec967b21b50. Adapted the Anthropic
-    httpx/httpx2 module resolution (#9791) onto the relocated provider test
-    and the conversation-detail edit-mode scrollbar fix (#9752) onto the
-    composition-based ConversationPage. Validation passed: 27 focused pytest
-    cases and 6 Dashboard Vitest layout cases. No upstream version bump
-    occurred in this interval, so 4.27.4 and its changelog remain unchanged.
+    Reviewed the interval from c6a14e0600485293bd88cf78c04ecec967b21b50
+    through 4d877c9919e58008f6f2cf4b19e18f9c48e4338f. Adapted CodeQL 4.37.8
+    to an immutable SHA (#9799), Chat coarse-pointer menus (#9782),
+    Anthropic api_base /v1 stripping (#9802), deactivated-plugin command
+    dimming via PluginRegistry plus OpenAPI (#9664), OpenAI Chat Completions
+    tool schema order (#9798), console/root log_level sync with
+    _SafeConsoleStream (#9805), and DingTalk CREATING as pending (#9808).
+    Skipped the Dockerfile COPY reorder (#9787) because the fork already
+    copies manifests, installs dependencies, then copies the source tree;
+    skipped the WeCom receive-loop offload (#9759) because
+    _start_message_task already keeps the ACK path responsive. Validation
+    covered focused pytest and Dashboard Vitest cases. No upstream version
+    bump occurred in this interval, so 4.27.4 and its changelog remain
+    unchanged.
