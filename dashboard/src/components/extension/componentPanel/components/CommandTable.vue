@@ -202,33 +202,37 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
       <template v-slot:item.actions="{ item }">
         <div class="d-flex align-center">
           <v-btn-group density="default" variant="text" color="primary">
-            <v-btn
-              v-if="!item.enabled"
-              icon
-              size="small"
-              color="success"
-              :disabled="isPluginInactive(item)"
-              @click="emit('toggle-command', item)"
-            >
-              <v-icon size="22">mdi-play</v-icon>
+            <span v-if="!item.enabled" class="command-action-tooltip">
+              <v-btn
+                icon
+                size="small"
+                color="success"
+                :disabled="isPluginInactive(item)"
+                @click="emit('toggle-command', item)"
+              >
+                <v-icon size="22">mdi-play</v-icon>
+              </v-btn>
               <v-tooltip activator="parent" location="top">{{ isPluginInactive(item) ? tm('tooltips.pluginInactive') : tm('tooltips.enable') }}</v-tooltip>
-            </v-btn>
-            <v-btn
-              v-else
-              icon
-              size="small"
-              color="error"
-              :disabled="isPluginInactive(item)"
-              @click="emit('toggle-command', item)"
-            >
-              <v-icon size="22">mdi-pause</v-icon>
+            </span>
+            <span v-else class="command-action-tooltip">
+              <v-btn
+                icon
+                size="small"
+                color="error"
+                :disabled="isPluginInactive(item)"
+                @click="emit('toggle-command', item)"
+              >
+                <v-icon size="22">mdi-pause</v-icon>
+              </v-btn>
               <v-tooltip activator="parent" location="top">{{ isPluginInactive(item) ? tm('tooltips.pluginInactive') : tm('tooltips.disable') }}</v-tooltip>
-            </v-btn>
+            </span>
 
-            <v-btn icon size="small" color="warning" :disabled="isPluginInactive(item)" @click="emit('rename', item)">
-              <v-icon size="22">mdi-pencil</v-icon>
+            <span class="command-action-tooltip">
+              <v-btn icon size="small" color="warning" :disabled="isPluginInactive(item)" @click="emit('rename', item)">
+                <v-icon size="22">mdi-pencil</v-icon>
+              </v-btn>
               <v-tooltip activator="parent" location="top">{{ isPluginInactive(item) ? tm('tooltips.pluginInactive') : tm('tooltips.rename') }}</v-tooltip>
-            </v-btn>
+            </span>
 
             <v-btn icon size="small" @click="emit('view-details', item)">
               <v-icon size="22">mdi-information</v-icon>
@@ -297,6 +301,16 @@ code.sub-command-code {
   cursor: pointer;
 }
 
+.command-action-tooltip {
+  display: inline-flex;
+  height: 100%;
+}
+
+.v-btn-group .command-action-tooltip .v-btn {
+  border-radius: 0;
+  height: 100%;
+}
+
 .v-data-table .plugin-inactive-row,
 .v-data-table .plugin-inactive-row td,
 .v-data-table .plugin-inactive-row .v-data-table__td {
@@ -319,9 +333,8 @@ code.sub-command-code {
   opacity: 1;
 }
 
-.v-data-table .plugin-inactive-row .v-btn-group .v-btn:disabled,
+.v-data-table .plugin-inactive-row .command-action-tooltip,
 .v-data-table .plugin-inactive-row .v-chip.cursor-pointer.v-chip--disabled {
   cursor: not-allowed !important;
 }
 </style>
-
