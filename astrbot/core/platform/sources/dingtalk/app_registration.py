@@ -127,7 +127,7 @@ async def poll_dingtalk_app_registration_once(device_code: str) -> dict[str, Any
 
 def dingtalk_registration_poll_result(raw: dict[str, Any]) -> dict[str, Any]:
     status_raw = _string_field(raw, "status").upper()
-    if status_raw == "WAITING":
+    if status_raw in {"WAITING", "CREATING"}:
         return {"status": "pending"}
     if status_raw == "SUCCESS":
         client_id = _string_field(raw, "client_id")
