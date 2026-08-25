@@ -1,4 +1,5 @@
 import hashlib
+import re
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,29 @@ from astrbot.core.utils.t2i import template_manager
 LEGACY_TEMPLATE = "<html>\n<body>legacy default</body>\n</html>\n"
 CURRENT_TEMPLATE = "<html>\n<body>current default</body>\n</html>\n"
 CUSTOM_TEMPLATE = "<html>\n<body>customized by user</body>\n</html>\n"
+
+
+def test_default_template_preserves_soft_breaks_and_fits_display_math() -> None:
+    """Verify the default template keeps Markdown and wide-math layout safe."""
+    template_path = (
+        Path(__file__).parents[1]
+        / "astrbot/core/utils/t2i/template/base.html"
+    )
+    template = template_path.read_text(encoding="utf-8")
+
+    paragraph_rule = re.search(r"\n    p \{(?P<body>.*?)\n    \}", template, re.DOTALL)
+    math_rule = re.search(
+        r"\n    \.katex-display \{(?P<body>.*?)\n    \}",
+        template,
+        re.DOTALL,
+    )
+
+    assert paragraph_rule is not None
+    assert "white-space: normal;" in paragraph_rule.group("body")
+    assert math_rule is not None
+    assert "overflow-x: auto;" in math_rule.group("body")
+    assert 'querySelectorAll(".katex-display")' in template
+    assert "renderedWidth > availableWidth" in template
 
 
 @pytest.mark.parametrize(

@@ -144,7 +144,7 @@
 
     p {
       margin: 0.78em 0;
-      white-space: pre-line;
+      white-space: normal;
     }
 
     strong {
@@ -387,7 +387,8 @@
     .katex-display {
       max-width: 100%;
       margin: 1.1em 0;
-      overflow: visible;
+      overflow-x: auto;
+      overflow-y: hidden;
       font-size: 0.95em;
     }
 
@@ -465,6 +466,27 @@
             { left: "$", right: "$", display: false }
           ]
         });
+
+        window.addEventListener(
+          "load",
+          function () {
+            contentElement
+              .querySelectorAll(".katex-display")
+              .forEach(function (displayElement) {
+                const availableWidth = displayElement.clientWidth;
+                const renderedWidth = displayElement.scrollWidth;
+                if (availableWidth > 0 && renderedWidth > availableWidth) {
+                  const fontSize = parseFloat(
+                    window.getComputedStyle(displayElement).fontSize
+                  );
+                  const fittedFontSize =
+                    fontSize * (availableWidth / renderedWidth) * 0.98;
+                  displayElement.style.fontSize = `${fittedFontSize}px`;
+                }
+              });
+          },
+          { once: true }
+        );
       }
     })();
   </script>
