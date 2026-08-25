@@ -460,4 +460,35 @@ describe('Chat view smoke', () => {
       'current-model',
     );
   });
+
+  it('opens nested settings menus on click for coarse pointers', async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes('pointer: coarse'),
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+
+    try {
+      const wrapper = mountChat();
+      await flushPromises();
+
+      const nestedMenus = wrapper
+        .findAllComponents({ name: 'VMenu' })
+        .filter(
+          (menu) =>
+            menu.props('openOnHover') === false &&
+            menu.props('openOnClick') === true,
+        );
+
+      expect(nestedMenus.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
 });
