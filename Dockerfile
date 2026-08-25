@@ -1,8 +1,6 @@
 FROM python:3.12-slim
 WORKDIR /AstrBot
 
-COPY . /AstrBot/
-
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     build-essential \
@@ -21,6 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get install -y --no-install-recommends nodejs \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+COPY . /AstrBot/
 
 RUN python -m pip install uv \
     && echo "3.12" > .python-version \
