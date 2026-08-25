@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     ffmpeg \
     libavcodec-extra \
+    fonts-noto-cjk \
     curl \
     gnupg \
     git \
