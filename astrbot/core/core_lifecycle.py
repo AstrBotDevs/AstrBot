@@ -15,6 +15,7 @@ import threading
 import time
 import traceback
 from asyncio import Queue
+from pathlib import Path
 
 from astrbot.api import logger, sp
 from astrbot.core import LogBroker, LogManager
@@ -27,6 +28,9 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.pipeline.scheduler import PipelineContext, PipelineScheduler
+from astrbot.core.platform.button_interaction import (
+    configure_button_callback_registry,
+)
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.process_restart import restart_process
@@ -172,6 +176,9 @@ class AstrBotCoreLifecycle:
             LogManager.configure_trace_logger(self.astrbot_config)
 
         await self.db.initialize()
+        button_callback_db_path = getattr(self.db, "db_path", None)
+        if isinstance(button_callback_db_path, (str, Path)):
+            configure_button_callback_registry(button_callback_db_path)
         if sp.db_helper is self.db:
             await sp.initialize()
 

@@ -7,7 +7,16 @@ from pathlib import Path, PurePosixPath
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import File, Image, Json, Plain, Record
+from astrbot.api.message_components import (
+    ActionRow,
+    CallbackAction,
+    File,
+    Image,
+    Json,
+    Plain,
+    Record,
+)
+from astrbot.core.platform.button_interaction import encode_button_callback
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
 from astrbot.core.utils.media_utils import (
@@ -70,6 +79,29 @@ class WebChatMessageEvent(AstrMessageEvent):
                         "data": json.dumps(comp.data, ensure_ascii=False),
                         "streaming": streaming,
                         "chain_type": message.type,
+                        "message_id": message_id,
+                    },
+                )
+                if not accepted:
+                    return None
+            elif isinstance(comp, ActionRow):
+                row_data = comp.toDict()["data"]
+                for button, serialized_button in zip(
+                    comp.buttons,
+                    row_data["buttons"],
+                    strict=True,
+                ):
+                    if isinstance(button.action, CallbackAction):
+                        serialized_button["action"]["callback_data"] = (
+                            encode_button_callback(button.id, button.action.data)
+                        )
+                        serialized_button["action"].pop("data", None)
+                accepted = await webchat_queue_mgr.put_back_queue(
+                    request_id,
+                    {
+                        "type": "actionrow",
+                        "data": row_data,
+                        "streaming": streaming,
                         "message_id": message_id,
                     },
                 )

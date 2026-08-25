@@ -17,7 +17,17 @@ import qrcode as qrcode_lib
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import File, Image, Plain, Record, Reply, Video
+from astrbot.api.message_components import (
+    ActionRow,
+    CallbackAction,
+    File,
+    Image,
+    Plain,
+    Record,
+    Reply,
+    UrlAction,
+    Video,
+)
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -1651,6 +1661,31 @@ class WeixinOCAdapter(Platform):
         for segment in message_chain.chain:
             if isinstance(segment, Plain):
                 pending_text += segment.text
+                continue
+
+            if isinstance(segment, ActionRow):
+                fallback_parts = [
+                    f"{button.label}: {button.action.url}"
+                    for button in segment.buttons
+                    if isinstance(button.action, UrlAction)
+                ]
+                callback_labels = [
+                    button.label
+                    for button in segment.buttons
+                    if isinstance(button.action, CallbackAction)
+                ]
+                if callback_labels:
+                    fallback_parts.append(
+                        segment.fallback_text
+                        or (
+                            f"可选操作：{' / '.join(callback_labels)}"
+                            "（当前平台不支持按钮，请发送选项名称）"
+                        )
+                    )
+                if fallback_parts:
+                    if pending_text and not pending_text.endswith("\n"):
+                        pending_text += "\n"
+                    pending_text += "\n".join(fallback_parts)
                 continue
 
             if isinstance(segment, (Image, Video, File)):

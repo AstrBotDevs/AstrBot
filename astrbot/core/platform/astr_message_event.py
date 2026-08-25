@@ -17,6 +17,7 @@ from astrbot.core.message.components import (
     At,
     AtAll,
     BaseMessageComponent,
+    ButtonInteraction,
     Face,
     Forward,
     Image,
@@ -180,6 +181,24 @@ class AstrMessageEvent(abc.ABC):
     def get_messages(self) -> list[BaseMessageComponent]:
         """获取消息链。"""
         return getattr(self.message_obj, "message", [])
+
+    def is_button_interaction(self) -> bool:
+        """Return whether this event represents a portable button click."""
+        return any(
+            isinstance(component, ButtonInteraction)
+            for component in self.get_messages()
+        )
+
+    def get_button_interaction(self) -> ButtonInteraction | None:
+        """Return the normalized button click carried by this event, if any."""
+        return next(
+            (
+                component
+                for component in self.get_messages()
+                if isinstance(component, ButtonInteraction)
+            ),
+            None,
+        )
 
     def get_message_type(self) -> MessageType:
         """获取消息类型。"""

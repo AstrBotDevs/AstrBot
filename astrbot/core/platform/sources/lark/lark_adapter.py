@@ -13,6 +13,10 @@ from lark_oapi.api.im.v1 import (
     GetMessageResourceRequest,
 )
 from lark_oapi.api.im.v1.processor import P2ImMessageReceiveV1Processor
+from lark_oapi.event.callback.model.p2_card_action_trigger import (
+    P2CardActionTrigger,
+    P2CardActionTriggerResponse,
+)
 
 import astrbot.api.message_components as Comp
 from astrbot import logger
@@ -25,6 +29,7 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.button_interaction import decode_button_callback
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import MediaResolver
 from astrbot.core.utils.webhook_utils import log_webhook_info
@@ -63,13 +68,22 @@ class LarkPlatformAdapter(Platform):
         def do_v2_msg_event(event: lark.im.v1.P2ImMessageReceiveV1) -> None:
             asyncio.create_task(on_msg_event_recv(event))
 
+        def do_card_action_trigger(
+            event: P2CardActionTrigger,
+        ) -> P2CardActionTriggerResponse:
+            # Return immediately so Lark receives the callback ACK within three seconds.
+            asyncio.create_task(self.convert_card_action(event))
+            return P2CardActionTriggerResponse()
+
         self.event_handler = (
             lark.EventDispatcherHandler.builder("", "")
             .register_p2_im_message_receive_v1(do_v2_msg_event)
+            .register_p2_card_action_trigger(do_card_action_trigger)
             .build()
         )
 
         self.do_v2_msg_event = do_v2_msg_event
+        self.do_card_action_trigger = do_card_action_trigger
 
         self.client = lark.ws.Client(
             app_id=self.appid,
@@ -487,6 +501,7 @@ class LarkPlatformAdapter(Platform):
             self.lark_api,
             receive_id=receive_id,
             receive_id_type=id_type,
+            message_type=session.message_type.value,
         )
 
         await super().send_by_session(session, message_chain)
@@ -593,6 +608,103 @@ class LarkPlatformAdapter(Platform):
 
         await self.handle_msg(abm)
 
+    async def convert_card_action(
+        self,
+        callback: P2CardActionTrigger | dict[str, Any],
+    ) -> None:
+        """Convert a Lark card callback into a portable button interaction.
+
+        Args:
+            callback: SDK callback model or decoded webhook payload.
+        """
+        callback_data = (
+            callback
+            if isinstance(callback, dict)
+            else json.loads(lark.JSON.marshal(callback))
+        )
+        header = callback_data.get("header", {})
+        event = callback_data.get("event", {})
+        if not isinstance(header, dict) or not isinstance(event, dict):
+            logger.debug("[Lark] Ignored an incomplete card callback.")
+            return
+        action = event.get("action", {})
+        operator = event.get("operator", {})
+        context = event.get("context", {})
+        if not all(isinstance(item, dict) for item in (action, operator, context)):
+            logger.debug("[Lark] Ignored an incomplete card callback.")
+            return
+
+        event_id = str(header.get("event_id") or "")
+        create_time = str(header.get("create_time") or "")
+        value = action.get("value")
+        sender_id = str(operator.get("open_id") or "")
+        source_message_id = str(context.get("open_message_id") or "")
+        chat_id = str(context.get("open_chat_id") or "")
+
+        if event_id and self._is_duplicate_event(event_id):
+            logger.debug(f"[Lark] Ignored duplicate card callback: {event_id}")
+            return
+
+        if not isinstance(value, dict):
+            logger.debug("[Lark] Ignored a card callback without AstrBot metadata.")
+            return
+        payload = value.get("astrbot_callback")
+        if not isinstance(payload, str):
+            logger.debug("[Lark] Ignored a non-AstrBot card callback.")
+            return
+
+        try:
+            action_id, data = decode_button_callback(payload)
+        except ValueError:
+            logger.debug("[Lark] Ignored an invalid AstrBot card callback payload.")
+            return
+
+        message_type_value = value.get("astrbot_message_type")
+        try:
+            message_type = MessageType(message_type_value)
+        except (TypeError, ValueError):
+            message_type = (
+                MessageType.GROUP_MESSAGE if chat_id else MessageType.FRIEND_MESSAGE
+            )
+
+        if not sender_id:
+            logger.debug("[Lark] Ignored a card callback without an operator open_id.")
+            return
+
+        abm = AstrBotMessage()
+        if create_time:
+            try:
+                raw_timestamp = int(create_time)
+                while raw_timestamp > 10_000_000_000:
+                    raw_timestamp //= 1000
+                abm.timestamp = raw_timestamp
+            except ValueError:
+                pass
+        abm.type = message_type
+        abm.self_id = self.bot_open_id or self.bot_name
+        abm.message_id = source_message_id or event_id
+        abm.message_str = ""
+        abm.raw_message = callback
+        abm.sender = MessageMember(
+            user_id=sender_id,
+            nickname=sender_id[:8],
+        )
+        if message_type == MessageType.GROUP_MESSAGE and chat_id:
+            abm.group_id = chat_id
+            abm.session_id = chat_id
+        else:
+            abm.session_id = sender_id
+        abm.message = [
+            Comp.ButtonInteraction(
+                action_id=action_id,
+                data=data,
+                interaction_id=event_id,
+                source_message_id=source_message_id or None,
+            )
+        ]
+
+        await self.handle_msg(abm)
+
     def create_event(self, message: AstrBotMessage) -> LarkMessageEvent:
         """Creates a Lark message event.
 
@@ -622,14 +734,16 @@ class LarkPlatformAdapter(Platform):
         try:
             header = event_data.get("header", {})
             event_id = header.get("event_id", "")
-            if event_id and self._is_duplicate_event(event_id):
-                logger.debug(f"[Lark Webhook] 跳过重复事件: {event_id}")
-                return
             event_type = header.get("event_type", "")
             if event_type == "im.message.receive_v1":
+                if event_id and self._is_duplicate_event(event_id):
+                    logger.debug(f"[Lark Webhook] 跳过重复事件: {event_id}")
+                    return
                 processor = P2ImMessageReceiveV1Processor(self.do_v2_msg_event)
                 data = (processor.type())(event_data)
                 processor.do(data)
+            elif event_type == "card.action.trigger":
+                await self.convert_card_action(event_data)
             else:
                 logger.debug(f"[Lark Webhook] 未处理的事件类型: {event_type}")
         except Exception as e:

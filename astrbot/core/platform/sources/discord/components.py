@@ -1,6 +1,69 @@
 import discord
 
-from astrbot.api.message_components import BaseMessageComponent
+from astrbot.api.message_components import (
+    ActionRow,
+    BaseMessageComponent,
+    ButtonStyle,
+    CallbackAction,
+    UrlAction,
+)
+from astrbot.core.platform.button_interaction import encode_button_callback
+
+
+def action_rows_to_discord_view(
+    action_rows: list[ActionRow],
+) -> discord.ui.View:
+    """Convert common action rows to a Discord view.
+
+    Args:
+        action_rows: Common action rows to render.
+
+    Returns:
+        A Discord view containing the supported buttons.
+
+    Raises:
+        ValueError: If the rows exceed Discord's component limits.
+    """
+    if len(action_rows) > 5:
+        raise ValueError("Discord messages support at most five action rows.")
+
+    view = discord.ui.View(timeout=None)
+    style_mapping = {
+        ButtonStyle.DEFAULT: discord.ButtonStyle.secondary,
+        ButtonStyle.PRIMARY: discord.ButtonStyle.primary,
+        ButtonStyle.SUCCESS: discord.ButtonStyle.success,
+        ButtonStyle.DANGER: discord.ButtonStyle.danger,
+    }
+
+    for row_index, action_row in enumerate(action_rows):
+        if len(action_row.buttons) > 5:
+            raise ValueError("Discord action rows support at most five buttons.")
+        for button in action_row.buttons:
+            label = button.label[:80]
+            if isinstance(button.action, UrlAction):
+                item = discord.ui.Button(
+                    label=label,
+                    style=discord.ButtonStyle.link,
+                    url=button.action.url,
+                    row=row_index,
+                )
+            elif isinstance(button.action, CallbackAction):
+                custom_id = encode_button_callback(button.id, button.action.data)
+                if len(custom_id) > 100:
+                    raise ValueError(
+                        f"Discord button callback payload exceeds 100 characters: {button.id}"
+                    )
+                item = discord.ui.Button(
+                    label=label,
+                    style=style_mapping[button.style],
+                    custom_id=custom_id,
+                    row=row_index,
+                )
+            else:
+                continue
+            view.add_item(item)
+
+    return view
 
 
 # Discord专用组件

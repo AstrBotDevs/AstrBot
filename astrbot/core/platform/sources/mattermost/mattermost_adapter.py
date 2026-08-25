@@ -2,14 +2,16 @@ import asyncio
 import json
 import re
 import time
+import uuid
 from collections import deque
 from typing import Any, cast
+from urllib.parse import urlparse
 
 import aiohttp
 
 from astrbot.api import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, Plain
+from astrbot.api.message_components import At, ButtonInteraction, Plain
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -17,7 +19,10 @@ from astrbot.api.platform import (
     Platform,
     PlatformMetadata,
 )
+from astrbot.core import astrbot_config
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.button_interaction import decode_button_callback
+from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
 from .client import MattermostClient
@@ -49,7 +54,26 @@ class MattermostPlatformAdapter(Platform):
         if not self.bot_token:
             raise ValueError("Mattermost bot token 是必需的")
 
-        self.client = MattermostClient(self.base_url, self.bot_token)
+        callback_base = str(astrbot_config.get("callback_api_base", "")).strip()
+        webhook_uuid = str(self.config.get("webhook_uuid", "")).strip()
+        parsed_callback_base = urlparse(callback_base)
+        if (
+            self.config.get("unified_webhook_mode", False)
+            and parsed_callback_base.scheme in {"http", "https"}
+            and parsed_callback_base.netloc
+            and webhook_uuid
+        ):
+            action_callback_url = (
+                f"{callback_base.rstrip('/')}/api/platform/webhook/{webhook_uuid}"
+            )
+        else:
+            action_callback_url = ""
+
+        self.client = MattermostClient(
+            self.base_url,
+            self.bot_token,
+            action_callback_url=action_callback_url,
+        )
         self.metadata = PlatformMetadata(
             name="mattermost",
             description="Mattermost 平台适配器",
@@ -88,6 +112,14 @@ class MattermostPlatformAdapter(Platform):
             self.bot_username,
             self.bot_self_id,
         )
+        webhook_uuid = str(self.config.get("webhook_uuid", "")).strip()
+        if self.client.action_callback_url:
+            log_webhook_info(f"{self.meta().id}(Mattermost)", webhook_uuid)
+        else:
+            logger.warning(
+                "Mattermost callback buttons are disabled because callback_api_base "
+                "or webhook_uuid is not configured."
+            )
 
         while self._running:
             try:
@@ -237,6 +269,113 @@ class MattermostPlatformAdapter(Platform):
             self.bot_self_id,
         )
         return abm
+
+    async def convert_button_interaction(
+        self,
+        payload: dict[str, Any],
+    ) -> AstrBotMessage | None:
+        """Convert a Mattermost post action into a portable button interaction.
+
+        Args:
+            payload: Mattermost PostActionIntegrationRequest payload.
+
+        Returns:
+            Converted message, or ``None`` for non-AstrBot button actions.
+        """
+        context = payload.get("context")
+        if not isinstance(context, dict):
+            return None
+        encoded_callback = context.get("astrbot_callback")
+        if not isinstance(encoded_callback, str):
+            return None
+        try:
+            action_id, callback_data = decode_button_callback(encoded_callback)
+        except ValueError:
+            return None
+
+        channel_id = str(payload.get("channel_id", "")).strip()
+        user_id = str(payload.get("user_id", "")).strip()
+        if not channel_id or not user_id:
+            return None
+
+        is_direct = False
+        try:
+            channel = await self.client.get_channel(channel_id)
+            is_direct = str(channel.get("type", "")) == "D"
+        except Exception as exc:
+            logger.debug(
+                "Mattermost could not resolve interaction channel %s: %s",
+                channel_id,
+                exc,
+            )
+
+        interaction_id = str(payload.get("trigger_id", "")).strip() or uuid.uuid4().hex
+        source_message_id = str(payload.get("post_id", "")).strip() or None
+
+        abm = AstrBotMessage()
+        abm.self_id = self.bot_self_id
+        abm.sender = MessageMember(
+            user_id=user_id,
+            nickname=str(payload.get("user_name", "")).strip() or user_id,
+        )
+        abm.type = (
+            MessageType.FRIEND_MESSAGE if is_direct else MessageType.GROUP_MESSAGE
+        )
+        abm.group_id = None if is_direct else channel_id
+        abm.session_id = channel_id
+        abm.message_id = interaction_id
+        abm.timestamp = int(time.time())
+        abm.message_str = ""
+        abm.message = [
+            ButtonInteraction(
+                action_id=action_id,
+                data=callback_data,
+                interaction_id=interaction_id,
+                source_message_id=source_message_id,
+            )
+        ]
+        abm.raw_message = payload
+        return abm
+
+    async def _dispatch_button_interaction(self, payload: dict[str, Any]) -> None:
+        """Resolve and dispatch an acknowledged Mattermost button callback.
+
+        Args:
+            payload: Mattermost PostActionIntegrationRequest payload.
+        """
+        message = await self.convert_button_interaction(payload)
+        if message is not None:
+            await self.handle_msg(message)
+
+    async def webhook_callback(self, request: Any) -> Any:
+        """Acknowledge a Mattermost post action and dispatch it asynchronously.
+
+        Args:
+            request: Dashboard webhook request wrapper.
+
+        Returns:
+            An empty JSON object accepted by Mattermost.
+        """
+        try:
+            payload = await request.get_json(silent=False)
+        except Exception as exc:
+            logger.warning("Mattermost received invalid action callback JSON: %s", exc)
+            return {"error": {"message": "Invalid callback payload."}}, 400
+        if not isinstance(payload, dict):
+            return {"error": {"message": "Invalid callback payload."}}, 400
+
+        task = asyncio.create_task(self._dispatch_button_interaction(payload))
+        task.add_done_callback(
+            lambda done: (
+                logger.error(
+                    "Mattermost button interaction failed: %s",
+                    done.exception(),
+                )
+                if not done.cancelled() and done.exception()
+                else None
+            )
+        )
+        return {}
 
     def _parse_text_components(self, message_text: str) -> list[Any]:
         if not message_text:

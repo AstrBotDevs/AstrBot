@@ -17,7 +17,7 @@ from wechatpy.exceptions import InvalidSignatureException
 from wechatpy.messages import BaseMessage
 
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import File, Image, Plain, Record
+from astrbot.api.message_components import ButtonInteraction, File, Image, Plain, Record
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -28,6 +28,7 @@ from astrbot.api.platform import (
 )
 from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.button_interaction import decode_button_callback
 from astrbot.core.platform.webhook_server import FastAPIWebhookServer
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
@@ -370,6 +371,42 @@ class WecomPlatformAdapter(Platform):
             abm.timestamp = int(cast(int | str, msg.time))
             abm.session_id = abm.sender.user_id
             abm.raw_message = msg
+        elif msg.type == "unknown" and msg._data.get("Event") == "template_card_event":
+            callback_payload = msg._data.get("EventKey")
+            if not isinstance(callback_payload, str):
+                logger.debug("Ignored a WeCom template card callback without EventKey.")
+                return None
+            try:
+                action_id, data = decode_button_callback(callback_payload)
+            except ValueError:
+                logger.debug("Ignored a template card callback not created by AstrBot.")
+                return None
+
+            sender_id = str(msg._data.get("FromUserName", ""))
+            if not sender_id:
+                logger.debug("Ignored a WeCom template card callback without a sender.")
+                return None
+            response_code = str(msg._data.get("ResponseCode") or "")
+            task_id = str(msg._data.get("TaskId") or "")
+            interaction_id = response_code or task_id or uuid.uuid4().hex
+            abm.message_str = action_id
+            abm.self_id = str(msg._data.get("AgentID", ""))
+            abm.message = [
+                ButtonInteraction(
+                    action_id=action_id,
+                    data=data,
+                    interaction_id=interaction_id,
+                    source_message_id=task_id or None,
+                )
+            ]
+            abm.type = MessageType.FRIEND_MESSAGE
+            abm.sender = MessageMember(sender_id, sender_id)
+            abm.message_id = interaction_id
+            create_time = msg._data.get("CreateTime")
+            if create_time:
+                abm.timestamp = int(cast(int | str, create_time))
+            abm.session_id = sender_id
+            abm.raw_message = msg
         elif isinstance(msg, ImageMessage):
             abm.message_str = "[图片]"
             abm.self_id = str(msg.agent)
@@ -423,6 +460,7 @@ class WecomPlatformAdapter(Platform):
         self.agent_id = abm.self_id
         logger.info(f"abm: {abm}")
         await self.handle_msg(abm)
+        return abm
 
     async def convert_wechat_kf_message(self, msg: dict) -> AstrBotMessage | None:
         msgtype = msg.get("msgtype")
@@ -437,7 +475,29 @@ class WecomPlatformAdapter(Platform):
         abm.message_id = msg.get("msgid", uuid.uuid4().hex[:8])
         abm.message_str = ""
         if msgtype == "text":
-            text = msg.get("text", {}).get("content", "").strip()
+            text_data = msg.get("text", {})
+            text = text_data.get("content", "").strip()
+            menu_id = text_data.get("menu_id")
+            if isinstance(menu_id, str) and menu_id:
+                try:
+                    action_id, data = decode_button_callback(menu_id)
+                except ValueError:
+                    logger.debug(
+                        "Treating an unrecognized WeCom customer-service menu "
+                        "callback as a regular text message."
+                    )
+                else:
+                    abm.message = [
+                        ButtonInteraction(
+                            action_id=action_id,
+                            data=data,
+                            interaction_id=abm.message_id,
+                            source_message_id=None,
+                        )
+                    ]
+                    abm.message_str = action_id
+                    await self.handle_msg(abm)
+                    return abm
             if self._is_duplicate_wechat_kf_text_message(abm.session_id, text):
                 logger.debug(
                     "忽略 15 秒内重复微信客服文本消息 session_id=%s text=%s",
@@ -514,6 +574,7 @@ class WecomPlatformAdapter(Platform):
             logger.warning(f"未实现的微信客服消息事件: {msg}")
             return
         await self.handle_msg(abm)
+        return abm
 
     def create_event(self, message: AstrBotMessage) -> WecomPlatformEvent:
         """Creates a WeCom message event.

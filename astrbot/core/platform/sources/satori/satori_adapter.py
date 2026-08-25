@@ -12,6 +12,7 @@ from astrbot.api import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import (
     At,
+    ButtonInteraction,
     File,
     Image,
     Plain,
@@ -27,6 +28,7 @@ from astrbot.api.platform import (
     register_platform_adapter,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.button_interaction import decode_button_callback
 from astrbot.core.utils.media_utils import MediaResolver
 
 if TYPE_CHECKING:
@@ -309,8 +311,94 @@ class SatoriPlatformAdapter(Platform):
                 if abm:
                     await self.handle_msg(abm)
 
+            elif event_type == "interaction/button":
+                abm = self.convert_satori_button_interaction(event_data)
+                if abm:
+                    await self.handle_msg(abm)
+
         except Exception as e:
             logger.error(f"处理事件失败: {e}")
+
+    def convert_satori_button_interaction(
+        self,
+        event_data: dict,
+    ) -> AstrBotMessage | None:
+        """Convert a Satori button event into a portable interaction.
+
+        Args:
+            event_data: Satori ``interaction/button`` event payload.
+
+        Returns:
+            A normalized AstrBot message, or ``None`` for malformed or foreign
+            button events.
+        """
+        button = event_data.get("button")
+        if not isinstance(button, dict):
+            logger.debug("[Satori] Ignored a button interaction without a button.")
+            return None
+        callback_payload = button.get("id")
+        if not isinstance(callback_payload, str):
+            logger.debug("[Satori] Ignored a button interaction without an id.")
+            return None
+        try:
+            action_id, callback_data = decode_button_callback(callback_payload)
+        except ValueError:
+            logger.debug("[Satori] Ignored a button not created by AstrBot.")
+            return None
+
+        operator = event_data.get("operator") or event_data.get("user") or {}
+        channel = event_data.get("channel") or {}
+        guild = event_data.get("guild")
+        login = event_data.get("login") or {}
+        if not isinstance(operator, dict) or not isinstance(channel, dict):
+            logger.debug("[Satori] Ignored an incomplete button interaction.")
+            return None
+
+        operator_id = str(operator.get("id") or "").strip()
+        channel_id = str(channel.get("id") or "").strip()
+        if not operator_id or not channel_id:
+            logger.debug("[Satori] Ignored a button interaction without a session.")
+            return None
+
+        timestamp = int(event_data.get("timestamp") or time.time())
+        sequence = event_data.get("sn")
+        interaction_id = (
+            str(sequence)
+            if sequence is not None
+            else f"{timestamp}:{operator_id}:{callback_payload}"
+        )
+        source_message = event_data.get("message")
+        source_message_id = (
+            str(source_message.get("id"))
+            if isinstance(source_message, dict) and source_message.get("id")
+            else None
+        )
+
+        abm = AstrBotMessage()
+        abm.raw_message = event_data
+        abm.self_id = str((login.get("user") or {}).get("id") or "")
+        abm.sender = MessageMember(
+            user_id=operator_id,
+            nickname=str(operator.get("nick") or operator.get("name") or operator_id),
+        )
+        abm.session_id = channel_id
+        abm.message_id = interaction_id
+        abm.timestamp = timestamp
+        if isinstance(guild, dict) and guild.get("id"):
+            abm.type = MessageType.GROUP_MESSAGE
+            abm.group_id = str(guild["id"])
+        else:
+            abm.type = MessageType.FRIEND_MESSAGE
+        abm.message_str = action_id
+        abm.message = [
+            ButtonInteraction(
+                action_id=action_id,
+                data=callback_data,
+                interaction_id=interaction_id,
+                source_message_id=source_message_id,
+            )
+        ]
+        return abm
 
     async def convert_satori_message(
         self,

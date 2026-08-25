@@ -8,6 +8,7 @@ import pytest
 from astrbot.core.message.components import (
     At,
     AtAll,
+    ButtonInteraction,
     Face,
     Forward,
     Image,
@@ -104,6 +105,18 @@ class TestAstrMessageEventInit:
         assert astr_message_event.trace is not None
         assert astr_message_event.span is not None
         assert astr_message_event.trace == astr_message_event.span
+
+    def test_button_interaction_accessors(self, astr_message_event):
+        interaction = ButtonInteraction(
+            action_id="approve",
+            data={"request_id": "req-1"},
+            interaction_id="interaction-1",
+            source_message_id="message-1",
+        )
+        astr_message_event.message_obj.message.append(interaction)
+
+        assert astr_message_event.is_button_interaction()
+        assert astr_message_event.get_button_interaction() == interaction
 
 
 class TestUnifiedMsgOrigin:

@@ -434,6 +434,7 @@
               @open-thread="openThreadPanel"
               @open-reasoning="openReasoningPanel"
               @open-refs="openRefsSidebar"
+              @button-click="handleButtonClick"
             />
           </div>
         </section>
@@ -798,6 +799,7 @@ const {
   loadSessionMessages,
   createLocalExchange,
   sendMessageStream,
+  sendButtonInteraction,
   editMessage,
   continueEditedMessage,
   regenerateMessage,
@@ -811,6 +813,18 @@ const {
     }
   },
 });
+
+function handleButtonClick(payload: {
+  message: ChatRecord;
+  callbackData: string;
+}) {
+  if (!currSessionId.value) return;
+  sendButtonInteraction({
+    sessionId: currSessionId.value,
+    sourceMessageId: payload.message.id,
+    callbackData: payload.callbackData,
+  });
+}
 
 const transportMode = ref<TransportMode>(
   (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket"

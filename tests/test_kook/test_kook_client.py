@@ -12,9 +12,11 @@ from astrbot.core.message.components import (
     At,
     AtAll,
     BaseMessageComponent,
+    ButtonInteraction,
     Plain,
     Record,
 )
+from astrbot.core.platform.button_interaction import encode_button_callback
 from astrbot.core.platform.sources.kook.kook_client import KookClient
 from astrbot.core.platform.sources.kook.kook_config import KookConfig
 from astrbot.core.platform.sources.kook.kook_types import (
@@ -220,3 +222,61 @@ async def test_kook_event_warp_message(
         assert astrbotMessage.message_str == expected_message_str
     else:
         assert get_json_field(raw_event, expected_message_str)
+
+
+@pytest.mark.asyncio
+async def test_kook_button_click_enters_event_pipeline(monkeypatch):
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.kook.kook_adapter.KookClient",
+        mock_kook_client,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.kook.kook_adapter.KookRolesRecord",
+        mock_kook_roles_record,
+    )
+
+    from astrbot.core.platform.sources.kook.kook_adapter import KookPlatformAdapter
+
+    event_queue = asyncio.Queue()
+    adapter = KookPlatformAdapter({}, {}, event_queue)
+    callback_value = encode_button_callback("approve", {"request_id": 42})
+    click_event = KookMessageEventData.from_dict(
+        {
+            "channel_type": "GROUP",
+            "type": 255,
+            "target_id": "guild-1",
+            "author_id": "1",
+            "content": "[system]",
+            "msg_id": "interaction-1",
+            "msg_timestamp": 1_700_000_000_000,
+            "nonce": "",
+            "from_type": 1,
+            "extra": {
+                "type": "message_btn_click",
+                "body": {
+                    "value": callback_value,
+                    "msg_id": "source-message-1",
+                    "user_id": "user-1",
+                    "target_id": "channel-1",
+                    "user_info": {"username": "Alice"},
+                },
+            },
+        }
+    )
+
+    await adapter._on_received(click_event)
+
+    event = event_queue.get_nowait()
+    assert event.is_button_interaction()
+    assert event.get_sender_id() == "user-1"
+    assert event.get_group_id() == "channel-1"
+    interaction = event.get_button_interaction()
+    assert isinstance(interaction, ButtonInteraction)
+    assert interaction.action_id == "approve"
+    assert interaction.data == {"request_id": 42}
+    assert interaction.interaction_id == "interaction-1"
+    assert interaction.source_message_id == "source-message-1"
+
+    click_event.extra.body["value"] = "foreign-callback"
+    await adapter._on_received(click_event)
+    assert event_queue.empty()

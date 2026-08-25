@@ -7,7 +7,14 @@ from wechatpy.replies import ImageReply, VoiceReply
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import Image, Plain, Record
+from astrbot.api.message_components import (
+    ActionRow,
+    CallbackAction,
+    Image,
+    Plain,
+    Record,
+    UrlAction,
+)
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.utils.media_utils import convert_audio_to_amr
 
@@ -86,6 +93,29 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
             "active_send_mode", False
         )
         for comp in message.chain:
+            if isinstance(comp, ActionRow):
+                fallback_parts = [
+                    f"{button.label}: {button.action.url}"
+                    for button in comp.buttons
+                    if isinstance(button.action, UrlAction)
+                ]
+                callback_labels = [
+                    button.label
+                    for button in comp.buttons
+                    if isinstance(button.action, CallbackAction)
+                ]
+                if callback_labels:
+                    fallback_parts.append(
+                        comp.fallback_text
+                        or (
+                            f"可选操作：{' / '.join(callback_labels)}"
+                            "（当前平台不支持按钮，请发送选项名称）"
+                        )
+                    )
+                if not fallback_parts:
+                    continue
+                comp = Plain("\n".join(fallback_parts))
+
             if isinstance(comp, Plain):
                 # Split long text messages if needed
                 plain_chunks = await self.split_plain(comp.text)
@@ -97,7 +127,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                     logger.debug(
                         f"split plain into {len(plain_chunks)} chunks for passive reply. Message not sent."
                     )
-                    self.message_out["cached_xml"] = plain_chunks
+                    self.message_out.setdefault("cached_xml", []).extend(plain_chunks)
             elif isinstance(comp, Image):
                 img_path = await comp.convert_to_file_path()
 

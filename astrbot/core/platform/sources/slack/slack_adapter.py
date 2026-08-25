@@ -20,6 +20,7 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.button_interaction import decode_button_callback
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
@@ -206,6 +207,74 @@ class SlackAdapter(Platform):
         abm.raw_message = event
         return abm
 
+    async def convert_button_interaction(
+        self,
+        payload: dict,
+    ) -> AstrBotMessage | None:
+        """Convert a Slack block action into a generic button interaction.
+
+        Args:
+            payload: Slack interactive callback payload.
+
+        Returns:
+            Converted message, or ``None`` for non-AstrBot button actions.
+        """
+        actions = payload.get("actions") or []
+        if not actions:
+            return None
+
+        action = actions[0]
+        encoded_value = action.get("value")
+        if not isinstance(encoded_value, str):
+            # URL buttons also produce a Slack interaction payload, but they are
+            # navigation actions rather than AstrBot callbacks.
+            return None
+        try:
+            action_id, data = decode_button_callback(encoded_value)
+        except ValueError:
+            return None
+
+        user = payload.get("user") or {}
+        user_id = user.get("id", "")
+        user_name = user.get("name") or user.get("username") or user_id
+        channel = payload.get("channel") or {}
+        channel_id = channel.get("id", "")
+
+        is_im = False
+        if channel_id:
+            try:
+                channel_info = await self.web_client.conversations_info(
+                    channel=channel_id
+                )
+                is_im = bool(cast(dict, channel_info["channel"]).get("is_im"))
+            except Exception:
+                pass
+
+        container = payload.get("container") or {}
+        source_message_id = container.get("message_ts") or (
+            payload.get("message") or {}
+        ).get("ts")
+        interaction_id = payload.get("trigger_id") or uuid.uuid4().hex
+
+        abm = AstrBotMessage()
+        abm.self_id = cast(str, self.bot_self_id)
+        abm.sender = MessageMember(user_id=user_id, nickname=user_name)
+        abm.type = MessageType.FRIEND_MESSAGE if is_im else MessageType.GROUP_MESSAGE
+        abm.group_id = None if is_im else channel_id
+        abm.session_id = user_id if is_im else channel_id
+        abm.message_id = interaction_id
+        abm.message_str = ""
+        abm.message = [
+            ButtonInteraction(
+                action_id=action_id,
+                data=data,
+                interaction_id=interaction_id,
+                source_message_id=source_message_id,
+            )
+        ]
+        abm.raw_message = payload
+        return abm
+
     def _parse_blocks(self, blocks: list) -> list:
         """解析 Slack blocks 格式的消息内容"""
         message_components = []
@@ -287,6 +356,12 @@ class SlackAdapter(Platform):
 
     async def _handle_socket_event(self, req: SocketModeRequest) -> None:
         """处理 Socket Mode 事件"""
+        if req.type == "interactive" and req.payload.get("type") == "block_actions":
+            abm = await self.convert_button_interaction(req.payload)
+            if abm:
+                await self.handle_msg(abm)
+            return
+
         if req.type == "events_api":
             # 事件 API
             event = req.payload.get("event", {})
@@ -376,6 +451,12 @@ class SlackAdapter(Platform):
 
     async def _handle_webhook_event(self, event_data: dict) -> None:
         """处理 Webhook 事件"""
+        if event_data.get("type") == "block_actions":
+            abm = await self.convert_button_interaction(event_data)
+            if abm:
+                await self.handle_msg(abm)
+            return
+
         event = event_data.get("event", {})
 
         # 忽略机器人自己的消息和消息编辑

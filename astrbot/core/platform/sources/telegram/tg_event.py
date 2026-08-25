@@ -5,7 +5,12 @@ from collections.abc import Callable
 from typing import Any, cast
 
 import telegramify_markdown
-from telegram import ReactionTypeCustomEmoji, ReactionTypeEmoji
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ReactionTypeCustomEmoji,
+    ReactionTypeEmoji,
+)
 from telegram.constants import ChatAction
 from telegram.error import BadRequest
 from telegram.ext import ExtBot
@@ -13,15 +18,19 @@ from telegram.ext import ExtBot
 from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
+    ActionRow,
     At,
+    CallbackAction,
     File,
     Image,
     Plain,
     Record,
     Reply,
+    UrlAction,
     Video,
 )
 from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata
+from astrbot.core.platform.button_interaction import encode_button_callback
 from astrbot.core.utils.metrics import Metric
 
 
@@ -113,7 +122,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
         payload: dict[str, Any],
     ) -> None:
         """按 Telegram 限制切分文本后逐段发送。"""
-        for chunk in cls._split_message(text):
+        chunks = cls._split_message(text)
+        for index, chunk in enumerate(chunks):
+            chunk_payload = dict(payload)
+            if index < len(chunks) - 1:
+                chunk_payload.pop("reply_markup", None)
             try:
                 markdown_text = telegramify_markdown.markdownify(
                     chunk,
@@ -121,13 +134,60 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 await client.send_message(
                     text=markdown_text,
                     parse_mode="MarkdownV2",
-                    **cast(Any, payload),
+                    **cast(Any, chunk_payload),
                 )
             except (ValueError, BadRequest) as e:
                 logger.warning(
                     f"Failed to convert message to Markdown，using normal text: {e!s}"
                 )
-                await client.send_message(text=chunk, **cast(Any, payload))
+                await client.send_message(text=chunk, **cast(Any, chunk_payload))
+
+    @classmethod
+    def _build_inline_keyboard(
+        cls,
+        rows: list[ActionRow],
+    ) -> InlineKeyboardMarkup | None:
+        """Render common button rows as a Telegram inline keyboard.
+
+        Args:
+            rows: Common action rows to render.
+
+        Returns:
+            Telegram markup, or ``None`` when no valid buttons remain.
+        """
+        keyboard: list[list[InlineKeyboardButton]] = []
+        for row in rows:
+            telegram_row: list[InlineKeyboardButton] = []
+            for button in row.buttons:
+                if isinstance(button.action, UrlAction):
+                    telegram_row.append(
+                        InlineKeyboardButton(button.label, url=button.action.url)
+                    )
+                    continue
+
+                if not isinstance(button.action, CallbackAction):
+                    continue
+                callback_data = encode_button_callback(
+                    button.id,
+                    button.action.data,
+                )
+                if len(callback_data.encode("utf-8")) > 64:
+                    logger.warning(
+                        "Skipping Telegram button %r because its callback token "
+                        "exceeds 64 bytes.",
+                        button.id,
+                    )
+                    continue
+                telegram_row.append(
+                    InlineKeyboardButton(
+                        button.label,
+                        callback_data=callback_data,
+                    )
+                )
+            if telegram_row:
+                keyboard.append(telegram_row)
+
+        return InlineKeyboardMarkup(keyboard) if keyboard else None
 
     @classmethod
     async def _send_chat_action(
@@ -274,6 +334,15 @@ class TelegramPlatformEvent(AstrMessageEvent):
     ) -> None:
         image_path = None
 
+        action_rows = [i for i in message.chain if isinstance(i, ActionRow)]
+        reply_markup = cls._build_inline_keyboard(action_rows)
+        renderable_indexes = [
+            index
+            for index, component in enumerate(message.chain)
+            if isinstance(component, (Plain, Image, File, Record, Video))
+        ]
+        last_renderable_index = renderable_indexes[-1] if renderable_indexes else None
+
         has_reply = False
         reply_message_id = None
         at_user_id = None
@@ -294,7 +363,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         action = cls._get_chat_action_for_chain(message.chain)
         await cls._send_chat_action(client, user_name, action, message_thread_id)
 
-        for i in message.chain:
+        for index, i in enumerate(message.chain):
             payload = {
                 "chat_id": user_name,
             }
@@ -302,6 +371,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 payload["reply_to_message_id"] = str(reply_message_id)
             if message_thread_id:
                 payload["message_thread_id"] = message_thread_id
+            if reply_markup is not None and index == last_renderable_index:
+                payload["reply_markup"] = reply_markup
 
             if isinstance(i, Plain):
                 if at_user_id and not at_flag:
@@ -339,6 +410,20 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     caption=getattr(i, "text", None) or None,
                     **cast(Any, payload),
                 )
+
+        if action_rows and last_renderable_index is None:
+            fallback_text = next(
+                (row.fallback_text for row in action_rows if row.fallback_text),
+                "Choose an option:",
+            )
+            payload = {"chat_id": user_name}
+            if reply_markup is not None:
+                payload["reply_markup"] = reply_markup
+            if has_reply:
+                payload["reply_to_message_id"] = str(reply_message_id)
+            if message_thread_id:
+                payload["message_thread_id"] = message_thread_id
+            await cls._send_text_chunks(client, fallback_text, payload)
 
     async def send(self, message: MessageChain) -> None:
         if self.get_message_type() == MessageType.GROUP_MESSAGE:

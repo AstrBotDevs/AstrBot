@@ -4,15 +4,21 @@ import pytest
 
 from astrbot.api.platform import PlatformMetadata, Unknown
 from astrbot.core.message.components import (
+    ActionRow,
     At,
     AtAll,
     BaseMessageComponent,
+    Button,
+    ButtonStyle,
+    CallbackAction,
     Image,
     Json,
     Plain,
     Reply,
+    UrlAction,
     Video,
 )
+from astrbot.core.platform.button_interaction import decode_button_callback
 from astrbot.core.platform.sources.kook.kook_event import KookEvent
 from astrbot.core.platform.sources.kook.kook_types import KookMessageType, OrderMessage
 from tests.test_kook.shared import (
@@ -172,3 +178,73 @@ async def test_kook_event_warp_message(
     assert result.index == expected_output.index
     assert result.type == expected_output.type
     assert result.reply_id == expected_output.reply_id
+
+
+@pytest.mark.asyncio
+async def test_kook_event_renders_portable_buttons():
+    client = mock_kook_client("", "")
+    event = KookEvent(
+        "",
+        mock_astrbot_message(),
+        PlatformMetadata(name="test", id="test", description="test"),
+        "",
+        client,
+    )
+    row = ActionRow(
+        buttons=[
+            Button(
+                id="approve",
+                label="Approve",
+                style=ButtonStyle.SUCCESS,
+                action=CallbackAction(data={"request_id": 42}),
+            ),
+            Button(
+                id="docs",
+                label="Documentation",
+                style=ButtonStyle.DANGER,
+                action=UrlAction(url="https://example.com/docs"),
+            ),
+        ]
+    )
+
+    result = await event._wrap_message(0, row)
+
+    assert result.type == KookMessageType.CARD
+    card = json.loads(result.text)[0]
+    callback_button, url_button = card["modules"][0]["elements"]
+    assert callback_button["click"] == "return-val"
+    assert callback_button["theme"] == "success"
+    assert decode_button_callback(callback_button["value"]) == (
+        "approve",
+        {"request_id": 42},
+    )
+    assert url_button == {
+        "type": "button",
+        "text": "Documentation",
+        "theme": "danger",
+        "value": "https://example.com/docs",
+        "click": "link",
+    }
+
+
+@pytest.mark.asyncio
+async def test_kook_event_splits_action_rows_at_four_buttons():
+    client = mock_kook_client("", "")
+    event = KookEvent(
+        "",
+        mock_astrbot_message(),
+        PlatformMetadata(name="test", id="test", description="test"),
+        "",
+        client,
+    )
+    row = ActionRow(
+        buttons=[
+            Button(id=f"button-{index}", label=str(index), action=CallbackAction())
+            for index in range(5)
+        ]
+    )
+
+    result = await event._wrap_message(0, row)
+
+    modules = json.loads(result.text)[0]["modules"]
+    assert [len(module["elements"]) for module in modules] == [4, 1]

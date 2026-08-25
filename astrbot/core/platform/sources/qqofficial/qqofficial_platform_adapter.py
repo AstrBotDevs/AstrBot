@@ -14,10 +14,21 @@ import botpy.message
 from botpy import Client
 from botpy.connection import ConnectionState
 from botpy.gateway import BotWebSocket
+from botpy.interaction import Interaction
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, File, Image, Plain, Record, Reply, Video
+from astrbot.api.message_components import (
+    ActionRow,
+    At,
+    ButtonInteraction,
+    File,
+    Image,
+    Plain,
+    Record,
+    Reply,
+    Video,
+)
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -27,6 +38,7 @@ from astrbot.api.platform import (
 )
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.button_interaction import decode_button_callback
 from astrbot.core.utils.media_utils import MediaResolver
 
 from ...register import register_platform_adapter
@@ -160,6 +172,27 @@ def _ensure_group_message_create_parser() -> None:
         )
 
 
+async def _handle_interaction_create(client: Any, interaction: Interaction) -> None:
+    """Acknowledge and dispatch a QQ inline-keyboard click.
+
+    Args:
+        client: QQ websocket or webhook bot client.
+        interaction: QQ interaction payload parsed by qq-botpy.
+    """
+    if interaction.type != 11:
+        return
+    try:
+        abm = QQOfficialPlatformAdapter._parse_interaction_from_qqofficial(interaction)
+    except ValueError as exc:
+        logger.warning("[QQOfficial] Ignore invalid button interaction: %s", exc)
+        await client.api.on_interaction_result(interaction.id, 1)
+        return
+
+    await client.api.on_interaction_result(interaction.id, 0)
+    client.platform.remember_session_scene(abm.session_id, interaction.scene)
+    client.platform.commit_event(client.platform.create_event(abm))
+
+
 class ManagedBotWebSocket(BotWebSocket):
     def __init__(self, session, connection: Any, client: botClient):
         super().__init__(session, connection)
@@ -250,6 +283,14 @@ class botClient(Client):
         self.platform.remember_session_scene(abm.session_id, "friend")
         self._commit(abm)
 
+    async def on_interaction_create(self, interaction: Interaction) -> None:
+        """Handle a QQ inline-keyboard click.
+
+        Args:
+            interaction: QQ interaction payload parsed by qq-botpy.
+        """
+        await _handle_interaction_create(self, interaction)
+
     def _commit(self, abm: AstrBotMessage) -> None:
         self.platform.remember_session_message_id(abm.session_id, abm.message_id)
         self.platform.commit_event(self.platform.create_event(abm))
@@ -299,11 +340,13 @@ class QQOfficialPlatformAdapter(Platform):
                 public_messages=True,
                 public_guild_messages=True,
                 direct_message=guild_dm,
+                interaction=True,
             )
         else:
             self.intents = botpy.Intents(
                 public_guild_messages=True,
                 direct_message=guild_dm,
+                interaction=True,
             )
         self.client = botClient(
             intents=self.intents,
@@ -350,6 +393,21 @@ class QQOfficialPlatformAdapter(Platform):
             file_source,
             file_name,
         ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_chain)
+        keyboard = QQOfficialMessageEvent._parse_keyboard(message_chain)
+        if keyboard and not plain_text:
+            plain_text = next(
+                (
+                    row.fallback_text
+                    for row in message_chain.chain
+                    if isinstance(row, ActionRow) and row.fallback_text
+                ),
+                "",
+            ) or " / ".join(
+                button.label
+                for row in message_chain.chain
+                if isinstance(row, ActionRow)
+                for button in row.buttons
+            )
         if (
             not plain_text
             and not image_path
@@ -357,6 +415,7 @@ class QQOfficialPlatformAdapter(Platform):
             and not record_file_path
             and not video_file_source
             and not file_source
+            and not keyboard
         ):
             return
 
@@ -380,6 +439,8 @@ class QQOfficialPlatformAdapter(Platform):
             return
 
         payload: dict[str, Any] = {"content": plain_text}
+        if keyboard:
+            payload["keyboard"] = keyboard
         if msg_id and not allow_group_proactive_send:
             payload["msg_id"] = msg_id
         ret: Any = None
@@ -548,6 +609,67 @@ class QQOfficialPlatformAdapter(Platform):
             message.session_id,
             self.client,
         )
+
+    @staticmethod
+    def _parse_interaction_from_qqofficial(
+        interaction: Interaction,
+    ) -> AstrBotMessage:
+        """Convert a QQ button interaction into an AstrBot message.
+
+        Args:
+            interaction: QQ inline-keyboard interaction.
+
+        Returns:
+            Normalized AstrBot message carrying a ButtonInteraction component.
+
+        Raises:
+            ValueError: The interaction lacks a routable button or session target.
+        """
+        resolved = interaction.data.resolved
+        button_id = str(resolved.button_id or "")
+        button_data = str(resolved.button_data or "")
+        try:
+            action_id, data = decode_button_callback(button_data)
+        except ValueError:
+            action_id = button_id or button_data
+            data = button_data or None
+        if not action_id:
+            raise ValueError("QQ button interaction has no button identifier.")
+
+        abm = AstrBotMessage()
+        abm.timestamp = int(time.time())
+        abm.raw_message = interaction
+        abm.message_id = str(interaction.id)
+        abm.self_id = str(interaction.application_id or "qq_official")
+        if interaction.scene == "group":
+            abm.type = MessageType.GROUP_MESSAGE
+            abm.session_id = str(interaction.group_openid or "")
+            abm.group_id = abm.session_id
+            sender_id = str(interaction.group_member_openid or "")
+        elif interaction.scene == "guild":
+            abm.type = MessageType.GROUP_MESSAGE
+            abm.session_id = str(interaction.channel_id or "")
+            abm.group_id = abm.session_id
+            sender_id = str(resolved.user_id or "")
+        else:
+            abm.type = MessageType.FRIEND_MESSAGE
+            abm.session_id = str(interaction.user_openid or "")
+            sender_id = abm.session_id
+        if not abm.session_id or not sender_id:
+            raise ValueError("QQ button interaction has no session or sender target.")
+
+        component = ButtonInteraction(
+            action_id=action_id,
+            data=data,
+            interaction_id=str(interaction.id),
+            source_message_id=(
+                str(resolved.message_id) if resolved.message_id else None
+            ),
+        )
+        abm.sender = MessageMember(sender_id)
+        abm.message = [component]
+        abm.message_str = ""
+        return abm
 
     @staticmethod
     def _normalize_attachment_url(url: str | None) -> str:

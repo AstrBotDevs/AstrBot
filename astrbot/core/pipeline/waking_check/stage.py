@@ -5,6 +5,7 @@ from astrbot.core.message.components import At, AtAll, Reply
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.star.filter.button_interaction import ButtonInteractionFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
@@ -142,9 +143,13 @@ class WakingCheckStage(Stage):
                     event.is_at_or_wake_command = True
                     break
             # 检查是否是私聊
-            if event.is_private_chat() and (
-                not self.friend_message_needs_wake_prefix
-                or event.get_platform_name() == "webchat"
+            if (
+                not event.is_button_interaction()
+                and event.is_private_chat()
+                and (
+                    not self.friend_message_needs_wake_prefix
+                    or event.get_platform_name() == "webchat"
+                )
             ):
                 is_wake = True
                 event.is_wake = True
@@ -168,6 +173,11 @@ class WakingCheckStage(Stage):
             EventType.AdapterMessageEvent,
             plugins_name=event.plugins_name,
         ):
+            if event.is_button_interaction() and not any(
+                isinstance(handler_filter, ButtonInteractionFilter)
+                for handler_filter in handler.event_filters
+            ):
+                continue
             if (
                 self.disable_builtin_commands
                 and handler.handler_module_path

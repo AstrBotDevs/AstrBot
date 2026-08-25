@@ -5,6 +5,7 @@ from typing import Any, cast
 import botpy
 import botpy.message
 from botpy import Client
+from botpy.interaction import Interaction
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
@@ -16,6 +17,7 @@ from ...register import register_platform_adapter
 from ..qqofficial.qqofficial_platform_adapter import (
     QQOfficialPlatformAdapter,
     _ensure_group_message_create_parser,
+    _handle_interaction_create,
 )
 from .qo_webhook_event import QQOfficialWebhookMessageEvent
 from .qo_webhook_server import QQOfficialWebhook
@@ -89,6 +91,14 @@ class botClient(Client):
         self.platform.remember_session_scene(abm.session_id, "friend")
         self._commit(abm)
 
+    async def on_interaction_create(self, interaction: Interaction) -> None:
+        """Handle a QQ inline-keyboard click delivered by webhook.
+
+        Args:
+            interaction: QQ interaction payload parsed by qq-botpy.
+        """
+        await _handle_interaction_create(self, interaction)
+
     def _commit(self, abm: AstrBotMessage) -> None:
         self.platform.remember_session_message_id(abm.session_id, abm.message_id)
         self.platform.commit_event(self.platform.create_event(abm))
@@ -112,6 +122,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
             public_messages=True,
             public_guild_messages=True,
             direct_message=True,
+            interaction=True,
         )
         self.client = botClient(
             intents=intents,  # 已经无用

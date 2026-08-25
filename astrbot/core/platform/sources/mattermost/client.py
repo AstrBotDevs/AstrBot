@@ -8,15 +8,33 @@ import aiohttp
 
 from astrbot.api import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, File, Image, Plain, Record, Reply, Video
+from astrbot.api.message_components import (
+    ActionRow,
+    At,
+    CallbackAction,
+    File,
+    Image,
+    Plain,
+    Record,
+    Reply,
+    UrlAction,
+    Video,
+)
+from astrbot.core.platform.button_interaction import encode_button_callback
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import MediaResolver, detect_image_mime_type_async
 
 
 class MattermostClient:
-    def __init__(self, base_url: str, token: str) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        token: str,
+        action_callback_url: str = "",
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.token = token
+        self.action_callback_url = action_callback_url
         self._session: aiohttp.ClientSession | None = None
 
     async def ensure_session(self) -> aiohttp.ClientSession:
@@ -126,6 +144,7 @@ class MattermostClient:
         *,
         file_ids: list[str] | None = None,
         root_id: str | None = None,
+        props: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "channel_id": channel_id,
@@ -135,6 +154,8 @@ class MattermostClient:
             payload["file_ids"] = file_ids
         if root_id:
             payload["root_id"] = root_id
+        if props:
+            payload["props"] = props
         return await self.post_json("posts", payload)
 
     async def ws_connect(self) -> aiohttp.ClientWebSocketResponse:
@@ -152,9 +173,10 @@ class MattermostClient:
     ) -> dict[str, Any]:
         text_parts: list[str] = []
         file_ids: list[str] = []
+        attachments: list[dict[str, Any]] = []
         root_id: str | None = None
 
-        for segment in message_chain.chain:
+        for row_index, segment in enumerate(message_chain.chain):
             if isinstance(segment, Plain):
                 text_parts.append(segment.text)
             elif isinstance(segment, At):
@@ -200,6 +222,10 @@ class MattermostClient:
                         mimetypes.guess_type(filename)[0] or "application/octet-stream",
                     )
                 )
+            elif isinstance(segment, ActionRow):
+                attachments.append(
+                    self._build_action_row_attachment(segment, row_index)
+                )
             else:
                 logger.debug(
                     "Mattermost send_message_chain skipped unsupported segment: %s",
@@ -211,7 +237,73 @@ class MattermostClient:
             "".join(text_parts).strip(),
             file_ids=file_ids or None,
             root_id=root_id,
+            props={"attachments": attachments} if attachments else None,
         )
+
+    def _build_action_row_attachment(
+        self,
+        row: ActionRow,
+        row_index: int,
+    ) -> dict[str, Any]:
+        """Map one portable action row to a Mattermost attachment.
+
+        Args:
+            row: Portable button row to render.
+            row_index: Component index used to produce unique native action IDs.
+
+        Returns:
+            Mattermost message attachment containing actions and link fallbacks.
+        """
+        actions: list[dict[str, Any]] = []
+        link_parts: list[str] = []
+        unavailable_callbacks: list[str] = []
+        for button_index, button in enumerate(row.buttons):
+            if isinstance(button.action, UrlAction):
+                link_parts.append(f"[{button.label}]({button.action.url})")
+                continue
+            if not isinstance(button.action, CallbackAction):
+                continue
+            if not self.action_callback_url:
+                unavailable_callbacks.append(button.label)
+                continue
+            actions.append(
+                {
+                    "id": f"astrbot{row_index}b{button_index}",
+                    "type": "button",
+                    "name": button.label,
+                    "style": button.style.value,
+                    "integration": {
+                        "url": self.action_callback_url,
+                        "context": {
+                            "astrbot_callback": encode_button_callback(
+                                button.id,
+                                button.action.data,
+                            ),
+                        },
+                    },
+                }
+            )
+
+        fallback = row.fallback_text or " / ".join(
+            button.label for button in row.buttons
+        )
+        attachment: dict[str, Any] = {"fallback": fallback}
+        attachment_text: list[str] = []
+        if row.fallback_text:
+            attachment_text.append(row.fallback_text)
+        if link_parts:
+            attachment_text.append(" · ".join(link_parts))
+        if unavailable_callbacks:
+            attachment_text.append(" / ".join(unavailable_callbacks))
+            logger.warning(
+                "Mattermost callback buttons require callback_api_base and "
+                "webhook_uuid; rendered labels as fallback text."
+            )
+        if attachment_text:
+            attachment["text"] = "\n".join(attachment_text)
+        if actions:
+            attachment["actions"] = actions
+        return attachment
 
     async def parse_post_attachments(
         self,
