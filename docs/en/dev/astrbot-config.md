@@ -195,7 +195,7 @@ Dashboard accounts have stable `account_id` values. Their TOTP secret, recovery-
 - Providers and platforms use three-state `proxy_mode`: `inherit` follows the global config, `direct` disables environment proxies, and `custom` uses only that item's `proxy_url`. An empty string no longer means both inherit and direct.
 - No GitHub mirrors are provided by default. Plugin `download_url` values and prefix mirrors must be public HTTPS origins; private and non-HTTPS targets are rejected.
 - `platform_settings.segmented_reply` remains a UX feature and stays off by default. Telegram, Discord, and WeCom hard-limit splitting is handled by the send path.
-- `log_level` and `log_file_*` control console and rotating file logs.
+- `log_level` and `log_file_*` control the console Loguru sink, the root logger, plugin loggers without an override, and rotating file logs. `log_level` applies to terminal output, not only the file sink.
 - `trace_enable` is the Trace collection switch; `trace_log_*` controls its separate rotating file.
 - `temp_dir_max_size` limits `data/temp` in MiB and defaults to `1024`; a background task removes older files when the limit is exceeded.
 - `timezone` is an IANA timezone and defaults to `Asia/Shanghai`.
