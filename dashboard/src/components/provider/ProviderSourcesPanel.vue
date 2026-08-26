@@ -32,6 +32,11 @@
                     <v-img
                       v-if="resolveOption(item)?.source?.provider"
                       :src="resolveSourceIcon(resolveOption(item)?.source)"
+                      :class="{
+                        'provider-icon--monochrome': isMonochromeSourceIcon(
+                          resolveOption(item)?.source,
+                        ),
+                      }"
                       alt="provider logo"
                       cover
                     ></v-img>
@@ -57,6 +62,11 @@
                       <v-img
                         v-if="resolveOption(item)?.source?.provider"
                         :src="resolveSourceIcon(resolveOption(item)?.source)"
+                        :class="{
+                          'provider-icon--monochrome': isMonochromeSourceIcon(
+                            resolveOption(item)?.source,
+                          ),
+                        }"
                         alt="provider logo"
                         cover
                       ></v-img>
@@ -110,6 +120,9 @@
                 <v-img
                   v-if="sourceType.icon"
                   :src="sourceType.icon"
+                  :class="{
+                    'provider-icon--monochrome': sourceType.isMonochrome,
+                  }"
                   alt="provider icon"
                   cover
                 ></v-img>
@@ -148,6 +161,9 @@
           <v-img
             v-if="source?.provider"
             :src="resolveSourceIcon(source)"
+            :class="{
+              'provider-icon--monochrome': isMonochromeSourceIcon(source),
+            }"
             alt="provider logo"
             cover
           ></v-img>
@@ -210,6 +226,10 @@ const props = defineProps({
   resolveSourceIcon: {
     type: Function,
     required: true,
+  },
+  isMonochromeSourceIcon: {
+    type: Function,
+    default: () => false,
   },
   getSourceDisplayName: {
     type: Function,

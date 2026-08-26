@@ -78,6 +78,7 @@ vi.mock('@/components/shared/ItemCard.vue', () => ({
 
 vi.mock('@/utils/providerUtils', () => ({
   getProviderIcon: (provider: string) => `/icons/${provider}.svg`,
+  isMonochromeProviderIcon: () => false,
 }));
 
 function createProviderSourcesState(overrides: Record<string, unknown> = {}) {
@@ -130,6 +131,7 @@ function createProviderSourcesState(overrides: Record<string, unknown> = {}) {
     advancedSourceConfig: computed(() => ({ proxy: 'http://localhost:7890' })),
     manualProviderId: computed(() => 'openai-main/'),
     resolveSourceIcon: () => '/icons/openai.svg',
+    isMonochromeSourceIcon: () => false,
     getSourceDisplayName: (source: { id?: string; templateKey?: string }) =>
       source.id || source.templateKey || 'unknown',
     supportsImageInput: computed(() => true),
@@ -198,8 +200,7 @@ describe('ProviderPage', () => {
       advancedSourceConfig: computed(() => null),
     });
 
-    const wrapper = mountWithVuetify(ProviderPage, {
-    });
+    const wrapper = mountWithVuetify(ProviderPage, {});
 
     await flushPromises();
 
@@ -241,8 +242,12 @@ describe('ProviderPage', () => {
 
     await flushPromises();
 
-    expect(document.body.querySelector('.provider-form-dialog__card')).not.toBeNull();
-    expect(document.body.querySelector('.provider-form-dialog__content')).not.toBeNull();
+    expect(
+      document.body.querySelector('.provider-form-dialog__card'),
+    ).not.toBeNull();
+    expect(
+      document.body.querySelector('.provider-form-dialog__content'),
+    ).not.toBeNull();
     expect(
       document.body.querySelector(
         '.provider-form-dialog__content .astrbot-config-stub',

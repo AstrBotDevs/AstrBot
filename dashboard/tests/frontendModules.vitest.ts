@@ -89,7 +89,11 @@ import {
   toInitials,
   toPinyinText,
 } from '@/utils/pluginSearch';
-import { getProviderDescription, getProviderIcon } from '@/utils/providerUtils';
+import {
+  getProviderDescription,
+  getProviderIcon,
+  isMonochromeProviderIcon,
+} from '@/utils/providerUtils';
 import { restartAstrBot } from '@/utils/restartAstrBot';
 import { stepUpHeaders } from '@/utils/stepUp';
 
@@ -147,6 +151,8 @@ describe('frontend modules', () => {
     expect(normalizeTextInput('ok')).toBe('ok');
     expect(stepUpHeaders('tok')['X-AstrBot-Step-Up']).toBe('tok');
     expect(getProviderIcon('openai')).toContain('openai');
+    expect(isMonochromeProviderIcon('openai')).toBe(true);
+    expect(isMonochromeProviderIcon('google')).toBe(false);
     expect(
       getProviderDescription(
         { type: 'openai_chat_completions' },

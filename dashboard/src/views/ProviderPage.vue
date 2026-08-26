@@ -52,6 +52,7 @@
               :available-source-types="availableSourceTypes"
               :tm="tm"
               :resolve-source-icon="resolveSourceIcon"
+              :is-monochrome-source-icon="isMonochromeSourceIcon"
               :get-source-display-name="getSourceDisplayName"
               @add-provider-source="addProviderSource"
               @select-provider-source="selectProviderSource"
@@ -181,6 +182,7 @@
                 enabled-field="enable"
                 :loading="isProviderTesting(provider.id)"
                 :bglogo="getProviderIcon(provider.provider)"
+                :bglogo-monochrome="isMonochromeProviderIcon(provider.provider)"
                 :show-copy-button="true"
                 @toggle-enabled="
                   toggleProviderEnable(provider, !provider.enable)
@@ -414,7 +416,10 @@ import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue
 import { useProviderModelConfigDialog } from '@/composables/useProviderModelConfigDialog';
 import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 import { useProviderSources } from '@/composables/useProviderSources';
-import { getProviderIcon } from '@/utils/providerUtils';
+import {
+  getProviderIcon,
+  isMonochromeProviderIcon,
+} from '@/utils/providerUtils';
 import { runProviderMutationWithStepUp } from '@/utils/providerStepUp';
 
 const props = defineProps({
@@ -467,6 +472,7 @@ const {
   advancedSourceConfig,
   manualProviderId,
   resolveSourceIcon,
+  isMonochromeSourceIcon,
   getSourceDisplayName,
   supportsImageInput,
   supportsAudioInput,

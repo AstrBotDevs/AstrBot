@@ -78,6 +78,33 @@ export function getProviderIcon(type: string): string {
   return PROVIDER_ICONS[type] || '';
 }
 
+const MONOCHROME_PROVIDER_ICONS = new Set([
+  'openai',
+  'azure',
+  'xai',
+  'anthropic',
+  'ollama',
+  'deepseek',
+  'modelscope',
+  'zhipu',
+  'siliconflow',
+  'moonshot',
+  'kimi',
+  'kimi-code',
+  'ppio',
+  'lm_studio',
+  'minimax',
+  'minimax-token-plan',
+  'mimo',
+  'xiaomi',
+  'xiaomi-token-plan',
+  'openrouter',
+]);
+
+export function isMonochromeProviderIcon(type: string): boolean {
+  return MONOCHROME_PROVIDER_ICONS.has(type);
+}
+
 export function getProviderDescription(
   template: ProviderDescriptionTemplate,
   name: string,

@@ -41,3 +41,7 @@
   border-radius: 8px;
   background: rgb(var(--v-theme-surface-variant));
 }
+
+.v-theme--AstrBotDark .provider-icon--monochrome {
+  filter: brightness(0) invert(1);
+}

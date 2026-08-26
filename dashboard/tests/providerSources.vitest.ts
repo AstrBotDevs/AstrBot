@@ -53,6 +53,8 @@ describe('useProviderSources', () => {
       sources.getSourceDisplayName({ id: 'openai', name: 'OpenAI' }),
     ).toBeDefined();
     expect(sources.resolveSourceIcon({ provider: 'openai' })).toBeDefined();
+    expect(sources.isMonochromeSourceIcon({ provider: 'openai' })).toBe(true);
+    expect(sources.isMonochromeSourceIcon({ provider: 'google' })).toBe(false);
     expect(sources.supportsImageInput({})).toBe(false);
     expect(sources.supportsAudioInput({})).toBe(false);
     expect(sources.supportsToolCall({})).toBe(false);

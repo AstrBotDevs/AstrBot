@@ -63,7 +63,13 @@
                       <img
                         v-if="resolveProviderIcon(template.provider)"
                         :src="resolveProviderIcon(template.provider)"
-                        class="provider-logo-img"
+                        :class="[
+                          'provider-logo-img',
+                          {
+                            'provider-icon--monochrome':
+                              isMonochromeProviderIcon(template.provider || ''),
+                          },
+                        ]"
                       />
                       <div v-else class="provider-logo-fallback">
                         {{ name[0].toUpperCase() }}
@@ -100,6 +106,7 @@ import { useModuleI18n } from '@/i18n/composables';
 import {
   getProviderIcon,
   getProviderDescription as describeProvider,
+  isMonochromeProviderIcon,
 } from '@/utils/providerUtils';
 
 type ProviderTab =

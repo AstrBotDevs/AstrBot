@@ -67,7 +67,13 @@
       v-if="bglogo"
       class="item-card__background d-flex justify-end align-center"
     >
-      <v-img :src="bglogo" contain width="120" height="120"></v-img>
+      <v-img
+        :src="bglogo"
+        :class="{ 'provider-icon--monochrome': bglogoMonochrome }"
+        contain
+        width="120"
+        height="120"
+      ></v-img>
     </div>
   </v-card>
 </template>
@@ -84,6 +90,7 @@ interface ItemCardProps {
   titleField?: string;
   enabledField?: string;
   bglogo?: string | null;
+  bglogoMonochrome?: boolean;
   loading?: boolean;
   showCopyButton?: boolean;
   showEditButton?: boolean;
@@ -96,6 +103,7 @@ const props = withDefaults(defineProps<ItemCardProps>(), {
   titleField: 'id',
   enabledField: 'enable',
   bglogo: null,
+  bglogoMonochrome: false,
   loading: false,
   showCopyButton: false,
   showEditButton: true,

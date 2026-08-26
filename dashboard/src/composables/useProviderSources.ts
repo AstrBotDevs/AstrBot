@@ -1,6 +1,9 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue';
 import { providerApi } from '@/api/v1';
-import { getProviderIcon } from '@/utils/providerUtils';
+import {
+  getProviderIcon,
+  isMonochromeProviderIcon,
+} from '@/utils/providerUtils';
 import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog,
@@ -210,7 +213,12 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       return [];
     }
 
-    const types: Array<{ value: string; label: string; icon: string }> = [];
+    const types: Array<{
+      value: string;
+      label: string;
+      icon: string;
+      isMonochrome: boolean;
+    }> = [];
     for (const [templateName, template] of Object.entries(
       providerTemplates.value,
     )) {
@@ -219,6 +227,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
           value: templateName,
           label: templateName,
           icon: getProviderIcon(template.provider || ''),
+          isMonochrome: isMonochromeProviderIcon(template.provider || ''),
         });
       }
     }
@@ -450,6 +459,12 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   function resolveSourceIcon(source: ProviderSourceItem | null | undefined) {
     if (!source) return '';
     return getProviderIcon(source.provider || '') || '';
+  }
+
+  function isMonochromeSourceIcon(
+    source: ProviderSourceItem | null | undefined,
+  ) {
+    return Boolean(source && isMonochromeProviderIcon(source.provider || ''));
   }
 
   function getSourceDisplayName(source: ProviderSourceItem | null | undefined) {
@@ -1029,6 +1044,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
     // helpers
     resolveSourceIcon,
+    isMonochromeSourceIcon,
     getSourceDisplayName,
     getModelMetadata,
     supportsImageInput,
