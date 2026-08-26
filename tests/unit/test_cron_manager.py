@@ -646,6 +646,73 @@ class TestRunActiveAgentJob:
         assert config.provider_settings is provider_settings
         assert config.provider_settings["fallback_chat_models"] == ["fallback-provider"]
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("already_sent", "expected_calls"),
+        [(False, 1), (True, 0)],
+    )
+    async def test_woke_main_agent_fallback_delivery(
+        self,
+        cron_manager,
+        already_sent,
+        expected_calls,
+    ):
+        """Deliver only when the agent skips the message tool."""
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "admins_id": [],
+            "provider_settings": {},
+        }
+        cron_manager.ctx = ctx
+
+        conv = MagicMock()
+        conv.history = "[]"
+        response = MagicMock(role="assistant", completion_text="Scheduled reminder")
+
+        class FakeRunner:
+            def step_until_done(self, max_step):
+                async def gen():
+                    if False:
+                        yield None
+
+                return gen()
+
+            def get_final_llm_resp(self):
+                return response
+
+        async def fake_build_main_agent(*, event, plugin_context, config, req):
+            event._has_send_oper = already_sent
+            return MagicMock(agent_runner=FakeRunner())
+
+        with (
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                AsyncMock(return_value=conv),
+            ),
+            patch(
+                "astrbot.core.astr_main_agent.build_main_agent",
+                side_effect=fake_build_main_agent,
+            ),
+            patch(
+                "astrbot.core.cron.manager.persist_agent_history",
+                AsyncMock(),
+            ),
+            patch(
+                "astrbot.core.cron.manager.CronMessageEvent.send",
+                AsyncMock(),
+            ) as send,
+        ):
+            await cron_manager._woke_main_agent(
+                message="run scheduled task",
+                session_str="test:FriendMessage:user123",
+                delivery_session_str="test:FriendMessage:user123",
+                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+            )
+
+        assert send.await_count == expected_calls
+        if expected_calls:
+            assert send.await_args.args[0].get_plain_text() == "Scheduled reminder"
+
 
 class TestGetNextRunTime:
     """Tests for _get_next_run_time method."""

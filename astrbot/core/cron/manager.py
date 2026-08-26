@@ -15,6 +15,7 @@ from astrbot.core.agent.tool import ToolSet
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
+from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entites import ProviderRequest
@@ -492,6 +493,19 @@ class CronJobManager:
             # agent will send message to user via using tools
             pass
         llm_resp = runner.get_final_llm_resp()
+        if (
+            delivery_session_str
+            and llm_resp
+            and llm_resp.role == "assistant"
+            and llm_resp.completion_text
+            and not cron_event._has_send_oper
+        ):
+            logger.warning(
+                "Cron job agent did not call send_message_to_user; "
+                "delivering its final response to %s as a fallback.",
+                delivery_session_str,
+            )
+            await cron_event.send(MessageChain().message(llm_resp.completion_text))
         cron_meta = extras.get("cron_job", {}) if extras else {}
         summary_note = (
             f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
