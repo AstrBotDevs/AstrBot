@@ -24,53 +24,55 @@ function onSubmit() {
 </script>
 
 <template>
-  <v-text-field
-    :model-value="props.username"
-    :label="t('username')"
-    autocomplete="username"
-    class="mb-6 input-field"
-    required
-    hide-details="auto"
-    variant="outlined"
-    prepend-inner-icon="mdi-account"
-    :disabled="props.loading"
-    @update:model-value="(value: string) => emit('update:username', value)"
-    @keyup.enter="onSubmit"
-  ></v-text-field>
+  <form autocomplete="on" @submit.prevent="onSubmit">
+    <v-text-field
+      :model-value="props.username"
+      :label="t('username')"
+      name="username"
+      autocomplete="username"
+      class="mb-6 input-field"
+      required
+      hide-details="auto"
+      variant="outlined"
+      prepend-inner-icon="mdi-account"
+      :disabled="props.loading"
+      @update:model-value="(value: string) => emit('update:username', value)"
+    ></v-text-field>
 
-  <v-text-field
-    :model-value="props.password"
-    :label="t('password')"
-    autocomplete="current-password"
-    required
-    variant="outlined"
-    hide-details="auto"
-    :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
-    :type="showPassword ? 'text' : 'password'"
-    class="pwd-input"
-    prepend-inner-icon="mdi-lock"
-    :disabled="props.loading"
-    @click:append-inner="showPassword = !showPassword"
-    @update:model-value="(value: string) => emit('update:password', value)"
-    @keyup.enter="onSubmit"
-  ></v-text-field>
+    <v-text-field
+      :model-value="props.password"
+      :label="t('password')"
+      name="password"
+      autocomplete="current-password"
+      required
+      variant="outlined"
+      hide-details="auto"
+      :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+      :type="showPassword ? 'text' : 'password'"
+      class="pwd-input"
+      prepend-inner-icon="mdi-lock"
+      :disabled="props.loading"
+      @click:append-inner="showPassword = !showPassword"
+      @update:model-value="(value: string) => emit('update:password', value)"
+    ></v-text-field>
 
-  <div class="mt-2">
-    <small class="auth-default-hint">{{ t('defaultHint') }}</small>
-  </div>
+    <div class="mt-2">
+      <small class="auth-default-hint">{{ t('defaultHint') }}</small>
+    </div>
 
-  <v-btn
-    color="secondary"
-    block
-    class="login-btn mt-8"
-    variant="flat"
-    size="large"
-    :loading="props.loading"
-    :disabled="props.loading || !props.username || !props.password"
-    @click="onSubmit"
-  >
-    <span class="login-btn-text">{{ t('login') }}</span>
-  </v-btn>
+    <v-btn
+      type="submit"
+      color="secondary"
+      block
+      class="login-btn mt-8"
+      variant="flat"
+      size="large"
+      :loading="props.loading"
+      :disabled="props.loading || !props.username || !props.password"
+    >
+      <span class="login-btn-text">{{ t('login') }}</span>
+    </v-btn>
+  </form>
 </template>
 
 <style scoped>

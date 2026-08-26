@@ -34,6 +34,7 @@ const getSelectedGitHubProxy = readSelectedGitHubProxy;
 const customizer = useCustomizerStore();
 const { xs, smAndDown } = useDisplay();
 const commonStore = useCommonStore();
+const authStore = useAuthStore();
 const { t } = useI18n();
 const {
   dialogOpen: stepUpDialogOpen,
@@ -389,7 +390,6 @@ function accountEdit() {
       accountEditStatus.value.message = res.data.message || '';
       setTimeout(() => {
         dialog.value = !dialog.value;
-        const authStore = useAuthStore();
         authStore.logout();
       }, 2000);
     })
@@ -493,7 +493,6 @@ function checkUpdate() {
     .catch((err) => {
       if (err.response?.status === 401) {
         console.log('401');
-        const authStore = useAuthStore();
         authStore.logout();
         return;
       }
@@ -1291,6 +1290,19 @@ onMounted(async () => {
         <v-list-item-title>{{
           t('core.header.accountDialog.title')
         }}</v-list-item-title>
+      </v-list-item>
+
+      <v-divider class="my-1" />
+
+      <v-list-item
+        class="styled-menu-item text-error"
+        prepend-icon="mdi-logout"
+        rounded="md"
+        @click="authStore.logout()"
+      >
+        <v-list-item-title>
+          {{ t('core.header.buttons.logout') }}
+        </v-list-item-title>
       </v-list-item>
     </StyledMenu>
 
