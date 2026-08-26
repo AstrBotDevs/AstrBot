@@ -255,14 +255,23 @@ export const usePersonaStore = defineStore('persona', {
      * 删除文件夹
      */
     async deleteFolder(folderId: string): Promise<void> {
+      const deletedFolder = this.findFolderInTree(folderId);
+      const isCurrentFolderDeleted =
+        this.currentFolderId === folderId ||
+        this.breadcrumbPath.some((folder) => folder.folder_id === folderId);
       const response = await personaApi.deleteFolder(folderId);
 
       if (response.data.status !== 'ok') {
         throw new Error(response.data.message || '删除文件夹失败');
       }
 
-      // 刷新当前文件夹内容和文件夹树
-      await Promise.all([this.refreshCurrentFolder(), this.loadFolderTree()]);
+      // If the active folder was deleted, return to its parent instead of
+      // keeping a stale folder ID that would hide moved personas and folders.
+      const targetFolderId = isCurrentFolderDeleted
+        ? (deletedFolder?.parent_id ?? null)
+        : this.currentFolderId;
+      await this.loadFolderTree();
+      await this.navigateToFolder(targetFolderId);
     },
 
     /**
