@@ -21,7 +21,6 @@ import AboutPage from "@/views/AboutPage.vue";
 import { authApi, isLegacyFallbackError, statsApi, updatesApi } from "@/api/v1";
 import { getDesktopRuntimeInfo } from "@/utils/desktopRuntime";
 import ProviderModelMenu from "@/components/chat/ProviderModelMenu.vue";
-import { LogOut } from "@lucide/vue";
 
 enableKatex();
 enableMermaid();
@@ -1382,15 +1381,11 @@ onMounted(async () => {
 
       <v-list-item
         @click="authStore.logout()"
-        class="styled-menu-item"
+        class="styled-menu-item text-error"
+        prepend-icon="mdi-logout"
         rounded="md"
       >
-        <template v-slot:prepend>
-          <v-icon color="error" size="20">
-            <LogOut :size="20" aria-hidden="true" />
-          </v-icon>
-        </template>
-        <v-list-item-title class="text-error">
+        <v-list-item-title>
           {{ t("core.header.buttons.logout") }}
         </v-list-item-title>
       </v-list-item>
