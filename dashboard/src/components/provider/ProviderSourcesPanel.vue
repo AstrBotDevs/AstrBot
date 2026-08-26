@@ -133,6 +133,14 @@
           </v-list-item>
         </StyledMenu>
       </div>
+
+      <v-progress-linear
+        v-if="loading"
+        class="provider-sources-progress"
+        color="primary"
+        height="2"
+        indeterminate
+      />
     </div>
 
     <div
@@ -193,7 +201,7 @@
       </button>
     </div>
 
-    <div v-else class="provider-sources-empty">
+    <div v-else-if="!loading" class="provider-sources-empty">
       <v-icon size="44" color="on-surface-variant">mdi-api-off</v-icon>
       <p class="provider-sources-empty__text">
         {{ emptyText || tm('providerSources.empty') }}
@@ -234,6 +242,10 @@ const props = defineProps({
   deleteLabel: {
     type: String,
     default: '',
+  },
+  loading: {
+    type: Boolean,
+    default: false,
   },
   tm: {
     type: Function,
@@ -340,6 +352,14 @@ const selectSourceByValue = (value) => {
   justify-content: space-between;
   gap: 12px;
   padding: 20px 20px 12px;
+  position: relative;
+}
+
+.provider-sources-progress {
+  bottom: 0;
+  left: 0;
+  position: absolute;
+  right: 0;
 }
 
 .provider-sources-head__copy {

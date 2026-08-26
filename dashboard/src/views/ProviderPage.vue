@@ -58,6 +58,7 @@
                   ? ''
                   : tm('providers.deleteProvider')
               "
+              :loading="loadingSources"
               :tm="tm"
               :resolve-source-icon="resolveSourceIcon"
               :is-monochrome-source-icon="isMonochromeSourceIcon"
@@ -417,6 +418,7 @@ const {
   selectedProviderType,
   selectedProviderSource,
   availableModels,
+  loadingSources,
   loadingModels,
   savingSource,
   testingProviders,

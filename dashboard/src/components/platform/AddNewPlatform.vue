@@ -975,7 +975,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   'update:show': [value: boolean];
   'show-toast': [payload: ToastPayload];
-  'refresh-config': [];
+  'refresh-config': [platformId?: string];
 }>();
 
 const { tm } = useModuleI18n('features/platform');
@@ -1593,7 +1593,7 @@ async function savePlatform() {
     state.loading = false;
     showDialog.value = false;
     resetForm();
-    emit('refresh-config');
+    emit('refresh-config', platformId);
     showSuccess(res.data.message || tm('messages.addSuccessWithConfig'));
   } catch (error) {
     state.loading = false;

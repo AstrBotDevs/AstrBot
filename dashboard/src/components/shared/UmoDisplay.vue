@@ -5,7 +5,7 @@
         <span
           class="umo-display__name"
           :class="{ 'umo-display__name--umo': !hasReadableName }"
-          :title="displayNameTitle"
+          :title="showRawTitle ? displayNameTitle : displayName"
         >
           {{ displayName }}
         </span>
@@ -76,6 +76,7 @@ const props = withDefaults(
     showPlatform?: boolean;
     showInfo?: boolean;
     showMeta?: boolean;
+    showRawTitle?: boolean;
     editable?: boolean;
     editTooltip?: string;
   }>(),
@@ -90,6 +91,7 @@ const props = withDefaults(
     showPlatform: true,
     showInfo: true,
     showMeta: true,
+    showRawTitle: true,
     editable: false,
     editTooltip: '',
   },

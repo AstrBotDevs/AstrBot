@@ -591,6 +591,7 @@ CONFIG_METADATA_2 = {
                         "description": "应用密钥",
                         "type": "string",
                         "secret": True,
+                        "show_key": True,
                     },
                     "token": {
                         "description": "回调 Token",

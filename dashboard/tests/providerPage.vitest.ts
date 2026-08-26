@@ -92,6 +92,7 @@ function createProviderSourcesState(overrides: Record<string, unknown> = {}) {
     }),
     availableModels: ref([{ id: 'openai-main/gpt-4.1-mini' }]),
     loadingModels: ref(false),
+    loadingSources: ref(false),
     savingSource: ref(false),
     testingProviders: ref([]),
     isSourceModified: computed(() => false),
