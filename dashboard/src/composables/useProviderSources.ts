@@ -660,14 +660,16 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   async function deleteProvider(provider: any) {
     const confirmed = await askForConfirmation(tm('models.deleteConfirm', { id: provider.id }))
-    if (!confirmed) return
+    if (!confirmed) return false
 
     try {
       await providerApi.delete(String(provider.id))
       providers.value = providers.value.filter((p) => p.id !== provider.id)
       showMessage(tm('models.deleteSuccess'))
+      return true
     } catch (error: any) {
       showMessage(error.message || tm('models.deleteError'), 'error')
+      return false
     } finally {
       await loadConfig()
     }
