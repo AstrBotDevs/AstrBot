@@ -398,6 +398,33 @@
         "description": "App ID",
         "hint": "Required. App ID for the current messaging platform. See the platform integration docs for how to obtain it."
       },
+      "app_secret": {
+        "description": "Application Secret"
+      },
+      "app_token": {
+        "description": "Slack App Token"
+      },
+      "bot_token": {
+        "description": "Slack Bot Token"
+      },
+      "channel_access_token": {
+        "description": "LINE Channel Access Token"
+      },
+      "channel_secret": {
+        "description": "LINE Channel Secret"
+      },
+      "client_secret": {
+        "description": "Client Secret"
+      },
+      "encoding_aes_key": {
+        "description": "Message Encryption Key"
+      },
+      "signing_secret": {
+        "description": "Slack Signing Secret"
+      },
+      "token": {
+        "description": "Callback Token"
+      },
       "callback_server_host": {
         "description": "Callback Server Host",
         "hint": "Callback server host. Leave empty to disable the callback server."
@@ -1233,6 +1260,15 @@
   },
   "provider_group": {
     "provider": {
+      "api_key": {
+        "description": "API Key"
+      },
+      "dashscope_api_key": {
+        "description": "DashScope API Key"
+      },
+      "gemini_tts_api_key": {
+        "description": "Gemini API Key"
+      },
       "genie_onnx_model_dir": {
         "description": "ONNX Model Directory",
         "hint": "The directory path containing the ONNX model files"

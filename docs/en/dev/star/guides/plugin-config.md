@@ -62,6 +62,7 @@ The current runtime supports:
 - `obvious_hint` makes the hint prominent in the form.
 - `default` sets an explicit default of the same type.
 - `invisible` hides the field from the WebUI while keeping it in configuration.
+- `secret` applies to `string` and string `list` fields. When `true`, the dashboard masks the value and lets the user temporarily reveal it. This only affects the UI; it does not encrypt the stored configuration.
 - `options` supplies a string or numeric choice list.
 - `labels` supplies display text corresponding to `options`. See [Plugin Internationalization](./plugin-i18n) for current limitations.
 - `slider` applies only to `int` / `float` and contains `min`, `max`, and `step`.
@@ -82,6 +83,29 @@ Common stable `_special` values for plugins include:
 - `select_knowledgebase`, returning a list of knowledge-base IDs, so the field should be `list`.
 
 Core configuration uses additional `_special` values that are not a plugin SDK contract. Do not copy them from core metadata.
+
+## Sensitive configuration fields
+
+API keys, access tokens, and passwords should set `"secret": true`. The dashboard masks their contents by default and provides a control to temporarily reveal or hide them. String lists also support this field:
+
+```json
+{
+  "api_key": {
+    "description": "API Key",
+    "type": "string",
+    "default": "",
+    "secret": true
+  },
+  "backup_api_keys": {
+    "description": "Backup API keys",
+    "type": "list",
+    "default": [],
+    "secret": true
+  }
+}
+```
+
+`secret` does not change the value or data type received by the plugin. It only masks the value in the dashboard; the original value is still stored in the plugin configuration file. Plugins should avoid logging, echoing, or otherwise exposing these values.
 
 ## File-upload fields
 

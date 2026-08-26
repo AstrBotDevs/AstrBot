@@ -392,6 +392,33 @@
         "description": "appid",
         "hint": "必填项。当前消息平台的 AppID。如何获取请参考对应平台接入文档。"
       },
+      "app_secret": {
+        "description": "应用密钥"
+      },
+      "app_token": {
+        "description": "Slack App Token"
+      },
+      "bot_token": {
+        "description": "Slack Bot Token"
+      },
+      "channel_access_token": {
+        "description": "LINE Channel Access Token"
+      },
+      "channel_secret": {
+        "description": "LINE Channel Secret"
+      },
+      "client_secret": {
+        "description": "客户端密钥"
+      },
+      "encoding_aes_key": {
+        "description": "消息加密密钥"
+      },
+      "signing_secret": {
+        "description": "Slack Signing Secret"
+      },
+      "token": {
+        "description": "回调 Token"
+      },
       "callback_server_host": {
         "description": "回调服务器主机",
         "hint": "回调服务器主机。留空则不启用回调服务器。"
@@ -1227,6 +1254,15 @@
   },
   "provider_group": {
     "provider": {
+      "api_key": {
+        "description": "API Key"
+      },
+      "dashscope_api_key": {
+        "description": "DashScope API Key"
+      },
+      "gemini_tts_api_key": {
+        "description": "Gemini API Key"
+      },
       "genie_onnx_model_dir": {
         "description": "ONNX Model Directory",
         "hint": "The directory path containing the ONNX model files"

@@ -38,6 +38,7 @@ PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_token": {
         "description": "登录后 token（可留空）",
         "type": "string",
+        "secret": True,
         "hint": "扫码登录成功后会自动写入；高级场景可手动填写。",
     },
 }
@@ -580,6 +581,57 @@ CONFIG_METADATA_2 = {
                     #     "type": "string",
                     #     "options": ["fullscreen", "embedded"],
                     # },
+                    "app_secret": {
+                        "description": "应用密钥",
+                        "type": "string",
+                        "secret": True,
+                    },
+                    "token": {
+                        "description": "回调 Token",
+                        "type": "string",
+                        "secret": True,
+                    },
+                    "encoding_aes_key": {
+                        "description": "消息加密密钥",
+                        "type": "string",
+                        "secret": True,
+                    },
+                    "client_secret": {
+                        "description": "客户端密钥",
+                        "type": "string",
+                        "secret": True,
+                    },
+                    "bot_token": {
+                        "description": "Slack Bot Token",
+                        "type": "string",
+                        "secret": True,
+                    },
+                    "app_token": {
+                        "description": "Slack App Token",
+                        "type": "string",
+                        "condition": {
+                            "slack_connection_mode": "socket",
+                        },
+                        "secret": True,
+                    },
+                    "signing_secret": {
+                        "description": "Slack Signing Secret",
+                        "type": "string",
+                        "condition": {
+                            "slack_connection_mode": "webhook",
+                        },
+                        "secret": True,
+                    },
+                    "channel_access_token": {
+                        "description": "LINE Channel Access Token",
+                        "type": "string",
+                        "secret": True,
+                    },
+                    "channel_secret": {
+                        "description": "LINE Channel Secret",
+                        "type": "string",
+                        "secret": True,
+                    },
                     "lark_connection_mode": {
                         "description": "订阅方式",
                         "type": "string",
@@ -589,6 +641,7 @@ CONFIG_METADATA_2 = {
                     "lark_encrypt_key": {
                         "description": "Encrypt Key",
                         "type": "string",
+                        "secret": True,
                         "hint": "用于解密飞书回调数据的加密密钥",
                         "condition": {
                             "lark_connection_mode": "webhook",
@@ -597,6 +650,7 @@ CONFIG_METADATA_2 = {
                     "lark_verification_token": {
                         "description": "Verification Token",
                         "type": "string",
+                        "secret": True,
                         "hint": "用于验证飞书回调请求的令牌",
                         "condition": {
                             "lark_connection_mode": "webhook",
@@ -619,6 +673,7 @@ CONFIG_METADATA_2 = {
                     "satori_token": {
                         "description": "Satori 令牌",
                         "type": "string",
+                        "secret": True,
                         "hint": "用于 Satori API 身份验证的令牌。",
                     },
                     "satori_auto_reconnect": {
@@ -692,6 +747,7 @@ CONFIG_METADATA_2 = {
                     "telegram_token": {
                         "description": "Bot Token",
                         "type": "string",
+                        "secret": True,
                         "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。",
                     },
                     "mattermost_url": {
@@ -702,6 +758,7 @@ CONFIG_METADATA_2 = {
                     "mattermost_bot_token": {
                         "description": "Mattermost Bot Token",
                         "type": "string",
+                        "secret": True,
                         "hint": "在 Mattermost 中创建 Bot 账户后生成的访问令牌。",
                     },
                     "mattermost_reconnect_delay": {
@@ -717,6 +774,7 @@ CONFIG_METADATA_2 = {
                     "misskey_token": {
                         "description": "Misskey Access Token",
                         "type": "string",
+                        "secret": True,
                         "hint": "连接服务设置生成的 API 鉴权访问令牌（Access token）",
                     },
                     "misskey_default_visibility": {
@@ -818,6 +876,7 @@ CONFIG_METADATA_2 = {
                     "secret": {
                         "description": "secret",
                         "type": "string",
+                        "secret": True,
                         "hint": "必填项。",
                     },
                     "enable_group_c2c": {
@@ -842,6 +901,7 @@ CONFIG_METADATA_2 = {
                     "ws_reverse_token": {
                         "description": "反向 Websocket Token",
                         "type": "string",
+                        "secret": True,
                         "hint": "反向 Websocket Token。未设置则不启用 Token 验证。",
                     },
                     "wecom_ai_bot_name": {
@@ -869,6 +929,7 @@ CONFIG_METADATA_2 = {
                     "wecomaibot_token": {
                         "description": "企业微信智能机器人 Token",
                         "type": "string",
+                        "secret": True,
                         "hint": "用于 Webhook 回调模式的身份验证。",
                         "condition": {
                             "wecom_ai_bot_connection_mode": "webhook",
@@ -877,6 +938,7 @@ CONFIG_METADATA_2 = {
                     "wecomaibot_encoding_aes_key": {
                         "description": "企业微信智能机器人 EncodingAESKey",
                         "type": "string",
+                        "secret": True,
                         "hint": "用于 Webhook 回调模式的消息加密解密。",
                         "condition": {
                             "wecom_ai_bot_connection_mode": "webhook",
@@ -885,6 +947,7 @@ CONFIG_METADATA_2 = {
                     "msg_push_webhook_url": {
                         "description": "企业微信消息推送 Webhook URL",
                         "type": "string",
+                        "secret": True,
                         "hint": "用于 send_by_session 主动消息推送。格式示例: https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx",
                     },
                     "only_use_webhook_url_to_send": {
@@ -903,6 +966,7 @@ CONFIG_METADATA_2 = {
                     "wecomaibot_ws_secret": {
                         "description": "长连接 Secret",
                         "type": "string",
+                        "secret": True,
                         "hint": "企业微信智能机器人长连接模式凭证 Secret。",
                         "condition": {
                             "wecom_ai_bot_connection_mode": "long_connection",
@@ -929,6 +993,7 @@ CONFIG_METADATA_2 = {
                     "discord_token": {
                         "description": "Discord Bot Token",
                         "type": "string",
+                        "secret": True,
                         "hint": "在此处填入你的Discord Bot Token",
                     },
                     "proxy_mode": {
@@ -1159,9 +1224,14 @@ CONFIG_METADATA_2 = {
                                 "hint": "启用此功能前，您需要手动在设备中安装 baidu-aip 库。一般来说，安装指令如下: `pip3 install baidu-aip`",
                             },
                             "app_id": {"description": "APP ID", "type": "string"},
-                            "api_key": {"description": "API Key", "type": "string"},
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "secret": True,
+                            },
                             "secret_key": {
                                 "type": "string",
+                                "secret": True,
                             },
                         },
                     },
@@ -2127,6 +2197,7 @@ CONFIG_METADATA_2 = {
                     "nvidia_rerank_api_key": {
                         "description": "API Key",
                         "type": "string",
+                        "secret": True,
                     },
                     "nvidia_rerank_model": {
                         "description": "重排序模型名称",
@@ -2414,6 +2485,7 @@ CONFIG_METADATA_2 = {
                     "embedding_api_key": {
                         "description": "API Key",
                         "type": "string",
+                        "secret": True,
                     },
                     "embedding_api_base": {
                         "description": "API Base URL",
@@ -2892,6 +2964,7 @@ CONFIG_METADATA_2 = {
                     "dify_api_key": {
                         "description": "API Key",
                         "type": "string",
+                        "secret": True,
                         "hint": "Dify API Key。此项必填。",
                     },
                     "dify_api_base": {
@@ -2944,6 +3017,7 @@ CONFIG_METADATA_2 = {
                     "deerflow_auth_header": {
                         "description": "Authorization Header",
                         "type": "string",
+                        "secret": True,
                         "hint": "可选。自定义 Authorization 请求头，优先级高于 DeerFlow API Key。",
                     },
                     "deerflow_assistant_id": {
@@ -3083,6 +3157,7 @@ CONFIG_METADATA_2 = {
                             },
                             "moonshotai_api_key": {
                                 "type": "string",
+                                "secret": True,
                             },
                         },
                     },

@@ -62,6 +62,7 @@ Schema 文件必须是**严格 JSON**，不能包含注释、尾随逗号或 Pyt
 - `obvious_hint`：让 hint 在表单中醒目显示。
 - `default`：明确默认值；类型必须与 `type` 一致。
 - `invisible`：从 WebUI 隐藏，但仍存在于配置中。
+- `secret`：仅对 `string` 和字符串 `list` 生效。为 `true` 时，管理面板会遮罩该值，并允许用户临时显示。此选项只影响界面，不会加密配置文件。
 - `options`：字符串/数值选项列表，渲染为选择器。
 - `labels`：与 `options` 一一对应的显示文本。国际化限制见[插件国际化](./plugin-i18n)。
 - `slider`：只用于 `int` / `float`，对象包含 `min`、`max`、`step`。
@@ -77,6 +78,29 @@ Schema 文件必须是**严格 JSON**，不能包含注释、尾随逗号或 Pyt
 - `select_knowledgebase`：返回知识库 ID 列表，对应字段应为 `list`。
 
 Core 内部还使用其他 `_special` 值，但它们不是插件 SDK 契约，不要从核心配置复制。
+
+## 敏感配置项
+
+API Key、访问令牌和密码等敏感字符串应设置 `"secret": true`。管理面板会默认遮罩输入内容，并提供临时显示或隐藏的按钮。字符串列表同样支持该字段：
+
+```json
+{
+  "api_key": {
+    "description": "API Key",
+    "type": "string",
+    "default": "",
+    "secret": true
+  },
+  "backup_api_keys": {
+    "description": "备用 API Key",
+    "type": "list",
+    "default": [],
+    "secret": true
+  }
+}
+```
+
+`secret` 不会改变插件读取到的数据类型或内容。它只负责管理面板中的显示遮罩，配置值仍会原样保存在插件配置文件中，因此插件不应记录、回显或主动暴露这些值。
 
 ## 文件上传字段
 
