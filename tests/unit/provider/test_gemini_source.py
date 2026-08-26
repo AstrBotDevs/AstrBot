@@ -24,6 +24,66 @@ class FakeToolSet:
         }
 
 
+def test_gemini_prepare_conversation_removes_leading_model_content():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    contents = provider._prepare_conversation(
+        {
+            "messages": [
+                {"role": "assistant", "content": "stale assistant turn"},
+                {"role": "user", "content": "current user turn"},
+            ]
+        }
+    )
+
+    assert len(contents) == 1
+    assert isinstance(contents[0], google_types.UserContent)
+    assert contents[0].parts is not None
+    assert contents[0].parts[-1].text == "current user turn"
+
+
+def test_gemini_prepare_conversation_keeps_normal_user_first_history():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    contents = provider._prepare_conversation(
+        {
+            "messages": [
+                {"role": "user", "content": "first user turn"},
+                {"role": "assistant", "content": "assistant turn"},
+                {"role": "user", "content": "current user turn"},
+            ]
+        }
+    )
+
+    assert [type(content) for content in contents] == [
+        google_types.UserContent,
+        google_types.ModelContent,
+        google_types.UserContent,
+    ]
+    assert contents[-1].parts is not None
+    assert contents[-1].parts[-1].text == "current user turn"
+
+
+def test_gemini_prepare_conversation_preserves_user_model_history():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    contents = provider._prepare_conversation(
+        {
+            "messages": [
+                {"role": "user", "content": "user turn"},
+                {"role": "assistant", "content": "assistant turn"},
+            ]
+        }
+    )
+
+    assert [type(content) for content in contents] == [
+        google_types.UserContent,
+        google_types.ModelContent,
+    ]
+    assert contents[-1].parts is not None
+    assert contents[-1].parts[-1].text == "assistant turn"
+
+
 def test_gemini_empty_output_raises_empty_model_output_error():
     llm_response = LLMResponse(role="assistant")
 
@@ -197,8 +257,9 @@ def test_gemini_prepare_conversation_drops_leading_assistant_and_uses_placeholde
     )
 
     assert len(conversation) == 1
-    assert isinstance(conversation[0], google_types.ModelContent)
-    assert [part.text for part in conversation[0].parts] == ["", ""]
+    assert isinstance(conversation[0], google_types.UserContent)
+    assert conversation[0].parts is not None
+    assert [part.text for part in conversation[0].parts] == [" "]
     assert logger_warning.call_count == 2
     assert (
         "Failed to decode google gemini thinking signature"
