@@ -32,12 +32,14 @@ class CommandCatalogRegistration:
 @dataclass(frozen=True, slots=True)
 class CommandGroupRegistration:
     paths: tuple[tuple[str, ...], ...]
+    handler_id: str = ""
+    handler: Any = None
 
 
 class CommandCatalog:
     """An immutable command lookup snapshot."""
 
-    __slots__ = ("_commands", "_groups", "_max_depth")
+    __slots__ = ("_commands", "_groups", "_group_owners", "_max_depth")
 
     def __init__(
         self,
@@ -46,6 +48,7 @@ class CommandCatalog:
     ) -> None:
         command_map: dict[tuple[str, ...], list[CommandCatalogEntry]] = {}
         group_paths: set[tuple[str, ...]] = set()
+        group_owners: dict[tuple[str, ...], str] = {}
         max_depth = 1
         for registration in commands:
             seen_paths: set[tuple[str, ...]] = set()
@@ -67,6 +70,7 @@ class CommandCatalog:
             for path in dict.fromkeys(registration.paths):
                 if path:
                     group_paths.add(path)
+                    group_owners.setdefault(path, registration.handler_id)
                     max_depth = max(max_depth, len(path))
         self._commands: Mapping[tuple[str, ...], tuple[CommandCatalogEntry, ...]] = (
             MappingProxyType(
@@ -74,6 +78,7 @@ class CommandCatalog:
             )
         )
         self._groups = frozenset(group_paths)
+        self._group_owners = MappingProxyType(group_owners)
         self._max_depth = max_depth
 
     @property
@@ -83,6 +88,11 @@ class CommandCatalog:
     @property
     def groups(self) -> frozenset[tuple[str, ...]]:
         return self._groups
+
+    @property
+    def group_owners(self) -> Mapping[tuple[str, ...], str]:
+        """Return the owner handler id for each dispatchable command group."""
+        return self._group_owners
 
     def resolve(self, source: str) -> CommandResolution:
         tokens = self._scan_header_tokens(source, self._max_depth + 1)
@@ -182,8 +192,18 @@ class CommandCatalogStore:
         self._snapshot = snapshot
 
 
-def build_command_catalog(handlers: Iterable[Any]) -> CommandCatalog:
-    """Build an immutable catalog snapshot from registered command handlers."""
+def build_command_catalog(
+    handlers: Iterable[Any],
+    *,
+    path_winners: Mapping[tuple[str, ...], str] | None = None,
+) -> CommandCatalog:
+    """Build an immutable catalog snapshot from registered command handlers.
+
+    Args:
+        handlers: Enabled command handlers for one configuration profile.
+        path_winners: Optional takeover map of public path to remaining
+            handler id. Conflicting paths without a unique owner are omitted.
+    """
     from astrbot.core.star.filter.command import CommandFilter
     from astrbot.core.star.filter.command_group import CommandGroupFilter
 
@@ -261,5 +281,18 @@ def build_command_catalog(handlers: Iterable[Any]) -> CommandCatalog:
                         for name in filter_ref.get_complete_command_names()
                     ),
                 )
-                groups.append(CommandGroupRegistration(paths))
+                groups.append(
+                    CommandGroupRegistration(
+                        paths,
+                        handler.handler_full_name,
+                        handler,
+                    )
+                )
+    from .occupancy import apply_exclusive_occupancy
+
+    registrations, groups, _conflicts = apply_exclusive_occupancy(
+        registrations,
+        groups,
+        path_winners=path_winners,
+    )
     return CommandCatalog(registrations, groups)

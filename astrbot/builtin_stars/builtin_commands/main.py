@@ -242,25 +242,25 @@ class Main(star.Star):
         """Remove a session variable"""
         await self.variable_c.unset_variable(event, key)
 
-    @filter.command_group("chat")
-    def chat(self) -> None:
+    @filter.command_group("llm")
+    def llm(self) -> None:
         """Manage LLM chat for the current session"""
 
     @filter.permission("session.manage")
-    @chat.command("status")
-    async def chat_status(self, event: AstrMessageEvent) -> None:
+    @llm.command("status")
+    async def llm_status(self, event: AstrMessageEvent) -> None:
         """Show whether LLM chat is enabled"""
         await self.chat_c.status(event)
 
     @filter.permission("session.manage")
-    @chat.command("enable")
-    async def chat_enable(self, event: AstrMessageEvent) -> None:
+    @llm.command("enable")
+    async def llm_enable(self, event: AstrMessageEvent) -> None:
         """Enable LLM chat for the current session"""
         await self.chat_c.set_enabled(event, True)
 
     @filter.permission("session.manage")
-    @chat.command("disable")
-    async def chat_disable(self, event: AstrMessageEvent) -> None:
+    @llm.command("disable")
+    async def llm_disable(self, event: AstrMessageEvent) -> None:
         """Disable LLM chat for the current session"""
         await self.chat_c.set_enabled(event, False)
 

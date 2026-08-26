@@ -1,4 +1,5 @@
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -85,6 +86,7 @@ async def sync_command_configs(
         descriptors,
         config_records,
     )
+    await _persist_pending_conflicts(db, descriptors)
     live_handlers = {desc.handler_full_name for desc in descriptors}
     stale_configs = [
         config.handler_full_name
@@ -94,6 +96,20 @@ async def sync_command_configs(
     ]
     if stale_configs:
         await db.delete_command_configs(stale_configs)
+
+
+async def persist_scoped_command_conflicts(
+    db: CommandStore,
+    handler_registry: HandlerRegistry,
+    config_id: str,
+    plugin_names: set[str] | None,
+) -> None:
+    """Persist pending public-path conflicts for one routing profile."""
+    descriptors = _collect_descriptors(handler_registry, include_sub_commands=True)
+    descriptors = _filter_descriptor_scope(descriptors, plugin_names)
+    config_records = await db.get_command_configs()
+    _bind_configs_to_descriptors(handler_registry, descriptors, config_records)
+    await _persist_pending_conflicts(db, descriptors, config_id=config_id)
 
 
 async def toggle_command(
@@ -141,6 +157,9 @@ async def rename_command(
     command_id: str,
     new_fragment: str,
     aliases: list[str] | None = None,
+    *,
+    config_id: str = "",
+    config: dict | None = None,
 ) -> CommandDescriptor:
     descriptor = _build_descriptor_by_command_id(handler_registry, command_id)
     if not descriptor:
@@ -152,8 +171,12 @@ async def rename_command(
 
     # 校验主指令名
     candidate_full = _compose_command(descriptor.parent_signature, new_fragment)
+    plugin_names = _plugin_scope(config)
     if _is_command_in_use(
-        handler_registry, descriptor.handler_full_name, candidate_full
+        handler_registry,
+        descriptor.handler_full_name,
+        candidate_full,
+        plugin_names=plugin_names,
     ):
         raise ValueError(f"指令名 '{candidate_full}' 已被其他指令占用。")
 
@@ -165,9 +188,23 @@ async def rename_command(
                 continue
             alias_full = _compose_command(descriptor.parent_signature, alias)
             if _is_command_in_use(
-                handler_registry, descriptor.handler_full_name, alias_full
+                handler_registry,
+                descriptor.handler_full_name,
+                alias_full,
+                plugin_names=plugin_names,
             ):
                 raise ValueError(f"别名 '{alias_full}' 已被其他指令占用。")
+
+    alias_paths = [
+        _compose_command(descriptor.parent_signature, alias.strip())
+        for alias in aliases or []
+        if alias.strip()
+    ]
+    _validate_llm_prefix_occupancy(
+        candidate_full,
+        alias_paths,
+        config=config,
+    )
 
     existing_cfg = await _load_command_config(db, descriptor)
     merged_extra = dict(existing_cfg.extra_data or {}) if existing_cfg else {}
@@ -191,6 +228,19 @@ async def rename_command(
         auto_managed=False,
     )
     _bind_descriptor_with_config(descriptor, config)
+    writer = getattr(db, "upsert_command_conflict", None)
+    if writer is not None:
+        await writer(
+            conflict_key=descriptor.original_command or candidate_full,
+            handler_full_name=descriptor.handler_full_name,
+            plugin_name=descriptor.plugin_name or "",
+            command_id=descriptor.command_id,
+            config_id=config_id,
+            status="renamed",
+            resolution="manual_rename",
+            resolved_command=new_fragment,
+            auto_generated=False,
+        )
 
     await sync_command_configs(db, handler_registry)
     return descriptor
@@ -242,8 +292,10 @@ async def update_command_permission(
 async def list_commands(
     db: CommandStore,
     handler_registry: HandlerRegistry,
+    plugin_names: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     descriptors = _collect_descriptors(handler_registry, include_sub_commands=True)
+    descriptors = _filter_descriptor_scope(descriptors, plugin_names)
     config_records = await db.get_command_configs()
     _bind_configs_to_descriptors(handler_registry, descriptors, config_records)
 
@@ -283,22 +335,34 @@ async def list_commands(
 async def list_command_conflicts(
     db: CommandStore,
     handler_registry: HandlerRegistry,
+    config_id: str = "",
+    plugin_names: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """列出所有冲突的指令组。"""
     descriptors = _collect_descriptors(handler_registry, include_sub_commands=False)
+    descriptors = _filter_descriptor_scope(descriptors, plugin_names)
     config_records = await db.get_command_configs()
     _bind_configs_to_descriptors(handler_registry, descriptors, config_records)
 
     conflict_groups = _group_conflicts(descriptors)
+    stored = await db.list_command_conflicts(config_id=config_id)
+    stored_status = {
+        (row.conflict_key, row.command_id): row.status
+        for row in stored
+        if row.command_id
+    }
     details = [
         {
+            "config_id": config_id,
             "conflict_key": key,
+            "public_path": key,
             "handlers": [
                 {
                     "command_id": item.command_id,
                     "handler_full_name": item.handler_full_name,
                     "plugin": item.plugin_name,
                     "current_name": item.effective_command,
+                    "status": stored_status.get((key, item.command_id), "pending"),
                 }
                 for item in group
             ],
@@ -306,6 +370,99 @@ async def list_command_conflicts(
         for key, group in conflict_groups.items()
     ]
     return details
+
+
+async def takeover_command(
+    db: CommandStore,
+    handler_registry: HandlerRegistry,
+    command_id: str,
+    *,
+    config_id: str = "",
+) -> CommandDescriptor:
+    """Keep one command_id on its public path and suppress the others.
+
+    The losing handlers stay enabled; only the shared public path is removed
+    from the configuration profile's catalog.
+    """
+    descriptor = _build_descriptor_by_command_id(handler_registry, command_id)
+    if not descriptor:
+        raise ValueError("指定的处理函数不存在或不是指令。")
+    public_path = (descriptor.effective_command or "").strip()
+    if not public_path:
+        raise ValueError("指令没有可接管的对外路径。")
+
+    descriptors = _collect_descriptors(handler_registry, include_sub_commands=True)
+    config_records = await db.get_command_configs()
+    _bind_configs_to_descriptors(handler_registry, descriptors, config_records)
+    claimants = [
+        item
+        for item in descriptors
+        if item.enabled
+        and item.plugin_activated
+        and (item.effective_command or "").strip() == public_path
+    ]
+    if descriptor.command_id not in {item.command_id for item in claimants}:
+        claimants.append(descriptor)
+    if len(claimants) < 2 and all(
+        item.command_id == descriptor.command_id for item in claimants
+    ):
+        raise ValueError("该对外路径没有需要接管的冲突。")
+
+    for item in claimants:
+        status = "takeover" if item.command_id == descriptor.command_id else "pending"
+        await db.upsert_command_conflict(
+            conflict_key=public_path,
+            handler_full_name=item.handler_full_name,
+            plugin_name=item.plugin_name or "",
+            config_id=config_id,
+            command_id=item.command_id,
+            status=status,
+            resolution="takeover" if status == "takeover" else None,
+            auto_generated=False,
+        )
+    return descriptor
+
+
+async def load_path_winners(
+    db: CommandStore,
+    config_id: str = "",
+) -> dict[tuple[str, ...], str]:
+    """Return takeover winners for one configuration profile."""
+    records = await db.list_command_conflicts(status="takeover", config_id=config_id)
+    winners: dict[tuple[str, ...], str] = {}
+    for record in records:
+        path = tuple((record.conflict_key or "").split())
+        if path and record.handler_full_name:
+            winners[path] = record.handler_full_name
+    return winners
+
+
+async def apply_path_winners(
+    db: CommandStore,
+    plugin_catalog: Any,
+    config_ids: Iterable[str] | None = None,
+) -> None:
+    """Load persisted takeover winners onto the plugin catalog."""
+    lister = getattr(db, "list_command_conflicts", None)
+    if lister is None:
+        return
+    known = set(config_ids or ())
+    stored = await lister(status="takeover")
+    by_config: dict[str, dict[tuple[str, ...], str]] = defaultdict(dict)
+    for record in stored:
+        path = tuple((record.conflict_key or "").split())
+        if path and record.handler_full_name:
+            by_config[record.config_id][path] = record.handler_full_name
+            known.add(record.config_id)
+    catalogs = getattr(plugin_catalog, "_command_catalogs", {})
+    known.update(catalogs)
+    if not known:
+        known.add("")
+    setter = getattr(plugin_catalog, "set_path_winners", None)
+    if setter is None:
+        return
+    for config_id in known:
+        setter(config_id, by_config.get(config_id, {}))
 
 
 # Internal helpers ----------------------------------------------------------
@@ -331,6 +488,20 @@ def _collect_descriptors(
             )
             continue
     return descriptors
+
+
+def _filter_descriptor_scope(
+    descriptors: list[CommandDescriptor],
+    plugin_names: set[str] | None,
+) -> list[CommandDescriptor]:
+    """Limit descriptors to the plugins enabled by one routing profile."""
+    if plugin_names is None:
+        return descriptors
+    return [
+        descriptor
+        for descriptor in descriptors
+        if descriptor.plugin_name in plugin_names or descriptor.reserved
+    ]
 
 
 def _build_descriptor(
@@ -704,14 +875,62 @@ def _bind_configs_to_descriptors(
     return config_map
 
 
+async def _persist_pending_conflicts(
+    db: CommandStore,
+    descriptors: list[CommandDescriptor],
+    *,
+    config_id: str = "",
+) -> None:
+    """Write pending occupancy rows for enabled public-path collisions."""
+    lister = getattr(db, "list_command_conflicts", None)
+    writer = getattr(db, "upsert_command_conflict", None)
+    if lister is None or writer is None:
+        return
+    existing = await lister(config_id=config_id)
+    protected = {
+        (row.conflict_key, row.command_id)
+        for row in existing
+        if row.status in {"takeover", "renamed"}
+    }
+    for public_path, group in _group_conflicts(descriptors).items():
+        for item in group:
+            if (public_path, item.command_id) in protected:
+                continue
+            await writer(
+                conflict_key=public_path,
+                handler_full_name=item.handler_full_name,
+                plugin_name=item.plugin_name or "",
+                config_id=config_id,
+                command_id=item.command_id,
+                status="pending",
+                auto_generated=True,
+            )
+
+
 def _group_conflicts(
     descriptors: list[CommandDescriptor],
 ) -> dict[str, list[CommandDescriptor]]:
     conflicts: dict[str, list[CommandDescriptor]] = defaultdict(list)
     for desc in descriptors:
-        if desc.effective_command and desc.enabled and desc.plugin_activated:
-            conflicts[desc.effective_command].append(desc)
+        if not desc.enabled or not desc.plugin_activated:
+            continue
+        for public_path in _descriptor_public_paths(desc):
+            if desc not in conflicts[public_path]:
+                conflicts[public_path].append(desc)
     return {k: v for k, v in conflicts.items() if len(v) > 1}
+
+
+def _descriptor_public_paths(desc: CommandDescriptor) -> tuple[str, ...]:
+    """Return the effective command path and all effective alias paths."""
+    paths: list[str] = []
+    if desc.effective_command:
+        paths.append(desc.effective_command)
+    paths.extend(
+        _compose_command(desc.parent_signature, alias)
+        for alias in desc.aliases
+        if alias.strip()
+    )
+    return tuple(dict.fromkeys(paths))
 
 
 def _set_filter_fragment(
@@ -745,10 +964,21 @@ def _is_command_in_use(
     handler_registry: HandlerRegistry,
     target_handler_full_name: str,
     candidate_full_command: str,
+    *,
+    plugin_names: set[str] | None = None,
 ) -> bool:
     candidate = candidate_full_command.strip()
     for handler in handler_registry:
         if handler.handler_full_name == target_handler_full_name:
+            continue
+        if not getattr(handler, "enabled", True):
+            continue
+        plugin = handler_registry.plugins.get_by_module(handler.handler_module_path)
+        if plugin is not None and not plugin.activated:
+            continue
+        if plugin_names is not None and (
+            plugin is None or plugin.name not in plugin_names
+        ):
             continue
         filter_ref = _locate_primary_filter(handler)
         if not filter_ref:
@@ -757,6 +987,46 @@ def _is_command_in_use(
         if candidate in names:
             return True
     return False
+
+
+def _plugin_scope(config: dict | None) -> set[str] | None:
+    """Return the enabled plugin scope represented by a routing profile."""
+    if not config:
+        return None
+    raw = config.get("plugin_set", ["*"])
+    if raw == ["*"] or raw is None:
+        return None
+    return {str(name) for name in raw if str(name).strip()}
+
+
+def _validate_llm_prefix_occupancy(
+    candidate_full: str,
+    aliases: list[str],
+    *,
+    config: dict | None,
+) -> None:
+    """Reject a rename that moves a command onto an LLM trigger root."""
+    if not config:
+        return
+    from astrbot.core.pipeline.turn_router import (
+        command_prefixes_from_config,
+        public_root_token,
+    )
+
+    llm_access = config.get("llm_access") or {}
+    llm_prefixes = tuple(
+        str(value) for value in llm_access.get("prefixes", []) if str(value).strip()
+    )
+    command_prefixes = command_prefixes_from_config(config)
+    for value in (candidate_full, *aliases):
+        root = public_root_token(value, command_prefixes)
+        if not root:
+            continue
+        for prefix in llm_prefixes:
+            if public_root_token(prefix, command_prefixes) == root:
+                raise ValueError(
+                    f"指令路径 '{value}' 与 LLM 触发前缀 '{prefix}' 冲突。"
+                )
 
 
 def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:

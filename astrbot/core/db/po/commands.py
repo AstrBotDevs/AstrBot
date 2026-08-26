@@ -41,9 +41,10 @@ class CommandConflict(TimestampMixin, SQLModel, table=True):
     id: int | None = Field(
         default=None, primary_key=True, sa_column_kwargs={"autoincrement": True}
     )
+    config_id: str = Field(default="", nullable=False, max_length=255)
     conflict_key: str = Field(nullable=False, max_length=255)
     handler_full_name: str = Field(nullable=False, max_length=512)
-    command_id: str | None = Field(default=None, max_length=512)
+    command_id: str = Field(default="", nullable=False, max_length=512)
     plugin_name: str = Field(nullable=False, max_length=255)
     status: str = Field(default="pending", max_length=32)
     resolution: str | None = Field(default=None, max_length=64)
@@ -54,8 +55,9 @@ class CommandConflict(TimestampMixin, SQLModel, table=True):
 
     __table_args__ = (
         UniqueConstraint(
+            "config_id",
             "conflict_key",
-            "handler_full_name",
-            name="uix_conflict_handler",
+            "command_id",
+            name="uix_conflict_scope",
         ),
     )

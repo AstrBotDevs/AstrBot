@@ -27,7 +27,12 @@ from astrbot.core.utils.requirements_utils import plan_missing_requirements_inst
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
 from .command_ids import take_alter_cmd_entry
-from .command_management import command_id_for_handler, sync_command_configs
+from .command_management import (
+    apply_path_winners,
+    command_id_for_handler,
+    persist_scoped_command_conflicts,
+    sync_command_configs,
+)
 from .dashboard_extension import validate_dashboard_manifest
 from .filter.permission import ActionPermissionFilter
 from .plugin_catalog import PluginCatalog
@@ -979,6 +984,23 @@ class PluginRuntimeLoader:
                 self._execution_context.database,
                 self._catalog.runtime_catalogs.handlers,
             )
+            config_manager = getattr(
+                self._execution_context, "astrbot_config_mgr", None
+            )
+            for config_id, config in getattr(config_manager, "confs", {}).items():
+                raw_plugin_set = config.get("plugin_set", ["*"])
+                plugin_names = (
+                    None
+                    if raw_plugin_set in (None, ["*"])
+                    else {str(name) for name in raw_plugin_set if str(name).strip()}
+                )
+                await persist_scoped_command_conflicts(
+                    self._execution_context.database,
+                    self._catalog.runtime_catalogs.handlers,
+                    config_id,
+                    plugin_names,
+                )
+            await apply_path_winners(self._execution_context.database, self._catalog)
         except Exception as exc:
             logger.error("同步指令配置失败: %s", exc)
             logger.error(traceback.format_exc())

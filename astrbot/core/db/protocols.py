@@ -731,6 +731,7 @@ class CommandStore(Protocol):
     async def list_command_conflicts(
         self,
         status: str | None = None,
+        config_id: str | None = None,
     ) -> list[CommandConflict]: ...
 
     async def upsert_command_conflict(
@@ -739,6 +740,7 @@ class CommandStore(Protocol):
         handler_full_name: str,
         plugin_name: str,
         *,
+        config_id: str | None = None,
         command_id: str | None = None,
         status: str | None = None,
         resolution: str | None = None,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass
 from types import ModuleType
 from typing import TYPE_CHECKING
@@ -46,6 +47,7 @@ class PluginCatalog:
         "runtime_catalogs",
         "_command_catalogs",
         "_command_catalog_scopes",
+        "_path_winners",
         "_live_logging",
     )
 
@@ -59,6 +61,7 @@ class PluginCatalog:
         self.runtime_catalogs.tools.bind_plugin_lookup(self.runtime_catalogs.plugins)
         self._command_catalogs: dict[str, CommandCatalogStore] = {}
         self._command_catalog_scopes: dict[str, tuple[str, ...] | None] = {}
+        self._path_winners: dict[str, dict[tuple[str, ...], str]] = {}
         self._live_logging = live_logging
 
     @property
@@ -578,8 +581,23 @@ class PluginCatalog:
             or self._command_catalog_scopes[config_id] != scope
         ):
             self._command_catalog_scopes[config_id] = scope
-            self._replace_command_catalog(store, scope)
+            self._replace_command_catalog(store, scope, config_id)
         return store
+
+    def set_path_winners(
+        self,
+        config_id: str,
+        winners: Mapping[tuple[str, ...], str],
+    ) -> None:
+        """Record path-level takeover winners for one configuration profile."""
+        self._path_winners[config_id] = dict(winners)
+        store = self._command_catalogs.get(config_id)
+        if store is not None:
+            self._replace_command_catalog(
+                store,
+                self._command_catalog_scopes.get(config_id),
+                config_id,
+            )
 
     def refresh_command_catalogs(self) -> None:
         """Atomically rebuild all registered pipeline command snapshots."""
@@ -587,15 +605,22 @@ class PluginCatalog:
             self._replace_command_catalog(
                 store,
                 self._command_catalog_scopes.get(config_id),
+                config_id,
             )
 
     def _replace_command_catalog(
         self,
         store: CommandCatalogStore,
         plugin_names: tuple[str, ...] | None,
+        config_id: str = "",
     ) -> None:
         handlers = self.runtime_catalogs.handlers.get_handlers_by_event_type(
             EventType.AdapterMessageEvent,
             plugins_name=list(plugin_names) if plugin_names is not None else None,
         )
-        store.replace(build_command_catalog(handlers))
+        store.replace(
+            build_command_catalog(
+                handlers,
+                path_winners=self._path_winners.get(config_id),
+            )
+        )

@@ -29,6 +29,7 @@ async def initialize_sqlite_schema(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
         await _ensure_command_id_columns(conn)
+        await _ensure_command_conflict_scope(conn)
     await _drop_keep_original_alias_column(engine)
     async with engine.connect() as conn:
         for pragma in _SQLITE_RUNTIME_PRAGMAS:
@@ -88,6 +89,39 @@ async def _ensure_command_id_columns(conn) -> None:
                 "WHERE command_id IS NULL OR command_id = ''"
             ),
         )
+
+
+async def _ensure_command_conflict_scope(conn) -> None:
+    """Scope command_conflicts by config_id, public path, and command_id."""
+    table_exists, has_config_id = await conn.run_sync(
+        lambda sync_conn: (
+            "command_conflicts" in sa_inspect(sync_conn).get_table_names(),
+            _column_exists(sync_conn, "command_conflicts", "config_id"),
+        ),
+    )
+    if not table_exists:
+        return
+    if not has_config_id:
+        await conn.execute(
+            text(
+                "ALTER TABLE command_conflicts "
+                "ADD COLUMN config_id VARCHAR(255) NOT NULL DEFAULT ''"
+            ),
+        )
+    await conn.execute(
+        text(
+            "UPDATE command_conflicts SET command_id = "
+            "plugin_name || ':' || replace(conflict_key, ' ', '.') "
+            "WHERE command_id IS NULL OR command_id = ''"
+        ),
+    )
+    await conn.execute(text("DROP INDEX IF EXISTS uix_conflict_handler"))
+    await conn.execute(
+        text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uix_conflict_scope "
+            "ON command_conflicts (config_id, conflict_key, command_id)"
+        ),
+    )
 
 
 async def _drop_keep_original_alias_column(engine: AsyncEngine) -> None:
