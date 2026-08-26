@@ -9,7 +9,8 @@
     "handlersOperation": "管理行为"
   },
   "titles": {
-    "installedAstrBotPlugins": "已安装"
+    "installedAstrBotPlugins": "已安装",
+    "pluginPages": "插件页面"
   },
   "failedPlugins": {
     "title": "加载失败插件（{count}）",
@@ -103,7 +104,9 @@
   },
   "empty": {
     "noPlugins": "暂无插件",
-    "noPluginsDesc": "尝试安装插件或调整搜索条件"
+    "noPluginsDesc": "尝试安装插件或调整搜索条件",
+    "noPluginPages": "暂无插件页面",
+    "noPluginPagesDesc": "安装带有网页界面的插件后会显示在这里"
   },
   "detail": {
     "contents": "插件行为",

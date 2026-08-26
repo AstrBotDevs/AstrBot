@@ -1,5 +1,4 @@
 import { commandApi, pluginApi } from "@/api/v1";
-import { pluginSidebarState } from "@/composables/usePluginSidebarItems";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCommonStore } from "@/stores/common";
 import { resolveErrorMessage } from "@/utils/errorUtils";
@@ -516,9 +515,6 @@ export const useExtensionPage = (initialTab = "installed") => {
     try {
       const res = await pluginApi.list();
       Object.assign(extension_data, res.data);
-
-      // 同步插件数据到侧边栏共享状态
-      pluginSidebarState.plugins = res.data?.data || [];
 
       const failRes = await pluginApi.failed();
       failedPluginsDict.value = failRes.data.data || {};

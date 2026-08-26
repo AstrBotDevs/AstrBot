@@ -25,6 +25,12 @@ const MarketPluginsTab = defineAsyncComponent(
 const PluginDetailPage = defineAsyncComponent(
   () => import("./extension/PluginDetailPage.vue"),
 );
+const PluginPagesTab = defineAsyncComponent(
+  () => import("./extension/PluginPagesTab.vue"),
+);
+const PluginPagePage = defineAsyncComponent(
+  () => import("./PluginPagePage.vue"),
+);
 
 const pageState = useExtensionPage(props.initialTab);
 const { pluginName, pluginDesc } = usePluginI18n();
@@ -181,6 +187,22 @@ const {
   searchDebounceTimer,
 } = pageState;
 
+// All installed plugins that ship web pages, listed in the page switcher row.
+const pluginsWithPages = computed(() =>
+  filteredExtensions.value.filter(
+    (plugin) => Array.isArray(plugin?.pages) && plugin.pages.length > 0,
+  ),
+);
+
+const openPluginPage = (plugin) => {
+  const pages = plugin?.pages;
+  if (!Array.isArray(pages) || pages.length === 0 || !plugin?.name) return;
+  router.push({
+    name: "ExtensionPluginPages",
+    params: { pluginName: plugin.name, pageName: pages[0] },
+  });
+};
+
 const logLevelItems = computed(() => [
   { title: tm("dialogs.config.coreSettings.followGlobal"), value: null },
   { title: "DEBUG", value: "DEBUG" },
@@ -334,13 +356,44 @@ const updateDialogPluginLogo = computed(() => {
     </v-alert>
   </div>
 
+  <!-- Plugin page opened inline: kept outside the 1200px wrapper so the
+       absolutely positioned page host can fill the workspace shell. -->
+  <div
+    v-else-if="route.meta.extensionTab === 'pluginPages' && route.params.pageName"
+    class="plugin-page-host"
+  >
+    <!-- Horizontal switcher: every plugin that ships web pages -->
+    <div class="plugin-pages-switcher">
+      <button
+        v-for="plugin in pluginsWithPages"
+        :key="plugin.name"
+        type="button"
+        class="plugin-pages-switcher__item"
+        :class="{
+          'plugin-pages-switcher__item--active':
+            plugin.name === route.params.pluginName,
+        }"
+        @click="openPluginPage(plugin)"
+      >
+        {{ pluginName(plugin) || plugin.display_name || plugin.name }}
+      </button>
+    </div>
+    <div class="plugin-page-host__body">
+      <PluginPagePage />
+    </div>
+  </div>
+
   <v-row v-else class="extension-page">
     <v-col cols="12" md="12">
       <v-card variant="flat" style="background-color: transparent">
         <!-- 标签页 -->
         <v-card-text style="padding: 0px 12px">
+          <PluginPagesTab
+            v-if="route.meta.extensionTab === 'pluginPages'"
+            :state="pageState"
+          />
           <InstalledPluginsTab
-            v-if="activeTab === 'installed'"
+            v-else-if="activeTab === 'installed'"
             :state="pageState"
           />
           <MarketPluginsTab v-else :state="pageState" />
@@ -1271,6 +1324,56 @@ const updateDialogPluginLogo = computed(() => {
   margin: 0 auto;
   max-width: 1200px;
   width: 100%;
+}
+
+/* Containing block for the absolutely positioned inline plugin page */
+.plugin-page-host {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.plugin-page-host__body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+/* Horizontal row of every plugin that ships web pages, shown above the page */
+.plugin-pages-switcher {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 8px 12px;
+}
+
+.plugin-pages-switcher__item {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: rgba(var(--v-theme-on-surface), 0.58);
+  cursor: pointer;
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  height: 30px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.plugin-pages-switcher__item:hover {
+  background: rgba(var(--v-theme-on-surface), 0.045);
+  color: rgba(var(--v-theme-on-surface), 0.78);
+}
+
+.plugin-pages-switcher__item--active {
+  background: rgba(var(--v-theme-on-surface), 0.065);
+  color: rgba(var(--v-theme-on-surface), 0.86);
 }
 
 .plugin-handler-item {

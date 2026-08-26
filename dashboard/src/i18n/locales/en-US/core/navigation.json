@@ -16,7 +16,8 @@
     "market": "Plugin Market",
     "mcp": "MCP Servers",
     "skills": "Skills",
-    "components": "Handlers"
+    "components": "Handlers",
+    "pluginPages": "Plugin Pages"
   },
   "conversation": "Conversations",
   "sessionManagement": "Custom Rules",
@@ -45,6 +46,5 @@
   "configTabs": {
     "normal": "Normal Config",
     "system": "System Config"
-  },
-  "pluginWebui": "Plugin Pages"
+  }
 }
