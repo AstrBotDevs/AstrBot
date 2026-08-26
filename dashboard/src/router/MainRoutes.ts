@@ -57,6 +57,13 @@ const MainRoutes = {
           meta: { extensionTab: 'installed', pluginView: 'market' }
         },
         {
+          name: 'ExtensionPluginPages',
+          path: 'pages/:pluginName?/:pageName?',
+          component: () => import('@/views/ExtensionPage.vue'),
+          props: { initialTab: 'installed' },
+          meta: { extensionTab: 'pluginPages', pluginView: 'pluginPages' }
+        },
+        {
           name: 'ExtensionMcp',
           path: 'mcp',
           component: () => import('@/views/extension/McpServersPage.vue'),
@@ -89,11 +96,6 @@ const MainRoutes = {
           meta: { extensionTab: 'installed', pluginView: 'market' }
         }
       ]
-    },
-    {
-      name: 'PluginPage',
-      path: '/plugin-page/:pluginName/:pageName',
-      component: () => import('@/views/PluginPagePage.vue')
     },
     {
       path: '/extension/:pluginId',

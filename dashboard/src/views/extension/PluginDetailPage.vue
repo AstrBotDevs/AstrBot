@@ -507,12 +507,14 @@ const getComponentDescription = (component) => {
   return String(fallback).trim();
 };
 
+// Open the plugin page inline within the plugin pages tab instead of the
+// standalone full-screen route, so the workspace chrome stays visible.
 const openComponentPage = (component) => {
   const targetPluginName = component?.plugin_name || pluginData.value?.name;
   const targetPageName = component?.page_name || component?.name;
   if (!targetPluginName || !targetPageName) return;
   router.push({
-    name: "PluginPage",
+    name: "ExtensionPluginPages",
     params: {
       pluginName: targetPluginName,
       pageName: targetPageName,

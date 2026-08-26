@@ -13,7 +13,8 @@
     "market": "插件市场",
     "mcp": "MCP",
     "skills": "技能",
-    "components": "管理行为"
+    "components": "管理行为",
+    "pluginPages": "插件页面"
   },
   "config": "配置文件",
   "chat": "聊天",
@@ -45,6 +46,5 @@
   "configTabs": {
     "normal": "普通配置",
     "system": "系统配置"
-  },
-  "pluginWebui": "插件页面"
+  }
 }
