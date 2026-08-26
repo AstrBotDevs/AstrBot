@@ -603,3 +603,55 @@ async def test_telegram_run_rebuilds_fresh_application_after_recreate_init_failu
     app_two.shutdown.assert_awaited()
     app_three.initialize.assert_awaited()
     app_three.start.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_telegram_proxy_is_applied_to_bot_api_and_polling_requests():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    module_globals = TelegramPlatformAdapter.__init__.__globals__
+    proxy_url = "http://127.0.0.1:7890"
+
+    builder = MagicMock()
+    builder.token.return_value = builder
+    builder.base_url.return_value = builder
+    builder.base_file_url.return_value = builder
+    builder.proxy.return_value = builder
+    builder.get_updates_proxy.return_value = builder
+
+    with patch.dict(
+        module_globals,
+        {"ApplicationBuilder": MagicMock(return_value=builder)},
+    ):
+        TelegramPlatformAdapter(
+            make_platform_config("telegram", telegram_proxy=proxy_url),
+            {},
+            asyncio.Queue(),
+        )
+
+    builder.proxy.assert_called_once_with(proxy_url)
+    builder.get_updates_proxy.assert_called_once_with(proxy_url)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("telegram_proxy", [None, ""])
+async def test_telegram_proxy_is_skipped_when_not_configured(telegram_proxy):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    module_globals = TelegramPlatformAdapter.__init__.__globals__
+
+    builder = MagicMock()
+    builder.token.return_value = builder
+    builder.base_url.return_value = builder
+    builder.base_file_url.return_value = builder
+
+    with patch.dict(
+        module_globals,
+        {"ApplicationBuilder": MagicMock(return_value=builder)},
+    ):
+        TelegramPlatformAdapter(
+            make_platform_config("telegram", telegram_proxy=telegram_proxy),
+            {},
+            asyncio.Queue(),
+        )
+
+    builder.proxy.assert_not_called()
+    builder.get_updates_proxy.assert_not_called()

@@ -450,6 +450,7 @@ CONFIG_METADATA_2 = {
                         "type": "telegram",
                         "enable": True,
                         "telegram_token": "your_bot_token",
+                        "telegram_proxy": "",
                         "start_message": "Hello, I'm AstrBot!",
                         "telegram_api_base_url": "https://api.telegram.org/bot",
                         "telegram_file_base_url": "https://api.telegram.org/file/bot",
@@ -673,7 +674,12 @@ CONFIG_METADATA_2 = {
                     "telegram_token": {
                         "description": "Bot Token",
                         "type": "string",
-                        "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。",
+                        "hint": "在此处填入你的 Telegram Bot Token",
+                    },
+                    "telegram_proxy": {
+                        "description": "Telegram 代理地址",
+                        "type": "string",
+                        "hint": "可选的代理地址，如 http://ip:port 或 socks5://ip:port。仅 Telegram 适配器使用，留空则回退到全局代理设置。",
                     },
                     "mattermost_url": {
                         "description": "Mattermost URL",

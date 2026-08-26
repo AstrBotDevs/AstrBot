@@ -602,9 +602,13 @@
         "description": "Telegram 轮询重启延迟",
         "hint": "当轮询意外结束尝试自动重启时的延迟时间，单位为秒。默认为 5s。"
       },
+      "telegram_proxy": {
+        "description": "Telegram 代理地址",
+        "hint": "可选的代理地址，如 http://ip:port 或 socks5://ip:port。仅 Telegram 适配器使用，留空则回退到全局代理设置。"
+      },
       "telegram_token": {
         "description": "Bot Token",
-        "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。"
+        "hint": "在此处填入你的 Telegram Bot Token"
       },
       "mattermost_url": {
         "description": "Mattermost URL",
