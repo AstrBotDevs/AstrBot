@@ -5,22 +5,23 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 4d877c9919e58008f6f2cf4b19e18f9c48e4338f
-  synced_at_utc: 2026-08-25T22:16:00Z
+  commit: 8ea8ce613a0bee4ddb48b21490afe23418277c75
+  synced_at_utc: 2026-08-26T20:33:48Z
   sync_method: manual-adaptation
-  source_pr: '9799, 9782, 9802, 9664, 9798, 9805, 9808'
+  source_pr: '9803, 9801, 9812, 9647, 9820, 9824, 9814, 9827, 9815, 9830, 9832, 9825, 9818, 9833, 9738'
   note: >-
-    Reviewed the interval from c6a14e0600485293bd88cf78c04ecec967b21b50
-    through 4d877c9919e58008f6f2cf4b19e18f9c48e4338f. Adapted CodeQL 4.37.8
-    to an immutable SHA (#9799), Chat coarse-pointer menus (#9782),
-    Anthropic api_base /v1 stripping (#9802), deactivated-plugin command
-    dimming via PluginRegistry plus OpenAPI (#9664), OpenAI Chat Completions
-    tool schema order (#9798), console/root log_level sync with
-    _SafeConsoleStream (#9805), and DingTalk CREATING as pending (#9808).
-    Skipped the Dockerfile COPY reorder (#9787) because the fork already
-    copies manifests, installs dependencies, then copies the source tree;
-    skipped the WeCom receive-loop offload (#9759) because
-    _start_message_task already keeps the ACK path responsive. Validation
-    covered focused pytest and Dashboard Vitest cases. No upstream version
-    bump occurred in this interval; absorbed user-visible fixes were added
-    to the in-progress 4.27.5 changelog.
+    Reviewed the interval from 4d877c9919e58008f6f2cf4b19e18f9c48e4338f
+    through 8ea8ce613a0bee4ddb48b21490afe23418277c75. Adapted the default
+    T2I template onto Playwright (#9803), max_agent_step coercion for cron
+    and background wake-ups (#9801), monochrome provider icons (#9647),
+    the provider workspace (#9820), masked secret config fields (#9824),
+    UMO rate-limit isolation (#9814), hidden personal WeChat internals
+    (#9827), empty LLM request guards (#9815), dashboard auth/logout
+    (#9830), the bot workspace with fork quick actions and step-up
+    (#9825), sanitized proactive history (#9818), QQ Official unique-session
+    group routing (#9833), and Gemini pop(0) (#9738). Cherry-picked the
+    persona folder reset after a quote-style conflict (#9832). Skipped
+    the persona-manager mobile create-folder dropdown (#9812) because the
+    fork toolbar already always shows that action. No upstream version
+    bump occurred in this interval; absorbed user-visible changes were
+    added to the in-progress 4.27.5 changelog.
