@@ -49,6 +49,8 @@
     "openPages": "Pages",
     "openPage": "Open",
     "openWebui": "Open Plugin UI",
+"expand": "Expand",
+"collapse": "Collapse",
     "close": "Close",
     "save": "Save",
     "saveAndClose": "Save and Close",

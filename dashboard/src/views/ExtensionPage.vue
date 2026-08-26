@@ -4,6 +4,7 @@ import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
 import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
 import ProxySelector from "@/components/shared/ProxySelector.vue";
 import UninstallConfirmDialog from "@/components/shared/UninstallConfirmDialog.vue";
+import PluginPagesSwitcher from "@/components/extension/PluginPagesSwitcher.vue";
 import { useExtensionPage } from "./extension/useExtensionPage";
 import { computed, defineAsyncComponent } from "vue";
 import defaultPluginIcon from "/favicon.svg";
@@ -187,42 +188,6 @@ const {
   searchDebounceTimer,
 } = pageState;
 
-// All installed plugins that ship web pages, listed in the page switcher row.
-const pluginsWithPages = computed(() =>
-  filteredExtensions.value.filter(
-    (plugin) => Array.isArray(plugin?.pages) && plugin.pages.length > 0,
-  ),
-);
-
-const openPluginPage = (plugin) => {
-  const pages = plugin?.pages;
-  if (!Array.isArray(pages) || pages.length === 0 || !plugin?.name) return;
-  router.push({
-    name: "ExtensionPluginPages",
-    params: { pluginName: plugin.name, pageName: pages[0] },
-  });
-};
-
-// Convert vertical wheel input into horizontal scrolling for the page
-// switcher row, so a mouse wheel can sweep through many plugin entries.
-// Scrolling stops being intercepted once the row hits either end, letting
-// the wheel fall through to the page's vertical scroll again.
-const onPluginSwitcherWheel = (event) => {
-  const el = event.currentTarget;
-  if (el.scrollWidth <= el.clientWidth) return;
-
-  // Physical mice report line-based deltas (deltaMode === 1); convert them.
-  const delta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
-  const maxScroll = el.scrollWidth - el.clientWidth;
-  const canScroll =
-    (delta < 0 && el.scrollLeft > 0) ||
-    (delta > 0 && el.scrollLeft < maxScroll);
-  if (!canScroll) return;
-
-  event.preventDefault();
-  el.scrollLeft += delta;
-};
-
 const logLevelItems = computed(() => [
   { title: tm("dialogs.config.coreSettings.followGlobal"), value: null },
   { title: "DEBUG", value: "DEBUG" },
@@ -334,6 +299,17 @@ const updateDialogPluginLogo = computed(() => {
 </script>
 
 <template>
+  <!-- Page switcher below the workspace tabs, shown whenever the plugin pages
+       tab is in its grid view (a page is not opened yet). -->
+  <div
+    v-if="
+      route.meta.extensionTab === 'pluginPages' && !route.params.pageName
+    "
+    class="plugin-pages-switcher-host"
+  >
+    <PluginPagesSwitcher :plugins="filteredExtensions" />
+  </div>
+
   <PluginDetailPage
     v-if="selectedPluginId && selectedDetailPlugin"
     :plugin="selectedDetailPlugin"
@@ -382,21 +358,8 @@ const updateDialogPluginLogo = computed(() => {
     v-else-if="route.meta.extensionTab === 'pluginPages' && route.params.pageName"
     class="plugin-page-host"
   >
-    <!-- Horizontal switcher: every plugin that ships web pages -->
-    <div class="plugin-pages-switcher" @wheel="onPluginSwitcherWheel">
-      <button
-        v-for="plugin in pluginsWithPages"
-        :key="plugin.name"
-        type="button"
-        class="plugin-pages-switcher__item"
-        :class="{
-          'plugin-pages-switcher__item--active':
-            plugin.name === route.params.pluginName,
-        }"
-        @click="openPluginPage(plugin)"
-      >
-        {{ pluginName(plugin) || plugin.display_name || plugin.name }}
-      </button>
+    <div class="plugin-pages-switcher-host">
+      <PluginPagesSwitcher :plugins="filteredExtensions" />
     </div>
     <div class="plugin-page-host__body">
       <PluginPagePage />
@@ -1354,51 +1317,15 @@ const updateDialogPluginLogo = computed(() => {
   flex-direction: column;
 }
 
+/* Horizontal inset for the switcher row so it lines up with the tabs */
+.plugin-pages-switcher-host {
+  padding: 0 12px;
+}
+
 .plugin-page-host__body {
   flex: 1;
   min-height: 0;
   position: relative;
-}
-
-/* Horizontal row of every plugin that ships web pages, shown above the page */
-.plugin-pages-switcher {
-  align-items: center;
-  display: flex;
-  flex-shrink: 0;
-  gap: 6px;
-  overflow-x: auto;
-  padding: 8px 12px;
-  scrollbar-width: none;
-}
-
-.plugin-pages-switcher::-webkit-scrollbar {
-  display: none;
-}
-
-.plugin-pages-switcher__item {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  border-radius: 8px;
-  color: rgba(var(--v-theme-on-surface), 0.58);
-  cursor: pointer;
-  display: inline-flex;
-  flex-shrink: 0;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  height: 30px;
-  padding: 0 12px;
-  white-space: nowrap;
-}
-
-.plugin-pages-switcher__item:hover {
-  background: rgba(var(--v-theme-on-surface), 0.045);
-  color: rgba(var(--v-theme-on-surface), 0.78);
-}
-
-.plugin-pages-switcher__item--active {
-  background: rgba(var(--v-theme-on-surface), 0.065);
-  color: rgba(var(--v-theme-on-surface), 0.86);
 }
 
 .plugin-handler-item {

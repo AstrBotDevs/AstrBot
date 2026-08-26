@@ -31,6 +31,12 @@ const {
   openPluginSourceBindingDialog,
 } = props.state;
 
+// Suppress the browser's native middle-click autoscroll indicator so the
+// custom middle-click new-tab behavior is the only effect.
+const onCardMouseDown = (event) => {
+  if (event.button === 1) event.preventDefault();
+};
+
 // Open the plugin page inline within the current plugin pages tab. Used by
 // both the card body and the webui button so they never leave this tab.
 const openPluginPageInline = (extension) => {
@@ -195,6 +201,7 @@ const togglePinnedExtension = (extension) => {
               :is-pinned="isPinnedExtension(extension)"
               class="rounded-lg"
               style="background-color: rgb(var(--v-theme-mcpCardBg))"
+              @mousedown="onCardMouseDown"
               @click="openPluginPage(extension, $event)"
               @auxclick="openPluginPage(extension, $event)"
               @toggle-pin="togglePinnedExtension(extension)"
