@@ -109,5 +109,5 @@ async def test_stalled_concurrent_events_use_current_time_after_lock(monkeypatch
     margin = 0.3
     expected_stall = limiter.rate_limit_time.total_seconds() + margin
     assert sleep_durations == pytest.approx([expected_stall, expected_stall])
-    timestamps = list(limiter.event_timestamps[FakeEvent.session_id])
+    timestamps = list(limiter.event_timestamps[FakeEvent.unified_msg_origin])
     assert timestamps == sorted(timestamps)
