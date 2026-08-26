@@ -19,6 +19,13 @@
                 >
                   {{ tm("addAdapter") }}
                 </v-btn>
+                <v-progress-linear
+                  v-if="loadingPlatforms"
+                  class="bot-list-panel__progress"
+                  color="primary"
+                  height="2"
+                  indeterminate
+                />
               </div>
 
               <div
@@ -116,7 +123,7 @@
                 </div>
               </div>
 
-              <div v-else class="bot-list-empty">
+              <div v-else-if="!loadingPlatforms" class="bot-list-empty">
                 <v-icon size="42" color="grey-lighten-1"
                   >mdi-robot-outline</v-icon
                 >
@@ -328,6 +335,7 @@ const confirmDialog = useConfirmDialog();
 
 const configData = ref({});
 const metadata = ref({});
+const loadingPlatforms = ref(true);
 const selectedPlatformId = ref(null);
 const showAddPlatformDialog = ref(false);
 const platformStats = ref({});
@@ -377,6 +385,7 @@ onBeforeUnmount(() => {
 });
 
 async function getConfig(preferredPlatformId = null) {
+  loadingPlatforms.value = true;
   try {
     const response = await systemConfigApi.runtime();
     configData.value = response.data.data.config;
@@ -395,6 +404,8 @@ async function getConfig(preferredPlatformId = null) {
     }
   } catch (error) {
     showError(error);
+  } finally {
+    loadingPlatforms.value = false;
   }
 }
 
@@ -621,6 +632,14 @@ function showError(error) {
   gap: 12px;
   justify-content: space-between;
   padding: 20px 20px 12px;
+  position: relative;
+}
+
+.bot-list-panel__progress {
+  bottom: 0;
+  left: 0;
+  position: absolute;
+  right: 0;
 }
 
 .bot-list-panel__title {
