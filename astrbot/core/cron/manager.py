@@ -443,18 +443,7 @@ class CronJobManager:
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
         req.conversation = conv
-        # finetine the messages
-        context = load_sanitized_history(conv.history)
-        if context:
-            req.contexts = context
-            context_dump = req._print_friendly_context()
-            req.contexts = []
-            req.system_prompt += (
-                "\n\nBellow is you and user previous conversation history:\n"
-                f"---\n"
-                f"{context_dump}\n"
-                f"---\n"
-            )
+        req.contexts = load_sanitized_history(conv.history)
         cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
         req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
             cron_job=cron_job_str
