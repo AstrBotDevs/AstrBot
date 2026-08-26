@@ -600,6 +600,16 @@
         "description": "Telegram Polling Restart Delay",
         "hint": "Waiting time in seconds when the polling loop needs to restart after unexpected exits. Defaults to 5s."
       },
+      "telegram_reply_to_message": {
+        "description": "Telegram Reply To Message",
+        "labels": [
+          "Disabled",
+          "Direct messages only",
+          "Group chats only",
+          "Direct and group chats"
+        ],
+        "hint": "Whether the bot quotes (replies to) the message that triggered its response. off: disabled; private: direct messages only; group: group chats only; all: both direct messages and group chats. Defaults to off."
+      },
       "telegram_token": {
         "description": "Bot Token",
         "hint": "If you are in mainland China, set a proxy or change api_base in Other Settings."
