@@ -49,6 +49,8 @@
         "openPages": "Pages",
         "openPage": "Открыть",
         "openWebui": "Открыть UI плагина",
+"expand": "Развернуть",
+"collapse": "Свернуть",
         "close": "Закрыть",
         "save": "Сохранить",
         "saveAndClose": "Сохранить и закрыть",
