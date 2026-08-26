@@ -143,6 +143,10 @@
       v-else-if="itemMeta?.type === 'string'"
       :model-value="modelValue"
       @update:model-value="emitUpdate"
+      :type="stringInputType"
+      :append-inner-icon="secretToggleIcon"
+      :autocomplete="itemMeta?.secret ? 'new-password' : undefined"
+      @click:append-inner="secretVisible = !secretVisible"
       density="compact"
       variant="outlined"
       class="config-field"
@@ -213,6 +217,7 @@
       v-else-if="itemMeta?.type === 'list'"
       :model-value="modelValue"
       @update:model-value="emitUpdate"
+      :secret="Boolean(itemMeta?.secret)"
       class="config-field"
     />
 
@@ -231,6 +236,10 @@
       v-else
       :model-value="modelValue"
       @update:model-value="emitUpdate"
+      :type="stringInputType"
+      :append-inner-icon="secretToggleIcon"
+      :autocomplete="itemMeta?.secret ? 'new-password' : undefined"
+      @click:append-inner="secretVisible = !secretVisible"
       density="compact"
       variant="outlined"
       class="config-field"
@@ -256,6 +265,7 @@ import { usePluginI18n } from '@/utils/pluginI18n'
 
 const numericTemp = ref(null)
 const listSearchText = ref('')
+const secretVisible = ref(false)
 
 const props = defineProps({
   modelValue: {
@@ -306,6 +316,14 @@ const listSelectItems = computed(() =>
     ? getSelectItems(props.itemMeta)
     : []
 )
+
+const stringInputType = computed(() =>
+  props.itemMeta?.secret && !secretVisible.value ? 'password' : 'text'
+)
+const secretToggleIcon = computed(() => {
+  if (!props.itemMeta?.secret) return undefined
+  return secretVisible.value ? 'mdi-eye-off-outline' : 'mdi-eye-outline'
+})
 
 function toNumber(val) {
   const n = parseFloat(val)

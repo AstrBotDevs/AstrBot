@@ -417,6 +417,33 @@
     "name": "平台配置",
     "platform": {
       "description": "消息平台适配器",
+      "app_secret": {
+        "description": "应用密钥"
+      },
+      "token": {
+        "description": "回调 Token"
+      },
+      "encoding_aes_key": {
+        "description": "消息加密密钥"
+      },
+      "client_secret": {
+        "description": "客户端密钥"
+      },
+      "bot_token": {
+        "description": "Slack Bot Token"
+      },
+      "app_token": {
+        "description": "Slack App Token"
+      },
+      "signing_secret": {
+        "description": "Slack Signing Secret"
+      },
+      "channel_access_token": {
+        "description": "LINE Channel Access Token"
+      },
+      "channel_secret": {
+        "description": "LINE Channel Secret"
+      },
       "active_send_mode": {
         "description": "是否换用主动发送接口"
       },
@@ -1199,6 +1226,15 @@
   },
   "provider_group": {
     "provider": {
+      "api_key": {
+        "description": "API Key"
+      },
+      "dashscope_api_key": {
+        "description": "DashScope API Key"
+      },
+      "gemini_tts_api_key": {
+        "description": "Gemini API Key"
+      },
       "genie_onnx_model_dir": {
         "description": "ONNX Model Directory",
         "hint": "The directory path containing the ONNX model files"
