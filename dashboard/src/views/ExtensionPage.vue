@@ -203,6 +203,26 @@ const openPluginPage = (plugin) => {
   });
 };
 
+// Convert vertical wheel input into horizontal scrolling for the page
+// switcher row, so a mouse wheel can sweep through many plugin entries.
+// Scrolling stops being intercepted once the row hits either end, letting
+// the wheel fall through to the page's vertical scroll again.
+const onPluginSwitcherWheel = (event) => {
+  const el = event.currentTarget;
+  if (el.scrollWidth <= el.clientWidth) return;
+
+  // Physical mice report line-based deltas (deltaMode === 1); convert them.
+  const delta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
+  const maxScroll = el.scrollWidth - el.clientWidth;
+  const canScroll =
+    (delta < 0 && el.scrollLeft > 0) ||
+    (delta > 0 && el.scrollLeft < maxScroll);
+  if (!canScroll) return;
+
+  event.preventDefault();
+  el.scrollLeft += delta;
+};
+
 const logLevelItems = computed(() => [
   { title: tm("dialogs.config.coreSettings.followGlobal"), value: null },
   { title: "DEBUG", value: "DEBUG" },
@@ -363,7 +383,7 @@ const updateDialogPluginLogo = computed(() => {
     class="plugin-page-host"
   >
     <!-- Horizontal switcher: every plugin that ships web pages -->
-    <div class="plugin-pages-switcher">
+    <div class="plugin-pages-switcher" @wheel="onPluginSwitcherWheel">
       <button
         v-for="plugin in pluginsWithPages"
         :key="plugin.name"
@@ -1348,6 +1368,11 @@ const updateDialogPluginLogo = computed(() => {
   gap: 6px;
   overflow-x: auto;
   padding: 8px 12px;
+  scrollbar-width: none;
+}
+
+.plugin-pages-switcher::-webkit-scrollbar {
+  display: none;
 }
 
 .plugin-pages-switcher__item {
