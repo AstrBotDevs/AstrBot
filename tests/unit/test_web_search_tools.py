@@ -494,11 +494,13 @@ def _resetKeyRotators():
     tools._BOCHA_KEY_ROTATOR.index = 0
     tools._BRAVE_KEY_ROTATOR.index = 0
     tools._FIRECRAWL_KEY_ROTATOR.index = 0
+    tools._SERPLY_KEY_ROTATOR.index = 0
     yield
     tools._TAVILY_KEY_ROTATOR.index = 0
     tools._BOCHA_KEY_ROTATOR.index = 0
     tools._BRAVE_KEY_ROTATOR.index = 0
     tools._FIRECRAWL_KEY_ROTATOR.index = 0
+    tools._SERPLY_KEY_ROTATOR.index = 0
 
 
 # ---------------------------------------------------------------------------
@@ -531,7 +533,11 @@ async def test_tavily_search_key_failover_on_quota_exceeded_432(
                 status=200,
                 jsonData={
                     "results": [
-                        {"title": "AstrBot", "url": "https://example.com", "content": "OK"}
+                        {
+                            "title": "AstrBot",
+                            "url": "https://example.com",
+                            "content": "OK",
+                        }
                     ]
                 },
             ),
@@ -569,7 +575,11 @@ async def test_tavily_search_key_failover_on_rate_limited_429(
                 status=200,
                 jsonData={
                     "results": [
-                        {"title": "RateLimitOK", "url": "https://example2.com", "content": "OK"}
+                        {
+                            "title": "RateLimitOK",
+                            "url": "https://example2.com",
+                            "content": "OK",
+                        }
                     ]
                 },
             ),
@@ -1070,3 +1080,247 @@ async def test_anysearch_search_falls_back_to_content_for_snippet(monkeypatch):
     assert results[0].title == "Test Title"
     assert results[0].url == "https://example.com"
 
+
+# --- Serply tests ---
+
+
+class _FakeSerplySession:
+    """Return the next response for each get() call and record the requests."""
+
+    def __init__(self, responses: list):
+        self.responses = responses
+        self.cursor = 0
+        self.trust_env = None
+        self.calls: list[dict] = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return None
+
+    def get(self, url, params, headers):
+        resp = self.responses[self.cursor]
+        self.cursor = (self.cursor + 1) % len(self.responses)
+        self.calls.append({"url": url, "params": params, "headers": headers})
+        return resp
+
+
+def test_normalize_legacy_web_search_config_migrates_serply_key():
+    config = _FakeConfig({"provider_settings": {"websearch_serply_key": "serply-key"}})
+
+    tools.normalize_legacy_web_search_config(config)
+
+    assert config["provider_settings"]["websearch_serply_key"] == ["serply-key"]
+    assert config.saved is True
+
+
+@pytest.mark.asyncio
+async def test_serply_search_tool_maps_results(monkeypatch):
+    async def fake_serply_search(provider_settings, search_type, params):
+        assert provider_settings["websearch_serply_key"] == ["serply-key"]
+        assert search_type == "web"
+        assert params == {"q": "AstrBot", "num": 5, "gl": "us"}
+        return [
+            tools.SearchResult(
+                title="AstrBot",
+                url="https://example.com",
+                snippet="AI Agent Assistant",
+            )
+        ]
+
+    monkeypatch.setattr(tools, "_serply_search", fake_serply_search)
+    tool = tools.SerplyWebSearchTool()
+    context = _context_with_provider_settings({"websearch_serply_key": ["serply-key"]})
+
+    result = await tool.call(context, query="AstrBot", num_results=5, gl="us")
+
+    parsed = json.loads(result)
+    assert parsed["results"][0]["title"] == "AstrBot"
+    assert parsed["results"][0]["url"] == "https://example.com"
+    assert parsed["results"][0]["snippet"] == "AI Agent Assistant"
+
+
+@pytest.mark.asyncio
+async def test_serply_search_tool_falls_back_to_web_and_caps_results(monkeypatch):
+    async def fake_serply_search(provider_settings, search_type, params):
+        assert search_type == "web"
+        assert params["num"] == 1
+        return [
+            tools.SearchResult(title="A", url="https://a.example", snippet="a"),
+            tools.SearchResult(title="B", url="https://b.example", snippet="b"),
+        ]
+
+    monkeypatch.setattr(tools, "_serply_search", fake_serply_search)
+    tool = tools.SerplyWebSearchTool()
+    context = _context_with_provider_settings({"websearch_serply_key": ["serply-key"]})
+
+    result = await tool.call(
+        context, query="AstrBot", num_results=0, search_type="images"
+    )
+
+    assert [item["title"] for item in json.loads(result)["results"]] == ["A"]
+
+
+@pytest.mark.asyncio
+async def test_serply_search_tool_returns_error_without_key():
+    tool = tools.SerplyWebSearchTool()
+    context = _context_with_provider_settings({"websearch_serply_key": []})
+
+    result = await tool.call(context, query="AstrBot")
+
+    assert result == "Error: Serply API key is not configured in AstrBot."
+
+
+@pytest.mark.asyncio
+async def test_serply_search_raw_api_call(monkeypatch):
+    session = _FakeSerplySession(
+        [
+            _FakeFirecrawlResponse(
+                status=200,
+                json_data={
+                    "results": [
+                        {
+                            "title": "AstrBot",
+                            "link": "https://example.com",
+                            "description": "AI Agent Assistant",
+                        },
+                        {"title": "No link", "description": "dropped"},
+                    ],
+                },
+            )
+        ]
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    results = await tools._serply_search(
+        {"websearch_serply_key": ["serply-key"]},
+        "web",
+        {"q": "AstrBot", "num": 10},
+    )
+
+    assert session.trust_env is True
+    assert session.calls == [
+        {
+            "url": "https://api.serply.io/v1/search/",
+            "params": {"q": "AstrBot", "num": 10},
+            "headers": {"Accept": "application/json", "X-Api-Key": "serply-key"},
+        }
+    ]
+    assert results == [
+        tools.SearchResult(
+            title="AstrBot", url="https://example.com", snippet="AI Agent Assistant"
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_serply_search_news_vertical_maps_entries(monkeypatch):
+    session = _FakeSerplySession(
+        [
+            _FakeFirecrawlResponse(
+                status=200,
+                json_data={
+                    "entries": [
+                        {
+                            "title": "AstrBot 4.0 released",
+                            "link": "https://news.example.com/astrbot",
+                            "summary": '<a href="https://news.example.com/astrbot">AstrBot 4.0 released</a>',
+                            "source": {
+                                "href": "https://news.example.com",
+                                "title": "Example News",
+                            },
+                            "published": "Fri, 07 Aug 2026 07:00:00 GMT",
+                        }
+                    ],
+                },
+            )
+        ]
+    )
+
+    def fake_client_session(*, trust_env):
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    results = await tools._serply_search(
+        {"websearch_serply_key": ["serply-key"]},
+        "news",
+        {"q": "AstrBot", "num": 10},
+    )
+
+    assert session.calls[0]["url"] == "https://api.serply.io/v1/news/"
+    assert results == [
+        tools.SearchResult(
+            title="AstrBot 4.0 released",
+            url="https://news.example.com/astrbot",
+            snippet="Example News Fri, 07 Aug 2026 07:00:00 GMT",
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_serply_search_key_failover_on_unauthorized_401(monkeypatch):
+    session = _FakeSerplySession(
+        [
+            _FakeFirecrawlResponse(status=401, text_data="Invalid API key"),
+            _FakeFirecrawlResponse(
+                status=200,
+                json_data={
+                    "results": [
+                        {
+                            "title": "AstrBot",
+                            "link": "https://example.com",
+                            "description": "ok",
+                        }
+                    ]
+                },
+            ),
+        ]
+    )
+
+    def fake_client_session(*, trust_env):
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    results = await tools._serply_search(
+        {"websearch_serply_key": ["bad-key", "good-key"]},
+        "web",
+        {"q": "AstrBot", "num": 10},
+    )
+
+    assert [call["headers"]["X-Api-Key"] for call in session.calls] == [
+        "bad-key",
+        "good-key",
+    ]
+    assert results[0].url == "https://example.com"
+
+
+@pytest.mark.asyncio
+async def test_serply_search_raises_on_server_error_without_failover(monkeypatch):
+    session = _FakeSerplySession(
+        [_FakeFirecrawlResponse(status=500, text_data="Internal Server Error")]
+    )
+
+    def fake_client_session(*, trust_env):
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    with pytest.raises(
+        Exception,
+        match="Serply web search failed: Internal Server Error, status: 500",
+    ):
+        await tools._serply_search(
+            {"websearch_serply_key": ["key-1", "key-2"]},
+            "web",
+            {"q": "AstrBot"},
+        )
+
+    assert len(session.calls) == 1

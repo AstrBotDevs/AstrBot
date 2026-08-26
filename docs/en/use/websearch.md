@@ -14,11 +14,11 @@ When using a large language model that supports function calling with the web se
 
 And other prompts with search intent to trigger the model to invoke the search tool.
 
-AstrBot currently supports 7 web search providers: `Tavily`, `BoCha`, `Baidu AI Search`, `Brave`, `Firecrawl`,  `Exa` ,and `AnySearch`.
+AstrBot currently supports 8 web search providers: `Tavily`, `BoCha`, `Baidu AI Search`, `Brave`, `Firecrawl`, `Exa`, `AnySearch`, and `Serply`.
 
 ![image](https://files.astrbot.app/docs/source/images/websearch/image.png)
 
-Go to `Configuration`, scroll down to find Web Search, where you can select `Tavily`, `BoCha`, `Baidu AI Search`, `Brave`, `Firecrawl`,  `Exa` ,or `AnySearch`.
+Go to `Configuration`, scroll down to find Web Search, where you can select `Tavily`, `BoCha`, `Baidu AI Search`, `Brave`, `Firecrawl`, `Exa`, `AnySearch`, or `Serply`.
 
 ### Tavily
 
@@ -43,6 +43,10 @@ Go to [Firecrawl](https://firecrawl.dev) to get an API Key, then fill it in the 
 ### Exa
 
 Go to [Exa](https://dashboard.exa.ai) to get an API Key, then fill it in the corresponding configuration item. Exa is an AI-native search engine that supports keyword and semantic search with category filters, domain restrictions, and date ranges.
+
+### Serply
+
+Go to [Serply](https://serply.io) to get an API Key, then fill it in the corresponding configuration item. Serply returns live Google search results and also exposes the Google News and Google Scholar verticals through the `search_type` parameter of the search tool. See the [Serply API docs](https://serply.io/docs) for details.
 
 If you use Tavily as your web search source, you will get a better experience optimization on AstrBot ChatUI, including citation source display and more:
 

@@ -123,6 +123,7 @@ DEFAULT_CONFIG = {
         "websearch_firecrawl_key": [],
         "websearch_exa_key": [],
         "websearch_anysearch_key": [],
+        "websearch_serply_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -3646,6 +3647,7 @@ CONFIG_METADATA_3 = {
                             "firecrawl",
                             "exa",
                             "anysearch",
+                            "serply",
                         ],
                         "condition": {
                             "provider_settings.web_search": True,
@@ -3723,6 +3725,17 @@ CONFIG_METADATA_3 = {
                         "hint": "可添加多个 Key 进行轮询。留空则使用匿名模式（每日免费额度）。申请地址：https://anysearch.com/console/api-keys",
                         "condition": {
                             "provider_settings.websearch_provider": "anysearch",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_serply_key": {
+                        "description": "Serply API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "可添加多个 Key 进行轮询。Get a key at https://serply.io",
+                        "secret": True,
+                        "condition": {
+                            "provider_settings.websearch_provider": "serply",
                             "provider_settings.web_search": True,
                         },
                     },

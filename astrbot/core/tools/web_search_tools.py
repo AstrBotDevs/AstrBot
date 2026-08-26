@@ -24,6 +24,7 @@ WEB_SEARCH_TOOL_NAMES = [
     "web_search_exa",
     "exa_get_contents",
     "web_search_anysearch",
+    "web_search_serply",
 ]
 _TAVILY_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
@@ -52,6 +53,16 @@ _EXA_WEB_SEARCH_TOOL_CONFIG = {
 _ANYSEARCH_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
     "provider_settings.websearch_provider": "anysearch",
+}
+_SERPLY_WEB_SEARCH_TOOL_CONFIG = {
+    "provider_settings.web_search": True,
+    "provider_settings.websearch_provider": "serply",
+}
+# Serply search vertical -> (endpoint, key of the result list in the response).
+_SERPLY_SEARCH_ENDPOINTS = {
+    "web": ("https://api.serply.io/v1/search/", "results"),
+    "news": ("https://api.serply.io/v1/news/", "entries"),
+    "scholar": ("https://api.serply.io/v1/scholar/", "articles"),
 }
 
 
@@ -117,6 +128,7 @@ _BRAVE_KEY_ROTATOR = _KeyRotator("websearch_brave_key", "Brave")
 _FIRECRAWL_KEY_ROTATOR = _KeyRotator("websearch_firecrawl_key", "Firecrawl")
 _EXA_KEY_ROTATOR = _KeyRotator("websearch_exa_key", "Exa")
 _ANYSEARCH_KEY_ROTATOR = _KeyRotator("websearch_anysearch_key", "AnySearch")
+_SERPLY_KEY_ROTATOR = _KeyRotator("websearch_serply_key", "Serply")
 
 
 def normalize_legacy_web_search_config(cfg) -> None:
@@ -142,6 +154,7 @@ def normalize_legacy_web_search_config(cfg) -> None:
         "websearch_firecrawl_key",
         "websearch_exa_key",
         "websearch_anysearch_key",
+        "websearch_serply_key",
     ):
         value = provider_settings.get(setting_name)
         if isinstance(value, str):
@@ -1386,6 +1399,147 @@ class AnySearchWebSearchTool(FunctionTool[AstrAgentContext]):
         return _search_result_payload(results)
 
 
+async def _serply_search(
+    provider_settings: dict,
+    search_type: str,
+    params: dict,
+) -> list[SearchResult]:
+    """Call the Serply search API with API key failover.
+
+    Args:
+        provider_settings: Provider settings containing Serply API keys.
+        search_type: Search vertical, one of the keys of _SERPLY_SEARCH_ENDPOINTS.
+        params: Query parameters for the Serply endpoint.
+
+    Returns:
+        Normalized search results.
+
+    Raises:
+        ValueError: If Serply API keys are not configured.
+        Exception: If the request fails after all retryable keys are exhausted,
+            or if a non-retryable HTTP error is returned.
+    """
+    keys = provider_settings.get("websearch_serply_key", [])
+    if not keys:
+        raise ValueError("Error: Serply API key is not configured in AstrBot.")
+
+    url, results_key = _SERPLY_SEARCH_ENDPOINTS[search_type]
+    last_error = None
+    for _ in range(len(keys)):
+        serply_key = await _SERPLY_KEY_ROTATOR.get(provider_settings)
+        header = {
+            "Accept": "application/json",
+            "X-Api-Key": serply_key,
+        }
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.get(
+                url,
+                params=params,
+                headers=header,
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return [
+                        SearchResult(
+                            title=item.get("title", ""),
+                            url=item.get("link", ""),
+                            # News entries carry an HTML summary; use source and date instead.
+                            snippet=item.get("description")
+                            or (
+                                f"{(item.get('source') or {}).get('title', '')} "
+                                f"{item.get('published', '')}"
+                            ).strip(),
+                        )
+                        for item in data.get(results_key, [])
+                        if item.get("link")
+                    ]
+                reason = await response.text()
+                if response.status in _RETRYABLE_HTTP_STATUSES:
+                    last_error = Exception(
+                        f"Serply web search failed: {reason}, status: {response.status}",
+                    )
+                    continue
+                raise Exception(
+                    f"Serply web search failed: {reason}, status: {response.status}",
+                )
+
+    if last_error is not None:
+        raise last_error
+    raise Exception("Serply web search failed with all configured keys.")
+
+
+@builtin_tool(config=_SERPLY_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class SerplyWebSearchTool(FunctionTool[AstrAgentContext]):
+    """Web search tool powered by the Serply API (Google web, news and scholar)."""
+
+    name: str = "web_search_serply"
+    description: str = (
+        "A web search tool powered by Serply, which returns live Google search results. "
+        "Supports Google web search as well as the Google News and Google Scholar verticals."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Required. Search query."},
+                "num_results": {
+                    "type": "integer",
+                    "description": "Optional. Number of results to return. Range: 1-100. Default is 10.",
+                },
+                "search_type": {
+                    "type": "string",
+                    "description": (
+                        'Optional. Search vertical. One of "web", "news", "scholar". '
+                        'Default is "web". Use "news" for recent news coverage and '
+                        '"scholar" for academic papers.'
+                    ),
+                },
+                "gl": {
+                    "type": "string",
+                    "description": 'Optional. Country code for region-specific results, for example "us" or "cn".',
+                },
+                "hl": {
+                    "type": "string",
+                    "description": 'Optional. Google interface language code, for example "en" or "zh-cn".',
+                },
+            },
+            "required": ["query"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        _, provider_settings, _ = _get_runtime(context)
+        if not provider_settings.get("websearch_serply_key", []):
+            return "Error: Serply API key is not configured in AstrBot."
+
+        try:
+            num_results = int(kwargs.get("num_results", 10))
+        except (TypeError, ValueError):
+            num_results = 10
+        if num_results < 1:
+            num_results = 1
+        if num_results > 100:
+            num_results = 100
+
+        search_type = kwargs.get("search_type", "web")
+        if search_type not in _SERPLY_SEARCH_ENDPOINTS:
+            search_type = "web"
+
+        params: dict = {"q": kwargs["query"], "num": num_results}
+        if kwargs.get("gl"):
+            params["gl"] = kwargs["gl"]
+        if kwargs.get("hl"):
+            params["hl"] = kwargs["hl"]
+
+        # The news and scholar feeds do not honor `num`, so cap client-side.
+        results = await _serply_search(provider_settings, search_type, params)
+        results = results[:num_results]
+        if not results:
+            return "Error: Serply web search does not return any results."
+        return _search_result_payload(results)
+
+
 __all__ = [
     "AnySearchWebSearchTool",
     "BaiduWebSearchTool",
@@ -1393,6 +1547,7 @@ __all__ = [
     "BraveWebSearchTool",
     "ExaGetContentsTool",
     "ExaWebSearchTool",
+    "SerplyWebSearchTool",
     "TavilyExtractWebPageTool",
     "TavilyWebSearchTool",
     "WEB_SEARCH_TOOL_NAMES",
