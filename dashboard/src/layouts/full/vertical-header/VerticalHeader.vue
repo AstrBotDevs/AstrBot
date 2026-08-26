@@ -21,12 +21,14 @@ import AboutPage from "@/views/AboutPage.vue";
 import { authApi, isLegacyFallbackError, statsApi, updatesApi } from "@/api/v1";
 import { getDesktopRuntimeInfo } from "@/utils/desktopRuntime";
 import ProviderModelMenu from "@/components/chat/ProviderModelMenu.vue";
+import { LogOut } from "@lucide/vue";
 
 enableKatex();
 enableMermaid();
 
 const customizer = useCustomizerStore();
 const commonStore = useCommonStore();
+const authStore = useAuthStore();
 const chatHeader = useChatHeaderStore();
 const theme = useTheme();
 const { lgAndUp } = useDisplay();
@@ -422,7 +424,6 @@ function accountEdit() {
       accountEditStatus.value.message = res.data.message || "";
       setTimeout(() => {
         dialog.value = !dialog.value;
-        const authStore = useAuthStore();
         authStore.logout();
       }, 2000);
     })
@@ -532,7 +533,6 @@ function checkUpdate() {
       }
       if (err.response && err.response.status == 401) {
         console.log("401");
-        const authStore = useAuthStore();
         authStore.logout();
         return;
       }
@@ -1376,6 +1376,23 @@ onMounted(async () => {
         <v-list-item-title>{{
           t("core.header.accountDialog.title")
         }}</v-list-item-title>
+      </v-list-item>
+
+      <v-divider class="my-1" />
+
+      <v-list-item
+        @click="authStore.logout()"
+        class="styled-menu-item"
+        rounded="md"
+      >
+        <template v-slot:prepend>
+          <v-icon color="error" size="20">
+            <LogOut :size="20" aria-hidden="true" />
+          </v-icon>
+        </template>
+        <v-list-item-title class="text-error">
+          {{ t("core.header.buttons.logout") }}
+        </v-list-item-title>
       </v-list-item>
       </StyledMenu>
     </div>
