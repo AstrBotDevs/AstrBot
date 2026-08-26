@@ -15,7 +15,8 @@ The file content is a `Schema` that represents the configuration. The Schema is 
 {
   "token": {
     "description": "Bot Token",
-    "type": "string"
+    "type": "string",
+    "secret": true
   },
   "sub_config": {
     "description": "Test nested configuration",
@@ -56,6 +57,29 @@ The file content is a `Schema` that represents the configuration. The Schema is 
 - `editor_language`: Optional. The code language for the code editor, defaults to `json`.
 - `editor_theme`: Optional. The theme for the code editor. Options are `vs-light` (default) and `vs-dark`.
 - `_special`: Optional. Used to call AstrBot's visualization features for provider selection, persona selection, knowledge base selection, etc. See details below.
+
+### Sensitive configuration fields
+
+Sensitive strings such as API keys, access tokens, and passwords should set `"secret": true`. The dashboard masks their contents by default and provides a control to temporarily reveal or hide them. String lists also support this field, which is useful when a plugin accepts multiple API keys:
+
+```json
+{
+  "api_key": {
+    "description": "API Key",
+    "type": "string",
+    "default": "",
+    "secret": true
+  },
+  "backup_api_keys": {
+    "description": "Backup API keys",
+    "type": "list",
+    "default": [],
+    "secret": true
+  }
+}
+```
+
+`secret` does not change the value or data type received by the plugin. It only masks the value in the dashboard; the original value is still stored in the plugin configuration file. Plugins should avoid logging, echoing, or otherwise exposing these values.
 
 ### Configuration Internationalization (Optional)
 

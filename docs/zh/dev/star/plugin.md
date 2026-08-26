@@ -898,6 +898,7 @@ AstrBot 提供了”强大“的配置解析和可视化功能。能够让用户
   "token": {
     "description": "Bot Token",
     "type": "string",
+    "secret": true,
     "hint": "测试醒目提醒",
     "obvious_hint": true
   },
@@ -940,6 +941,29 @@ AstrBot 提供了”强大“的配置解析和可视化功能。能够让用户
 - `editor_language`: 可选。代码编辑器的代码语言，默认为 `json`。
 - `editor_theme`: 可选。代码编辑器的主题，可选值有 `vs-light`（默认）， `vs-dark`。
 - `_special`: 可选。用于调用 AstrBot 提供的可视化提供商选取、人格选取、知识库选取等功能，详见下文。
+
+### 敏感配置项
+
+API Key、访问令牌和密码等敏感字符串应设置 `"secret": true`。管理面板会默认遮罩输入内容，并提供临时显示或隐藏内容的按钮。字符串列表同样支持该字段，适合配置多个 API Key：
+
+```json
+{
+  "api_key": {
+    "description": "API Key",
+    "type": "string",
+    "default": "",
+    "secret": true
+  },
+  "backup_api_keys": {
+    "description": "备用 API Key",
+    "type": "list",
+    "default": [],
+    "secret": true
+  }
+}
+```
+
+`secret` 不会改变插件读取到的数据类型或内容。它只负责管理面板中的显示遮罩，配置值仍会原样保存在插件配置文件中，因此插件不应记录、回显或主动暴露这些值。
 
 其中，如果启用了代码编辑器，效果如下图所示:
 
