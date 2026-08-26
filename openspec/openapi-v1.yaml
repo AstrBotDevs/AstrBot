@@ -8,9 +8,10 @@ info:
     JSON objects because their schemas are provided at runtime by template
     endpoints.
     Developer API keys currently support these scopes only: bot, provider,
-    persona, im, config, chat, data, file, plugin, mcp, skill, plus the sensitive
-    config:edit_admin and chat:admin sub-scopes. The config scope also grants bot
-    and provider access, but no parent scope grants a sensitive sub-scope.
+    persona, im, config, chat, data, file, plugin, kb, mcp, sandbox, skill, system,
+    tool, plus the sensitive config:edit_admin and chat:admin sub-scopes. The config
+    scope also grants bot and provider access, but no parent scope grants a
+    sensitive sub-scope.
 x-astrbot-scope-definitions:
   bot:
     description: Manage bot and platform configurations.
@@ -50,12 +51,24 @@ x-astrbot-scope-definitions:
   plugin:
     description: Manage plugins, plugin configuration, plugin sources, and marketplace data.
     description_zh: 管理插件、插件配置、插件源和插件市场数据。
+  kb:
+    description: Manage knowledge bases and documents.
+    description_zh: 管理知识库及其文档。
   mcp:
     description: Manage MCP server configuration and provider synchronization.
     description_zh: 管理 MCP 服务器配置和服务端同步。
+  sandbox:
+    description: Manage runtime sandboxes and execute sandbox operations.
+    description_zh: 管理运行时沙盒并执行沙盒操作。
   skill:
     description: Manage Skills, archives, files, and Shipyard Neo Skill workflows.
     description_zh: 管理 Skills、Skill 压缩包、Skill 文件和 Shipyard Neo Skill 流程。
+  system:
+    description: Access system status and administrative system operations.
+    description_zh: 访问系统状态及系统管理操作。
+  tool:
+    description: Manage LLM tools, commands, and tool permissions.
+    description_zh: 管理 LLM 工具、命令及工具权限。
 servers:
   - url: http://localhost:6185
     description: Local AstrBot server
@@ -155,6 +168,7 @@ paths:
       tags: [Auth]
       summary: Start or refresh TOTP setup
       operationId: setupTotp
+      x-astrbot-scope: system
       requestBody:
         required: false
         content:
@@ -170,6 +184,7 @@ paths:
       tags: [Auth]
       summary: Generate or rotate TOTP recovery codes
       operationId: recoverTotp
+      x-astrbot-scope: system
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -179,6 +194,7 @@ paths:
       tags: [Auth]
       summary: Update dashboard account credentials
       operationId: updateAuthAccount
+      x-astrbot-scope: system
       requestBody:
         required: true
         content:
@@ -194,6 +210,7 @@ paths:
       tags: [API Keys]
       summary: List OpenAPI keys
       operationId: listApiKeys
+      x-astrbot-scope: system
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -201,6 +218,7 @@ paths:
       tags: [API Keys]
       summary: Create an OpenAPI key
       operationId: createApiKey
+      x-astrbot-scope: system
       requestBody:
         required: true
         content:
@@ -216,6 +234,7 @@ paths:
       tags: [API Keys]
       summary: Revoke an OpenAPI key
       operationId: revokeApiKey
+      x-astrbot-scope: system
       parameters:
         - $ref: "#/components/parameters/KeyId"
       responses:
@@ -227,6 +246,7 @@ paths:
       tags: [API Keys]
       summary: Delete an OpenAPI key
       operationId: deleteApiKey
+      x-astrbot-scope: system
       parameters:
         - $ref: "#/components/parameters/KeyId"
       responses:
@@ -4601,7 +4621,6 @@ paths:
       tags: [Backups]
       summary: Download a backup
       operationId: downloadBackup
-      x-astrbot-scope: system
       parameters:
         - $ref: "#/components/parameters/Filename"
       responses:
@@ -5360,8 +5379,8 @@ components:
           type: array
           items:
             type: string
-            enum: [bot, provider, persona, im, config, "config:edit_admin", chat, "chat:admin", data, file, plugin, mcp, skill]
-          example: [bot, provider, persona, im, config, "config:edit_admin", chat, "chat:admin", data, file, plugin, mcp, skill]
+            enum: [bot, provider, persona, im, config, "config:edit_admin", chat, "chat:admin", data, file, plugin, kb, mcp, sandbox, skill, system, tool]
+          example: [bot, provider, persona, im, config, "config:edit_admin", chat, "chat:admin", data, file, plugin, kb, mcp, sandbox, skill, system, tool]
         expires_at:
           type: string
           format: date-time

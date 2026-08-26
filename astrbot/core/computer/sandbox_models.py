@@ -1,0 +1,139 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any
+
+from astrbot.core.computer.sandbox_timeouts import lease_is_active
+
+
+class SandboxRetentionPolicy(str, Enum):
+    TEMPORARY = "temporary"
+    PERSISTENT = "persistent"
+
+
+class SandboxStatus(str, Enum):
+    CREATING = "creating"
+    RESTORING = "restoring"
+    RUNNING = "running"
+    ERROR = "error"
+    STOPPING = "stopping"
+    STOPPED = "stopped"
+    UNKNOWN = "unknown"
+
+
+@dataclass(slots=True)
+class SandboxRecord:
+    sandbox_id: str
+    sandbox_name: str
+    provider: str
+    managed: bool
+    created_by_astrbot: bool
+    is_default: bool = False
+    owner_user_id: str | None = None
+    owner_session_id: str | None = None
+    created_by_user_id: str | None = None
+    created_by_session_id: str | None = None
+    controller_user_id: str | None = None
+    controller_session_id: str | None = None
+    lease_expires_at: float | None = None
+    last_used_at: float | None = None
+    idle_timeout: int | float | None = None
+    expires_at: float | None = None
+    retention_policy: SandboxRetentionPolicy = SandboxRetentionPolicy.TEMPORARY
+    status: SandboxStatus = SandboxStatus.RUNNING
+    connect_info: dict[str, Any] = field(default_factory=dict)
+    capabilities: list[str] = field(default_factory=list)
+    tool_names: list[str] = field(default_factory=list)
+    labels: dict[str, Any] = field(default_factory=dict)
+    notes: str | None = None
+    created_hook_fired: bool = False
+
+    @staticmethod
+    def _required_string(data: dict[str, Any], field_name: str) -> str:
+        value = data[field_name]
+        if not isinstance(value, str):
+            raise ValueError(f"{field_name} must be a non-empty string")
+        value = value.strip()
+        if not value:
+            raise ValueError(f"{field_name} must be a non-empty string")
+        return value
+
+    @classmethod
+    def _required_provider(cls, data: dict[str, Any]) -> str:
+        if "provider" in data:
+            return cls._required_string(data, "provider")
+        return cls._required_string(data, "booter_type")
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> SandboxRecord:
+        return cls(
+            sandbox_id=cls._required_string(data, "sandbox_id"),
+            sandbox_name=cls._required_string(data, "sandbox_name"),
+            provider=cls._required_provider(data),
+            managed=bool(data["managed"]),
+            created_by_astrbot=bool(data["created_by_astrbot"]),
+            is_default=bool(data.get("is_default", False)),
+            owner_user_id=data.get("owner_user_id"),
+            owner_session_id=data.get("owner_session_id"),
+            created_by_user_id=data.get("created_by_user_id")
+            or data.get("owner_user_id"),
+            created_by_session_id=data.get("created_by_session_id")
+            or data.get("owner_session_id"),
+            controller_user_id=data.get("controller_user_id"),
+            controller_session_id=data.get("controller_session_id"),
+            lease_expires_at=data.get("lease_expires_at"),
+            last_used_at=data.get("last_used_at"),
+            idle_timeout=data.get("idle_timeout"),
+            expires_at=data.get("expires_at"),
+            retention_policy=SandboxRetentionPolicy(
+                data.get("retention_policy", SandboxRetentionPolicy.TEMPORARY)
+            ),
+            status=SandboxStatus(data.get("status", SandboxStatus.RUNNING)),
+            connect_info=dict(data.get("connect_info") or {}),
+            capabilities=sorted(
+                str(item) for item in data.get("capabilities", []) if item
+            ),
+            tool_names=sorted(str(item) for item in data.get("tool_names", []) if item),
+            labels=dict(data.get("labels") or {}),
+            notes=data.get("notes"),
+            created_hook_fired=bool(data.get("created_hook_fired", False)),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "sandbox_id": self.sandbox_id,
+            "sandbox_name": self.sandbox_name,
+            "provider": self.provider,
+            "managed": self.managed,
+            "created_by_astrbot": self.created_by_astrbot,
+            "is_default": self.is_default,
+            "owner_user_id": self.owner_user_id,
+            "owner_session_id": self.owner_session_id,
+            "created_by_user_id": self.created_by_user_id,
+            "created_by_session_id": self.created_by_session_id,
+            "controller_user_id": self.controller_user_id,
+            "controller_session_id": self.controller_session_id,
+            "lease_expires_at": self.lease_expires_at,
+            "last_used_at": self.last_used_at,
+            "idle_timeout": self.idle_timeout,
+            "expires_at": self.expires_at,
+            "retention_policy": self.retention_policy.value,
+            "status": self.status.value,
+            "connect_info": dict(self.connect_info),
+            "capabilities": list(self.capabilities),
+            "tool_names": list(self.tool_names),
+            "labels": dict(self.labels),
+            "notes": self.notes,
+            "created_hook_fired": self.created_hook_fired,
+        }
+
+    def has_active_lease(self, *, now: float | None = None) -> bool:
+        return lease_is_active(
+            self.controller_session_id, self.lease_expires_at, now=now
+        )
+
+    def is_controlled_by(self, session_id: str, *, now: float | None = None) -> bool:
+        return self.controller_session_id == session_id and self.has_active_lease(
+            now=now
+        )

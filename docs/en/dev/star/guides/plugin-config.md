@@ -234,3 +234,5 @@ class ConfigPlugin(Star):
 ## Configuration Updates
 
 When you update the Schema across different versions, AstrBot will recursively inspect the configuration items in the Schema, automatically adding default values for missing items and removing those that no longer exist.
+
+Note that `default` is only applied when creating a new config file or when a field is missing from an existing config. If a field already exists in `data/config/<plugin_name>_config.json`, changing the Schema `default` later will not overwrite that saved value. This is intentional so plugin upgrades do not silently replace user-edited settings.

@@ -32,6 +32,11 @@ from .tools import router as tools_router
 from .updates import router as updates_router
 
 API_V1_PREFIX = "/api/v1"
+SCOPE_DEPENDENCY_NAMES = {
+    "require_kb_scope": "kb",
+    "require_system_scope": "system",
+    "require_tool_scope": "tool",
+}
 
 
 def build_api_router() -> APIRouter:
@@ -73,6 +78,11 @@ def build_api_router() -> APIRouter:
                 for dependency in route.dependant.dependencies
                 if isinstance(dependency.call, ScopeDependency)
             }
+            required_scopes.update(
+                SCOPE_DEPENDENCY_NAMES[dependency.call.__name__]
+                for dependency in route.dependant.dependencies
+                if getattr(dependency.call, "__name__", "") in SCOPE_DEPENDENCY_NAMES
+            )
             if len(required_scopes) != 1:
                 continue
             required_scope = required_scopes.pop()
