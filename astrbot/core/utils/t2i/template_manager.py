@@ -1,5 +1,6 @@
 # astrbot/core/utils/t2i/template_manager.py
 
+import hashlib
 import logging
 import re
 from pathlib import Path
@@ -9,6 +10,16 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_p
 logger = logging.getLogger("astrbot")
 
 _ALLOWED_VARS = frozenset({"rendered_html", "shiki_runtime", "text", "version"})
+
+# Unmodified copies of previous built-in templates. Matching hashes are safe
+# to drop so the current Playwright-rendered built-in template is used.
+_LEGACY_UNMODIFIED_CORE_TEMPLATE_HASHES = {
+    "base.html": frozenset(
+        {
+            "260af3eda8558d36ee307aa84698cf3708fdf1cc9e2a55f193b15615b98555b3",
+        }
+    )
+}
 
 _SSTI_BLACKLIST: list[tuple[str, re.Pattern]] = [
     (
@@ -90,7 +101,13 @@ class TemplateManager:
 
             try:
                 user_content = self._read_file(user_path)
-                if user_content == self._read_file(builtin_path):
+                normalized = user_content.replace("\r\n", "\n")
+                content_hash = hashlib.sha256(normalized.encode()).hexdigest()
+                if user_content == self._read_file(
+                    builtin_path
+                ) or content_hash in _LEGACY_UNMODIFIED_CORE_TEMPLATE_HASHES.get(
+                    filename, ()
+                ):
                     user_path.unlink()
                 elif (
                     "marked.min.js" in user_content

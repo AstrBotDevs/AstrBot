@@ -80,3 +80,54 @@ def test_reset_default_template_removes_core_overrides_only(template_paths):
 
     assert manager.get_template("base") == "builtin base.html"
     assert manager.get_template("custom") == "custom"
+
+
+def test_template_manager_removes_hashed_unmodified_legacy_copy(
+    template_paths, monkeypatch
+):
+    _, user_dir = template_paths
+    user_dir.mkdir(parents=True)
+    (user_dir / "base.html").write_text(
+        "previous unmodified builtin\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        template_manager,
+        "_LEGACY_UNMODIFIED_CORE_TEMPLATE_HASHES",
+        {
+            "base.html": frozenset(
+                {
+                    "96d9ae2f1a14756153a7809f25406fdbd074896e05d738f1972600dfd16dc566",
+                }
+            )
+        },
+    )
+
+    manager = TemplateManager()
+
+    assert not (user_dir / "base.html").exists()
+    assert manager.get_template("base") == "builtin base.html"
+
+
+def test_builtin_base_template_stays_offline():
+    content = (
+        (
+            Path(__file__).resolve().parents[2]
+            / "astrbot"
+            / "core"
+            / "utils"
+            / "t2i"
+            / "template"
+            / "base.html"
+        )
+        .read_text(encoding="utf-8")
+        .replace("\r\n", "\n")
+    )
+
+    assert "https://fonts.googleapis.com" not in content
+    assert "cdn.jsdelivr.net" not in content
+    assert 'src="http' not in content
+    assert 'href="http' not in content
+    assert "{{ rendered_html | safe }}" in content
+    assert "markdown-source" not in content
+    assert "marked.min.js" not in content
