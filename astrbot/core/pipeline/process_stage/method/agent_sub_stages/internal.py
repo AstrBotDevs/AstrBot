@@ -55,13 +55,17 @@ class InternalAgentSubStage(Stage):
         self.ctx = ctx
         conf = ctx.astrbot_config
         settings = conf["provider_settings"]
+        runner_config = conf["agent_runner"]["config"]
+        model_config = runner_config["model"]
+        persona_config = runner_config["persona"]
+        misc_config = runner_config["misc"]
         self.streaming_response: bool = settings["streaming_response"]
         self.unsupported_streaming_strategy: str = settings[
             "unsupported_streaming_strategy"
         ]
-        self.max_step: int = settings.get("max_agent_step", 30)
+        self.max_step: int = misc_config.get("max_steps", 30)
         self.tool_call_timeout: int = settings.get("tool_call_timeout", 60)
-        self.tool_schema_mode: str = settings.get("tool_schema_mode", "full")
+        self.tool_schema_mode: str = misc_config.get("tool_schema_mode", "full")
         if self.tool_schema_mode not in ("skills_like", "full"):
             logger.warning(
                 "Unsupported tool_schema_mode: %s, fallback to skills_like",
@@ -91,31 +95,29 @@ class InternalAgentSubStage(Stage):
         )
 
         # 上下文管理相关
-        self.context_limit_reached_strategy: str = settings.get(
-            "context_limit_reached_strategy", "truncate_by_turns"
+        self.context_limit_reached_strategy: str = misc_config.get(
+            "overflow_strategy", "truncate_by_turns"
         )
-        self.llm_compress_instruction: str = settings.get(
-            "llm_compress_instruction", ""
+        self.llm_compress_instruction: str = misc_config.get("compress_instruction", "")
+        self.llm_compress_keep_recent_ratio: float = misc_config.get(
+            "compress_keep_recent_ratio", 0.15
         )
-        self.llm_compress_keep_recent_ratio: float = settings.get(
-            "llm_compress_keep_recent_ratio", 0.15
-        )
-        self.llm_compress_provider_id: str = settings.get(
-            "llm_compress_provider_id", ""
-        )
-        self.max_context_length = settings["max_context_length"]  # int
+        self.llm_compress_provider_id: str = misc_config.get("compress_provider_id", "")
+        self.max_context_length = misc_config.get("max_turns", -1)
         self.dequeue_context_length: int = min(
-            max(1, settings["dequeue_context_length"]),
-            self.max_context_length - 1,
+            max(1, misc_config.get("trim_turns", 1)),
+            self.max_context_length - 1
+            if self.max_context_length > 0
+            else misc_config.get("trim_turns", 1),
         )
         if self.dequeue_context_length <= 0:
             self.dequeue_context_length = 1
-        self.fallback_max_context_tokens: int = settings.get(
-            "fallback_max_context_tokens", 128000
+        self.fallback_max_context_tokens: int = misc_config.get(
+            "fallback_max_tokens", 128000
         )
 
-        self.llm_safety_mode = settings.get("llm_safety_mode", True)
-        self.safety_mode_strategy = settings.get(
+        self.llm_safety_mode = persona_config.get("safety_mode", True)
+        self.safety_mode_strategy = persona_config.get(
             "safety_mode_strategy", "system_prompt"
         )
 
@@ -148,7 +150,12 @@ class InternalAgentSubStage(Stage):
             computer_use_runtime=self.computer_use_runtime,
             sandbox_cfg=self.sandbox_cfg,
             add_cron_tools=self.add_cron_tools,
-            provider_settings=settings,
+            provider_settings={
+                **settings,
+                "default_personality": persona_config.get("persona_id", "default"),
+            },
+            fallback_provider_ids=model_config.get("fallback_provider_ids", []),
+            request_max_retries=model_config.get("request_max_retries", 5),
             subagent_orchestrator=conf.get("subagent_orchestrator", {}),
             timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
             max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),

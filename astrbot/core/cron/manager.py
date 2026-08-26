@@ -444,10 +444,13 @@ class CronJobManager:
         provider_settings = cfg.get("provider_settings", {}) or {}
         tool_call_timeout = provider_settings.get("tool_call_timeout", 120)
         agent_max_step = coerce_int_config(
-            provider_settings.get("max_agent_step", 30),
+            cfg.get("agent_runner", {})
+            .get("config", {})
+            .get("misc", {})
+            .get("max_steps", 30),
             default=30,
             min_value=1,
-            field_name="provider_settings.max_agent_step",
+            field_name="agent_runner.config.misc.max_steps",
         )
         config = MainAgentBuildConfig(
             tool_call_timeout=tool_call_timeout,

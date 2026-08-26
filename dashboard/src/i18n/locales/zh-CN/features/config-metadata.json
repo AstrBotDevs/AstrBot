@@ -3,13 +3,15 @@
     "name": "AI 配置",
     "agent_runner": {
       "description": "Agent 执行方式",
-      "hint": "选择 AI 对话的执行器,默认为 AstrBot 内置 Agent 执行器,可使用 AstrBot 内的知识库、人格、工具调用功能。如果不打算接入 Dify、Coze、DeerFlow 等第三方 Agent 执行器,不需要修改此节。",
+      "hint": "选择 AI 对话的执行器。切换执行器会使用新类型的默认配置，不保留上一类型的参数。",
       "provider_settings": {
         "enable": {
           "description": "启用",
           "hint": "AI 对话总开关"
-        },
-        "agent_runner_type": {
+        }
+      },
+      "agent_runner": {
+        "runner_type": {
           "description": "执行器",
           "labels": [
             "内置 Agent",
@@ -18,37 +20,100 @@
             "阿里云百炼应用",
             "DeerFlow"
           ]
-        },
-        "coze_agent_runner_provider_id": {
-          "description": "Coze Agent 执行器提供商 ID"
-        },
-        "dify_agent_runner_provider_id": {
-          "description": "Dify Agent 执行器提供商 ID"
-        },
-        "dashscope_agent_runner_provider_id": {
-          "description": "阿里云百炼应用 Agent 执行器提供商 ID"
-        },
-        "deerflow_agent_runner_provider_id": {
-          "description": "DeerFlow Agent 执行器提供商 ID"
+        }
+      }
+    },
+    "dify_runner": {
+      "description": "Dify 配置",
+      "agent_runner": {
+        "config": {
+          "persona_id": { "description": "人格" },
+          "dify_api_type": { "description": "应用类型" },
+          "dify_api_key": { "description": "API Key" },
+          "dify_api_base": { "description": "API Base URL" },
+          "dify_workflow_output_key": { "description": "Workflow 输出变量名" },
+          "dify_query_input_key": { "description": "Prompt 输入变量名" },
+          "variables": { "description": "变量" },
+          "timeout": { "description": "超时时间（秒）" },
+          "proxy": { "description": "代理地址" }
+        }
+      }
+    },
+    "coze_runner": {
+      "description": "Coze 配置",
+      "agent_runner": {
+        "config": {
+          "persona_id": { "description": "人格" },
+          "coze_api_key": { "description": "API Key" },
+          "bot_id": { "description": "Bot ID" },
+          "coze_api_base": { "description": "API Base URL" },
+          "auto_save_history": { "description": "由 Coze 管理对话记录" },
+          "timeout": { "description": "超时时间（秒）" },
+          "proxy": { "description": "代理地址" }
+        }
+      }
+    },
+    "dashscope_runner": {
+      "description": "阿里云百炼应用配置",
+      "agent_runner": {
+        "config": {
+          "persona_id": { "description": "人格" },
+          "dashscope_app_type": { "description": "应用类型" },
+          "dashscope_api_key": { "description": "API Key" },
+          "dashscope_app_id": { "description": "应用 ID" },
+          "rag_options": {
+            "pipeline_ids": { "description": "知识库 Pipeline ID" },
+            "file_ids": { "description": "文件 ID" },
+            "output_reference": { "description": "输出引用" }
+          },
+          "variables": { "description": "变量" },
+          "timeout": { "description": "超时时间（秒）" },
+          "proxy": { "description": "代理地址" }
+        }
+      }
+    },
+    "deerflow_runner": {
+      "description": "DeerFlow 配置",
+      "agent_runner": {
+        "config": {
+          "persona_id": { "description": "人格" },
+          "deerflow_api_base": { "description": "API Base URL" },
+          "deerflow_api_key": { "description": "API Key" },
+          "deerflow_auth_header": { "description": "Authorization Header" },
+          "deerflow_assistant_id": { "description": "Assistant ID" },
+          "deerflow_model_name": { "description": "模型名称覆盖" },
+          "deerflow_thinking_enabled": { "description": "启用思考模式" },
+          "deerflow_plan_mode": { "description": "启用计划模式" },
+          "deerflow_subagent_enabled": { "description": "启用子智能体" },
+          "deerflow_max_concurrent_subagents": { "description": "子智能体最大并发数" },
+          "deerflow_recursion_limit": { "description": "递归深度上限" },
+          "timeout": { "description": "超时时间（秒）" },
+          "proxy": { "description": "代理地址" }
         }
       }
     },
     "ai": {
       "description": "模型",
-      "hint": "当使用非内置 Agent 执行器时,默认对话模型和默认图片转述模型可能会无效,但某些插件会依赖此配置项来调用 AI 能力。",
+      "hint": "配置内置 Agent 使用的对话模型，以及通用的图片转述、语音模型。",
+      "agent_runner": {
+        "config": {
+          "model": {
+            "provider_id": {
+              "description": "默认对话模型",
+              "hint": "留空时使用第一个模型"
+            },
+            "fallback_provider_ids": {
+              "description": "回退对话模型列表",
+              "hint": "主对话模型请求失败时，按顺序切换到这些对话模型。"
+            },
+            "request_max_retries": {
+              "description": "请求最大重试次数",
+              "hint": "单次模型请求遇到可重试错误时的最大尝试次数。"
+            }
+          }
+        }
+      },
       "provider_settings": {
-        "default_provider_id": {
-          "description": "默认对话模型",
-          "hint": "留空时使用第一个模型"
-        },
-        "fallback_chat_models": {
-          "description": "回退对话模型列表",
-          "hint": "主对话模型请求失败时，按顺序切换到这些对话模型。"
-        },
-        "request_max_retries": {
-          "description": "请求最大重试次数",
-          "hint": "单次模型请求遇到可重试错误时的最大尝试次数。"
-        },
         "default_image_caption_provider_id": {
           "description": "默认图片转述模型",
           "hint": "留空代表不使用,可用于非多模态模型"
@@ -83,9 +148,19 @@
     "persona": {
       "description": "人格",
       "hint": "赋予 AstrBot 人格。",
-      "provider_settings": {
-        "default_personality": {
-          "description": "默认采用的人格"
+      "agent_runner": {
+        "config": {
+          "persona": {
+            "persona_id": { "description": "默认采用的人格" },
+            "safety_mode": {
+              "description": "健康模式",
+              "hint": "引导模型输出健康、安全的内容，避免有害或敏感话题。"
+            },
+            "safety_mode_strategy": {
+              "description": "健康模式策略",
+              "hint": "选择健康模式的实现策略。"
+            }
+          }
         }
       }
     },
@@ -254,54 +329,59 @@
     "truncate_and_compress": {
       "hint": "AstrBot 如何管理工作记忆。详见: [上下文管理策略](https://docs.astrbot.app/use/context-compress.html)。",
       "description": "上下文管理策略",
-      "provider_settings": {
-        "max_context_length": {
-          "description": "压缩前最多保留对话轮数",
-          "hint": "普通会话历史超过该轮数后，才会按下方策略进行持久化截断或 LLM 压缩；请求发送前也会先按该值约束上下文。-1 表示不按轮数限制。"
-        },
-        "dequeue_context_length": {
-          "description": "轮次超限时一次丢弃轮数",
-          "hint": "当超过\"压缩前最多保留对话轮数\"且无法使用 LLM 压缩时，一次丢弃多少轮旧对话；请求期截断也会复用该值。"
-        },
-        "context_limit_reached_strategy": {
-          "description": "历史超限或上下文接近上限时的处理方式",
-          "labels": [
-            "按对话轮数截断",
-            "由 LLM 压缩上下文"
-          ],
-          "hint": "普通会话历史仅在超过\"压缩前最多保留对话轮数\"后执行该策略；请求发送前也会在上下文 token 接近模型窗口时使用同一策略保护本次请求。"
-        },
-        "llm_compress_instruction": {
-          "description": "上下文压缩提示词",
-          "hint": "如果为空则使用默认提示词。"
-        },
-        "llm_compress_keep_recent_ratio": {
-          "description": "压缩时保留最近上下文比例",
-          "hint": "按当前上下文 token 数保留最近内容，范围 0-0.3。0.15 表示保留 15%；比例大于 0 时至少保留最后一轮。"
-        },
-        "llm_compress_provider_id": {
-          "description": "用于上下文压缩的模型提供商 ID",
-          "hint": "留空时使用当前聊天模型进行压缩；如果模型不可用或压缩失败，将回退为\"按对话轮数截断\"的策略。"
-        },
-        "fallback_max_context_tokens": {
-          "description": "上下文窗口兜底值",
-          "hint": "当 max_context_tokens 为 0 且模型不在内置元数据中时，使用此值作为上下文窗口大小。默认 128000。"
+      "agent_runner": {
+        "config": {
+          "misc": {
+            "max_turns": {
+              "description": "压缩前最多保留对话轮数",
+              "hint": "普通会话历史超过该轮数后，才会按下方策略进行持久化截断或 LLM 压缩；请求发送前也会先按该值约束上下文。-1 表示不按轮数限制。"
+            },
+            "trim_turns": {
+              "description": "轮次超限时一次丢弃轮数",
+              "hint": "当超过\"压缩前最多保留对话轮数\"且无法使用 LLM 压缩时，一次丢弃多少轮旧对话；请求期截断也会复用该值。"
+            },
+            "overflow_strategy": {
+              "description": "历史超限或上下文接近上限时的处理方式",
+              "labels": ["按对话轮数截断", "由 LLM 压缩上下文"],
+              "hint": "普通会话历史仅在超过\"压缩前最多保留对话轮数\"后执行该策略；请求发送前也会在上下文 token 接近模型窗口时使用同一策略保护本次请求。"
+            },
+            "compress_instruction": {
+              "description": "上下文压缩提示词",
+              "hint": "如果为空则使用默认提示词。"
+            },
+            "compress_keep_recent_ratio": {
+              "description": "压缩时保留最近上下文比例",
+              "hint": "按当前上下文 token 数保留最近内容，范围 0-0.3。0.15 表示保留 15%；比例大于 0 时至少保留最后一轮。"
+            },
+            "compress_provider_id": {
+              "description": "用于上下文压缩的模型提供商 ID",
+              "hint": "留空时使用当前聊天模型进行压缩；如果模型不可用或压缩失败，将回退为\"按对话轮数截断\"的策略。"
+            },
+            "fallback_max_tokens": {
+              "description": "上下文窗口兜底值",
+              "hint": "当 max_context_tokens 为 0 且模型不在内置元数据中时，使用此值作为上下文窗口大小。默认 128000。"
+            }
+          }
         }
       }
     },
     "others": {
       "description": "其他配置",
+      "agent_runner": {
+        "config": {
+          "misc": {
+            "max_steps": { "description": "工具调用轮数上限" },
+            "tool_schema_mode": {
+              "description": "工具调用模式",
+              "hint": "skills-like 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
+              "labels": ["Skills-like（两阶段）", "Full（完整参数）"]
+            }
+          }
+        }
+      },
       "provider_settings": {
         "display_reasoning_text": {
           "description": "显示思考内容"
-        },
-        "llm_safety_mode": {
-          "description": "健康模式",
-          "hint": "引导模型输出健康、安全、积极的内容，避免有害或敏感话题。"
-        },
-        "safety_mode_strategy": {
-          "description": "健康模式策略",
-          "hint": "选择健康模式的实现方式。"
         },
         "identifier": {
           "description": "用户识别",
@@ -352,19 +432,8 @@
             "hint": "开启后，get_msg/get_forward_msg 全部尝试失败时输出 warning 日志。"
           }
         },
-        "max_agent_step": {
-          "description": "工具调用轮数上限"
-        },
         "tool_call_timeout": {
           "description": "工具调用超时时间(秒)"
-        },
-        "tool_schema_mode": {
-          "description": "工具调用模式",
-          "hint": "skills-like 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
-          "labels": [
-            "Skills-like（两阶段）",
-            "Full（完整参数）"
-          ]
         },
         "streaming_response": {
           "description": "流式输出"

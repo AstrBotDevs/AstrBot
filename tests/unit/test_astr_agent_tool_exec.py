@@ -485,7 +485,15 @@ async def test_background_wakeup_applies_max_agent_step(
         parameters={"type": "object", "properties": {}},
     )
     context = SimpleNamespace(
-        get_config=lambda **_kwargs: {"provider_settings": dict(provider_settings)},
+        get_config=lambda **_kwargs: {
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {
+                    "misc": {"max_steps": provider_settings.get("max_agent_step", 30)}
+                },
+            },
+        },
         get_llm_tool_manager=lambda: SimpleNamespace(
             get_builtin_tool=lambda _tool_cls: send_tool
         ),

@@ -1,45 +1,11 @@
 import traceback
 
 from astrbot.core import astrbot_config, logger
-from astrbot.core.agent.runners.deerflow.constants import (
-    DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
-    DEERFLOW_PROVIDER_TYPE,
-)
 from astrbot.core.astrbot_config_mgr import AstrBotConfig, AstrBotConfigManager
+from astrbot.core.config.agent_runner import finalize_agent_runner_migration
 from astrbot.core.db.migration.migra_45_to_46 import migrate_45_to_46
 from astrbot.core.db.migration.migra_token_usage import migrate_token_usage
 from astrbot.core.db.migration.migra_webchat_session import migrate_webchat_session
-
-
-def _migra_agent_runner_configs(conf: AstrBotConfig, ids_map: dict) -> None:
-    """
-    Migra agent runner configs from provider configs.
-    """
-    try:
-        default_prov_id = conf["provider_settings"]["default_provider_id"]
-        if default_prov_id in ids_map:
-            conf["provider_settings"]["default_provider_id"] = ""
-            p = ids_map[default_prov_id]
-            if p["type"] == "dify":
-                conf["provider_settings"]["dify_agent_runner_provider_id"] = p["id"]
-                conf["provider_settings"]["agent_runner_type"] = "dify"
-            elif p["type"] == "coze":
-                conf["provider_settings"]["coze_agent_runner_provider_id"] = p["id"]
-                conf["provider_settings"]["agent_runner_type"] = "coze"
-            elif p["type"] == "dashscope":
-                conf["provider_settings"]["dashscope_agent_runner_provider_id"] = p[
-                    "id"
-                ]
-                conf["provider_settings"]["agent_runner_type"] = "dashscope"
-            elif p["type"] == DEERFLOW_PROVIDER_TYPE:
-                conf["provider_settings"][DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY] = p[
-                    "id"
-                ]
-                conf["provider_settings"]["agent_runner_type"] = DEERFLOW_PROVIDER_TYPE
-            conf.save_config()
-    except Exception as e:
-        logger.error(f"Migration for third party agent runner configs failed: {e!s}")
-        logger.error(traceback.format_exc())
 
 
 def _migra_provider_to_source_structure(conf: AstrBotConfig) -> None:
@@ -156,24 +122,15 @@ async def migra(
         logger.error(f"Migration for token_usage column failed: {e!s}")
         logger.error(traceback.format_exc())
 
-    # migra third party agent runner configs
-    _c = False
-    providers = astrbot_config["provider"]
-    ids_map = {}
-    for prov in providers:
-        type_ = prov.get("type")
-        if type_ in ["dify", "coze", "dashscope", DEERFLOW_PROVIDER_TYPE]:
-            prov["provider_type"] = "agent_runner"
-            ids_map[prov["id"]] = {
-                "type": type_,
-                "id": prov["id"],
-            }
-            _c = True
-    if _c:
-        astrbot_config.save_config()
-
-    for conf in acm.confs.values():
-        _migra_agent_runner_configs(conf, ids_map)
+    try:
+        configs = list(acm.confs.values())
+        if finalize_agent_runner_migration(configs):
+            for conf in configs:
+                conf.save_config()
+            logger.info("Agent Runner configuration migration completed")
+    except Exception as e:
+        logger.error(f"Agent Runner configuration migration failed: {e!s}")
+        logger.error(traceback.format_exc())
 
     # Migrate providers to new structure: extract source fields to provider_sources
     try:
