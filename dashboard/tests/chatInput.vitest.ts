@@ -16,7 +16,14 @@ vi.mock('@/stores/customizer', () => ({
 vi.mock('@/api/v1', () => ({
   commandApi: {
     list: vi.fn().mockResolvedValue({
-      data: { status: 'ok', data: { items: [], wake_prefix: ['/'] } },
+      data: {
+        status: 'ok',
+        data: {
+          items: [],
+          command_prefixes: ['/'],
+          llm_access: { prefixes: ['/'] },
+        },
+      },
     }),
   },
 }));

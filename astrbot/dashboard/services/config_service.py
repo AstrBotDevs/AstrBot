@@ -692,6 +692,33 @@ def _require_config_save_commit(committed: bool) -> None:
         )
 
 
+def _llm_access_occupancy_error(
+    config: dict,
+    config_id: str,
+    plugin_catalog,
+) -> dict | None:
+    """Reject LLM prefixes that occupy an enabled command root."""
+    if plugin_catalog is None:
+        return None
+    from astrbot.core.command.occupancy import (
+        collect_command_roots,
+        llm_prefix_conflict,
+    )
+    from astrbot.core.pipeline.turn_router import command_prefixes_from_config
+
+    llm_access = config.get("llm_access") or {}
+    prefixes = llm_access.get("prefixes") or []
+    plugin_set = config.get("plugin_set", ["*"])
+    plugin_names = None if plugin_set == ["*"] else plugin_set
+    store = plugin_catalog.get_command_catalog(config_id, plugin_names)
+    return llm_prefix_conflict(
+        prefixes,
+        command_prefixes_from_config(config),
+        collect_command_roots(store.snapshot),
+        config_id=config_id,
+    )
+
+
 class ConfigProfileService:
     def __init__(
         self,
@@ -700,12 +727,14 @@ class ConfigProfileService:
         core_control: CoreControl,
         totp_runtime_state: TotpRuntimeState,
         db: DatabaseSessionStore | None = None,
+        plugin_catalog=None,
     ) -> None:
         self.core_control = core_control
         self.acm = config_manager
         self.config_router = config_router
         self.db = db
         self.totp_runtime_state = totp_runtime_state
+        self.plugin_catalog = plugin_catalog
 
     def get_profile_schema(self) -> dict:
         return {
@@ -803,6 +832,18 @@ class ConfigProfileService:
         if not _get_nested_value(config, ("dashboard", "totp", "enable")):
             _set_nested_value(config, ("dashboard", "totp", "secret"), "")
             _set_nested_value(config, ("dashboard", "totp", "recovery_code_hash"), "")
+
+        occupancy_error = _llm_access_occupancy_error(
+            config,
+            config_id,
+            self.plugin_catalog,
+        )
+        if occupancy_error is not None:
+            raise ApiError(
+                "LLM 触发前缀与指令根冲突。",
+                status_code=409,
+                data=occupancy_error,
+            )
 
         committed = await save_config_async(
             config,

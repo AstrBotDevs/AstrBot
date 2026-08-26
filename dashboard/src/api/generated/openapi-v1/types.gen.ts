@@ -473,6 +473,8 @@ export type CommandPatchRequest = {
   alias?: string;
   aliases?: Array<string>;
   action?: string;
+  takeover?: boolean;
+  config_id?: string;
 };
 
 export type AuthorizationBindingRequest = {
@@ -564,7 +566,11 @@ export type CommandItem = {
 
 export type CommandListData = {
   items?: Array<CommandItem>;
-  wake_prefix?: Array<string>;
+  command_prefixes?: Array<string>;
+  llm_access?: {
+    prefixes?: Array<string>;
+    [key: string]: unknown;
+  };
   summary?: CommandSummary;
   [key: string]: unknown;
 };

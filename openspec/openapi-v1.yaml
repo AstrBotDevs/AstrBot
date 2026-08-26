@@ -6226,6 +6226,10 @@ components:
             type: string
         action:
           type: string
+        takeover:
+          type: boolean
+        config_id:
+          type: string
       additionalProperties: false
 
     AuthorizationBindingRequest:
@@ -6441,10 +6445,18 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CommandItem'
-        wake_prefix:
+        command_prefixes:
           type: array
           items:
             type: string
+        llm_access:
+          type: object
+          properties:
+            prefixes:
+              type: array
+              items:
+                type: string
+          additionalProperties: true
         summary:
           $ref: '#/components/schemas/CommandSummary'
       additionalProperties: true

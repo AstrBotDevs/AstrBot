@@ -143,7 +143,8 @@ export interface BotRegistrationData {
 
 export interface CommandListData {
   items?: CommandItem[];
-  wake_prefix?: string[];
+  command_prefixes?: string[];
+  llm_access?: { prefixes?: string[]; [key: string]: unknown };
   summary?: {
     disabled?: number;
     conflicts?: number;

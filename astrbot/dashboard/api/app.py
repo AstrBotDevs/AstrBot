@@ -235,6 +235,7 @@ def create_dashboard_asgi_app(
             core_control,
             runtime.services.totp_runtime_state,
             db,
+            runtime.plugin_manager.catalog,
         ),
         config_display=ConfigDisplayService(
             runtime.astrbot_config,

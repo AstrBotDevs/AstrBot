@@ -3,9 +3,11 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.db.protocols import CommandStore
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.star.command_management import (
+    apply_path_winners,
     list_command_conflicts,
     list_commands,
     rename_command,
+    takeover_command,
     toggle_command,
     update_command_permission,
 )
@@ -38,28 +40,59 @@ class CommandService:
         self.config_manager = config_manager
 
     async def _refresh_command_surfaces(self) -> None:
+        await apply_path_winners(
+            self.db,
+            self.plugin_catalog,
+            self.config_manager.confs,
+        )
         self.plugin_catalog.refresh_command_catalogs()
         await self.platform_manager.refresh_registered_commands()
 
     async def list_commands(self, config_id: str = "") -> dict:
-        commands = await list_commands(self.db, self.handler_registry)
+        commands = await list_commands(
+            self.db,
+            self.handler_registry,
+            self._plugin_scope(config_id),
+        )
         summary = {
             "total": len(commands),
             "disabled": len([cmd for cmd in commands if not cmd["enabled"]]),
             "conflicts": len([cmd for cmd in commands if cmd.get("has_conflict")]),
         }
-        wake_prefix = self._get_wake_prefix(config_id)
+        command_prefixes, llm_prefixes = self._get_prefixes(config_id)
         return {
             "items": commands,
             "summary": summary,
-            "wake_prefix": wake_prefix,
+            "command_prefixes": command_prefixes,
+            "llm_access": {"prefixes": llm_prefixes},
         }
 
-    async def list_conflicts(self):
+    async def list_conflicts(self, config_id: str = ""):
         return await list_command_conflicts(
             self.db,
             self.handler_registry,
+            config_id=config_id,
+            plugin_names=self._plugin_scope(config_id),
         )
+
+    async def takeover_command(
+        self,
+        command_id: str | None,
+        config_id: str = "",
+    ) -> dict:
+        if not command_id:
+            raise CommandServiceError("command_id 为必填。")
+        try:
+            await takeover_command(
+                self.db,
+                self.handler_registry,
+                command_id,
+                config_id=config_id,
+            )
+        except ValueError as exc:
+            raise CommandServiceError(str(exc)) from exc
+        await self._refresh_command_surfaces()
+        return await self._get_command_payload(command_id)
 
     async def toggle_command(self, command_id: str | None, enabled) -> dict:
         if command_id is None or enabled is None:
@@ -110,6 +143,8 @@ class CommandService:
         command_id: str | None,
         new_name: str | None,
         aliases=None,
+        *,
+        config_id: str = "",
     ) -> dict:
         if not command_id or not new_name:
             raise CommandServiceError("command_id 与 new_name 均为必填。")
@@ -121,12 +156,28 @@ class CommandService:
                 command_id,
                 new_name,
                 aliases=aliases,
+                config_id=config_id,
+                config=self._config_for_id(config_id),
             )
         except ValueError as exc:
             raise CommandServiceError(str(exc)) from exc
 
         await self._refresh_command_surfaces()
         return await self._get_command_payload(command_id)
+
+    def _config_for_id(self, config_id: str) -> dict:
+        """Return the selected routing profile for occupancy validation."""
+        config_id = config_id.strip()
+        if config_id and config_id in self.config_manager.confs:
+            return self.config_manager.confs[config_id]
+        return self.config
+
+    def _plugin_scope(self, config_id: str) -> set[str] | None:
+        config = self._config_for_id(config_id)
+        raw = config.get("plugin_set", ["*"])
+        if raw == ["*"] or raw is None:
+            return None
+        return {str(name) for name in raw if str(name).strip()}
 
     async def update_permission(
         self,
@@ -148,12 +199,19 @@ class CommandService:
 
         return await self._get_command_payload(command_id)
 
-    def _get_wake_prefix(self, config_id: str) -> list:
-        wake_prefix = self.config.get("wake_prefix", ["/"])
+    def _get_prefixes(self, config_id: str) -> tuple[list, list]:
+        command_prefixes = list(self.config.get("command_prefixes", ["/"]))
+        llm_prefixes = list(
+            (self.config.get("llm_access") or {}).get("prefixes", ["/"])
+        )
         config_id = config_id.strip()
         if config_id and config_id in self.config_manager.confs:
-            return self.config_manager.confs[config_id].get("wake_prefix", wake_prefix)
-        return wake_prefix
+            scoped = self.config_manager.confs[config_id]
+            command_prefixes = list(scoped.get("command_prefixes", command_prefixes))
+            llm_prefixes = list(
+                (scoped.get("llm_access") or {}).get("prefixes", llm_prefixes)
+            )
+        return command_prefixes, llm_prefixes
 
     async def _get_command_payload(self, command_id: str) -> dict:
         commands = await list_commands(self.db, self.handler_registry)

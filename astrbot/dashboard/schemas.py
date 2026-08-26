@@ -329,6 +329,8 @@ class CommandUpdateRequest(BaseModel):
     alias: str | None = None
     aliases: list[str] | None = None
     action: str | None = Field(default=None, min_length=3, max_length=128)
+    takeover: bool | None = None
+    config_id: str | None = None
 
 
 class CommandToggleRequest(BaseModel):
@@ -344,6 +346,7 @@ class CommandRenameRequest(BaseModel):
     command_id: str
     new_name: str
     aliases: list[str] | None = None
+    config_id: str | None = None
 
 
 class CommandPermissionRequest(BaseModel):

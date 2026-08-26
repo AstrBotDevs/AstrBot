@@ -349,10 +349,6 @@
           "hint": "选择在不支持流式回复的平台上的处理方式。实时分段回复会在系统接收流式响应检测到诸如标点符号等分段点时,立即发送当前已接收的内容",
           "labels": ["实时分段回复", "关闭流式回复"]
         },
-        "wake_prefix": {
-          "description": "LLM 聊天额外唤醒前缀",
-          "hint": "仅作用于消息平台，不作用于 WebUI。如果唤醒前缀为 /, 额外聊天唤醒前缀为 chat,则需要 /chat 才会触发 LLM 请求"
-        },
         "prompt_prefix": {
           "description": "用户提示词",
           "hint": "可使用 {{prompt}} 作为用户输入的占位符。如果不输入占位符则代表添加在用户输入的前面。"
@@ -782,9 +778,6 @@
           "description": "群发送者并发（实验性）",
           "hint": "实验性，默认关闭。同群不同发送者可并行生成，整轮发送仍按群排队。与隔离会话互斥；会关闭同群流式，分段/合并转发可能交错。"
         },
-        "friend_message_needs_wake_prefix": {
-          "description": "私聊消息需要唤醒词"
-        },
         "reply_prefix": {
           "description": "回复时的文本前缀"
         },
@@ -801,8 +794,20 @@
           "description": "只 @ 机器人是否触发等待"
         }
       },
-      "wake_prefix": {
-        "description": "唤醒词"
+      "command_prefixes": {
+        "description": "指令前缀"
+      },
+      "llm_access": {
+        "prefixes": { "description": "LLM 触发前缀" },
+        "private": { "description": "私聊 LLM 访问" },
+        "group": { "description": "群聊 LLM 访问" },
+        "reply_to_bot": { "description": "回复机器人时允许 LLM" }
+      },
+      "inbound_coalesce": {
+        "enable": { "description": "启用入站回合合并" },
+        "wait_seconds": { "description": "回合等待秒数" },
+        "max_total_seconds": { "description": "回合最长等待秒数" },
+        "max_typing_wait": { "description": "最长输入暂停秒数" }
       }
     },
     "whitelist": {

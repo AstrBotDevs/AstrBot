@@ -72,7 +72,8 @@ describe('chat component smokes', () => {
         status: 'ok',
         data: {
           items: [],
-          wake_prefix: ['/'],
+          command_prefixes: ['/'],
+          llm_access: { prefixes: ['/'] },
         },
       },
     });
@@ -119,7 +120,9 @@ describe('chat component smokes', () => {
 
     expect(wrapper.find('.reply-preview').exists()).toBe(true);
     expect(wrapper.find('.attachments-preview').exists()).toBe(true);
-    expect(wrapper.find('.input-container').attributes('style')).toBeUndefined();
+    expect(
+      wrapper.find('.input-container').attributes('style'),
+    ).toBeUndefined();
     expect(wrapper.text()).toContain('quoted message');
     expect(
       warnSpy.mock.calls.some((args) =>

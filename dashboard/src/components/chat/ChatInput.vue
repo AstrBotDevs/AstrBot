@@ -786,9 +786,11 @@ async function fetchCommands() {
     if (res.data.status === 'ok') {
       allCommands.value = res.data.data.items || [];
       // 读取当前配置的唤醒词列表，用于指令候选的触发前缀
-      const prefixes: string[] = res.data.data.wake_prefix || [];
-      if (prefixes && prefixes.length > 0) {
-        wakePrefixes.value = prefixes;
+      const commandPrefixes: string[] = res.data.data.command_prefixes || [];
+      const llmPrefixes: string[] = res.data.data.llm_access?.prefixes || [];
+      const prefixes = [...commandPrefixes, ...llmPrefixes].filter(Boolean);
+      if (prefixes.length > 0) {
+        wakePrefixes.value = [...new Set(prefixes)];
       }
     }
   } catch (err) {

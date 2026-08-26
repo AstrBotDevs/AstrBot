@@ -355,10 +355,6 @@
           "hint": "Select the handling method for platforms that don't support streaming responses. Real-time segmented reply sends content immediately when the system detects segment points like punctuation during streaming reception",
           "labels": ["Real-time Segmented Reply", "Disable Streaming Response"]
         },
-        "wake_prefix": {
-          "description": "Additional LLM Chat Wake Prefix",
-          "hint": "Applies only to messaging platforms, not WebUI. If the wake prefix is / and the additional chat wake prefix is chat, then /chat is required to trigger LLM requests"
-        },
         "prompt_prefix": {
           "description": "User Prompt",
           "hint": "You can use {{prompt}} as a placeholder for user input. If no placeholder is provided, it will be added before the user input."
@@ -788,9 +784,6 @@
           "description": "Group Sender Concurrency (Experimental)",
           "hint": "Experimental and off by default. Different group senders may generate in parallel, but a whole turn still sends one-at-a-time per group. Ignored when session isolation is on. Disables group streaming; segmented or forwarded replies may interleave."
         },
-        "friend_message_needs_wake_prefix": {
-          "description": "Private Messages Require Wake Word"
-        },
         "reply_prefix": {
           "description": "Reply Text Prefix"
         },
@@ -807,8 +800,20 @@
           "description": "Trigger Waiting on Mention-only Messages"
         }
       },
-      "wake_prefix": {
-        "description": "Wake Word"
+      "command_prefixes": {
+        "description": "Command Prefixes"
+      },
+      "llm_access": {
+        "prefixes": { "description": "LLM trigger prefixes" },
+        "private": { "description": "Direct-message LLM access" },
+        "group": { "description": "Group LLM access" },
+        "reply_to_bot": { "description": "Allow LLM when replying to the bot" }
+      },
+      "inbound_coalesce": {
+        "enable": { "description": "Enable inbound turn coalescing" },
+        "wait_seconds": { "description": "Turn wait seconds" },
+        "max_total_seconds": { "description": "Maximum turn wait seconds" },
+        "max_typing_wait": { "description": "Maximum typing pause seconds" }
       }
     },
     "whitelist": {

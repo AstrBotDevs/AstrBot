@@ -408,7 +408,11 @@ class SpikeHandler(BaseHTTPRequestHandler):
                     {
                         "status": "ok",
                         "message": None,
-                        "data": {"items": [], "wake_prefix": ["/"]},
+                        "data": {
+                            "items": [],
+                            "command_prefixes": ["/"],
+                            "llm_access": {"prefixes": ["/"]},
+                        },
                     }
                 )
                 return

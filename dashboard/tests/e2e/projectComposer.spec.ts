@@ -40,7 +40,11 @@ test('keeps the project composer visible with more than one hundred sessions', a
         data = [];
       }
       if (path === '/api/v1/commands') {
-        data = { items: [], wake_prefix: ['/'] };
+        data = {
+          items: [],
+          command_prefixes: ['/'],
+          llm_access: { prefixes: ['/'] },
+        };
       }
       await route.fulfill({
         contentType: 'application/json',

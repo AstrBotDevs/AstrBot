@@ -37,9 +37,20 @@ async def _list_commands(config_id: str | None, service: CommandService):
         _raise_command_error(exc)
 
 
-async def _list_command_conflicts(service: CommandService):
+async def _list_command_conflicts(service: CommandService, config_id: str = ""):
     try:
-        return ok(await service.list_conflicts())
+        return ok(await service.list_conflicts(config_id))
+    except CommandServiceError as exc:
+        _raise_command_error(exc)
+
+
+async def _takeover_command(
+    command_id: str,
+    config_id: str,
+    service: CommandService,
+):
+    try:
+        return ok(await service.takeover_command(command_id, config_id=config_id))
     except CommandServiceError as exc:
         _raise_command_error(exc)
 
@@ -68,6 +79,7 @@ async def _rename_command(payload: CommandRenameRequest, service: CommandService
                 payload.command_id,
                 payload.new_name,
                 aliases=payload.aliases,
+                config_id=getattr(payload, "config_id", "") or "",
             )
         )
     except CommandServiceError as exc:
@@ -95,10 +107,11 @@ async def list_commands(
 
 @router.get("/commands/conflicts")
 async def list_command_conflicts(
+    config_id: str | None = None,
     _auth: AuthContext = Depends(require_tool_scope),
     service: CommandService = Depends(get_command_service),
 ):
-    return await _list_command_conflicts(service)
+    return await _list_command_conflicts(service, config_id or "")
 
 
 @router.patch("/commands/builtin")
@@ -125,12 +138,15 @@ async def update_command(
             ),
             service,
         )
+    if payload.takeover:
+        return await _takeover_command(command_id, payload.config_id or "", service)
     if payload.alias is not None:
         return await _rename_command(
             CommandRenameRequest(
                 command_id=command_id,
                 new_name=payload.alias,
                 aliases=payload.aliases,
+                config_id=payload.config_id or "",
             ),
             service,
         )
