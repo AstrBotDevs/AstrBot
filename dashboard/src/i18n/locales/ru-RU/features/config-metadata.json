@@ -415,6 +415,33 @@
         "name": "Платформы",
         "platform": {
             "description": "Адаптеры сообщений",
+            "app_secret": {
+                "description": "Секрет приложения"
+            },
+            "token": {
+                "description": "Токен обратного вызова"
+            },
+            "encoding_aes_key": {
+                "description": "Ключ шифрования сообщений"
+            },
+            "client_secret": {
+                "description": "Секрет клиента"
+            },
+            "bot_token": {
+                "description": "Slack Bot Token"
+            },
+            "app_token": {
+                "description": "Slack App Token"
+            },
+            "signing_secret": {
+                "description": "Slack Signing Secret"
+            },
+            "channel_access_token": {
+                "description": "LINE Channel Access Token"
+            },
+            "channel_secret": {
+                "description": "LINE Channel Secret"
+            },
             "active_send_mode": {
                 "description": "Использовать API активной отправки"
             },
@@ -1198,6 +1225,15 @@
     },
     "provider_group": {
         "provider": {
+            "api_key": {
+                "description": "API Key"
+            },
+            "dashscope_api_key": {
+                "description": "DashScope API Key"
+            },
+            "gemini_tts_api_key": {
+                "description": "Gemini API Key"
+            },
             "genie_onnx_model_dir": {
                 "description": "Директория моделей ONNX",
                 "hint": "Путь к директории с файлами моделей ONNX"
