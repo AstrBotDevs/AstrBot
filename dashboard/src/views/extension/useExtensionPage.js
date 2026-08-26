@@ -2333,7 +2333,7 @@ export const useExtensionPage = (initialTab = "installed") => {
 
   // 生命周期
   onMounted(async () => {
-    const hasRouteTab = isValidTab(route.meta.extensionTab);
+    const hasRouteTab = Boolean(route.meta.extensionTab);
     if (!hasRouteTab && !syncTabFromHash(getLocationHash())) {
       await replaceTabRoute(router, route, activeTab.value);
     }
@@ -2458,7 +2458,7 @@ export const useExtensionPage = (initialTab = "installed") => {
   watch(
     () => route.hash,
     (newHash) => {
-      if (isValidTab(route.meta.extensionTab)) return;
+      if (route.meta.extensionTab) return;
       const tab = extractTabFromHash(newHash);
       if (tab && tab !== activeTab.value) {
         activeTab.value = tab;
@@ -2467,7 +2467,7 @@ export const useExtensionPage = (initialTab = "installed") => {
   );
 
   watch(activeTab, (newTab) => {
-    if (isValidTab(route.meta.extensionTab)) return;
+    if (route.meta.extensionTab) return;
     if (!isValidTab(newTab)) return;
     if (route.hash === `#${newTab}`) return;
     void replaceTabRoute(router, route, newTab);
