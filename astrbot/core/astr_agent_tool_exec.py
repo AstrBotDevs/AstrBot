@@ -49,6 +49,7 @@ from astrbot.core.tools.computer_tools import (
 )
 from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
@@ -692,6 +693,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             )
         cfg = ctx.get_config(umo=event.unified_msg_origin) or {}
         provider_settings = cfg.get("provider_settings") or {}
+        max_agent_step = coerce_int_config(
+            provider_settings.get("max_agent_step", 30),
+            default=30,
+            min_value=1,
+            field_name="provider_settings.max_agent_step",
+        )
         from astrbot.core.streaming_override import resolve_streaming_response
 
         config = MainAgentBuildConfig(
@@ -743,7 +750,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return
 
         runner = result.agent_runner
-        max_agent_step = int(provider_settings.get("max_agent_step", 30))
         async for _ in runner.step_until_done(max_agent_step):
             # agent will send message to user via using tools
             pass

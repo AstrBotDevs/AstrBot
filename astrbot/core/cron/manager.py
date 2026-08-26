@@ -19,6 +19,7 @@ from astrbot.core.db.po import CronJob
 from astrbot.core.db.protocols import CronStore
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.task_utils import cancel_tracked_tasks, create_tracked_task
 
@@ -427,6 +428,12 @@ class CronJobManager:
 
         provider_settings = cfg.get("provider_settings", {})
         tool_call_timeout = provider_settings.get("tool_call_timeout", 120)
+        max_agent_step = coerce_int_config(
+            provider_settings.get("max_agent_step", 30),
+            default=30,
+            min_value=1,
+            field_name="provider_settings.max_agent_step",
+        )
         config = MainAgentBuildConfig(
             tool_call_timeout=tool_call_timeout,
             llm_safety_mode=False,
@@ -473,7 +480,6 @@ class CronJobManager:
             return
 
         runner = result.agent_runner
-        max_agent_step = int(provider_settings.get("max_agent_step", 30))
         async for _ in runner.step_until_done(max_agent_step):
             # agent will send message to user via using tools
             pass
