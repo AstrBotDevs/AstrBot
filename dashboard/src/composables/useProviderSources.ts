@@ -1,6 +1,6 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { providerApi } from '@/api/v1'
-import { getProviderIcon } from '@/utils/providerUtils'
+import { getProviderIcon, isMonochromeProviderIcon } from '@/utils/providerUtils'
 import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from '@/utils/confirmDialog'
 import { normalizeTextInput } from '@/utils/inputValue'
 
@@ -8,6 +8,17 @@ export interface UseProviderSourcesOptions {
   defaultTab?: string
   tm: (key: string, params?: Record<string, unknown>) => string
   showMessage: (message: string, color?: string) => void
+}
+
+interface ProviderSourceType {
+  value: string
+  label: string
+  icon: string
+  isMonochrome: boolean
+}
+
+interface ProviderIconSource {
+  provider?: string
 }
 
 export function resolveDefaultTab(value?: string) {
@@ -84,13 +95,14 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       return []
     }
 
-    const types: Array<{ value: string; label: string; icon: string }> = []
+    const types: ProviderSourceType[] = []
     for (const [templateName, template] of Object.entries(providerTemplates.value)) {
       if (template.provider_type === selectedProviderType.value) {
         types.push({
           value: templateName,
           label: templateName,
-          icon: getProviderIcon(template.provider)
+          icon: getProviderIcon(template.provider),
+          isMonochrome: isMonochromeProviderIcon(template.provider)
         })
       }
     }
@@ -290,9 +302,13 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return type.includes(providerType)
   }
 
-  function resolveSourceIcon(source: any) {
+  function resolveSourceIcon(source: ProviderIconSource | null | undefined) {
     if (!source) return ''
-    return getProviderIcon(source.provider) || ''
+    return getProviderIcon(source.provider || '') || ''
+  }
+
+  function isMonochromeSourceIcon(source: ProviderIconSource | null | undefined) {
+    return Boolean(source && isMonochromeProviderIcon(source.provider || ''))
   }
 
   function getSourceDisplayName(source: any) {
@@ -644,14 +660,16 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   async function deleteProvider(provider: any) {
     const confirmed = await askForConfirmation(tm('models.deleteConfirm', { id: provider.id }))
-    if (!confirmed) return
+    if (!confirmed) return false
 
     try {
       await providerApi.delete(String(provider.id))
       providers.value = providers.value.filter((p) => p.id !== provider.id)
       showMessage(tm('models.deleteSuccess'))
+      return true
     } catch (error: any) {
       showMessage(error.message || tm('models.deleteError'), 'error')
+      return false
     } finally {
       await loadConfig()
     }
@@ -766,6 +784,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
     // helpers
     resolveSourceIcon,
+    isMonochromeSourceIcon,
     getSourceDisplayName,
     getModelMetadata,
     supportsImageInput,

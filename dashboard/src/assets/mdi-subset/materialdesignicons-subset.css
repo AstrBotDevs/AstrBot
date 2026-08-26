@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 268 icons */
+/* Auto-generated MDI subset – 270 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -272,10 +272,6 @@
   content: "\F08BB";
 }
 
-.mdi-cogs::before {
-  content: "\F08D6";
-}
-
 .mdi-comment-question::before {
   content: "\F0817";
 }
@@ -394,6 +390,14 @@
 
 .mdi-eye-off::before {
   content: "\F0209";
+}
+
+.mdi-eye-off-outline::before {
+  content: "\F06D1";
+}
+
+.mdi-eye-outline::before {
+  content: "\F06D0";
 }
 
 .mdi-eyedropper::before {
@@ -666,6 +670,10 @@
 
 .mdi-lock-plus-outline::before {
   content: "\F16B2";
+}
+
+.mdi-logout::before {
+  content: "\F0343";
 }
 
 .mdi-magnify::before {

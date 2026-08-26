@@ -415,6 +415,33 @@
     "name": "Platform",
     "platform": {
       "description": "Message Platform Adapters",
+      "app_secret": {
+        "description": "Application Secret"
+      },
+      "token": {
+        "description": "Callback Token"
+      },
+      "encoding_aes_key": {
+        "description": "Message Encryption Key"
+      },
+      "client_secret": {
+        "description": "Client Secret"
+      },
+      "bot_token": {
+        "description": "Slack Bot Token"
+      },
+      "app_token": {
+        "description": "Slack App Token"
+      },
+      "signing_secret": {
+        "description": "Slack Signing Secret"
+      },
+      "channel_access_token": {
+        "description": "LINE Channel Access Token"
+      },
+      "channel_secret": {
+        "description": "LINE Channel Secret"
+      },
       "active_send_mode": {
         "description": "Use Proactive Send API"
       },
@@ -1197,6 +1224,15 @@
   },
   "provider_group": {
     "provider": {
+      "api_key": {
+        "description": "API Key"
+      },
+      "dashscope_api_key": {
+        "description": "DashScope API Key"
+      },
+      "gemini_tts_api_key": {
+        "description": "Gemini API Key"
+      },
       "genie_onnx_model_dir": {
         "description": "ONNX Model Directory",
         "hint": "The directory path containing the ONNX model files"
