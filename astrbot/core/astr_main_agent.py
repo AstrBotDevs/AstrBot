@@ -190,8 +190,7 @@ class MainAgentBuildConfig:
     tool_schema_mode: str = "full"
     """The tool schema mode, can be 'full' or 'skills-like'."""
     provider_wake_prefix: str = ""
-    """The wake prefix for the provider. If the user message does not start with this prefix,
-    the main agent will not be triggered."""
+    """Unused routing placeholder; access decisions are made upstream."""
     streaming_response: bool = True
     """Whether to use streaming response."""
     sanitize_context_by_modalities: bool = False
@@ -1935,15 +1934,9 @@ async def build_main_agent(
             req.audio_urls = []
             if sel_model := event.get_extra("selected_model"):
                 req.model = sel_model
-            wake_prefix = config.provider_wake_prefix
-            if wake_prefix and not event.message_str.startswith(wake_prefix):
-                if event.message_str and event.message_str.strip():
-                    return None
-                wake_prefix = ""
-
             req.prompt = coalesce_prompt_with_json_cards(
                 event,
-                event.message_str[len(wake_prefix) :],
+                event.message_str,
             )
 
             conversation = await _get_session_conv(event, plugin_context)

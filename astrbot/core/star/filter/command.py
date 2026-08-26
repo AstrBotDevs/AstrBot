@@ -150,7 +150,7 @@ class CommandFilter(HandlerFilter):
         Command text parsing intentionally does not happen in filters.
         """
 
-        if not event.is_at_or_wake_command or not self.handler_md:
+        if not event.get_extra("should_run_command") or not self.handler_md:
             return False
         matched_ids = event.get_extra("command_handler_ids", default=())
         return (

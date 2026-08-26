@@ -325,8 +325,7 @@ class DiscordPlatformAdapter(Platform):
 
         # 1. 优先处理斜杠指令
         if is_slash_command:
-            message_event.is_wake = True
-            message_event.is_at_or_wake_command = True
+            message_event.set_extra("adapter_preconfigured", True)
             self.commit_event(message_event)
             return
 
@@ -369,8 +368,7 @@ class DiscordPlatformAdapter(Platform):
 
         # 如果是被@的消息，设置为唤醒状态
         if is_mention:
-            message_event.is_wake = True
-            message_event.is_at_or_wake_command = True
+            message_event.set_extra("adapter_preconfigured", True)
 
         self.commit_event(message_event)
 

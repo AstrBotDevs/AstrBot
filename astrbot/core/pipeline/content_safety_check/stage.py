@@ -42,7 +42,9 @@ class ContentSafetyCheckStage(Stage):
 
         ok, info = await self.strategy_selector.check("\n".join(texts))
         if not ok:
-            if event.is_at_or_wake_command:
+            if event.get_extra("should_run_command") or event.get_extra(
+                "should_run_llm"
+            ):
                 event.set_result(
                     MessageEventResult().message(
                         "你的消息或者大模型的响应中包含不适当的内容，已被屏蔽。",

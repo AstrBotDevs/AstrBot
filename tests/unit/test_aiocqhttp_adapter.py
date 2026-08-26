@@ -300,17 +300,18 @@ async def test_aiocqhttp_reply_only_wake_resolves_sender_lazily(monkeypatch):
     await stage.initialize(
         SimpleNamespace(
             astrbot_config={
-                "wake_prefix": ["/"],
                 "platform_settings": {
                     "no_permission_reply": True,
-                    "friend_message_needs_wake_prefix": False,
                     "ignore_bot_self_message": False,
                     "ignore_at_all": False,
                     "unique_session": False,
-                    "group_wake_policy": {
-                        "mention_bot": True,
-                        "reply_to_bot": True,
-                    },
+                },
+                "command_prefixes": ["/"],
+                "llm_access": {
+                    "prefixes": ["/"],
+                    "private": "open",
+                    "group": "mention",
+                    "reply_to_bot": True,
                 },
                 "plugin_set": ["*"],
             },

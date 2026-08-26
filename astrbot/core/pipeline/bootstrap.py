@@ -22,6 +22,7 @@ def builtin_stage_classes() -> Sequence[type[Stage]]:
     from .respond.stage import RespondStage
     from .result_decorate.stage import ResultDecorateStage
     from .session_status_check.stage import SessionStatusCheckStage
+    from .turn_coalesce.stage import TurnCoalesceStage
     from .waking_check.stage import WakingCheckStage
     from .whitelist_check.stage import WhitelistCheckStage
 
@@ -29,6 +30,7 @@ def builtin_stage_classes() -> Sequence[type[Stage]]:
         WakingCheckStage,
         WhitelistCheckStage,
         SessionStatusCheckStage,
+        TurnCoalesceStage,
         RateLimitStage,
         ContentSafetyCheckStage,
         PreProcessStage,

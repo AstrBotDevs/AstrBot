@@ -44,7 +44,9 @@ else:
 
 class FakeEvent:
     def __init__(self, extras: dict, *, at_or_wake: bool = False):
-        self._extras = extras
+        self._extras = dict(extras)
+        if at_or_wake:
+            self._extras["should_run_command"] = True
         self._stopped = False
         self.is_at_or_wake_command = at_or_wake
         self.result_history: list[MessageEventResult] = []

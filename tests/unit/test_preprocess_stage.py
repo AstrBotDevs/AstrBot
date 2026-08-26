@@ -16,6 +16,7 @@ class FakeEvent:
         self.message_obj = SimpleNamespace(message=message, message_str="")
         self.message_str = ""
         self.is_at_or_wake_command = False
+        self._extras: dict[str, object] = {}
         self.unified_msg_origin = "test:session"
         self.temporary_local_files: list[str] = []
         self.reactions: list[str] = []
@@ -25,6 +26,12 @@ class FakeEvent:
 
     def get_messages(self):
         return self.message_obj.message
+
+    def get_extra(self, key: str, default=None):
+        return self._extras.get(key, default)
+
+    def set_extra(self, key: str, value) -> None:
+        self._extras[key] = value
 
     def track_temporary_local_file(self, path: str) -> None:
         if path not in self.temporary_local_files:
@@ -140,7 +147,7 @@ async def test_preprocess_path_mapping_accepts_file_uri(tmp_path):
 @pytest.mark.asyncio
 async def test_pre_ack_emoji_only_reacts_for_awakened_supported_platform(monkeypatch):
     event = FakeEvent([Plain("hello")])
-    event.is_at_or_wake_command = True
+    event.set_extra("should_run_llm", True)
     monkeypatch.setattr(event, "get_platform_name", lambda: "telegram")
     stage = _stage(
         platform_specific={
@@ -158,7 +165,7 @@ async def test_pre_ack_emoji_failure_does_not_interrupt_preprocessing(
     caplog, monkeypatch
 ):
     event = FakeEvent([Plain("hello")])
-    event.is_at_or_wake_command = True
+    event.set_extra("should_run_llm", True)
     monkeypatch.setattr(event, "get_platform_name", lambda: "discord")
 
     async def fail_react(_: str) -> None:

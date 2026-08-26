@@ -283,8 +283,8 @@ async def test_discord_handle_msg_sets_wake_when_bot_role_is_mentioned(monkeypat
     def fake_create_event(_message, _followup_webhook=None):
         return SimpleNamespace(
             interaction_followup_webhook=None,
-            is_wake=False,
-            is_at_or_wake_command=False,
+            _extras={},
+            set_extra=MagicMock(),
         )
 
     adapter.create_event = fake_create_event
@@ -292,8 +292,10 @@ async def test_discord_handle_msg_sets_wake_when_bot_role_is_mentioned(monkeypat
     await adapter.handle_msg(message)
 
     assert len(committed_events) == 1
-    assert committed_events[0].is_wake is True
-    assert committed_events[0].is_at_or_wake_command is True
+    committed_events[0].set_extra.assert_called_once_with(
+        "adapter_preconfigured",
+        True,
+    )
 
 
 @pytest.mark.asyncio
@@ -368,8 +370,8 @@ async def test_discord_handle_msg_slash_command_wakes_without_mention_checks():
     def fake_create_event(_message, _followup_webhook=None):
         return SimpleNamespace(
             interaction_followup_webhook=object(),
-            is_wake=False,
-            is_at_or_wake_command=False,
+            _extras={},
+            set_extra=MagicMock(),
         )
 
     adapter.create_event = fake_create_event
@@ -377,8 +379,10 @@ async def test_discord_handle_msg_slash_command_wakes_without_mention_checks():
     await adapter.handle_msg(message, followup_webhook=object())
 
     assert len(committed_events) == 1
-    assert committed_events[0].is_wake is True
-    assert committed_events[0].is_at_or_wake_command is True
+    committed_events[0].set_extra.assert_called_once_with(
+        "adapter_preconfigured",
+        True,
+    )
 
 
 @pytest.mark.asyncio

@@ -112,8 +112,10 @@ class FakeEvent:
         self._result = result
         self._stopped = stopped
 
-    def get_extra(self, key: str):
-        return self._extras.get(key)
+    def get_extra(self, key: str, default=None):
+        if key == "should_run_llm" and key not in self._extras:
+            return self.is_at_or_wake_command
+        return self._extras.get(key, default)
 
     def set_extra(self, key: str, value) -> None:
         self._extras[key] = value

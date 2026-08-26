@@ -48,8 +48,7 @@ class CronMessageEvent(AstrMessageEvent):
         # Ensure we use the original session for sending messages
         self.session = session
         self.context_obj = context
-        self.is_at_or_wake_command = True
-        self.is_wake = True
+        self.set_extra("adapter_preconfigured", True)
 
         if extras:
             self._extras.update(extras)

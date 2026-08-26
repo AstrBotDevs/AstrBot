@@ -166,6 +166,7 @@ def test_builtin_pipeline_stage_order_is_a_fixed_tuple() -> None:
         "WakingCheckStage",
         "WhitelistCheckStage",
         "SessionStatusCheckStage",
+        "TurnCoalesceStage",
         "RateLimitStage",
         "ContentSafetyCheckStage",
         "PreProcessStage",

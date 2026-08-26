@@ -17,7 +17,7 @@ from astrbot.core.command import (
     CommandResolutionKind,
     render_diagnostic,
 )
-from astrbot.core.message.components import At, AtAll, Reply
+from astrbot.core.message.components import Reply
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
@@ -34,6 +34,14 @@ from astrbot.core.utils.quoted_message.onebot_client import OneBotClient
 
 from ..context import PipelineContext
 from ..stage import Stage
+from ..turn_router import (
+    TurnRouteInput,
+    command_prefixes_from_config,
+    is_manager_flush,
+    llm_access_from_config,
+    route_turn,
+    strip_inbound_flush_flags,
+)
 
 UNIQUE_SESSION_ID_BUILDERS: dict[str, Callable[[AstrMessageEvent], str | None]] = {
     "aiocqhttp": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
@@ -57,6 +65,9 @@ class WakeReason(Enum):
     PRIVATE_DEFAULT = "private_default"
     ADAPTER_PRECONFIGURED = "adapter_preconfigured"
     PLUGIN_HANDLER = "plugin_handler"
+    LLM_PREFIX = "llm_prefix"
+    LLM_OPEN = "llm_open"
+    TURN_CONTINUATION = "turn_continuation"
 
 
 @dataclass
@@ -76,7 +87,7 @@ class WakingCheckStage(Stage):
 
     1. 机器人被 @ 了
     2. 机器人的消息被提到了
-    3. 以 wake_prefix 前缀开头，并且消息没有以 At 消息段开头
+    3. 以配置的 LLM 前缀开头，并且消息没有以 At 消息段开头
     4. 插件（Star）的 handler filter 通过
     5. 私聊消息的唤醒由当前平台和会话策略决定，不读取旧管理员配置
     """
@@ -96,11 +107,6 @@ class WakingCheckStage(Stage):
             "no_permission_reply",
             True,
         )
-        # 私聊是否需要 wake_prefix 才能唤醒机器人
-        self.friend_message_needs_wake_prefix = self.ctx.astrbot_config[
-            "platform_settings"
-        ].get("friend_message_needs_wake_prefix", False)
-        # 是否忽略机器人自己发送的消息
         self.ignore_bot_self_message = self.ctx.astrbot_config["platform_settings"].get(
             "ignore_bot_self_message",
             False,
@@ -111,17 +117,24 @@ class WakingCheckStage(Stage):
         )
         platform_settings = self.ctx.astrbot_config.get("platform_settings", {})
         self.unique_session = platform_settings.get("unique_session", False)
-        group_wake_policy = platform_settings.get("group_wake_policy", {})
-        self.group_wake_mention_bot = bool(group_wake_policy.get("mention_bot", False))
-        self.group_wake_reply_to_bot = bool(
-            group_wake_policy.get("reply_to_bot", False)
-        )
+        self.command_prefixes = command_prefixes_from_config(self.ctx.astrbot_config)
+        self.llm_access = llm_access_from_config(self.ctx.astrbot_config)
         enabled_plugins = self.ctx.astrbot_config.get("plugin_set", ["*"])
         plugin_names = None if enabled_plugins == ["*"] else enabled_plugins
         self.command_catalog = ctx.plugin_catalog.get_command_catalog(
             ctx.astrbot_config_id,
             plugin_names,
         )
+
+    def _llm_access_for_event(self, event: AstrMessageEvent):
+        if event.get_extra("skip_private_wake"):
+            return self.llm_access.__class__(
+                prefixes=self.llm_access.prefixes,
+                private="off",
+                group=self.llm_access.group,
+                reply_to_bot=self.llm_access.reply_to_bot,
+            )
+        return self.llm_access
 
     async def process(
         self,
@@ -134,10 +147,67 @@ class WakingCheckStage(Stage):
             return
 
         event.message_str = event.message_str.strip(" \t")
-        wake_decision = await self._detect_wake(event)
-        event.set_extra(
-            "wake_reasons", {reason.value for reason in wake_decision.reasons}
+        extras = getattr(event, "_extras", None)
+        if not isinstance(extras, dict):
+            extras = {}
+        manager_flush = is_manager_flush(extras)
+        if not manager_flush:
+            strip_inbound_flush_flags(extras)
+        await self._resolve_reply_senders(event)
+        manager = getattr(
+            getattr(self.ctx, "execution_context", None),
+            "turn_window_manager",
+            None,
         )
+        has_open_window = False
+        if manager is not None:
+            has_open_window = manager.has_open_window(manager.window_key(event))
+        route = route_turn(
+            TurnRouteInput(
+                message_str=event.message_str,
+                messages=tuple(event.get_messages()),
+                is_private=event.is_private_chat(),
+                command_prefixes=self.command_prefixes,
+                llm_access=self._llm_access_for_event(event),
+                catalog=self.command_catalog.snapshot,
+                self_id=str(event.get_self_id()),
+                is_notice_or_request=event.get_extra("onebot_post_type")
+                in {"notice", "request"},
+                has_open_window=has_open_window
+                or bool(event.get_extra("turn_continuation")),
+                is_manager_flush=manager_flush,
+                adapter_preconfigured=bool(event.get_extra("adapter_preconfigured")),
+                ignore_at_all=self.ignore_at_all,
+            )
+        )
+        event.message_str = route.message_str
+        event.set_extra("should_run_command", route.should_run_command)
+        event.set_extra("should_run_llm", route.should_run_llm)
+        event.set_extra("route_kind", route.route_kind)
+        event.set_extra("wake_reasons", set(route.wake_reasons))
+        event.is_wake = (
+            route.should_run_command
+            or route.should_run_llm
+            or route.route_kind in {"passthrough", "turn_flush"}
+        )
+        event.is_at_or_wake_command = route.should_run_command or route.should_run_llm
+        if route.resolution is not None and route.resolution.kind in {
+            CommandResolutionKind.INCOMPLETE_GROUP,
+            CommandResolutionKind.UNKNOWN_SUBCOMMAND,
+        }:
+            try:
+                self._command_engine().resolve(route.message_str)
+            except CommandError as exc:
+                logger.info("Command input rejected: %s", exc.diagnostic.code.value)
+                await event.send(
+                    MessageEventResult()
+                    .message(
+                        render_diagnostic(exc.diagnostic, event.message_str, "zh-CN")
+                    )
+                    .use_markdown(False)
+                )
+                event.stop_event()
+                return
         (
             activated_handlers,
             handlers_parsed_params,
@@ -152,8 +222,15 @@ class WakingCheckStage(Stage):
         )
         event.set_extra("activated_handlers", activated_handlers)
         event.set_extra("handlers_parsed_params", handlers_parsed_params)
-        if not (wake_decision.should_wake or event.is_wake):
+        if route.stop and not activated_handlers:
             event.stop_event()
+        elif activated_handlers:
+            event.is_wake = True
+            wake_reasons = event.get_extra("wake_reasons", default=set())
+            if not isinstance(wake_reasons, set):
+                wake_reasons = set(wake_reasons)
+            wake_reasons.add(WakeReason.PLUGIN_HANDLER.value)
+            event.set_extra("wake_reasons", wake_reasons)
 
     def _apply_unique_session(self, event: AstrMessageEvent) -> None:
         onebot_post_type = event.get_extra("onebot_post_type")
@@ -357,76 +434,72 @@ class WakingCheckStage(Stage):
                 )
 
     async def _detect_wake(self, event: AstrMessageEvent) -> WakeDecision:
-        if event.is_wake:
-            return WakeDecision(True, {WakeReason.ADAPTER_PRECONFIGURED})
-
-        wake_prefixes = self.ctx.astrbot_config["wake_prefix"]
-        messages = event.get_messages()
-        skip_private_wake = bool(event.get_extra("skip_private_wake", False))
-        for wake_prefix in wake_prefixes:
-            if event.message_str.startswith(wake_prefix):
-                if (
-                    not event.is_private_chat()
-                    and messages
-                    and isinstance(messages[0], At)
-                    and str(messages[0].qq) != str(event.get_self_id())
-                    and str(messages[0].qq) != "all"
-                ):
-                    # 如果是群聊，且第一个消息段是 At 消息，但不是 At 机器人或 At 全体成员，则不唤醒
-                    break
-                event.is_at_or_wake_command = True
-                event.is_wake = True
-                event.message_str = event.message_str[len(wake_prefix) :].strip(" \t")
-                return WakeDecision(True, {WakeReason.PREFIX})
-
-        unresolved_replies: list[Reply] = []
-        for message in messages:
-            reply_sender_id = self._reply_sender_id(message)
-            if reason := self._message_wakes_event(message, event, reply_sender_id):
-                event.is_wake = True
-                event.is_at_or_wake_command = True
-                return WakeDecision(True, {reason})
-            if isinstance(message, Reply) and not reply_sender_id:
-                unresolved_replies.append(message)
-        if await self._unresolved_reply_wakes_event(event, unresolved_replies):
-            return WakeDecision(True, {WakeReason.REPLY_TO_BOT})
-        if (
-            event.is_private_chat()
-            and not skip_private_wake
-            and (
-                not self.friend_message_needs_wake_prefix
-                or event.get_platform_name() == "webchat"
+        await self._resolve_reply_senders(event)
+        extras = getattr(event, "_extras", None)
+        if not isinstance(extras, dict):
+            extras = {}
+        manager_flush = is_manager_flush(extras)
+        if not manager_flush:
+            strip_inbound_flush_flags(extras)
+        manager = getattr(
+            getattr(self.ctx, "execution_context", None),
+            "turn_window_manager",
+            None,
+        )
+        has_open_window = bool(event.get_extra("turn_continuation"))
+        if manager is not None:
+            has_open_window = has_open_window or manager.has_open_window(
+                manager.window_key(event)
             )
-        ):
-            event.is_wake = True
-            event.is_at_or_wake_command = True
-            return WakeDecision(True, {WakeReason.PRIVATE_DEFAULT})
-        return WakeDecision(False, set())
+        route = route_turn(
+            TurnRouteInput(
+                message_str=event.message_str,
+                messages=tuple(event.get_messages()),
+                is_private=event.is_private_chat(),
+                command_prefixes=self.command_prefixes,
+                llm_access=self._llm_access_for_event(event),
+                catalog=self.command_catalog.snapshot,
+                self_id=str(event.get_self_id()),
+                is_notice_or_request=event.get_extra("onebot_post_type")
+                in {"notice", "request"},
+                has_open_window=has_open_window,
+                is_manager_flush=manager_flush,
+                adapter_preconfigured=bool(event.get_extra("adapter_preconfigured")),
+                ignore_at_all=self.ignore_at_all,
+            )
+        )
+        event.message_str = route.message_str
+        event.set_extra("should_run_command", route.should_run_command)
+        event.set_extra("should_run_llm", route.should_run_llm)
+        event.set_extra("route_kind", route.route_kind)
+        event.set_extra("wake_reasons", set(route.wake_reasons))
+        event.is_wake = (
+            route.should_run_command
+            or route.should_run_llm
+            or route.route_kind in {"passthrough", "turn_flush"}
+        )
+        event.is_at_or_wake_command = route.should_run_command or route.should_run_llm
+        reasons = set()
+        for value in route.wake_reasons:
+            try:
+                reasons.add(WakeReason(value))
+            except ValueError:
+                continue
+        return WakeDecision(event.is_wake, reasons)
+
+    async def _resolve_reply_senders(self, event: AstrMessageEvent) -> None:
+        unresolved: list[Reply] = []
+        for message in event.get_messages():
+            if isinstance(message, Reply) and not self._reply_sender_id(message):
+                unresolved.append(message)
+        if unresolved:
+            await self._unresolved_reply_wakes_event(event, unresolved)
 
     @staticmethod
     def _reply_sender_id(message: object) -> str:
         if isinstance(message, Reply) and message.sender_id not in (None, "", 0, "0"):
             return str(message.sender_id)
         return ""
-
-    def _message_wakes_event(
-        self, message: object, event: AstrMessageEvent, reply_sender_id: str
-    ) -> WakeReason | None:
-        if (
-            isinstance(message, At)
-            and str(message.qq) == str(event.get_self_id())
-            and self.group_wake_mention_bot
-        ):
-            return WakeReason.MENTION_BOT
-        if isinstance(message, AtAll) and not self.ignore_at_all:
-            return WakeReason.MENTION_ALL
-        if (
-            isinstance(message, Reply)
-            and reply_sender_id == str(event.get_self_id())
-            and self.group_wake_reply_to_bot
-        ):
-            return WakeReason.REPLY_TO_BOT
-        return None
 
     async def _unresolved_reply_wakes_event(
         self, event: AstrMessageEvent, replies: list[Reply]
@@ -439,13 +512,6 @@ class WakingCheckStage(Stage):
             if not resolved_sender_id:
                 continue
             reply.sender_id = resolved_sender_id
-            if (
-                resolved_sender_id == str(event.get_self_id())
-                and self.group_wake_reply_to_bot
-            ):
-                event.is_wake = True
-                event.is_at_or_wake_command = True
-                return True
         return False
 
     async def _collect_activated_handlers(
@@ -474,7 +540,7 @@ class WakingCheckStage(Stage):
         group_gate_cache: dict[int, tuple[bool, bool]] = {}
         catalog_resolution = (
             engine.catalog.resolve(event.message_str)
-            if event.is_at_or_wake_command
+            if event.get_extra("should_run_command")
             else None
         )
         if catalog_resolution and catalog_resolution.kind in {
@@ -501,7 +567,7 @@ class WakingCheckStage(Stage):
         try:
             resolved_command = (
                 engine.resolve(event.message_str)
-                if event.is_at_or_wake_command
+                if event.get_extra("should_run_command")
                 else None
             )
         except CommandError as exc:

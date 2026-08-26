@@ -368,7 +368,7 @@ class TestMainAgentBuildConfig:
         config = module.MainAgentBuildConfig(tool_call_timeout=60)
         assert config.tool_call_timeout == 60
         assert config.tool_schema_mode == "full"
-        assert config.provider_wake_prefix == ""
+        assert config.provider_wake_prefix == ""  # unused; routing owns LLM access
         assert config.streaming_response is True
         assert config.sanitize_context_by_modalities is False
         assert config.kb_agentic_mode is False
@@ -1810,21 +1810,31 @@ class TestBuildMainAgent:
     async def test_build_main_agent_no_wake_prefix(
         self, mock_event, mock_context, mock_provider
     ):
-        """Test building main agent without matching wake prefix."""
+        """Routing owns LLM access; a missing extra prefix no longer blocks build."""
         module = ama
         mock_event.message_str = "hello"
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
 
-        result = await module.build_main_agent(
-            event=mock_event,
-            plugin_context=mock_context,
-            config=module.MainAgentBuildConfig(
-                tool_call_timeout=60, provider_wake_prefix="/"
-            ),
-        )
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60, provider_wake_prefix="/"
+                ),
+            )
 
-        assert result is None
+        assert result is not None
 
     @pytest.mark.asyncio
     async def test_build_main_agent_with_images(

@@ -811,7 +811,10 @@ def test_platform_manager_create_event_falls_back_to_platform_name() -> None:
     manager._find_inst_by_name.assert_called_once_with("telegram")
     platform.create_event.assert_called_once()
     platform.commit_event.assert_called_once()
-    assert platform.commit_event.call_args.args[0].is_wake is False
+    platform.commit_event.call_args.args[0].set_extra.assert_called_once_with(
+        "adapter_preconfigured",
+        False,
+    )
 
 
 def test_platform_discovery_imports_registered_builtin_adapter_once(monkeypatch):

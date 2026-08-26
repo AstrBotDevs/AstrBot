@@ -324,13 +324,6 @@ class ThirdPartyAgentSubStage:
     ) -> AsyncGenerator[None]:
         req: ProviderRequest | None = None
 
-        if provider_wake_prefix and not event.message_str.startswith(
-            provider_wake_prefix
-        ):
-            if event.message_str and event.message_str.strip():
-                return
-            provider_wake_prefix = ""
-
         self.prov_cfg: dict = next(
             (p for p in self.conf["provider"] if p["id"] == self.prov_id),
             {},
@@ -349,7 +342,7 @@ class ThirdPartyAgentSubStage:
         req.session_id = event.unified_msg_origin
         req.prompt = coalesce_prompt_with_json_cards(
             event,
-            event.message_str[len(provider_wake_prefix) :],
+            event.message_str,
         )
         settings = self.conf.get("provider_settings", {})
         build_config = MainAgentBuildConfig(

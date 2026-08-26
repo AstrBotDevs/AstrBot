@@ -86,7 +86,10 @@ class PreProcessStage(Stage):
             cfg.get("enable", False)
             and platform in supported
             and emojis
-            and event.is_at_or_wake_command
+            and (
+                event.get_extra("should_run_command")
+                or event.get_extra("should_run_llm")
+            )
         ):
             return
         try:

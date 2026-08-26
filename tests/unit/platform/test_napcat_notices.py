@@ -59,7 +59,8 @@ async def test_napcat_private_notice_events_do_not_auto_wake_pipeline(monkeypatc
 
     assert queued.is_private_chat() is True
     assert queued.is_at_or_wake_command is False
-    assert queued.is_wake is False
+    assert queued.is_wake is True
+    assert queued.get_extra("route_kind") == "passthrough"
 
 
 @pytest.mark.asyncio
@@ -269,10 +270,15 @@ async def test_napcat_reply_only_wake_resolves_sender_lazily_in_waking_stage(
     await stage.initialize(
         SimpleNamespace(
             astrbot_config={
-                "wake_prefix": ["/"],
+                "command_prefixes": ["/"],
+                "llm_access": {
+                    "prefixes": ["/"],
+                    "private": "open",
+                    "group": "prefix",
+                    "reply_to_bot": True,
+                },
                 "platform_settings": {
                     "no_permission_reply": True,
-                    "friend_message_needs_wake_prefix": False,
                     "ignore_bot_self_message": False,
                     "ignore_at_all": False,
                     "unique_session": False,

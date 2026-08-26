@@ -6,7 +6,7 @@ from .command import CommandFilter
 from .custom_filter import CustomFilter
 
 
-# 指令组受到 wake_prefix 的制约。
+# 指令组受配置的 command_prefixes framing 约束。
 class CommandGroupFilter(HandlerFilter):
     def __init__(
         self,

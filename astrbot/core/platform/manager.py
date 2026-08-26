@@ -110,7 +110,11 @@ class PlatformManager:
                 self.webchat_queue_manager,
             )
         adapter_factory = cast(Callable[[dict, dict, Queue], Platform], adapter_cls)
-        return adapter_factory(platform_config, self.settings, self.event_queue)
+        adapter = adapter_factory(platform_config, self.settings, self.event_queue)
+        typing_signal = getattr(self, "typing_signal", None)
+        if typing_signal is not None:
+            adapter.typing_signal = typing_signal
+        return adapter
 
     def _is_valid_platform_id(self, platform_id: str | None) -> bool:
         if not platform_id:
@@ -641,7 +645,7 @@ class PlatformManager:
             raise ValueError(f"Platform not found: {platform}")
 
         event = inst.create_event(cast(AstrBotMessage, event_message))
-        event.is_wake = is_wake
+        event.set_extra("adapter_preconfigured", bool(is_wake))
         inst.commit_event(event)
 
     def get_all_stats(self) -> dict:

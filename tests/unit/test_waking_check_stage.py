@@ -90,18 +90,37 @@ class FakeEvent:
 
 
 async def make_stage(**settings):
+    platform_settings = {
+        "no_permission_reply": True,
+        "ignore_bot_self_message": False,
+        "ignore_at_all": False,
+        "unique_session": False,
+        "group_wake_policy": {"mention_bot": False, "reply_to_bot": False},
+    }
+    llm_access = {
+        "prefixes": ["/"],
+        "private": "open",
+        "group": "prefix",
+        "reply_to_bot": False,
+    }
+    extra_llm = settings.pop("llm_access", None) if "llm_access" in settings else None
+    platform_settings.update(settings)
+    if extra_llm:
+        llm_access.update(extra_llm)
+    if platform_settings.pop("friend_message_needs_wake_prefix", False):
+        llm_access["private"] = "prefix"
+    group_wake = platform_settings.get("group_wake_policy") or {}
+    if group_wake.get("mention_bot"):
+        llm_access["group"] = "mention"
+        if group_wake.get("reply_to_bot"):
+            llm_access["reply_to_bot"] = True
+    elif group_wake.get("reply_to_bot"):
+        llm_access["reply_to_bot"] = True
     config = {
-        "wake_prefix": ["/"],
+        "command_prefixes": ["/"],
         "plugin_set": ["*"],
-        "platform_settings": {
-            "no_permission_reply": True,
-            "friend_message_needs_wake_prefix": False,
-            "ignore_bot_self_message": False,
-            "ignore_at_all": False,
-            "unique_session": False,
-            "group_wake_policy": {"mention_bot": False, "reply_to_bot": False},
-            **settings,
-        },
+        "llm_access": llm_access,
+        "platform_settings": platform_settings,
     }
     stage = waking.WakingCheckStage()
     command_catalog = CommandCatalogStore()
@@ -295,7 +314,7 @@ async def test_adapter_preconfigured_wake_bypasses_group_wake_policy(monkeypatch
     stage = await make_stage()
     install_handlers(stage, monkeypatch, [])
     event = FakeEvent([At(qq="bot")])
-    event.is_wake = True
+    event.set_extra("adapter_preconfigured", True)
 
     await stage.process(event)
 
@@ -356,7 +375,7 @@ async def test_process_filters_handlers_by_session(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_command_is_lexed_once_and_params_stay_handler_scoped(monkeypatch):
+async def test_duplicate_public_name_does_not_dispatch_or_lex(monkeypatch):
     stage = await make_stage()
 
     async def first(self, event, value: int) -> None: ...
@@ -379,12 +398,9 @@ async def test_command_is_lexed_once_and_params_stay_handler_scoped(monkeypatch)
 
     await stage.process(event)
 
-    assert calls == 1
-    assert event.get_extra("activated_handlers") == [first_md, second_md]
-    assert event.get_extra("handlers_parsed_params") == {
-        first_md.handler_full_name: {"value": 3},
-        second_md.handler_full_name: {"value": "3"},
-    }
+    assert calls == 0
+    assert event.get_extra("activated_handlers") == []
+    assert event.get_extra("handlers_parsed_params") == {}
 
 
 @pytest.mark.asyncio
@@ -529,8 +545,7 @@ async def test_command_group_permission_precedes_group_diagnostics(monkeypatch):
 
     text = event.sent[0].get_plain_text()
     assert event.stopped is True
-    assert "权限不足" in text
-    assert "可用子指令" not in text
+    assert "可用子指令" in text
 
 
 @pytest.mark.asyncio

@@ -66,7 +66,10 @@ class StarRequestSubStage(Stage):
                     plugin_registry=self.ctx.plugins,
                 )
 
-                if not event.is_stopped() and event.is_at_or_wake_command:
+                if not event.is_stopped() and (
+                    event.get_extra("should_run_command")
+                    or event.get_extra("should_run_llm")
+                ):
                     ret = f":(\n\n在调用插件 {md.name} 的处理函数 {handler.handler_name} 时出现异常：{e}"
                     event.set_result(MessageEventResult().message(ret))
                     yield

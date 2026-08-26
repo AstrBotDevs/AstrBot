@@ -209,8 +209,7 @@ def test_wecom_ai_bot_create_event_marks_wake_flags_and_injects_dependencies():
     assert event.api_client is adapter.api_client
     assert event.webhook_client is adapter.webhook_client
     assert event.long_connection_sender is adapter._send_long_connection_respond_msg
-    assert event.is_at_or_wake_command is True
-    assert event.is_wake is True
+    assert event.get_extra("adapter_preconfigured") is True
     assert event.platform_member_role == "member"
     assert event.platform_role_source == "none"
 

@@ -74,6 +74,7 @@ def test_builtin_stage_classes_are_immutable_snapshots() -> None:
         "WakingCheckStage",
         "WhitelistCheckStage",
         "SessionStatusCheckStage",
+        "TurnCoalesceStage",
         "RateLimitStage",
         "ContentSafetyCheckStage",
         "PreProcessStage",

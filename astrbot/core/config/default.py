@@ -94,7 +94,6 @@ DEFAULT_CONFIG = {
         "no_permission_reply": True,
         "empty_mention_waiting": True,
         "empty_mention_waiting_need_reply": True,
-        "friend_message_needs_wake_prefix": False,
         "ignore_bot_self_message": False,
         "ignore_at_all": False,
         "group_wake_policy": {
@@ -112,7 +111,6 @@ DEFAULT_CONFIG = {
         "default_image_caption_provider_id": "",
         "image_caption_prompt": "Please describe the image using Chinese.",
         "provider_pool": ["*"],  # "*" 表示使用所有可用的提供者
-        "wake_prefix": "",
         "web_search": False,
         "websearch_provider": "tavily",
         "websearch_tavily_key": [],
@@ -298,7 +296,21 @@ DEFAULT_CONFIG = {
             "pre_ack_emoji": {"enable": False, "emojis": ["🤔"]},
         },
     },
-    "wake_prefix": ["/"],
+    "command_prefixes": ["/"],
+    "llm_access": {
+        "prefixes": ["/"],
+        "private": "open",
+        "group": "prefix",
+        "reply_to_bot": False,
+    },
+    "inbound_coalesce": {
+        "enable": False,
+        "private": True,
+        "group": False,
+        "wait_seconds": 2.0,
+        "max_total_seconds": 12.0,
+        "max_typing_wait": 30.0,
+    },
     "log_level": "INFO",
     "log_file_enable": False,
     "log_file_path": "logs/astrbot.log",
@@ -1045,10 +1057,6 @@ CONFIG_METADATA_2 = {
                     "empty_mention_waiting_need_reply": {
                         "type": "bool",
                         "hint": "在上面一个配置项中，如果启用了触发等待，启用此项后，机器人会使用 LLM 生成一条回复。否则，将不回复而只是等待。",
-                    },
-                    "friend_message_needs_wake_prefix": {
-                        "type": "bool",
-                        "hint": "启用后，私聊消息需要唤醒前缀才会被处理，同群聊一样。",
                     },
                     "ignore_bot_self_message": {
                         "type": "bool",
@@ -2995,9 +3003,6 @@ CONFIG_METADATA_2 = {
                     "request_max_retries": {
                         "type": "int",
                     },
-                    "wake_prefix": {
-                        "type": "string",
-                    },
                     "web_search": {
                         "type": "bool",
                     },
@@ -3190,9 +3195,41 @@ CONFIG_METADATA_2 = {
     },
     "misc_config_group": {
         "metadata": {
-            "wake_prefix": {
+            "command_prefixes": {
                 "type": "list",
                 "items": {"type": "string"},
+            },
+            "llm_access": {
+                "type": "object",
+                "items": {
+                    "prefixes": {"type": "list", "items": {"type": "string"}},
+                    "private": {
+                        "type": "string",
+                        "options": ["open", "prefix", "off"],
+                    },
+                    "group": {
+                        "type": "string",
+                        "options": [
+                            "open",
+                            "prefix",
+                            "mention",
+                            "prefix_or_mention",
+                            "off",
+                        ],
+                    },
+                    "reply_to_bot": {"type": "bool"},
+                },
+            },
+            "inbound_coalesce": {
+                "type": "object",
+                "items": {
+                    "enable": {"type": "bool"},
+                    "private": {"type": "bool"},
+                    "group": {"type": "bool"},
+                    "wait_seconds": {"type": "float"},
+                    "max_total_seconds": {"type": "float"},
+                    "max_typing_wait": {"type": "float"},
+                },
             },
             "t2i": {
                 "type": "bool",
@@ -3920,11 +3957,6 @@ CONFIG_METADATA_3 = {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
-                    "provider_settings.wake_prefix": {
-                        "description": "LLM 聊天额外唤醒前缀 ",
-                        "type": "string",
-                        "hint": "仅作用于消息平台，不作用于 WebUI。如果唤醒前缀为 /, 额外聊天唤醒前缀为 chat，则需要 /chat 才会触发 LLM 请求",
-                    },
                     "provider_settings.image_compress_enabled": {
                         "description": "启用图片压缩",
                         "type": "bool",
@@ -4034,14 +4066,51 @@ CONFIG_METADATA_3 = {
                         "type": "bool",
                         "hint": "实验性，默认关闭。同群不同发送者可并行生成，但整轮发送仍按群排队；与隔离会话互斥；会关闭同群流式，分段/合并转发可能交错。",
                     },
-                    "wake_prefix": {
-                        "description": "唤醒词",
+                    "command_prefixes": {
+                        "description": "指令前缀",
                         "type": "list",
                         "items": {"type": "string"},
                     },
-                    "platform_settings.friend_message_needs_wake_prefix": {
-                        "description": "私聊消息需要唤醒词",
+                    "llm_access.prefixes": {
+                        "description": "LLM 触发前缀",
+                        "type": "list",
+                        "items": {"type": "string"},
+                    },
+                    "llm_access.private": {
+                        "description": "私聊 LLM 访问",
+                        "type": "string",
+                        "options": ["open", "prefix", "off"],
+                    },
+                    "llm_access.group": {
+                        "description": "群聊 LLM 访问",
+                        "type": "string",
+                        "options": [
+                            "open",
+                            "prefix",
+                            "mention",
+                            "prefix_or_mention",
+                            "off",
+                        ],
+                    },
+                    "llm_access.reply_to_bot": {
+                        "description": "回复机器人时允许 LLM",
                         "type": "bool",
+                    },
+                    "inbound_coalesce.enable": {
+                        "description": "启用入站回合合并",
+                        "type": "bool",
+                    },
+                    "inbound_coalesce.wait_seconds": {
+                        "description": "回合等待秒数",
+                        "type": "float",
+                    },
+                    "inbound_coalesce.max_total_seconds": {
+                        "description": "回合最长等待秒数",
+                        "type": "float",
+                    },
+                    "inbound_coalesce.max_typing_wait": {
+                        "description": "最长输入暂停秒数",
+                        "type": "float",
                     },
                     "platform_settings.reply_prefix": {
                         "description": "回复时的文本前缀",

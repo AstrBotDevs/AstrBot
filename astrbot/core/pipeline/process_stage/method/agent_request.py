@@ -18,15 +18,6 @@ class AgentRequestSubStage(Stage):
             raise RuntimeError("AgentRequestSubStage requires shared preferences")
         self.session_services = SessionServiceManager(ctx.preferences)
 
-        self.bot_wake_prefixs: list[str] = self.config["wake_prefix"]
-        self.prov_wake_prefix: str = self.config["provider_settings"]["wake_prefix"]
-        for bwp in self.bot_wake_prefixs:
-            if self.prov_wake_prefix.startswith(bwp):
-                logger.info(
-                    f"识别 LLM 聊天额外唤醒前缀 {self.prov_wake_prefix} 以机器人唤醒前缀 {bwp} 开头，已自动去除。",
-                )
-                self.prov_wake_prefix = self.prov_wake_prefix[len(bwp) :]
-
         agent_runner_type = self.config["provider_settings"]["agent_runner_type"]
         if agent_runner_type == "local":
             self.agent_sub_stage = InternalAgentSubStage()
@@ -47,8 +38,5 @@ class AgentRequestSubStage(Stage):
             )
             return
 
-        provider_wake_prefix = (
-            "" if event.get_platform_name() == "webchat" else self.prov_wake_prefix
-        )
-        async for resp in self.agent_sub_stage.process(event, provider_wake_prefix):
+        async for resp in self.agent_sub_stage.process(event, ""):
             yield resp

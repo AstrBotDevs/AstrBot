@@ -43,7 +43,7 @@ class Main(star.Star):
             messages = event.get_messages()
             cfg = self.context.config.get(umo=event.unified_msg_origin)
             p_settings = cfg["platform_settings"]
-            wake_prefix = cfg.get("wake_prefix", [])
+            command_prefixes = cfg.get("command_prefixes", [])
             if len(messages) != 1:
                 return
 
@@ -52,12 +52,12 @@ class Main(star.Star):
                 and str(messages[0].qq) == str(event.get_self_id())
                 and p_settings.get("empty_mention_waiting", True)
             )
-            is_wake_prefix_only = (
+            is_command_prefix_only = (
                 isinstance(messages[0], Comp.Plain)
-                and messages[0].text.strip() in wake_prefix
+                and messages[0].text.strip() in command_prefixes
             )
 
-            if not (is_empty_mention or is_wake_prefix_only):
+            if not (is_empty_mention or is_command_prefix_only):
                 return
 
             if p_settings.get("empty_mention_waiting_need_reply", True):

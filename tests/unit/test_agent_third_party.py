@@ -482,16 +482,17 @@ async def test_resolve_persona_custom_error_message_returns_none_on_failure(
 
 
 @pytest.mark.asyncio
-async def test_third_party_process_returns_early_when_wake_prefix_does_not_match():
+async def test_third_party_process_does_not_use_provider_wake_prefix(monkeypatch):
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
     event = FakeInternalProcessEvent(message_str="hello")
+    stage.conf = {"provider": [], "provider_settings": {}}
+    stage.prov_id = ""
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
 
     assert yielded == []
-    assert event.result_history == []
 
 
 @pytest.mark.asyncio
@@ -575,7 +576,7 @@ async def test_third_party_process_returns_early_when_request_has_no_prompt_or_m
     stage.runner_type = "dify"
     stage.ctx = _pipeline_context(SimpleNamespace())
     stage.conf = {"provider": [{"id": "runner-1"}]}
-    event = FakeInternalProcessEvent(message_str="ask", message_components=[])
+    event = FakeInternalProcessEvent(message_str="", message_components=[])
 
     yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
 
@@ -1152,7 +1153,7 @@ async def test_third_party_process_builds_media_only_request_and_uses_non_stream
     record = MagicMock(spec=Record)
     record.convert_to_file_path = AsyncMock(return_value="/tmp/audio.wav")
     event = FakeInternalProcessEvent(
-        message_str="ask",
+        message_str="",
         message_components=[image, record],
     )
     metric_upload = AsyncMock()
@@ -1228,7 +1229,7 @@ async def test_third_party_process_inlines_qq_face_component_and_quote_context(
     stage.ctx = _pipeline_context(SimpleNamespace())
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(
-        message_str="askhello",
+        message_str="hello",
         message_components=[
             Face(id=111),
             Reply(id="quoted-face", chain=[Face(id=111)], message_str=""),
@@ -1290,7 +1291,7 @@ async def test_third_party_process_inlines_qq_face_component_and_quote_context(
         "</Quoted Message>"
     )
     assert request_hook.await_args.args[2] is req
-    assert event.message_str == "askhello"
+    assert event.message_str == "hello"
     assert event.message_obj.message[0].id == 111
 
 

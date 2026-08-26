@@ -1487,8 +1487,24 @@ class NapCatPlatformAdapter(Platform):
 
     def _get_ignored_notice_event_reason(self, event: object) -> str | None:
         if isinstance(event, OneBot11InputStatus):
+            self._signal_typing(event)
             return "ephemeral notify:input_status"
         return None
+
+    def _signal_typing(self, notice: OneBot11InputStatus) -> None:
+        callback = getattr(self, "typing_signal", None)
+        if not callable(callback):
+            return
+        user_id = str(getattr(notice, "user_id", "") or "")
+        group_id = str(getattr(notice, "group_id", "") or "0")
+        platform_id = self.meta().id
+        if group_id not in {"", "0"}:
+            umo = f"{platform_id}:GroupMessage:{group_id}"
+        else:
+            umo = f"{platform_id}:FriendMessage:{user_id}"
+        key = f"{platform_id}:{umo}:{user_id}"
+        event_type = int(getattr(notice, "event_type", 2) or 2)
+        callback(key, event_type)
 
     async def _convert_message_event(
         self,

@@ -34,6 +34,7 @@ from astrbot.core.memory import MemoryManager
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.persona_runtime import PersonaRuntimeManager
 from astrbot.core.pipeline.scheduler import PipelineContext, PipelineScheduler
+from astrbot.core.pipeline.turn_window import TurnWindowManager
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.provider.manager import ProviderManager
@@ -388,6 +389,7 @@ class AstrBotCoreLifecycle:
 
         # 初始化事件队列
         self.event_queue = Queue(maxsize=EVENT_QUEUE_MAXSIZE)
+        self.turn_window_manager = TurnWindowManager(self._enqueue_turn_event)
 
         # 初始化人格管理器
         self.persona_mgr = PersonaManager(
@@ -473,6 +475,12 @@ class AstrBotCoreLifecycle:
         self.execution_context = execution_context
         execution_context.persona_runtime_manager = self.persona_runtime_manager
         execution_context.memory_manager = self.memory_manager
+        execution_context.turn_window_manager = self.turn_window_manager
+        self.platform_manager.typing_signal = self._on_typing_signal
+        self._register_cleanup(
+            "turn window manager",
+            self.turn_window_manager.terminate,
+        )
         self._register_cleanup(
             "follow-up coordinator",
             self.services.follow_up_coordinator.terminate,
@@ -809,6 +817,21 @@ class AstrBotCoreLifecycle:
             mapping[conf_id] = scheduler
         return mapping
 
+    def _on_typing_signal(self, key: str, event_type: int) -> None:
+        """Pause or resume turn flush from an adapter typing notice."""
+        if event_type == 1:
+            self.turn_window_manager.pause_typing(key)
+            return
+        self.turn_window_manager.resume_typing(key)
+
+    def _enqueue_turn_event(self, event) -> bool:
+        """Requeue a manager-built flush event from the waking stage."""
+        try:
+            self.event_queue.put_nowait(event)
+        except Exception:
+            return False
+        return True
+
     async def reload_pipeline_scheduler(self, conf_id: str) -> None:
         """重新加载消息事件流水线调度器.
 
@@ -844,6 +867,9 @@ class AstrBotCoreLifecycle:
         )
         await scheduler.initialize()
         self.pipeline_scheduler_mapping[conf_id] = scheduler
+        manager = getattr(self, "turn_window_manager", None)
+        if manager is not None:
+            manager.discard_all(f"reload pipeline {conf_id}")
 
     async def remove_pipeline_scheduler(self, conf_id: str) -> None:
         """Remove the scheduler associated with a deleted configuration profile."""

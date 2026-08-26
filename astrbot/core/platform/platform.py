@@ -3,7 +3,7 @@ import asyncio
 import logging
 import uuid
 from asyncio import Queue, QueueFull
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -91,6 +91,9 @@ class Platform(abc.ABC):
         self._handler_registry: HandlerRegistry | None = None
         self._plugin_registry: PluginRegistry | None = None
         self._metrics: MetricsSink | None = None
+        # Optional side channel for ephemeral typing notifications. The
+        # lifecycle binds this callback after adapter construction.
+        self.typing_signal: Callable[[str, int], None] | None = None
         # 维护了消息平台的事件队列，EventBus 会从这里取出事件并处理。
         self._event_queue = event_queue
         self.client_self_id = uuid.uuid4().hex

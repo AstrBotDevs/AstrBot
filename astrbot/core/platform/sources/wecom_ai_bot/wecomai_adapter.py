@@ -677,8 +677,7 @@ class WecomAIBotAdapter(Platform):
             only_use_webhook_url_to_send=self.only_use_webhook_url_to_send,
             long_connection_sender=self._send_long_connection_respond_msg,
         )
-        message_event.is_at_or_wake_command = True
-        message_event.is_wake = True
+        message_event.set_extra("adapter_preconfigured", True)
         return message_event
 
     async def handle_msg(self, message: AstrBotMessage) -> None:

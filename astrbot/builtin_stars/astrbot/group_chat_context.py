@@ -340,7 +340,7 @@ class GroupChatContext:
             return False
         if event.get_message_type() != MessageType.GROUP_MESSAGE:
             return False
-        if event.is_at_or_wake_command:
+        if event.get_extra("should_run_llm"):
             return False
         if cfg["ar_whitelist"] and (
             event.unified_msg_origin not in cfg["ar_whitelist"]
