@@ -5,6 +5,8 @@
     "title": "Service Providers",
     "settings": "Settings",
     "addProvider": "Add Provider",
+    "deleteProvider": "Delete provider",
+    "selectHint": "Please select a provider",
     "providerType": "Provider Type",
     "tabs": {
       "all": "All",

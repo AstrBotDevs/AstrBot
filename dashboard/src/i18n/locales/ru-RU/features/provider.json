@@ -5,6 +5,8 @@
         "title": "Сервис-провайдеры",
         "settings": "Настройки",
         "addProvider": "Добавить провайдера",
+        "deleteProvider": "Удалить провайдера",
+        "selectHint": "Выберите провайдера",
         "providerType": "Тип провайдера",
         "tabs": {
             "all": "Все",

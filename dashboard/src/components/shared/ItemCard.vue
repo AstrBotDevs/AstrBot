@@ -63,6 +63,7 @@
     <div class="d-flex justify-end align-center" style="position: absolute; bottom: 16px; right: 16px; opacity: 0.2;" v-if="bglogo">
       <v-img
         :src="bglogo"
+        :class="{ 'provider-icon--monochrome': bglogoMonochrome }"
         contain
         width="120"
         height="120"
@@ -96,6 +97,10 @@ export default {
     bglogo: {
       type: String,
       default: null
+    },
+    bglogoMonochrome: {
+      type: Boolean,
+      default: false
     },
     loading: {
       type: Boolean,
@@ -170,4 +175,5 @@ export default {
 .item-status-indicator.active {
   background-color: #4caf50;
 }
+
 </style>

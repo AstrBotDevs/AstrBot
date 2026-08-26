@@ -2,7 +2,7 @@
   <div class="provider-sources-panel">
     <div class="provider-sources-head">
       <div class="provider-sources-head__copy">
-        <h3 class="provider-sources-title">{{ tm('providerSources.title') }}</h3>
+        <h3 class="provider-sources-title">{{ title || tm('providerSources.title') }}</h3>
       </div>
 
       <div class="provider-sources-controls">
@@ -16,7 +16,7 @@
             variant="solo-filled"
             flat
             hide-details
-            :placeholder="tm('providerSources.selectHint')"
+            :placeholder="selectHint || tm('providerSources.selectHint')"
             @update:model-value="selectSourceByValue"
         >
             <template #selection="{ item }">
@@ -25,6 +25,7 @@
                   <v-img
                     v-if="item.raw.source?.provider"
                     :src="resolveSourceIcon(item.raw.source)"
+                    :class="{ 'provider-icon--monochrome': isMonochromeSourceIcon(item.raw.source) }"
                     alt="provider logo"
                     cover
                   ></v-img>
@@ -44,6 +45,7 @@
                     <v-img
                       v-if="item.raw.source?.provider"
                       :src="resolveSourceIcon(item.raw.source)"
+                      :class="{ 'provider-icon--monochrome': isMonochromeSourceIcon(item.raw.source) }"
                       alt="provider logo"
                       cover
                     ></v-img>
@@ -62,8 +64,8 @@
           variant="text"
           size="small"
           color="error"
-          :aria-label="tm('providerSources.delete')"
-          :title="tm('providerSources.delete')"
+          :aria-label="deleteLabel || tm('providerSources.delete')"
+          :title="deleteLabel || tm('providerSources.delete')"
           @click.stop="deleteSelectedSource"
         ></v-btn>
 
@@ -92,6 +94,7 @@
                 <v-img
                   v-if="sourceType.icon"
                   :src="sourceType.icon"
+                  :class="{ 'provider-icon--monochrome': sourceType.isMonochrome }"
                   alt="provider icon"
                   cover
                 ></v-img>
@@ -121,6 +124,7 @@
           <v-img
             v-if="source?.provider"
             :src="resolveSourceIcon(source)"
+            :class="{ 'provider-icon--monochrome': isMonochromeSourceIcon(source) }"
             alt="provider logo"
             cover
           ></v-img>
@@ -142,8 +146,8 @@
             icon="mdi-delete-outline"
             variant="text"
             size="small"
-            :aria-label="tm('providerSources.delete')"
-            :title="tm('providerSources.delete')"
+            :aria-label="deleteLabel || tm('providerSources.delete')"
+            :title="deleteLabel || tm('providerSources.delete')"
             @click.stop="emitDeleteSource(source)"
           ></v-btn>
         </div>
@@ -152,7 +156,9 @@
 
     <div v-else class="provider-sources-empty">
       <v-icon size="44" color="grey-lighten-1">mdi-api-off</v-icon>
-      <p class="provider-sources-empty__text">{{ tm('providerSources.empty') }}</p>
+      <p class="provider-sources-empty__text">
+        {{ emptyText || tm('providerSources.empty') }}
+      </p>
     </div>
   </div>
 </template>
@@ -174,11 +180,31 @@ const props = defineProps({
     type: Array,
     default: () => []
   },
+  title: {
+    type: String,
+    default: ''
+  },
+  emptyText: {
+    type: String,
+    default: ''
+  },
+  selectHint: {
+    type: String,
+    default: ''
+  },
+  deleteLabel: {
+    type: String,
+    default: ''
+  },
   tm: {
     type: Function,
     required: true
   },
   resolveSourceIcon: {
+    type: Function,
+    required: true
+  },
+  isMonochromeSourceIcon: {
     type: Function,
     required: true
   },
@@ -248,11 +274,13 @@ const selectSourceByValue = (value) => {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .provider-sources-head {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   justify-content: space-between;
   gap: 12px;
   padding: 20px 20px 12px;
@@ -308,6 +336,7 @@ const selectSourceByValue = (value) => {
 .provider-sources-list {
   flex: 1;
   min-height: 0;
+  overscroll-behavior: contain;
   overflow-y: auto;
   padding: 6px 12px 16px;
   display: flex;
