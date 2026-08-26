@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -366,18 +367,23 @@ async def test_execute_handoff_passes_tool_call_timeout_to_tool_loop_agent(
 
 
 @pytest.mark.asyncio
-async def test_background_wakeup_passes_provider_settings_to_main_agent(
+async def test_background_wakeup_passes_history_and_provider_settings_to_main_agent(
     monkeypatch: pytest.MonkeyPatch,
 ):
+    """Test background wakeup keeps structured history and provider settings."""
     provider_settings = {
         "fallback_chat_models": ["fallback-provider"],
         "request_max_retries": 3,
         "stream": True,
     }
+    history = [
+        {"role": "user", "content": "old question"},
+        {"role": "assistant", "content": "old answer"},
+    ]
     captured: dict = {}
 
     async def _fake_get_session_conv(**_kwargs):
-        return SimpleNamespace(history="[]")
+        return SimpleNamespace(history=json.dumps(history))
 
     async def _fake_build_main_agent(**kwargs):
         captured.update(kwargs)
@@ -428,6 +434,10 @@ async def test_background_wakeup_passes_provider_settings_to_main_agent(
     assert config.streaming_response == provider_settings["stream"]
     assert config.provider_settings == provider_settings
     assert config.provider_settings["fallback_chat_models"] == ["fallback-provider"]
+    request = captured["req"]
+    assert "old question" not in request.system_prompt
+    assert "old answer" not in request.system_prompt
+    assert request.contexts == history
 
 
 @pytest.mark.asyncio
