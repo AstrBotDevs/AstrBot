@@ -109,6 +109,7 @@ from astrbot.core.tools.web_search_tools import (
     SerpApiImageSearchTool,
     SerpApiScholarSearchTool,
     SerpApiWebSearchTool,
+    SerplyWebSearchTool,
     TavilyExtractWebPageTool,
     TavilyWebSearchTool,
     normalize_legacy_web_search_config,
@@ -173,6 +174,7 @@ WEB_SEARCH_CITATION_TOOL_NAMES = frozenset(
         "image_search_serpapi",
         "finance_search_serpapi",
         "scholar_search_serpapi",
+        "web_search_serply",
     }
 )
 WEB_SEARCH_CITATION_PROMPT = (
@@ -1320,6 +1322,8 @@ async def _apply_web_search_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiImageSearchTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiFinanceSearchTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerpApiScholarSearchTool))
+    elif provider == "serply":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerplyWebSearchTool))
 
 
 def _apply_web_search_citation_prompt(

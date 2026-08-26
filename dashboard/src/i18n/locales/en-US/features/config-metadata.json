@@ -182,7 +182,8 @@
             "Brave",
             "Firecrawl",
             "Exa",
-            "AnySearch"
+            "AnySearch",
+            "Serply"
           ],
           "subtitles": [
             "Google web, image, scholar, and finance search",
@@ -193,7 +194,8 @@
             "",
             "",
             "",
-            ""
+            "",
+            "Google web, news, and scholar search"
           ]
         },
         "websearch_tavily_key": {
@@ -234,6 +236,10 @@
         "websearch_deepseek_key": {
           "description": "DeepSeek API Key",
           "hint": "Enter your DeepSeek API key. Can use the same key as the chat model (must be entered separately). Supports multiple keys for rotation. Get a key: [https://platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys)"
+        },
+        "websearch_serply_key": {
+          "description": "Serply API Key",
+          "hint": "Multiple keys can be added for rotation. Get a key at https://serply.io"
         }
       }
     },

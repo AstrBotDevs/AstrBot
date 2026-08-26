@@ -150,6 +150,7 @@ DEFAULT_CONFIG = {
         "websearch_anysearch_key": [],
         "websearch_deepseek_key": [],
         "websearch_serpapi_key": [],
+        "websearch_serply_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -3682,6 +3683,7 @@ CONFIG_METADATA_3 = {
                             "firecrawl",
                             "exa",
                             "anysearch",
+                            "serply",
                         ],
                         "labels": [
                             "SerpApi",
@@ -3693,6 +3695,7 @@ CONFIG_METADATA_3 = {
                             "Firecrawl",
                             "Exa",
                             "AnySearch",
+                            "Serply",
                         ],
                         "subtitles": [
                             "Google 网页、图片、学术和财经搜索",
@@ -3704,6 +3707,7 @@ CONFIG_METADATA_3 = {
                             "",
                             "",
                             "",
+                            "Google 网页、新闻和学术搜索",
                         ],
                         "condition": {
                             "provider_settings.web_search": True,
@@ -3803,6 +3807,17 @@ CONFIG_METADATA_3 = {
                         "secret": True,
                         "condition": {
                             "provider_settings.websearch_provider": "serpapi",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_serply_key": {
+                        "description": "Serply API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "可添加多个 Key 进行轮询。Get a key at https://serply.io",
+                        "secret": True,
+                        "condition": {
+                            "provider_settings.websearch_provider": "serply",
                             "provider_settings.web_search": True,
                         },
                     },

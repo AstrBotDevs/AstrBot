@@ -270,7 +270,8 @@
             "Brave",
             "Firecrawl",
             "Exa",
-            "AnySearch"
+            "AnySearch",
+            "Serply"
           ],
           "subtitles": [
             "Google のウェブ・画像・学術・金融検索",
@@ -281,7 +282,8 @@
             "",
             "",
             "",
-            ""
+            "",
+            "Google のウェブ・ニュース・学術検索"
           ]
         },
         "websearch_tavily_key": {
@@ -322,6 +324,10 @@
         "websearch_deepseek_key": {
           "description": "DeepSeek API Key",
           "hint": "DeepSeek API Key を入力します。チャットモデルと同じ Key も使用可能（個別に入力が必要）。複数 Key のローテーションに対応しています。 Key の取得: [https://platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys)"
+        },
+        "websearch_serply_key": {
+          "description": "Serply API Key",
+          "hint": "複数の Key を追加してローテーションできます。Key の取得: https://serply.io"
         }
       }
     },
