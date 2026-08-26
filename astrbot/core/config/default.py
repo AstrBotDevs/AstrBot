@@ -19,11 +19,13 @@ PERSONAL_WECHAT_CONFIG_METADATA = {
         "description": "扫码参数 bot_type",
         "type": "string",
         "hint": "默认值: 3",
+        "invisible": True,
     },
     "weixin_oc_qr_poll_interval": {
         "description": "二维码状态轮询间隔（秒）",
         "type": "int",
         "hint": "每隔多少秒轮询一次二维码状态。",
+        "invisible": True,
     },
     "weixin_oc_long_poll_timeout_ms": {
         "description": "getUpdates 长轮询超时时间（毫秒）",
@@ -40,7 +42,11 @@ PERSONAL_WECHAT_CONFIG_METADATA = {
         "type": "string",
         "hint": "扫码登录成功后会自动写入；高级场景可手动填写。",
         "secret": True,
+        "invisible": True,
     },
+    "weixin_oc_account_id": {"invisible": True},
+    "weixin_oc_sync_buf": {"invisible": True},
+    "weixin_oc_context_tokens": {"invisible": True},
 }
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
