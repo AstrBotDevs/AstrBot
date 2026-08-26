@@ -54,7 +54,7 @@ class RateLimitStage(Stage):
             MessageEventResult: 继续或停止事件处理的结果。
 
         """
-        session_id = event.session_id
+        session_id = event.unified_msg_origin
 
         async with self.locks[session_id]:  # 确保同一会话不会并发修改队列
             now = datetime.now()
