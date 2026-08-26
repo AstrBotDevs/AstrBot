@@ -396,7 +396,13 @@ class ProviderOpenAIOfficial(Provider):
         model = provider_config.get("model", "unknown")
         self.set_model(model)
 
-        self.reasoning_key = "reasoning_content"
+        # Different upstream/relay channels name the thinking field
+        # differently (e.g. reasoning_content for DeepSeek/Moonshot,
+        # reasoning for OpenRouter-style relays), so allow overriding it
+        # via the provider config. See issue #9783.
+        self.reasoning_key = (
+            provider_config.get("reasoning_key") or "reasoning_content"
+        )
 
     def _ollama_disable_thinking_enabled(self) -> bool:
         value = self.provider_config.get("ollama_disable_thinking", False)
@@ -1036,7 +1042,9 @@ class ProviderOpenAIOfficial(Provider):
                 # When all parts were think blocks, fall back to None.
                 message["content"] = new_content or None
                 if reasoning_content_present:
-                    message["reasoning_content"] = reasoning_content
+                    # Emit the thinking history under the configured key so
+                    # channels that expect `reasoning` (issue #9783) accept it.
+                    message[self.reasoning_key] = reasoning_content
 
             if (
                 message.get("role") == "assistant"

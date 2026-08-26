@@ -2141,6 +2141,11 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                         "hint": "关闭 Ollama 思考模式。",
                     },
+                    "reasoning_key": {
+                        "description": "思考内容字段名",
+                        "type": "string",
+                        "hint": "从响应中提取思考内容的字段名。默认 reasoning_content（DeepSeek/Moonshot/阿里百炼等）；OpenRouter 及其兼容中转渠道使用 reasoning。",
+                    },
                     "custom_extra_body": {
                         "description": "自定义请求体参数",
                         "type": "dict",

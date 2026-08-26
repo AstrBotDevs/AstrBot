@@ -5,7 +5,11 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-from openai.types.chat.chat_completion import ChatCompletion
+from openai.types.chat.chat_completion import (
+    ChatCompletion,
+    ChatCompletionMessage,
+    Choice,
+)
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from PIL import Image as PILImage
 
@@ -396,6 +400,71 @@ async def test_groq_payload_drops_reasoning_content_from_assistant_history():
         ]
         assert "reasoning_content" not in assistant_message
         assert "reasoning" not in assistant_message
+    finally:
+        await provider.terminate()
+
+
+def _make_reasoning_completion(
+    thinking_field: str,
+) -> ChatCompletion:
+    kwargs = {thinking_field: "thoughts"}
+    message = ChatCompletionMessage(role="assistant", content="answer", **kwargs)
+    return ChatCompletion(
+        id="chatcmpl-reasoning-test",
+        choices=[Choice(index=0, finish_reason="stop", message=message)],
+        created=1,
+        model="test-model",
+        object="chat.completion",
+    )
+
+
+@pytest.mark.asyncio
+async def test_reasoning_key_configurable_extracts_alias_field():
+    """reasoning_key 可配置：按配置字段名提取思考内容 (#9783)"""
+    provider = _make_provider({"reasoning_key": "reasoning"})
+    try:
+        completion = _make_reasoning_completion("reasoning")
+        assert provider._extract_reasoning_content(completion) == "thoughts"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_reasoning_key_default_keeps_reasoning_content_behavior():
+    """默认 key 仍为 reasoning_content，不取 reasoning 别名（行为不回归）"""
+    provider = _make_provider()
+    try:
+        aliased = _make_reasoning_completion("reasoning")
+        assert provider._extract_reasoning_content(aliased) is None
+        standard = _make_reasoning_completion("reasoning_content")
+        assert provider._extract_reasoning_content(standard) == "thoughts"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_reasoning_key_applied_to_assistant_history_payload():
+    """配置 reasoning_key 后，历史 think 内容写入配置的字段名 (#9783)"""
+    provider = _make_provider({"reasoning_key": "reasoning"})
+    try:
+        payloads = {
+            "model": "test-model",
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "think", "think": "step 1"},
+                        {"type": "text", "text": "final answer"},
+                    ],
+                }
+            ],
+        }
+
+        provider._finally_convert_payload(payloads)
+
+        assistant_message = payloads["messages"][0]
+        assert assistant_message["reasoning"] == "step 1"
+        assert "reasoning_content" not in assistant_message
     finally:
         await provider.terminate()
 
