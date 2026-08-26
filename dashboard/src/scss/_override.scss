@@ -130,3 +130,7 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
     color: rgb(var(--v-theme-primary));
   }
 }
+
+.v-theme--PurpleThemeDark .provider-icon--monochrome {
+  filter: brightness(0) invert(1);
+}

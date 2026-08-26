@@ -55,6 +55,40 @@ export function getProviderIcon(type) {
 }
 
 /**
+ * Determine whether a provider icon is a monochrome SVG.
+ *
+ * These icons need to be inverted in the dark theme because they are loaded as
+ * external images and cannot inherit the page text color.
+ *
+ * @param {string} type - Provider type
+ * @returns {boolean} Whether the icon should be theme-inverted
+ */
+export function isMonochromeProviderIcon(type) {
+  return [
+    'openai',
+    'azure',
+    'xai',
+    'anthropic',
+    'ollama',
+    'deepseek',
+    'modelscope',
+    'zhipu',
+    'siliconflow',
+    'moonshot',
+    'kimi',
+    'kimi-code',
+    'ppio',
+    'lm_studio',
+    'minimax',
+    'minimax-token-plan',
+    'mimo',
+    'xiaomi',
+    'xiaomi-token-plan',
+    'openrouter'
+  ].includes(type);
+}
+
+/**
  * 获取提供商简介
  * @param {Object} template - 模板对象
  * @param {string} name - 提供商名称

@@ -45,7 +45,11 @@
                                         </div>
                                         <div class="provider-card-logo">
                                             <img :src="getProviderIcon(template.provider)"
-                                                v-if="getProviderIcon(template.provider)" class="provider-logo-img">
+                                                v-if="getProviderIcon(template.provider)"
+                                                :class="[
+                                                    'provider-logo-img',
+                                                    { 'provider-icon--monochrome': isMonochromeProviderIcon(template.provider) }
+                                                ]">
                                             <div v-else class="provider-logo-fallback">
                                                 {{ name[0].toUpperCase() }}
                                             </div>
@@ -72,7 +76,7 @@
 
 <script>
 import { useModuleI18n } from '@/i18n/composables';
-import { getProviderIcon, getProviderDescription } from '@/utils/providerUtils';
+import { getProviderIcon, getProviderDescription, isMonochromeProviderIcon } from '@/utils/providerUtils';
 
 const AVAILABLE_PROVIDER_TABS = ['agent_runner', 'speech_to_text', 'text_to_speech', 'embedding', 'rerank'];
 
@@ -151,6 +155,7 @@ export default {
 
         // 从工具函数导入
         getProviderIcon,
+        isMonochromeProviderIcon,
 
         // 获取提供商简介
         getProviderDescription(template, name) {

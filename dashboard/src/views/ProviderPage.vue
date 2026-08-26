@@ -45,6 +45,7 @@
               :available-source-types="availableSourceTypes"
               :tm="tm"
               :resolve-source-icon="resolveSourceIcon"
+              :is-monochrome-source-icon="isMonochromeSourceIcon"
               :get-source-display-name="getSourceDisplayName"
               @add-provider-source="addProviderSource"
               @select-provider-source="selectProviderSource"
@@ -159,6 +160,7 @@
                 enabled-field="enable"
                 :loading="isProviderTesting(provider.id)"
                 :bglogo="getProviderIcon(provider.provider)"
+                :bglogo-monochrome="isMonochromeProviderIcon(provider.provider)"
                 :show-copy-button="true"
                 @toggle-enabled="toggleProviderEnable(provider, !provider.enable)"
                 @delete="deleteProvider"
@@ -350,7 +352,7 @@ import ProviderModelsPanel from '@/components/provider/ProviderModelsPanel.vue'
 import ProviderSourcesPanel from '@/components/provider/ProviderSourcesPanel.vue'
 import { useProviderModelConfigDialog } from '@/composables/useProviderModelConfigDialog'
 import { useProviderSources } from '@/composables/useProviderSources'
-import { getProviderIcon } from '@/utils/providerUtils'
+import { getProviderIcon, isMonochromeProviderIcon } from '@/utils/providerUtils'
 
 const props = defineProps({
   defaultTab: {
@@ -394,6 +396,7 @@ const {
   advancedSourceConfig,
   manualProviderId,
   resolveSourceIcon,
+  isMonochromeSourceIcon,
   getSourceDisplayName,
   supportsImageInput,
   supportsAudioInput,
