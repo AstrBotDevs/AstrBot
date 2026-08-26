@@ -3,6 +3,7 @@ import { ref, computed, watch, useAttrs } from "vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from "@/i18n/composables";
 import UninstallConfirmDialog from "./UninstallConfirmDialog.vue";
+import PluginActivationSwitch from "./PluginActivationSwitch.vue";
 import PluginPlatformChip from "./PluginPlatformChip.vue";
 import StyledMenu from "./StyledMenu.vue";
 import defaultPluginIcon from "/favicon.svg";
@@ -22,6 +23,10 @@ const props = defineProps({
     default: false,
   },
   isPinned: {
+    type: Boolean,
+    default: false,
+  },
+  compact: {
     type: Boolean,
     default: false,
   },
@@ -188,6 +193,7 @@ const openWebui = () => {
   <v-card
     v-bind="attrs"
     class="extension-card mx-auto d-flex flex-column h-100"
+    :class="{ 'extension-card--compact': compact }"
     elevation="0"
     height="100%"
     :ripple="false"
@@ -210,7 +216,7 @@ const openWebui = () => {
   >
     <v-card-text class="extension-card-text">
       <div class="extension-content-row">
-        <div class="extension-image-container">
+        <div v-if="!compact" class="extension-image-container">
           <img
             :src="logoSrc"
             :alt="extension.name"
@@ -222,8 +228,8 @@ const openWebui = () => {
         <div class="extension-meta-group">
           <div class="extension-title-row">
             <p
-              class="text-h3 font-weight-black extension-title"
-              :class="{ 'text-h4': $vuetify.display.xs }"
+              class="font-weight-black extension-title"
+              :class="compact || $vuetify.display.xs ? 'text-h4' : 'text-h3'"
             >
               <v-tooltip
                 location="top"
@@ -241,11 +247,14 @@ const openWebui = () => {
                   >
                 </template>
               </v-tooltip>
-              <span v-if="extension.version" class="extension-version">
+              <span
+                v-if="extension.version && !compact"
+                class="extension-version"
+              >
                 {{ extension.version }}
               </span>
               <v-chip
-                v-if="extension.reserved"
+                v-if="extension.reserved && !compact"
                 color="primary"
                 size="x-small"
                 class="extension-system-chip"
@@ -253,7 +262,7 @@ const openWebui = () => {
                 {{ tm("status.system") }}
               </v-chip>
               <v-chip
-                v-if="!marketMode"
+                v-if="!marketMode && !compact"
                 :color="extension.activated ? 'success' : 'default'"
                 :prepend-icon="
                   extension.activated
@@ -292,40 +301,15 @@ const openWebui = () => {
               </v-tooltip>
             </p>
 
-            <template v-if="!marketMode">
-              <v-tooltip location="left">
-                <template v-slot:activator="{ props: tooltipProps }">
-                  <div class="extension-switch-wrap" @click.stop>
-                    <div
-                      v-bind="tooltipProps"
-                      style="display: inline-flex; align-items: center"
-                    >
-                      <v-switch
-                        :model-value="extension.activated"
-                        :aria-label="
-                          extension.activated
-                            ? tm('buttons.stop')
-                            : tm('buttons.load')
-                        "
-                        color="success"
-                        density="compact"
-                        hide-details
-                        inset
-                        @update:model-value="toggleActivation"
-                      ></v-switch>
-                    </div>
-                  </div>
-                </template>
-                <span>{{
-                  extension.activated
-                    ? tm("buttons.stop")
-                    : tm("buttons.load")
-                }}</span>
-              </v-tooltip>
-            </template>
+            <PluginActivationSwitch
+              v-if="!marketMode && !compact"
+              :activated="extension.activated"
+              tooltip-location="left"
+              @toggle="toggleActivation"
+            />
           </div>
 
-          <div class="extension-chip-group d-flex flex-wrap">
+          <div v-if="!compact" class="extension-chip-group d-flex flex-wrap">
             <v-chip
               v-if="extension?.has_update"
               color="warning"
@@ -359,6 +343,7 @@ const openWebui = () => {
           </div>
 
           <div
+            v-if="!compact"
             class="extension-desc"
             :class="{ 'text-caption': $vuetify.display.xs }"
           >
@@ -370,7 +355,7 @@ const openWebui = () => {
 
     <v-card-actions class="extension-actions">
       <template v-if="!marketMode">
-        <v-spacer></v-spacer>
+        <v-spacer v-if="!compact"></v-spacer>
         <v-tooltip location="top">
           <template v-slot:activator="{ props: pinTooltipProps }">
             <v-btn
@@ -378,7 +363,7 @@ const openWebui = () => {
               :aria-label="isPinned ? tm('buttons.unpin') : tm('buttons.pin')"
               :color="isPinned ? 'primary' : 'secondary'"
               :icon="isPinned ? 'mdi-pin' : 'mdi-pin-outline'"
-              size="small"
+              :size="compact ? 'x-small' : 'small'"
               variant="tonal"
               class="extension-pin-btn"
               @click.stop="togglePin"
@@ -392,7 +377,7 @@ const openWebui = () => {
             <v-btn
               v-bind="actionProps"
               icon="mdi-book-open-page-variant"
-              size="small"
+              :size="compact ? 'x-small' : 'small'"
               variant="tonal"
               color="info"
               @click.stop="viewReadme"
@@ -409,7 +394,7 @@ const openWebui = () => {
             <v-btn
               v-bind="actionProps"
               icon="mdi-monitor-dashboard"
-              size="small"
+              :size="compact ? 'x-small' : 'small'"
               variant="tonal"
               color="primary"
               :disabled="!extension.activated"
@@ -423,7 +408,7 @@ const openWebui = () => {
             <v-btn
               v-bind="actionProps"
               icon="mdi-cog"
-              size="small"
+              :size="compact ? 'x-small' : 'small'"
               variant="tonal"
               color="primary"
               @click.stop="configure"
@@ -436,7 +421,7 @@ const openWebui = () => {
             <v-btn
               v-bind="actionProps"
               icon="mdi-refresh"
-              size="small"
+              :size="compact ? 'x-small' : 'small'"
               variant="tonal"
               color="primary"
               @click.stop="reloadExtension"
@@ -449,7 +434,7 @@ const openWebui = () => {
             <v-btn
               v-bind="menuProps"
               icon="mdi-dots-horizontal"
-              size="small"
+              :size="compact ? 'x-small' : 'small'"
               variant="tonal"
               color="secondary"
               @click.stop
@@ -520,6 +505,12 @@ const openWebui = () => {
             }}</v-list-item-title>
           </v-list-item>
         </StyledMenu>
+
+        <PluginActivationSwitch
+          v-if="compact"
+          :activated="extension.activated"
+          @toggle="toggleActivation"
+        />
       </template>
       <template v-else>
         <v-btn color="primary" size="small" @click.stop="viewReadme">
@@ -620,18 +611,8 @@ const openWebui = () => {
   margin-left: 8px;
 }
 
-.extension-switch-wrap {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-
 .extension-pin-btn {
   flex-shrink: 0;
-}
-
-.extension-switch-wrap :deep(.v-switch) {
-  margin: 0;
 }
 
 @media (max-width: 600px) {
@@ -651,5 +632,31 @@ const openWebui = () => {
   justify-content: flex-end;
   min-height: 42px;
   padding: 0 12px 10px;
+}
+
+.extension-card--compact {
+  align-items: center;
+  flex-direction: row !important;
+  min-height: 44px;
+}
+
+.extension-card--compact .extension-card-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 0 6px 12px;
+}
+
+.extension-card--compact .extension-content-row,
+.extension-card--compact .extension-title-row {
+  align-items: center;
+  gap: 4px;
+}
+
+.extension-card--compact .extension-actions {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: 2px;
+  min-height: 0;
+  padding: 6px 8px 6px 4px;
 }
 </style>
