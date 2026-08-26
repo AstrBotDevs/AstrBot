@@ -103,6 +103,7 @@ from astrbot.core.tools.web_search_tools import (
     ExaWebSearchTool,
     FirecrawlExtractWebPageTool,
     FirecrawlWebSearchTool,
+    SerplyWebSearchTool,
     TavilyExtractWebPageTool,
     TavilyWebSearchTool,
     normalize_legacy_web_search_config,
@@ -162,6 +163,7 @@ WEB_SEARCH_CITATION_TOOL_NAMES = frozenset(
         "web_search_brave",
         "web_search_exa",
         "web_search_anysearch",
+        "web_search_serply",
     }
 )
 WEB_SEARCH_CITATION_PROMPT = (
@@ -1296,6 +1298,8 @@ async def _apply_web_search_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExaGetContentsTool))
     elif provider == "anysearch":
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(AnySearchWebSearchTool))
+    elif provider == "serply":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(SerplyWebSearchTool))
 
 
 def _apply_web_search_citation_prompt(
