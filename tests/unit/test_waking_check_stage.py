@@ -798,3 +798,14 @@ async def test_catalog_snapshot_replacement_handles_rename_alias_and_disable():
     with pytest.raises(waking.CommandError) as caught:
         disabled.resolve("extension add value")
     assert caught.value.diagnostic.code.value == "resolution.unknown_subcommand"
+
+
+def test_qq_official_unique_session_keeps_group_id():
+    event = FakeEvent(
+        [],
+        platform="qq_official",
+        sender_id="user-1",
+        group_id="group-1",
+    )
+
+    assert waking.build_unique_session_id(event) == "user-1_group-1"

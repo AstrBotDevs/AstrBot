@@ -371,6 +371,12 @@ class QQOfficialPlatformAdapter(Platform):
         session: MessageSession,
         message_chain: MessageChain,
     ) -> None:
+        if session.message_type == MessageType.GROUP_MESSAGE:
+            session = MessageSession(
+                session.platform_name,
+                session.message_type,
+                session.session_id.rsplit("_", 1)[-1],
+            )
         message_chains = QQOfficialMessageEvent._split_message_chain_by_media(
             message_chain
         )

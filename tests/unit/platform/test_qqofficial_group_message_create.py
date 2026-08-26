@@ -281,6 +281,40 @@ async def test_ws_group_send_by_session_without_cached_msg_id_omits_msg_id():
 
 
 @pytest.mark.asyncio
+async def test_ws_group_send_by_session_strips_unique_session_suffix():
+    adapter = QQOfficialPlatformAdapter(
+        {
+            "id": "qq-official-test",
+            "appid": "123",
+            "secret": "secret",
+            "enable_group_c2c": True,
+            "enable_guild_direct_message": False,
+        },
+        {},
+        asyncio.Queue(),
+    )
+    adapter.client.api = SimpleNamespace(
+        post_group_message=AsyncMock(return_value={"id": "sent-unique"}),
+        post_message=AsyncMock(),
+    )
+    adapter._session_scene["group-1"] = "group"
+
+    await adapter.send_by_session(
+        MessageSession(
+            "qq_official",
+            MessageType.GROUP_MESSAGE,
+            "user-1_group-1",
+        ),
+        MessageChain(chain=[Plain("unique session hello")]),
+    )
+
+    adapter.client.api.post_group_message.assert_awaited_once()
+    kwargs = adapter.client.api.post_group_message.await_args.kwargs
+    assert kwargs["group_openid"] == "group-1"
+    assert kwargs["content"] == "unique session hello"
+
+
+@pytest.mark.asyncio
 async def test_ws_group_send_by_session_with_cached_msg_id_still_omits_msg_id():
     adapter = QQOfficialPlatformAdapter(
         {
