@@ -588,13 +588,16 @@ class TestRunActiveAgentJob:
     async def test_woke_main_agent_passes_provider_settings(self, cron_manager):
         """Test active cron agent keeps fallback chat model settings."""
         provider_settings = {
-            "tool_call_timeout": 77,
             "fallback_chat_models": ["fallback-provider"],
         }
         ctx = MagicMock()
         ctx.get_config.return_value = {
             "admins_id": [],
             "provider_settings": provider_settings,
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"misc": {"tool_call_timeout": 77}},
+            },
         }
         cron_manager.ctx = ctx
 

@@ -89,6 +89,8 @@ def test_local_legacy_fields_are_fully_migrated():
             "safety_mode_strategy": "system_prompt",
             "max_agent_step": 42,
             "tool_schema_mode": "skills_like",
+            "tool_call_timeout": 88,
+            "sanitize_context_by_modalities": True,
             "context_limit_reached_strategy": "truncate_by_turns",
             "llm_compress_instruction": "Summarize",
             "llm_compress_keep_recent_ratio": 0.2,
@@ -126,16 +128,20 @@ def test_local_legacy_fields_are_fully_migrated():
                 "safety_mode": False,
                 "safety_mode_strategy": "system_prompt",
             },
+            "compression": {
+                "max_turns": 20,
+                "trim_turns": 3,
+                "overflow_strategy": "truncate_by_turns",
+                "instruction": "Summarize",
+                "keep_recent_ratio": 0.2,
+                "provider_id": "compressor",
+                "fallback_max_tokens": 64000,
+            },
             "misc": {
                 "max_steps": 42,
                 "tool_schema_mode": "skills_like",
-                "overflow_strategy": "truncate_by_turns",
-                "compress_instruction": "Summarize",
-                "compress_keep_recent_ratio": 0.2,
-                "compress_provider_id": "compressor",
-                "max_turns": 20,
-                "trim_turns": 3,
-                "fallback_max_tokens": 64000,
+                "tool_call_timeout": 88,
+                "sanitize_context_by_modalities": True,
             },
         },
     }
@@ -146,7 +152,95 @@ def test_local_legacy_fields_are_fully_migrated():
         "request_max_retries",
         "default_personality",
         "max_agent_step",
+        "tool_call_timeout",
+        "sanitize_context_by_modalities",
     }.intersection(config["provider_settings"])
+
+
+def test_local_migration_replaces_default_root_inserted_before_version_bump():
+    config = {
+        "config_version": 2,
+        "provider": [
+            {"id": "chat-main", "provider_type": "chat_completion"},
+            {"id": "compressor", "provider_type": "chat_completion"},
+        ],
+        "provider_settings": {
+            "agent_runner_type": "local",
+            "default_provider_id": "chat-main",
+            "fallback_chat_models": ["chat-backup"],
+            "request_max_retries": 8,
+            "default_personality": "developer",
+            "llm_safety_mode": False,
+            "max_agent_step": 48,
+            "tool_call_timeout": 96,
+            "sanitize_context_by_modalities": True,
+            "context_limit_reached_strategy": "llm_compress",
+            "llm_compress_instruction": "Keep decisions",
+            "llm_compress_provider_id": "compressor",
+            "max_context_length": 24,
+            "dequeue_context_length": 4,
+        },
+        "agent_runner": {
+            "runner_type": "local",
+            "config": get_agent_runner_config_default("local"),
+        },
+    }
+
+    assert prepare_agent_runner_migration(config)
+    finalize_agent_runner_migration(
+        [
+            {
+                "provider": [
+                    {"id": "chat-main", "provider_type": "chat_completion"},
+                    {"id": "chat-backup", "provider_type": "chat_completion"},
+                    {"id": "compressor", "provider_type": "chat_completion"},
+                ]
+            },
+            config,
+        ]
+    )
+
+    assert config["agent_runner"] == {
+        "runner_type": "local",
+        "config": {
+            "model": {
+                "provider_id": "chat-main",
+                "fallback_provider_ids": ["chat-backup"],
+                "request_max_retries": 8,
+            },
+            "persona": {
+                "persona_id": "developer",
+                "safety_mode": False,
+                "safety_mode_strategy": "system_prompt",
+            },
+            "compression": {
+                "max_turns": 24,
+                "trim_turns": 4,
+                "overflow_strategy": "llm_compress",
+                "instruction": "Keep decisions",
+                "keep_recent_ratio": 0.15,
+                "provider_id": "compressor",
+                "fallback_max_tokens": 128000,
+            },
+            "misc": {
+                "max_steps": 48,
+                "tool_schema_mode": "full",
+                "tool_call_timeout": 96,
+                "sanitize_context_by_modalities": True,
+            },
+        },
+    }
+    assert not set(config["provider_settings"]).intersection(
+        {
+            "agent_runner_type",
+            "default_provider_id",
+            "fallback_chat_models",
+            "default_personality",
+            "llm_compress_provider_id",
+            "tool_call_timeout",
+            "sanitize_context_by_modalities",
+        }
+    )
 
 
 def test_missing_local_provider_references_are_removed():
@@ -169,7 +263,7 @@ def test_missing_local_provider_references_are_removed():
     runner_config = config["agent_runner"]["config"]
     assert runner_config["model"]["provider_id"] == ""
     assert runner_config["model"]["fallback_provider_ids"] == ["available"]
-    assert runner_config["misc"]["compress_provider_id"] == ""
+    assert runner_config["compression"]["provider_id"] == ""
 
 
 @pytest.mark.parametrize(
@@ -359,6 +453,7 @@ def test_multiple_profiles_can_copy_one_provider_and_migration_is_idempotent():
 
 def test_new_agent_runner_config_is_authoritative_and_opaque_on_reload(tmp_path):
     config = copy.deepcopy(DEFAULT_CONFIG)
+    config["config_version"] = 2
     config["provider_settings"]["agent_runner_type"] = "coze"
     config["agent_runner"] = {
         "runner_type": "dify",

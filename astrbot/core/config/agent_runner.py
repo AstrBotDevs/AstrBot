@@ -18,16 +18,20 @@ AGENT_RUNNER_CONFIG_DEFAULTS: dict[str, dict[str, Any]] = {
             "safety_mode": True,
             "safety_mode_strategy": "system_prompt",
         },
+        "compression": {
+            "max_turns": -1,
+            "trim_turns": 1,
+            "overflow_strategy": "llm_compress",
+            "instruction": "",
+            "keep_recent_ratio": 0.15,
+            "provider_id": "",
+            "fallback_max_tokens": 128000,
+        },
         "misc": {
             "max_steps": 30,
             "tool_schema_mode": "full",
-            "overflow_strategy": "llm_compress",
-            "compress_instruction": "",
-            "compress_keep_recent_ratio": 0.15,
-            "compress_provider_id": "",
-            "max_turns": -1,
-            "trim_turns": 1,
-            "fallback_max_tokens": 128000,
+            "tool_call_timeout": 120,
+            "sanitize_context_by_modalities": False,
         },
     },
     "dify": {
@@ -171,14 +175,14 @@ def normalize_agent_runner(agent_runner: object) -> dict[str, Any]:
     default = AGENT_RUNNER_CONFIG_DEFAULTS[runner_type]
     normalized = _normalize_value(config, default)
     if runner_type == "local":
-        ratio = normalized["misc"]["compress_keep_recent_ratio"]
-        normalized["misc"]["compress_keep_recent_ratio"] = min(0.3, max(0.0, ratio))
+        ratio = normalized["compression"]["keep_recent_ratio"]
+        normalized["compression"]["keep_recent_ratio"] = min(0.3, max(0.0, ratio))
         if normalized["model"]["request_max_retries"] < 1:
             normalized["model"]["request_max_retries"] = 1
         if normalized["misc"]["max_steps"] < 1:
             normalized["misc"]["max_steps"] = 1
-        if normalized["misc"]["trim_turns"] < 1:
-            normalized["misc"]["trim_turns"] = 1
+        if normalized["compression"]["trim_turns"] < 1:
+            normalized["compression"]["trim_turns"] = 1
     return {"runner_type": runner_type, "config": normalized}
 
 
@@ -240,26 +244,44 @@ def prepare_agent_runner_migration(config: dict[str, Any]) -> bool:
         config["provider_settings"] = provider_settings
         changed = True
 
-    if isinstance(config.get("agent_runner"), dict):
-        for key in (
-            "agent_runner_type",
-            *LEGACY_AGENT_RUNNER_PROVIDER_ID_KEYS.values(),
-            "default_provider_id",
-            "fallback_chat_models",
-            "request_max_retries",
-            "default_personality",
-            "llm_safety_mode",
-            "safety_mode_strategy",
-            "max_agent_step",
-            "tool_schema_mode",
-            "context_limit_reached_strategy",
-            "llm_compress_instruction",
-            "llm_compress_keep_recent_ratio",
-            "llm_compress_provider_id",
-            "max_context_length",
-            "dequeue_context_length",
-            "fallback_max_context_tokens",
-        ):
+    legacy_setting_keys = (
+        "agent_runner_type",
+        *LEGACY_AGENT_RUNNER_PROVIDER_ID_KEYS.values(),
+        "default_provider_id",
+        "fallback_chat_models",
+        "request_max_retries",
+        "default_personality",
+        "llm_safety_mode",
+        "safety_mode_strategy",
+        "max_agent_step",
+        "tool_schema_mode",
+        "tool_call_timeout",
+        "sanitize_context_by_modalities",
+        "context_limit_reached_strategy",
+        "llm_compress_instruction",
+        "llm_compress_keep_recent_ratio",
+        "llm_compress_provider_id",
+        "max_context_length",
+        "dequeue_context_length",
+        "fallback_max_context_tokens",
+    )
+    existing_agent_runner = config.get("agent_runner")
+    config_version = config.get("config_version")
+    legacy_version = not isinstance(config_version, int) or config_version < 3
+    default_local_agent_runner = {
+        "runner_type": "local",
+        "config": get_agent_runner_config_default("local"),
+    }
+    default_root_inserted_before_migration = (
+        legacy_version
+        and existing_agent_runner == default_local_agent_runner
+        and any(key in provider_settings for key in legacy_setting_keys)
+    )
+
+    if isinstance(existing_agent_runner, dict) and not (
+        default_root_inserted_before_migration
+    ):
+        for key in legacy_setting_keys:
             if key in provider_settings:
                 provider_settings.pop(key)
                 changed = True
@@ -300,25 +322,27 @@ def prepare_agent_runner_migration(config: dict[str, Any]) -> bool:
                     "safety_mode_strategy", "system_prompt"
                 ),
             }
-            runner_config["misc"] = {
-                "max_steps": provider_settings.get("max_agent_step", 30),
-                "tool_schema_mode": provider_settings.get("tool_schema_mode", "full"),
+            runner_config["compression"] = {
+                "max_turns": provider_settings.get("max_context_length", -1),
+                "trim_turns": provider_settings.get("dequeue_context_length", 1),
                 "overflow_strategy": provider_settings.get(
                     "context_limit_reached_strategy", "llm_compress"
                 ),
-                "compress_instruction": provider_settings.get(
-                    "llm_compress_instruction", ""
-                ),
-                "compress_keep_recent_ratio": provider_settings.get(
+                "instruction": provider_settings.get("llm_compress_instruction", ""),
+                "keep_recent_ratio": provider_settings.get(
                     "llm_compress_keep_recent_ratio", 0.15
                 ),
-                "compress_provider_id": provider_settings.get(
-                    "llm_compress_provider_id", ""
-                ),
-                "max_turns": provider_settings.get("max_context_length", -1),
-                "trim_turns": provider_settings.get("dequeue_context_length", 1),
+                "provider_id": provider_settings.get("llm_compress_provider_id", ""),
                 "fallback_max_tokens": provider_settings.get(
                     "fallback_max_context_tokens", 128000
+                ),
+            }
+            runner_config["misc"] = {
+                "max_steps": provider_settings.get("max_agent_step", 30),
+                "tool_schema_mode": provider_settings.get("tool_schema_mode", "full"),
+                "tool_call_timeout": provider_settings.get("tool_call_timeout", 120),
+                "sanitize_context_by_modalities": provider_settings.get(
+                    "sanitize_context_by_modalities", False
                 ),
             }
             runner_config = normalize_agent_runner(
@@ -345,25 +369,7 @@ def prepare_agent_runner_migration(config: dict[str, Any]) -> bool:
             "runner_type": runner_type,
             "config": runner_config,
         }
-        for key in (
-            "agent_runner_type",
-            *LEGACY_AGENT_RUNNER_PROVIDER_ID_KEYS.values(),
-            "default_provider_id",
-            "fallback_chat_models",
-            "request_max_retries",
-            "default_personality",
-            "llm_safety_mode",
-            "safety_mode_strategy",
-            "max_agent_step",
-            "tool_schema_mode",
-            "context_limit_reached_strategy",
-            "llm_compress_instruction",
-            "llm_compress_keep_recent_ratio",
-            "llm_compress_provider_id",
-            "max_context_length",
-            "dequeue_context_length",
-            "fallback_max_context_tokens",
-        ):
+        for key in legacy_setting_keys:
             provider_settings.pop(key, None)
         changed = True
 
@@ -449,12 +455,12 @@ def finalize_agent_runner_migration(configs: list[dict[str, Any]]) -> bool:
                 for fallback_id in model_config["fallback_provider_ids"]
                 if fallback_id in available_model_provider_ids
             ]
-            compress_provider_id = migrated_config["misc"]["compress_provider_id"]
+            compress_provider_id = migrated_config["compression"]["provider_id"]
             if (
                 compress_provider_id
                 and compress_provider_id not in available_model_provider_ids
             ):
-                migrated_config["misc"]["compress_provider_id"] = ""
+                migrated_config["compression"]["provider_id"] = ""
 
     filtered_providers = [
         provider

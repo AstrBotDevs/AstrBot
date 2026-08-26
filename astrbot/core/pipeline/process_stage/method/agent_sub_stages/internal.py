@@ -58,13 +58,14 @@ class InternalAgentSubStage(Stage):
         runner_config = conf["agent_runner"]["config"]
         model_config = runner_config["model"]
         persona_config = runner_config["persona"]
+        compression_config = runner_config["compression"]
         misc_config = runner_config["misc"]
         self.streaming_response: bool = settings["streaming_response"]
         self.unsupported_streaming_strategy: str = settings[
             "unsupported_streaming_strategy"
         ]
         self.max_step: int = misc_config.get("max_steps", 30)
-        self.tool_call_timeout: int = settings.get("tool_call_timeout", 60)
+        self.tool_call_timeout: int = misc_config.get("tool_call_timeout", 120)
         self.tool_schema_mode: str = misc_config.get("tool_schema_mode", "full")
         if self.tool_schema_mode not in ("skills_like", "full"):
             logger.warning(
@@ -81,7 +82,7 @@ class InternalAgentSubStage(Stage):
             False,
         )
         self.show_reasoning = settings.get("display_reasoning_text", False)
-        self.sanitize_context_by_modalities: bool = settings.get(
+        self.sanitize_context_by_modalities: bool = misc_config.get(
             "sanitize_context_by_modalities",
             False,
         )
@@ -95,24 +96,24 @@ class InternalAgentSubStage(Stage):
         )
 
         # 上下文管理相关
-        self.context_limit_reached_strategy: str = misc_config.get(
+        self.context_limit_reached_strategy: str = compression_config.get(
             "overflow_strategy", "truncate_by_turns"
         )
-        self.llm_compress_instruction: str = misc_config.get("compress_instruction", "")
-        self.llm_compress_keep_recent_ratio: float = misc_config.get(
-            "compress_keep_recent_ratio", 0.15
+        self.llm_compress_instruction: str = compression_config.get("instruction", "")
+        self.llm_compress_keep_recent_ratio: float = compression_config.get(
+            "keep_recent_ratio", 0.15
         )
-        self.llm_compress_provider_id: str = misc_config.get("compress_provider_id", "")
-        self.max_context_length = misc_config.get("max_turns", -1)
+        self.llm_compress_provider_id: str = compression_config.get("provider_id", "")
+        self.max_context_length = compression_config.get("max_turns", -1)
         self.dequeue_context_length: int = min(
-            max(1, misc_config.get("trim_turns", 1)),
+            max(1, compression_config.get("trim_turns", 1)),
             self.max_context_length - 1
             if self.max_context_length > 0
-            else misc_config.get("trim_turns", 1),
+            else compression_config.get("trim_turns", 1),
         )
         if self.dequeue_context_length <= 0:
             self.dequeue_context_length = 1
-        self.fallback_max_context_tokens: int = misc_config.get(
+        self.fallback_max_context_tokens: int = compression_config.get(
             "fallback_max_tokens", 128000
         )
 

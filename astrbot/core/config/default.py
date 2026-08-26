@@ -126,7 +126,6 @@ DEFAULT_CONFIG = {
         "show_tool_use_status": False,
         "show_tool_call_result": False,
         "buffer_intermediate_messages": False,
-        "sanitize_context_by_modalities": False,
         "max_quoted_fallback_images": 20,
         "quoted_message_parser": {
             "max_component_chain_depth": 4,
@@ -136,7 +135,6 @@ DEFAULT_CONFIG = {
         },
         "unsupported_streaming_strategy": "realtime_segmenting",
         "reachability_check": False,
-        "tool_call_timeout": 120,
         "file_extract": {
             "enable": False,
             "provider": "moonshotai",
@@ -2850,9 +2848,6 @@ CONFIG_METADATA_2 = {
                     "unsupported_streaming_strategy": {
                         "type": "string",
                     },
-                    "tool_call_timeout": {
-                        "type": "int",
-                    },
                     "file_extract": {
                         "type": "object",
                         "items": {
@@ -3749,7 +3744,7 @@ CONFIG_METADATA_3 = {
                 "description": "上下文管理策略",
                 "type": "object",
                 "items": {
-                    "agent_runner.config.misc.max_turns": {
+                    "agent_runner.config.compression.max_turns": {
                         "description": "压缩前最多保留对话轮数",
                         "type": "int",
                         "hint": "普通会话历史超过该轮数后，才会按下方策略进行持久化截断或 LLM 压缩；请求发送前也会先按该值约束上下文。-1 表示不按轮数限制。",
@@ -3757,7 +3752,7 @@ CONFIG_METADATA_3 = {
                             "agent_runner.runner_type": "local",
                         },
                     },
-                    "agent_runner.config.misc.trim_turns": {
+                    "agent_runner.config.compression.trim_turns": {
                         "description": "轮次超限时一次丢弃轮数",
                         "type": "int",
                         "hint": "当超过“压缩前最多保留对话轮数”且无法使用 LLM 压缩时，一次丢弃多少轮旧对话；请求期截断也会复用该值。",
@@ -3765,7 +3760,7 @@ CONFIG_METADATA_3 = {
                             "agent_runner.runner_type": "local",
                         },
                     },
-                    "agent_runner.config.misc.overflow_strategy": {
+                    "agent_runner.config.compression.overflow_strategy": {
                         "description": "历史超限或上下文接近上限时的处理方式",
                         "type": "string",
                         "options": ["truncate_by_turns", "llm_compress"],
@@ -3775,36 +3770,36 @@ CONFIG_METADATA_3 = {
                         },
                         "hint": "普通会话历史仅在超过“压缩前最多保留对话轮数”后执行该策略；请求发送前也会在上下文 token 接近模型窗口时使用同一策略保护本次请求。",
                     },
-                    "agent_runner.config.misc.compress_instruction": {
+                    "agent_runner.config.compression.instruction": {
                         "description": "上下文压缩提示词",
                         "type": "text",
                         "hint": "如果为空则使用默认提示词。",
                         "condition": {
-                            "agent_runner.config.misc.overflow_strategy": "llm_compress",
+                            "agent_runner.config.compression.overflow_strategy": "llm_compress",
                             "agent_runner.runner_type": "local",
                         },
                     },
-                    "agent_runner.config.misc.compress_keep_recent_ratio": {
+                    "agent_runner.config.compression.keep_recent_ratio": {
                         "description": "压缩时保留最近上下文比例",
                         "type": "float",
                         "slider": {"min": 0, "max": 0.3, "step": 0.01},
                         "hint": "按当前上下文 token 数保留最近内容，范围 0-0.3。0.15 表示保留 15%；比例大于 0 时至少保留最后一轮。",
                         "condition": {
-                            "agent_runner.config.misc.overflow_strategy": "llm_compress",
+                            "agent_runner.config.compression.overflow_strategy": "llm_compress",
                             "agent_runner.runner_type": "local",
                         },
                     },
-                    "agent_runner.config.misc.compress_provider_id": {
+                    "agent_runner.config.compression.provider_id": {
                         "description": "用于上下文压缩的模型提供商 ID",
                         "type": "string",
                         "_special": "select_provider",
                         "hint": "留空时使用当前聊天模型进行压缩；如果模型不可用或压缩失败，将回退为“按对话轮数截断”的策略。",
                         "condition": {
-                            "agent_runner.config.misc.overflow_strategy": "llm_compress",
+                            "agent_runner.config.compression.overflow_strategy": "llm_compress",
                             "agent_runner.runner_type": "local",
                         },
                     },
-                    "agent_runner.config.misc.fallback_max_tokens": {
+                    "agent_runner.config.compression.fallback_max_tokens": {
                         "description": "上下文窗口兜底值",
                         "type": "int",
                         "hint": "当 max_context_tokens 为 0 且模型不在内置元数据中时，使用此值作为上下文窗口大小。默认 128000。",
@@ -3886,7 +3881,7 @@ CONFIG_METADATA_3 = {
                             "provider_settings.streaming_response": False,
                         },
                     },
-                    "provider_settings.sanitize_context_by_modalities": {
+                    "agent_runner.config.misc.sanitize_context_by_modalities": {
                         "description": "按模型能力清理历史上下文",
                         "type": "bool",
                         "hint": "开启后，在每次请求 LLM 前会按当前模型提供商中所选择的模型能力删除对话中不支持的图片/工具调用结构（会改变模型看到的历史）",
@@ -3901,7 +3896,7 @@ CONFIG_METADATA_3 = {
                             "agent_runner.runner_type": "local",
                         },
                     },
-                    "provider_settings.tool_call_timeout": {
+                    "agent_runner.config.misc.tool_call_timeout": {
                         "description": "工具调用超时时间（秒）",
                         "type": "int",
                         "condition": {

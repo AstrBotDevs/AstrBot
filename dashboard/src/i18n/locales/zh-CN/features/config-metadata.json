@@ -327,7 +327,7 @@
       "description": "上下文管理策略",
       "agent_runner": {
         "config": {
-          "misc": {
+          "compression": {
             "max_turns": {
               "description": "压缩前最多保留对话轮数",
               "hint": "普通会话历史超过该轮数后，才会按下方策略进行持久化截断或 LLM 压缩；请求发送前也会先按该值约束上下文。-1 表示不按轮数限制。"
@@ -341,15 +341,15 @@
               "labels": ["按对话轮数截断", "由 LLM 压缩上下文"],
               "hint": "普通会话历史仅在超过\"压缩前最多保留对话轮数\"后执行该策略；请求发送前也会在上下文 token 接近模型窗口时使用同一策略保护本次请求。"
             },
-            "compress_instruction": {
+            "instruction": {
               "description": "上下文压缩提示词",
               "hint": "如果为空则使用默认提示词。"
             },
-            "compress_keep_recent_ratio": {
+            "keep_recent_ratio": {
               "description": "压缩时保留最近上下文比例",
               "hint": "按当前上下文 token 数保留最近内容，范围 0-0.3。0.15 表示保留 15%；比例大于 0 时至少保留最后一轮。"
             },
-            "compress_provider_id": {
+            "provider_id": {
               "description": "用于上下文压缩的模型提供商 ID",
               "hint": "留空时使用当前聊天模型进行压缩；如果模型不可用或压缩失败，将回退为\"按对话轮数截断\"的策略。"
             },
@@ -371,6 +371,13 @@
               "description": "工具调用模式",
               "hint": "skills-like 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
               "labels": ["Skills-like（两阶段）", "Full（完整参数）"]
+            },
+            "tool_call_timeout": {
+              "description": "工具调用超时时间(秒)"
+            },
+            "sanitize_context_by_modalities": {
+              "description": "按模型能力清理历史上下文",
+              "hint": "开启后，在每次请求 LLM 前会按当前模型提供商中所选择的模型能力删除对话中不支持的图片/工具调用结构（会改变模型看到的历史）"
             }
           }
         }
@@ -402,10 +409,6 @@
           "description": "合并 Agent 中间消息",
           "hint": "开启后，非流式模式下多步工具调用过程中产生的中间文本将缓冲，待 Agent 完成后合并为一条回复发送。"
         },
-        "sanitize_context_by_modalities": {
-          "description": "按模型能力清理历史上下文",
-          "hint": "开启后，在每次请求 LLM 前会按当前模型提供商中所选择的模型能力删除对话中不支持的图片/工具调用结构（会改变模型看到的历史）"
-        },
         "max_quoted_fallback_images": {
           "description": "转发消息中图片获取上限",
           "hint": "转发消息解析到的图片最多注入数量，超出部分会截断。"
@@ -427,9 +430,6 @@
             "description": "转发消息解析失败告警",
             "hint": "开启后，get_msg/get_forward_msg 全部尝试失败时输出 warning 日志。"
           }
-        },
-        "tool_call_timeout": {
-          "description": "工具调用超时时间(秒)"
         },
         "streaming_response": {
           "description": "流式输出"
