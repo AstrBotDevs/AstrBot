@@ -31,7 +31,6 @@ AGENT_RUNNER_CONFIG_DEFAULTS: dict[str, dict[str, Any]] = {
         },
     },
     "dify": {
-        "persona_id": "default",
         "dify_api_type": "chat",
         "dify_api_key": "",
         "dify_api_base": "https://api.dify.ai/v1",
@@ -42,7 +41,6 @@ AGENT_RUNNER_CONFIG_DEFAULTS: dict[str, dict[str, Any]] = {
         "proxy": "",
     },
     "coze": {
-        "persona_id": "default",
         "coze_api_key": "",
         "bot_id": "",
         "coze_api_base": "https://api.coze.cn",
@@ -51,7 +49,6 @@ AGENT_RUNNER_CONFIG_DEFAULTS: dict[str, dict[str, Any]] = {
         "proxy": "",
     },
     "dashscope": {
-        "persona_id": "default",
         "dashscope_app_type": "agent",
         "dashscope_api_key": "",
         "dashscope_app_id": "",
@@ -65,7 +62,6 @@ AGENT_RUNNER_CONFIG_DEFAULTS: dict[str, dict[str, Any]] = {
         "proxy": "",
     },
     "deerflow": {
-        "persona_id": "default",
         "deerflow_api_base": "http://127.0.0.1:2026",
         "deerflow_api_key": "",
         "deerflow_auth_header": "",
@@ -213,14 +209,12 @@ def _get_provider_runner_type(provider: object) -> str | None:
 def _copy_provider_config(
     runner_type: str,
     provider: dict[str, Any],
-    persona_id: str,
 ) -> dict[str, Any]:
     config = {
         key: copy.deepcopy(value)
         for key, value in provider.items()
         if key not in _LEGACY_PROVIDER_IDENTITY_FIELDS
     }
-    config["persona_id"] = persona_id
     return normalize_agent_runner({"runner_type": runner_type, "config": config})[
         "config"
     ]
@@ -273,10 +267,6 @@ def prepare_agent_runner_migration(config: dict[str, Any]) -> bool:
         runner_type = provider_settings.get("agent_runner_type", "local")
         if runner_type not in AGENT_RUNNER_TYPES:
             runner_type = "local"
-        persona_id = provider_settings.get("default_personality", "default")
-        if not isinstance(persona_id, str) or not persona_id:
-            persona_id = "default"
-
         providers = config.get("provider", [])
         provider_map = {
             provider.get("id"): provider
@@ -290,6 +280,9 @@ def prepare_agent_runner_migration(config: dict[str, Any]) -> bool:
             runner_type = default_provider_runner_type
 
         if runner_type == "local":
+            persona_id = provider_settings.get("default_personality", "default")
+            if not isinstance(persona_id, str) or not persona_id:
+                persona_id = "default"
             runner_config = get_agent_runner_config_default("local")
             runner_config["model"] = {
                 "provider_id": default_provider_id
@@ -342,10 +335,9 @@ def prepare_agent_runner_migration(config: dict[str, Any]) -> bool:
                 provider_id = default_provider_id
             provider = provider_map.get(provider_id)
             if provider and _get_provider_runner_type(provider) == runner_type:
-                runner_config = _copy_provider_config(runner_type, provider, persona_id)
+                runner_config = _copy_provider_config(runner_type, provider)
             else:
                 runner_config = get_agent_runner_config_default(runner_type)
-                runner_config["persona_id"] = persona_id
                 if provider_id:
                     runner_config[_LEGACY_PROVIDER_ID_MARKER] = provider_id
 
@@ -421,27 +413,18 @@ def finalize_agent_runner_migration(configs: list[dict[str, Any]]) -> bool:
             changed = True
         if provider_id:
             provider = provider_map.get(provider_id)
-            persona_id = runner_config.get("persona_id", "default")
             if provider and _get_provider_runner_type(provider) == runner_type:
-                agent_runner["config"] = _copy_provider_config(
-                    runner_type, provider, persona_id
-                )
+                agent_runner["config"] = _copy_provider_config(runner_type, provider)
             else:
                 agent_runner["config"] = get_agent_runner_config_default(runner_type)
-                agent_runner["config"]["persona_id"] = persona_id
             changed = True
         elif default_provider_id:
             provider = provider_map.get(default_provider_id)
             provider_runner_type = _get_provider_runner_type(provider)
             if provider and provider_runner_type:
-                persona_id = runner_config.get("persona", {}).get(
-                    "persona_id", "default"
-                )
                 config["agent_runner"] = {
                     "runner_type": provider_runner_type,
-                    "config": _copy_provider_config(
-                        provider_runner_type, provider, persona_id
-                    ),
+                    "config": _copy_provider_config(provider_runner_type, provider),
                 }
             changed = True
 

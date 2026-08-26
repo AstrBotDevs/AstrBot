@@ -186,11 +186,7 @@ class ThirdPartyAgentSubStage(Stage):
             return await resolve_persona_custom_error_message(
                 event=event,
                 persona_manager=self.ctx.plugin_manager.context.persona_manager,
-                provider_settings={
-                    "default_personality": self.runner_config.get(
-                        "persona_id", "default"
-                    )
-                },
+                provider_settings={"default_personality": "default"},
                 conversation_persona_id=conversation_persona_id,
             )
         except Exception as e:

@@ -24,7 +24,7 @@ async def test_third_party_runner_receives_inline_profile_config(
     runner_class_name: str,
     config_key: str,
 ):
-    inline_config = {"persona_id": "default", config_key: "inline-secret"}
+    inline_config = {config_key: "inline-secret"}
     runner = MagicMock()
     runner.reset = AsyncMock()
     runner.get_final_llm_resp.return_value = LLMResponse(

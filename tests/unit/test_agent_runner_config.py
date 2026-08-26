@@ -28,6 +28,8 @@ def test_agent_runner_defaults_are_isolated_and_normalized(runner_type: str):
         "runner_type": runner_type,
         "config": second,
     }
+    if runner_type != "local":
+        assert "persona_id" not in second
 
 
 def test_switching_runner_type_discards_previous_runner_fields():
@@ -36,6 +38,7 @@ def test_switching_runner_type_discards_previous_runner_fields():
             "runner_type": "dify",
             "config": {
                 "provider_id": "legacy-provider",
+                "persona_id": "legacy-persona",
                 "model": {"provider_id": "chat-model"},
                 "dify_api_key": "secret",
                 "unexpected": True,
@@ -48,6 +51,7 @@ def test_switching_runner_type_discards_previous_runner_fields():
         "dify_api_key": "secret",
     }
     assert "provider_id" not in normalized["config"]
+    assert "persona_id" not in normalized["config"]
     assert "model" not in normalized["config"]
 
 
@@ -227,10 +231,14 @@ def test_third_party_provider_config_is_copied_inline(
     runner_config = config["agent_runner"]["config"]
     assert config["agent_runner"]["runner_type"] == runner_type
     assert runner_config[expected_key] == provider_config[expected_key]
-    assert runner_config["persona_id"] == "operator"
-    assert not {"id", "type", "provider", "provider_type", "enable"}.intersection(
-        runner_config
-    )
+    assert not {
+        "id",
+        "type",
+        "provider",
+        "provider_type",
+        "enable",
+        "persona_id",
+    }.intersection(runner_config)
     assert global_config["provider"] == []
 
 
@@ -248,7 +256,6 @@ def test_missing_third_party_provider_uses_runner_defaults():
     finalize_agent_runner_migration([{"provider": []}, config])
 
     expected = get_agent_runner_config_default("coze")
-    expected["persona_id"] = "operator"
     assert config["agent_runner"] == {
         "runner_type": "coze",
         "config": expected,
@@ -342,6 +349,9 @@ def test_multiple_profiles_can_copy_one_provider_and_migration_is_idempotent():
     assert [
         profile["agent_runner"]["config"]["deerflow_api_key"] for profile in profiles
     ] == ["shared-key", "shared-key"]
+    assert all(
+        "persona_id" not in profile["agent_runner"]["config"] for profile in profiles
+    )
     assert global_config["provider"] == []
     assert not finalize_agent_runner_migration([global_config, *profiles])
     assert [global_config, *profiles] == first_result

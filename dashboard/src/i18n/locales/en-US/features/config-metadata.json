@@ -26,7 +26,6 @@
     "dify_runner": {
       "description": "Dify Configuration",
       "agent_runner": { "config": {
-        "persona_id": { "description": "Persona" },
         "dify_api_type": { "description": "Application Type" },
         "dify_api_key": { "description": "API Key" },
         "dify_api_base": { "description": "API Base URL" },
@@ -40,7 +39,6 @@
     "coze_runner": {
       "description": "Coze Configuration",
       "agent_runner": { "config": {
-        "persona_id": { "description": "Persona" },
         "coze_api_key": { "description": "API Key" },
         "bot_id": { "description": "Bot ID" },
         "coze_api_base": { "description": "API Base URL" },
@@ -52,7 +50,6 @@
     "dashscope_runner": {
       "description": "Alibaba Cloud Bailian Application Configuration",
       "agent_runner": { "config": {
-        "persona_id": { "description": "Persona" },
         "dashscope_app_type": { "description": "Application Type" },
         "dashscope_api_key": { "description": "API Key" },
         "dashscope_app_id": { "description": "Application ID" },
@@ -69,7 +66,6 @@
     "deerflow_runner": {
       "description": "DeerFlow Configuration",
       "agent_runner": { "config": {
-        "persona_id": { "description": "Persona" },
         "deerflow_api_base": { "description": "API Base URL" },
         "deerflow_api_key": { "description": "API Key" },
         "deerflow_auth_header": { "description": "Authorization Header" },

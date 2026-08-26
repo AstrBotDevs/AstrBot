@@ -3118,11 +3118,6 @@ CONFIG_METADATA_3 = {
                     "agent_runner.runner_type": "dify",
                 },
                 "items": {
-                    "agent_runner.config.persona_id": {
-                        "description": "人格",
-                        "type": "string",
-                        "_special": "select_persona",
-                    },
                     "agent_runner.config.dify_api_type": {
                         "description": "应用类型",
                         "type": "string",
@@ -3166,11 +3161,6 @@ CONFIG_METADATA_3 = {
                     "agent_runner.runner_type": "coze",
                 },
                 "items": {
-                    "agent_runner.config.persona_id": {
-                        "description": "人格",
-                        "type": "string",
-                        "_special": "select_persona",
-                    },
                     "agent_runner.config.coze_api_key": {
                         "description": "API Key",
                         "type": "string",
@@ -3205,11 +3195,6 @@ CONFIG_METADATA_3 = {
                     "agent_runner.runner_type": "dashscope",
                 },
                 "items": {
-                    "agent_runner.config.persona_id": {
-                        "description": "人格",
-                        "type": "string",
-                        "_special": "select_persona",
-                    },
                     "agent_runner.config.dashscope_app_type": {
                         "description": "应用类型",
                         "type": "string",
@@ -3259,11 +3244,6 @@ CONFIG_METADATA_3 = {
                     "agent_runner.runner_type": "deerflow",
                 },
                 "items": {
-                    "agent_runner.config.persona_id": {
-                        "description": "人格",
-                        "type": "string",
-                        "_special": "select_persona",
-                    },
                     "agent_runner.config.deerflow_api_base": {
                         "description": "API Base URL",
                         "type": "string",
