@@ -28,22 +28,41 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 ## 顶层结构
 
-| 键                                                | 用途                                                                            |
-| ------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `config_version`                                  | 当前核心配置结构版本，默认 `2`，不要手动降级。                                  |
-| `platform_settings`                               | 所有消息平台共用的收发、白名单、限流和分段回复行为。                            |
-| `provider_sources`                                | API 端点和凭据等 Provider 来源。由“提供商”页面维护。                            |
-| `provider`                                        | 具体聊天、STT、TTS、Embedding、Rerank 等模型实例。                              |
-| `provider_settings`                               | 当前配置档的 Agent、默认模型、Persona、检索、上下文和工具行为。                 |
-| `subagent_orchestrator`                           | 子代理 handoff 编排。                                                           |
-| `provider_stt_settings` / `provider_tts_settings` | 语音转文本和文本转语音默认模型及开关。                                          |
-| `provider_ltm_settings`                           | 旧名称下的群聊上下文、图片转述和主动回复设置；不是 Alkaid 长期记忆的数据开关。  |
-| `content_safety`                                  | 内置关键词和可选外部内容安全检查。                                              |
-| `dashboard`                                       | WebUI 监听、认证、限流和 TLS；账户身份及 TOTP 权威状态由 Dashboard 数据库保存。 |
-| `platform` / `platform_specific`                  | 平台实例，以及 Lark、Telegram、Discord 等平台特异行为。                         |
-| 其他顶层键                                        | 管理员、T2I、代理、日志、时区、插件、知识库、Trace 和指标等。                   |
+| 键                                                | 用途                                                                                         |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `config_version`                                  | 当前核心配置结构版本，默认 `2`，不要手动降级。                                               |
+| `platform_settings`                               | 所有消息平台共用的收发、白名单、限流和分段回复行为。                                         |
+| `provider_sources`                                | API 端点和凭据等 Provider 来源。由“提供商”页面维护。                                         |
+| `provider`                                        | 具体聊天、STT、TTS、Embedding、Rerank 等模型实例。                                           |
+| `provider_settings`                               | 当前配置档的 Agent、默认模型、Persona、检索、上下文和工具行为。                              |
+| `subagent_orchestrator`                           | 子代理 handoff 编排。                                                                        |
+| `provider_stt_settings` / `provider_tts_settings` | 语音转文本和文本转语音默认模型及开关。                                                       |
+| `provider_ltm_settings`                           | 旧名称下的群聊上下文、图片转述和主动回复设置；不是 Alkaid 长期记忆的数据开关。               |
+| `content_safety`                                  | 内置关键词和可选外部内容安全检查。                                                           |
+| `dashboard`                                       | WebUI 监听、认证、限流和 TLS；账户身份及 TOTP 权威状态由 Dashboard 数据库保存。              |
+| `platform` / `platform_specific`                  | 平台实例，以及 Lark、Telegram、Discord 等平台特异行为。                                      |
+| `command_prefixes`                                | 指令头前缀，默认 ["/"]。                                                                     |
+| `llm_access`                                      | 当前配置档的私聊和群聊 LLM 访问策略；默认 `private=open`、`group=prefix`、`prefixes=["/"]`。 |
+| `inbound_coalesce`                                | 可选的连续私聊 LLM 消息有界合并，默认关闭。                                                  |
+| 其他顶层键                                        | 管理员、T2I、代理、日志、时区、插件、知识库、Trace 和指标等。                                |
 
 `provider_sources`、`provider` 和 `platform` 中的对象结构由各类型注册的当前模板决定。不要从旧文档复制对象；在 WebUI 创建后再检查保存结果。模型通过 `provider_source_id` 引用来源，重命名或删除来源时应让 WebUI 同步引用。
+
+## 入站路由
+
+`command_prefixes` 和 `llm_access` 都读取事件实际选中的配置档。`command_prefixes` 只负责指令头，不会与 LLM 前缀自动拼接。`llm_access.prefixes` 的每一项都是用户实际输入的完整字符串，按词边界和最长匹配处理。非空 LLM 前缀会在同一配置档占用其第一个指令根；如果与已启用指令冲突，Dashboard 会拒绝保存。
+
+| 键                                   | 可选值                                                      | 说明                                                                     |
+| ------------------------------------ | ----------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `llm_access.private`                 | `open` / `prefix` / `off`                                   | 私聊始终允许、必须带 LLM 前缀，或不打开新的 LLM 回合；已有续片仍可继续。 |
+| `llm_access.group`                   | `open` / `prefix` / `mention` / `prefix_or_mention` / `off` | 群聊 LLM 的基础门禁；不会从指令前缀推断提及或回复条件。                  |
+| `llm_access.reply_to_bot`            | `true` / `false`                                            | 将“回复机器人”作为群聊 LLM 访问的额外 OR 条件。                          |
+| `inbound_coalesce.enable`            | `true` / `false`                                            | 启用有界回合窗口，默认关闭；当前实现只合并私聊消息。                     |
+| `inbound_coalesce.wait_seconds`      | 数字                                                        | 缓冲回合的静默等待时间。                                                 |
+| `inbound_coalesce.max_total_seconds` | 数字                                                        | 缓冲回合的最长生命周期，不因新片段而延长。                               |
+| `inbound_coalesce.max_typing_wait`   | 数字                                                        | 输入停止通知丢失时，自动恢复暂停回合的保护时间。                         |
+
+路由顺序是先匹配指令，再判断 LLM 访问。命中指令时只执行指令；裸指令组输出帮助；未知子指令输出 Orbit 诊断且不会回落到 LLM。否则事件通过 LLM 门禁或被丢弃。通知和请求属于透传事件。启用合并后，私聊窗口中的后续片段不再要求重复 LLM 前缀；收到指令会丢弃缓冲回合。NapCat 的 `input_status` 只暂停或恢复回合窗口，不会进入消息 Pipeline。
 
 ## `platform_settings`
 
@@ -60,8 +79,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 | `forward_threshold`                         | `1500`                                      | 支持转发消息的平台上，长回复转发阈值。                                                                      |
 | `segmented_reply`                           | 见默认配置                                  | 非流式结果的分段、间隔、清理规则。                                                                          |
 | `path_mapping`                              | `[]`                                        | 将平台事件中的容器路径映射到 AstrBot 可访问路径，格式为 `原路径:目标路径`。该功能仍在收发 pipeline 中使用。 |
-| `group_wake_policy`                         | `{mention_bot: false, reply_to_bot: false}` | 群聊是否因 @ 机器人或回复机器人而唤醒。两项默认都关闭。唤醒前缀由顶层 `wake_prefix` 控制，默认 `["/"]`。    |
-| `friend_message_needs_wake_prefix`          | `false`                                     | 私聊是否也要求唤醒前缀。                                                                                    |
+| `group_wake_policy`                         | `{mention_bot: false, reply_to_bot: false}` | 为展示保留的 schema 字段，不影响运行时路由；群聊 LLM 访问由顶层 `llm_access` 控制。                         |
 | `ignore_bot_self_message` / `ignore_at_all` | `false`                                     | 忽略机器人自身消息或全体提及。                                                                              |
 
 `path_mapping` 示例：
@@ -98,7 +116,6 @@ API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志
 - `default_personality`：默认 Persona ID。
 - `persona_pool`：本配置档可选 Persona，`["*"]` 表示全部。
 - `prompt_prefix`：用户提示词模板，必须保留 `{{prompt}}` 才能包含原始输入。
-- `wake_prefix`：配置档级唤醒前缀；顶层 `wake_prefix` 仍是全局命令/唤醒前缀列表。
 - `identifier`、`group_name_display`、`datetime_system_prompt`：向提示词加入用户 ID、群名或当前时间。
 
 Persona 的选择优先级和权限语义见 [Persona 人格设定](../use/persona)。

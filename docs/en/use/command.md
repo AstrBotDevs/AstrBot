@@ -32,6 +32,12 @@ Quote or escape these characters when they are data:
 
 Declared options can appear before or after positional arguments and support `--name=value`. `--` stops option parsing; for example, `/session name -- -x` passes `-x` as data. Negative numeric positionals such as `-1` do not require the terminator.
 
+## Command and LLM routing
+
+Commands are framed by the profile's `command_prefixes` (default `["/"]`) and matched against the enabled command catalog. Command matching happens before LLM access: a matched command always wins, a bare command group shows its help, and an unknown subcommand returns an Orbit diagnostic instead of becoming an LLM prompt. Non-command messages follow the profile's `llm_access` policy. Its prefixes are complete user-typed strings; they are not automatically combined with `command_prefixes`.
+
+Enabled command paths, aliases, descendants, and non-empty LLM prefix roots share one scoped namespace. A conflict is rejected or excluded from the runtime catalog until it is resolved by a Dashboard rename or takeover. The built-in LLM state commands are `/llm status`, `/llm enable`, and `/llm disable`; `/chat` is not their compatibility alias.
+
 ## Command Reference
 
 ### Help
@@ -47,7 +53,7 @@ Declared options can appear before or after positional arguments and support `--
 - `/bot leave`: Prompt for leave confirmation. Requires `session.manage` and only works in group chats.
 - `/bot leave --confirm` or `/bot leave -c`: Leave the current group after confirmation. Rejected when the platform does not declare `leave_group`.
 
-Both `enable` and `disable` are idempotent. They write the existing `session_enabled` flag for the current UMO, same scope as `/chat`. When the session is disabled, the pipeline stops ordinary events but still allows `/bot status` and `/bot enable` so the session can be turned back on from chat. A bare `/bot` only shows the subcommand tree.
+Both `enable` and `disable` are idempotent. They write the existing `session_enabled` flag for the current UMO, same scope as `/llm`. When the session is disabled, the pipeline stops ordinary events but still allows `/bot status` and `/bot enable` so the session can be turned back on from chat. A bare `/bot` only shows the subcommand tree.
 
 ### Session Information
 
@@ -93,11 +99,11 @@ These commands require `provider.use`. Cross-session assignment also requires `s
 
 ### LLM Chat State
 
-- `/chat status`: Show whether LLM chat is enabled for the current session.
-- `/chat enable`: Enable LLM chat for the current session.
-- `/chat disable`: Disable LLM chat for the current session.
+- `/llm status`: Show whether LLM chat is enabled for the current session.
+- `/llm enable`: Enable LLM chat for the current session.
+- `/llm disable`: Disable LLM chat for the current session.
 
-These commands require `session.manage`. Both `enable` and `disable` are idempotent. `/chat` only controls whether the LLM is enabled; it does not change streaming mode.
+These commands require `session.manage`. Both `enable` and `disable` are idempotent. `/llm` only controls whether the LLM is enabled; it does not change streaming mode.
 
 ### Session streaming
 

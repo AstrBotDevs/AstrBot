@@ -103,7 +103,7 @@ Stop the process, back up `data/`, then delete `data/data_v4.db`, `data/data_v4.
 
 ### The bot does not answer in a group
 
-To avoid flooding group chats, mentioning the bot or replying to the bot does not wake it by default. Send a wake prefix (default `/`), or enable `platform_settings.group_wake_policy.mention_bot` / `reply_to_bot` on the current profile. Also check:
+To avoid flooding group chats, ordinary messages require the configured `llm_access.group` policy (the default is `prefix`, with `llm_access.prefixes` defaulting to `["/"]`). To allow replies to the bot as an additional trigger, enable `llm_access.reply_to_bot`. Also check:
 
 - which profile is bound to the message session;
 - whether the platform and Provider are enabled;

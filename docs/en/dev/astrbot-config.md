@@ -41,26 +41,44 @@ At startup, AstrBot recursively inserts missing current defaults, fixes key orde
 | `content_safety`                                  | Built-in keyword checks and optional external content-safety checks.                                                                   |
 | `dashboard`                                       | WebUI listening, authentication, rate limiting, and TLS; Dashboard account identity and authoritative TOTP state live in its database. |
 | `platform` / `platform_specific`                  | Adapter instances and platform-specific behavior for Lark, Telegram, Discord, and others.                                              |
+| `command_prefixes`                                | Command framing prefixes; default `["/"]`.                                                                                             |
+| `llm_access`                                      | Per-profile LLM access policy for direct and group messages; defaults to `private=open`, `group=prefix`, `prefixes=["/"]`.             |
+| `inbound_coalesce`                                | Optional bounded merging of consecutive private-message LLM fragments; disabled by default.                                            |
 | Other top-level keys                              | Administrators, T2I, proxy, logging, timezone, plugins, knowledge base, Trace, and metrics.                                            |
 
 Object layouts inside `provider_sources`, `provider`, and `platform` come from the currently registered type templates. Do not copy old objects from documentation. Create them in the WebUI and inspect the saved result if necessary. A model references its source through `provider_source_id`; use the WebUI when renaming or deleting a source so references are updated together.
 
+## Inbound routing
+
+`command_prefixes` and `llm_access` are read from the configuration profile selected for the event. `command_prefixes` only frames command headers; it is never combined with an LLM prefix. Each `llm_access.prefixes` entry is the complete string users type, uses token-boundary matching, and follows longest-match semantics. Non-empty LLM prefixes reserve their first command-root token in the same profile, so a prefix that conflicts with an enabled command is rejected by the Dashboard.
+
+| Key                                  | Values                                                      | Meaning                                                                                                           |
+| ------------------------------------ | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `llm_access.private`                 | `open` / `prefix` / `off`                                   | Direct messages always pass, require an LLM prefix, or never open a new LLM turn. A continuation may still pass.  |
+| `llm_access.group`                   | `open` / `prefix` / `mention` / `prefix_or_mention` / `off` | Base gate for group LLM access. Mention and reply behavior are not inferred from command framing.                 |
+| `llm_access.reply_to_bot`            | `true` / `false`                                            | Adds replying to the bot as an explicit OR condition for group LLM access.                                        |
+| `inbound_coalesce.enable`            | `true` / `false`                                            | Enables the bounded turn window; disabled by default. The current implementation coalesces private messages only. |
+| `inbound_coalesce.wait_seconds`      | Number                                                      | Quiet-period delay before a buffered turn is flushed.                                                             |
+| `inbound_coalesce.max_total_seconds` | Number                                                      | Maximum lifetime of a buffered turn, regardless of new fragments.                                                 |
+| `inbound_coalesce.max_typing_wait`   | Number                                                      | Guard that resumes a paused turn when a typing-stop notice is lost.                                               |
+
+Routing checks commands before LLM access. A matched command wins; a bare command group emits help; an unknown subcommand emits the Orbit diagnostic and never falls through to the LLM. Otherwise the event either passes the LLM gate or is dropped. Notices and requests are passthrough events. When coalescing is enabled, later private fragments continue an open turn without repeating the LLM prefix, while a command discards the buffered turn. NapCat `input_status` notices stay out of the message pipeline and only pause or resume the turn window.
+
 ## `platform_settings`
 
-| Key                                         | Default                                     | Meaning                                                                                                                                                          |
-| ------------------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `unique_session`                            | `false`                                     | Split separate sessions for members inside a group.                                                                                                              |
-| `group_sender_concurrency`                  | `false`                                     | Experimental. Different group senders may generate in parallel; a whole turn still sends one-at-a-time per group. Ignored when `unique_session` is on.           |
-| `rate_limit`                                | `60` seconds / `30` messages / `stall`      | Wait (`stall`) or discard (`discard`) when the limit is exceeded.                                                                                                |
-| `enable_id_white_list`                      | `true`                                      | Enable the ID allowlist; the two `wl_ignore_admin_*` fields control administrator bypass.                                                                        |
-| `reply_prefix`                              | `""`                                        | Prefix added to replies.                                                                                                                                         |
-| `reply_with_mention` / `reply_with_quote`   | `false`                                     | Mention the sender or quote the source message when supported by the adapter.                                                                                    |
-| `forward_threshold`                         | `1500`                                      | Long-reply forwarding threshold on platforms that support forwarded messages.                                                                                    |
-| `segmented_reply`                           | See current defaults                        | Non-streaming segmentation, timing, and cleanup rules.                                                                                                           |
-| `path_mapping`                              | `[]`                                        | Map paths from a platform container into paths AstrBot can read, using `source:target`. This is still used by the receive/respond pipeline.                      |
-| `group_wake_policy`                         | `{mention_bot: false, reply_to_bot: false}` | Whether mentioning the bot or replying to the bot wakes a group message. Both default to false. The wake prefix is the top-level `wake_prefix`, default `["/"]`. |
-| `friend_message_needs_wake_prefix`          | `false`                                     | Require a wake prefix in direct messages.                                                                                                                        |
-| `ignore_bot_self_message` / `ignore_at_all` | `false`                                     | Ignore the bot's own messages or mass mentions.                                                                                                                  |
+| Key                                         | Default                                     | Meaning                                                                                                                                                |
+| ------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `unique_session`                            | `false`                                     | Split separate sessions for members inside a group.                                                                                                    |
+| `group_sender_concurrency`                  | `false`                                     | Experimental. Different group senders may generate in parallel; a whole turn still sends one-at-a-time per group. Ignored when `unique_session` is on. |
+| `rate_limit`                                | `60` seconds / `30` messages / `stall`      | Wait (`stall`) or discard (`discard`) when the limit is exceeded.                                                                                      |
+| `enable_id_white_list`                      | `true`                                      | Enable the ID allowlist; the two `wl_ignore_admin_*` fields control administrator bypass.                                                              |
+| `reply_prefix`                              | `""`                                        | Prefix added to replies.                                                                                                                               |
+| `reply_with_mention` / `reply_with_quote`   | `false`                                     | Mention the sender or quote the source message when supported by the adapter.                                                                          |
+| `forward_threshold`                         | `1500`                                      | Long-reply forwarding threshold on platforms that support forwarded messages.                                                                          |
+| `segmented_reply`                           | See current defaults                        | Non-streaming segmentation, timing, and cleanup rules.                                                                                                 |
+| `path_mapping`                              | `[]`                                        | Map paths from a platform container into paths AstrBot can read, using `source:target`. This is still used by the receive/respond pipeline.            |
+| `group_wake_policy`                         | `{mention_bot: false, reply_to_bot: false}` | Retained schema field for display; it has no runtime routing effect. Group LLM access is controlled by top-level `llm_access`.                         |
+| `ignore_bot_self_message` / `ignore_at_all` | `false`                                     | Ignore the bot's own messages or mass mentions.                                                                                                        |
 
 Example path mapping:
 
@@ -96,7 +114,6 @@ API keys are sensitive configuration. Never commit a real `cmd_config.json`, scr
 - `default_personality` selects the default Persona ID.
 - `persona_pool` limits selectable Personas; `["*"]` means all.
 - `prompt_prefix` is the user-prompt template. Keep `{{prompt}}` if the original input must be included.
-- profile-level `wake_prefix` is distinct from the top-level global command/wake-prefix list.
 - `identifier`, `group_name_display`, and `datetime_system_prompt` add user identity, group name, or current time to the prompt.
 
 See [Personas](../use/persona) for selection priority and permission semantics.

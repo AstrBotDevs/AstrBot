@@ -143,17 +143,22 @@ The order in `astrbot/core/pipeline/stage_order.py` is:
 1. `WakingCheckStage`
 2. `WhitelistCheckStage`
 3. `SessionStatusCheckStage`
-4. `RateLimitStage`
-5. `ContentSafetyCheckStage`
-6. `PreProcessStage`
-7. `GroupMessageHistoryStage`
-8. `ProcessStage`
-9. `ResultDecorateStage`
-10. `RespondStage`
+4. `TurnCoalesceStage`
+5. `RateLimitStage`
+6. `ContentSafetyCheckStage`
+7. `PreProcessStage`
+8. `GroupMessageHistoryStage`
+9. `ProcessStage`
+10. `ResultDecorateStage`
+11. `RespondStage`
 
 `GroupMessageHistoryStage` persists inbound group messages other than WebChat before any plugin handles the event, for `GetGroupMessageHistoryTool`. Direct messages and WebChat skip this stage. `ProcessStage` runs plugin handlers and the Agent. `ResultDecorateStage` applies prefixes, segmentation, TTS, local text-to-image rendering, quoting, and related transformations. `RespondStage` uses the platform's unified send API. The scheduler supports both ordinary async stages and async-generator onion middleware; preserve stop-propagation and finalization semantics. `SessionStatusCheckStage` stops events when the session is disabled, except for activated `/bot status` and `/bot enable` so the session can be turned back on from chat.
 
-Group wake behavior is explicit. `platform_settings.group_wake_policy` separately controls whether mentioning or replying to the bot wakes a group message, and both values default to false. `WakingCheckStage` records the actual `wake_reasons` on the event. Built-in command availability is stored per handler in the command database; `disable_builtin_commands` is not migrated, accepted by Dashboard config writes, or read by the Pipeline. Command configs use a stable `command_id` (`{plugin}:{original path}` with spaces as dots). Sync claims live handlers by `handler_full_name` then `command_id` and deletes unmatched rows. `alter_cmd` is read only under `command_id`; Python method names and historical short-name keys are not migrated. Built-in commands ignore persisted names and aliases unless `resolution_strategy` is `manual_rename`. The unused `keep_original_alias` column is dropped in a separate transaction; a drop failure does not block startup.
+Inbound routing is a single decision in `WakingCheckStage`: command, LLM, passthrough, or drop. It writes `should_run_command`, `should_run_llm`, `route_kind`, and the explicit `wake_reasons` set onto the event. Command matching runs before LLM access; a matched command wins, a bare command group emits help, and an unknown subcommand emits the Orbit diagnostic without falling through to the LLM. LLM access is selected from the event's configuration profile through `llm_access`; `command_prefixes` only frames command headers. The derived `is_wake` and `is_at_or_wake_command` attributes are not pipeline gates.
+
+`TurnCoalesceStage` runs after the allow-list and session checks. When enabled, it hands eligible private-message LLM fragments to the lifecycle-owned, bounded `TurnWindowManager` without waiting in the pipeline. The manager merges fragments, pauses on NapCat typing notices, discards a buffered turn when a command arrives, and requeues one signed flush event through rate limiting and the remaining stages. Adapter-supplied flush flags are stripped; only manager-created events can carry `route_kind=turn_flush`. Notice and request events remain passthrough events, so ephemeral `input_status` never becomes an LLM message.
+
+`platform_settings.group_wake_policy` is retained in the schema for display only; group LLM access is controlled by `llm_access.group`, `llm_access.reply_to_bot`, and continuation state. Built-in command availability is stored per handler in the command database; `disable_builtin_commands` is not migrated, accepted by Dashboard config writes, or read by the Pipeline. Command configs use a stable `command_id` (`{plugin}:{original path}` with spaces as dots). Sync claims live handlers by `handler_full_name` then `command_id` and deletes unmatched rows. `alter_cmd` is read only under `command_id`; Python method names and historical short-name keys are not migrated. Built-in commands ignore persisted names and aliases unless `resolution_strategy` is `manual_rename`. The unused `keep_original_alias` column is dropped in a separate transaction; a drop failure does not block startup.
 
 `platform_settings.group_sender_concurrency` is experimental and off by default. When it is on and `unique_session` is off, group LLM locks may split by sender so different members can generate in parallel. A whole turn still sends one-at-a-time per group UMO, and that turn is forced non-streaming. `AssistantHistoryCommitter` merges other senders' complete turns and never resurrects truncated history. Direct messages, WebChat, live mode, cron jobs, and proactive replies keep the original UMO lock.
 
@@ -161,7 +166,7 @@ Group wake behavior is explicit. `platform_settings.group_wake_policy` separatel
 
 Command arguments are handled by the Orbit Command Syntax subsystem under `astrbot/core/command/`. `catalog.py` builds an immutable longest-match index for enabled commands, groups, and aliases at every level. `lexer.py` implements a deterministic POSIX word subset without expansions or operators. `schema.py` compiles handler signatures during registration, `binder.py` handles positionals, options, defaults, and conversion, and `engine.py` provides the resolve, lex, and bind flow.
 
-The plugin manager explicitly owns a `CommandCatalogStore` for each Pipeline configuration. Plugin load, unload, reload, enablement changes, and Dashboard command enablement, rename, or alias updates build a new snapshot and atomically replace the reference. The `WakingCheckStage` hot path only reads the snapshot: it removes the wake prefix, performs longest command-header matching, lexes once after a match, and binds every matching handler independently by `handler_full_name`. A completely unknown root never enters Orbit, so ordinary LLM prompts containing `$`, URLs, or incomplete quotes are not intercepted by command parsing.
+The plugin manager explicitly owns a `CommandCatalogStore` for each Pipeline configuration. Plugin load, unload, reload, enablement changes, and Dashboard command enablement, rename, or alias updates build a new snapshot and atomically replace the reference. The `WakingCheckStage` hot path only reads the snapshot: it removes the configured command prefix, performs longest command-header matching, lexes once after a match, and binds every matching handler independently by `handler_full_name`. A completely unknown root never enters Orbit, so ordinary LLM prompts containing `$`, URLs, or incomplete quotes are not intercepted by command parsing. Enabled command paths, aliases, descendants, and the first token of each non-empty LLM prefix share one scoped namespace; conflicting paths are excluded until a Dashboard rename or takeover leaves one owner. The built-in LLM state group is `/llm` (`status`, `enable`, and `disable`).
 
 Core diagnostics retain only stable error codes, Unicode code-point spans, parameters, and hint codes. The zh-CN/en-US message and source caret are rendered at the presentation boundary. Supported plugin entry points are `astrbot.api.command` and `option`/`GreedyStr` from `astrbot.api.event.filter`; the internal catalog, engine, and handler metadata are not plugin APIs.
 

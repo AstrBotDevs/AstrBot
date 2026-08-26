@@ -143,17 +143,22 @@ Mixin 只通过 `self.get_db()` 拿会话，不直接持有 engine，也不互�
 1. `WakingCheckStage`
 2. `WhitelistCheckStage`
 3. `SessionStatusCheckStage`
-4. `RateLimitStage`
-5. `ContentSafetyCheckStage`
-6. `PreProcessStage`
-7. `GroupMessageHistoryStage`
-8. `ProcessStage`
-9. `ResultDecorateStage`
-10. `RespondStage`
+4. `TurnCoalesceStage`
+5. `RateLimitStage`
+6. `ContentSafetyCheckStage`
+7. `PreProcessStage`
+8. `GroupMessageHistoryStage`
+9. `ProcessStage`
+10. `ResultDecorateStage`
+11. `RespondStage`
 
 `GroupMessageHistoryStage` 在插件处理前持久化非 WebChat 的入站群消息，供 `GetGroupMessageHistoryTool` 使用；私聊和 WebChat 会跳过。`ProcessStage` 负责插件处理与 Agent 调用；`ResultDecorateStage` 处理前缀、分段、TTS、本地文转图、引用等结果装饰；`RespondStage` 统一调用平台发送接口。流水线同时支持普通异步 stage 和用异步生成器实现的洋葱式前后处理，修改时必须保留停止传播和收尾语义。`SessionStatusCheckStage` 在会话关闭时停止事件，但放行已激活的 `/bot status` 和 `/bot enable`，以便从聊天重新打开会话。
 
-群聊唤醒规则是显式配置。`platform_settings.group_wake_policy` 分别控制“提及机器人”和“回复机器人”是否唤醒，默认都关闭；`WakingCheckStage` 会把实际原因写入事件的 `wake_reasons`。内置命令是否可用则按 handler 存储在命令数据库中；`disable_builtin_commands` 不迁移、不接受配置写入，也不被 Pipeline 读取。指令配置以 `command_id`（`{plugin}:{original path}`，空格换成点）为稳定标识；同步时按 `handler_full_name` 再按 `command_id` 认领活 handler，认领失败的行删除。`alter_cmd` 只读取 `command_id` 键，不从 Python 方法名或历史短名迁移。内置指令在 `resolution_strategy` 不是 `manual_rename` 时忽略库中的名字和别名覆盖。未使用的 `keep_original_alias` 列在独立事务中删除，失败不影响启动。
+入站路由在 `WakingCheckStage` 中一次完成：指令、LLM、透传或丢弃。阶段会把 `should_run_command`、`should_run_llm`、`route_kind` 和明确的 `wake_reasons` 集合写入事件。指令匹配优先于 LLM 访问：命中指令时只执行指令，裸指令组输出帮助，未知子指令输出 Orbit 诊断且不会回落到 LLM。LLM 访问从事件所属配置档的 `llm_access` 读取；`command_prefixes` 只负责指令头。派生属性 `is_wake` 和 `is_at_or_wake_command` 不能作为 Pipeline 门禁。
+
+`TurnCoalesceStage` 位于白名单和会话检查之后。启用时，它把符合条件的私聊 LLM 消息片段交给生命周期持有的有界 `TurnWindowManager`，不会在流水线中等待。管理器负责合并片段、根据 NapCat 输入状态暂停、收到指令时丢弃未完成回合，并重新排队一个带签名的 flush 事件，让它经过限流及后续阶段。适配器提供的 flush 标志会被清除，只有管理器创建的事件可以携带 `route_kind=turn_flush`。通知和请求保持透传，因此临时的 `input_status` 不会变成 LLM 消息。
+
+`platform_settings.group_wake_policy` 在 schema 中保留但只用于展示；群聊 LLM 访问由 `llm_access.group`、`llm_access.reply_to_bot` 和续片状态控制。内置命令是否可用则按 handler 存储在命令数据库中；`disable_builtin_commands` 不迁移、不接受配置写入，也不被 Pipeline 读取。指令配置以 `command_id`（`{plugin}:{original path}`，空格换成点）为稳定标识；同步时按 `handler_full_name` 再按 `command_id` 认领活 handler，认领失败的行删除。`alter_cmd` 只读取 `command_id` 键，不从 Python 方法名或历史短名迁移。内置指令在 `resolution_strategy` 不是 `manual_rename` 时忽略库中的名字和别名覆盖。未使用的 `keep_original_alias` 列在独立事务中删除，失败不影响启动。
 
 `platform_settings.group_sender_concurrency` 是实验性开关，默认关闭。启用且未开 `unique_session` 时，群聊 LLM 锁可按发送者拆分，不同群友可并行生成；整轮出站仍按群 UMO 排队，本轮强制非流式。对话历史在 `AssistantHistoryCommitter` 内合并并发完整轮次，不复活已截断历史。私聊、WebChat、live、定时任务和主动回复保持原 UMO 串行。
 
@@ -161,7 +166,7 @@ Mixin 只通过 `self.get_db()` 拿会话，不直接持有 engine，也不互�
 
 指令参数由 `astrbot/core/command/` 下的 Orbit Command Syntax 子系统处理。`catalog.py` 为已启用指令、指令组和各级别名建立不可变最长匹配索引；`lexer.py` 实现不执行 expansion 或 operator 的确定性 POSIX word 子集；`schema.py` 在 handler 注册期编译签名；`binder.py` 负责位置参数、option、默认值和类型转换；`engine.py` 统一执行 resolve、lex 和 bind。
 
-插件管理器按 Pipeline 配置显式拥有 `CommandCatalogStore`。插件加载、卸载、重载、启禁，以及 Dashboard 中的指令启禁、重命名和别名修改都会构建新 snapshot 并原子替换引用。`WakingCheckStage` 的消息热路径只读取 snapshot：先完成 wake prefix 移除和最长指令头匹配，命中后只 lex 一次，再按 `handler_full_name` 分别绑定所有匹配 handler。完全未知根指令不会进入 Orbit，因此带 `$`、URL 或不完整引号的普通 LLM prompt 不会被指令解析器拦截。
+插件管理器按 Pipeline 配置显式拥有 `CommandCatalogStore`。插件加载、卸载、重载、启禁，以及 Dashboard 中的指令启禁、重命名和别名修改都会构建新 snapshot 并原子替换引用。`WakingCheckStage` 的消息热路径只读取 snapshot：先完成配置的指令前缀移除和最长指令头匹配，命中后只 lex 一次，再按 `handler_full_name` 分别绑定所有匹配 handler。完全未知根指令不会进入 Orbit，因此带 `$`、URL 或不完整引号的普通 LLM prompt 不会被指令解析器拦截。已启用的指令路径、别名、子路径和每个非空 LLM 前缀的第一个 token 共享同一作用域命名空间；冲突路径会从 catalog 排除，直到 Dashboard 重命名或接管后只剩一个所有者。内置 LLM 状态组为 `/llm`（`status`、`enable`、`disable`）。
 
 核心结构化诊断只保存稳定错误码、Unicode code-point span、参数和 hint code；zh-CN/en-US 文本及源码 caret 在展示边界渲染。插件公开入口是 `astrbot.api.command` 以及 `astrbot.api.event.filter` 中的 `option`、`GreedyStr`，内部 catalog、engine 和 handler metadata 不属于插件 API。
 

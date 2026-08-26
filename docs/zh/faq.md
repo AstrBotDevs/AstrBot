@@ -103,7 +103,7 @@ uv run python scripts/sync_dashboard_dist.py
 
 ### 群聊中机器人不回复
 
-为避免群消息泛滥，默认不会因 @ 机器人或回复机器人而唤醒。需要发送唤醒前缀（默认 `/`），或在当前配置档打开 `platform_settings.group_wake_policy.mention_bot` / `reply_to_bot`。同时检查：
+为避免群消息泛滥，普通消息需要满足配置档的 `llm_access.group` 策略（默认是 `prefix`，`llm_access.prefixes` 默认值为 `["/"]`）。如需把“回复机器人”作为额外触发条件，请启用 `llm_access.reply_to_bot`。同时检查：
 
 - 当前配置档是否绑定到该消息会话；
 - 平台和 Provider 是否启用；

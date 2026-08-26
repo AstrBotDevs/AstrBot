@@ -32,6 +32,12 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 
 已声明的 option 可以位于位置参数前后，支持 `--name=value`。`--` 会终止 option 解析，例如 `/session name -- -x` 会把 `-x` 当作普通参数。`-1` 等负数可以直接用于数值位置参数。
 
+## 指令与 LLM 路由
+
+指令由配置档的 `command_prefixes`（默认 `["/"]`）标记，并在已启用的指令 catalog 中匹配。路由总是先匹配指令，再判断 LLM 访问：命中指令时只执行指令，裸指令组显示帮助，未知子指令返回 Orbit 诊断，不会被当作 LLM 提示词。非指令消息遵循当前配置档的 `llm_access` 策略；其中的前缀是用户实际输入的完整字符串，不会与 `command_prefixes` 自动拼接。
+
+已启用的指令路径、别名、子路径和非空 LLM 前缀根共享同一作用域命名空间。发生冲突时，路径会被拒绝或从运行时 catalog 排除，直到通过 Dashboard 重命名或接管解决。内置 LLM 状态指令是 `/llm status`、`/llm enable` 和 `/llm disable`；`/chat` 不是它们的兼容别名。
+
 ## 指令列表
 
 ### 帮助
@@ -47,7 +53,7 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 - `/bot leave`：提示退群确认。需要 `session.manage`，且只能在群聊中使用。
 - `/bot leave --confirm` 或 `/bot leave -c`：确认后退出当前群。当前平台未声明 `leave_group` 时会拒绝。
 
-`enable` 和 `disable` 都是幂等操作，写入已有的 `session_enabled`，作用范围是当前 UMO（与 `/chat` 相同）。会话关闭后，流水线会停止普通事件，但仍放行 `/bot status` 和 `/bot enable`，以便从聊天重新打开。裸 `/bot` 只显示子指令树。
+`enable` 和 `disable` 都是幂等操作，写入已有的 `session_enabled`，作用范围是当前 UMO（与 `/llm` 相同）。会话关闭后，流水线会停止普通事件，但仍放行 `/bot status` 和 `/bot enable`，以便从聊天重新打开。裸 `/bot` 只显示子指令树。
 
 ### 会话信息
 
@@ -93,11 +99,11 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 
 ### LLM 聊天状态
 
-- `/chat status`：显示当前会话是否启用 LLM 聊天。
-- `/chat enable`：启用当前会话的 LLM 聊天。
-- `/chat disable`：停用当前会话的 LLM 聊天。
+- `/llm status`：显示当前会话是否启用 LLM 聊天。
+- `/llm enable`：启用当前会话的 LLM 聊天。
+- `/llm disable`：停用当前会话的 LLM 聊天。
 
-这些指令需要 `session.manage`。`enable` 和 `disable` 都是幂等操作。`/chat` 只控制是否启用 LLM，与流式模式无关。
+这些指令需要 `session.manage`。`enable` 和 `disable` 都是幂等操作。`/llm` 只控制是否启用 LLM，与流式模式无关。
 
 ### 会话流式输出
 
