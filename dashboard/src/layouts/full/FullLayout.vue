@@ -21,6 +21,10 @@ const routerLoadingStore = useRouterLoadingStore();
 const isCurrentChatRoute = computed(
   () => route.path === "/chat" || route.path.startsWith("/chat/"),
 );
+const isProviderPageRoute = computed(() => route.path === "/providers");
+const isViewportLockedRoute = computed(
+  () => isCurrentChatRoute.value || isProviderPageRoute.value,
+);
 const isFullScreenRoute = computed(() => isCurrentChatRoute.value);
 const shouldMountChat = ref(isCurrentChatRoute.value);
 
@@ -106,25 +110,32 @@ onMounted(() => {
       <v-main
         :class="{ 'chat-main': isCurrentChatRoute }"
         :style="{
-          height: isCurrentChatRoute ? '100vh' : undefined,
-          overflow: isCurrentChatRoute ? 'hidden' : undefined,
+          height: isViewportLockedRoute ? '100vh' : undefined,
+          overflow: isViewportLockedRoute ? 'hidden' : undefined,
         }"
       >
         <v-container
           fluid
           class="page-wrapper"
-          :class="{ 'chat-mode-container': isCurrentChatRoute }"
+          :class="{
+            'chat-mode-container': isCurrentChatRoute,
+            'viewport-locked-container': isProviderPageRoute,
+          }"
           :style="{
-            height: isFullScreenRoute ? '100%' : 'calc(100% - 8px)',
+            height:
+              isFullScreenRoute || isProviderPageRoute
+                ? '100%'
+                : 'calc(100% - 8px)',
             padding: isFullScreenRoute ? '0' : undefined,
-            minHeight: isFullScreenRoute ? 'unset' : undefined,
+            minHeight:
+              isFullScreenRoute || isProviderPageRoute ? 'unset' : undefined,
           }"
         >
           <div
             :style="{
               height: '100%',
               width: '100%',
-              overflow: isCurrentChatRoute ? 'hidden' : undefined,
+              overflow: isViewportLockedRoute ? 'hidden' : undefined,
             }"
           >
             <div
@@ -150,6 +161,12 @@ onMounted(() => {
 
 <style scoped>
 .chat-mode-container {
+  min-height: unset !important;
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
+.viewport-locked-container {
   min-height: unset !important;
   height: 100% !important;
   overflow: hidden !important;
