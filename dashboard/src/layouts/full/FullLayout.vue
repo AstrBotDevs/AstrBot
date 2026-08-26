@@ -25,8 +25,12 @@ const isPluginPageRoute = computed(
   () => route.path.startsWith("/plugin-page/"),
 );
 const isProviderPageRoute = computed(() => route.path === "/providers");
+const isPlatformPageRoute = computed(() => route.path === "/platforms");
 const isViewportLockedRoute = computed(
-  () => isCurrentChatRoute.value || isProviderPageRoute.value,
+  () =>
+    isCurrentChatRoute.value ||
+    isProviderPageRoute.value ||
+    isPlatformPageRoute.value,
 );
 const isFullScreenRoute = computed(
   () => isCurrentChatRoute.value || isPluginPageRoute.value,
@@ -124,16 +128,19 @@ onMounted(() => {
           class="page-wrapper"
           :class="{
             'chat-mode-container': isCurrentChatRoute,
-            'viewport-locked-container': isProviderPageRoute,
+            'viewport-locked-container':
+              isProviderPageRoute || isPlatformPageRoute,
           }"
           :style="{
             height:
-              isFullScreenRoute || isProviderPageRoute
+              isFullScreenRoute || isProviderPageRoute || isPlatformPageRoute
                 ? '100%'
                 : 'calc(100% - 8px)',
             padding: isFullScreenRoute ? '0' : undefined,
             minHeight:
-              isFullScreenRoute || isProviderPageRoute ? 'unset' : undefined,
+              isFullScreenRoute || isProviderPageRoute || isPlatformPageRoute
+                ? 'unset'
+                : undefined,
           }"
         >
           <div

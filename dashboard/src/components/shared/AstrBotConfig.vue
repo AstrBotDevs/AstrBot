@@ -188,7 +188,8 @@ function hasVisibleItemsAfter(items, currentIndex) {
 <template>
   <div class="config-section" v-if="iterable && metadata[metadataKey]?.type === 'object'">
     <v-list-item-title class="config-title">
-      {{ resolveConfigText(currentConfigPath, 'description', metadata[metadataKey]?.description) }} <span class="metadata-key">({{ metadataKey }})</span>
+      {{ resolveConfigText(currentConfigPath, 'description', metadata[metadataKey]?.description) }}
+      <span v-if="metadata[metadataKey]?.show_key" class="metadata-key">({{ metadataKey }})</span>
     </v-list-item-title>
     <v-list-item-subtitle class="config-hint">
       <span v-if="metadata[metadataKey]?.obvious_hint && metadata[metadataKey]?.hint" class="important-hint">‼️</span>
@@ -237,7 +238,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
               <v-list-item-title class="config-title">
                 <span v-if="metadata[metadataKey].items[key]?.description">
                   {{ resolveConfigText(getItemPath(key), 'description', metadata[metadataKey].items[key]?.description) }}
-                  <span class="property-key">({{ key }})</span>
+                  <span v-if="metadata[metadataKey].items[key]?.show_key" class="property-key">({{ key }})</span>
                 </span>
                 <span v-else>{{ key }}</span>
               </v-list-item-title>
@@ -272,7 +273,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
                 <v-list-item-title class="property-name">
                   <span v-if="metadata[metadataKey].items[key]?.description">
                     {{ resolveConfigText(getItemPath(key), 'description', metadata[metadataKey].items[key]?.description) }}
-                    <span class="property-key">({{ key }})</span>
+                    <span v-if="metadata[metadataKey].items[key]?.show_key" class="property-key">({{ key }})</span>
                   </span>
                   <span v-else>{{ key }}</span>
                 </v-list-item-title>
@@ -332,7 +333,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
           <v-list-item density="compact">
             <v-list-item-title class="property-name">
               {{ resolveConfigText(getItemPath(metadataKey), 'description', metadata[metadataKey]?.description) }}
-              <span class="property-key">({{ metadataKey }})</span>
+              <span v-if="metadata[metadataKey]?.show_key" class="property-key">({{ metadataKey }})</span>
             </v-list-item-title>
 
             <v-list-item-subtitle class="property-hint">
@@ -420,10 +421,10 @@ function hasVisibleItemsAfter(items, currentIndex) {
 }
 
 .metadata-key, .property-key {
-  font-size: 0.85em;
-  opacity: 0.7;
+  color: rgba(var(--v-theme-on-surface), 0.45);
+  font-size: 0.82em;
   font-weight: normal;
-  display: none;
+  margin-left: 4px;
 }
 
 .important-hint {
