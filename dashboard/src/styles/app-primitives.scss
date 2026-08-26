@@ -164,7 +164,8 @@
 .dashboard-main--chat,
 .chat-mode-container,
 .chat-layout-content,
-.chat-layout-panel {
+.chat-layout-panel,
+.viewport-locked-container {
   min-height: 0;
   height: 100%;
   overflow: hidden;

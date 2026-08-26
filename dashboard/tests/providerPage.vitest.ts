@@ -149,6 +149,7 @@ function createProviderSourcesState(overrides: Record<string, unknown> = {}) {
     deleteProvider: vi.fn(),
     modelAlreadyConfigured: vi.fn(() => false),
     testProvider: vi.fn(),
+    toggleProviderEnable: vi.fn(),
     loadConfig: vi.fn(),
     ...overrides,
   };
@@ -207,7 +208,7 @@ describe('ProviderPage', () => {
     expect(wrapper.find('.provider-empty-state').exists()).toBe(true);
   });
 
-  it('renders non-chat provider cards on alternate tabs', async () => {
+  it('renders the non-chat workbench on alternate tabs', async () => {
     testState.providerSourcesState = createProviderSourcesState({
       selectedProviderType: ref('speech_to_text'),
     });
@@ -220,8 +221,9 @@ describe('ProviderPage', () => {
 
     await flushPromises();
 
-    expect(wrapper.findAll('.item-card-stub')).toHaveLength(1);
-    expect(wrapper.text()).toContain('whisper-main');
+    expect(wrapper.find('.item-card-stub').exists()).toBe(false);
+    expect(wrapper.find('.provider-empty-state').exists()).toBe(true);
+    expect(wrapper.find('.provider-tabs').exists()).toBe(true);
   });
 
   it('keeps the configured-model edit dialog in a scrollable card layout', async () => {

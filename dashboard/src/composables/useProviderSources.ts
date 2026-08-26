@@ -893,22 +893,24 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   async function deleteProvider(provider: ProviderItem) {
     if (!provider.id) {
       showMessage(tm('models.deleteError'), 'error');
-      return;
+      return false;
     }
     const confirmed = await askForConfirmation(
       tm('models.deleteConfirm', { id: provider.id }),
     );
-    if (!confirmed) return;
+    if (!confirmed) return false;
 
     try {
       await providerApi.delete(String(provider.id));
       providers.value = providers.value.filter((p) => p.id !== provider.id);
       showMessage(tm('models.deleteSuccess'));
+      return true;
     } catch (error: unknown) {
       showMessage(
         resolveErrorMessage(error, tm('models.deleteError')),
         'error',
       );
+      return false;
     } finally {
       await loadConfig();
     }
