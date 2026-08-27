@@ -48,4 +48,4 @@ the production build.
 The upstream public documentation at
 [https://docs.astrbot.app/](https://docs.astrbot.app/) describes upstream
 behavior. Documentation in this repository follows the current checkout.
-[Report an issue](https://github.com/Xero-Team/AstrBot/issues).
+This fork does not operate a public issue tracker.

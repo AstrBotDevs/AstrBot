@@ -1,7 +1,7 @@
 # Agent Sandbox Environment ⛵️
 
 > [!TIP]
-> This feature is currently in technical preview and may have some bugs. If you encounter any issues, please submit an issue on [GitHub](https://github.com/Xero-Team/AstrBot/issues).
+> This feature is currently in technical preview and may have some bugs. This fork does not operate a public issue tracker.
 
 The Agent sandbox environment replaces the previous code executor path and provides Agents with safer and more flexible code execution and automation capabilities.
 

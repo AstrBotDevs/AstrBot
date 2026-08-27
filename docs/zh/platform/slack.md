@@ -85,5 +85,3 @@ Slack 支持两种接入方式：`Webhook` 与 `Socket`。如果您没有公网�
 ## 测试成功性
 
 进入您刚刚添加的 Slack 工作区，进入需要用到 Bot 的频道，然后 @ 您刚刚创建的应用。然后点击 Slackbot 随后发送的消息中的 添加 按钮来添加到工作区中。然后，@ 应用，输入 `/help`，如果能够成功回复，说明测试成功。
-
-如果有疑问，请[提交 Issue](https://github.com/Xero-Team/AstrBot/issues)。

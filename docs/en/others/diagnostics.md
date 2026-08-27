@@ -1,6 +1,6 @@
 # Diagnostics
 
-This page provides a general checklist for diagnosing AstrBot issues. When something goes wrong, first identify which stage is affected, then collect the relevant logs. This makes issue reports easier to reproduce and investigate.
+This page provides a general checklist for diagnosing AstrBot issues. When something goes wrong, first identify which stage is affected, then collect the relevant logs.
 
 ## Common Issue Types
 
@@ -67,9 +67,9 @@ data/logs/event_loop_watchdog.log
 
 When reading this file, focus on the top frames. Useful clues often include plugin functions, platform adapters, MCP tools, synchronous network requests, `time.sleep()`, `subprocess.run()`, or CPU-heavy loops.
 
-## What to Include in an Issue
+## What to Collect
 
-When filing an issue, include as much of the following as possible:
+When diagnosing a problem, collect as much of the following as possible:
 
 - Approximate time of the incident and timezone.
 - AstrBot version, deployment method (Docker, manual deployment, desktop client, etc.), and operating system.

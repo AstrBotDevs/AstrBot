@@ -1,7 +1,7 @@
 # Agent 沙盒环境 ⛵️
 
 > [!TIP]
-> 此功能目前处于技术预览阶段，可能会存在一些 Bug。如果您遇到了问题，请在 [GitHub](https://github.com/Xero-Team/AstrBot/issues) 上提交 issue。
+> 此功能目前处于技术预览阶段，可能会存在一些 Bug。本 fork 不运营公开 Issue 跟踪器。
 
 Agent 沙盒环境已经取代之前的代码执行器路径，为 Agent 提供更安全、更灵活的代码执行和自动化操作能力。
 

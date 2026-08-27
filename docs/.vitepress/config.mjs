@@ -20,10 +20,6 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: 'GitHub', link: 'https://github.com/Xero-Team/AstrBot' },
-          {
-            text: 'Issue',
-            link: 'https://github.com/Xero-Team/AstrBot/issues',
-          },
           { text: 'HTTP API', link: '/scalar.html' },
         ],
         sidebar: [
@@ -266,10 +262,6 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: 'GitHub', link: 'https://github.com/Xero-Team/AstrBot' },
-          {
-            text: 'Issues',
-            link: 'https://github.com/Xero-Team/AstrBot/issues',
-          },
           { text: 'HTTP API', link: '/scalar.html' },
         ],
         sidebar: [

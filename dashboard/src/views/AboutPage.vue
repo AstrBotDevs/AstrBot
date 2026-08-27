@@ -16,16 +16,6 @@
           >
             {{ tm('hero.starButton') }}
           </v-btn>
-          <v-btn
-            class="ml-4"
-            color="secondary"
-            size="small"
-            variant="tonal"
-            prepend-icon="mdi-comment-question"
-            @click="open('https://github.com/Xero-Team/AstrBot/issues')"
-          >
-            {{ tm('hero.issueButton') }}
-          </v-btn>
         </div>
       </div>
     </div>

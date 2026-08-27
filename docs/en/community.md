@@ -1,14 +1,12 @@
 # Community
 
-The collaboration entry point for this fork is GitHub. This documentation may not cover every feature. File issues and contributions against the current repository, not upstream channels.
+This fork does not operate a public issue tracker or support queue. This documentation may not cover every feature. Security reports go through [SECURITY.md](https://github.com/Xero-Team/AstrBot/blob/master/SECURITY.md). Code contributions go through a Pull Request.
 
 ## GitHub
 
-Issues and pull requests belong here:
-
 - [Xero-Team/AstrBot](https://github.com/Xero-Team/AstrBot)
 
-See [CONTRIBUTING.md](https://github.com/Xero-Team/AstrBot/blob/master/CONTRIBUTING.md) in the repository root. Pull requests target `Xero-Team/AstrBot`.
+See [CONTRIBUTING.md](https://github.com/Xero-Team/AstrBot/blob/master/CONTRIBUTING.md) in the repository root. Pull requests target `Xero-Team/AstrBot`. Do not file GitHub issues here.
 
 ## Upstream AstrBot community channels
 

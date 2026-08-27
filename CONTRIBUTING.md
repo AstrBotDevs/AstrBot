@@ -11,17 +11,9 @@
 - 后端开发流程使用 `uv`，Dashboard 前端流程使用 `pnpm`。
 - 如果新旧路径并存，优先沿用新路径，不要继续扩展 legacy shim。
 
-### 报告问题
+### 问题与反馈
 
-请在当前 fork 的仓库提交问题：
-<https://github.com/Xero-Team/AstrBot/issues>
-
-提交前请先确认是否已有相同问题，并尽量附上：
-
-- 复现步骤
-- 预期行为和实际行为
-- 日志、截图、配置片段或调用示例
-- 运行方式：`uv`、Docker 或源码
+本 fork 不运营公开 Issue 跟踪器或支持队列。安全漏洞按 [SECURITY.md](SECURITY.md) 私密报告。代码贡献走 Pull Request。
 
 ### 开发环境
 
@@ -89,17 +81,9 @@ This repository is a modernized AstrBot fork. Please follow these rules:
 - The Python baseline is `3.14+`.
 - Backend workflows use `uv`; dashboard workflows use `pnpm`.
 
-### Reporting Issues
+### Issues and Feedback
 
-Please file issues in this fork:
-<https://github.com/Xero-Team/AstrBot/issues>
-
-Include:
-
-- reproduction steps
-- expected and actual behavior
-- logs, screenshots, config snippets, or API examples
-- deployment mode: `uv`, Docker, or source
+This fork does not operate a public issue tracker or support queue. Security reports go through [SECURITY.md](SECURITY.md). Code contributions go through a Pull Request.
 
 ### Development Setup
 

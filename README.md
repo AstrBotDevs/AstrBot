@@ -15,7 +15,6 @@
 <br>
 
 <a href="./docs/en/index.md">Documentation</a> ｜
-<a href="https://github.com/Xero-Team/AstrBot/issues">Issue Tracker</a> ｜
 <a href="./docs/en/dev/development.md">Development Guide</a>
 
 </div>
@@ -158,11 +157,11 @@ Provider templates come from the code registry and evolve over time. Treat **Pro
 
 ## ❤️ Contributing
 
-Issues and Pull Requests are always welcome. Please target this fork's repository and keep documentation aligned with the current branch behavior rather than upstream historical behavior.
+Pull Requests that match this fork's current branch are welcome. Keep documentation aligned with the current branch behavior rather than upstream historical behavior. This fork does not operate a public issue tracker.
 
 ### How to Contribute
 
-You can contribute by reviewing issues or helping with pull request reviews. Any issues or PRs are welcome to encourage community participation. Of course, these are just suggestions—you can contribute in any way you like. For adding new features, please discuss through an Issue first.
+Open a Pull Request against `Xero-Team/AstrBot`. Do not file GitHub issues here; security reports go through [SECURITY.md](SECURITY.md).
 
 ### Development Environment
 

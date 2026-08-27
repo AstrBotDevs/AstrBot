@@ -71,5 +71,3 @@ In the admin panel's "Configuration" page, find `Platform Specific -> Discord ->
 # Troubleshooting
 
 - If you're stuck at the final step and the bot is not online, please ensure your server can directly connect to Discord
-
-If you have any questions, please [submit an Issue](https://github.com/Xero-Team/AstrBot/issues).

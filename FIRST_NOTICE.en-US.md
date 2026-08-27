@@ -6,11 +6,9 @@ AstrBot is an Agentic AI assistant for personal and group chats, with support fo
 
 Important notice:
 
-AstrBot is a **free and open-source software project** protected by the AGPLv3 license. You can find the full source code and related resources on our [**official website**](https://astrbot.app) and [**GitHub**](https://github.com/astrbotdevs/astrbot).
-As of now, AstrBot has **no commercial services of any kind**, and the official team **will never charge users any fees** under any name.
+This repository is a modernized AstrBot fork protected by the AGPLv3 license. The source is on [**GitHub**](https://github.com/Xero-Team/AstrBot).
+This fork currently has **no commercial services of any kind** and **will never charge users any fees** under any name.
 
-If anyone asks you to pay while using AstrBot, **you are likely being scammed**. Please request a refund immediately and report it to us by email.
+If anyone asks you to pay while using this software, **you are likely being scammed**. Request a refund immediately. This fork does not operate a public feedback channel.
 
-📊 Please read the [End User License Agreement](https://github.com/AstrBotDevs/AstrBot/blob/master/EULA.md) carefully before using this project. By installing, you agree to all its contents.
-
-📮 Official email: [community@astrbot.app](mailto:community@astrbot.app)
+📊 Please read the in-repo [End User License Agreement](https://github.com/Xero-Team/AstrBot/blob/master/EULA.md) carefully before using this project. By installing, you agree to all its contents.

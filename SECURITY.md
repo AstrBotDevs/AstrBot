@@ -19,10 +19,12 @@ their security issues are out of scope here.
 
 ## Reporting a Vulnerability / 报告漏洞
 
-**Do NOT open a public GitHub issue for security vulnerabilities.** Public
-issues disclose the problem before a fix exists.
+**Do NOT open a public GitHub issue for security vulnerabilities.** This fork
+does not operate a public issue tracker. Public issues disclose the problem
+before a fix exists.
 
-> **切勿为安全漏洞开启公开 Issue。** 公开 Issue 会在修复前暴露问题。
+> **切勿为安全漏洞开启公开 Issue。** 本 fork 不运营公开 Issue 跟踪器。公开
+> Issue 会在修复前暴露问题。
 
 **Preferred channel / 推荐渠道 — GitHub Private Security Advisory:**
 

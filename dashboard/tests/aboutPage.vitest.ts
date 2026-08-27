@@ -3,14 +3,16 @@ import AboutPage from '@/views/AboutPage.vue';
 import { mountWithVuetify } from './utils/mountWithVuetify';
 
 describe('AboutPage', () => {
-  it('opens repository and issue links from the hero actions', async () => {
+  it('opens the repository link from the hero action', async () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     const wrapper = mountWithVuetify(AboutPage);
     const buttons = wrapper.findAll('button');
-    expect(buttons.length).toBeGreaterThanOrEqual(2);
+    expect(buttons.length).toBe(1);
     await buttons[0].trigger('click');
-    await buttons[1].trigger('click');
-    expect(open).toHaveBeenCalled();
+    expect(open).toHaveBeenCalledWith(
+      'https://github.com/Xero-Team/AstrBot',
+      '_blank',
+    );
     open.mockRestore();
   });
 });
