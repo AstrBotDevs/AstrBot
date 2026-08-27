@@ -46,21 +46,21 @@
                   <template #selection="{ item }">
                     <div class="bot-mobile-selection">
                       <img
-                        :src="getPlatformIconFor(item.raw.platform)"
+                        :src="getPlatformIconFor(item.raw?.platform)"
                         class="bot-list-icon bot-list-icon--mobile"
                         alt="bot logo"
                       />
-                      <span>{{ item.raw.title }}</span>
+                      <span>{{ item.raw?.title }}</span>
                     </div>
                   </template>
                   <template #item="{ props: itemProps, item }">
                     <v-list-item
                       v-bind="itemProps"
-                      :subtitle="item.raw.subtitle"
+                      :subtitle="item.raw?.subtitle"
                     >
                       <template #prepend>
                         <img
-                          :src="getPlatformIconFor(item.raw.platform)"
+                          :src="getPlatformIconFor(item.raw?.platform)"
                           class="bot-list-icon bot-list-icon--mobile me-2"
                           alt="bot logo"
                         />
@@ -184,6 +184,7 @@
       :metadata="metadata"
       :config_data="configData"
       :updating-mode="false"
+      :request-step-up="requestStepUp"
       @show-toast="showToast"
       @refresh-config="handlePlatformCreated"
     />
@@ -473,7 +474,7 @@ function handleLocaleChange() {
 
 function getPlatformIconFor(platform) {
   const templates =
-    metadata.value['platform_group']?.metadata?.platform?.config_template || {};
+    metadata.value.platform_group?.metadata?.platform?.config_template || {};
   const template =
     templates[platform?.type] ||
     templates[platform?.id] ||

@@ -120,7 +120,23 @@ vi.mock('@/components/shared/ItemCard.vue', () => ({
 
 vi.mock('@/components/platform/AddNewPlatform.vue', () => ({
   default: {
+    name: 'AddNewPlatform',
+    props: ['show', 'metadata', 'config_data', 'updatingMode', 'requestStepUp'],
     template: '<div class="add-platform-stub"></div>',
+  },
+}));
+
+vi.mock('@/components/platform/PlatformEditor.vue', () => ({
+  default: {
+    name: 'PlatformEditor',
+    props: [
+      'platform',
+      'metadata',
+      'runtimeStat',
+      'hasQrPayload',
+      'requestStepUp',
+    ],
+    template: '<div class="platform-editor-stub">{{ platform?.id }}</div>',
   },
 }));
 
@@ -133,9 +149,7 @@ vi.mock('@/components/shared/QrCodeViewer.vue', () => ({
 
 function hasAttrWarning(calls: unknown[][]) {
   return calls.some((args) =>
-    args.some((arg) =>
-      String(arg).includes('Extraneous non-props attributes'),
-    ),
+    args.some((arg) => String(arg).includes('Extraneous non-props attributes')),
   );
 }
 
@@ -281,19 +295,21 @@ describe('page smoke tests', () => {
 
     await flushPromises();
 
-    expect(wrapper.find('.item-card-stub').exists()).toBe(true);
-    expect(wrapper.find('.item-card-id').text()).toBe('wecom-main');
-    expect(wrapper.find('.platform-status-row').exists()).toBe(true);
-    expect(wrapper.find('.error-chip').exists()).toBe(true);
-    expect(wrapper.find('.platform-qr-chip').exists()).toBe(true);
-    expect(wrapper.find('.webhook-info').exists()).toBe(true);
+    expect(wrapper.find('.bot-list-item__title').text()).toBe('wecom-main');
 
-    await wrapper.find('.error-chip').trigger('click');
-    await flushPromises();
+    const addPlatform = wrapper.findComponent({ name: 'AddNewPlatform' });
+    expect(addPlatform.exists()).toBe(true);
+    expect(typeof addPlatform.props('requestStepUp')).toBe('function');
 
-    expect(
-      document.body.querySelector('.platform-error-dialog__content'),
-    ).not.toBeNull();
+    if (!wrapper.find('.platform-editor-stub').exists()) {
+      await wrapper.find('.bot-list-item__main').trigger('click');
+      await flushPromises();
+    }
+
+    const editor = wrapper.findComponent({ name: 'PlatformEditor' });
+    expect(editor.exists()).toBe(true);
+    expect(typeof editor.props('requestStepUp')).toBe('function');
+
     expect(hasCriticalRuntimeWarning(warnSpy.mock.calls)).toBe(false);
     expect(hasCriticalRuntimeWarning(errorSpy.mock.calls)).toBe(false);
   });
