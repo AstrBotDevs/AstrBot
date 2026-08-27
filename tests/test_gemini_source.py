@@ -148,6 +148,47 @@ async def test_gemini3_prepare_conversation_adds_signature_to_cross_provider_too
 
 
 @pytest.mark.asyncio
+async def test_gemini3_prepare_conversation_drops_foreign_tool_step_signature():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    foreign_signature = base64.b64encode(b"foreign-provider-signature").decode("utf-8")
+
+    contents = await provider._prepare_conversation(
+        {
+            "model": "gemini-3.1-pro-preview",
+            "messages": [
+                {"role": "user", "content": "find the latest result"},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "think",
+                            "text": "provider-specific reasoning",
+                            "encrypted": foreign_signature,
+                        },
+                        {"type": "text", "text": "I will check."},
+                    ],
+                    "tool_calls": [
+                        {
+                            "function": {
+                                "name": "search",
+                                "arguments": '{"query": "result"}',
+                            }
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+
+    assert contents[-1].parts is not None
+    assert contents[-1].parts[0].text == "I will check."
+    assert contents[-1].parts[0].thought_signature is None
+    assert (
+        contents[-1].parts[1].thought_signature == b"skip_thought_signature_validator"
+    )
+
+
+@pytest.mark.asyncio
 async def test_gemini3_prepare_conversation_preserves_real_tool_signature():
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
     signature = b"real-gemini-signature"

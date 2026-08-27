@@ -386,6 +386,15 @@ class ProviderGoogleGenAI(Provider):
                             thinking_signature = None
 
                     if (
+                        is_gemini3_model
+                        and tool_calls
+                        and not tool_calls_have_thought_signature
+                    ):
+                        # An unsigned tool step came from another provider, so
+                        # its opaque reasoning signature is not valid for Gemini.
+                        thinking_signature = None
+
+                    if (
                         not text
                         and thinking_signature
                         and tool_calls_have_thought_signature
