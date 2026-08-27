@@ -470,6 +470,62 @@ async def test_reasoning_key_applied_to_assistant_history_payload():
 
 
 @pytest.mark.asyncio
+async def test_sanitize_assistant_messages_uses_configured_reasoning_key():
+    """reasoning_key='reasoning' 时，think-only 历史不被误删为空消息 (#9783, PR #9829 review)"""
+    provider = _make_provider({"reasoning_key": "reasoning"})
+    try:
+        payloads = {
+            "model": "test-model",
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [{"type": "think", "think": "step 1"}],
+                }
+            ],
+        }
+
+        provider._finally_convert_payload(payloads)
+        provider._sanitize_assistant_messages(payloads, provider.reasoning_key)
+
+        assert len(payloads["messages"]) == 1
+        assistant_message = payloads["messages"][0]
+        assert assistant_message["reasoning"] == "step 1"
+        assert assistant_message["content"] == ""
+    finally:
+        await provider.terminate()
+
+
+def test_sanitize_assistant_messages_keeps_custom_key_only_history():
+    """自定义 reasoning_key 下：该字段或默认字段的思考历史都保留，真空消息仍丢弃"""
+    payloads = {
+        "messages": [
+            {
+                "role": "assistant",
+                "content": None,
+                "reasoning": "thinking under custom key",
+            },
+            {
+                "role": "assistant",
+                "content": None,
+                "reasoning_content": "legacy thinking under default key",
+            },
+            {"role": "assistant", "content": None},
+        ]
+    }
+
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads, "reasoning")
+
+    assert len(payloads["messages"]) == 2
+    assert payloads["messages"][0]["reasoning"] == "thinking under custom key"
+    assert payloads["messages"][0]["content"] == ""
+    assert (
+        payloads["messages"][1]["reasoning_content"]
+        == "legacy thinking under default key"
+    )
+    assert payloads["messages"][1]["content"] == ""
+
+
+@pytest.mark.asyncio
 async def test_handle_api_error_content_moderated_without_images_raises():
     provider = _make_provider(
         {"image_moderation_error_patterns": ["file:content-moderated"]}

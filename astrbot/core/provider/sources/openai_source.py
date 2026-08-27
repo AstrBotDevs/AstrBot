@@ -455,13 +455,18 @@ class ProviderOpenAIOfficial(Provider):
             raise Exception(f"获取模型列表失败：{e}")
 
     @staticmethod
-    def _sanitize_assistant_messages(payloads: dict) -> None:
+    def _sanitize_assistant_messages(
+        payloads: dict, reasoning_key: str = "reasoning_content"
+    ) -> None:
         """在请求发送前过滤/规范化空的 assistant 消息。
 
         严格 API（Moonshot、DeepSeek Reasoner 等）会在 assistant 消息同时缺少
         ``content`` 和 ``tool_calls`` 时返回 400。把 ``""`` / ``None`` / ``[]``
         都视作空内容：无 tool_calls 时整条过滤掉；有 tool_calls 时将 content
         设为 ``None`` 以符合 OpenAI 规范。就地修改 ``payloads["messages"]``。
+
+        ``reasoning_key`` 是思考历史的字段名（可经 provider 配置 ``reasoning_key``
+        覆盖，issue #9783）；同时兼容默认 ``reasoning_content`` 的历史存量消息。
         """
         messages = payloads.get("messages")
         if not isinstance(messages, list):
@@ -478,7 +483,11 @@ class ProviderOpenAIOfficial(Provider):
 
             content = msg.get("content")
             tool_calls = msg.get("tool_calls")
-            reasoning_content = msg.get("reasoning_content")
+            # Follow the configured reasoning key (#9783); fall back to the
+            # default key so history saved by older versions is not dropped.
+            reasoning_content = msg.get(reasoning_key) or msg.get(
+                "reasoning_content"
+            )
 
             if _is_empty(content) and not tool_calls:
                 if not reasoning_content:
@@ -569,7 +578,7 @@ class ProviderOpenAIOfficial(Provider):
 
         model = payloads.get("model", "").lower()
 
-        self._sanitize_assistant_messages(payloads)
+        self._sanitize_assistant_messages(payloads, self.reasoning_key)
 
         completion = await retry_provider_request(
             "OpenAI",
@@ -627,7 +636,7 @@ class ProviderOpenAIOfficial(Provider):
             del payloads[key]
         self._apply_provider_specific_request_overrides(payloads, extra_body)
 
-        self._sanitize_assistant_messages(payloads)
+        self._sanitize_assistant_messages(payloads, self.reasoning_key)
 
         stream = await retry_provider_request(
             "OpenAI",
