@@ -4608,56 +4608,6 @@ paths:
         '200':
           $ref: '#/components/responses/Ok'
 
-  /api/v1/updates/check:
-    get:
-      tags: [Updates]
-      summary: Check for updates
-      operationId: checkUpdate
-      x-astrbot-scope: system
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/updates/releases:
-    get:
-      tags: [Updates]
-      summary: List releases
-      operationId: listReleases
-      x-astrbot-scope: system
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/updates/core:
-    post:
-      tags: [Updates]
-      summary: Update AstrBot core
-      operationId: updateCore
-      x-astrbot-scope: system
-      x-astrbot-action: system.update
-      x-astrbot-step-up: required
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateRequest'
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
-  /api/v1/updates/progress/{task_id}:
-    get:
-      tags: [Updates]
-      summary: Get update progress
-      operationId: getUpdateProgress
-      x-astrbot-scope: system
-      parameters:
-        - $ref: '#/components/parameters/TaskId'
-      responses:
-        '200':
-          $ref: '#/components/responses/Ok'
-
   /api/v1/pip/install:
     post:
       tags: [Updates]
@@ -7080,19 +7030,6 @@ components:
         confirmed:
           type: boolean
           default: true
-      additionalProperties: false
-
-    UpdateRequest:
-      type: object
-      properties:
-        version:
-          type: string
-        proxy:
-          type: string
-        reboot:
-          type: boolean
-        progress_id:
-          type: string
       additionalProperties: false
 
     PipInstallRequest:

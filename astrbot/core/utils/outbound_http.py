@@ -25,7 +25,6 @@ ProgressCallback = Callable[[dict[str, Any]], Awaitable[None] | None]
 
 _DEFAULT_MAX_URL_LENGTH = 2048
 _PLUGIN_ARCHIVE_MAX_BYTES = 50 * 1024 * 1024
-_CORE_ARCHIVE_MAX_BYTES = 200 * 1024 * 1024
 _MIRROR_TEST_MAX_BYTES = 64 * 1024
 _JSON_MAX_BYTES = 8 * 1024 * 1024
 _DEFAULT_HTTPS_PORTS = frozenset({443})
@@ -139,17 +138,6 @@ class ValidatedOutboundURL:
     addresses: tuple[ipaddress.IPv4Address | ipaddress.IPv6Address, ...]
 
 
-CORE_UPDATE = OutboundRequestPolicy(
-    allowed_schemes=frozenset({"https"}),
-    allowed_hosts=GITHUB_RELATED_HOSTS | SOULTER_REGISTRY_HOSTS,
-    allowed_ports=_DEFAULT_HTTPS_PORTS,
-    allow_private_network=False,
-    max_redirects=5,
-    max_url_length=_DEFAULT_MAX_URL_LENGTH,
-    max_response_bytes=_CORE_ARCHIVE_MAX_BYTES,
-    timeout_seconds=1800.0,
-    allowed_content_types=_ARCHIVE_CONTENT_TYPES,
-)
 PLUGIN_REPOSITORY = OutboundRequestPolicy(
     allowed_schemes=frozenset({"https"}),
     allowed_hosts=GITHUB_RELATED_HOSTS | SOULTER_REGISTRY_HOSTS,

@@ -27,7 +27,6 @@ if TYPE_CHECKING:
     from astrbot.core.star.star_manager import PluginManager
     from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
     from astrbot.core.umop_config_router import UmopConfigRouter
-    from astrbot.core.updator import AstrBotUpdator
     from astrbot.core.webchat.run_coordinator import WebChatRunCoordinator
 
 
@@ -59,7 +58,6 @@ class CoreRuntime:
     event_bus: EventBus
     dashboard_shutdown_event: asyncio.Event
     start_time: int
-    updater: AstrBotUpdator
 
 
 class CoreControl(Protocol):

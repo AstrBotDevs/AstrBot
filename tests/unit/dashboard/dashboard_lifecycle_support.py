@@ -91,33 +91,6 @@ def _assert_cookie_samesite_strict(cookie_header: str) -> None:
     assert "samesite=strict" in cookie_header.lower()
 
 
-async def _wait_for_update_progress(
-    test_client,
-    authenticated_header: dict,
-    progress_id: str,
-) -> dict:
-    """Wait until a core update task reaches a terminal status.
-
-    Args:
-        test_client: Quart/FastAPI adapter test client.
-        authenticated_header: Headers for authenticated dashboard requests.
-        progress_id: Update progress id to poll.
-
-    Returns:
-        The progress response payload.
-    """
-    for _ in range(100):
-        response = await test_client.get(
-            f"/api/v1/updates/progress/{progress_id}",
-            headers=authenticated_header,
-        )
-        data = await response.get_json()
-        if data["data"].get("status") in {"success", "error"}:
-            return data
-        await asyncio.sleep(0.01)
-    pytest.fail(f"Update task did not finish: {progress_id}")
-
-
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def core_lifecycle_td(tmp_path_factory):
     """Creates and initializes a core lifecycle instance with a temporary database."""

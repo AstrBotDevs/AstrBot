@@ -107,11 +107,6 @@ export interface TotpSetupData {
   [key: string]: unknown;
 }
 
-export interface UpdateCheckData {
-  has_new_version: boolean;
-  [key: string]: unknown;
-}
-
 export interface UploadedFileData {
   attachment_id: string;
   filename: string;
@@ -493,26 +488,6 @@ export interface ProjectData {
   [key: string]: unknown;
 }
 
-export interface DownloadStageData {
-  status: 'pending' | 'running' | 'done' | 'error';
-  downloaded: number;
-  total: number;
-  percent: number;
-  speed: number;
-  [key: string]: unknown;
-}
-
-export interface UpdateProgressData {
-  id: string;
-  status: 'idle' | 'running' | 'success' | 'error';
-  stage: string;
-  version: string;
-  message: string;
-  overall_percent: number;
-  stages: Record<string, DownloadStageData>;
-  [key: string]: unknown;
-}
-
 export interface PluginConfigFilesData {
   files?: string[];
   [key: string]: unknown;
@@ -521,13 +496,6 @@ export interface PluginConfigFilesData {
 export interface PluginConfigUploadData {
   uploaded?: string[];
   errors?: OpenConfig[];
-  [key: string]: unknown;
-}
-
-export interface ReleaseItemData {
-  tag_name: string;
-  published_at: string;
-  body: string;
   [key: string]: unknown;
 }
 

@@ -378,8 +378,6 @@ def create_dashboard_asgi_app(
             runtime.catalogs.plugins,
         ),
         updates=UpdateService(
-            runtime.updater,
-            core_control,
             pip_install_func=lambda *args, **kwargs: call_pip_install(
                 runtime.services.pip_installer, *args, **kwargs
             ),

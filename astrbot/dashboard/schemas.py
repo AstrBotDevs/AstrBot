@@ -253,13 +253,6 @@ class BackupRenameRequest(OpenModel):
     new_name: str | None = None
 
 
-class UpdateRequest(OpenModel):
-    version: str | None = None
-    proxy: str | None = None
-    reboot: bool | None = None
-    progress_id: str | None = None
-
-
 class PipInstallRequest(OpenModel):
     package: str | None = None
     mirror: str | None = None

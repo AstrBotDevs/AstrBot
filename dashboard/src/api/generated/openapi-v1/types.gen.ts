@@ -883,13 +883,6 @@ export type BackupImportRequest = {
   confirmed?: boolean;
 };
 
-export type UpdateRequest = {
-  version?: string;
-  proxy?: string;
-  reboot?: boolean;
-  progress_id?: string;
-};
-
 export type PipInstallRequest = {
   package: string;
   mirror?: string;
@@ -6576,75 +6569,6 @@ export type ImportBackupResponses = {
 
 export type ImportBackupResponse =
   ImportBackupResponses[keyof ImportBackupResponses];
-
-export type CheckUpdateData = {
-  body?: never;
-  path?: never;
-  query?: never;
-  url: '/api/v1/updates/check';
-};
-
-export type CheckUpdateResponses = {
-  /**
-   * Standard AstrBot success response
-   */
-  200: SuccessEnvelope;
-};
-
-export type CheckUpdateResponse =
-  CheckUpdateResponses[keyof CheckUpdateResponses];
-
-export type ListReleasesData = {
-  body?: never;
-  path?: never;
-  query?: never;
-  url: '/api/v1/updates/releases';
-};
-
-export type ListReleasesResponses = {
-  /**
-   * Standard AstrBot success response
-   */
-  200: SuccessEnvelope;
-};
-
-export type ListReleasesResponse =
-  ListReleasesResponses[keyof ListReleasesResponses];
-
-export type UpdateCoreData = {
-  body?: UpdateRequest;
-  path?: never;
-  query?: never;
-  url: '/api/v1/updates/core';
-};
-
-export type UpdateCoreResponses = {
-  /**
-   * Standard AstrBot success response
-   */
-  200: SuccessEnvelope;
-};
-
-export type UpdateCoreResponse = UpdateCoreResponses[keyof UpdateCoreResponses];
-
-export type GetUpdateProgressData = {
-  body?: never;
-  path: {
-    task_id: string;
-  };
-  query?: never;
-  url: '/api/v1/updates/progress/{task_id}';
-};
-
-export type GetUpdateProgressResponses = {
-  /**
-   * Standard AstrBot success response
-   */
-  200: SuccessEnvelope;
-};
-
-export type GetUpdateProgressResponse =
-  GetUpdateProgressResponses[keyof GetUpdateProgressResponses];
 
 export type InstallPipPackageData = {
   body: PipInstallRequest;

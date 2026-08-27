@@ -62,7 +62,6 @@ ACTIONS = frozenset(
         "data.manage",
         "data.export_all",
         "system.manage",
-        "system.update",
         "system.restart",
         "system.pip_install",
         "identity.read",
@@ -123,7 +122,6 @@ HIGH_RISK_ACTIONS = frozenset(
     {
         "identity.operator.write",
         "identity.root.write",
-        "system.update",
         "system.restart",
         "system.pip_install",
         "extension.plugin_install",

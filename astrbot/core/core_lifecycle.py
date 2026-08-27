@@ -37,6 +37,7 @@ from astrbot.core.pipeline.scheduler import PipelineContext, PipelineScheduler
 from astrbot.core.pipeline.turn_window import TurnWindowManager
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
+from astrbot.core.process_reboot import ProcessRebooter
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.runtime_services import RuntimeServices
 from astrbot.core.skills.skill_manager import SkillManager
@@ -44,7 +45,6 @@ from astrbot.core.star.star_handler import EventType
 from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.umop_config_router import UmopConfigRouter
-from astrbot.core.updator import AstrBotUpdator
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.event_loop_diagnostics import (
@@ -305,7 +305,7 @@ class AstrBotCoreLifecycle:
     async def initialize(self) -> None:
         """初始化 AstrBot 核心生命周期管理类.
 
-        负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus、AstrBotUpdator等。
+        负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus、ProcessRebooter等。
         """
         if self._stopped:
             raise RuntimeError(
@@ -530,8 +530,7 @@ class AstrBotCoreLifecycle:
         # 初始化消息事件流水线调度器
         self.pipeline_scheduler_mapping = await self.load_pipeline_scheduler()
 
-        # 初始化更新器
-        self.astrbot_updator = AstrBotUpdator()
+        self.process_rebooter = ProcessRebooter()
 
         # 初始化事件总线
         self.event_bus = EventBus(
@@ -608,7 +607,6 @@ class AstrBotCoreLifecycle:
             event_bus=self.event_bus,
             dashboard_shutdown_event=self.dashboard_shutdown_event,
             start_time=self.start_time,
-            updater=self.astrbot_updator,
         )
 
     def _load(self) -> None:
@@ -775,7 +773,7 @@ class AstrBotCoreLifecycle:
         await self.services.html_renderer.terminate()
         dashboard_shutdown_event.set()
         threading.Thread(
-            target=self.astrbot_updator._reboot,
+            target=self.process_rebooter.reboot,
             name="restart",
             daemon=True,
         ).start()

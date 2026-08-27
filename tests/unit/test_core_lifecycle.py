@@ -562,7 +562,7 @@ class TestAstrBotCoreLifecycleInitialize:
                 return_value=mock_pipeline_scheduler,
             ),
             patch(
-                "astrbot.core.core_lifecycle.AstrBotUpdator",
+                "astrbot.core.core_lifecycle.ProcessRebooter",
                 return_value=mock_astrbot_updator,
             ),
             patch("astrbot.core.core_lifecycle.EventBus", return_value=mock_event_bus),
@@ -1109,7 +1109,7 @@ class TestAstrBotCoreLifecycleRestart:
 
         lifecycle.dashboard_shutdown_event = asyncio.Event()
 
-        lifecycle.astrbot_updator = MagicMock()
+        lifecycle.process_rebooter = MagicMock()
         mock_html_renderer = MagicMock()
         mock_html_renderer.terminate = AsyncMock()
 

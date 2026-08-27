@@ -9,7 +9,7 @@ from astrbot.core.utils.io import ensure_dir, extract_zip_safely, remove_dir
 from astrbot.core.utils.outbound_http import PLUGIN_DOWNLOAD_URL
 
 from ..star.star import StarMetadata
-from ..updator import RepoZipUpdator
+from ..zip_updator import RepoZipUpdator
 
 PLUGIN_METADATA_FILENAMES = ("metadata.yaml", "metadata.yml")
 PLUGIN_METADATA_REQUIRED_FIELDS = ("name", "desc", "version", "author")

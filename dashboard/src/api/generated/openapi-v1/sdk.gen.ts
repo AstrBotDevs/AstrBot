@@ -29,8 +29,6 @@ import type {
   BulkToggleBuiltinCommandsResponses,
   CheckBackupData,
   CheckBackupResponses,
-  CheckUpdateData,
-  CheckUpdateResponses,
   CleanupStorageData,
   CleanupStorageResponses,
   CompleteBackupUploadData,
@@ -276,8 +274,6 @@ import type {
   GetTokenFileResponses,
   GetTraceSettingsData,
   GetTraceSettingsResponses,
-  GetUpdateProgressData,
-  GetUpdateProgressResponses,
   GetVersionData,
   GetVersionResponses,
   GrantAuthorizationRoleBindingData,
@@ -411,8 +407,6 @@ import type {
   ListProviderSourcesData,
   ListProviderSourcesResponses,
   ListProvidersResponses,
-  ListReleasesData,
-  ListReleasesResponses,
   ListSessionGroupsData,
   ListSessionGroupsResponses,
   ListSessionRulesData,
@@ -568,8 +562,6 @@ import type {
   UpdateConfigProfileContentResponses,
   UpdateConversationData,
   UpdateConversationResponses,
-  UpdateCoreData,
-  UpdateCoreResponses,
   UpdateCronJobData,
   UpdateCronJobResponses,
   UpdateDataFileContentData,
@@ -6084,68 +6076,6 @@ export const importBackup = <ThrowOnError extends boolean = false>(
       },
     },
   );
-
-/**
- * Check for updates
- */
-export const checkUpdate = <ThrowOnError extends boolean = false>(
-  options?: Options<CheckUpdateData, ThrowOnError>,
-): RequestResult<CheckUpdateResponses, unknown, ThrowOnError> =>
-  (options?.client ?? client).get<CheckUpdateResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/updates/check',
-    ...options,
-  });
-
-/**
- * List releases
- */
-export const listReleases = <ThrowOnError extends boolean = false>(
-  options?: Options<ListReleasesData, ThrowOnError>,
-): RequestResult<ListReleasesResponses, unknown, ThrowOnError> =>
-  (options?.client ?? client).get<ListReleasesResponses, unknown, ThrowOnError>(
-    {
-      responseType: 'json',
-      security: [{ name: 'X-API-Key', type: 'apiKey' }],
-      url: '/api/v1/updates/releases',
-      ...options,
-    },
-  );
-
-/**
- * Update AstrBot core
- */
-export const updateCore = <ThrowOnError extends boolean = false>(
-  options?: Options<UpdateCoreData, ThrowOnError>,
-): RequestResult<UpdateCoreResponses, unknown, ThrowOnError> =>
-  (options?.client ?? client).post<UpdateCoreResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/updates/core',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-  });
-
-/**
- * Get update progress
- */
-export const getUpdateProgress = <ThrowOnError extends boolean = false>(
-  options: Options<GetUpdateProgressData, ThrowOnError>,
-): RequestResult<GetUpdateProgressResponses, unknown, ThrowOnError> =>
-  (options.client ?? client).get<
-    GetUpdateProgressResponses,
-    unknown,
-    ThrowOnError
-  >({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/updates/progress/{task_id}',
-    ...options,
-  });
 
 /**
  * Install a Python package

@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 from astrbot.core.utils.outbound_http import (
-    CORE_UPDATE,
     GITHUB_MIRROR_TEST,
     JSON_FETCH,
     MCP_REMOTE,
@@ -369,28 +368,6 @@ def test_proxy_credentials_are_redacted() -> None:
     redacted = redact_outbound_url("https://user:secret@mirror.example/path?token=abc")
     assert "secret" not in redacted
     assert "token=abc" not in redacted
-
-
-def test_core_update_rejects_arbitrary_host() -> None:
-    with pytest.raises(OutboundRequestError, match="host"):
-        validate_outbound_url(
-            "https://evil.example/source.zip",
-            CORE_UPDATE,
-            resolve_addresses=lambda host, port: _public("93.184.216.34"),
-        )
-
-
-def test_core_update_allows_soulter_and_github() -> None:
-    validate_outbound_url(
-        "https://astrbot-registry.soulter.top/download/astrbot-core/v1/source.zip",
-        CORE_UPDATE,
-        resolve_addresses=lambda host, port: _public("93.184.216.34"),
-    )
-    validate_outbound_url(
-        "https://codeload.github.com/AstrBotDevs/AstrBot/legacy.zip/master",
-        CORE_UPDATE,
-        resolve_addresses=lambda host, port: _public("140.82.112.3"),
-    )
 
 
 def test_mirror_origin_rejects_private_and_credentials() -> None:

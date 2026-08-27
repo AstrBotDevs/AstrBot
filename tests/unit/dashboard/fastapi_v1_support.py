@@ -626,23 +626,6 @@ class FakeUmopConfigRouter:
         return self.umop_to_conf_id.get(umo)
 
 
-class FakeAstrBotUpdator:
-    async def check_update(self, *_args, **_kwargs):
-        return None
-
-    async def get_releases(self):
-        return []
-
-    async def update(self, *_args, **_kwargs) -> None:
-        return None
-
-    async def download_update_package(self, *_args, **kwargs):
-        return kwargs.get("path", "temp.zip")
-
-    def apply_update_package(self, *_args, **_kwargs) -> None:
-        return None
-
-
 class FakeAstrBotConfig(dict):
     def save_config(self, post_config: dict | None = None, *, indent: int = 2) -> None:
         _ = indent
@@ -847,7 +830,6 @@ def fake_core_lifecycle(fake_db: FakeDb):
             llm_metadata_catalog=LLMMetadataCatalog(),
             totp_runtime_state=TotpRuntimeState(),
         ),
-        updater=FakeAstrBotUpdator(),
         catalogs=catalogs,
         webchat_run_coordinator=webchat_run_coordinator,
         start_time=1234567890,

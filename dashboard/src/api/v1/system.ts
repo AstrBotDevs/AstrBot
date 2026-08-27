@@ -18,7 +18,6 @@ import type {
   GhproxyTestRequest,
   PipInstallRequest,
   TraceSettingsRequest,
-  UpdateRequest,
 } from './shared';
 import type { AxiosRequestConfig } from './shared';
 import type { AxiosResponse } from './shared';
@@ -28,10 +27,7 @@ import type {
   OpenConfig,
   ProviderTokenStatsData,
   PublicVersionData,
-  ReleaseItemData,
   T2iRuntimeStatsData,
-  UpdateCheckData,
-  UpdateProgressData,
   VersionData,
 } from './types';
 
@@ -49,22 +45,6 @@ export const traceApi = {
 };
 
 export const updatesApi = {
-  check() {
-    return typed<UpdateCheckData>(openApiV1.checkUpdate());
-  },
-  releases() {
-    return typed<ReleaseItemData[]>(openApiV1.listReleases());
-  },
-  core(payload?: UpdateRequest, requestConfig?: AxiosRequestConfig) {
-    return typed<OpenConfig>(
-      openApiV1.updateCore(generatedOptions({ body: payload }, requestConfig)),
-    );
-  },
-  progress(taskId: string) {
-    return typed<UpdateProgressData>(
-      openApiV1.getUpdateProgress({ path: { task_id: taskId } }),
-    );
-  },
   installPip(payload: PipInstallRequest, requestConfig?: AxiosRequestConfig) {
     return typed<OpenConfig>(
       openApiV1.installPipPackage(
