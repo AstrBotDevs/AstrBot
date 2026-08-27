@@ -247,28 +247,28 @@ A role names who the subject is; the scope decides where that authority applies.
 
 Actions use `domain.verb`. Built-in commands declare them with `@filter.permission("session.manage")` and still call `authorize()`. High-risk actions are never inherited silently from a parent action.
 
-| Action                                                    | Default roles                                  | High risk                          |
-| --------------------------------------------------------- | ---------------------------------------------- | ---------------------------------- |
-| `session.read`                                            | member+ on the current session                 | no                                 |
-| `session.manage`                                          | session_admin+                                 | no                                 |
-| `session.assign`                                          | session_owner+                                 | yes across sessions                |
-| `provider.use` / `provider.read`                          | member+                                        | no; credentials are never returned |
-| `provider.manage`                                         | instance_operator+                             | no                                 |
-| `provider.credentials.write`                              | instance_operator+                             | yes                                |
-| `platform.manage`                                         | instance_operator+                             | yes                                |
-| `agent.manage`                                            | session_owner+                                 | partial                            |
-| `extension.read` / `extension.manage`                     | member+ / instance_operator+                   | partial                            |
-| `extension.plugin_install`                                | instance_operator+ with Dashboard step-up      | yes                                |
-| `data.manage` / `data.export_all`                         | owner / instance_operator+                     | full export is high risk           |
-| `system.manage`                                           | root; limited read for operator                | no                                 |
-| `system.update` / `system.restart` / `system.pip_install` | root + step-up                                 | yes                                |
-| `identity.manage`                                         | session_owner+ within scope                    | yes                                |
-| `identity.operator.write` / `identity.root.write`         | root + step-up                                 | yes                                |
-| `dashboard.account.manage`                                | root + step-up                                 | yes                                |
-| `filesystem.read` / `filesystem.write`                    | operator, root                                 | no                                 |
-| `filesystem.manage`                                       | root + step-up                                 | yes                                |
-| `tool.file_read` / `tool.mcp_read`                        | member+                                        | no                                 |
-| instance tools such as `tool.local_exec`                  | instance_operator+; WebChat also needs step-up | yes                                |
+| Action                                            | Default roles                                  | High risk                          |
+| ------------------------------------------------- | ---------------------------------------------- | ---------------------------------- |
+| `session.read`                                    | member+ on the current session                 | no                                 |
+| `session.manage`                                  | session_admin+                                 | no                                 |
+| `session.assign`                                  | session_owner+                                 | yes across sessions                |
+| `provider.use` / `provider.read`                  | member+                                        | no; credentials are never returned |
+| `provider.manage`                                 | instance_operator+                             | no                                 |
+| `provider.credentials.write`                      | instance_operator+                             | yes                                |
+| `platform.manage`                                 | instance_operator+                             | yes                                |
+| `agent.manage`                                    | session_owner+                                 | partial                            |
+| `extension.read` / `extension.manage`             | member+ / instance_operator+                   | partial                            |
+| `extension.plugin_install`                        | instance_operator+ with Dashboard step-up      | yes                                |
+| `data.manage` / `data.export_all`                 | owner / instance_operator+                     | full export is high risk           |
+| `system.manage`                                   | root; limited read for operator                | no                                 |
+| `system.restart` / `system.pip_install`           | root + step-up                                 | yes                                |
+| `identity.manage`                                 | session_owner+ within scope                    | yes                                |
+| `identity.operator.write` / `identity.root.write` | root + step-up                                 | yes                                |
+| `dashboard.account.manage`                        | root + step-up                                 | yes                                |
+| `filesystem.read` / `filesystem.write`            | operator, root                                 | no                                 |
+| `filesystem.manage`                               | root + step-up                                 | yes                                |
+| `tool.file_read` / `tool.mcp_read`                | member+                                        | no                                 |
+| instance tools such as `tool.local_exec`          | instance_operator+; WebChat also needs step-up | yes                                |
 
 Plugin actions must use `plugin:<plugin-id>:<action>` and call `self.context.authz.authorize()` again. Undeclared plugin writes are denied. Tool authority is the intersection of user authorization, Persona tool policy, and the tool's own policy. Sub-agent handoff cannot escalate the caller.
 

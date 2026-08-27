@@ -2,10 +2,9 @@
 
 当前 fork **默认不提供** GitHub 镜像列表，Dashboard 也不再接受任意自定义镜像输入。
 
-插件安装、插件更新和 Core 更新只会请求：
+插件安装和插件更新只会请求：
 
 - GitHub 官方相关域名；
-- Core 版本检查默认使用 `https://api.github.com/repos/Xero-Team/AstrBot/releases`，可用环境变量 `ASTRBOT_RELEASE_API` 覆盖；当前 fork 不发布可供 Dashboard 下载的 Core 包，托管包地址仅在设置 `ASTRBOT_CORE_PACKAGE_BASE_URL` 时启用；
 - 插件市场默认先请求上游 GitHub 集合 `AstrBotDevs/AstrBot_Plugins_Collection`，然后是 jsDelivr CDN，最后才是 Soulter 兼容源（`api.soulter.top`、`astrbot-registry.soulter.top`）；这些都是上游服务，不是本 fork 运营的市场。默认市场没有 Soulter MD5 校验，每次打开都会重新拉取；自定义市场才使用对应的 `-md5.json`。JSON 请求会使用配置里的 `http_proxy`，不会读取进程环境变量代理。
 - 通过后端校验的公开 HTTPS origin。
 

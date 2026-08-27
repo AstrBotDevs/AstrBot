@@ -247,28 +247,28 @@ guest:<id>
 
 动作使用 `domain.verb`。内置命令通过 `@filter.permission("session.manage")` 声明能力，最终仍调用 `authorize()`。高风险动作不能从父动作静默继承。
 
-| 动作                                                      | 默认允许角色                                   | 高风险             |
-| --------------------------------------------------------- | ---------------------------------------------- | ------------------ |
-| `session.read`                                            | member 及以上（当前会话）                      | 否                 |
-| `session.manage`                                          | session_admin 及以上                           | 否                 |
-| `session.assign`                                          | session_owner 及以上                           | 跨会话时需更高角色 |
-| `provider.use` / `provider.read`                          | member 及以上                                  | 否；凭据永不返回   |
-| `provider.manage`                                         | instance_operator 及以上                       | 否                 |
-| `provider.credentials.write`                              | instance_operator 及以上                       | 是                 |
-| `platform.manage`                                         | instance_operator 及以上                       | 是                 |
-| `agent.manage`                                            | session_owner 及以上                           | 部分               |
-| `extension.read` / `extension.manage`                     | member / instance_operator 及以上              | 部分               |
-| `extension.plugin_install`                                | instance_operator 及以上 + Dashboard step-up   | 是                 |
-| `data.manage` / `data.export_all`                         | 资源所有者 / instance_operator 及以上          | 全量导出是高风险   |
-| `system.manage`                                           | root；部分只读给 operator                      | 否                 |
-| `system.update` / `system.restart` / `system.pip_install` | root + step-up                                 | 是                 |
-| `identity.manage`                                         | session_owner 及以上（作用域受限）             | 是                 |
-| `identity.operator.write` / `identity.root.write`         | root + step-up                                 | 是                 |
-| `dashboard.account.manage`                                | root + step-up                                 | 是                 |
-| `filesystem.read` / `filesystem.write`                    | operator、root                                 | 否                 |
-| `filesystem.manage`                                       | root + step-up                                 | 是                 |
-| `tool.file_read` / `tool.mcp_read`                        | member 及以上                                  | 否                 |
-| `tool.local_exec` 等实例工具                              | instance_operator 及以上；WebChat 另需 step-up | 是                 |
+| 动作                                              | 默认允许角色                                   | 高风险             |
+| ------------------------------------------------- | ---------------------------------------------- | ------------------ |
+| `session.read`                                    | member 及以上（当前会话）                      | 否                 |
+| `session.manage`                                  | session_admin 及以上                           | 否                 |
+| `session.assign`                                  | session_owner 及以上                           | 跨会话时需更高角色 |
+| `provider.use` / `provider.read`                  | member 及以上                                  | 否；凭据永不返回   |
+| `provider.manage`                                 | instance_operator 及以上                       | 否                 |
+| `provider.credentials.write`                      | instance_operator 及以上                       | 是                 |
+| `platform.manage`                                 | instance_operator 及以上                       | 是                 |
+| `agent.manage`                                    | session_owner 及以上                           | 部分               |
+| `extension.read` / `extension.manage`             | member / instance_operator 及以上              | 部分               |
+| `extension.plugin_install`                        | instance_operator 及以上 + Dashboard step-up   | 是                 |
+| `data.manage` / `data.export_all`                 | 资源所有者 / instance_operator 及以上          | 全量导出是高风险   |
+| `system.manage`                                   | root；部分只读给 operator                      | 否                 |
+| `system.restart` / `system.pip_install`           | root + step-up                                 | 是                 |
+| `identity.manage`                                 | session_owner 及以上（作用域受限）             | 是                 |
+| `identity.operator.write` / `identity.root.write` | root + step-up                                 | 是                 |
+| `dashboard.account.manage`                        | root + step-up                                 | 是                 |
+| `filesystem.read` / `filesystem.write`            | operator、root                                 | 否                 |
+| `filesystem.manage`                               | root + step-up                                 | 是                 |
+| `tool.file_read` / `tool.mcp_read`                | member 及以上                                  | 否                 |
+| `tool.local_exec` 等实例工具                      | instance_operator 及以上；WebChat 另需 step-up | 是                 |
 
 插件自定义动作必须使用 `plugin:<plugin-id>:<action>` 命名空间，并通过 `self.context.authz.authorize()` 再次调用核心授权。未声明的插件写操作默认拒绝。工具最终权限是“用户授权 ∩ Persona 工具策略 ∩ 工具自身策略”；子 Agent handoff 不能提升调用者。
 

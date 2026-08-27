@@ -112,17 +112,17 @@ WebUI 支持多个 Dashboard 账户。首次启动会创建 bootstrap `root` 账
 
 固定角色：
 
-| 角色                | 范围            | 典型用途                           |
-| ------------------- | --------------- | ---------------------------------- |
-| `root`              | 全局控制面      | 账户管理、系统更新、重启、pip 安装 |
-| `operator`          | 全局控制面      | 配置、Provider、插件、数据运维     |
-| `instance_operator` | 单个配置档      | 该配置档的管理动作                 |
-| `session_owner`     | 当前群/私聊会话 | 会话管理、会话内模型选择           |
-| `session_admin`     | 当前会话        | 有限管理，例如停任务、改会话名     |
-| `member`            | 当前会话        | 普通对话                           |
-| `guest`             | 未认证          | 匿名 WebChat                       |
+| 角色                | 范围            | 典型用途                       |
+| ------------------- | --------------- | ------------------------------ |
+| `root`              | 全局控制面      | 账户管理、重启、pip 安装       |
+| `operator`          | 全局控制面      | 配置、Provider、插件、数据运维 |
+| `instance_operator` | 单个配置档      | 该配置档的管理动作             |
+| `session_owner`     | 当前群/私聊会话 | 会话管理、会话内模型选择       |
+| `session_admin`     | 当前会话        | 有限管理，例如停任务、改会话名 |
+| `member`            | 当前会话        | 普通对话                       |
+| `guest`             | 未认证          | 匿名 WebChat                   |
 
-安装插件、写入凭据、导出全部对话、更新核心、pip 安装和重启都会弹出 step-up。凭证只用于当前操作一次，不能放入 URL。对话导出要求精确的 `conversation:export` 资源与 `data.export_all`；普通 `data` scope 的 API Key 会被拒绝。备份下载走已认证 Blob 请求，不会把 Dashboard JWT 放进查询参数。
+安装插件、写入凭据、导出全部对话、pip 安装和重启都会弹出 step-up。凭证只用于当前操作一次，不能放入 URL。对话导出要求精确的 `conversation:export` 资源与 `data.export_all`；普通 `data` scope 的 API Key 会被拒绝。备份下载走已认证 Blob 请求，不会把 Dashboard JWT 放进查询参数。
 
 开发模型见[项目架构](/dev/architecture#统一授权系统)。
 
@@ -201,7 +201,7 @@ WebUI 支持多个 Dashboard 账户。首次启动会创建 bootstrap `root` 账
 
 ## 更新管理面板
 
-当前 fork 不发布可供 Dashboard 下载的 Core 或独立 Dashboard Release。版本检查请求 `Xero-Team/AstrBot` 的 GitHub Releases；列表为空时界面提示未发布 Core Release，不要用面板一键更新去安装上游 zip。源码部署应在更新 checkout 后重新构建 `dashboard/dist`，再运行 `uv run python scripts/sync_dashboard_dist.py`，具体命令见[源码部署](/deploy/astrbot/cli#更新-checkout)。
+本 fork 不提供 Dashboard 一键 Core 更新。源码部署应在更新 checkout 后重新构建 `dashboard/dist`，再运行 `uv run python scripts/sync_dashboard_dist.py`，具体命令见[源码部署](/deploy/astrbot/cli#更新-checkout)。
 
 消息指令和 `astrbot` CLI 都不会下载、安装或更新 Dashboard。上游 Dashboard 静态资源与当前 fork 的后端 API 和前端功能不兼容，不应复制到 `data/dist`。启动时只使用显式 `--webui-dir`、当前源码树构建产物、随包资源或版本匹配的 `data/dist`；没有兼容构建时，后端继续运行，但 WebUI 不可用。
 

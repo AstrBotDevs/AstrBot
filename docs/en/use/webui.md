@@ -119,7 +119,7 @@ Fixed roles:
 
 | Role                | Scope                | Typical use                                    |
 | ------------------- | -------------------- | ---------------------------------------------- |
-| `root`              | global control plane | accounts, core updates, restarts, pip installs |
+| `root`              | global control plane | accounts, restarts, pip installs               |
 | `operator`          | global control plane | config, providers, plugins, data operations    |
 | `instance_operator` | one config profile   | management actions for that profile            |
 | `session_owner`     | current group/DM     | session management and in-session model choice |
@@ -127,7 +127,7 @@ Fixed roles:
 | `member`            | current session      | ordinary chat                                  |
 | `guest`             | unauthenticated      | anonymous WebChat                              |
 
-Plugin installs, credential writes, full conversation export, core updates, pip installs, and restarts prompt for step-up. The proof is single-use for that operation and is never placed in a URL. Conversation export requires the exact `conversation:export` resource and `data.export_all`; a `data` API key is denied. Backup downloads use an authenticated Blob request and never put a Dashboard JWT in the query string.
+Plugin installs, credential writes, full conversation export, pip installs, and restarts prompt for step-up. The proof is single-use for that operation and is never placed in a URL. Conversation export requires the exact `conversation:export` resource and `data.export_all`; a `data` API key is denied. Backup downloads use an authenticated Blob request and never put a Dashboard JWT in the query string.
 
 The developer model is in [Architecture](/en/dev/architecture#unified-authorization).
 
@@ -206,7 +206,7 @@ You can enable or disable trace recording using the switch at the top of the pag
 
 ## Updating the Admin Panel
 
-This fork does not publish downloadable Core or independent Dashboard releases. The in-app version check queries GitHub Releases for `Xero-Team/AstrBot`; when that list is empty the UI reports that no Core Release is published. Do not use the Dashboard one-click updater to install an upstream zip. Source deployments should rebuild `dashboard/dist` after updating the checkout and run `uv run python scripts/sync_dashboard_dist.py`; see [Update the Checkout](/en/deploy/astrbot/cli#update-the-checkout).
+This fork does not provide a Dashboard one-click Core updater. Source deployments should rebuild `dashboard/dist` after updating the checkout and run `uv run python scripts/sync_dashboard_dist.py`; see [Update the Checkout](/en/deploy/astrbot/cli#update-the-checkout).
 
 Message commands and the `astrbot` CLI never download, install, or update Dashboard assets. Upstream Dashboard static files are incompatible with this fork's backend API and frontend behavior and must not be copied into `data/dist`. Startup uses only an explicit `--webui-dir`, a build from the current source tree, bundled assets, or a version-matched `data/dist`. Without a compatible build, the backend continues to run but the WebUI is unavailable.
 
