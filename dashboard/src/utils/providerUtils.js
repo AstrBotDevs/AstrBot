@@ -43,6 +43,7 @@ export function getProviderIcon(type) {
     'groq': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/groq.svg',
     'aihubmix': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/aihubmix-color.svg',
     'openrouter': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openrouter.svg',
+    'synthorai': 'https://synthorai.io/synthorai-mark.svg',
     'ssycloud': 'https://admin.shengsuanyun.com/assets/logo-BoujJhP-.png',
     "tokenpony": "https://tokenpony.cn/tokenpony-web/logo.png",
     "compshare": "https://compshare.cn/favicon.ico",

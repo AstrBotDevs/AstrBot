@@ -443,6 +443,10 @@ class ProviderManager:
                 from .sources.openrouter_source import (
                     ProviderOpenRouter as ProviderOpenRouter,
                 )
+            case "synthorai_chat_completion":
+                from .sources.synthorai_source import (
+                    ProviderSynthorai as ProviderSynthorai,
+                )
             case "ssycloud_chat_completion":
                 from .sources.ssycloud_source import (
                     ProviderSSYCloud as ProviderSSYCloud,

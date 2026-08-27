@@ -1524,6 +1524,17 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
+                    "Synthorai": {
+                        "id": "synthorai",
+                        "provider": "synthorai",
+                        "type": "synthorai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "timeout": 120,
+                        "api_base": "https://synthorai.io/v1",
+                        "proxy": "",
+                    },
                     "SSYCloud(胜算云)": {
                         "id": "ssycloud",
                         "provider": "ssycloud",
