@@ -22,6 +22,7 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  SlidersHorizontal,
   Trash2,
   X,
 } from "@lucide/vue";
@@ -91,6 +92,7 @@ const selectedTypes = ref<string[]>([]);
 const umoQuery = ref("");
 const sortValue = ref("updated_at:desc");
 const groupBySession = ref(false);
+const mobileFiltersOpen = ref(false);
 const expandedSessions = ref<Record<string, boolean>>({});
 const page = ref(1);
 const pageSize = 30;
@@ -106,6 +108,7 @@ const activeConversation = ref<Conversation | null>(null);
 const conversationHistory = ref<any[]>([]);
 const previewLoading = ref(false);
 const previewRequestId = ref(0);
+const previewPageScroll = ref(0);
 const previewMessagesRef = ref<HTMLElement | null>(null);
 const rawDataDialog = ref(false);
 const rawHistoryText = ref("");
@@ -506,6 +509,7 @@ function toggleSessionExpanded(userId: string) {
 }
 
 async function openConversation(item: Conversation) {
+  previewPageScroll.value = window.scrollY;
   rawDataDialog.value = false;
   activeConversation.value = item;
   conversationHistory.value = [];
@@ -545,11 +549,13 @@ async function openConversation(item: Conversation) {
 }
 
 function closePreview() {
+  const pageScroll = previewPageScroll.value;
   previewRequestId.value += 1;
   rawDataDialog.value = false;
   activeConversation.value = null;
   conversationHistory.value = [];
   previewLoading.value = false;
+  void nextTick(() => window.scrollTo({ top: pageScroll, behavior: "auto" }));
 }
 
 function openRawData() {
@@ -720,8 +726,26 @@ function changePage(nextPage: number) {
 </script>
 
 <template>
-  <div class="conversation-workspace" :class="{ 'is-dark': isDark }">
+  <div
+    class="conversation-workspace"
+    :class="{
+      'is-dark': isDark,
+      'conversation-workspace--preview-open': activeConversation,
+    }"
+  >
     <div class="workspace-actions">
+      <v-btn
+        class="mobile-filter-trigger"
+        size="small"
+        :variant="hasFilters ? 'tonal' : 'text'"
+        :aria-expanded="mobileFiltersOpen"
+        aria-haspopup="dialog"
+        @click="mobileFiltersOpen = true"
+      >
+        <SlidersHorizontal :size="15" aria-hidden="true" />
+        <span>{{ tm("workspace.filters.title") }}</span>
+        <span v-if="hasFilters" class="filter-status-dot" aria-hidden="true" />
+      </v-btn>
       <v-btn
         size="small"
         variant="text"
@@ -742,26 +766,56 @@ function changePage(nextPage: number) {
       </RouterLink>
     </div>
 
+    <button
+      v-if="mobileFiltersOpen"
+      type="button"
+      class="mobile-filter-backdrop"
+      :aria-label="tm('workspace.filters.close')"
+      @click="mobileFiltersOpen = false"
+    />
+    <button
+      v-if="activeConversation"
+      type="button"
+      class="mobile-preview-backdrop"
+      :aria-label="tm('workspace.preview.close')"
+      @click="closePreview"
+    />
+
     <main
       class="workspace-grid"
       :class="{ 'workspace-grid--preview': activeConversation }"
     >
-      <aside class="workspace-card filter-panel">
+      <aside
+        class="workspace-card filter-panel"
+        :class="{ 'filter-panel--mobile-open': mobileFiltersOpen }"
+      >
         <div class="panel-heading">
           <span>{{ tm("workspace.filters.title") }}</span>
-          <v-btn
-            v-if="hasFilters"
-            icon
-            size="x-small"
-            variant="text"
-            :aria-label="tm('workspace.filters.reset')"
-            @click="resetFilters"
-          >
-            <RotateCcw :size="15" aria-hidden="true" />
-            <v-tooltip activator="parent" location="top">
-              {{ tm("workspace.filters.reset") }}
-            </v-tooltip>
-          </v-btn>
+          <div class="filter-heading-actions">
+            <v-btn
+              v-if="hasFilters"
+              icon
+              size="x-small"
+              variant="text"
+              :aria-label="tm('workspace.filters.reset')"
+              @click="resetFilters"
+            >
+              <RotateCcw :size="15" aria-hidden="true" />
+              <v-tooltip activator="parent" location="top">
+                {{ tm("workspace.filters.reset") }}
+              </v-tooltip>
+            </v-btn>
+            <v-btn
+              class="mobile-filter-close"
+              icon
+              size="x-small"
+              variant="text"
+              :aria-label="tm('workspace.filters.close')"
+              @click="mobileFiltersOpen = false"
+            >
+              <X :size="17" aria-hidden="true" />
+            </v-btn>
+          </div>
         </div>
 
         <div class="filter-block filter-block--first">
@@ -875,6 +929,12 @@ function changePage(nextPage: number) {
             flat
             hide-details
           />
+        </div>
+
+        <div class="mobile-filter-footer">
+          <v-btn block variant="tonal" @click="mobileFiltersOpen = false">
+            {{ tm("workspace.filters.done") }}
+          </v-btn>
         </div>
       </aside>
 
@@ -1380,6 +1440,21 @@ function changePage(nextPage: number) {
   gap: 6px;
 }
 
+.mobile-filter-trigger,
+.mobile-filter-backdrop,
+.mobile-preview-backdrop,
+.mobile-filter-close,
+.mobile-filter-footer {
+  display: none;
+}
+
+.filter-status-dot {
+  background: rgb(var(--v-theme-primary));
+  border-radius: 999px;
+  height: 6px;
+  width: 6px;
+}
+
 .workspace-grid {
   display: grid;
   gap: 14px;
@@ -1408,6 +1483,11 @@ function changePage(nextPage: number) {
 .filter-panel {
   align-self: start;
   padding: 18px;
+}
+
+.filter-heading-actions {
+  align-items: center;
+  display: flex;
 }
 
 .panel-heading {
@@ -1957,6 +2037,11 @@ function changePage(nextPage: number) {
 }
 
 @media (max-width: 800px) {
+  :global(html:has(.conversation-workspace--preview-open)),
+  :global(body:has(.conversation-workspace--preview-open)) {
+    overflow: hidden;
+  }
+
   .conversation-workspace {
     overflow: visible;
     padding-inline: 4px;
@@ -1969,12 +2054,83 @@ function changePage(nextPage: number) {
     min-height: 0;
   }
 
+  .mobile-preview-backdrop {
+    background: rgba(0, 0, 0, 0.42);
+    border: 0;
+    display: block;
+    inset: 0;
+    position: fixed;
+    touch-action: none;
+    z-index: 2290;
+  }
+
   .workspace-grid--preview .preview-panel {
+    border-radius: 20px;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    box-shadow: 0 18px 52px rgba(0, 0, 0, 0.24);
     grid-column: auto;
+    left: 8px;
+    position: fixed;
+    right: 8px;
+    top: max(8px, env(safe-area-inset-top));
+    z-index: 2300;
+  }
+
+  .mobile-filter-trigger {
+    display: inline-flex;
+  }
+
+  .mobile-filter-backdrop {
+    background: rgba(0, 0, 0, 0.42);
+    border: 0;
+    display: block;
+    inset: 0;
+    position: fixed;
+    touch-action: none;
+    z-index: 2990;
   }
 
   .filter-panel {
-    padding: 16px;
+    border-radius: 20px 20px 0 0;
+    bottom: 0;
+    box-shadow: 0 -14px 40px rgba(0, 0, 0, 0.18);
+    left: 0;
+    max-height: min(86dvh, 760px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 18px 18px calc(16px + env(safe-area-inset-bottom));
+    position: fixed;
+    right: 0;
+    transform: translateY(calc(100% + 20px));
+    transition:
+      transform 0.22s ease,
+      visibility 0s linear 0.22s;
+    visibility: hidden;
+    z-index: 3000;
+  }
+
+  .filter-panel--mobile-open {
+    transform: translateY(0);
+    transition: transform 0.22s ease;
+    visibility: visible;
+  }
+
+  .mobile-filter-close {
+    display: inline-flex;
+  }
+
+  .mobile-filter-footer {
+    background: var(--workspace-card);
+    bottom: calc(-16px - env(safe-area-inset-bottom));
+    display: block;
+    margin: 18px -18px 0;
+    padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+    position: sticky;
+  }
+
+  .conversation-list {
+    overflow-y: visible;
+    overscroll-behavior: auto;
   }
 
   .robot-options {

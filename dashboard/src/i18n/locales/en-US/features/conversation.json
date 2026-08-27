@@ -119,6 +119,8 @@
       "umoPlaceholder": "Enter a full or partial UMO",
       "sort": "Sort",
       "reset": "Clear filters",
+      "close": "Close filters",
+      "done": "Done",
       "updatedDesc": "Recently updated",
       "createdDesc": "Recently created",
       "updatedAsc": "Oldest updated",

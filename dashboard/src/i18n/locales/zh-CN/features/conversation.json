@@ -119,6 +119,8 @@
       "umoPlaceholder": "输入完整或部分 UMO",
       "sort": "排序",
       "reset": "清除筛选",
+      "close": "关闭筛选",
+      "done": "完成",
       "updatedDesc": "最近更新",
       "createdDesc": "最新创建",
       "updatedAsc": "最早更新",
