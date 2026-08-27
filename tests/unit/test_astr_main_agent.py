@@ -142,8 +142,9 @@ def _setup_conversation_for_build(conv_mgr, cid: str = "conv-id") -> MagicMock:
     return conversation
 
 
-def test_append_system_reminders_includes_weekday(mock_event):
-    """Test datetime reminder includes weekday information."""
+@pytest.mark.asyncio
+async def test_append_system_reminders_includes_weekday(mock_event):
+    """Test datetime reminder includes weekday and is not persisted."""
     req = ProviderRequest(prompt="Hello")
     fixed_now = datetime.datetime(
         2026,
@@ -172,6 +173,14 @@ def test_append_system_reminders_includes_weekday(mock_event):
     assert [part.text for part in req.extra_user_content_parts] == [
         "<system_reminder>Current datetime: "
         "2026-06-08 12:34 (UTC), Weekday: Monday</system_reminder>"
+    ]
+    assert req.extra_user_content_parts[0]._no_save is True
+
+    message = Message.model_validate(await req.assemble_context())
+    assert isinstance(message.content, list)
+    assert message.content[1].text == req.extra_user_content_parts[0].text
+    assert dump_messages_with_checkpoints([message]) == [
+        {"role": "user", "content": [{"type": "text", "text": "Hello"}]}
     ]
 
 

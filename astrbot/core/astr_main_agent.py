@@ -1010,7 +1010,9 @@ def _append_system_reminders(
         system_content = (
             "<system_reminder>" + "\n".join(system_parts) + "</system_reminder>"
         )
-        req.extra_user_content_parts.append(TextPart(text=system_content))
+        req.extra_user_content_parts.append(
+            TextPart(text=system_content).mark_as_temp()
+        )
 
 
 async def _decorate_llm_request(
