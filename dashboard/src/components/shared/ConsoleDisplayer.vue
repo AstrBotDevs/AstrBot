@@ -14,6 +14,7 @@ import { EventSourcePolyfill } from 'event-source-polyfill';
         </v-chip>
       </v-chip-group>
       <v-spacer></v-spacer>
+      <slot name="header-actions"></slot>
       <v-btn
         :icon="isFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'"
         variant="text"
@@ -378,7 +379,11 @@ export default {
 }
 
 .fullscreen-btn {
-    color: rgba(255, 255, 255, 0.7) !important; /* 提高在深色背景下的对比度 */
+  color: rgba(var(--v-theme-on-surface), 0.7) !important;
+}
+
+#console-wrapper:fullscreen .fullscreen-btn {
+  color: rgba(255, 255, 255, 0.7) !important;
 }
 
 :deep(.console-log-line) {

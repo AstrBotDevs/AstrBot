@@ -9,56 +9,51 @@ const { tm } = useModuleI18n('features/console');
 
 <template>
   <div class="console-page">
-    <div class="console-header">
-      <div>
-        <h1 class="text-h2 mb-1">{{ tm('title') }}</h1>
-        <p class="text-body-2 text-medium-emphasis mb-0">
-          {{ tm('debugHint.text') }}
-        </p>
-      </div>
-      <div class="d-flex align-center">
-        <v-switch
-          v-model="hideUserChatEnabled"
-          :label="hideUserChatEnabled ? tm('hideUserChat.enabled') : tm('hideUserChat.disabled')"
-          hide-details
-          density="compact"
-          inset
-          color="primary"
-          style="margin-right: 16px;"
-        ></v-switch>
-        <v-switch
-          v-model="autoScrollEnabled"
-          :label="autoScrollEnabled ? tm('autoScroll.enabled') : tm('autoScroll.disabled')"
-          hide-details
-          density="compact"
-          inset
-          color="primary"
-          style="margin-right: 16px;"
-        ></v-switch>
-        <v-dialog v-model="pipDialog" width="400">
-          <template v-slot:activator="{ props }">
-            <v-btn variant="text" v-bind="props">{{ tm('pipInstall.button') }}</v-btn>
-          </template>
-          <v-card>
-            <v-card-title class="text-h3 pa-4 pb-0 pl-6">
-              <span>{{ tm('pipInstall.dialogTitle') }}</span>
-            </v-card-title>
-            <v-card-text>
-              <v-text-field v-model="pipInstallPayload.package" :label="tm('pipInstall.packageLabel')" variant="outlined"></v-text-field>
-              <v-text-field v-model="pipInstallPayload.mirror" :label="tm('pipInstall.mirrorLabel')" variant="outlined"></v-text-field>
-              <small>{{ tm('pipInstall.mirrorHint') }}</small>
-            </v-card-text>
-            <v-card-actions>
-              <v-spacer></v-spacer>
-              <v-btn color="blue-darken-1" variant="text" @click="pipInstall" :loading="loading">
-                {{ tm('pipInstall.installButton') }}
-              </v-btn>
-            </v-card-actions>
-          </v-card>
-        </v-dialog>
-      </div>
-    </div>
-    <ConsoleDisplayer ref="consoleDisplayer" class="console-display" :hide-user-chat="hideUserChatEnabled" />
+    <ConsoleDisplayer ref="consoleDisplayer" class="console-display" :hide-user-chat="hideUserChatEnabled">
+      <template #header-actions>
+        <div class="d-flex align-center console-header-actions">
+          <v-switch
+            v-model="hideUserChatEnabled"
+            :label="hideUserChatEnabled ? tm('hideUserChat.enabled') : tm('hideUserChat.disabled')"
+            hide-details
+            density="compact"
+            inset
+            color="primary"
+            style="margin-right: 16px;"
+          ></v-switch>
+          <v-switch
+            v-model="autoScrollEnabled"
+            :label="autoScrollEnabled ? tm('autoScroll.enabled') : tm('autoScroll.disabled')"
+            hide-details
+            density="compact"
+            inset
+            color="primary"
+            style="margin-right: 16px;"
+          ></v-switch>
+          <v-dialog v-model="pipDialog" width="400">
+            <template v-slot:activator="{ props }">
+              <v-btn variant="text" v-bind="props">{{ tm('pipInstall.button') }}</v-btn>
+            </template>
+            <v-card>
+              <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+                <span>{{ tm('pipInstall.dialogTitle') }}</span>
+              </v-card-title>
+              <v-card-text>
+                <v-text-field v-model="pipInstallPayload.package" :label="tm('pipInstall.packageLabel')" variant="outlined"></v-text-field>
+                <v-text-field v-model="pipInstallPayload.mirror" :label="tm('pipInstall.mirrorLabel')" variant="outlined"></v-text-field>
+                <small>{{ tm('pipInstall.mirrorHint') }}</small>
+              </v-card-text>
+              <v-card-actions>
+                <v-spacer></v-spacer>
+                <v-btn color="blue-darken-1" variant="text" @click="pipInstall" :loading="loading">
+                  {{ tm('pipInstall.installButton') }}
+                </v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+        </div>
+      </template>
+    </ConsoleDisplayer>
   </div>
 </template>
 <script>
@@ -130,14 +125,6 @@ export default {
   width: 100%;
 }
 
-.console-header {
-  align-items: flex-start;
-  display: flex;
-  flex-shrink: 0;
-  justify-content: space-between;
-  margin-bottom: 24px;
-}
-
 .console-display {
   flex: 1;
   min-height: 0;
@@ -163,9 +150,8 @@ export default {
     padding: 16px;
   }
 
-  .console-header {
-    flex-direction: column;
-    gap: 12px;
+  .console-header-actions {
+    flex-wrap: wrap;
   }
 }
 </style>
