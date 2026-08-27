@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from "vue";
+import { reactive, ref, watch } from "vue";
 import { PackagePlus } from "@lucide/vue";
 import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
 import { useModuleI18n } from "@/i18n/composables";
@@ -7,15 +7,10 @@ import { useCustomizerStore } from "@/stores/customizer";
 import { updatesApi } from "@/api/v1";
 import { useToast } from "@/utils/toast";
 
-type ConsoleDisplayerHandle = {
-  autoScroll: boolean;
-};
-
 const { tm } = useModuleI18n("features/console");
 const toast = useToast();
 const customizerStore = useCustomizerStore();
 
-const consoleDisplayer = ref<ConsoleDisplayerHandle | null>(null);
 const autoScrollEnabled = ref(
   localStorage.getItem("console_auto_scroll") !== "false",
 );
@@ -26,17 +21,8 @@ const pipDialog = ref(false);
 const pipInstallPayload = reactive({ package: "", mirror: "" });
 const loading = ref(false);
 
-onMounted(() => {
-  if (consoleDisplayer.value) {
-    consoleDisplayer.value.autoScroll = autoScrollEnabled.value;
-  }
-});
-
 watch(autoScrollEnabled, (value) => {
   localStorage.setItem("console_auto_scroll", String(value));
-  if (consoleDisplayer.value) {
-    consoleDisplayer.value.autoScroll = value;
-  }
 });
 
 watch(hideUserChatEnabled, (value) => {
@@ -67,9 +53,9 @@ async function pipInstall() {
 <template>
   <div class="console-page" :class="{ 'is-dark': customizerStore.isDark }">
     <ConsoleDisplayer
-      ref="consoleDisplayer"
       class="console-display"
       workspace-mode
+      :auto-scroll="autoScrollEnabled"
       :hide-user-chat="hideUserChatEnabled"
     >
       <template #header-actions>

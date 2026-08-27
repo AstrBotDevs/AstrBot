@@ -52,7 +52,6 @@ export default {
   name: "ConsoleDisplayer",
   data() {
     return {
-      autoScroll: true,
       isFullscreen: false,
       logColorAnsiMap: {
         "\u001b[1;34m": "color: #6cb6d9; font-weight: bold;",
@@ -99,6 +98,10 @@ export default {
     hideUserChat: {
       type: Boolean,
       default: false,
+    },
+    autoScroll: {
+      type: Boolean,
+      default: true,
     },
     workspaceMode: {
       type: Boolean,
@@ -301,10 +304,6 @@ export default {
           });
         }
       }
-    },
-
-    toggleAutoScroll() {
-      this.autoScroll = !this.autoScroll;
     },
 
     toggleFullscreen() {
