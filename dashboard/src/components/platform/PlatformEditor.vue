@@ -372,6 +372,7 @@ import UmoDisplay from '@/components/shared/UmoDisplay.vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { getPlatformIcon, getTutorialLink } from '@/utils/platformUtils';
 import { runBotMutationWithStepUp } from '@/utils/botStepUp';
+import { resolveErrorMessage } from '@/utils/errorUtils';
 
 const SYSTEM_DEFAULT_CONFIG = '__astrbot_system_default__';
 
@@ -431,7 +432,7 @@ let loadVersion = 0;
 
 const platformTemplates = computed(
   () =>
-    props.metadata['platform_group']?.metadata?.platform?.config_template || {},
+    props.metadata.platform_group?.metadata?.platform?.config_template || {},
 );
 
 const platformIcon = computed(() => {
@@ -552,7 +553,7 @@ function mergeConfigWithTemplate(sourceConfig, templateConfig) {
         !Array.isArray(referenceValue)
       ) {
         target[key] = merge(sourceValue, referenceValue);
-      } else if (Object.prototype.hasOwnProperty.call(sourceObject, key)) {
+      } else if (Object.hasOwn(sourceObject, key)) {
         target[key] = clone(sourceValue);
       } else {
         target[key] = clone(referenceValue);
@@ -560,7 +561,7 @@ function mergeConfigWithTemplate(sourceConfig, templateConfig) {
     }
 
     for (const [key, value] of Object.entries(sourceObject)) {
-      if (!Object.prototype.hasOwnProperty.call(referenceObject, key)) {
+      if (!Object.hasOwn(referenceObject, key)) {
         target[key] = clone(value);
       }
     }
@@ -871,9 +872,10 @@ function showSuccess(message) {
 }
 
 function showError(error) {
-  const message =
-    error?.response?.data?.message || error?.message || String(error);
-  emit('show-toast', { message, type: 'error' });
+  emit('show-toast', {
+    message: resolveErrorMessage(error, tm('messages.platformUpdateFailed')),
+    type: 'error',
+  });
 }
 </script>
 
