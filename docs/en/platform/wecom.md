@@ -60,7 +60,7 @@ Back in WeCom Customer Service callback settings, click `Complete`. If successfu
 > [!TIP]
 > Based on [#571](https://github.com/Soulter/AstrBot/issues/571), for newly registered enterprises, `corp_id` may take about 30 minutes to become valid.
 
-Then open AstrBot `Console`, you should see logs asking you to open a WeChat scan link.
+Then open `Data` -> `Logs` in AstrBot, where you should see logs asking you to open a WeChat scan link.
 
 ```txt
 Please open the following link and scan with WeChat ...

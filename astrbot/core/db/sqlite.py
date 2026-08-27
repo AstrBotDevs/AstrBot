@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from deprecated import deprecated
-from sqlalchemy import CursorResult, Row, not_
+from sqlalchemy import CursorResult, Row, case, not_
 from sqlalchemy.dialects.sqlite import dialect as sqlite_dialect
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
@@ -372,6 +372,19 @@ class SQLiteDatabase(BaseDatabase):
                         col(ConversationV2.content).ilike(f"%{escaped_search_query}%"),
                     )
                 )
+            keyword_query = str(kwargs.get("keyword_query") or "").strip()
+            if keyword_query:
+                escaped_keyword_query = json.dumps(
+                    keyword_query,
+                    ensure_ascii=True,
+                )[1:-1]
+                conditions.append(
+                    or_(
+                        col(ConversationV2.title).ilike(f"%{keyword_query}%"),
+                        col(ConversationV2.content).ilike(f"%{keyword_query}%"),
+                        col(ConversationV2.content).ilike(f"%{escaped_keyword_query}%"),
+                    )
+                )
             message_types = kwargs.get("message_types") or []
             if message_types:
                 conditions.append(
@@ -395,12 +408,22 @@ class SQLiteDatabase(BaseDatabase):
                 conditions.append(
                     not_(col(ConversationV2.platform_id).in_(exclude_platforms))
                 )
+            umo_query = str(kwargs.get("umo_query") or "").strip()
+            if umo_query:
+                conditions.append(col(ConversationV2.user_id).ilike(f"%{umo_query}%"))
 
             if conditions:
                 base_query = base_query.where(*conditions)
 
+            group_by_session = bool(kwargs.get("group_by_session", False))
+
             # Get total count matching the filters
-            count_query = select(func.count(ConversationV2.inner_conversation_id))
+            count_target = (
+                func.distinct(ConversationV2.user_id)
+                if group_by_session
+                else ConversationV2.inner_conversation_id
+            )
+            count_query = select(func.count(count_target))
             if conditions:
                 count_query = count_query.where(*conditions)
             total_count = await session.execute(count_query)
@@ -408,15 +431,74 @@ class SQLiteDatabase(BaseDatabase):
 
             # Get paginated results
             offset = (page - 1) * page_size
-            result_query = (
-                base_query.order_by(desc(ConversationV2.created_at))
-                .order_by(desc(ConversationV2.inner_conversation_id))
-                .offset(offset)
-                .limit(page_size)
+            sort_by = kwargs.get("sort_by", "created_at")
+            sort_order = kwargs.get("sort_order", "desc")
+            sort_column = (
+                ConversationV2.updated_at
+                if sort_by == "updated_at"
+                else ConversationV2.created_at
             )
+            order = sort_column.asc if sort_order == "asc" else sort_column.desc
+            tie_breaker = (
+                ConversationV2.inner_conversation_id.asc
+                if sort_order == "asc"
+                else ConversationV2.inner_conversation_id.desc
+            )
+            if group_by_session:
+                session_sort = func.max(sort_column).label("session_sort")
+                session_tie_breaker = func.max(
+                    ConversationV2.inner_conversation_id
+                ).label("session_tie_breaker")
+                session_query = select(
+                    ConversationV2.user_id,
+                    session_sort,
+                    session_tie_breaker,
+                )
+                if conditions:
+                    session_query = session_query.where(*conditions)
+                session_order = (
+                    session_sort.asc if sort_order == "asc" else session_sort.desc
+                )
+                session_tie_order = (
+                    session_tie_breaker.asc
+                    if sort_order == "asc"
+                    else session_tie_breaker.desc
+                )
+                session_rows = await session.execute(
+                    session_query.group_by(ConversationV2.user_id)
+                    .order_by(session_order())
+                    .order_by(session_tie_order())
+                    .offset(offset)
+                    .limit(page_size)
+                )
+                session_ids = [row[0] for row in session_rows.all()]
+                if not session_ids:
+                    return [], total
+                session_rank = case(
+                    {session_id: index for index, session_id in enumerate(session_ids)},
+                    value=ConversationV2.user_id,
+                    else_=len(session_ids),
+                )
+                result_query = (
+                    base_query.where(col(ConversationV2.user_id).in_(session_ids))
+                    .order_by(session_rank)
+                    .order_by(order())
+                    .order_by(tie_breaker())
+                )
+            else:
+                result_query = (
+                    base_query.order_by(order())
+                    .order_by(tie_breaker())
+                    .offset(offset)
+                    .limit(page_size)
+                )
             if not include_history:
                 result_query = result_query.options(defer(ConversationV2.content))
-            if len(platforms) > 1 or len(platform_ids or []) > 1:
+            if (
+                not group_by_session
+                and sort_by == "created_at"
+                and (len(platforms) > 1 or len(platform_ids or []) > 1)
+            ):
                 # SQLite may choose the narrow platform index for IN queries and
                 # then materialize a temporary sort. Force the global ordering
                 # index for multi-platform pages while keeping ORM row mapping.
@@ -448,6 +530,20 @@ class SQLiteDatabase(BaseDatabase):
             conversations = result.scalars().all()
 
             return conversations, total
+
+    async def get_conversation_platform_ids(self) -> list[str]:
+        """Return distinct platform IDs referenced by conversation history.
+
+        Returns:
+            Sorted platform IDs that have at least one conversation.
+        """
+        async with self.get_db() as session:
+            result = await session.execute(
+                select(ConversationV2.platform_id)
+                .distinct()
+                .order_by(ConversationV2.platform_id)
+            )
+            return [platform_id for platform_id in result.scalars() if platform_id]
 
     async def create_conversation(
         self,

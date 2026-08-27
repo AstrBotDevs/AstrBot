@@ -548,7 +548,7 @@ Log level. Default is `INFO`. Can be set to `DEBUG`, `INFO`, `WARNING`, `ERROR`,
 
 ### `trace_enable`
 
-Whether to enable trace recording. Default is `false`. When enabled, AstrBot records execution traces, which can be viewed on the Trace page of the admin panel.
+Whether to enable trace recording. Default is `false`. When enabled, AstrBot records execution traces, which can be viewed under `Data` -> `Trace` in the admin panel.
 
 ### `pip_install_arg`
 

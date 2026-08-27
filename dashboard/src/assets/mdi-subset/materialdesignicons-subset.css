@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 272 icons */
+/* Auto-generated MDI subset – 269 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -282,10 +282,6 @@
 
 .mdi-connection::before {
   content: "\F1616";
-}
-
-.mdi-console::before {
-  content: "\F018D";
 }
 
 .mdi-console-line::before {
@@ -1020,10 +1016,6 @@
   content: "\F050E";
 }
 
-.mdi-timeline-text-outline::before {
-  content: "\F0BD4";
-}
-
 .mdi-timer-outline::before {
   content: "\F051B";
 }
@@ -1070,10 +1062,6 @@
 
 .mdi-vector-point::before {
   content: "\F01C4";
-}
-
-.mdi-view-dashboard::before {
-  content: "\F056E";
 }
 
 .mdi-volume-high::before {
