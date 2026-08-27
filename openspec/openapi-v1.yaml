@@ -4220,6 +4220,12 @@ paths:
             type: string
             enum: [asc, desc]
             default: desc
+        - name: group_by_session
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Paginate by UMO and return all conversation summaries for each selected session.
         - name: include_history
           in: query
           schema:

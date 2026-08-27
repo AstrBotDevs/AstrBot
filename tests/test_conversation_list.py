@@ -150,6 +150,73 @@ async def test_filtered_conversations_summary_skips_content_and_applies_filters(
 
 
 @pytest.mark.asyncio
+async def test_filtered_conversations_can_paginate_complete_session_groups(
+    tmp_path: Path,
+):
+    db = SQLiteDatabase(str(tmp_path / "grouped-conversations.db"))
+    await db.initialize()
+
+    def conversation(cid: str, user_id: str, day: int) -> ConversationV2:
+        """Build a dated conversation fixture.
+
+        Args:
+            cid: Conversation ID.
+            user_id: Unified message origin.
+            day: Day used for the created and updated timestamps.
+
+        Returns:
+            Conversation fixture.
+        """
+        timestamp = datetime(2026, 1, day, tzinfo=timezone.utc)
+        return ConversationV2(
+            conversation_id=cid,
+            platform_id="qq",
+            user_id=user_id,
+            content=[{"role": "user", "content": cid}],
+            created_at=timestamp,
+            updated_at=timestamp,
+        )
+
+    async with db.get_db() as session:
+        async with session.begin():
+            session.add_all(
+                [
+                    conversation("a-old", "qq:FriendMessage:a", 1),
+                    conversation("a-new", "qq:FriendMessage:a", 2),
+                    conversation("b-old", "qq:FriendMessage:b", 3),
+                    conversation("b-new", "qq:FriendMessage:b", 4),
+                    conversation("c-only", "qq:FriendMessage:c", 5),
+                ]
+            )
+
+    first_page, total_sessions = await db.get_filtered_conversations(
+        page=1,
+        page_size=2,
+        sort_by="updated_at",
+        sort_order="desc",
+        group_by_session=True,
+        include_history=False,
+    )
+    second_page, second_total = await db.get_filtered_conversations(
+        page=2,
+        page_size=2,
+        sort_by="updated_at",
+        sort_order="desc",
+        group_by_session=True,
+        include_history=False,
+    )
+
+    assert total_sessions == second_total == 3
+    assert [item.conversation_id for item in first_page] == [
+        "c-only",
+        "b-new",
+        "b-old",
+    ]
+    assert [item.conversation_id for item in second_page] == ["a-new", "a-old"]
+    assert all("content" in sqlalchemy_inspect(item).unloaded for item in first_page)
+
+
+@pytest.mark.asyncio
 async def test_conversation_indexes_are_idempotent_and_support_ordered_list(
     tmp_path: Path,
 ):

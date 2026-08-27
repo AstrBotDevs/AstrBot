@@ -127,7 +127,10 @@
     "list": {
       "title": "Диалоги",
       "total": "Всего: {count}",
+      "sessionTotal": "Сеансов: {count}",
       "selected": "Выбрано: {count}",
+      "groupBySession": "Группировать по сеансам",
+      "conversationCount": "Диалогов: {count}",
       "selectPage": "Выбрать страницу",
       "empty": "Диалогов пока нет",
       "filteredEmpty": "Нет диалогов с такими фильтрами",

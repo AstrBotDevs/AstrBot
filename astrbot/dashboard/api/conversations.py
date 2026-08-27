@@ -98,6 +98,7 @@ async def _list_conversations(
     umo: str,
     sort_by: Literal["created_at", "updated_at"],
     sort_order: Literal["asc", "desc"],
+    group_by_session: bool,
     include_history: bool,
 ):
     return await _run(
@@ -113,6 +114,7 @@ async def _list_conversations(
             umo_query=umo,
             sort_by=sort_by,
             sort_order=sort_order,
+            group_by_session=group_by_session,
             include_history=include_history,
         )
     )
@@ -131,6 +133,7 @@ async def list_conversations(
     umo: str = Query(default=""),
     sort_by: Literal["created_at", "updated_at"] = Query(default="created_at"),
     sort_order: Literal["asc", "desc"] = Query(default="desc"),
+    group_by_session: bool = Query(default=False),
     include_history: bool = Query(default=True),
     _auth: AuthContext = Depends(require_data_scope),
     service: ConversationService = Depends(get_service),
@@ -148,6 +151,7 @@ async def list_conversations(
         umo=umo,
         sort_by=sort_by,
         sort_order=sort_order,
+        group_by_session=group_by_session,
         include_history=include_history,
     )
 
@@ -255,6 +259,7 @@ async def list_dashboard_conversations(
     umo: str = Query(default=""),
     sort_by: Literal["created_at", "updated_at"] = Query(default="created_at"),
     sort_order: Literal["asc", "desc"] = Query(default="desc"),
+    group_by_session: bool = Query(default=False),
     include_history: bool = Query(default=True),
     _username: str = Depends(require_dashboard_user),
     service: ConversationService = Depends(get_service),
@@ -272,6 +277,7 @@ async def list_dashboard_conversations(
         umo=umo,
         sort_by=sort_by,
         sort_order=sort_order,
+        group_by_session=group_by_session,
         include_history=include_history,
     )
 

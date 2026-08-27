@@ -47,6 +47,7 @@ class ConversationService:
         umo_query: str = "",
         sort_by: str = "created_at",
         sort_order: str = "desc",
+        group_by_session: bool = False,
         include_history: bool = True,
     ) -> dict:
         platform_list = [item.strip() for item in platforms.split(",") if item.strip()]
@@ -78,6 +79,7 @@ class ConversationService:
                 umo_query=umo_query.strip(),
                 sort_by=sort_by,
                 sort_order=sort_order,
+                group_by_session=group_by_session,
                 include_history=include_history,
             )
         except Exception as exc:
@@ -104,6 +106,7 @@ class ConversationService:
                 "page_size": page_size,
                 "total": total_count,
                 "total_pages": total_pages,
+                "grouped_by_session": group_by_session,
             },
         }
 

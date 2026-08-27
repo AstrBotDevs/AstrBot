@@ -3151,6 +3151,10 @@ export type ListConversationsData = {
          */
         exclude_platforms?: string;
         /**
+         * Paginate by UMO and return all conversation summaries for each selected session.
+         */
+        group_by_session?: boolean;
+        /**
          * Include full message history in each conversation.
          */
         include_history?: boolean;

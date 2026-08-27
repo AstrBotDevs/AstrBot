@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from deprecated import deprecated
-from sqlalchemy import CursorResult, Row, not_
+from sqlalchemy import CursorResult, Row, case, not_
 from sqlalchemy.dialects.sqlite import dialect as sqlite_dialect
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
@@ -415,8 +415,15 @@ class SQLiteDatabase(BaseDatabase):
             if conditions:
                 base_query = base_query.where(*conditions)
 
+            group_by_session = bool(kwargs.get("group_by_session", False))
+
             # Get total count matching the filters
-            count_query = select(func.count(ConversationV2.inner_conversation_id))
+            count_target = (
+                func.distinct(ConversationV2.user_id)
+                if group_by_session
+                else ConversationV2.inner_conversation_id
+            )
+            count_query = select(func.count(count_target))
             if conditions:
                 count_query = count_query.where(*conditions)
             total_count = await session.execute(count_query)
@@ -437,16 +444,60 @@ class SQLiteDatabase(BaseDatabase):
                 if sort_order == "asc"
                 else ConversationV2.inner_conversation_id.desc
             )
-            result_query = (
-                base_query.order_by(order())
-                .order_by(tie_breaker())
-                .offset(offset)
-                .limit(page_size)
-            )
+            if group_by_session:
+                session_sort = func.max(sort_column).label("session_sort")
+                session_tie_breaker = func.max(
+                    ConversationV2.inner_conversation_id
+                ).label("session_tie_breaker")
+                session_query = select(
+                    ConversationV2.user_id,
+                    session_sort,
+                    session_tie_breaker,
+                )
+                if conditions:
+                    session_query = session_query.where(*conditions)
+                session_order = (
+                    session_sort.asc if sort_order == "asc" else session_sort.desc
+                )
+                session_tie_order = (
+                    session_tie_breaker.asc
+                    if sort_order == "asc"
+                    else session_tie_breaker.desc
+                )
+                session_rows = await session.execute(
+                    session_query.group_by(ConversationV2.user_id)
+                    .order_by(session_order())
+                    .order_by(session_tie_order())
+                    .offset(offset)
+                    .limit(page_size)
+                )
+                session_ids = [row[0] for row in session_rows.all()]
+                if not session_ids:
+                    return [], total
+                session_rank = case(
+                    {session_id: index for index, session_id in enumerate(session_ids)},
+                    value=ConversationV2.user_id,
+                    else_=len(session_ids),
+                )
+                result_query = (
+                    base_query.where(col(ConversationV2.user_id).in_(session_ids))
+                    .order_by(session_rank)
+                    .order_by(order())
+                    .order_by(tie_breaker())
+                )
+            else:
+                result_query = (
+                    base_query.order_by(order())
+                    .order_by(tie_breaker())
+                    .offset(offset)
+                    .limit(page_size)
+                )
             if not include_history:
                 result_query = result_query.options(defer(ConversationV2.content))
-            if sort_by == "created_at" and (
-                len(platforms) > 1 or len(platform_ids or []) > 1
+            if (
+                not group_by_session
+                and sort_by == "created_at"
+                and (len(platforms) > 1 or len(platform_ids or []) > 1)
             ):
                 # SQLite may choose the narrow platform index for IN queries and
                 # then materialize a temporary sort. Force the global ordering

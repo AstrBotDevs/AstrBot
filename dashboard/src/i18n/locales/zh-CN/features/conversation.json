@@ -127,7 +127,10 @@
     "list": {
       "title": "对话",
       "total": "共 {count} 条",
+      "sessionTotal": "共 {count} 个会话",
       "selected": "已选 {count} 条",
+      "groupBySession": "按会话分组",
+      "conversationCount": "{count} 个对话",
       "selectPage": "选择当前页",
       "empty": "暂无对话",
       "filteredEmpty": "没有符合筛选条件的对话",

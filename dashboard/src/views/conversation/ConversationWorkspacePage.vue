@@ -1,11 +1,19 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from "vue";
 import { RouterLink } from "vue-router";
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import {
   Bot,
   Braces,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Copy,
@@ -54,6 +62,22 @@ type BotOption = {
   type: string;
 };
 
+type SessionGroup = {
+  userId: string;
+  sample: Conversation;
+  items: Conversation[];
+  selectedCount: number;
+};
+
+type ConversationListEntry =
+  | { kind: "session"; key: string; group: SessionGroup }
+  | {
+      kind: "conversation";
+      key: string;
+      item: Conversation;
+      grouped: boolean;
+    };
+
 const { locale } = useI18n();
 const { tm } = useModuleI18n("features/conversation");
 const customizerStore = useCustomizerStore();
@@ -66,6 +90,8 @@ const selectedBotIds = ref<string[]>([]);
 const selectedTypes = ref<string[]>([]);
 const umoQuery = ref("");
 const sortValue = ref("updated_at:desc");
+const groupBySession = ref(false);
+const expandedSessions = ref<Record<string, boolean>>({});
 const page = ref(1);
 const pageSize = 30;
 const total = ref(0);
@@ -80,6 +106,7 @@ const activeConversation = ref<Conversation | null>(null);
 const conversationHistory = ref<any[]>([]);
 const previewLoading = ref(false);
 const previewRequestId = ref(0);
+const previewMessagesRef = ref<HTMLElement | null>(null);
 const rawDataDialog = ref(false);
 const rawHistoryText = ref("");
 
@@ -114,6 +141,48 @@ const somePageSelected = computed(
       (item) => selectedByKey.value[conversationKey(item)],
     ),
 );
+const sessionGroups = computed<SessionGroup[]>(() => {
+  const groups = new Map<string, Conversation[]>();
+  for (const item of conversations.value) {
+    const items = groups.get(item.user_id);
+    if (items) items.push(item);
+    else groups.set(item.user_id, [item]);
+  }
+  return Array.from(groups, ([userId, items]) => ({
+    userId,
+    sample: items[0],
+    items,
+    selectedCount: items.filter(
+      (item) => selectedByKey.value[conversationKey(item)],
+    ).length,
+  }));
+});
+const conversationListEntries = computed<ConversationListEntry[]>(() => {
+  if (!groupBySession.value) {
+    return conversations.value.map((item) => ({
+      kind: "conversation",
+      key: conversationKey(item),
+      item,
+      grouped: false,
+    }));
+  }
+
+  const entries: ConversationListEntry[] = [];
+  for (const group of sessionGroups.value) {
+    entries.push({ kind: "session", key: `session:${group.userId}`, group });
+    if (expandedSessions.value[group.userId]) {
+      entries.push(
+        ...group.items.map((item) => ({
+          kind: "conversation" as const,
+          key: conversationKey(item),
+          item,
+          grouped: true,
+        })),
+      );
+    }
+  }
+  return entries;
+});
 const botTypes = computed(() =>
   Object.fromEntries(availableBots.value.map((bot) => [bot.id, bot.type])),
 );
@@ -204,9 +273,13 @@ watch([keyword, umoQuery], () => {
   scheduleFetch();
 });
 
-watch([selectedBotIds, selectedTypes, sortValue], () => {
+watch([selectedBotIds, selectedTypes, sortValue, groupBySession], () => {
   cancelScheduledFetch();
   page.value = 1;
+  expandedSessions.value =
+    groupBySession.value && activeConversation.value
+      ? { [activeConversation.value.user_id]: true }
+      : {};
   void fetchConversations();
 });
 
@@ -330,6 +403,7 @@ async function fetchConversations() {
     exclude_platforms: "webchat",
     sort_by: sortBy,
     sort_order: sortOrder,
+    group_by_session: groupBySession.value,
   };
   if (keyword.value.trim()) params.keyword = keyword.value.trim();
   if (umoQuery.value.trim()) params.umo = umoQuery.value.trim();
@@ -414,6 +488,23 @@ function toggleCurrentPage() {
   selectedByKey.value = next;
 }
 
+function toggleSessionSelection(group: SessionGroup) {
+  const next = { ...selectedByKey.value };
+  if (group.selectedCount === group.items.length) {
+    for (const item of group.items) delete next[conversationKey(item)];
+  } else {
+    for (const item of group.items) next[conversationKey(item)] = item;
+  }
+  selectedByKey.value = next;
+}
+
+function toggleSessionExpanded(userId: string) {
+  expandedSessions.value = {
+    ...expandedSessions.value,
+    [userId]: !expandedSessions.value[userId],
+  };
+}
+
 async function openConversation(item: Conversation) {
   rawDataDialog.value = false;
   activeConversation.value = item;
@@ -442,7 +533,14 @@ async function openConversation(item: Conversation) {
       "error",
     );
   } finally {
-    if (requestId === previewRequestId.value) previewLoading.value = false;
+    if (requestId === previewRequestId.value) {
+      previewLoading.value = false;
+      await nextTick();
+      if (requestId === previewRequestId.value && previewMessagesRef.value) {
+        previewMessagesRef.value.scrollTop =
+          previewMessagesRef.value.scrollHeight;
+      }
+    }
   }
 }
 
@@ -792,11 +890,27 @@ function changePage(nextPage: number) {
                   ? tm("workspace.list.selected", {
                       count: selectedItems.length,
                     })
-                  : tm("workspace.list.total", { count: total })
+                  : tm(
+                      groupBySession
+                        ? "workspace.list.sessionTotal"
+                        : "workspace.list.total",
+                      { count: total },
+                    )
               }}
             </div>
           </div>
           <div class="toolbar-actions">
+            <div class="group-switch">
+              <span>{{ tm("workspace.list.groupBySession") }}</span>
+              <v-switch
+                v-model="groupBySession"
+                color="primary"
+                density="compact"
+                hide-details
+                inset
+                :aria-label="tm('workspace.list.groupBySession')"
+              />
+            </div>
             <template v-if="selectedItems.length">
               <v-btn
                 icon
@@ -865,72 +979,157 @@ function changePage(nextPage: number) {
               {{ tm("workspace.actions.refresh") }}
             </v-btn>
           </div>
-          <button
-            v-for="item in conversations"
+          <template
+            v-for="entry in conversationListEntries"
             v-else
-            :key="conversationKey(item)"
-            type="button"
-            class="conversation-row"
-            :class="{
-              'conversation-row--active':
-                activeConversation &&
-                conversationKey(activeConversation) === conversationKey(item),
-            }"
-            @click="openConversation(item)"
+            :key="entry.key"
           >
-            <span class="row-select" @click.stop>
-              <v-checkbox-btn
-                :model-value="Boolean(selectedByKey[conversationKey(item)])"
-                density="compact"
-                hide-details
-                @update:model-value="toggleConversation(item)"
-              />
-            </span>
-            <span class="row-platform">
-              <img
-                v-if="platformIcon(item)"
-                :src="platformIcon(item)"
-                alt=""
-                class="platform-icon platform-icon--row"
-              />
-              <span v-else class="platform-icon platform-icon--fallback">
-                <Bot :size="16" aria-hidden="true" />
+            <div
+              v-if="entry.kind === 'session'"
+              class="session-group-row"
+              :class="{
+                'session-group-row--active':
+                  activeConversation?.user_id === entry.group.userId,
+              }"
+            >
+              <span class="row-select" @click.stop>
+                <v-checkbox-btn
+                  :model-value="
+                    entry.group.selectedCount === entry.group.items.length
+                  "
+                  :indeterminate="
+                    entry.group.selectedCount > 0 &&
+                    entry.group.selectedCount < entry.group.items.length
+                  "
+                  density="compact"
+                  hide-details
+                  @update:model-value="toggleSessionSelection(entry.group)"
+                />
               </span>
-            </span>
-            <span class="row-content">
-              <span class="row-title-line">
-                <span class="row-title">
-                  {{ item.title || tm("status.noTitle") }}
-                </span>
-                <span
-                  class="row-edit"
-                  role="button"
-                  tabindex="0"
-                  :aria-label="tm('workspace.actions.editTitle')"
-                  @click.stop="startEditing(item)"
-                  @keydown.enter.stop="startEditing(item)"
-                >
-                  <Pencil :size="13" aria-hidden="true" />
+              <span class="row-platform">
+                <img
+                  v-if="platformIcon(entry.group.sample)"
+                  :src="platformIcon(entry.group.sample)"
+                  alt=""
+                  class="platform-icon platform-icon--row"
+                />
+                <span v-else class="platform-icon platform-icon--fallback">
+                  <Bot :size="16" aria-hidden="true" />
                 </span>
               </span>
-              <span class="row-meta">
-                <span>{{ item.platform_id }}</span>
-                <span aria-hidden="true">·</span>
-                <span>{{ messageTypeLabel(item) }}</span>
-                <span aria-hidden="true">·</span>
-                <span
-                  class="row-identity"
-                  :class="{
-                    'row-identity--named': hasReadableIdentity(item),
-                  }"
-                  :title="item.user_id"
-                >
-                  {{ conversationIdentity(item) }}
+              <button
+                type="button"
+                class="session-group-main"
+                :aria-expanded="Boolean(expandedSessions[entry.group.userId])"
+                @click="toggleSessionExpanded(entry.group.userId)"
+              >
+                <span class="row-content">
+                  <span
+                    class="session-group-name"
+                    :class="{
+                      'row-identity--named': hasReadableIdentity(
+                        entry.group.sample,
+                      ),
+                    }"
+                    :title="entry.group.userId"
+                  >
+                    {{ conversationIdentity(entry.group.sample) }}
+                  </span>
+                  <span class="row-meta">
+                    <span>{{ entry.group.sample.platform_id }}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{{ messageTypeLabel(entry.group.sample) }}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>
+                      {{
+                        tm("workspace.list.conversationCount", {
+                          count: entry.group.items.length,
+                        })
+                      }}
+                    </span>
+                  </span>
+                </span>
+                <ChevronDown
+                  v-if="expandedSessions[entry.group.userId]"
+                  :size="16"
+                  aria-hidden="true"
+                />
+                <ChevronRight v-else :size="16" aria-hidden="true" />
+              </button>
+            </div>
+            <button
+              v-else
+              type="button"
+              class="conversation-row"
+              :class="{
+                'conversation-row--grouped': entry.grouped,
+                'conversation-row--active':
+                  activeConversation &&
+                  conversationKey(activeConversation) ===
+                    conversationKey(entry.item),
+              }"
+              @click="openConversation(entry.item)"
+            >
+              <span class="row-select" @click.stop>
+                <v-checkbox-btn
+                  :model-value="
+                    Boolean(selectedByKey[conversationKey(entry.item)])
+                  "
+                  density="compact"
+                  hide-details
+                  @update:model-value="toggleConversation(entry.item)"
+                />
+              </span>
+              <span v-if="!entry.grouped" class="row-platform">
+                <img
+                  v-if="platformIcon(entry.item)"
+                  :src="platformIcon(entry.item)"
+                  alt=""
+                  class="platform-icon platform-icon--row"
+                />
+                <span v-else class="platform-icon platform-icon--fallback">
+                  <Bot :size="16" aria-hidden="true" />
                 </span>
               </span>
-            </span>
-            <span class="row-time">{{ formatTimestamp(item.updated_at) }}</span>
-          </button>
+              <span class="row-content">
+                <span class="row-title-line">
+                  <span class="row-title">
+                    {{ entry.item.title || tm("status.noTitle") }}
+                  </span>
+                  <span
+                    class="row-edit"
+                    role="button"
+                    tabindex="0"
+                    :aria-label="tm('workspace.actions.editTitle')"
+                    @click.stop="startEditing(entry.item)"
+                    @keydown.enter.stop="startEditing(entry.item)"
+                  >
+                    <Pencil :size="13" aria-hidden="true" />
+                  </span>
+                </span>
+                <span class="row-meta">
+                  <span>{{ entry.item.platform_id }}</span>
+                  <span aria-hidden="true">·</span>
+                  <span>{{ messageTypeLabel(entry.item) }}</span>
+                  <template v-if="!entry.grouped">
+                    <span aria-hidden="true">·</span>
+                    <span
+                      class="row-identity"
+                      :class="{
+                        'row-identity--named': hasReadableIdentity(entry.item),
+                      }"
+                      :title="entry.item.user_id"
+                    >
+                      {{ conversationIdentity(entry.item) }}
+                    </span>
+                  </template>
+                </span>
+              </span>
+              <span class="row-time">
+                {{ formatTimestamp(entry.item.updated_at) }}
+              </span>
+            </button>
+          </template>
         </div>
 
         <footer class="pagination-bar">
@@ -1042,7 +1241,7 @@ function changePage(nextPage: number) {
           </v-btn>
         </div>
 
-        <div class="preview-messages">
+        <div ref="previewMessagesRef" class="preview-messages">
           <div v-if="previewLoading" class="panel-state">
             <v-progress-circular indeterminate size="28" width="3" />
             <span>{{ tm("workspace.preview.loading") }}</span>
@@ -1394,6 +1593,24 @@ function changePage(nextPage: number) {
   min-height: 36px;
 }
 
+.group-switch {
+  align-items: center;
+  color: var(--workspace-muted);
+  display: flex;
+  font-size: 0.72rem;
+  gap: 7px;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+.group-switch :deep(.v-switch) {
+  flex: 0 0 auto;
+}
+
+.group-switch :deep(.v-selection-control) {
+  min-height: 32px;
+}
+
 .select-page-row {
   align-items: center;
   color: var(--workspace-muted);
@@ -1413,6 +1630,56 @@ function changePage(nextPage: number) {
   position: relative;
 }
 
+.session-group-row {
+  align-items: center;
+  border-top: 1px solid var(--workspace-subtle);
+  display: grid;
+  gap: 9px;
+  grid-template-columns: 30px 28px minmax(0, 1fr);
+  min-height: 62px;
+  padding: 7px 15px 7px 10px;
+  transition: background-color 0.15s ease;
+}
+
+.session-group-row:hover {
+  background: rgba(var(--v-theme-on-surface), 0.038);
+}
+
+.session-group-row--active {
+  background: rgba(var(--v-theme-primary), 0.075);
+}
+
+.session-group-row--active:hover {
+  background: rgba(var(--v-theme-primary), 0.1);
+}
+
+.session-group-main {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.session-group-name {
+  font-size: 0.82rem;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-group-main:hover .session-group-name {
+  color: rgb(var(--v-theme-primary));
+}
+
 .conversation-row {
   align-items: center;
   background: transparent;
@@ -1428,6 +1695,13 @@ function changePage(nextPage: number) {
   text-align: left;
   transition: background-color 0.15s ease;
   width: 100%;
+}
+
+.conversation-row--grouped {
+  background: rgba(var(--v-theme-surface), 0.66);
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  min-height: 58px;
+  padding-left: 38px;
 }
 
 .conversation-row:hover {
@@ -1715,6 +1989,11 @@ function changePage(nextPage: number) {
 
   .conversation-row {
     grid-template-columns: 30px 26px minmax(0, 1fr);
+  }
+
+  .conversation-row--grouped {
+    grid-template-columns: 30px minmax(0, 1fr);
+    padding-left: 24px;
   }
 
   .row-time {

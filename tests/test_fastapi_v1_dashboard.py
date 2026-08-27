@@ -315,6 +315,7 @@ class FakeConversationManager:
         self.last_keyword_query = ""
         self.last_umo_query = ""
         self.last_sort = ("created_at", "desc")
+        self.last_group_by_session = False
         self.conversations: dict[tuple[str, str], FakeConversation] = {
             (user_id, "conversation/with/slash"): FakeConversation(
                 cid="conversation/with/slash",
@@ -336,12 +337,14 @@ class FakeConversationManager:
         umo_query: str = "",
         sort_by: str = "created_at",
         sort_order: str = "desc",
+        group_by_session: bool = False,
         include_history: bool = True,
     ):
         self.last_include_history = include_history
         self.last_keyword_query = keyword_query
         self.last_umo_query = umo_query
         self.last_sort = (sort_by, sort_order)
+        self.last_group_by_session = group_by_session
         self.last_filter_args = {
             "platforms": platforms,
             "message_types": message_types,
@@ -1469,6 +1472,7 @@ async def test_conversation_workspace_filters_and_options(
             "umo": "session-1",
             "sort_by": "updated_at",
             "sort_order": "asc",
+            "group_by_session": "true",
         },
         headers=_jwt_headers(),
     )
@@ -1477,6 +1481,7 @@ async def test_conversation_workspace_filters_and_options(
     assert manager.last_keyword_query == "Demo"
     assert manager.last_umo_query == "session-1"
     assert manager.last_sort == ("updated_at", "asc")
+    assert manager.last_group_by_session is True
 
 
 @pytest.mark.asyncio

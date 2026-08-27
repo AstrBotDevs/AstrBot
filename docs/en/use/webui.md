@@ -100,7 +100,7 @@ The `Statistics` tab summarizes platform instances, messages, model calls, token
 Use the `Conversations` tab to find and manage saved conversation records:
 
 - Filter by keyword, bot ID, private/group conversation type, or UMO, and sort by creation or update time.
-- The list loads 30 records per page from the server. Full message history is loaded only after you select a conversation and is then shown in the preview on the right.
+- By default, the list loads 30 records per page from the server. When **Group by session** is enabled, pagination switches to UMO sessions and expanding a session reveals all of its conversations. Full message history is loaded only after you select a conversation and is then shown in the preview on the right.
 - Edit titles, export multiple selected conversations, or delete multiple selected conversations.
 - Use the `{}` button in the preview header to inspect the raw `history` JSON in a read-only, word-wrapped Monaco editor.
 - Select `Back to legacy` in the upper-right corner if you still need the original table-based view.

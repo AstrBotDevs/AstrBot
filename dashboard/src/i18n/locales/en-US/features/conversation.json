@@ -127,7 +127,10 @@
     "list": {
       "title": "Conversations",
       "total": "{count} total",
+      "sessionTotal": "{count} sessions",
       "selected": "{count} selected",
+      "groupBySession": "Group by session",
+      "conversationCount": "{count} conversations",
       "selectPage": "Select this page",
       "empty": "No conversations yet",
       "filteredEmpty": "No conversations match these filters",
