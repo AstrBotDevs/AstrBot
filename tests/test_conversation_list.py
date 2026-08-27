@@ -25,6 +25,7 @@ async def test_filtered_conversations_summary_skips_content_and_applies_filters(
             user_id="qq:GroupMessage:1",
             content=[{"role": "user", "content": "x" * 10_000}],
             created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         ),
         ConversationV2(
             conversation_id="friend",
@@ -33,6 +34,7 @@ async def test_filtered_conversations_summary_skips_content_and_applies_filters(
             title="中文标题",
             content=[{"role": "assistant", "content": "中文正文 😀"}],
             created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            updated_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
         ),
         ConversationV2(
             conversation_id="other",
@@ -40,6 +42,7 @@ async def test_filtered_conversations_summary_skips_content_and_applies_filters(
             user_id="telegram:FriendMessage:3",
             content=[{"role": "assistant", "content": "ordinary"}],
             created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            updated_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
         ),
         ConversationV2(
             conversation_id="webchat",
@@ -47,6 +50,7 @@ async def test_filtered_conversations_summary_skips_content_and_applies_filters(
             user_id="webchat:FriendMessage:4",
             content=[{"role": "assistant", "content": "excluded"}],
             created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
         ),
         ConversationV2(
             conversation_id="astrbot",
@@ -54,6 +58,7 @@ async def test_filtered_conversations_summary_skips_content_and_applies_filters(
             user_id="astrbot:FriendMessage:5",
             content=[{"role": "assistant", "content": "excluded"}],
             created_at=datetime(2023, 1, 1, tzinfo=timezone.utc),
+            updated_at=datetime(2023, 1, 1, tzinfo=timezone.utc),
         ),
     ]
     async with db.get_db() as session:
@@ -102,9 +107,46 @@ async def test_filtered_conversations_summary_skips_content_and_applies_filters(
     assert [item.conversation_id for item in title_matches] == ["friend"]
     assert [item.conversation_id for item in content_matches] == ["friend"]
 
+    keyword_matches, _ = await db.get_filtered_conversations(
+        keyword_query="中文正文",
+        include_history=False,
+    )
+    keyword_does_not_match_umo, _ = await db.get_filtered_conversations(
+        keyword_query="FriendMessage:2",
+        include_history=False,
+    )
+    assert [item.conversation_id for item in keyword_matches] == ["friend"]
+    assert keyword_does_not_match_umo == []
+
     full, full_total = await db.get_filtered_conversations(page_size=10)
     assert full_total == 5
     assert all("content" not in sqlalchemy_inspect(item).unloaded for item in full)
+
+    umo_matches, _ = await db.get_filtered_conversations(
+        umo_query="FriendMessage:2",
+        include_history=False,
+    )
+    assert [item.conversation_id for item in umo_matches] == ["friend"]
+
+    updated_ascending, _ = await db.get_filtered_conversations(
+        page_size=10,
+        sort_by="updated_at",
+        sort_order="asc",
+        include_history=False,
+    )
+    assert [item.conversation_id for item in updated_ascending] == [
+        "astrbot",
+        "webchat",
+        "other",
+        "group",
+        "friend",
+    ]
+
+    assert await db.get_conversation_platform_ids() == [
+        "qq",
+        "telegram",
+        "webchat",
+    ]
 
 
 @pytest.mark.asyncio

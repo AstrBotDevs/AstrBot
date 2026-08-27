@@ -173,6 +173,15 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def get_conversation_platform_ids(self) -> list[str]:
+        """Return distinct platform IDs referenced by conversation history.
+
+        Returns:
+            Sorted platform IDs that have at least one conversation.
+        """
+        ...
+
+    @abc.abstractmethod
     async def create_conversation(
         self,
         user_id: str,

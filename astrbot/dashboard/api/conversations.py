@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
@@ -94,6 +94,10 @@ async def _list_conversations(
     search: str,
     exclude_ids: str,
     exclude_platforms: str,
+    keyword: str,
+    umo: str,
+    sort_by: Literal["created_at", "updated_at"],
+    sort_order: Literal["asc", "desc"],
     include_history: bool,
 ):
     return await _run(
@@ -105,6 +109,10 @@ async def _list_conversations(
             search_query=search,
             exclude_ids=exclude_ids,
             exclude_platforms=exclude_platforms,
+            keyword_query=keyword,
+            umo_query=umo,
+            sort_by=sort_by,
+            sort_order=sort_order,
             include_history=include_history,
         )
     )
@@ -119,6 +127,10 @@ async def list_conversations(
     search: str = Query(default=""),
     exclude_ids: str = Query(default=""),
     exclude_platforms: str = Query(default=""),
+    keyword: str = Query(default=""),
+    umo: str = Query(default=""),
+    sort_by: Literal["created_at", "updated_at"] = Query(default="created_at"),
+    sort_order: Literal["asc", "desc"] = Query(default="desc"),
     include_history: bool = Query(default=True),
     _auth: AuthContext = Depends(require_data_scope),
     service: ConversationService = Depends(get_service),
@@ -132,8 +144,20 @@ async def list_conversations(
         search=search,
         exclude_ids=exclude_ids,
         exclude_platforms=exclude_platforms,
+        keyword=keyword,
+        umo=umo,
+        sort_by=sort_by,
+        sort_order=sort_order,
         include_history=include_history,
     )
+
+
+@router.get("/conversations/filter-options")
+async def get_conversation_filter_options(
+    _auth: AuthContext = Depends(require_data_scope),
+    service: ConversationService = Depends(get_service),
+):
+    return await _run(service.get_filter_options)
 
 
 @router.post("/conversations/export")
@@ -227,6 +251,10 @@ async def list_dashboard_conversations(
     search: str = Query(default=""),
     exclude_ids: str = Query(default=""),
     exclude_platforms: str = Query(default=""),
+    keyword: str = Query(default=""),
+    umo: str = Query(default=""),
+    sort_by: Literal["created_at", "updated_at"] = Query(default="created_at"),
+    sort_order: Literal["asc", "desc"] = Query(default="desc"),
     include_history: bool = Query(default=True),
     _username: str = Depends(require_dashboard_user),
     service: ConversationService = Depends(get_service),
@@ -240,6 +268,10 @@ async def list_dashboard_conversations(
         search=search,
         exclude_ids=exclude_ids,
         exclude_platforms=exclude_platforms,
+        keyword=keyword,
+        umo=umo,
+        sort_by=sort_by,
+        sort_order=sort_order,
         include_history=include_history,
     )
 

@@ -177,7 +177,13 @@ const MainRoutes = {
         {
           name: 'Conversation',
           path: 'conversations',
-          component: () => import('@/views/ConversationPage.vue'),
+          component: () => import('@/views/conversation/ConversationWorkspacePage.vue'),
+          meta: { dataTab: 'conversations' }
+        },
+        {
+          name: 'ConversationLegacy',
+          path: 'conversations/legacy',
+          component: () => import('@/views/conversation/LegacyConversationPage.vue'),
           meta: { dataTab: 'conversations' }
         },
         {

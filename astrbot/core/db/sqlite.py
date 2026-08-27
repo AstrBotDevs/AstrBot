@@ -372,6 +372,19 @@ class SQLiteDatabase(BaseDatabase):
                         col(ConversationV2.content).ilike(f"%{escaped_search_query}%"),
                     )
                 )
+            keyword_query = str(kwargs.get("keyword_query") or "").strip()
+            if keyword_query:
+                escaped_keyword_query = json.dumps(
+                    keyword_query,
+                    ensure_ascii=True,
+                )[1:-1]
+                conditions.append(
+                    or_(
+                        col(ConversationV2.title).ilike(f"%{keyword_query}%"),
+                        col(ConversationV2.content).ilike(f"%{keyword_query}%"),
+                        col(ConversationV2.content).ilike(f"%{escaped_keyword_query}%"),
+                    )
+                )
             message_types = kwargs.get("message_types") or []
             if message_types:
                 conditions.append(
@@ -395,6 +408,9 @@ class SQLiteDatabase(BaseDatabase):
                 conditions.append(
                     not_(col(ConversationV2.platform_id).in_(exclude_platforms))
                 )
+            umo_query = str(kwargs.get("umo_query") or "").strip()
+            if umo_query:
+                conditions.append(col(ConversationV2.user_id).ilike(f"%{umo_query}%"))
 
             if conditions:
                 base_query = base_query.where(*conditions)
@@ -408,15 +424,30 @@ class SQLiteDatabase(BaseDatabase):
 
             # Get paginated results
             offset = (page - 1) * page_size
+            sort_by = kwargs.get("sort_by", "created_at")
+            sort_order = kwargs.get("sort_order", "desc")
+            sort_column = (
+                ConversationV2.updated_at
+                if sort_by == "updated_at"
+                else ConversationV2.created_at
+            )
+            order = sort_column.asc if sort_order == "asc" else sort_column.desc
+            tie_breaker = (
+                ConversationV2.inner_conversation_id.asc
+                if sort_order == "asc"
+                else ConversationV2.inner_conversation_id.desc
+            )
             result_query = (
-                base_query.order_by(desc(ConversationV2.created_at))
-                .order_by(desc(ConversationV2.inner_conversation_id))
+                base_query.order_by(order())
+                .order_by(tie_breaker())
                 .offset(offset)
                 .limit(page_size)
             )
             if not include_history:
                 result_query = result_query.options(defer(ConversationV2.content))
-            if len(platforms) > 1 or len(platform_ids or []) > 1:
+            if sort_by == "created_at" and (
+                len(platforms) > 1 or len(platform_ids or []) > 1
+            ):
                 # SQLite may choose the narrow platform index for IN queries and
                 # then materialize a temporary sort. Force the global ordering
                 # index for multi-platform pages while keeping ORM row mapping.
@@ -448,6 +479,20 @@ class SQLiteDatabase(BaseDatabase):
             conversations = result.scalars().all()
 
             return conversations, total
+
+    async def get_conversation_platform_ids(self) -> list[str]:
+        """Return distinct platform IDs referenced by conversation history.
+
+        Returns:
+            Sorted platform IDs that have at least one conversation.
+        """
+        async with self.get_db() as session:
+            result = await session.execute(
+                select(ConversationV2.platform_id)
+                .distinct()
+                .order_by(ConversationV2.platform_id)
+            )
+            return [platform_id for platform_id in result.scalars() if platform_id]
 
     async def create_conversation(
         self,

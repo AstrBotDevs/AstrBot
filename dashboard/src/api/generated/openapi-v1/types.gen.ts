@@ -3155,6 +3155,10 @@ export type ListConversationsData = {
          */
         include_history?: boolean;
         /**
+         * Match conversation titles or message content.
+         */
+        keyword?: string;
+        /**
          * Comma-separated message types.
          */
         message_types?: string;
@@ -3166,6 +3170,12 @@ export type ListConversationsData = {
          */
         platforms?: string;
         search?: string;
+        sort_by?: 'created_at' | 'updated_at';
+        sort_order?: 'asc' | 'desc';
+        /**
+         * Match the unified message origin.
+         */
+        umo?: string;
         user_id?: string;
     };
 };
@@ -3173,6 +3183,10 @@ export type ListConversationsData = {
 export type ListConversationsResponse = (SuccessEnvelope);
 
 export type ListConversationsError = unknown;
+
+export type GetConversationFilterOptionsResponse = (SuccessEnvelope);
+
+export type GetConversationFilterOptionsError = unknown;
 
 export type BatchDeleteConversationsData = {
     body: ConversationBatchDeleteRequest;
