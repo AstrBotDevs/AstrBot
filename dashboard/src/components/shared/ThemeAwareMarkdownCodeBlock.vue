@@ -1,5 +1,5 @@
 <template>
-  <MarkdownCodeBlockNode
+  <CodeBlockNode
     :key="themeRenderKey"
     v-bind="forwardedBindings"
     @copy="handleCopy"
@@ -7,12 +7,12 @@
     <template v-for="(_, slotName) in $slots" #[slotName]="slotProps">
       <slot :name="slotName" v-bind="slotProps || {}" />
     </template>
-  </MarkdownCodeBlockNode>
+  </CodeBlockNode>
 </template>
 
 <script setup lang="ts">
 import { computed, inject, type Ref, useAttrs } from 'vue';
-import { MarkdownCodeBlockNode } from 'markstream-vue';
+import { CodeBlockNode, type CodeBlockNodeProps } from 'markstream-vue';
 import { copyToClipboard } from '@/utils/clipboard';
 
 defineOptions({
@@ -20,7 +20,7 @@ defineOptions({
 });
 
 const props = defineProps<{
-  node: Record<string, unknown>;
+  node: CodeBlockNodeProps['node'];
   isDark?: boolean;
 }>();
 

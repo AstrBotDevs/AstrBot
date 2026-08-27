@@ -1,5 +1,11 @@
-import { createHighlighterCore } from 'shiki/core';
+import {
+  createCssVariablesTheme,
+  createHighlighterCore,
+  getTokenStyleObject,
+  stringifyTokenStyle,
+} from 'shiki/core';
 import { createJavaScriptRegexEngine } from 'shiki/engine/javascript';
+import { createOnigurumaEngine } from 'shiki/engine/oniguruma';
 import bash from 'shiki/langs/bash.mjs';
 import css from 'shiki/langs/css.mjs';
 import diff from 'shiki/langs/diff.mjs';
@@ -24,27 +30,37 @@ import githubLight from 'shiki/themes/github-light.mjs';
 import vitesseDark from 'shiki/themes/vitesse-dark.mjs';
 import vitesseLight from 'shiki/themes/vitesse-light.mjs';
 
-export const LIMITED_SHIKI_LANGUAGES = [
-  ...bash,
-  ...css,
-  ...diff,
-  ...dockerfile,
-  ...html,
-  ...ini,
-  ...java,
-  ...javascript,
-  ...json,
-  ...jsx,
-  ...markdown,
-  ...powershell,
-  ...python,
-  ...sql,
-  ...tsx,
-  ...typescript,
-  ...vue,
-  ...xml,
-  ...yaml,
-];
+export {
+  createCssVariablesTheme,
+  createJavaScriptRegexEngine,
+  createOnigurumaEngine,
+  getTokenStyleObject,
+  stringifyTokenStyle,
+};
+
+const LIMITED_SHIKI_LANGUAGE_MODULES = [
+  bash,
+  css,
+  diff,
+  dockerfile,
+  html,
+  ini,
+  java,
+  javascript,
+  json,
+  jsx,
+  markdown,
+  powershell,
+  python,
+  sql,
+  tsx,
+  typescript,
+  vue,
+  xml,
+  yaml,
+] as const;
+
+export const LIMITED_SHIKI_LANGUAGES = LIMITED_SHIKI_LANGUAGE_MODULES.flat();
 
 const THEME_BY_NAME = {
   'github-dark': githubDark,
@@ -90,6 +106,31 @@ export const LIMITED_SHIKI_SUPPORTED_LANGUAGES = new Set<string>([
     ...(language.aliases || []),
   ]),
 ]);
+
+type LimitedGrammar = (typeof LIMITED_SHIKI_LANGUAGES)[number];
+type BundledLanguageLoader = () => Promise<{ default: LimitedGrammar[] }>;
+
+export const bundledLanguages: Record<string, BundledLanguageLoader> = {};
+
+for (const grammars of LIMITED_SHIKI_LANGUAGE_MODULES) {
+  const loader: BundledLanguageLoader = () =>
+    Promise.resolve({ default: [...grammars] });
+  for (const grammar of grammars) {
+    bundledLanguages[grammar.name] = loader;
+    for (const alias of grammar.aliases || []) {
+      bundledLanguages[alias] = loader;
+    }
+  }
+}
+
+for (const [alias, canonical] of Object.entries(
+  LIMITED_SHIKI_LANGUAGE_ALIASES,
+)) {
+  const loader = bundledLanguages[canonical];
+  if (loader) {
+    bundledLanguages[alias] ??= loader;
+  }
+}
 
 type ResolvedTheme = (typeof THEME_BY_NAME)[keyof typeof THEME_BY_NAME];
 type ThemeReference =
@@ -195,12 +236,6 @@ function wrapLimitedHighlighter(highlighter: Highlighter) {
     getLoadedLanguages() {
       return [...new Set([...getLoadedLanguages(), ...BUILT_IN_LANGUAGES])];
     },
-    loadLanguage() {
-      return Promise.resolve();
-    },
-    loadLanguageSync() {
-      return undefined;
-    },
     async loadTheme(...themes: ThemeReference[][]) {
       const resolved = uniqueThemes(themes.flat());
       if (resolved.length && loadTheme) {
@@ -232,4 +267,16 @@ export async function createHighlighter(
   });
 
   return wrapLimitedHighlighter(highlighter);
+}
+
+let limitedCodeToHtmlHighlighter:
+  ReturnType<typeof createHighlighter> | undefined;
+
+export async function codeToHtml(
+  code: string,
+  options: NormalizableCodeOptions = {},
+) {
+  limitedCodeToHtmlHighlighter ??= createHighlighter();
+  const highlighter = await limitedCodeToHtmlHighlighter;
+  return highlighter.codeToHtml(code, options);
 }
