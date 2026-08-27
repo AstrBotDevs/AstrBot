@@ -1,10 +1,6 @@
 {
   "logoTitle": "AstrBot Dashboard",
-  "version": {
-    "hasNewVersion": "AstrBot has a new version!"
-  },
   "buttons": {
-    "update": "Update",
     "account": "Account",
     "logout": "Log out",
     "theme": {
@@ -12,80 +8,6 @@
       "light": "Light Mode",
       "dark": "Dark Mode",
       "system": "Follow System"
-    }
-  },
-  "updateDialog": {
-    "title": "Update AstrBot",
-    "currentVersion": "Current Version",
-    "status": {
-      "checking": "Checking for updates...",
-      "switching": "Switching version..."
-    },
-    "tabs": {
-      "release": "😊 Release"
-    },
-    "releases": "Releases",
-    "updateToLatest": "Update to Latest Version",
-    "showPreReleases": "Show pre-release versions",
-    "preRelease": "Pre-release",
-    "preReleaseWarning": {
-      "title": "Pre-release Version Notice",
-      "description": "Versions marked as pre-release may contain unknown issues or bugs and are not recommended for production use. If you encounter any problems, please visit ",
-      "issueLink": "GitHub Issues"
-    },
-    "tip": "💡 TIP:",
-    "tipContinue": "Dashboard assets must be built from this checkout and are not downloaded during an update.",
-    "dockerTip": "When switching versions, only the bot main program is updated. Rebuild the Dashboard from the target checkout. If you are using Docker deployment, you can also rebuild the image or use",
-    "dockerTipLink": "watchtower",
-    "dockerTipContinue": "to automatically monitor and pull.",
-    "table": {
-      "tag": "Tag",
-      "publishDate": "Publish Date",
-      "content": "Content",
-      "sourceUrl": "Source URL",
-      "actions": "Actions",
-      "view": "View",
-      "switch": "Switch"
-    },
-    "releaseNotes": {
-      "title": "Release Notes",
-      "latestLabel": "Latest version"
-    },
-    "progress": {
-      "target": "Target version: ",
-      "preparing": "Preparing update...",
-      "core": "Download project code",
-      "dependencies": "Updating dependencies...",
-      "restart": "Preparing restart...",
-      "restarting": "Restarting AstrBot",
-      "completed": "Update complete",
-      "successReady": "Update successful",
-      "autoReloadIn": "Refreshing automatically in {seconds}s",
-      "reloadNow": "Refresh now",
-      "failed": "Update failed"
-    },
-    "redirectConfirm": {
-      "title": "Leaving AstrBot",
-      "message": "You are about to open the GitHub Releases page. Continue?",
-      "latestLabel": "Latest",
-      "targetVersion": "Target version: ",
-      "currentVersion": "Current version: ",
-      "guideTitle": "Recommended after opening:",
-      "guideStep1": "Download the installer that matches your OS and architecture.",
-      "guideStep2": "Install it and restart AstrBot.",
-      "guideStep3": "If you use Docker, prefer the image update path."
-    },
-    "desktopApp": {
-      "title": "Update Desktop App",
-      "message": "Check and upgrade the AstrBot desktop application.",
-      "currentVersion": "Current version: ",
-      "latestVersion": "Latest version: ",
-      "checking": "Checking desktop app updates...",
-      "hasNewVersion": "A new version is available. Click confirm to upgrade.",
-      "isLatest": "Already on the latest version",
-      "installing": "Downloading and installing update. The app will restart automatically...",
-      "checkFailed": "Failed to check updates. Please try again later.",
-      "installFailed": "Upgrade failed. Please try again later."
     }
   },
   "accountDialog": {

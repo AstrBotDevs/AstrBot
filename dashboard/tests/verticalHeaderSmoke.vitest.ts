@@ -92,31 +92,7 @@ vi.mock('@/api/v1', () => ({
     })),
   },
   updatesApi: {
-    check: vi.fn(async () => ({
-      data: {
-        message: 'Current release notes',
-        data: {
-          has_new_version: true,
-          dashboard_has_new_version: false,
-        },
-      },
-    })),
-    releases: vi.fn(async () => ({
-      data: {
-        data: [
-          {
-            tag_name: 'v4.26.2',
-            published_at: '2026-06-30T00:00:00Z',
-            body: 'Current release notes',
-          },
-        ],
-      },
-    })),
-    progress: vi.fn(async () => ({
-      data: { data: null },
-    })),
-    switchVersion: vi.fn(),
-    updateDashboard: vi.fn(),
+    installPip: vi.fn(),
   },
 }));
 
@@ -194,7 +170,7 @@ describe('VerticalHeader smoke', () => {
     vi.restoreAllMocks();
   });
 
-  it('opens the update dialog without translation warnings', async () => {
+  it('opens the account dialog without translation warnings', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -206,10 +182,6 @@ describe('VerticalHeader smoke', () => {
             props: ['modelValue'],
             template: '<div v-if="modelValue"><slot /></div>',
           },
-          LazyMarkdownRender: {
-            props: ['content'],
-            template: '<div class="lazy-markdown-stub">{{ content }}</div>',
-          },
           AboutPage: {
             template: '<div class="about-page-stub"></div>',
           },
@@ -219,26 +191,15 @@ describe('VerticalHeader smoke', () => {
 
     await flushPromises();
 
-    const updateTriggers = wrapper
+    const accountTriggers = wrapper
       .findAll('.styled-menu-item')
-      .filter((node) => node.text().includes('Update AstrBot'));
-    expect(updateTriggers).toHaveLength(1);
+      .filter((node) => node.text().includes('Modify Account'));
+    expect(accountTriggers).toHaveLength(1);
 
-    await updateTriggers[0].trigger('click');
+    await accountTriggers[0].trigger('click');
     await flushPromises();
 
-    expect(wrapper.text()).toContain('Update AstrBot');
-    expect(wrapper.text()).toContain('Current Version');
-    expect(wrapper.text()).toContain('AstrBot has a new version!');
-    expect(wrapper.find('.lazy-markdown-stub').text()).toContain(
-      'Current release notes',
-    );
-    expect(
-      document.body.querySelector('.update-status-dialog'),
-    ).not.toBeNull();
-    expect(
-      document.body.querySelector('.update-status-dialog__content'),
-    ).not.toBeNull();
+    expect(wrapper.text()).toContain('Modify Account');
     expect(hasCriticalWarning(warnSpy.mock.calls)).toBe(false);
     expect(hasCriticalWarning(errorSpy.mock.calls)).toBe(false);
   });

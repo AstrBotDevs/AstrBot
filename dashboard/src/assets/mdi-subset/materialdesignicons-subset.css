@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 272 icons */
+/* Auto-generated MDI subset – 269 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -98,10 +98,6 @@
 
 .mdi-arrow-up-bold::before {
   content: "\F0737";
-}
-
-.mdi-arrow-up-circle::before {
-  content: "\F0CE1";
 }
 
 .mdi-arrow-up-thin::before {
@@ -282,10 +278,6 @@
 
 .mdi-cogs::before {
   content: "\F08D6";
-}
-
-.mdi-comment-question::before {
-  content: "\F0817";
 }
 
 .mdi-compare-vertical::before {
@@ -834,10 +826,6 @@
 
 .mdi-progress-check::before {
   content: "\F0995";
-}
-
-.mdi-progress-download::before {
-  content: "\F0997";
 }
 
 .mdi-puzzle::before {

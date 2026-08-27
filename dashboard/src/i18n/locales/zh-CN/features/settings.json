@@ -63,7 +63,7 @@
     "title": "网络",
     "githubProxy": {
       "title": "GitHub 加速地址",
-      "subtitle": "默认不提供 GitHub 镜像。插件和 Core 更新只会请求官方 GitHub 或已校验的公开 HTTPS 源。",
+      "subtitle": "默认不提供 GitHub 镜像。插件安装和更新只会请求官方 GitHub 或已校验的公开 HTTPS 源。",
       "label": "选择 GitHub 加速地址"
     },
     "proxySelector": {

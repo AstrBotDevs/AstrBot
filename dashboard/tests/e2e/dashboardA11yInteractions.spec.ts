@@ -144,13 +144,13 @@ test.describe('Dashboard keyboard and responsive interactions', () => {
     await expect(changelogDialog).toBeHidden();
 
     await header.getByRole('button').last().click();
-    await page.getByText('更新 AstrBot', { exact: true }).click();
-    const updateDialog = page.locator(
-      '.v-overlay__content > .update-status-dialog',
+    await page.getByText('修改账户', { exact: true }).click();
+    const accountDialog = page.locator(
+      '.v-overlay__content > .account-dialog',
     );
-    await expect(updateDialog).toBeVisible();
+    await expect(accountDialog).toBeVisible();
     expect(
-      await updateDialog.evaluate(
+      await accountDialog.evaluate(
         (element) => getComputedStyle(element).backgroundColor,
       ),
     ).not.toMatch(/^rgba\(/);

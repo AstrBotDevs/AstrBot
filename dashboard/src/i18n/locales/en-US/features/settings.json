@@ -63,7 +63,7 @@
     "title": "Network",
     "githubProxy": {
       "title": "GitHub Proxy Address",
-      "subtitle": "No GitHub mirrors are provided by default. Plugin and core updates use official GitHub or validated public HTTPS origins.",
+      "subtitle": "No GitHub mirrors are provided by default. Plugin installs and updates use official GitHub or validated public HTTPS origins.",
       "label": "Select GitHub Proxy Address"
     },
     "proxySelector": {
