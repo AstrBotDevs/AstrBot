@@ -115,7 +115,7 @@ class ProviderAnthropic(Provider):
             http_client=self._create_http_client(provider_config),
         )
 
-    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
+    def _create_http_client(self, provider_config: dict) -> Any:
         """Create an HTTP client with optional proxy and system SSL trust store.
 
         The Anthropic SDK validates ``http_client`` with
