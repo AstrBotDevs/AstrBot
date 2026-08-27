@@ -34,6 +34,7 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
+from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
@@ -219,6 +220,18 @@ class InternalAgentSubStage(Stage):
 
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
                 logger.debug("acquired session lock for llm request")
+                current_config = self.ctx.plugin_manager.context.get_config(
+                    umo=event.unified_msg_origin
+                )
+                if not current_config.get("provider_settings", {}).get(
+                    "enable", True
+                ) or not await SessionServiceManager.should_process_llm_request(event):
+                    logger.debug(
+                        "LLM was disabled while waiting for the session lock; "
+                        "skipping request for %s.",
+                        event.unified_msg_origin,
+                    )
+                    return
                 agent_runner: AgentRunner | None = None
                 runner_registered = False
                 try:
