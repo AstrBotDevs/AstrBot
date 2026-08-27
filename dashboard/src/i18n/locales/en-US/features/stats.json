@@ -69,7 +69,8 @@
     "title": "Model Usage Ranking"
   },
   "sessionRanking": {
-    "title": "{range} Session Model Usage Top 10"
+    "title": "{range} Session Model Usage Top 10",
+    "openConversation": "View conversation"
   },
   "empty": {
     "platformStats": "No platform message statistics available.",

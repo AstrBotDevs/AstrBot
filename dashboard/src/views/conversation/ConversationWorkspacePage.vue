@@ -7,7 +7,7 @@ import {
   ref,
   watch,
 } from "vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import {
   Bot,
@@ -81,15 +81,23 @@ type ConversationListEntry =
 
 const { locale } = useI18n();
 const { tm } = useModuleI18n("features/conversation");
+const route = useRoute();
+const router = useRouter();
 const customizerStore = useCustomizerStore();
 const confirmDialog = useConfirmDialog();
+
+const initialUmoQuery = Array.isArray(route.query.umo)
+  ? route.query.umo[0]
+  : route.query.umo;
 
 const conversations = ref<Conversation[]>([]);
 const availableBots = ref<BotOption[]>([]);
 const keyword = ref("");
 const selectedBotIds = ref<string[]>([]);
 const selectedTypes = ref<string[]>([]);
-const umoQuery = ref("");
+const umoQuery = ref(
+  typeof initialUmoQuery === "string" ? initialUmoQuery : "",
+);
 const sortValue = ref("updated_at:desc");
 const groupBySession = ref(false);
 const mobileFiltersOpen = ref(false);
@@ -402,14 +410,17 @@ async function fetchConversations() {
     page: page.value,
     page_size: pageSize,
     include_history: false,
-    exclude_ids: "astrbot",
-    exclude_platforms: "webchat",
     sort_by: sortBy,
     sort_order: sortOrder,
     group_by_session: groupBySession.value,
   };
   if (keyword.value.trim()) params.keyword = keyword.value.trim();
-  if (umoQuery.value.trim()) params.umo = umoQuery.value.trim();
+  if (umoQuery.value.trim()) {
+    params.umo = umoQuery.value.trim();
+  } else {
+    params.exclude_ids = "astrbot";
+    params.exclude_platforms = "webchat";
+  }
   if (selectedBotIds.value.length) {
     params.platforms = selectedBotIds.value.join(",");
   }
@@ -466,11 +477,20 @@ async function fetchConversations() {
 function resetFilters() {
   cancelScheduledFetch();
   keyword.value = "";
-  umoQuery.value = "";
+  clearUmoQuery();
   selectedBotIds.value = [];
   selectedTypes.value = [];
   sortValue.value = "updated_at:desc";
   page.value = 1;
+}
+
+function clearUmoQuery() {
+  umoQuery.value = "";
+  if ("umo" in route.query) {
+    const query = { ...route.query };
+    delete query.umo;
+    void router.replace({ query });
+  }
 }
 
 function toggleConversation(item: Conversation) {
@@ -911,9 +931,21 @@ function changePage(nextPage: number) {
             density="compact"
             variant="solo-filled"
             flat
-            clearable
             hide-details
-          />
+          >
+            <template #append-inner>
+              <button
+                v-if="umoQuery"
+                type="button"
+                class="filter-input-clear"
+                :aria-label="tm('workspace.filters.reset')"
+                @mousedown.prevent
+                @click.stop="clearUmoQuery"
+              >
+                <X :size="18" aria-hidden="true" />
+              </button>
+            </template>
+          </v-text-field>
         </div>
 
         <div class="filter-block filter-block--last">
@@ -1537,6 +1569,26 @@ function changePage(nextPage: number) {
 
 .filter-panel :deep(.v-field__overlay) {
   opacity: 0;
+}
+
+.filter-input-clear {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: rgba(var(--v-theme-on-surface), 0.54);
+  cursor: pointer;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  padding: 0;
+  transition: background-color 0.16s ease, color 0.16s ease;
+  width: 28px;
+}
+
+.filter-input-clear:hover {
+  background: rgba(var(--v-theme-on-surface), 0.07);
+  color: rgba(var(--v-theme-on-surface), 0.82);
 }
 
 .robot-options {
