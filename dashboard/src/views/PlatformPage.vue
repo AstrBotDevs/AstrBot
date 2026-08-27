@@ -14,7 +14,7 @@
                   prepend-icon="mdi-plus"
                   size="small"
                   variant="text"
-                  rounded="xl"
+                  rounded="md"
                   @click="showAddPlatformDialog = true"
                 >
                   {{ tm('addAdapter') }}
@@ -46,21 +46,18 @@
                   <template #selection="{ item }">
                     <div class="bot-mobile-selection">
                       <img
-                        :src="getPlatformIconFor(item.raw?.platform)"
+                        :src="getPlatformIconFor(item.platform)"
                         class="bot-list-icon bot-list-icon--mobile"
                         alt="bot logo"
                       />
-                      <span>{{ item.raw?.title }}</span>
+                      <span>{{ item.title }}</span>
                     </div>
                   </template>
                   <template #item="{ props: itemProps, item }">
-                    <v-list-item
-                      v-bind="itemProps"
-                      :subtitle="item.raw?.subtitle"
-                    >
+                    <v-list-item v-bind="itemProps" :subtitle="item.subtitle">
                       <template #prepend>
                         <img
-                          :src="getPlatformIconFor(item.raw?.platform)"
+                          :src="getPlatformIconFor(item.platform)"
                           class="bot-list-icon bot-list-icon--mobile me-2"
                           alt="bot logo"
                         />
@@ -415,8 +412,8 @@ const currentWebhookUrl = computed(() =>
 );
 
 onMounted(() => {
-  getConfig();
-  getPlatformStats();
+  void getConfig();
+  void getPlatformStats();
   statsRefreshInterval = window.setInterval(getPlatformStats, 5000);
   window.addEventListener('astrbot-locale-changed', handleLocaleChange);
 });
@@ -469,7 +466,7 @@ async function getPlatformStats() {
 }
 
 function handleLocaleChange() {
-  getConfig(selectedPlatformId.value);
+  void getConfig(selectedPlatformId.value);
 }
 
 function getPlatformIconFor(platform) {
@@ -542,13 +539,13 @@ async function deletePlatform(platform) {
 }
 
 function handlePlatformCreated(platformId) {
-  getConfig(platformId || null);
-  getPlatformStats();
+  void getConfig(platformId || null);
+  void getPlatformStats();
 }
 
 function handlePlatformSaved(platformId) {
-  getConfig(platformId);
-  getPlatformStats();
+  void getConfig(platformId);
+  void getPlatformStats();
 }
 
 function getPlatformQrLoginStat(platformId) {

@@ -542,7 +542,7 @@ watch(selectedProviderType, () => {
   isLegacyProviderModified.value = false;
   suppressLegacyProviderWatch = true;
   newSelectedProviderConfig.value = {};
-  nextTick(() => {
+  void nextTick(() => {
     suppressLegacyProviderWatch = false;
   });
 });
@@ -663,7 +663,7 @@ function selectLegacyProvider(provider) {
   isLegacyProviderModified.value = Boolean(
     provider[unsavedLegacyProviderMarker],
   );
-  nextTick(() => {
+  void nextTick(() => {
     suppressLegacyProviderWatch = false;
   });
 }

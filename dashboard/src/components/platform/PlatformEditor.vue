@@ -20,7 +20,7 @@
           color="error"
           prepend-icon="mdi-alert-circle-outline"
           variant="text"
-          rounded="xl"
+          rounded="md"
           @click="$emit('show-error')"
         >
           {{ runtimeStat.error_count }} {{ tm('runtimeStatus.errors') }}
@@ -29,7 +29,7 @@
           v-if="hasQrPayload"
           prepend-icon="mdi-qrcode"
           variant="text"
-          rounded="xl"
+          rounded="md"
           @click="$emit('show-qr')"
         >
           {{ tm('platformQr.show') }}
@@ -38,7 +38,7 @@
           v-if="runtimeStat?.unified_webhook && draft.webhook_uuid"
           prepend-icon="mdi-webhook"
           variant="text"
-          rounded="xl"
+          rounded="md"
           @click="$emit('show-webhook', draft.webhook_uuid)"
         >
           {{ tm('viewWebhook') }}
@@ -47,7 +47,7 @@
           color="primary"
           prepend-icon="mdi-content-save-outline"
           variant="tonal"
-          rounded="xl"
+          rounded="md"
           :loading="saving"
           :disabled="!canSave"
           @click="save"
@@ -167,7 +167,7 @@
                 <v-list-item v-bind="itemProps">
                   <template #title>
                     <UmoDisplay
-                      v-bind="getSessionDisplayProps(item.raw)"
+                      v-bind="getSessionDisplayProps(item)"
                       compact
                       :show-info="false"
                       :show-platform="false"
@@ -180,7 +180,7 @@
               <template #selection="{ item }">
                 <UmoDisplay
                   v-if="item"
-                  v-bind="getSessionDisplayProps(item.raw)"
+                  v-bind="getSessionDisplayProps(item)"
                   compact
                   :show-info="false"
                   :show-platform="false"
@@ -498,7 +498,7 @@ const canSave = computed(
 watch(
   () => props.platform,
   (platform) => {
-    initialize(platform);
+    void initialize(platform);
   },
   { immediate: true },
 );
@@ -629,7 +629,7 @@ async function initialize(platform) {
           .map((info) => [info.umo, info]),
       );
     }
-  } catch (error) {
+  } catch {
     if (version === loadVersion) {
       knownSessionUmos.value = [];
       knownSessionInfo.value = {};
@@ -742,13 +742,23 @@ function addBinding() {
 
 function addAdvancedRoute() {
   const platformId = draft.value.id || originalPlatformId.value;
+  const profiles = configProfiles.value;
+  let defaultConfigId = '';
+  for (const profile of profiles) {
+    if (profile.id === 'default') {
+      defaultConfigId = profile.id;
+      break;
+    }
+  }
+  if (!defaultConfigId && profiles[0]) {
+    defaultConfigId = profiles[0].id;
+  }
+  const key = `pattern-${routeKey}`;
+  routeKey += 1;
   advancedRoutes.value.push({
-    key: `pattern-${routeKey++}`,
+    key,
     pattern: `${platformId}:GroupMessage:*`,
-    configId:
-      configProfiles.value.find((profile) => profile.id === 'default')?.id ||
-      configProfiles.value[0]?.id ||
-      '',
+    configId: defaultConfigId,
   });
 }
 
