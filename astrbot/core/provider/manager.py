@@ -431,6 +431,10 @@ class ProviderManager:
                 )
             case "zhipu_chat_completion":
                 from .sources.zhipu_source import ProviderZhipu as ProviderZhipu
+            case "zhipu_coding_plan_chat_completion":
+                from .sources.zhipu_coding_plan_source import (
+                    ProviderZhipuCodingPlan as ProviderZhipuCodingPlan,
+                )
             case "groq_chat_completion":
                 from .sources.groq_source import ProviderGroq as ProviderGroq
             case "xai_chat_completion":
