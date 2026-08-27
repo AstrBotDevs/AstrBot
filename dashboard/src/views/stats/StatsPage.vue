@@ -227,6 +227,19 @@
                         : globalT('core.common.copy') }}
                   </span>
                 </v-tooltip>
+                <v-tooltip location="top">
+                  <template #activator="{ props }">
+                    <RouterLink
+                      v-bind="props"
+                      class="umo-conversation-link"
+                      :to="{ name: 'Conversation', query: { umo: item.umo } }"
+                      :aria-label="t('sessionRanking.openConversation')"
+                    >
+                      <MessageSquareText :size="15" aria-hidden="true" />
+                    </RouterLink>
+                  </template>
+                  <span>{{ t('sessionRanking.openConversation') }}</span>
+                </v-tooltip>
               </div>
               <strong>{{ formatNumber(item.tokens) }}</strong>
             </div>
@@ -240,8 +253,9 @@
 
 <script setup lang="ts">
 import type { ApexOptions } from 'apexcharts'
-import { Check, Copy, MessageCircle } from '@lucide/vue'
+import { Check, Copy, MessageCircle, MessageSquareText } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { RouterLink } from 'vue-router'
 import { useTheme } from 'vuetify'
 import { statsApi } from '@/api/v1'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
@@ -1077,6 +1091,7 @@ onBeforeUnmount(() => {
 .provider-list {
   display: grid;
   gap: 12px;
+  min-width: 0;
 }
 
 .provider-list--scrollable {
@@ -1089,6 +1104,12 @@ onBeforeUnmount(() => {
   padding: 12px 0;
   border-bottom: 1px solid var(--stats-border);
   font-size: 14px;
+  min-width: 0;
+  width: 100%;
+}
+
+.provider-row > strong {
+  flex: 0 0 auto;
 }
 
 .provider-row:last-child {
@@ -1129,7 +1150,8 @@ onBeforeUnmount(() => {
   overflow-wrap: anywhere;
 }
 
-.umo-copy-button {
+.umo-copy-button,
+.umo-conversation-link {
   align-items: center;
   background: transparent;
   border: 0;
@@ -1141,11 +1163,13 @@ onBeforeUnmount(() => {
   height: 26px;
   justify-content: center;
   padding: 0;
+  text-decoration: none;
   transition: background-color 0.18s ease, color 0.18s ease;
   width: 26px;
 }
 
-.umo-copy-button:hover {
+.umo-copy-button:hover,
+.umo-conversation-link:hover {
   background: rgba(var(--v-theme-on-surface), 0.07);
   color: var(--stats-text);
 }

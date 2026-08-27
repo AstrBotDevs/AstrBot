@@ -69,7 +69,8 @@
     "title": "模型用量排名"
   },
   "sessionRanking": {
-    "title": "{range}会话模型用量 Top 10"
+    "title": "{range}会话模型用量 Top 10",
+    "openConversation": "查看对话"
   },
   "empty": {
     "platformStats": "当前没有平台消息统计数据。",
