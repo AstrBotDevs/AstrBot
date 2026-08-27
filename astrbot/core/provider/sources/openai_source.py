@@ -179,6 +179,13 @@ class ProviderOpenAIOfficial(Provider):
             return True
         return False
 
+    def _is_payload_too_large_error(self, error: Exception) -> bool:
+        """判断异常是否为请求体过大（HTTP 413）。"""
+        if hasattr(error, "status_code") and error.status_code == 413:
+            return True
+        error_text = str(error).lower()
+        return "413" in error_text or "request entity too large" in error_text
+
     async def _image_ref_to_data_url(
         self,
         image_ref: str,
@@ -1145,6 +1152,21 @@ class ProviderOpenAIOfficial(Provider):
                 available_api_keys,
                 func_tool,
                 "model_not_vlm",
+                image_fallback_used=True,
+            )
+        if self._is_payload_too_large_error(e):
+            if image_fallback_used or not self._context_contains_image(context_query):
+                raise e
+            logger.warning(
+                "检测到请求体过大（413），已移除图片并重试（保留文本内容）。"
+            )
+            return await self._fallback_to_text_only_and_retry(
+                payloads,
+                context_query,
+                chosen_key,
+                available_api_keys,
+                func_tool,
+                "request_too_large",
                 image_fallback_used=True,
             )
         if self._is_content_moderated_upload_error(e):

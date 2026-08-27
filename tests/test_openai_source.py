@@ -2299,3 +2299,49 @@ async def test_transform_content_part_replaces_unresolvable_image_with_text(monk
         assert part == {"type": "text", "text": "[image omitted]"}
     finally:
         await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_handle_api_error_payload_too_large_removes_images_and_retries_text_only():
+    provider = _make_provider()
+    try:
+        payloads = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "hello"},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "data:image/jpeg;base64,abcd"},
+                        },
+                    ],
+                }
+            ]
+        }
+        context_query = payloads["messages"]
+        err = _ErrorWithBody(
+            "upstream error",
+            {
+                "error": {
+                    "code": "INVALID_REQUEST_ERROR",
+                    "message": "413 Request Entity Too Large",
+                }
+            },
+        )
+
+        success, *_rest = await provider._handle_api_error(
+            err,
+            payloads=payloads,
+            context_query=context_query,
+            func_tool=None,
+            chosen_key="test-key",
+            available_api_keys=["test-key"],
+            retry_cnt=0,
+            max_retries=10,
+        )
+
+        assert success is False
+        assert payloads["messages"][0]["content"] == [{"type": "text", "text": "hello"}]
+    finally:
+        await provider.terminate()
