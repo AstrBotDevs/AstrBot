@@ -226,7 +226,7 @@ pre-commit install
 
 <div align="center">
 
-[![RepoStars](https://repostars.dev/api/embed?repo=AstrBotDevs%2FAstrBot&theme=dark)](https://repostars.dev/?repos=AstrBotDevs%2FAstrBot&theme=dark)
+[![仓库 Star 历史图表](https://repostars.dev/api/embed?repo=AstrBotDevs%2FAstrBot&theme=dark)](https://repostars.dev/?repos=AstrBotDevs%2FAstrBot&theme=dark)
 
 </div>
 

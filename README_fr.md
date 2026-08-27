@@ -224,7 +224,7 @@ Amis de l'open source ❤️
 
 <div align="center">
 
-[![RepoStars](https://repostars.dev/api/embed?repo=AstrBotDevs%2FAstrBot&theme=dark)](https://repostars.dev/?repos=AstrBotDevs%2FAstrBot&theme=dark)
+[![Graphique de l’historique des étoiles du dépôt](https://repostars.dev/api/embed?repo=AstrBotDevs%2FAstrBot&theme=dark)](https://repostars.dev/?repos=AstrBotDevs%2FAstrBot&theme=dark)
 
 </div>
 

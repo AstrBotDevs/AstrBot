@@ -225,7 +225,7 @@ AstrBot への貢献をしていただいたすべてのコントリビュータ
 
 <div align="center">
 
-[![RepoStars](https://repostars.dev/api/embed?repo=AstrBotDevs%2FAstrBot&theme=dark)](https://repostars.dev/?repos=AstrBotDevs%2FAstrBot&theme=dark)
+[![リポジトリのスター履歴チャート](https://repostars.dev/api/embed?repo=AstrBotDevs%2FAstrBot&theme=dark)](https://repostars.dev/?repos=AstrBotDevs%2FAstrBot&theme=dark)
 
 </div>
 

@@ -225,7 +225,7 @@ pre-commit install
 
 <div align="center">
 
-[![RepoStars](https://repostars.dev/api/embed?repo=AstrBotDevs%2FAstrBot&theme=dark)](https://repostars.dev/?repos=AstrBotDevs%2FAstrBot&theme=dark)
+[![График истории звёзд репозитория](https://repostars.dev/api/embed?repo=AstrBotDevs%2FAstrBot&theme=dark)](https://repostars.dev/?repos=AstrBotDevs%2FAstrBot&theme=dark)
 
 </div>
 
