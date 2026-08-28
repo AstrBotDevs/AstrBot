@@ -41,7 +41,7 @@ astrbot_plugin_page_demo/
 插件后端推荐使用 `astrbot.api.web`，不要把 FastAPI、Starlette 或 Quart 的原始请求对象作为插件公共 API 暴露给自己的业务代码。
 
 ```python
-from astrbot.api.star import Context, Star
+from astrbot.api.star import Context, Star, register
 from astrbot.api.web import error_response, json_response, request
 
 PLUGIN_NAME = "astrbot_plugin_page_demo"
