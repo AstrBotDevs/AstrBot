@@ -12,7 +12,7 @@ import DOMPurify from "dompurify";
 import MarkdownIt from "markdown-it";
 import defaultPluginIcon from "/favicon.svg";
 import { pluginApi } from "@/api/v1";
-import { useI18n } from "@/i18n/composables";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
 import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
 import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
@@ -42,6 +42,7 @@ const props = defineProps({
 
 const { tm, router } = props.state;
 const { locale } = useI18n();
+const { tm: consoleTm } = useModuleI18n("features/console");
 const {
   pluginName,
   pluginDesc: resolvePluginDesc,
@@ -106,6 +107,13 @@ const logoLoadFailed = ref(false);
 const detailPageRef = ref(null);
 const isHeaderStuck = ref(false);
 const pluginDetail = ref(null);
+const pluginLogAutoScroll = ref(
+  localStorage.getItem("console_auto_scroll") !== "false",
+);
+
+watch(pluginLogAutoScroll, (value) => {
+  localStorage.setItem("console_auto_scroll", String(value));
+});
 
 const pluginData = computed(() => pluginDetail.value || props.plugin);
 const displayName = computed(() => pluginName(pluginData.value));
@@ -1041,8 +1049,22 @@ onBeforeUnmount(() => {
       <ConsoleDisplayer
         class="plugin-log-console"
         :plugin-name="installedPluginName"
-        :show-level-btns="false"
-      />
+        :auto-scroll="pluginLogAutoScroll"
+      >
+        <template #header-actions>
+          <div class="plugin-log-console__actions">
+            <v-switch
+              v-model="pluginLogAutoScroll"
+              :label="consoleTm('autoScroll.label')"
+              :aria-label="consoleTm('autoScroll.label')"
+              hide-details
+              density="compact"
+              inset
+              color="primary"
+            />
+          </div>
+        </template>
+      </ConsoleDisplayer>
     </section>
 
     <section v-if="showDocsSection" class="detail-section">
@@ -1187,8 +1209,22 @@ onBeforeUnmount(() => {
 }
 
 .plugin-log-console {
-  height: 160px;
+  height: 640px;
   min-height: 0;
+}
+
+.plugin-log-console__actions {
+  align-items: center;
+  display: flex;
+}
+
+.plugin-log-console__actions :deep(.v-switch .v-selection-control) {
+  min-height: 34px;
+}
+
+.plugin-log-console__actions :deep(.v-label) {
+  font-size: 0.75rem;
+  opacity: 0.72;
 }
 
 .detail-section__title {
