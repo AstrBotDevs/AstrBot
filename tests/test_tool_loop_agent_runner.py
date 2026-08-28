@@ -719,6 +719,49 @@ async def test_tool_loop_uses_current_run_context_usage_snapshot(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("mutation", ["message", "tool_schema"])
+async def test_tool_loop_reestimates_after_in_place_request_mutation(
+    runner, provider_request, mock_tool_executor, mutation
+):
+    """Do not reuse prompt usage after a hook mutates the request in place."""
+
+    class MutatingHooks(MockHooks):
+        async def on_tool_end(self, run_context, tool, tool_args, tool_result):
+            await super().on_tool_end(run_context, tool, tool_args, tool_result)
+            if mutation == "message":
+                run_context.messages[0].content = "changed historical question"
+            else:
+                tool.parameters["properties"]["extra"] = {"type": "string"}
+
+    provider = CapturingToolLoopProvider("test_tool")
+    provider.first_response_usage = TokenUsage(input_other=900, output=10)
+    mutating_hooks = MutatingHooks()
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mutating_hooks,
+        streaming=False,
+    )
+
+    trusted_token_usages = []
+
+    async def capture_context_processing(messages, trusted_token_usage=0):
+        trusted_token_usages.append(trusted_token_usage)
+        return list(messages)
+
+    runner.request_context_manager.process = capture_context_processing
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert provider.call_count == 2
+    assert trusted_token_usages == [0, 0]
+
+
+@pytest.mark.asyncio
 async def test_normal_completion_without_max_step(
     runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
 ):

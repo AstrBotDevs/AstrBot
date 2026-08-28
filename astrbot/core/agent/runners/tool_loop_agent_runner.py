@@ -1,5 +1,7 @@
 import asyncio
 import copy
+import hashlib
+import json
 import sys
 import time
 import traceback
@@ -103,10 +105,10 @@ class FollowUpTicket:
 class _ContextUsageSnapshot:
     """Store provider prompt usage bound to one request context."""
 
-    message_ids: tuple[int, ...]
+    message_fingerprints: tuple[str, ...]
     prompt_tokens: int
     provider: Provider
-    func_tool: ToolSet | None
+    tool_schema_fingerprint: str | None
 
 
 class _ToolExecutionInterrupted(Exception):
@@ -688,6 +690,50 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return None
         return self.req.func_tool
 
+    def _context_usage_fingerprints(
+        self,
+        messages: list[Message],
+        func_tool: ToolSet | None,
+    ) -> tuple[tuple[str, ...], str | None]:
+        """Build immutable fingerprints for a context-usage snapshot.
+
+        Args:
+            messages: Messages that form the provider request context.
+            func_tool: Tools exposed to the provider for that request.
+
+        Returns:
+            Immutable fingerprints for the messages and tool schema.
+        """
+        json_dump_kwargs = {
+            "default": str,
+            "ensure_ascii": False,
+            "separators": (",", ":"),
+            "sort_keys": True,
+        }
+        message_fingerprints = tuple(
+            hashlib.sha256(
+                json.dumps(message.model_dump(), **json_dump_kwargs).encode()
+            ).hexdigest()
+            for message in messages
+        )
+        tool_schema_fingerprint = None
+        if func_tool is not None:
+            tool_schema_fingerprint = hashlib.sha256(
+                json.dumps(
+                    [
+                        {
+                            "active": getattr(tool, "active", True),
+                            "description": tool.description,
+                            "name": tool.name,
+                            "parameters": tool.parameters,
+                        }
+                        for tool in func_tool.tools
+                    ],
+                    **json_dump_kwargs,
+                ).encode()
+            ).hexdigest()
+        return message_fingerprints, tool_schema_fingerprint
+
     def _simple_print_message_role(self, tag: str, messages: list):
         roles = [m.role for m in messages]
         n = len(roles)
@@ -827,26 +873,31 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         trusted_token_usage = 0
         snapshot = self._context_usage_snapshot
         current_func_tool = self._func_tool_for_provider()
-        if (
-            snapshot
-            and self.enforce_max_turns == -1
-            and snapshot.provider is self.provider
-            and snapshot.func_tool is current_func_tool
-            and len(self.run_context.messages) >= len(snapshot.message_ids)
-            and all(
-                id(message) == message_id
-                for message, message_id in zip(
+        if snapshot:
+            message_fingerprints, tool_schema_fingerprint = (
+                self._context_usage_fingerprints(
                     self.run_context.messages,
-                    snapshot.message_ids,
+                    current_func_tool,
                 )
             )
-        ):
-            # The previous provider prompt includes overhead such as tool schemas.
-            # Only reuse it while the current request preserves that exact prefix.
-            tail_messages = self.run_context.messages[len(snapshot.message_ids) :]
-            trusted_token_usage = snapshot.prompt_tokens + (
-                self.request_context_manager.token_counter.count_tokens(tail_messages)
-            )
+            if (
+                self.enforce_max_turns == -1
+                and snapshot.provider is self.provider
+                and snapshot.tool_schema_fingerprint == tool_schema_fingerprint
+                and len(self.run_context.messages) >= len(snapshot.message_fingerprints)
+                and snapshot.message_fingerprints
+                == message_fingerprints[: len(snapshot.message_fingerprints)]
+            ):
+                # The previous provider prompt includes overhead such as tool schemas.
+                # Only reuse it while the current request preserves that exact prefix.
+                tail_messages = self.run_context.messages[
+                    len(snapshot.message_fingerprints) :
+                ]
+                trusted_token_usage = snapshot.prompt_tokens + (
+                    self.request_context_manager.token_counter.count_tokens(
+                        tail_messages
+                    )
+                )
         self._simple_print_message_role("[BefCompact]", self.run_context.messages)
         processed_messages = await self._await_or_stop(
             self.request_context_manager.process(
@@ -858,17 +909,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             yield await self._finalize_aborted_step()
             return
         self.run_context.messages = processed_messages
-        if snapshot and (
-            len(processed_messages) < len(snapshot.message_ids)
-            or any(
-                id(message) != message_id
-                for message, message_id in zip(
+        if snapshot:
+            processed_message_fingerprints, processed_tool_schema_fingerprint = (
+                self._context_usage_fingerprints(
                     processed_messages,
-                    snapshot.message_ids,
+                    self._func_tool_for_provider(),
                 )
             )
-        ):
-            self._context_usage_snapshot = None
+            if (
+                len(processed_messages) < len(snapshot.message_fingerprints)
+                or snapshot.tool_schema_fingerprint != processed_tool_schema_fingerprint
+                or snapshot.message_fingerprints
+                != processed_message_fingerprints[: len(snapshot.message_fingerprints)]
+            ):
+                self._context_usage_snapshot = None
         self._simple_print_message_role("[AftCompact]", self.run_context.messages)
 
         async for llm_response in self._iter_llm_responses_with_fallback():
@@ -913,13 +967,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 if self.req.conversation:
                     self.req.conversation.token_usage = llm_response.usage.total
                 if llm_response.usage.input > 0:
+                    message_fingerprints, tool_schema_fingerprint = (
+                        self._context_usage_fingerprints(
+                            self.run_context.messages,
+                            self._func_tool_for_provider(),
+                        )
+                    )
                     self._context_usage_snapshot = _ContextUsageSnapshot(
-                        message_ids=tuple(
-                            id(message) for message in self.run_context.messages
-                        ),
+                        message_fingerprints=message_fingerprints,
                         prompt_tokens=llm_response.usage.input,
                         provider=self.provider,
-                        func_tool=self._func_tool_for_provider(),
+                        tool_schema_fingerprint=tool_schema_fingerprint,
                     )
             # end_time must be set before the yield serializes to_dict().
             self.stats.end_time = time.time()
