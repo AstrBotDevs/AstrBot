@@ -5,7 +5,7 @@
 	quality-report-all quality-report-pyright quality-report-bandit quality-report-audit quality-report-radon-cc quality-report-radon-mi \
 	check check-all check-all-platforms format format-all test test-all test-blocking \
 	check-py check-py-all check-py-format check-py-lint \
-	check-web check-web-all check-web-build check-web-eslint check-web-smoke check-web-prettier \
+	check-web check-web-all check-web-build check-web-eslint check-web-smoke check-web-prettier check-web-i18n \
 	check-data check-md check-md-all check-md-prettier check-md-markdownlint check-toml check-toml-all check-toml-format check-toml-lint check-yaml check-yaml-all check-yaml-prettier check-yaml-lint \
 	check-shell check-shell-all check-shell-shfmt check-shell-shellcheck check-ps check-docker \
 	format-py format-web format-data format-md format-toml format-yaml format-shell format-ps format-eol
@@ -33,7 +33,7 @@ QUALITY_SECURITY_TARGETS := astrbot
 QUALITY_TARGETS := quality-pyright quality-bandit quality-audit quality-web-audit quality-complexity quality-radon-cc quality-radon-mi
 QUALITY_REPORT_TARGETS := quality-report-pyright quality-report-bandit quality-report-audit quality-report-radon-cc quality-report-radon-mi
 CHECK_PY_TARGETS := check-py-format check-py-lint
-CHECK_WEB_TARGETS := check-web-build check-web-eslint check-web-smoke check-web-prettier
+CHECK_WEB_TARGETS := check-web-build check-web-eslint check-web-smoke check-web-prettier check-web-i18n
 CHECK_MD_TARGETS := check-md-prettier check-md-markdownlint
 CHECK_TOML_TARGETS := check-toml-format check-toml-lint
 CHECK_YAML_TARGETS := check-yaml-prettier check-yaml-lint
@@ -314,6 +314,10 @@ check-web-smoke:
 check-web-prettier:
 	@echo "==> [web] prettier --check"
 	$(PRETTIER) --check "dashboard/src/**/*.{ts,mts,js,mjs,vue,scss,css}" "dashboard/*.{ts,mts,mjs}"
+
+check-web-i18n:
+	@echo "==> [web] i18n"
+	cd $(DASHBOARD_DIR) && $(PNPM) run i18n:check
 
 format-web:
 	@echo "==> [web] prettier + eslint --fix"

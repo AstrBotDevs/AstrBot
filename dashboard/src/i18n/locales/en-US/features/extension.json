@@ -307,6 +307,7 @@
     "changeSourceDisabled": "This plugin has no usable repository URL, so its source cannot be changed",
     "fillSourceUrl": "Please enter the source URL",
     "fillSourceName": "Please enter the source name",
+    "fillSourceNameAndUrl": "Please enter the source name and URL",
     "resolveSourceFirst": "Resolve and validate the source URL first",
     "sourceResolveFailed": "Failed to resolve source",
     "invalidUrl": "Please enter a valid URL",

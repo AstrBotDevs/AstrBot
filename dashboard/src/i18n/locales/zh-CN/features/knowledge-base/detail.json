@@ -98,6 +98,8 @@
     "settings": "检索设置",
     "topK": "返回结果数量",
     "topKHint": "最多返回多少条检索结果",
+    "debugMode": "调试（t-SNE）",
+    "tsneVisualization": "t-SNE 可视化",
     "enableRerank": "启用重排序",
     "enableRerankHint": "使用重排序模型提高检索质量",
     "score": "相关度分数",

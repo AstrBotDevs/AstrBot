@@ -183,6 +183,12 @@
     "select": "Select",
     "close": "Close"
   },
+  "interaction": {
+    "formAccept": "{server} requests input: {message}\\n\\nAccept this form request?",
+    "openUrl": "{server} requests external authorization: {message}\\n\\nOpen {url}?",
+    "fieldPrompt": "Enter {field}",
+    "invalidForm": "The MCP form was invalid or incomplete."
+  },
   "errors": {
     "sendMessageFailed": "Failed to send message, please try again",
     "createSessionFailed": "Failed to create session, please refresh the page"

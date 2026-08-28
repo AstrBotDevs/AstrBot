@@ -307,6 +307,7 @@
     "changeSourceDisabled": "当前插件缺少可用仓库地址，无法更换插件源",
     "fillSourceUrl": "请填写插件源地址",
     "fillSourceName": "请填写插件源名称",
+    "fillSourceNameAndUrl": "请填写插件源名称和地址",
     "resolveSourceFirst": "请先解析并校验插件源地址",
     "sourceResolveFailed": "插件源解析失败",
     "invalidUrl": "请输入有效的URL地址",

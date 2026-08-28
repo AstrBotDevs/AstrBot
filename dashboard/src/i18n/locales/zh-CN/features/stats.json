@@ -72,7 +72,8 @@
     }
   },
   "messageOverview": {
-    "title": "消息"
+    "title": "消息",
+    "subtitle": "机器人消息统计"
   },
   "messageTrend": {
     "title": "消息趋势",
@@ -84,7 +85,8 @@
     "subtitle": "{range}按聚合消息总量排序"
   },
   "modelCalls": {
-    "title": "AI 模型"
+    "title": "AI 模型",
+    "subtitle": "模型调用统计"
   },
   "modelTrend": {
     "title": "模型调用趋势",

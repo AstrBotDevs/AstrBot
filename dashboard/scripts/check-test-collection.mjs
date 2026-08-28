@@ -8,6 +8,10 @@ const testsRoot = resolve(dashboardRoot, 'tests');
 const vitestCli = resolve(dashboardRoot, 'node_modules/vitest/vitest.mjs');
 const testFilePattern = /\.(?:test|spec|vitest)\.(?:[cm]?[jt]sx?)$/;
 const supportFiles = new Set(['setup.vitest.ts']);
+const nativeNodeTestFiles = new Set([
+  'subsetMdiFont.test.mjs',
+  'checkI18n.test.mjs',
+]);
 
 function findTestLikeFiles(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -41,7 +45,7 @@ for (const file of testFiles) {
   if (
     testRelativePath.endsWith('.vitest.ts') ||
     (testRelativePath.endsWith('.test.mjs') &&
-      testRelativePath !== 'subsetMdiFont.test.mjs')
+      !nativeNodeTestFiles.has(testRelativePath))
   ) {
     vitestFiles.push(file);
     continue;

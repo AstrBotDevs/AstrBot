@@ -9,6 +9,7 @@
     "dev": "node scripts/subset-mdi-font.mjs && vite --host",
     "fonts:update": "node scripts/update-fonts.mjs",
     "fonts:check": "node scripts/check-fonts.mjs",
+    "i18n:check": "node scripts/check-i18n.mjs",
     "build:t2i-shiki-runtime": "node scripts/build-t2i-shiki-runtime.mjs",
     "build": "tsc -p tsconfig.vite-config.json --noEmit && vue-tsc --noEmit && vite build && node scripts/write-dashboard-version.mjs",
     "build-stage": "tsc -p tsconfig.vite-config.json --noEmit && vue-tsc --noEmit && vite build --base=/vue/free/stage/ && node scripts/write-dashboard-version.mjs",

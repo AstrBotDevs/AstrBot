@@ -21,7 +21,11 @@ export default mergeConfig(
       environment: 'jsdom',
       setupFiles: ['./tests/setup.vitest.ts'],
       include: ['./tests/**/*.{vitest.ts,test.mjs}'],
-      exclude: ['./tests/setup.vitest.ts', './tests/subsetMdiFont.test.mjs'],
+      exclude: [
+        './tests/setup.vitest.ts',
+        './tests/subsetMdiFont.test.mjs',
+        './tests/checkI18n.test.mjs',
+      ],
       css: false,
       restoreMocks: true,
       clearMocks: true,
