@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import cast
 
 import aiofiles
+import aiohttp
 import botpy
 import botpy.errors
 import botpy.message
@@ -22,7 +23,7 @@ from tenacity import (
     retry,
     retry_if_exception_type,
     stop_after_attempt,
-    wait_exponential,
+    wait_random_exponential,
 )
 
 from astrbot.api import logger
@@ -40,40 +41,40 @@ class APIReturnNoneError(Exception):
     pass
 
 
-def _patch_qq_botpy_formdata() -> None:
-    """Patch qq-botpy for aiohttp>=3.12 compatibility.
+class QQOfficialRetryBudgetExhaustedError(RuntimeError):
+    """Raised when semantic fallbacks consume the logical send retry budget."""
 
-    qq-botpy 1.2.1 defines botpy.http._FormData._gen_form_data() and expects
-    aiohttp.FormData to have a private flag named _is_processed, which is no
-    longer present in newer aiohttp versions.
+
+_QQOFFICIAL_NETWORK_ERRORS = (
+    aiohttp.ClientError,
+    OSError,
+    asyncio.TimeoutError,
+    APIReturnNoneError,
+)
+
+
+def _qqofficial_retry(
+    max_attempts: int = 3,
+    retry_errors: tuple[type[BaseException], ...] | None = None,
+):
+    """Retry QQ API transient failures with one bounded retry policy.
+
+    Args:
+        max_attempts: Maximum number of HTTP attempts.
+        retry_errors: Optional exception types that may be retried.
+
+    Returns:
+        A Tenacity retry decorator for QQ API calls.
     """
-
-    try:
-        from botpy.http import _FormData  # type: ignore
-
-        if not hasattr(_FormData, "_is_processed"):
-            setattr(_FormData, "_is_processed", False)
-    except Exception:
-        logger.debug("[QQOfficial] Skip botpy FormData patch.")
-
-
-_patch_qq_botpy_formdata()
-
-
-def _qqofficial_retry(max_attempts: int = 5):
-    """Retry decorator for QQ Official API transient errors (HTTP 500/504)"""
+    retry_errors = retry_errors or (
+        botpy.errors.ServerError,
+        botpy.errors.SequenceNumberError,
+        *_QQOFFICIAL_NETWORK_ERRORS,
+    )
     return retry(
-        retry=retry_if_exception_type(
-            (
-                botpy.errors.ServerError,
-                botpy.errors.SequenceNumberError,
-                OSError,
-                asyncio.TimeoutError,
-                APIReturnNoneError,
-            )
-        ),
+        retry=retry_if_exception_type(retry_errors),
         stop=stop_after_attempt(max_attempts),
-        wait=wait_exponential(multiplier=2, min=2, max=30),
+        wait=wait_random_exponential(multiplier=1, max=8),
         before_sleep=before_sleep_log(logger, logging.WARNING),
         reraise=True,
     )
@@ -514,15 +515,38 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         plain_text: str,
         stream: dict | None = None,
     ):
+        attempts_remaining = 3
+
+        async def send_with_retry(retry_payload: dict):
+            nonlocal attempts_remaining
+            if attempts_remaining <= 0:
+                raise QQOfficialRetryBudgetExhaustedError(
+                    "QQ send retry budget is exhausted"
+                )
+
+            @_qqofficial_retry(
+                max_attempts=attempts_remaining,
+                retry_errors=_QQOFFICIAL_NETWORK_ERRORS,
+            )
+            async def send_attempt():
+                nonlocal attempts_remaining
+                attempts_remaining -= 1
+                result = await send_func(retry_payload)
+                if result is None:
+                    raise APIReturnNoneError("QQ send API returned no response")
+                return result
+
+            return await send_attempt()
+
         try:
-            return await send_func(payload)
+            return await send_with_retry(payload)
         except _QQOFFICIAL_SEND_API_ERRORS as err:
             logger.info("[QQOfficial] 回复消息失败: %s, 尝试使用主动发送接口。", err)
             if payload.get("msg_id"):
                 fallback_payload = payload.copy()
                 fallback_payload.pop("msg_id", None)
                 try:
-                    ret = await send_func(fallback_payload)
+                    ret = await send_with_retry(fallback_payload)
                     logger.info("[QQOfficial] 使用主动发送接口发送成功。")
                     return ret
                 except _QQOFFICIAL_SEND_API_ERRORS as fallback_err:
@@ -550,7 +574,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 logger.warning(
                     "[QQOfficial] 流式 markdown 分片换行校验失败，已修正后重试一次。"
                 )
-                return await send_func(retry_payload)
+                return await send_with_retry(retry_payload)
 
             if (
                 self.MARKDOWN_NOT_ALLOWED_ERROR not in str(err)
@@ -571,7 +595,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 fallback_content = cast(str, fallback_payload.get("content") or "")
                 if fallback_content and not fallback_content.endswith("\n"):
                     fallback_payload["content"] = fallback_content + "\n"
-            return await send_func(fallback_payload)
+            return await send_with_retry(fallback_payload)
 
     async def upload_group_and_c2c_image(
         self,
@@ -611,7 +635,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         try:
             result = await _do_upload()
         except APIReturnNoneError:
-            logger.warning(f"上传图片API返回None，共尝试5次后放弃: {payload}")
+            logger.warning(
+                "[QQOfficial] Image upload returned no response after retries: "
+                "encoded_size=%d",
+                len(image_base64),
+            )
             raise
 
         if not isinstance(result, dict):
@@ -717,12 +745,12 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             result = await _do_upload()
         except APIReturnNoneError:
             logger.warning(
-                "Media upload API returned None after 5 attempts: %s",
+                "Media upload API returned no response after retries: %s",
                 file_source,
             )
             raise
         except (botpy.errors.ServerError, botpy.errors.SequenceNumberError):
-            logger.error("Media upload failed after 5 attempts: %s", file_source)
+            logger.error("Media upload failed after retries: %s", file_source)
             raise
         except Exception as exc:
             logger.error("Media upload request failed: %s", exc)
@@ -767,24 +795,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             payload["stream"] = stream_data
         route = Route("POST", "/v2/users/{openid}/messages", openid=openid)
 
-        retry_times = 3
-
-        @_qqofficial_retry(retry_times)
-        async def _do_request():
-            result = await self.bot.api._http.request(route, json=payload)
-            if result is None:
-                err_msg = "发送消息API返回None，触发重试"
-                raise APIReturnNoneError(err_msg)
-            return result
-
-        result = None
-        try:
-            result = await _do_request()
-        except APIReturnNoneError:
-            logger.warning(
-                f"[QQOfficial] post_c2c_message: 发送消息失败，API 返回 None，共尝试{retry_times}次后放弃"
-            )
-            return None
+        result = await self.bot.api._http.request(route, json=payload)
 
         if not isinstance(result, dict):
             logger.error(f"[QQOfficial] post_c2c_message: 响应不是 dict: {result}")

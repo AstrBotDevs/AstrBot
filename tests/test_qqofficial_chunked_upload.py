@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -127,6 +129,11 @@ class _FakeHttp:
 
     async def check_session(self) -> None:
         return None
+
+    @asynccontextmanager
+    async def request_slot(self) -> AsyncIterator[None]:
+        """Provide an unbounded request slot for upload protocol tests."""
+        yield
 
 
 @pytest.mark.asyncio

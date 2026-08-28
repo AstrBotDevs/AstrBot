@@ -12,6 +12,7 @@ from typing import Any, cast
 import botpy
 import botpy.message
 from botpy import Client
+from botpy.api import BotAPI
 from botpy.connection import ConnectionState
 from botpy.gateway import BotWebSocket
 
@@ -30,6 +31,7 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.media_utils import MediaResolver
 
 from ...register import register_platform_adapter
+from .qqofficial_http import QQOfficialHttp
 from .qqofficial_message_event import QQOfficialMessageEvent
 
 # remove logger handler
@@ -181,6 +183,11 @@ class ManagedBotWebSocket(BotWebSocket):
 class botClient(Client):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        self.http = QQOfficialHttp(
+            timeout=self.http.timeout,
+            is_sandbox=self.http.is_sandbox,
+        )
+        self.api = BotAPI(http=self.http)
         self._shutting_down = False
         self._active_websockets: set[ManagedBotWebSocket] = set()
 
