@@ -6,7 +6,7 @@ import { EventSourcePolyfill } from "event-source-polyfill";
 
 <template>
   <div
-    id="console-wrapper"
+    ref="consoleWrapper"
     class="console-displayer-wrapper"
     :class="{ 'console-displayer-wrapper--workspace': workspaceMode }"
   >
@@ -43,7 +43,7 @@ import { EventSourcePolyfill } from "event-source-polyfill";
       ></v-btn>
     </div>
 
-    <div id="term" class="console-term"></div>
+    <div ref="term" class="console-term"></div>
   </div>
 </template>
 
@@ -79,6 +79,7 @@ export default {
       maxRetryAttempts: 10,
       baseRetryDelay: 1000,
       lastEventId: null,
+      isUnmounted: false,
     };
   },
   computed: {
@@ -90,6 +91,10 @@ export default {
     historyNum: {
       type: String,
       default: "-1",
+    },
+    pluginName: {
+      type: String,
+      default: "",
     },
     showLevelBtns: {
       type: Boolean,
@@ -118,13 +123,20 @@ export default {
     hideUserChat() {
       this.refreshDisplay();
     },
+    pluginName() {
+      this.refreshDisplay();
+    },
   },
   async mounted() {
     await this.fetchLogHistory();
+    if (this.isUnmounted) {
+      return;
+    }
     this.connectSSE();
     document.addEventListener("fullscreenchange", this.handleFullscreenChange);
   },
   beforeUnmount() {
+    this.isUnmounted = true;
     document.removeEventListener(
       "fullscreenchange",
       this.handleFullscreenChange,
@@ -141,6 +153,9 @@ export default {
   },
   methods: {
     connectSSE() {
+      if (this.isUnmounted) {
+        return;
+      }
       if (this.eventSource) {
         this.eventSource.close();
         this.eventSource = null;
@@ -181,6 +196,9 @@ export default {
       };
 
       this.eventSource.onerror = (err) => {
+        if (this.isUnmounted) {
+          return;
+        }
         if (err.status === 401) {
           console.error("鉴权失败 (401)，可能是 Token 过期了。");
         } else {
@@ -233,7 +251,8 @@ export default {
           (existing) =>
             existing.time === log.time &&
             existing.data === log.data &&
-            existing.level === log.level,
+            existing.level === log.level &&
+            existing.plugin_name === log.plugin_name,
         );
 
         if (!exists) {
@@ -242,7 +261,8 @@ export default {
 
           if (
             this.isLevelSelected(log.level) &&
-            !this.isHiddenByCategory(log)
+            !this.isHiddenByCategory(log) &&
+            !this.isHiddenByPlugin(log)
           ) {
             this.printLog(log.data);
           }
@@ -288,8 +308,12 @@ export default {
       return this.hideUserChat && log && log.category === "user_chat";
     },
 
+    isHiddenByPlugin(log) {
+      return Boolean(this.pluginName) && log?.plugin_name !== this.pluginName;
+    },
+
     refreshDisplay() {
-      const termElement = document.getElementById("term");
+      const termElement = this.$refs.term;
       if (termElement) {
         termElement.innerHTML = "";
 
@@ -297,7 +321,8 @@ export default {
           this.localLogCache.forEach((logItem) => {
             if (
               this.isLevelSelected(logItem.level) &&
-              !this.isHiddenByCategory(logItem)
+              !this.isHiddenByCategory(logItem) &&
+              !this.isHiddenByPlugin(logItem)
             ) {
               this.printLog(logItem.data);
             }
@@ -307,20 +332,24 @@ export default {
     },
 
     toggleFullscreen() {
-      const container = document.getElementById("console-wrapper");
-      if (!document.fullscreenElement) {
+      const container = this.$refs.consoleWrapper;
+      if (!container) {
+        return;
+      }
+      if (document.fullscreenElement === container) {
+        document.exitFullscreen();
+      } else {
         container.requestFullscreen().catch((err) => {
           console.error(
             `Error attempting to enable full-screen mode: ${err.message}`,
           );
         });
-      } else {
-        document.exitFullscreen();
       }
     },
 
     handleFullscreenChange() {
-      this.isFullscreen = !!document.fullscreenElement;
+      this.isFullscreen =
+        document.fullscreenElement === this.$refs.consoleWrapper;
     },
 
     appendLogContent(element, log) {
@@ -356,7 +385,7 @@ export default {
     },
 
     printLog(log) {
-      let ele = document.getElementById("term");
+      let ele = this.$refs.term;
       if (!ele) {
         return;
       }
@@ -398,7 +427,7 @@ export default {
   padding: 12px;
 }
 
-#console-wrapper:fullscreen {
+.console-displayer-wrapper:fullscreen {
   background-color: #1e1e1e;
   padding: 20px;
 }
@@ -469,7 +498,7 @@ export default {
   color: rgba(var(--v-theme-on-surface), 0.7) !important;
 }
 
-#console-wrapper:fullscreen .fullscreen-btn {
+.console-displayer-wrapper:fullscreen .fullscreen-btn {
   color: rgba(255, 255, 255, 0.7) !important;
 }
 
