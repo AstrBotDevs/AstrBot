@@ -813,12 +813,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         llm_resp_result = None
 
         # Process request-time context before sending it to the provider.
-        token_usage = self.req.conversation.token_usage if self.req.conversation else 0
+        # Persisted usage belongs to a previous provider request and may include
+        # provider-specific cache accounting, so it cannot describe these messages.
         self._simple_print_message_role("[BefCompact]", self.run_context.messages)
         processed_messages = await self._await_or_stop(
             self.request_context_manager.process(
                 self.run_context.messages,
-                trusted_token_usage=token_usage,
             )
         )
         if processed_messages is None:

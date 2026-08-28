@@ -19,6 +19,7 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.db.po import Conversation
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
@@ -615,6 +616,62 @@ async def test_tool_loop_next_request_includes_tool_result(
     assert len(tool_messages) == 1
     assert tool_messages[0].tool_call_id == "call_context_refresh"
     assert "工具执行结果" in tool_messages[0].content
+
+
+@pytest.mark.asyncio
+async def test_context_compression_ignores_persisted_conversation_token_usage(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    """A previous request's usage must not compress a small current context."""
+    mock_provider.provider_config["max_context_tokens"] = 1_000_000
+    mock_provider.should_call_tools = False
+    provider_request.contexts = [
+        {"role": "user", "content": "x" * 320_000},
+        {"role": "assistant", "content": "important historical answer"},
+    ]
+    provider_request.prompt = "current question"
+    provider_request.conversation = Conversation(
+        platform_id="webchat",
+        user_id="user",
+        cid="conversation-id",
+        token_usage=3_879_963,
+    )
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    original_messages = list(runner.run_context.messages)
+    estimated_tokens = runner.request_context_manager.token_counter.count_tokens(
+        original_messages
+    )
+    assert estimated_tokens < 820_000
+
+    legacy_messages = await runner.request_context_manager.process(
+        original_messages,
+        trusted_token_usage=provider_request.conversation.token_usage,
+    )
+    assert "current question" not in [
+        message.content
+        for message in legacy_messages
+        if isinstance(message.content, str)
+    ]
+
+    async for _ in runner.step_until_done(1):
+        pass
+
+    contents = [
+        message.content
+        for message in runner.run_context.messages
+        if isinstance(message.content, str)
+    ]
+    assert "important historical answer" in contents
+    assert "current question" in contents
 
 
 @pytest.mark.asyncio
