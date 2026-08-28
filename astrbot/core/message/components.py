@@ -57,12 +57,12 @@ class ComponentType(StrEnum):
     Poke = "Poke"  # a poke message for Tencent QQ platform
     Reply = "Reply"  # a reply message segment
     Forward = "Forward"  # a forwarded message segment
-    RPS = "RPS"  # TODO
-    Dice = "Dice"  # TODO
-    Shake = "Shake"  # TODO
+    RPS = "RPS"
+    Dice = "Dice"
+    Shake = "Shake"
     Share = "Share"
-    Contact = "Contact"  # TODO
-    Location = "Location"  # TODO
+    Contact = "Contact"
+    Location = "Location"
     Markdown = "Markdown"
     MiniApp = "MiniApp"
     OnlineFile = "OnlineFile"
@@ -490,21 +490,21 @@ class AtAll(At):
         super().__init__(**_)
 
 
-class RPS(BaseMessageComponent):  # TODO
+class RPS(BaseMessageComponent):
     type: ComponentType = ComponentType.RPS
 
     def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
-class Dice(BaseMessageComponent):  # TODO
+class Dice(BaseMessageComponent):
     type: ComponentType = ComponentType.Dice
 
     def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
-class Shake(BaseMessageComponent):  # TODO
+class Shake(BaseMessageComponent):
     type: ComponentType = ComponentType.Shake
 
     def __init__(self, **_) -> None:
@@ -522,7 +522,7 @@ class Share(BaseMessageComponent):
         super().__init__(**_)
 
 
-class Contact(BaseMessageComponent):  # TODO
+class Contact(BaseMessageComponent):
     type: ComponentType = ComponentType.Contact
     sub_type: str = Field(alias="_type")
     id: int | None = 0
@@ -531,7 +531,7 @@ class Contact(BaseMessageComponent):  # TODO
         super().__init__(**_)
 
 
-class Location(BaseMessageComponent):  # TODO
+class Location(BaseMessageComponent):
     type: ComponentType = ComponentType.Location
     lat: float
     lon: float

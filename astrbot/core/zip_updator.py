@@ -4,7 +4,6 @@ import re
 import shutil
 import zipfile
 from pathlib import Path
-from typing import NoReturn
 
 from astrbot import logger
 from astrbot.core.utils.io import ensure_dir, on_error
@@ -195,12 +194,6 @@ class RepoZipUpdator:
                 },
             )
         return ret
-
-    def unzip(self) -> NoReturn:
-        raise NotImplementedError
-
-    async def update(self) -> NoReturn:
-        raise NotImplementedError
 
     def compare_version(self, v1: str, v2: str) -> int:
         """Semver 版本比较"""

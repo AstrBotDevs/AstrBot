@@ -4,11 +4,10 @@ import re
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 from jinja2.sandbox import SandboxedEnvironment
 from pydantic import BaseModel
-from typing_extensions import TypedDict
 
 from astrbot.core.config import VERSION
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -228,7 +227,9 @@ class LocalRenderStrategy(RenderStrategy):
             try:
                 page = await context.new_page()
             except TargetClosedError as exc:
-                logger.warning("Local T2I context closed while creating a page: %s", exc)
+                logger.warning(
+                    "Local T2I context closed while creating a page: %s", exc
+                )
                 await self._discard_context(level, context)
                 context = await self._ensure_context(level)
                 page = await context.new_page()

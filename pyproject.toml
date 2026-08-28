@@ -99,7 +99,6 @@ url = "https://mirrors.aliyun.com/pypi/simple"
 default = true
 
 [tool.ruff]
-exclude = ["astrbot/core/utils/t2i/local_strategy.py", "astrbot/api/all.py"]
 line-length = 88
 target-version = "py314"
 
