@@ -574,15 +574,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=ctx)
         req.conversation = conv
-        context = json.loads(conv.history)
-        if context:
-            req.contexts = context
-            context_dump = req._print_friendly_context()
-            req.contexts = []
-            req.system_prompt += (
-                "\n\nBellow is you and user previous conversation history:\n"
-                f"{context_dump}"
-            )
+        req.contexts = json.loads(conv.history)
 
         bg = json.dumps(extras["background_task_result"], ensure_ascii=False)
         req.system_prompt += BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT.format(

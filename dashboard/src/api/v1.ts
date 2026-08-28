@@ -1704,6 +1704,11 @@ export const personaApi = {
 };
 
 export const conversationApi = {
+  filterOptions() {
+    return typed<{ bots: Array<{ id: string; type: string }> }>(
+      openApiV1.getConversationFilterOptions(),
+    );
+  },
   list(params?: ListConversationsQuery, requestConfig?: AxiosRequestConfig) {
     return typed<any>(
       openApiV1.listConversations(

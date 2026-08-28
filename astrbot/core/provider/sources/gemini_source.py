@@ -428,7 +428,7 @@ class ProviderGoogleGenAI(Provider):
                 append_or_extend(gemini_contents, parts, types.UserContent)
 
         if gemini_contents and isinstance(gemini_contents[0], types.ModelContent):
-            gemini_contents.pop()
+            gemini_contents.pop(0)
 
         return gemini_contents
 

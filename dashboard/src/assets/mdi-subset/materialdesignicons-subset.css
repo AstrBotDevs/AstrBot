@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 267 icons */
+/* Auto-generated MDI subset – 269 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -284,10 +284,6 @@
   content: "\F1616";
 }
 
-.mdi-console::before {
-  content: "\F018D";
-}
-
 .mdi-console-line::before {
   content: "\F07B7";
 }
@@ -390,6 +386,14 @@
 
 .mdi-eye-off::before {
   content: "\F0209";
+}
+
+.mdi-eye-off-outline::before {
+  content: "\F06D1";
+}
+
+.mdi-eye-outline::before {
+  content: "\F06D0";
 }
 
 .mdi-eyedropper::before {
@@ -636,6 +640,10 @@
   content: "\F0339";
 }
 
+.mdi-link-variant-plus::before {
+  content: "\F1100";
+}
+
 .mdi-loading::before {
   content: "\F0772";
 }
@@ -662,6 +670,10 @@
 
 .mdi-lock-plus-outline::before {
   content: "\F16B2";
+}
+
+.mdi-logout::before {
+  content: "\F0343";
 }
 
 .mdi-magnify::before {
@@ -880,6 +892,10 @@
   content: "\F167A";
 }
 
+.mdi-routes::before {
+  content: "\F046A";
+}
+
 .mdi-send-outline::before {
   content: "\F1165";
 }
@@ -1000,10 +1016,6 @@
   content: "\F050E";
 }
 
-.mdi-timeline-text-outline::before {
-  content: "\F0BD4";
-}
-
 .mdi-timer-outline::before {
   content: "\F051B";
 }
@@ -1050,10 +1062,6 @@
 
 .mdi-vector-point::before {
   content: "\F01C4";
-}
-
-.mdi-view-dashboard::before {
-  content: "\F056E";
 }
 
 .mdi-volume-high::before {

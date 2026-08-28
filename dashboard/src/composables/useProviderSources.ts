@@ -63,6 +63,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const editableProviderSource = ref<any | null>(null)
   const availableModels = ref<any[]>([])
   const modelMetadata = ref<Record<string, any>>({})
+  const loadingSources = ref(true)
   const loadingModels = ref(false)
   const savingSource = ref(false)
   const savingProviderToggles = ref<string[]>([])
@@ -716,6 +717,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   async function loadProviderTemplate() {
+    loadingSources.value = true
     try {
       const response = await providerApi.schema()
       if (response.data.status === 'ok') {
@@ -729,6 +731,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       }
     } catch (error) {
       console.error('Failed to load provider template:', error)
+    } finally {
+      loadingSources.value = false
     }
   }
 
@@ -752,6 +756,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     editableProviderSource,
     availableModels,
     modelMetadata,
+    loadingSources,
     loadingModels,
     savingSource,
     savingProviderToggles,

@@ -482,6 +482,74 @@
     "name": "平台配置",
     "platform": {
       "description": "消息平台适配器",
+      "app_id": {
+        "description": "应用 ID",
+        "hint": "消息平台开放平台中的应用 ID。"
+      },
+      "app_secret": {
+        "description": "应用密钥",
+        "hint": "消息平台开放平台中的应用密钥。请妥善保管，避免泄露。"
+      },
+      "domain": {
+        "description": "开放平台 API 地址",
+        "hint": "开放平台 API 的基础地址。使用默认官方服务时通常无需修改。"
+      },
+      "corpid": {
+        "description": "企业 ID",
+        "hint": "企业微信后台中的企业 ID（CorpID）。"
+      },
+      "token": {
+        "description": "回调 Token",
+        "hint": "消息平台回调配置中用于验证请求的 Token。"
+      },
+      "encoding_aes_key": {
+        "description": "消息加密密钥",
+        "hint": "消息平台回调配置中的 EncodingAESKey，用于加密和解密消息。"
+      },
+      "api_base_url": {
+        "description": "API 基础地址",
+        "hint": "消息平台 API 的基础地址。使用默认官方服务时通常无需修改。"
+      },
+      "client_id": {
+        "description": "客户端 ID",
+        "hint": "消息平台开放平台中的客户端 ID。"
+      },
+      "client_secret": {
+        "description": "客户端密钥",
+        "hint": "消息平台开放平台中的客户端密钥。请妥善保管，避免泄露。"
+      },
+      "start_message": {
+        "description": "Start 命令回复",
+        "hint": "用户向 Telegram 机器人发送 /start 命令时回复的内容。"
+      },
+      "telegram_api_base_url": {
+        "description": "API 地址",
+        "hint": "Telegram Bot API 的基础地址。使用官方服务时通常无需修改。"
+      },
+      "telegram_file_base_url": {
+        "description": "文件 API 地址",
+        "hint": "Telegram Bot API 文件下载接口的基础地址。使用官方服务时通常无需修改。"
+      },
+      "bot_token": {
+        "description": "Slack Bot Token",
+        "hint": "Slack 应用的 Bot User OAuth Token，通常以 xoxb- 开头。"
+      },
+      "app_token": {
+        "description": "Slack App Token",
+        "hint": "Slack Socket Mode 使用的 App-Level Token，通常以 xapp- 开头。"
+      },
+      "signing_secret": {
+        "description": "Slack Signing Secret",
+        "hint": "Slack 应用的 Signing Secret，用于验证 Webhook 请求。"
+      },
+      "channel_access_token": {
+        "description": "LINE 频道访问令牌",
+        "hint": "LINE Messaging API 频道的 Channel Access Token。"
+      },
+      "channel_secret": {
+        "description": "LINE 频道密钥",
+        "hint": "LINE Messaging API 频道的 Channel Secret。"
+      },
       "active_send_mode": {
         "description": "是否换用主动发送接口"
       },
@@ -652,19 +720,19 @@
         "hint": "Only valid when Slack connection mode is `webhook`."
       },
       "telegram_command_auto_refresh": {
-        "description": "Telegram 命令自动刷新",
+        "description": "命令自动刷新",
         "hint": "启用后，AstrBot 将会在运行时自动刷新 Telegram 命令。(单独设置此项无效)"
       },
       "telegram_command_register": {
-        "description": "Telegram 命令注册",
+        "description": "命令注册",
         "hint": "启用后，AstrBot 将会自动注册 Telegram 命令。"
       },
       "telegram_command_register_interval": {
-        "description": "Telegram 命令自动刷新间隔",
+        "description": "命令自动刷新间隔",
         "hint": "Telegram 命令自动刷新间隔，单位为秒。"
       },
       "telegram_polling_restart_delay": {
-        "description": "Telegram 轮询重启延迟",
+        "description": "轮询重启延迟",
         "hint": "当轮询意外结束尝试自动重启时的延迟时间，单位为秒。默认为 5s。"
       },
       "telegram_token": {
@@ -1264,6 +1332,15 @@
   },
   "provider_group": {
     "provider": {
+      "api_key": {
+        "description": "API Key"
+      },
+      "dashscope_api_key": {
+        "description": "DashScope API Key"
+      },
+      "gemini_tts_api_key": {
+        "description": "Gemini API Key"
+      },
       "genie_onnx_model_dir": {
         "description": "ONNX Model Directory",
         "hint": "The directory path containing the ONNX model files"

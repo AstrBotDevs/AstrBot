@@ -425,6 +425,74 @@
         "name": "Платформы",
         "platform": {
             "description": "Адаптеры сообщений",
+            "app_id": {
+                "description": "ID приложения",
+                "hint": "ID приложения из консоли разработчика платформы сообщений."
+            },
+            "app_secret": {
+                "description": "Секрет приложения",
+                "hint": "Секрет приложения из консоли разработчика платформы сообщений. Храните его в безопасности."
+            },
+            "domain": {
+                "description": "Адрес API платформы",
+                "hint": "Базовый адрес API открытой платформы. Обычно значение по умолчанию менять не нужно."
+            },
+            "corpid": {
+                "description": "ID организации",
+                "hint": "ID организации (CorpID) из консоли администрирования WeCom."
+            },
+            "token": {
+                "description": "Токен обратного вызова",
+                "hint": "Токен для проверки запросов из настроек обратного вызова платформы сообщений."
+            },
+            "encoding_aes_key": {
+                "description": "Ключ шифрования сообщений",
+                "hint": "EncodingAESKey из настроек обратного вызова, используемый для шифрования и расшифровки сообщений."
+            },
+            "api_base_url": {
+                "description": "Базовый адрес API",
+                "hint": "Базовый адрес API платформы сообщений. Обычно значение по умолчанию менять не нужно."
+            },
+            "client_id": {
+                "description": "ID клиента",
+                "hint": "ID клиента из консоли разработчика платформы сообщений."
+            },
+            "client_secret": {
+                "description": "Секрет клиента",
+                "hint": "Секрет клиента из консоли разработчика платформы сообщений. Храните его в безопасности."
+            },
+            "start_message": {
+                "description": "Ответ на команду /start",
+                "hint": "Сообщение, отправляемое пользователю в ответ на команду /start для Telegram-бота."
+            },
+            "telegram_api_base_url": {
+                "description": "Адрес API",
+                "hint": "Базовый адрес Telegram Bot API. Обычно официальный адрес менять не нужно."
+            },
+            "telegram_file_base_url": {
+                "description": "Адрес файлового API",
+                "hint": "Базовый адрес для загрузки файлов из Telegram Bot API. Обычно официальный адрес менять не нужно."
+            },
+            "bot_token": {
+                "description": "Slack Bot Token",
+                "hint": "Bot User OAuth Token приложения Slack, обычно начинается с xoxb-."
+            },
+            "app_token": {
+                "description": "Slack App Token",
+                "hint": "App-Level Token для Slack Socket Mode, обычно начинается с xapp-."
+            },
+            "signing_secret": {
+                "description": "Slack Signing Secret",
+                "hint": "Signing Secret приложения Slack для проверки запросов Webhook."
+            },
+            "channel_access_token": {
+                "description": "Токен доступа канала LINE",
+                "hint": "Channel Access Token канала LINE Messaging API."
+            },
+            "channel_secret": {
+                "description": "Секрет канала LINE",
+                "hint": "Channel Secret канала LINE Messaging API."
+            },
             "active_send_mode": {
                 "description": "Использовать API активной отправки"
             },
@@ -595,16 +663,20 @@
                 "hint": "Действительно только если режим подключения Slack установлен как `webhook`."
             },
             "telegram_command_auto_refresh": {
-                "description": "Автообновление команд Telegram",
+                "description": "Автообновление команд",
                 "hint": "Если включено, AstrBot автоматически обновляет команды Telegram во время выполнения. (Одна эта настройка не имеет эффекта)"
             },
             "telegram_command_register": {
-                "description": "Регистрация команд Telegram",
+                "description": "Регистрация команд",
                 "hint": "Если включено, AstrBot автоматически регистрирует команды Telegram."
             },
             "telegram_command_register_interval": {
-                "description": "Интервал автообновления команд Telegram",
+                "description": "Интервал автообновления команд",
                 "hint": "Интервал автоматического обновления команд Telegram в секундах."
+            },
+            "telegram_polling_restart_delay": {
+                "description": "Задержка перезапуска опроса",
+                "hint": "Задержка перед автоматическим перезапуском после неожиданного завершения опроса, в секундах. По умолчанию 5 секунд."
             },
             "telegram_token": {
                 "description": "Токен бота",
@@ -1208,6 +1280,15 @@
     },
     "provider_group": {
         "provider": {
+            "api_key": {
+                "description": "API Key"
+            },
+            "dashscope_api_key": {
+                "description": "DashScope API Key"
+            },
+            "gemini_tts_api_key": {
+                "description": "Gemini API Key"
+            },
             "genie_onnx_model_dir": {
                 "description": "Директория моделей ONNX",
                 "hint": "Путь к директории с файлами моделей ONNX"

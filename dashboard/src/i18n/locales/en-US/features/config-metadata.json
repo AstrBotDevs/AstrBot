@@ -459,6 +459,74 @@
     "name": "Platform",
     "platform": {
       "description": "Message Platform Adapters",
+      "app_id": {
+        "description": "Application ID",
+        "hint": "The application ID from the messaging platform's developer console."
+      },
+      "app_secret": {
+        "description": "Application secret",
+        "hint": "The application secret from the messaging platform's developer console. Keep it secure."
+      },
+      "domain": {
+        "description": "Open platform API URL",
+        "hint": "The base URL of the open platform API. The default normally does not need to be changed."
+      },
+      "corpid": {
+        "description": "Enterprise ID",
+        "hint": "The enterprise ID (CorpID) from the WeCom administration console."
+      },
+      "token": {
+        "description": "Callback token",
+        "hint": "The token used to verify requests in the messaging platform's callback settings."
+      },
+      "encoding_aes_key": {
+        "description": "Message encryption key",
+        "hint": "The EncodingAESKey from the callback settings, used to encrypt and decrypt messages."
+      },
+      "api_base_url": {
+        "description": "API base URL",
+        "hint": "The messaging platform API base URL. The default normally does not need to be changed."
+      },
+      "client_id": {
+        "description": "Client ID",
+        "hint": "The client ID from the messaging platform's developer console."
+      },
+      "client_secret": {
+        "description": "Client secret",
+        "hint": "The client secret from the messaging platform's developer console. Keep it secure."
+      },
+      "start_message": {
+        "description": "Start command reply",
+        "hint": "The message sent when a user sends the /start command to the Telegram bot."
+      },
+      "telegram_api_base_url": {
+        "description": "API URL",
+        "hint": "The Telegram Bot API base URL. The official default normally does not need to be changed."
+      },
+      "telegram_file_base_url": {
+        "description": "File API URL",
+        "hint": "The base URL used to download files from the Telegram Bot API. The official default normally does not need to be changed."
+      },
+      "bot_token": {
+        "description": "Slack Bot Token",
+        "hint": "The Slack application's Bot User OAuth Token, usually beginning with xoxb-."
+      },
+      "app_token": {
+        "description": "Slack App Token",
+        "hint": "The App-Level Token used by Slack Socket Mode, usually beginning with xapp-."
+      },
+      "signing_secret": {
+        "description": "Slack Signing Secret",
+        "hint": "The Slack application's Signing Secret, used to verify webhook requests."
+      },
+      "channel_access_token": {
+        "description": "LINE Channel Access Token",
+        "hint": "The Channel Access Token for the LINE Messaging API channel."
+      },
+      "channel_secret": {
+        "description": "LINE Channel Secret",
+        "hint": "The Channel Secret for the LINE Messaging API channel."
+      },
       "active_send_mode": {
         "description": "Use Proactive Send API"
       },
@@ -629,19 +697,19 @@
         "hint": "Only valid when Slack connection mode is `webhook`."
       },
       "telegram_command_auto_refresh": {
-        "description": "Telegram Command Auto Refresh",
+        "description": "Command Auto Refresh",
         "hint": "When enabled, AstrBot automatically refreshes Telegram commands at runtime. (Setting this alone has no effect)"
       },
       "telegram_command_register": {
-        "description": "Telegram Command Registration",
+        "description": "Command Registration",
         "hint": "When enabled, AstrBot automatically registers Telegram commands."
       },
       "telegram_command_register_interval": {
-        "description": "Telegram Command Auto Refresh Interval",
+        "description": "Command Auto Refresh Interval",
         "hint": "Telegram command auto-refresh interval in seconds."
       },
       "telegram_polling_restart_delay": {
-        "description": "Telegram Polling Restart Delay",
+        "description": "Polling Restart Delay",
         "hint": "Waiting time in seconds when the polling loop needs to restart after unexpected exits. Defaults to 5s."
       },
       "telegram_token": {
@@ -1241,6 +1309,15 @@
   },
   "provider_group": {
     "provider": {
+      "api_key": {
+        "description": "API Key"
+      },
+      "dashscope_api_key": {
+        "description": "DashScope API Key"
+      },
+      "gemini_tts_api_key": {
+        "description": "Gemini API Key"
+      },
       "genie_onnx_model_dir": {
         "description": "ONNX Model Directory",
         "hint": "The directory path containing the ONNX model files"
