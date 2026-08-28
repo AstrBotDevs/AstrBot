@@ -103,10 +103,6 @@ DEFAULT_CONFIG = {
         "empty_mention_waiting_need_reply": True,
         "ignore_bot_self_message": False,
         "ignore_at_all": False,
-        "group_wake_policy": {
-            "mention_bot": False,
-            "reply_to_bot": False,
-        },
     },
     "provider_sources": [],  # provider sources
     "provider": [],  # models from provider_sources
@@ -176,11 +172,6 @@ DEFAULT_CONFIG = {
         "tool_schema_mode": "full",
         "llm_safety_mode": True,
         "safety_mode_strategy": "system_prompt",  # TODO: llm judge
-        "file_extract": {
-            "enable": False,
-            "provider": "moonshotai",
-            "moonshotai_api_key": "",
-        },
         "proactive_capability": {
             "add_cron_tools": True,
         },
@@ -1137,13 +1128,6 @@ CONFIG_METADATA_2 = {
                     "ignore_at_all": {
                         "type": "bool",
                         "hint": "启用后，机器人会忽略 @ 全体成员 的消息事件。",
-                    },
-                    "group_wake_policy": {
-                        "type": "object",
-                        "items": {
-                            "mention_bot": {"type": "bool"},
-                            "reply_to_bot": {"type": "bool"},
-                        },
                     },
                     "segmented_reply": {
                         "type": "object",
@@ -3153,21 +3137,6 @@ CONFIG_METADATA_2 = {
                     "tool_schema_mode": {
                         "type": "string",
                     },
-                    "file_extract": {
-                        "type": "object",
-                        "items": {
-                            "enable": {
-                                "type": "bool",
-                            },
-                            "provider": {
-                                "type": "string",
-                            },
-                            "moonshotai_api_key": {
-                                "type": "string",
-                                "secret": True,
-                            },
-                        },
-                    },
                     "proactive_capability": {
                         "type": "object",
                         "items": {
@@ -3805,39 +3774,9 @@ CONFIG_METADATA_3 = {
                     "provider_settings.enable": True,
                 },
             },
-            # "file_extract": {
-            #     "description": "文档解析能力 [beta]",
-            #     "type": "object",
-            #     "items": {
-            #         "provider_settings.file_extract.enable": {
-            #             "description": "启用文档解析能力",
-            #             "type": "bool",
-            #         },
-            #         "provider_settings.file_extract.provider": {
-            #             "description": "文档解析提供商",
-            #             "type": "string",
-            #             "options": ["moonshotai"],
-            #             "condition": {
-            #                 "provider_settings.file_extract.enable": True,
-            #             },
-            #         },
-            #         "provider_settings.file_extract.moonshotai_api_key": {
-            #             "description": "Moonshot AI API Key",
-            #             "type": "string",
-            #             "condition": {
-            #                 "provider_settings.file_extract.provider": "moonshotai",
-            #                 "provider_settings.file_extract.enable": True,
-            #             },
-            #         },
-            #     },
-            #     "condition": {
-            #         "provider_settings.agent_runner_type": "local",
-            #         "provider_settings.enable": True,
-            #     },
-            # },
             "proactive_capability": {
                 "description": "主动型 Agent",
-                "hint": "https://docs.astrbot.app/use/proactive-agent.html",
+                "hint": "/help/use/proactive-agent.html",
                 "type": "object",
                 "items": {
                     "provider_settings.proactive_capability.add_cron_tools": {
