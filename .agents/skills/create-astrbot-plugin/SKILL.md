@@ -11,15 +11,15 @@ Create a standalone plugin package that targets the current AstrBot checkout. Ke
 
 1. Read the repository `README.md` or `README_zh.md` and `pyproject.toml` before writing code.
 2. Treat `[project].requires-python` in `pyproject.toml` as the source of truth for the plugin's minimum Python version. Also read `.python-version` for the repository's tested interpreter pin. Never add Python 3.10–3.13 compatibility branches or hardcode a different floor.
-3. Read the relevant current-fork guide before choosing an API:
-   - [plugin development](https://github.com/Xero-Team/AstrBot/blob/master/docs/zh/dev/star/plugin-new.md)
-   - [minimal plugin](https://github.com/Xero-Team/AstrBot/blob/master/docs/zh/dev/star/guides/simple.md)
-   - [events and Orbit commands](https://github.com/Xero-Team/AstrBot/blob/master/docs/zh/dev/star/guides/listen-message-event.md)
-   - [configuration](https://github.com/Xero-Team/AstrBot/blob/master/docs/zh/dev/star/guides/plugin-config.md)
-   - [storage](https://github.com/Xero-Team/AstrBot/blob/master/docs/zh/dev/star/guides/storage.md)
-   - [messages](https://github.com/Xero-Team/AstrBot/blob/master/docs/zh/dev/star/guides/send-message.md)
-   - [AI](https://github.com/Xero-Team/AstrBot/blob/master/docs/zh/dev/star/guides/ai.md)
-   - [Dashboard Extension](https://github.com/Xero-Team/AstrBot/blob/master/docs/zh/dev/star/plugin-dashboard-extension.md)
+3. Read the relevant current-fork guide before choosing an API. Sources live under `docs/zh/dev/star/` in this checkout and are served in-app at `/help/dev/star/` after `make run`. Do not point generated READMEs at `docs.astrbot.app`.
+   - [plugin development](../../../docs/zh/dev/star/plugin-new.md)
+   - [minimal plugin](../../../docs/zh/dev/star/guides/simple.md)
+   - [events and Orbit commands](../../../docs/zh/dev/star/guides/listen-message-event.md)
+   - [configuration](../../../docs/zh/dev/star/guides/plugin-config.md)
+   - [storage](../../../docs/zh/dev/star/guides/storage.md)
+   - [messages](../../../docs/zh/dev/star/guides/send-message.md)
+   - [AI](../../../docs/zh/dev/star/guides/ai.md)
+   - [Dashboard Extension](../../../docs/zh/dev/star/plugin-dashboard-extension.md)
 4. Ask only for missing decisions that change the package shape: plugin name, behavior, command/event, supported platforms, secrets/configuration, third-party dependencies, and whether tests or a Dashboard page are required.
 5. Place a standalone plugin outside the AstrBot source tree when possible. Install it with `uv run astrbot plug install --editable <plugin-dir>` while developing.
 
@@ -100,7 +100,7 @@ For commands, follow the Orbit conventions: use a short lowercase root, explicit
 
 Test the behavior nearest its boundary: command parsing, empty and quoted arguments, config defaults and old config shapes, provider unavailable/timeout/cancellation, storage paths, and hot reload when applicable. Mock providers and external services unless an integration test is explicitly enabled.
 
-README content should state installation, commands, configuration, supported platforms, dependencies, and the exact Python floor read from the AstrBot checkout. Do not claim that the Xero-Team fork publishes PyPI packages, images, or an official plugin market.
+README content should state installation, commands, configuration, supported platforms, dependencies, and the exact Python floor read from the AstrBot checkout. Point users at the in-app documentation (`/help/` after starting AstrBot) rather than `docs.astrbot.app`. Do not claim that the Xero-Team fork publishes PyPI packages, images, or an official plugin market.
 
 ## Verification
 

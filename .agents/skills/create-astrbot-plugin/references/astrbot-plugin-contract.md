@@ -12,7 +12,7 @@ legacy example.
 - `main.py` contains the `Star` subclass and handler registrations. `requirements.txt`, `_conf_schema.json`, `.astrbot-plugin/i18n/`, `skills/`, and Dashboard files are opt-in.
 - Develop an independent repository outside the AstrBot checkout and connect it with `uv run astrbot plug install --editable <plugin-dir>`.
 
-Source: [AstrBot plugin development guide](https://github.com/Xero-Team/AstrBot/blob/master/docs/zh/dev/star/plugin-new.md).
+Source: [AstrBot plugin development guide](../../../../docs/zh/dev/star/plugin-new.md) (in-app: `/help/dev/star/plugin-new.html`).
 
 ## Public SDK and lifecycle
 
@@ -35,7 +35,7 @@ provider source modules, or private runtime registries. Do not use old
 `register` decorators, `event.bot`, `event.client`, or arbitrary raw platform
 calls.
 
-Source: [minimal plugin](https://github.com/Xero-Team/AstrBot/blob/master/docs/zh/dev/star/guides/simple.md) and the repository import-boundary rules in `AGENTS.md`.
+Source: [minimal plugin](../../../../docs/zh/dev/star/guides/simple.md) and the repository import-boundary rules in `AGENTS.md`.
 
 ## Configuration and persistence
 
@@ -48,7 +48,7 @@ Use `self.context.storage.data_directory()` for files and databases, or the
 plugin KV methods for small state. Never write persistent data into the plugin
 source tree or another plugin's directory.
 
-Sources: [plugin configuration](https://github.com/Xero-Team/AstrBot/blob/master/docs/zh/dev/star/guides/plugin-config.md) and [plugin storage](https://github.com/Xero-Team/AstrBot/blob/master/docs/zh/dev/star/guides/storage.md).
+Sources: [plugin configuration](../../../../docs/zh/dev/star/guides/plugin-config.md) and [plugin storage](../../../../docs/zh/dev/star/guides/storage.md).
 
 ## Security and compatibility
 

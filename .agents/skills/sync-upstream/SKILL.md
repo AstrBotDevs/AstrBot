@@ -184,6 +184,8 @@ Before accepting a decision, check the affected contract:
 - update OpenAPI source, generated Dashboard client, public JSON, call sites,
   and tests together for Dashboard protocol changes;
 - update both `docs/en/` and `docs/zh/` for user-visible behavior;
+- keep documentation in-app at `/help/`; do not restore `Dockerfile.docs`, a
+  docs Compose service, or `docs.astrbot.app` links;
 - regenerate NapCat models only through `make napcat-check`;
 - preserve Python 3.14+, the security invariants, current ownership boundaries,
   source-build deployment, and the no-legacy policy;
