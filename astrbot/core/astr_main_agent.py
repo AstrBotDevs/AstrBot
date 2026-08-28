@@ -114,7 +114,6 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_system_tmp_path,
     get_astrbot_workspaces_path,
 )
-from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.media_utils import (
     IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
     IMAGE_COMPRESS_DEFAULT_QUALITY,
@@ -189,8 +188,6 @@ class MainAgentBuildConfig:
     """
     tool_schema_mode: str = "full"
     """The tool schema mode, can be 'full' or 'skills-like'."""
-    provider_wake_prefix: str = ""
-    """Unused routing placeholder; access decisions are made upstream."""
     streaming_response: bool = True
     """Whether to use streaming response."""
     sanitize_context_by_modalities: bool = False
@@ -199,12 +196,6 @@ class MainAgentBuildConfig:
     kb_agentic_mode: bool = False
     """Whether to use agentic mode for knowledge base retrieval.
     This will inject the knowledge base query tool into the main agent's toolset to allow dynamic querying."""
-    file_extract_enabled: bool = False
-    """Whether to enable file content extraction for uploaded files."""
-    file_extract_prov: str = "moonshotai"
-    """The file extraction provider."""
-    file_extract_msh_api_key: str = ""
-    """The API key for Moonshot AI file extraction provider."""
     context_limit_reached_strategy: str = "truncate_by_turns"
     """The strategy to handle context length limit reached."""
     llm_compress_instruction: str = ""
@@ -328,55 +319,6 @@ async def _apply_kb(
             plugin_context.get_llm_tool_manager().get_builtin_tool(
                 KnowledgeBaseQueryTool
             )
-        )
-
-
-async def _apply_file_extract(
-    event: AstrMessageEvent,
-    req: ProviderRequest,
-    config: MainAgentBuildConfig,
-) -> None:
-    file_paths = []
-    file_names = []
-    for comp in event.message_obj.message:
-        if isinstance(comp, File):
-            file_paths.append(await comp.get_file())
-            file_names.append(comp.name)
-        elif isinstance(comp, Reply) and comp.chain:
-            for reply_comp in comp.chain:
-                if isinstance(reply_comp, File):
-                    file_paths.append(await reply_comp.get_file())
-                    file_names.append(reply_comp.name)
-    if not file_paths:
-        return
-    if not req.prompt:
-        req.prompt = "总结一下文件里面讲了什么？"
-    if config.file_extract_prov == "moonshotai":
-        if not config.file_extract_msh_api_key:
-            logger.error("Moonshot AI API key for file extract is not set")
-            return
-        file_contents = await asyncio.gather(
-            *[
-                extract_file_moonshotai(
-                    file_path,
-                    config.file_extract_msh_api_key,
-                )
-                for file_path in file_paths
-            ]
-        )
-    else:
-        logger.error("Unsupported file extract provider: %s", config.file_extract_prov)
-        return
-
-    for file_content, file_name in zip(file_contents, file_names):
-        req.contexts.append(
-            {
-                "role": "system",
-                "content": (
-                    "File Extract Results of user uploaded files:\n"
-                    f"{file_content}\nFile Name: {file_name or 'Unknown'}"
-                ),
-            },
         )
 
 
@@ -1526,11 +1468,6 @@ async def _prepare_request_for_agent(
     if isinstance(tool_history_policy, dict):
         req.tool_history_mode = str(tool_history_policy.get("mode", "full"))
         req.tool_history_placeholder = str(tool_history_policy.get("placeholder", ""))
-    if config.file_extract_enabled:
-        try:
-            await _apply_file_extract(event, req, config)
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Error occurred while applying file extract: %s", exc)
 
     req.prompt = coalesce_prompt_with_json_cards(event, req.prompt)
     has_reply = any(isinstance(comp, Reply) for comp in event.message_obj.message)

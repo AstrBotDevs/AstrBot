@@ -121,13 +121,6 @@ class InternalAgentSubStage:
         )
         self.kb_agentic_mode: bool = conf.get("kb_agentic_mode", False)
 
-        file_extract_conf: dict = settings.get("file_extract", {})
-        self.file_extract_enabled: bool = file_extract_conf.get("enable", False)
-        self.file_extract_prov: str = file_extract_conf.get("provider", "moonshotai")
-        self.file_extract_msh_api_key: str = file_extract_conf.get(
-            "moonshotai_api_key", ""
-        )
-
         # 上下文管理相关
         self.context_limit_reached_strategy: str = settings.get(
             "context_limit_reached_strategy", "truncate_by_turns"
@@ -175,9 +168,6 @@ class InternalAgentSubStage:
             tool_schema_mode=self.tool_schema_mode,
             sanitize_context_by_modalities=self.sanitize_context_by_modalities,
             kb_agentic_mode=self.kb_agentic_mode,
-            file_extract_enabled=self.file_extract_enabled,
-            file_extract_prov=self.file_extract_prov,
-            file_extract_msh_api_key=self.file_extract_msh_api_key,
             context_limit_reached_strategy=self.context_limit_reached_strategy,
             llm_compress_instruction=self.llm_compress_instruction,
             llm_compress_keep_recent_ratio=self.llm_compress_keep_recent_ratio,
@@ -328,13 +318,11 @@ class InternalAgentSubStage:
     async def _build_checked_agent_runner(
         self,
         event: AstrMessageEvent,
-        provider_wake_prefix: str,
         streaming_response: bool,
     ) -> MainAgentBuildResult | None:
         """Build a runner and reject configured provider endpoints unsafe for use."""
         build_cfg = replace(
             self.main_agent_cfg,
-            provider_wake_prefix=provider_wake_prefix,
             streaming_response=streaming_response,
         )
         build_result = await build_main_agent(
@@ -360,9 +348,7 @@ class InternalAgentSubStage:
                 return None
         return build_result
 
-    async def process(
-        self, event: AstrMessageEvent, provider_wake_prefix: str
-    ) -> AsyncGenerator[None]:
+    async def process(self, event: AstrMessageEvent) -> AsyncGenerator[None]:
         follow_up_capture: FollowUpCapture | None = None
         follow_up_consumed_marked = False
         follow_up_activated = False
@@ -472,7 +458,6 @@ class InternalAgentSubStage:
                 try:
                     build_result = await self._build_checked_agent_runner(
                         event,
-                        provider_wake_prefix,
                         streaming_response,
                     )
                     if build_result is None:

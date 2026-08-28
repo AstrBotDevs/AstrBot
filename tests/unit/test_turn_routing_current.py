@@ -110,7 +110,7 @@ async def test_extra_token_chat_matches_slash_and_bare_after_first_gate(monkeypa
 
     assert slash_out == ["done"]
     assert bare_out == ["done"]
-    assert stage.agent_sub_stage.process_calls == [(slash, ""), (bare, "")]
+    assert stage.agent_sub_stage.process_calls == [slash, bare]
 
 
 @pytest.mark.asyncio

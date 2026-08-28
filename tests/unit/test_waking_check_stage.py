@@ -95,7 +95,6 @@ async def make_stage(**settings):
         "ignore_bot_self_message": False,
         "ignore_at_all": False,
         "unique_session": False,
-        "group_wake_policy": {"mention_bot": False, "reply_to_bot": False},
     }
     llm_access = {
         "prefixes": ["/"],
@@ -103,19 +102,12 @@ async def make_stage(**settings):
         "group": "prefix",
         "reply_to_bot": False,
     }
-    extra_llm = settings.pop("llm_access", None) if "llm_access" in settings else None
+    extra_llm = settings.pop("llm_access", None)
     platform_settings.update(settings)
     if extra_llm:
         llm_access.update(extra_llm)
     if platform_settings.pop("friend_message_needs_wake_prefix", False):
         llm_access["private"] = "prefix"
-    group_wake = platform_settings.get("group_wake_policy") or {}
-    if group_wake.get("mention_bot"):
-        llm_access["group"] = "mention"
-        if group_wake.get("reply_to_bot"):
-            llm_access["reply_to_bot"] = True
-    elif group_wake.get("reply_to_bot"):
-        llm_access["reply_to_bot"] = True
     config = {
         "command_prefixes": ["/"],
         "plugin_set": ["*"],
@@ -266,7 +258,7 @@ def make_command_handler(name: str, handler, *extra_filters):
         ),
         ({}, FakeEvent([Plain("/hello")], message_text="/hello"), True),
         (
-            {"group_wake_policy": {"mention_bot": True, "reply_to_bot": False}},
+            {"llm_access": {"group": "mention"}},
             FakeEvent([At(qq="bot"), Plain("hello")]),
             True,
         ),
@@ -285,9 +277,7 @@ async def test_detect_wake_behavior_matrix(settings, event, expected):
 @pytest.mark.asyncio
 async def test_detect_wake_resolves_unknown_reply_sender(monkeypatch):
     event = FakeEvent([Reply(id="reply-1"), Plain("hello")])
-    stage = await make_stage(
-        group_wake_policy={"mention_bot": False, "reply_to_bot": True}
-    )
+    stage = await make_stage(llm_access={"reply_to_bot": True})
     client = SimpleNamespace(get_msg_sender_id=AsyncMock(return_value="bot"))
     monkeypatch.setattr(waking, "OneBotClient", lambda _: client)
 
@@ -297,7 +287,7 @@ async def test_detect_wake_resolves_unknown_reply_sender(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_group_wake_policy_does_not_mutate_at_component(monkeypatch):
+async def test_unwoken_mention_does_not_mutate_at_component(monkeypatch):
     stage = await make_stage()
     install_handlers(stage, monkeypatch, [])
     mention = At(qq="bot")
@@ -310,7 +300,7 @@ async def test_group_wake_policy_does_not_mutate_at_component(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_adapter_preconfigured_wake_bypasses_group_wake_policy(monkeypatch):
+async def test_adapter_preconfigured_wake_bypasses_group_llm_access(monkeypatch):
     stage = await make_stage()
     install_handlers(stage, monkeypatch, [])
     event = FakeEvent([At(qq="bot")])

@@ -391,11 +391,9 @@ def main_agent_build_config():
     return MainAgentBuildConfig(
         tool_call_timeout=60,
         tool_schema_mode="full",
-        provider_wake_prefix="",
         streaming_response=True,
         sanitize_context_by_modalities=False,
         kb_agentic_mode=False,
-        file_extract_enabled=False,
         context_limit_reached_strategy="truncate_by_turns",
         llm_safety_mode=True,
         computer_use_runtime="local",

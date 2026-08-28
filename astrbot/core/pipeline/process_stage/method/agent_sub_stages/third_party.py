@@ -319,9 +319,7 @@ class ThirdPartyAgentSubStage:
         # Second yield keeps scheduler progress consistent after final result update.
         yield
 
-    async def process(
-        self, event: AstrMessageEvent, provider_wake_prefix: str
-    ) -> AsyncGenerator[None]:
+    async def process(self, event: AstrMessageEvent) -> AsyncGenerator[None]:
         req: ProviderRequest | None = None
 
         self.prov_cfg: dict = next(

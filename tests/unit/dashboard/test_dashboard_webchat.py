@@ -229,7 +229,6 @@ async def test_webchat_step_up_http_chat_pipeline_context_matches_authorization(
                     "ignore_bot_self_message": False,
                     "ignore_at_all": False,
                     "unique_session": False,
-                    "group_wake_policy": {},
                 },
                 "plugin_set": ["*"],
             },

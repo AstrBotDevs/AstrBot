@@ -45,8 +45,8 @@ class FakeInternalAgentSubStage:
         self.process_calls = []
         self.responses = []
 
-    async def process(self, event, prefix):
-        self.process_calls.append((event, prefix))
+    async def process(self, event):
+        self.process_calls.append(event)
         for item in self.responses:
             yield item
 
@@ -57,8 +57,8 @@ class FakeThirdPartyAgentSubStage:
         self.process_calls = []
         self.responses = []
 
-    async def process(self, event, prefix):
-        self.process_calls.append((event, prefix))
+    async def process(self, event):
+        self.process_calls.append(event)
         for item in self.responses:
             yield item
 
@@ -222,7 +222,7 @@ async def test_process_returns_early_when_session_llm_is_disabled(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_process_forwards_event_and_trimmed_prefix_to_selected_substage(
+async def test_process_forwards_event_to_selected_substage(
     monkeypatch,
 ):
     stage = agent_request.AgentRequestSubStage()
@@ -242,30 +242,4 @@ async def test_process_forwards_event_and_trimmed_prefix_to_selected_substage(
 
     assert outputs == ["umo-ok:ask", "done"]
     should_process.assert_awaited_once_with(event)
-    assert stage.agent_sub_stage.process_calls == [(event, "")]
-
-
-@pytest.mark.parametrize("agent_runner_type", ["local", "remote"])
-@pytest.mark.asyncio
-async def test_process_ignores_provider_wake_prefix_for_webchat(
-    monkeypatch,
-    agent_runner_type,
-):
-    stage = agent_request.AgentRequestSubStage()
-    ctx = _ctx(agent_runner_type=agent_runner_type, wake_prefix="ask")
-    await stage.initialize(ctx)
-    stage.agent_sub_stage.responses = ["done"]
-
-    should_process = AsyncMock(return_value=True)
-    monkeypatch.setattr(
-        agent_request.SessionServiceManager,
-        "should_process_llm_request",
-        should_process,
-    )
-    event = FakeEvent("webchat-umo", platform_name="webchat")
-
-    outputs = [item async for item in stage.process(event)]
-
-    assert outputs == ["done"]
-    should_process.assert_awaited_once_with(event)
-    assert stage.agent_sub_stage.process_calls == [(event, "")]
+    assert stage.agent_sub_stage.process_calls == [event]

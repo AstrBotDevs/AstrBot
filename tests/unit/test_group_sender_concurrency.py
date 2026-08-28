@@ -129,7 +129,7 @@ async def test_internal_process_uses_sender_lock_when_enabled(monkeypatch):
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=None))
 
-    [item async for item in stage.process(event, provider_wake_prefix="")]
+    [item async for item in stage.process(event)]
 
     assert keys == [
         session_lock_key(event.unified_msg_origin, "user-a", concurrent=True)
@@ -164,7 +164,7 @@ async def test_internal_process_keeps_umo_lock_when_disabled(monkeypatch):
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=None))
 
-    [item async for item in stage.process(event, provider_wake_prefix="")]
+    [item async for item in stage.process(event)]
 
     assert keys == [event.unified_msg_origin]
 

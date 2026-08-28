@@ -25,7 +25,7 @@ async def test_internal_process_skips_empty_messages_without_provider_request(
     try_capture = MagicMock()
     stage.ctx.execution_context.follow_up_coordinator.try_capture = try_capture
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     try_capture.assert_not_called()
@@ -91,7 +91,7 @@ async def test_internal_process_accepts_non_text_messages_with_reply_or_media(
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
     _set_metrics_upload(stage, AsyncMock())
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
 
     assert yielded == [None]
@@ -124,7 +124,7 @@ async def test_internal_process_stops_when_follow_up_ticket_was_consumed(monkeyp
     )
     stage.ctx.execution_context.follow_up_coordinator.finalize_capture = finalize
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     event.send_typing.assert_not_awaited()
@@ -178,7 +178,7 @@ async def test_internal_process_sends_error_message_and_finalizes_follow_up_on_e
     finalize = AsyncMock()
     stage.ctx.execution_context.follow_up_coordinator.finalize_capture = finalize
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     event.send_typing.assert_awaited_once()
@@ -220,7 +220,7 @@ async def test_internal_process_finalizes_follow_up_when_waiting_hook_blocks(
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=True))
     stage.ctx.execution_context.follow_up_coordinator.finalize_capture = finalize
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     event.send_typing.assert_awaited_once()
@@ -263,7 +263,7 @@ async def test_internal_process_sends_llm_error_message_when_build_returns_none(
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=None))
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     event.send.assert_awaited_once()
@@ -312,7 +312,7 @@ async def test_internal_process_build_none_finalizes_follow_up_capture(monkeypat
     monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=None))
     stage.ctx.execution_context.follow_up_coordinator.finalize_capture = finalize
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     event.send.assert_awaited_once()
@@ -355,7 +355,7 @@ async def test_internal_process_skips_send_when_build_returns_none_without_llm_e
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=None))
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     event.send.assert_not_awaited()
@@ -401,7 +401,7 @@ async def test_internal_process_closes_reset_coro_when_llm_request_hook_blocks(
         internal, "build_main_agent", AsyncMock(return_value=build_result)
     )
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     reset_coro.close.assert_called_once_with()
@@ -456,7 +456,7 @@ async def test_internal_process_llm_request_hook_block_finalizes_follow_up_captu
     )
     stage.ctx.execution_context.follow_up_coordinator.finalize_capture = finalize
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     reset_coro.close.assert_called_once_with()
@@ -487,7 +487,7 @@ async def test_internal_process_stops_when_waiting_hook_blocks(monkeypatch):
     build_main_agent = AsyncMock()
     monkeypatch.setattr(internal, "build_main_agent", build_main_agent)
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     event.send_typing.assert_awaited_once()
@@ -527,7 +527,7 @@ async def test_internal_process_continues_when_send_typing_fails(monkeypatch):
     monkeypatch.setattr(internal, "build_main_agent", AsyncMock(return_value=None))
     monkeypatch.setattr(internal.logger, "warning", logger_warning)
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     event.send.assert_awaited_once()
@@ -559,7 +559,7 @@ async def test_internal_process_swallows_stop_typing_failures(monkeypatch):
     monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=True))
     monkeypatch.setattr(internal.logger, "warning", logger_warning)
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     event.send_typing.assert_awaited_once()
@@ -613,7 +613,7 @@ async def test_internal_process_sends_error_for_blocked_provider_api_base(monkey
         register_runner
     )
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == []
     register_runner.assert_not_called()
@@ -701,7 +701,7 @@ async def test_internal_process_streaming_sets_finish_result_from_final_response
     _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(task_utils.asyncio, "create_task", fake_create_task)
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.gather(*scheduled_tasks)
 
     assert yielded == [None]
@@ -768,7 +768,7 @@ async def test_internal_process_turns_streaming_into_general_when_platform_lacks
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
     _set_metrics_upload(stage, AsyncMock())
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
 
     assert yielded == [None]
@@ -831,7 +831,7 @@ async def test_internal_process_awaits_reset_before_running_agent(monkeypatch):
     _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(task_utils.asyncio, "create_task", fake_create_task)
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.gather(*scheduled_tasks)
 
     assert yielded == [None]
@@ -894,7 +894,7 @@ async def test_internal_process_live_mode_sets_stream_and_saves_history(monkeypa
     _set_metrics_upload(stage, metric_upload)
     monkeypatch.setattr(task_utils.asyncio, "create_task", fake_create_task)
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.gather(*scheduled_tasks)
 
     assert yielded == [None]
@@ -970,7 +970,7 @@ async def test_internal_process_live_mode_skips_history_when_runner_not_done(
     _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(task_utils.asyncio, "create_task", fake_create_task)
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.gather(*scheduled_tasks)
 
     assert yielded == [None]
@@ -1035,7 +1035,7 @@ async def test_internal_process_live_mode_skips_history_when_event_stopped_witho
     _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(task_utils.asyncio, "create_task", fake_create_task)
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.gather(*scheduled_tasks)
 
     assert yielded == [None]
@@ -1099,7 +1099,7 @@ async def test_internal_process_live_mode_saves_history_when_event_stopped_but_r
     _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(task_utils.asyncio, "create_task", fake_create_task)
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.gather(*scheduled_tasks)
 
     assert yielded == [None]
@@ -1162,7 +1162,7 @@ async def test_internal_process_skips_history_save_when_event_stopped_without_ab
     _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
 
     assert yielded == [None]
@@ -1217,7 +1217,7 @@ async def test_internal_process_saves_history_when_event_stopped_but_runner_abor
     _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
 
     assert yielded == [None]
@@ -1286,7 +1286,7 @@ async def test_internal_process_unregisters_runner_and_sends_error_when_history_
         lambda _event: "Error occurred during AI execution.",
     )
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
 
     assert yielded == [None]
@@ -1365,7 +1365,7 @@ async def test_internal_process_sends_error_when_stats_task_creation_fails_befor
         lambda _event: "Error occurred during AI execution.",
     )
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
 
     assert yielded == [None]
     save_to_history.assert_not_awaited()
@@ -1451,7 +1451,7 @@ async def test_internal_process_sends_error_when_metric_task_creation_fails_afte
         lambda _event: "Error occurred during AI execution.",
     )
 
-    yielded = [item async for item in stage.process(event, provider_wake_prefix="ask")]
+    yielded = [item async for item in stage.process(event)]
     await asyncio.gather(*scheduled_tasks)
 
     assert yielded == [None]

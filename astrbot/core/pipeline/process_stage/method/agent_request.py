@@ -38,5 +38,5 @@ class AgentRequestSubStage(Stage):
             )
             return
 
-        async for resp in self.agent_sub_stage.process(event, ""):
+        async for resp in self.agent_sub_stage.process(event):
             yield resp
