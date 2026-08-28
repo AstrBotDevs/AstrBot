@@ -110,6 +110,15 @@ class QQOfficialHttp(BotHttp):
         self._pending_requests = 0
         self._request_tasks: set[asyncio.Task[Any]] = set()
 
+    def _ensure_open(self) -> None:
+        """Reject new work after transport shutdown begins.
+
+        Raises:
+            QQOfficialHttpClosedError: The adapter is shutting down.
+        """
+        if self._closing:
+            raise QQOfficialHttpClosedError("QQ Official HTTP transport is closed")
+
     async def check_session(self) -> None:
         """Refresh authorization and create one reusable HTTP session if needed.
 
@@ -117,17 +126,14 @@ class QQOfficialHttp(BotHttp):
             QQOfficialHttpClosedError: The adapter is shutting down.
             RuntimeError: The QQ bot token is not initialized.
         """
-        if self._closing:
-            raise QQOfficialHttpClosedError("QQ Official HTTP transport is closed")
+        self._ensure_open()
         if self._token is None:
             raise RuntimeError("QQ Official HTTP token is not initialized")
 
         async with self._session_lock:
-            if self._closing:
-                raise QQOfficialHttpClosedError("QQ Official HTTP transport is closed")
+            self._ensure_open()
             await self._token.check_token()
-            if self._closing:
-                raise QQOfficialHttpClosedError("QQ Official HTTP transport is closed")
+            self._ensure_open()
             self._headers = {
                 "Authorization": self._token.get_string(),
                 "X-Union-Appid": self._token.app_id,
@@ -154,8 +160,7 @@ class QQOfficialHttp(BotHttp):
             QQOfficialHttpClosedError: The adapter is shutting down.
             QQOfficialHttpOverloadedError: The queue is full or its wait times out.
         """
-        if self._closing:
-            raise QQOfficialHttpClosedError("QQ Official HTTP transport is closed")
+        self._ensure_open()
 
         task = asyncio.current_task()
         if task is None:
@@ -184,8 +189,7 @@ class QQOfficialHttp(BotHttp):
                     "QQ Official outbound request queue timed out"
                 ) from exc
 
-            if self._closing:
-                raise QQOfficialHttpClosedError("QQ Official HTTP transport is closed")
+            self._ensure_open()
             yield
         finally:
             if acquired:

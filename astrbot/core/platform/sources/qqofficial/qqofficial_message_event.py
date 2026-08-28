@@ -448,27 +448,16 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         payload["msg_type"] = 7
                         payload.pop("markdown", None)
                         payload["content"] = plain_text or None
-                if stream:
-                    ret = await self._send_with_markdown_fallback(
-                        send_func=lambda retry_payload: self.post_c2c_message(
-                            openid=source.author.user_openid,
-                            **retry_payload,
-                            stream=stream,
-                        ),
-                        payload=payload,
-                        plain_text=plain_text,
+                ret = await self._send_with_markdown_fallback(
+                    send_func=lambda retry_payload: self.post_c2c_message(
+                        openid=source.author.user_openid,
+                        **retry_payload,
                         stream=stream,
-                    )
-                else:
-                    ret = await self._send_with_markdown_fallback(
-                        send_func=lambda retry_payload: self.post_c2c_message(
-                            openid=source.author.user_openid,
-                            **retry_payload,
-                        ),
-                        payload=payload,
-                        plain_text=plain_text,
-                        stream=stream,
-                    )
+                    ),
+                    payload=payload,
+                    plain_text=plain_text,
+                    stream=stream,
+                )
                 logger.debug(f"Message sent to C2C: {ret}")
 
             case botpy.message.Message():

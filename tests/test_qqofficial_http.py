@@ -119,6 +119,16 @@ def _immediate_retry(max_attempts: int = 3, retry_errors=None):
     return decorate
 
 
+@pytest.fixture
+def immediate_retries(monkeypatch) -> None:
+    """Disable retry waits while preserving attempt counts in tests."""
+    monkeypatch.setattr(
+        qqofficial_message_event,
+        "_qqofficial_retry",
+        _immediate_retry,
+    )
+
+
 @pytest.mark.asyncio
 async def test_http_session_reuses_keepalive_connector_and_stays_closed(monkeypatch):
     """Reuse one keep-alive pool and never recreate it after shutdown."""
@@ -269,13 +279,8 @@ async def test_transport_does_not_retry_connection_resets(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_send_retry_policy_has_one_owner_and_three_attempts(monkeypatch):
+async def test_send_retry_policy_has_one_owner_and_three_attempts(immediate_retries):
     """Retry an empty QQ send response exactly three times in the send layer."""
-    monkeypatch.setattr(
-        qqofficial_message_event,
-        "_qqofficial_retry",
-        _immediate_retry,
-    )
     send = AsyncMock(return_value=None)
     event = object.__new__(QQOfficialMessageEvent)
 
@@ -290,13 +295,10 @@ async def test_send_retry_policy_has_one_owner_and_three_attempts(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_semantic_fallbacks_share_the_three_attempt_retry_budget(monkeypatch):
+async def test_semantic_fallbacks_share_the_three_attempt_retry_budget(
+    immediate_retries,
+):
     """Keep proactive and stream fallbacks inside one logical send budget."""
-    monkeypatch.setattr(
-        qqofficial_message_event,
-        "_qqofficial_retry",
-        _immediate_retry,
-    )
     event = object.__new__(QQOfficialMessageEvent)
     send = AsyncMock(
         side_effect=[
@@ -318,13 +320,11 @@ async def test_semantic_fallbacks_share_the_three_attempt_retry_budget(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_failed_image_upload_log_omits_base64_payload(monkeypatch):
+async def test_failed_image_upload_log_omits_base64_payload(
+    monkeypatch,
+    immediate_retries,
+):
     """Log only image size when all upload attempts return no response."""
-    monkeypatch.setattr(
-        qqofficial_message_event,
-        "_qqofficial_retry",
-        _immediate_retry,
-    )
     warning = Mock()
     monkeypatch.setattr(qqofficial_message_event.logger, "warning", warning)
     event = object.__new__(QQOfficialMessageEvent)
