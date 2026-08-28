@@ -126,6 +126,7 @@ class _FakeHttp:
         self._session = session
         self._headers = {"Authorization": "QQBot token"}
         self.is_sandbox = False
+        self.slot_entries = 0
 
     async def check_session(self) -> None:
         return None
@@ -133,6 +134,7 @@ class _FakeHttp:
     @asynccontextmanager
     async def request_slot(self) -> AsyncIterator[None]:
         """Provide an unbounded request slot for upload protocol tests."""
+        self.slot_entries += 1
         yield
 
 
@@ -166,7 +168,8 @@ async def test_chunked_upload_supports_destination_index_base(
     file_path = tmp_path / "report.bin"
     file_path.write_bytes(file_data)
     session = _FakeSession(part_indexes)
-    uploader = QQOfficialChunkedUploader(_FakeHttp(session))  # type: ignore[arg-type]
+    http = _FakeHttp(session)
+    uploader = QQOfficialChunkedUploader(http)  # type: ignore[arg-type]
 
     upload = getattr(uploader, method_name)
     media = await upload(
@@ -188,6 +191,7 @@ async def test_chunked_upload_supports_destination_index_base(
         part_indexes[2]: 1,
     }
     assert session.merge_attempts == 2
+    assert http.slot_entries == len(session.calls)
 
     prepare_call = next(
         call for call in session.calls if call[1].endswith("/upload_prepare")

@@ -576,13 +576,16 @@ class QQOfficialChunkedUploader:
                     path,
                     is_sandbox=self._http.is_sandbox,
                 )
-                async with http_session.request(
-                    method,
-                    route.url,
-                    headers=self._http._headers,
-                    json=dict(body),
-                    timeout=aiohttp.ClientTimeout(total=_API_TIMEOUT_SECONDS),
-                ) as response:
+                async with (
+                    self._http.request_slot(),
+                    http_session.request(
+                        method,
+                        route.url,
+                        headers=self._http._headers,
+                        json=dict(body),
+                        timeout=aiohttp.ClientTimeout(total=_API_TIMEOUT_SECONDS),
+                    ) as response,
+                ):
                     try:
                         raw: object = await response.json(content_type=None)
                     except ValueError:

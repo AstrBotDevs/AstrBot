@@ -4,8 +4,9 @@ import copy
 import logging
 import os
 import random
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import aiofiles
 import aiohttp
@@ -21,7 +22,7 @@ from botpy.types.message import MarkdownPayload, Media
 from tenacity import (
     before_sleep_log,
     retry,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_random_exponential,
 )
@@ -56,12 +57,15 @@ _QQOFFICIAL_NETWORK_ERRORS = (
 def _qqofficial_retry(
     max_attempts: int = 3,
     retry_errors: tuple[type[BaseException], ...] | None = None,
+    non_retryable_messages: tuple[str, ...] = (),
 ):
     """Retry QQ API transient failures with one bounded retry policy.
 
     Args:
         max_attempts: Maximum number of HTTP attempts.
         retry_errors: Optional exception types that may be retried.
+        non_retryable_messages: Error fragments that require semantic fallback
+            instead of retrying the same payload.
 
     Returns:
         A Tenacity retry decorator for QQ API calls.
@@ -72,7 +76,12 @@ def _qqofficial_retry(
         *_QQOFFICIAL_NETWORK_ERRORS,
     )
     return retry(
-        retry=retry_if_exception_type(retry_errors),
+        retry=retry_if_exception(
+            lambda exc: (
+                isinstance(exc, retry_errors)
+                and not any(fragment in str(exc) for fragment in non_retryable_messages)
+            )
+        ),
         stop=stop_after_attempt(max_attempts),
         wait=wait_random_exponential(multiplier=1, max=8),
         before_sleep=before_sleep_log(logger, logging.WARNING),
@@ -86,6 +95,12 @@ _QQOFFICIAL_SEND_API_ERRORS = (
     botpy.errors.NotFoundError,
     botpy.errors.SequenceNumberError,
     botpy.errors.ServerError,
+)
+
+_QQOFFICIAL_SEND_RETRY_ERRORS = (
+    *_QQOFFICIAL_NETWORK_ERRORS,
+    botpy.errors.ServerError,
+    botpy.errors.SequenceNumberError,
 )
 
 
@@ -497,16 +512,52 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         return ret
 
+    @classmethod
     async def _send_with_markdown_fallback(
-        self,
-        send_func,
-        payload: dict,
+        cls,
+        send_func: Callable[[dict[str, Any]], Awaitable[Any]],
+        payload: dict[str, Any],
         plain_text: str,
         stream: dict | None = None,
-    ):
+    ) -> Any:
+        """Send one message with a shared retry and semantic-fallback budget.
+
+        Args:
+            send_func: Async QQ API call accepting the current payload.
+            payload: Initial message payload.
+            plain_text: Text used when markdown must fall back to content mode.
+            stream: Optional QQ C2C streaming metadata.
+
+        Returns:
+            The QQ API response from the successful attempt.
+
+        Raises:
+            QQOfficialRetryBudgetExhaustedError: A fallback starts after all
+                three HTTP attempts have already been consumed.
+            Exception: The QQ API call exhausts retries or returns a
+                non-recoverable error.
+        """
         attempts_remaining = 3
 
-        async def send_with_retry(retry_payload: dict):
+        async def send_with_retry(retry_payload: dict[str, Any]) -> Any:
+            """Consume the shared budget while sending the current payload.
+
+            Every network call decrements ``attempts_remaining`` before it runs,
+            so transport retries and later semantic fallbacks share the same
+            three-attempt ceiling.
+
+            Args:
+                retry_payload: Original or fallback payload to send.
+
+            Returns:
+                The non-empty QQ API response.
+
+            Raises:
+                QQOfficialRetryBudgetExhaustedError: No attempt remains.
+                APIReturnNoneError: All allowed attempts return no response.
+                Exception: The send call exhausts retryable failures or returns
+                    a non-retryable failure.
+            """
             nonlocal attempts_remaining
             if attempts_remaining <= 0:
                 raise QQOfficialRetryBudgetExhaustedError(
@@ -515,9 +566,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
             @_qqofficial_retry(
                 max_attempts=attempts_remaining,
-                retry_errors=_QQOFFICIAL_NETWORK_ERRORS,
+                retry_errors=_QQOFFICIAL_SEND_RETRY_ERRORS,
+                non_retryable_messages=(
+                    cls.STREAM_MARKDOWN_NEWLINE_ERROR,
+                    cls.MARKDOWN_NOT_ALLOWED_ERROR,
+                ),
             )
-            async def send_attempt():
+            async def send_attempt() -> Any:
                 nonlocal attempts_remaining
                 attempts_remaining -= 1
                 result = await send_func(retry_payload)
@@ -530,6 +585,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         try:
             return await send_with_retry(payload)
         except _QQOFFICIAL_SEND_API_ERRORS as err:
+            if attempts_remaining <= 0:
+                raise
             logger.info("[QQOfficial] 回复消息失败: %s, 尝试使用主动发送接口。", err)
             if payload.get("msg_id"):
                 fallback_payload = payload.copy()
@@ -547,7 +604,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
             # QQ 流式 markdown 分片校验：内容必须以换行结尾。
             # 某些边界场景服务端仍可能判定失败，这里做一次修正重试。
-            if stream and self.STREAM_MARKDOWN_NEWLINE_ERROR in str(err):
+            if stream and cls.STREAM_MARKDOWN_NEWLINE_ERROR in str(err):
                 retry_payload = payload.copy()
 
                 markdown_payload = retry_payload.get("markdown")
@@ -566,7 +623,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 return await send_with_retry(retry_payload)
 
             if (
-                self.MARKDOWN_NOT_ALLOWED_ERROR not in str(err)
+                cls.MARKDOWN_NOT_ALLOWED_ERROR not in str(err)
                 or not payload.get("markdown")
                 or not plain_text
             ):

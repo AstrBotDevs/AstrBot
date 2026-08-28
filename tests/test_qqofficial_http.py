@@ -6,6 +6,10 @@ import botpy.errors
 import pytest
 from botpy import Intents
 
+from astrbot.api.event import MessageChain
+from astrbot.api.message_components import Plain
+from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.sources.qqofficial import (
     qqofficial_http,
     qqofficial_message_event,
@@ -21,6 +25,7 @@ from astrbot.core.platform.sources.qqofficial.qqofficial_message_event import (
     QQOfficialMessageEvent,
 )
 from astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter import (
+    QQOfficialPlatformAdapter,
     botClient,
 )
 from astrbot.core.platform.sources.qqofficial_webhook.qo_webhook_server import (
@@ -91,17 +96,22 @@ async def test_response_parser_preserves_qq_error_mapping():
         await _parse_response(failure)
 
 
-def _immediate_retry(max_attempts: int = 3, retry_errors=None):
+def _immediate_retry(
+    max_attempts: int = 3,
+    retry_errors=None,
+    non_retryable_messages: tuple[str, ...] = (),
+):
     """Build a no-delay retry decorator for deterministic tests.
 
     Args:
         max_attempts: Maximum function attempts.
-        retry_errors: Ignored exception filter for production signature compatibility.
+        retry_errors: Exception types eligible for retry.
+        non_retryable_messages: Error fragments that bypass retries.
 
     Returns:
         Async retry decorator.
     """
-    del retry_errors
+    retry_errors = retry_errors or (APIReturnNoneError,)
 
     def decorate(function):
         async def wrapped(*args, **kwargs):
@@ -109,7 +119,9 @@ def _immediate_retry(max_attempts: int = 3, retry_errors=None):
             for _ in range(max_attempts):
                 try:
                     return await function(*args, **kwargs)
-                except APIReturnNoneError as exc:
+                except retry_errors as exc:
+                    if any(fragment in str(exc) for fragment in non_retryable_messages):
+                        raise
                     last_error = exc
             assert last_error is not None
             raise last_error
@@ -252,6 +264,24 @@ async def test_request_queue_is_bounded_and_close_cancels_owned_tasks():
 
 
 @pytest.mark.asyncio
+async def test_request_queue_timeout_is_reported_as_overload(monkeypatch):
+    """Map asyncio queue timeouts to the documented overload error."""
+    http = QQOfficialHttp(timeout=20)
+
+    async def raise_timeout(awaitable, *_args, **_kwargs):
+        awaitable.close()
+        raise asyncio.TimeoutError
+
+    monkeypatch.setattr(qqofficial_http.asyncio, "wait_for", raise_timeout)
+
+    with pytest.raises(QQOfficialHttpOverloadedError, match="timed out"):
+        async with http.request_slot():
+            pass
+
+    await http.close()
+
+
+@pytest.mark.asyncio
 async def test_transport_does_not_retry_connection_resets(monkeypatch):
     """Leave retries to AstrBot's single bounded retry policy."""
 
@@ -279,19 +309,44 @@ async def test_transport_does_not_retry_connection_resets(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_send_retry_policy_has_one_owner_and_three_attempts(immediate_retries):
-    """Retry an empty QQ send response exactly three times in the send layer."""
-    send = AsyncMock(return_value=None)
-    event = object.__new__(QQOfficialMessageEvent)
+@pytest.mark.parametrize(
+    ("side_effect", "expected_result", "expected_error", "expected_attempts"),
+    [
+        ([None, None, None], None, APIReturnNoneError, 3),
+        (
+            [botpy.errors.ServerError("temporary failure"), {"id": "sent"}],
+            {"id": "sent"},
+            None,
+            2,
+        ),
+    ],
+)
+async def test_send_retry_policy_has_one_owner_and_three_attempts(
+    immediate_retries,
+    side_effect,
+    expected_result,
+    expected_error,
+    expected_attempts,
+):
+    """Retry empty responses and transient QQ server errors in one owner."""
+    send = AsyncMock(side_effect=side_effect)
 
-    with pytest.raises(APIReturnNoneError):
-        await event._send_with_markdown_fallback(
+    if expected_error:
+        with pytest.raises(expected_error):
+            await QQOfficialMessageEvent._send_with_markdown_fallback(
+                send_func=send,
+                payload={"content": "hello"},
+                plain_text="hello",
+            )
+    else:
+        result = await QQOfficialMessageEvent._send_with_markdown_fallback(
             send_func=send,
             payload={"content": "hello"},
             plain_text="hello",
         )
+        assert result == expected_result
 
-    assert send.await_count == 3
+    assert send.await_count == expected_attempts
 
 
 @pytest.mark.asyncio
@@ -299,17 +354,18 @@ async def test_semantic_fallbacks_share_the_three_attempt_retry_budget(
     immediate_retries,
 ):
     """Keep proactive and stream fallbacks inside one logical send budget."""
-    event = object.__new__(QQOfficialMessageEvent)
     send = AsyncMock(
         side_effect=[
             botpy.errors.ForbiddenError("passive reply rejected"),
-            botpy.errors.ServerError(event.STREAM_MARKDOWN_NEWLINE_ERROR),
+            botpy.errors.ServerError(
+                QQOfficialMessageEvent.STREAM_MARKDOWN_NEWLINE_ERROR
+            ),
             None,
         ]
     )
 
     with pytest.raises(APIReturnNoneError):
-        await event._send_with_markdown_fallback(
+        await QQOfficialMessageEvent._send_with_markdown_fallback(
             send_func=send,
             payload={"content": "hello", "msg_id": "message-id"},
             plain_text="hello",
@@ -317,6 +373,38 @@ async def test_semantic_fallbacks_share_the_three_attempt_retry_budget(
         )
 
     assert send.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_session_send_uses_shared_retry_owner(immediate_retries):
+    """Retry proactive session sends through the same three-attempt owner."""
+    adapter = QQOfficialPlatformAdapter(
+        {
+            "id": "qq-official-test",
+            "appid": "123",
+            "secret": "secret",
+            "enable_group_c2c": True,
+            "enable_guild_direct_message": False,
+        },
+        {},
+        asyncio.Queue(),
+    )
+    send = AsyncMock(
+        side_effect=[ConnectionResetError("connection reset"), {"id": "sent"}]
+    )
+    adapter.client.api = SimpleNamespace(
+        post_group_message=send,
+        post_message=AsyncMock(),
+    )
+    adapter._session_scene["group-1"] = "group"
+
+    await adapter.send_by_session(
+        MessageSession("qq_official", MessageType.GROUP_MESSAGE, "group-1"),
+        MessageChain(chain=[Plain("proactive hello")]),
+    )
+
+    assert send.await_count == 2
+    await adapter.client.close()
 
 
 @pytest.mark.asyncio

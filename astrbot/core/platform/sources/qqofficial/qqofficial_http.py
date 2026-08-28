@@ -184,7 +184,7 @@ class QQOfficialHttp(BotHttp):
                     timeout=self._queue_timeout,
                 )
                 acquired = True
-            except TimeoutError as exc:
+            except asyncio.TimeoutError as exc:
                 raise QQOfficialHttpOverloadedError(
                     "QQ Official outbound request queue timed out"
                 ) from exc
