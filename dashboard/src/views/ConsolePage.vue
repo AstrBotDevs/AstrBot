@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
-import { useModuleI18n } from '@/i18n/composables';
+import { reactive, ref, watch } from 'vue';
 import { updatesApi } from '@/api/v1';
-import { resolveErrorMessage } from '@/utils/errorUtils';
-import { stepUpHeaders } from '@/utils/stepUp';
+import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
 import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
+import { useModuleI18n } from '@/i18n/composables';
+import { useCustomizerStore } from '@/stores/customizer';
+import { resolveErrorMessage } from '@/utils/errorUtils';
+import { stepUpHeaders } from '@/utils/stepUp';
 import { useToast } from '@/utils/toast';
-import { ref, watch } from 'vue';
 
 const { tm } = useModuleI18n('features/console');
 const toast = useToast();
+const customizerStore = useCustomizerStore();
 const autoScrollEnabled = ref(
   localStorage.getItem('console_auto_scroll') !== 'false',
 );
@@ -19,6 +21,7 @@ const hideUserChatEnabled = ref(
 );
 const pipDialog = ref(false);
 const loading = ref(false);
+const pipInstallPayload = reactive({ package: '', mirror: '' });
 const {
   dialogOpen: stepUpDialogOpen,
   loading: stepUpLoading,
@@ -27,10 +30,6 @@ const {
   submitStepUp,
   cancelStepUp,
 } = useDashboardStepUp();
-const pipInstallPayload = ref({
-  package: '',
-  mirror: '',
-});
 
 watch(autoScrollEnabled, (value) => {
   localStorage.setItem('console_auto_scroll', String(value));
@@ -49,7 +48,7 @@ async function pipInstall(): Promise<void> {
     });
     if (!stepUp) return;
     loading.value = true;
-    const res = await updatesApi.installPip(pipInstallPayload.value, {
+    const res = await updatesApi.installPip(pipInstallPayload, {
       headers: stepUpHeaders(stepUp),
     });
     if (res.data.status === 'ok') {
@@ -67,84 +66,90 @@ async function pipInstall(): Promise<void> {
 </script>
 
 <template>
-  <div class="console-page">
-    <div class="console-header">
-      <div>
-        <h1 class="text-h2 mb-1">{{ tm('title') }}</h1>
-        <p class="text-body-2 text-medium-emphasis mb-0">
-          {{ tm('debugHint.text') }}
-        </p>
-      </div>
-      <div class="console-header__controls">
-        <v-switch
-          v-model="hideUserChatEnabled"
-          :label="
-            hideUserChatEnabled
-              ? tm('hideUserChat.enabled')
-              : tm('hideUserChat.disabled')
-          "
-          hide-details
-          density="compact"
-          inset
-          color="primary"
-        ></v-switch>
-        <v-switch
-          v-model="autoScrollEnabled"
-          :label="
-            autoScrollEnabled
-              ? tm('autoScroll.enabled')
-              : tm('autoScroll.disabled')
-          "
-          hide-details
-          density="compact"
-          inset
-          color="primary"
-        ></v-switch>
-        <v-dialog v-model="pipDialog" width="400" scrollable>
-          <template #activator="{ props: activatorProps }">
-            <v-btn variant="plain" v-bind="activatorProps">{{
-              tm('pipInstall.button')
-            }}</v-btn>
-          </template>
-          <v-card class="app-dialog console-pip-dialog">
-            <v-card-title>
-              <span class="text-h5">{{ tm('pipInstall.dialogTitle') }}</span>
-            </v-card-title>
-            <v-divider />
-            <v-card-text class="console-pip-dialog__content">
-              <v-text-field
-                v-model="pipInstallPayload.package"
-                :label="tm('pipInstall.packageLabel')"
-                variant="outlined"
-              ></v-text-field>
-              <v-text-field
-                v-model="pipInstallPayload.mirror"
-                :label="tm('pipInstall.mirrorLabel')"
-                variant="outlined"
-              ></v-text-field>
-              <small>{{ tm('pipInstall.mirrorHint') }}</small>
-            </v-card-text>
-            <v-divider />
-            <v-card-actions class="console-pip-dialog__actions">
-              <v-spacer></v-spacer>
-              <v-btn
-                color="primary"
-                variant="text"
-                :loading="loading"
-                @click="pipInstall"
-              >
-                {{ tm('pipInstall.installButton') }}
-              </v-btn>
-            </v-card-actions>
-          </v-card>
-        </v-dialog>
-      </div>
-    </div>
+  <div class="console-page" :class="{ 'is-dark': customizerStore.isDark }">
     <ConsoleDisplayer
       class="console-display"
+      workspace-mode
       :auto-scroll="autoScrollEnabled"
       :hide-user-chat="hideUserChatEnabled"
-    />
+    >
+      <template #header-actions>
+        <div class="console-header-actions">
+          <v-switch
+            v-model="hideUserChatEnabled"
+            :label="tm('hideUserChat.label')"
+            :aria-label="tm('hideUserChat.label')"
+            hide-details
+            density="compact"
+            inset
+            color="primary"
+          />
+          <v-switch
+            v-model="autoScrollEnabled"
+            :label="tm('autoScroll.label')"
+            :aria-label="tm('autoScroll.label')"
+            hide-details
+            density="compact"
+            inset
+            color="primary"
+          />
+          <v-btn
+            class="pip-install-button"
+            size="small"
+            variant="tonal"
+            @click="pipDialog = true"
+          >
+            <v-icon size="15" aria-hidden="true"
+              >mdi-package-variant-plus</v-icon
+            >
+            <span>{{ tm('pipInstall.button') }}</span>
+          </v-btn>
+        </div>
+      </template>
+    </ConsoleDisplayer>
+    <v-dialog v-model="pipDialog" width="440" scrollable>
+      <v-card class="app-dialog console-pip-dialog">
+        <v-card-title>
+          <span class="text-h5">{{ tm('pipInstall.dialogTitle') }}</span>
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="console-pip-dialog__content">
+          <v-text-field
+            v-model="pipInstallPayload.package"
+            :label="tm('pipInstall.packageLabel')"
+            density="compact"
+            variant="solo-filled"
+            flat
+          />
+          <v-text-field
+            v-model="pipInstallPayload.mirror"
+            :label="tm('pipInstall.mirrorLabel')"
+            density="compact"
+            variant="solo-filled"
+            flat
+            hide-details
+          />
+          <div class="pip-mirror-hint">
+            {{ tm('pipInstall.mirrorHint') }}
+          </div>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="console-pip-dialog__actions">
+          <v-spacer />
+          <v-btn variant="text" @click="pipDialog = false">
+            {{ tm('pipInstall.cancelButton') }}
+          </v-btn>
+          <v-btn
+            color="primary"
+            variant="tonal"
+            :loading="loading"
+            @click="pipInstall"
+          >
+            {{ tm('pipInstall.installButton') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
     <DashboardStepUpDialog
       v-model="stepUpDialogOpen"
       :loading="stepUpLoading"
@@ -157,34 +162,50 @@ async function pipInstall(): Promise<void> {
 
 <style scoped>
 .console-page {
-  display: flex;
-  flex-direction: column;
+  --console-workspace-card: #f5f6f7;
+  height: calc(100dvh - 112px);
   margin: 0 auto;
-  max-width: 1400px;
-  min-height: 100%;
-  padding: var(--astrbot-space-6);
+  max-width: 1560px;
+  min-height: 0;
+  padding: 0 12px 8px;
   width: 100%;
 }
 
-.console-header {
-  align-items: flex-start;
-  display: flex;
-  flex-shrink: 0;
-  justify-content: space-between;
-  margin-bottom: var(--astrbot-space-6);
-}
-
-.console-header__controls {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--astrbot-space-4);
+.console-page.is-dark {
+  --console-workspace-card: rgba(var(--v-theme-on-surface), 0.06);
 }
 
 .console-display {
-  flex: 1;
+  height: 100%;
   min-height: 0;
   width: 100%;
+}
+
+.console-header-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.console-header-actions :deep(.v-switch .v-selection-control) {
+  min-height: 34px;
+}
+
+.console-header-actions :deep(.v-label) {
+  font-size: 0.75rem;
+  opacity: 0.72;
+}
+
+.pip-install-button :deep(.v-btn__content) {
+  gap: 6px;
+}
+
+.pip-mirror-hint {
+  color: rgba(var(--v-theme-on-surface), 0.52);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  margin-top: 8px;
 }
 
 .console-pip-dialog {
@@ -204,14 +225,25 @@ async function pipInstall(): Promise<void> {
   flex: 0 0 auto;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 800px) {
   .console-page {
-    padding: 16px;
+    padding: 0 4px 6px;
   }
 
-  .console-header {
-    flex-direction: column;
-    gap: 12px;
+  .console-header-actions {
+    width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .console-header-actions {
+    display: grid;
+    gap: 4px 10px;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pip-install-button {
+    grid-column: 1 / -1;
   }
 }
 </style>

@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import inspect as sqlalchemy_inspect
 
 from astrbot.core.db.sqlite import SQLiteDatabase
 
@@ -188,6 +189,138 @@ async def test_get_filtered_conversations_supports_unicode_and_literal_wildcards
     assert [conversation.conversation_id for conversation in conversations] == [
         "conv-unicode"
     ]
+
+
+@pytest.mark.asyncio
+async def test_get_filtered_conversations_supports_keyword_umo_sort_and_session_groups(
+    temp_db: SQLiteDatabase,
+):
+    await temp_db.create_conversation(
+        user_id="qq:GroupMessage:1",
+        platform_id="qq",
+        title="group",
+        content=[{"role": "user", "content": "x" * 40}],
+        cid="group",
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        updated_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    await temp_db.create_conversation(
+        user_id="qq:FriendMessage:2",
+        platform_id="qq",
+        title="中文标题",
+        content=[{"role": "assistant", "content": "中文正文 😀"}],
+        cid="friend",
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        updated_at=datetime(2026, 1, 2, tzinfo=UTC),
+    )
+    await temp_db.create_conversation(
+        user_id="telegram:FriendMessage:3",
+        platform_id="telegram",
+        title="other",
+        content=[{"role": "assistant", "content": "ordinary"}],
+        cid="other",
+        created_at=datetime(2025, 1, 1, tzinfo=UTC),
+        updated_at=datetime(2025, 1, 1, tzinfo=UTC),
+    )
+    await temp_db.create_conversation(
+        user_id="webchat:FriendMessage:4",
+        platform_id="webchat",
+        title="webchat",
+        content=[{"role": "assistant", "content": "excluded"}],
+        cid="webchat",
+        created_at=datetime(2024, 1, 1, tzinfo=UTC),
+        updated_at=datetime(2024, 1, 1, tzinfo=UTC),
+    )
+    await temp_db.create_conversation(
+        user_id="astrbot:FriendMessage:5",
+        platform_id="astrbot",
+        title="astrbot",
+        content=[{"role": "assistant", "content": "excluded"}],
+        cid="astrbot",
+        created_at=datetime(2023, 1, 1, tzinfo=UTC),
+        updated_at=datetime(2023, 1, 1, tzinfo=UTC),
+    )
+
+    keyword_matches, _ = await temp_db.get_filtered_conversations(
+        keyword_query="中文正文",
+        include_history=False,
+    )
+    keyword_does_not_match_umo, _ = await temp_db.get_filtered_conversations(
+        keyword_query="FriendMessage:2",
+        include_history=False,
+    )
+    assert [item.conversation_id for item in keyword_matches] == ["friend"]
+    assert keyword_does_not_match_umo == []
+    assert all(
+        "content" in sqlalchemy_inspect(item).unloaded for item in keyword_matches
+    )
+
+    umo_matches, _ = await temp_db.get_filtered_conversations(
+        umo_query="FriendMessage:2",
+        include_history=False,
+    )
+    assert [item.conversation_id for item in umo_matches] == ["friend"]
+
+    updated_ascending, _ = await temp_db.get_filtered_conversations(
+        page_size=10,
+        sort_by="updated_at",
+        sort_order="asc",
+        include_history=False,
+    )
+    assert [item.conversation_id for item in updated_ascending] == [
+        "astrbot",
+        "webchat",
+        "other",
+        "group",
+        "friend",
+    ]
+
+    assert await temp_db.get_conversation_platform_ids() == [
+        "astrbot",
+        "qq",
+        "telegram",
+        "webchat",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_filtered_conversations_can_paginate_complete_session_groups(
+    temp_db: SQLiteDatabase,
+):
+    def conversation(cid: str, user_id: str, day: int):
+        timestamp = datetime(2026, 1, day, tzinfo=UTC)
+        return temp_db.create_conversation(
+            user_id=user_id,
+            platform_id="qq",
+            content=[{"role": "user", "content": cid}],
+            cid=cid,
+            created_at=timestamp,
+            updated_at=timestamp,
+        )
+
+    await conversation("a-old", "qq:FriendMessage:a", 1)
+    await conversation("a-new", "qq:FriendMessage:a", 2)
+    await conversation("b-old", "qq:FriendMessage:b", 3)
+    await conversation("b-new", "qq:FriendMessage:b", 4)
+
+    page_one, total = await temp_db.get_filtered_conversations(
+        page=1,
+        page_size=1,
+        group_by_session=True,
+        sort_by="updated_at",
+        include_history=False,
+    )
+    page_two, _ = await temp_db.get_filtered_conversations(
+        page=2,
+        page_size=1,
+        group_by_session=True,
+        sort_by="updated_at",
+        include_history=False,
+    )
+
+    assert total == 2
+    assert [item.conversation_id for item in page_one] == ["b-new", "b-old"]
+    assert [item.conversation_id for item in page_two] == ["a-new", "a-old"]
 
 
 @pytest.mark.asyncio

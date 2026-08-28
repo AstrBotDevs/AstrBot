@@ -93,11 +93,6 @@ const sidebarItem: menu[] = [
     icon: 'mdi-dots-horizontal',
     children: [
       {
-        title: 'core.navigation.conversation',
-        icon: 'mdi-database',
-        to: '/conversation',
-      },
-      {
         title: 'core.navigation.sessionManagement',
         icon: 'mdi-pencil-ruler',
         to: '/session-management',
@@ -118,19 +113,9 @@ const sidebarItem: menu[] = [
         to: '/subagent',
       },
       {
-        title: 'core.navigation.dashboard',
-        icon: 'mdi-view-dashboard',
-        to: '/dashboard/default',
-      },
-      {
-        title: 'core.navigation.console',
-        icon: 'mdi-console',
-        to: '/console',
-      },
-      {
-        title: 'core.navigation.trace',
-        icon: 'mdi-timeline-text-outline',
-        to: '/trace',
+        title: 'core.navigation.data',
+        icon: 'mdi-database',
+        to: '/dashboard',
       },
       {
         title: 'core.navigation.dataFiles',

@@ -113,5 +113,54 @@
     "noItemSelectedForExport": "Please select conversations to export first",
     "copySuccess": "Copied",
     "copyError": "Copy failed"
+  },
+  "workspace": {
+    "filters": {
+      "title": "Filters",
+      "keyword": "Search",
+      "keywordPlaceholder": "Search titles or message content",
+      "robots": "Bot ID",
+      "robotEmpty": "No configured bots have conversations",
+      "types": "Conversation type",
+      "umo": "UMO",
+      "umoPlaceholder": "Enter a full or partial UMO",
+      "sort": "Sort",
+      "reset": "Clear filters",
+      "close": "Close filters",
+      "done": "Done",
+      "updatedDesc": "Recently updated",
+      "createdDesc": "Recently created",
+      "updatedAsc": "Oldest updated",
+      "createdAsc": "Oldest created"
+    },
+    "list": {
+      "title": "Conversations",
+      "total": "{count} total",
+      "sessionTotal": "{count} sessions",
+      "selected": "{count} selected",
+      "groupBySession": "Group by session",
+      "conversationCount": "{count} conversations",
+      "selectPage": "Select this page",
+      "empty": "No conversations yet",
+      "filteredEmpty": "No conversations match these filters",
+      "previous": "Previous",
+      "next": "Next",
+      "page": "Page {page} of {total}"
+    },
+    "preview": {
+      "title": "Conversation preview",
+      "close": "Close preview",
+      "loading": "Loading conversation",
+      "empty": "This conversation has no messages",
+      "copyUmo": "Copy UMO",
+      "rawData": "Raw data",
+      "copyRawData": "Copy raw data"
+    },
+    "actions": {
+      "editTitle": "Edit title",
+      "export": "Export",
+      "delete": "Delete",
+      "refresh": "Refresh"
+    }
   }
 }

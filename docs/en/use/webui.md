@@ -61,9 +61,35 @@ System-wide settings have moved from the old Config → System Config route to *
 
 Config profiles still control routed Agent, model, message-processing, and plugin behavior. Do not confuse profile settings with the system-level network and security controls under Settings.
 
-## Runtime Statistics
+## Data workspace
 
-The **Statistics** page includes a local text-to-image section. It shows the in-process Chromium connection, render successes and failures, active pages, timing, reusable browser contexts, and aggregate output size. These values reset when AstrBot restarts and never include templates, rendered content, file paths, or user data.
+**More → Data** opens `/dashboard` with tabs for Statistics, Conversations, Logs, and Trace. The old paths `/dashboard/default`, `/conversation`, `/console`, and `/trace` redirect to those tabs. The runtime `data/` file manager remains at `/data`; see [Data files](#data-files).
+
+### Statistics
+
+The Statistics tab summarizes platform instances, messages, model calls, tokens, and uptime. It also shows message trends, platform rankings, model-call trends, model usage rankings, and session token rankings. You can switch the window between 1 day, 3 days, and 1 week. Session rankings show UMO aliases and can copy the raw UMO.
+
+The same page includes a local text-to-image section. It shows the in-process Chromium connection, render successes and failures, active pages, timing, reusable browser contexts, and aggregate output size. These values reset when AstrBot restarts and never include templates, rendered content, file paths, or user data.
+
+### Conversations
+
+The Conversations tab searches and manages saved conversation history:
+
+- Filter by keyword, bot ID, private/group type, and UMO, and sort by created or updated time.
+- The list paginates 30 rows at a time. Group-by-session paginates by UMO and expands to every conversation in that session. Full messages load only after you select a conversation.
+- You can edit titles and bulk-export or bulk-delete. Export requires step-up reauthentication.
+- The `{}` control in the preview opens a read-only Monaco editor for the wrapped raw `history` JSON.
+
+### Logs
+
+The Logs tab shows live AstrBot logs. You can filter by level and install a missing Pip package from the page. Pip install requires step-up. Enable DEBUG logs in Settings before looking for DEBUG output.
+
+### Trace
+
+The Trace tab shows live execution traces for debugging model-call paths and tool invocations. Use the switch at the top to enable or disable recording.
+
+> [!NOTE]
+> Currently only some AstrBot main-agent model-call paths are recorded. Coverage will grow.
 
 ## ChatUI
 
@@ -194,15 +220,6 @@ Protected paths have a separate policy:
 - API keys cannot open this page.
 
 Concurrent saves use an etag; a changed file on disk returns a conflict with **Keep local** or **Reload**. The developer model is in [Architecture](/en/dev/architecture#data-file-manager).
-
-## Trace
-
-In the `Trace` page of the admin panel, you can view the real-time execution trace of AstrBot. This is useful for debugging model call paths, tool invocation processes, etc.
-
-You can enable or disable trace recording using the switch at the top of the page.
-
-> [!NOTE]
-> Currently only recording partial model call paths from AstrBot main Agent. More coverage will be added.
 
 ## Updating the Admin Panel
 

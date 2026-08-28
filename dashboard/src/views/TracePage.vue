@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import TraceDisplayer from '@/components/shared/TraceDisplayer.vue';
-import { traceApi } from '@/api/v1';
-import { useModuleI18n } from '@/i18n/composables';
-import { computed, ref, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useTheme } from 'vuetify';
+import { traceApi } from '@/api/v1';
+import TraceDisplayer from '@/components/shared/TraceDisplayer.vue';
+import { useModuleI18n } from '@/i18n/composables';
 
 defineOptions({ name: 'TracePage' });
 
@@ -41,7 +41,6 @@ const updateTraceSettings = async () => {
       throw new Error('Trace settings update was rejected');
     }
     confirmedTraceEnabled.value = traceEnabled.value;
-    // Refresh the TraceDisplayer component to reconnect SSE
     traceDisplayerKey.value += 1;
   } catch {
     console.error('Failed to update trace settings');
@@ -58,33 +57,32 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="dashboard-page trace-page" :class="{ 'is-dark': isDark }">
-    <v-container fluid class="dashboard-shell trace-shell pa-4 pa-md-6">
-      <div class="dashboard-header trace-header">
-        <div class="dashboard-header-main">
-          <h1 class="dashboard-title">{{ tm('title') }}</h1>
-          <p class="dashboard-subtitle">
-            {{ tm('hint') }}
-          </p>
-        </div>
-        <div class="dashboard-header-actions">
-          <v-switch
-            v-model="traceEnabled"
-            :loading="loading"
-            :disabled="loading"
-            color="primary"
-            hide-details
-            density="compact"
-            inset
-            @update:model-value="updateTraceSettings"
+  <div class="trace-page" :class="{ 'is-dark': isDark }">
+    <section class="trace-card">
+      <div class="trace-toolbar">
+        <div class="trace-hint">
+          <v-icon size="16" aria-hidden="true"
+            >mdi-timeline-text-outline</v-icon
           >
-            <template #label>
-              <span class="switch-label">{{
-                traceEnabled ? tm('recording') : tm('paused')
-              }}</span>
-            </template>
-          </v-switch>
+          <span>{{ tm('hint') }}</span>
         </div>
+        <v-switch
+          v-model="traceEnabled"
+          :loading="loading"
+          :disabled="loading"
+          :aria-label="tm('toggleLabel')"
+          color="primary"
+          hide-details
+          density="compact"
+          inset
+          @update:model-value="updateTraceSettings"
+        >
+          <template #label>
+            <span class="switch-label">
+              {{ traceEnabled ? tm('recording') : tm('paused') }}
+            </span>
+          </template>
+        </v-switch>
       </div>
       <div class="trace-body">
         <v-alert v-if="updateError" type="error" variant="tonal" class="mb-4">
@@ -92,25 +90,54 @@ onMounted(() => {
         </v-alert>
         <TraceDisplayer :key="traceDisplayerKey" />
       </div>
-    </v-container>
+    </section>
   </div>
 </template>
 
 <style scoped>
-@import '@/styles/dashboard-shell.css';
-
-.trace-page,
-.trace-shell {
-  height: 100%;
+.trace-page {
+  --trace-card: #f5f6f7;
+  height: calc(100dvh - 112px);
+  margin: 0 auto;
+  max-width: 1560px;
+  min-height: 0;
+  padding: 0 12px 8px;
+  width: 100%;
 }
 
-.trace-shell {
+.trace-page.is-dark {
+  --trace-card: rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.trace-card {
+  background: var(--trace-card);
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 12px;
 }
 
-.trace-header {
-  flex: 0 0 auto;
+.trace-toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  justify-content: space-between;
+  min-height: 42px;
+  padding: 0 2px 10px;
+}
+
+.trace-hint {
+  align-items: center;
+  color: rgba(var(--v-theme-on-surface), 0.58);
+  display: inline-flex;
+  font-size: 0.78rem;
+  gap: 8px;
+  line-height: 1.45;
+  min-width: 0;
 }
 
 .trace-body {
@@ -119,13 +146,17 @@ onMounted(() => {
 }
 
 .switch-label {
-  color: var(--dashboard-muted);
+  color: rgba(var(--v-theme-on-surface), 0.72);
   font-size: 13px;
   white-space: nowrap;
 }
 
 @media (max-width: 768px) {
-  .trace-header {
+  .trace-page {
+    padding: 0 4px 6px;
+  }
+
+  .trace-toolbar {
     align-items: flex-start;
   }
 }

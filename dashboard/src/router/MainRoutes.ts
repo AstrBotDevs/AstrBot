@@ -1,7 +1,15 @@
+import type { RouteLocationGeneric } from 'vue-router';
 import {
   EXTENSION_DETAILS_ROUTE_NAME,
   EXTENSION_ROUTE_NAME,
 } from './routeConstants';
+
+const redirectToDashboardTab =
+  (name: string) => (to: RouteLocationGeneric) => ({
+    name,
+    query: to.query,
+    hash: to.hash,
+  });
 
 const MainRoutes = {
   path: '/main',
@@ -65,14 +73,45 @@ const MainRoutes = {
       redirect: '/settings#system-config',
     },
     {
-      name: 'Stats',
-      path: '/dashboard/default',
-      component: () => import('@/views/stats/StatsPage.vue'),
+      name: 'DashboardWorkspace',
+      path: '/dashboard',
+      component: () => import('@/views/DashboardWorkspacePage.vue'),
+      redirect: redirectToDashboardTab('Stats'),
+      children: [
+        {
+          name: 'Stats',
+          path: 'statistics',
+          component: () => import('@/views/stats/StatsPage.vue'),
+          meta: { dataTab: 'statistics' },
+        },
+        {
+          name: 'Conversation',
+          path: 'conversations',
+          component: () =>
+            import('@/views/conversation/ConversationWorkspacePage.vue'),
+          meta: { dataTab: 'conversations' },
+        },
+        {
+          name: 'Console',
+          path: 'logs',
+          component: () => import('@/views/ConsolePage.vue'),
+          meta: { dataTab: 'logs' },
+        },
+        {
+          name: 'Trace',
+          path: 'trace',
+          component: () => import('@/views/TracePage.vue'),
+          meta: { dataTab: 'trace' },
+        },
+      ],
     },
     {
-      name: 'Conversation',
+      path: '/dashboard/default',
+      redirect: redirectToDashboardTab('Stats'),
+    },
+    {
       path: '/conversation',
-      component: () => import('@/views/ConversationPage.vue'),
+      redirect: redirectToDashboardTab('Conversation'),
     },
     {
       name: 'SessionManagement',
@@ -100,14 +139,12 @@ const MainRoutes = {
       component: () => import('@/views/CronJobPage.vue'),
     },
     {
-      name: 'Console',
       path: '/console',
-      component: () => import('@/views/ConsolePage.vue'),
+      redirect: redirectToDashboardTab('Console'),
     },
     {
-      name: 'Trace',
       path: '/trace',
-      component: () => import('@/views/TracePage.vue'),
+      redirect: redirectToDashboardTab('Trace'),
     },
     {
       name: 'DataFiles',

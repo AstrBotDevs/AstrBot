@@ -390,6 +390,8 @@ class ConversationStore(Protocol):
         **kwargs,
     ) -> tuple[list[ConversationV2], int]: ...
 
+    async def get_conversation_platform_ids(self) -> list[str]: ...
+
     async def create_conversation(
         self,
         user_id: str,
@@ -950,8 +952,10 @@ class SessionManagementStore(UmoAliasStore, DatabaseSessionStore, Protocol):
 
 
 @runtime_checkable
-class StatisticsSessionStore(StatisticsStore, DatabaseSessionStore, Protocol):
-    """Compose statistics queries and scoped SQL access."""
+class StatisticsSessionStore(
+    StatisticsStore, DatabaseSessionStore, UmoAliasStore, Protocol
+):
+    """Compose statistics queries, UMO aliases, and scoped SQL access."""
 
 
 @runtime_checkable

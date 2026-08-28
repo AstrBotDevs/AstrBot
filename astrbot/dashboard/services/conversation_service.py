@@ -3,15 +3,21 @@ import traceback
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from io import BytesIO
+from typing import Protocol
 
 from astrbot import logger
+from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
-from astrbot.core.db.protocols import UmoAliasStore
+from astrbot.core.db.protocols import ConversationStore, UmoAliasStore
 from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
 
 
 class ConversationServiceError(Exception):
     pass
+
+
+class ConversationDashboardStore(ConversationStore, UmoAliasStore, Protocol):
+    """Conversation listing plus UMO alias lookup for Dashboard serialization."""
 
 
 @dataclass
@@ -24,11 +30,13 @@ class ConversationExport:
 class ConversationService:
     def __init__(
         self,
-        db_helper: UmoAliasStore,
+        db_helper: ConversationDashboardStore,
         conversation_manager: ConversationManager,
+        config: AstrBotConfig,
     ) -> None:
         self.db_helper = db_helper
         self.conv_mgr = conversation_manager
+        self.config = config
 
     async def list_conversations(
         self,
@@ -40,13 +48,23 @@ class ConversationService:
         search_query: str,
         exclude_ids: str,
         exclude_platforms: str,
+        keyword_query: str = "",
+        umo_query: str = "",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        group_by_session: bool = False,
+        include_history: bool = True,
     ) -> dict:
-        platform_list = platforms.split(",") if platforms else []
-        message_type_list = message_types.split(",") if message_types else []
-        exclude_id_list = exclude_ids.split(",") if exclude_ids else []
-        exclude_platform_list = (
-            exclude_platforms.split(",") if exclude_platforms else []
-        )
+        platform_list = [item.strip() for item in platforms.split(",") if item.strip()]
+        message_type_list = [
+            item.strip() for item in message_types.split(",") if item.strip()
+        ]
+        exclude_id_list = [
+            item.strip() for item in exclude_ids.split(",") if item.strip()
+        ]
+        exclude_platform_list = [
+            item.strip() for item in exclude_platforms.split(",") if item.strip()
+        ]
 
         page = max(page, 1)
         if page_size < 1:
@@ -62,6 +80,12 @@ class ConversationService:
                 search_query=search_query,
                 exclude_ids=exclude_id_list,
                 exclude_platforms=exclude_platform_list,
+                keyword_query=keyword_query.strip(),
+                umo_query=umo_query.strip(),
+                sort_by=sort_by,
+                sort_order=sort_order,
+                group_by_session=group_by_session,
+                include_history=include_history,
             )
         except Exception as exc:
             logger.error(f"数据库查询出错: {exc!s}\n{traceback.format_exc()}")
@@ -83,7 +107,28 @@ class ConversationService:
                 "page_size": page_size,
                 "total": total_count,
                 "total_pages": total_pages,
+                "grouped_by_session": group_by_session,
             },
+        }
+
+    async def get_filter_options(self) -> dict:
+        """Build robot filter options from configured conversation platforms.
+
+        Returns:
+            Robot IDs and adapter types that exist in both configuration and
+            conversation history.
+        """
+        history_platform_ids = set(await self.db_helper.get_conversation_platform_ids())
+        configured_platforms = self.config.get("platform", [])
+        return {
+            "bots": [
+                {
+                    "id": str(platform.get("id", "")),
+                    "type": str(platform.get("type", "")),
+                }
+                for platform in configured_platforms
+                if platform.get("id") in history_platform_ids
+            ]
         }
 
     async def get_conversation_detail(self, data: object) -> dict:

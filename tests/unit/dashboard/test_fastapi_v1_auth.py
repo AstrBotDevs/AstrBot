@@ -650,6 +650,41 @@ async def test_v1_conversation_detail_requires_user_id(
 
 
 @pytest.mark.asyncio
+async def test_conversation_workspace_filters_and_options(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    options_response = await asgi_client.get(
+        "/api/v1/conversations/filter-options",
+        headers=_jwt_headers(),
+    )
+    assert options_response.status_code == 200
+    assert options_response.json()["data"]["bots"] == [
+        {"id": "webchat-main", "type": "webchat"}
+    ]
+
+    list_response = await asgi_client.get(
+        "/api/v1/conversations",
+        params={
+            "keyword": "Demo",
+            "umo": "session-1",
+            "sort_by": "updated_at",
+            "sort_order": "asc",
+            "group_by_session": "true",
+            "include_history": "false",
+        },
+        headers=_jwt_headers(),
+    )
+    assert list_response.status_code == 200
+    manager = fake_core_lifecycle.conversation_manager
+    assert manager.last_keyword_query == "Demo"
+    assert manager.last_umo_query == "session-1"
+    assert manager.last_sort == ("updated_at", "asc")
+    assert manager.last_group_by_session is True
+    assert manager.last_include_history is False
+
+
+@pytest.mark.asyncio
 async def test_conversation_export_rejects_missing_authorization_service(
     asgi_app: FastAPI,
     asgi_client: httpx.AsyncClient,

@@ -113,5 +113,54 @@
     "noItemSelectedForExport": "请先选择要导出的对话",
     "copySuccess": "复制成功",
     "copyError": "复制失败"
+  },
+  "workspace": {
+    "filters": {
+      "title": "筛选",
+      "keyword": "搜索关键词",
+      "keywordPlaceholder": "搜索标题或消息内容",
+      "robots": "机器人 ID",
+      "robotEmpty": "暂无有对话记录的机器人",
+      "types": "对话类型",
+      "umo": "UMO",
+      "umoPlaceholder": "输入完整或部分 UMO",
+      "sort": "排序",
+      "reset": "清除筛选",
+      "close": "关闭筛选",
+      "done": "完成",
+      "updatedDesc": "最近更新",
+      "createdDesc": "最新创建",
+      "updatedAsc": "最早更新",
+      "createdAsc": "最早创建"
+    },
+    "list": {
+      "title": "对话",
+      "total": "共 {count} 条",
+      "sessionTotal": "共 {count} 个会话",
+      "selected": "已选 {count} 条",
+      "groupBySession": "按会话分组",
+      "conversationCount": "{count} 个对话",
+      "selectPage": "选择当前页",
+      "empty": "暂无对话",
+      "filteredEmpty": "没有符合筛选条件的对话",
+      "previous": "上一页",
+      "next": "下一页",
+      "page": "第 {page} / {total} 页"
+    },
+    "preview": {
+      "title": "对话预览",
+      "close": "关闭预览",
+      "loading": "正在加载对话",
+      "empty": "这个对话还没有消息",
+      "copyUmo": "复制 UMO",
+      "rawData": "原始数据",
+      "copyRawData": "复制原始数据"
+    },
+    "actions": {
+      "editTitle": "编辑标题",
+      "export": "导出",
+      "delete": "删除",
+      "refresh": "刷新"
+    }
   }
 }

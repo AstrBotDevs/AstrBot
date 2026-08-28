@@ -8,6 +8,8 @@ import asyncio
 import json
 from collections.abc import Awaitable, Callable
 
+from sqlalchemy import inspect as sa_inspect
+
 from astrbot import logger
 from astrbot.core.agent.history_sanitizer import sanitize_history_for_storage
 from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment
@@ -85,11 +87,13 @@ class ConversationManager:
         updated_ts = to_utc_timestamp(conv_v2.updated_at)
         created_at = int(created_ts) if created_ts is not None else 0
         updated_at = int(updated_ts) if updated_ts is not None else 0
+        inspector = sa_inspect(conv_v2, raiseerr=False)
+        content_unloaded = bool(inspector and "content" in inspector.unloaded)
         return Conversation(
             platform_id=conv_v2.platform_id,
             user_id=conv_v2.user_id,
             cid=conv_v2.conversation_id,
-            history=json.dumps(conv_v2.content or []),
+            history="[]" if content_unloaded else json.dumps(conv_v2.content or []),
             title=conv_v2.title,
             persona_id=conv_v2.persona_id,
             created_at=created_at,

@@ -25,6 +25,7 @@ from astrbot.core.desktop_runtime import (
 )
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.star.star import PluginRegistry
+from astrbot.core.umo_alias import build_umo_alias_map, serialize_umo_alias
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.utils.auth_password import (
     is_default_dashboard_password,
@@ -480,14 +481,33 @@ class StatService:
                     reverse=True,
                 )
             ]
-            range_by_umo_data = [
-                {"umo": umo, "tokens": tokens}
-                for umo, tokens in sorted(
-                    total_by_umo.items(),
-                    key=lambda item: item[1],
-                    reverse=True,
+            platform_type_by_id = {"webchat": "webchat"}
+            for platform_config in self.config.get("platform", []):
+                platform_id = platform_config.get("id")
+                platform_type = platform_config.get("type")
+                if platform_id and platform_type:
+                    platform_type_by_id[str(platform_id)] = str(platform_type)
+            alias_map = build_umo_alias_map(
+                await self.db_helper.get_umo_aliases(list(total_by_umo)),
+            )
+            range_by_umo_data = []
+            for umo, tokens in sorted(
+                total_by_umo.items(),
+                key=lambda item: item[1],
+                reverse=True,
+            ):
+                alias_info = serialize_umo_alias(alias_map.get(umo), umo)
+                range_by_umo_data.append(
+                    {
+                        "umo": umo,
+                        "display_name": alias_info["display_name"],
+                        "platform_type": platform_type_by_id.get(
+                            umo.split(":", 1)[0],
+                            umo.split(":", 1)[0],
+                        ),
+                        "tokens": tokens,
+                    },
                 )
-            ]
 
             return {
                 "days": days,

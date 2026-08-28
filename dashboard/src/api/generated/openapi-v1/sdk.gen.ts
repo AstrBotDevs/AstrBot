@@ -190,6 +190,8 @@ import type {
   GetConfigProfileSchemaData,
   GetConfigProfileSchemaResponses,
   GetConversationData,
+  GetConversationFilterOptionsData,
+  GetConversationFilterOptionsResponses,
   GetConversationResponses,
   GetDataFileContentData,
   GetDataFileContentResponses,
@@ -5485,6 +5487,29 @@ export const listConversations = <ThrowOnError extends boolean = false>(
     responseType: 'json',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/conversations',
+    ...options,
+  });
+
+/**
+ * List available conversation filters
+ */
+export const getConversationFilterOptions = <
+  ThrowOnError extends boolean = false,
+>(
+  options?: Options<GetConversationFilterOptionsData, ThrowOnError>,
+): RequestResult<
+  GetConversationFilterOptionsResponses,
+  unknown,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    GetConversationFilterOptionsResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/conversations/filter-options',
     ...options,
   });
 

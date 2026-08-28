@@ -5966,6 +5966,24 @@ export type ListConversationsData = {
      * Comma-separated platforms to exclude.
      */
     exclude_platforms?: string;
+    /**
+     * Match conversation titles or message content.
+     */
+    keyword?: string;
+    /**
+     * Match the unified message origin.
+     */
+    umo?: string;
+    sort_by?: 'created_at' | 'updated_at';
+    sort_order?: 'asc' | 'desc';
+    /**
+     * Paginate by UMO and return all conversation summaries for each selected session.
+     */
+    group_by_session?: boolean;
+    /**
+     * Include serialized message history in list results.
+     */
+    include_history?: boolean;
   };
   url: '/api/v1/conversations';
 };
@@ -5979,6 +5997,23 @@ export type ListConversationsResponses = {
 
 export type ListConversationsResponse =
   ListConversationsResponses[keyof ListConversationsResponses];
+
+export type GetConversationFilterOptionsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/v1/conversations/filter-options';
+};
+
+export type GetConversationFilterOptionsResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type GetConversationFilterOptionsResponse =
+  GetConversationFilterOptionsResponses[keyof GetConversationFilterOptionsResponses];
 
 export type BatchDeleteConversationsData = {
   body: ConversationBatchDeleteRequest;

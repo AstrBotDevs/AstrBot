@@ -1,19 +1,6 @@
 <template>
   <div class="stats-page" :class="{ 'is-dark': isDark }">
     <v-container fluid class="stats-shell pa-4 pa-md-6">
-      <div class="stats-header">
-        <div>
-          <h1 class="stats-title">{{ t('header.title') }}</h1>
-          <p class="stats-subtitle">{{ t('header.subtitle') }}</p>
-        </div>
-        <div class="header-meta">
-          <div class="meta-pill">
-            <v-icon size="16">mdi-refresh</v-icon>
-            <span>{{ lastUpdatedLabel }}</span>
-          </div>
-        </div>
-      </div>
-
       <v-alert v-if="errorMessage" type="error" variant="tonal" class="mb-4">
         {{ errorMessage }}
       </v-alert>
@@ -124,7 +111,18 @@
                 :key="platform.name"
                 class="provider-row"
               >
-                <span class="provider-name">{{ platform.name }}</span>
+                <div class="provider-identity">
+                  <img
+                    v-if="platform.icon"
+                    :src="platform.icon"
+                    alt=""
+                    class="platform-icon"
+                  />
+                  <v-icon v-else size="18" aria-hidden="true"
+                    >mdi-message-outline</v-icon
+                  >
+                  <span class="provider-name">{{ platform.name }}</span>
+                </div>
                 <strong>{{ formatNumber(platform.count) }}</strong>
               </div>
             </div>
@@ -243,7 +241,65 @@
               :key="item.umo"
               class="provider-row"
             >
-              <span class="provider-name">{{ item.umo }}</span>
+              <div class="provider-identity provider-identity--umo">
+                <img
+                  v-if="item.icon"
+                  :src="item.icon"
+                  alt=""
+                  class="platform-icon"
+                />
+                <v-icon v-else size="18" aria-hidden="true"
+                  >mdi-message-outline</v-icon
+                >
+                <v-tooltip
+                  v-if="item.display_name && item.display_name !== item.umo"
+                  location="top"
+                  max-width="520"
+                >
+                  <template #activator="{ props }">
+                    <span
+                      v-bind="props"
+                      class="provider-name provider-name--alias"
+                    >
+                      {{ item.display_name }}
+                    </span>
+                  </template>
+                  <span class="umo-tooltip">{{ item.umo }}</span>
+                </v-tooltip>
+                <span v-else class="provider-name">{{ item.umo }}</span>
+                <v-tooltip location="top">
+                  <template #activator="{ props }">
+                    <button
+                      v-bind="props"
+                      type="button"
+                      class="umo-copy-button"
+                      :class="{
+                        'umo-copy-button--copied': copiedUmo === item.umo,
+                      }"
+                      :aria-label="
+                        copiedUmo === item.umo
+                          ? globalT('core.common.copied')
+                          : globalT('core.common.copy')
+                      "
+                      @click="copyUmo(item.umo)"
+                    >
+                      <v-icon v-if="copiedUmo === item.umo" size="15"
+                        >mdi-check</v-icon
+                      >
+                      <v-icon v-else size="15">mdi-content-copy</v-icon>
+                    </button>
+                  </template>
+                  <span>
+                    {{
+                      failedCopyUmo === item.umo
+                        ? globalT('core.common.copyFailed')
+                        : copiedUmo === item.umo
+                          ? globalT('core.common.copied')
+                          : globalT('core.common.copy')
+                    }}
+                  </span>
+                </v-tooltip>
+              </div>
               <strong>{{ formatNumber(item.tokens) }}</strong>
             </div>
           </div>
@@ -263,6 +319,8 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useTheme } from 'vuetify';
 import { statsApi, type T2iRuntimeStatsData } from '@/api/v1';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
+import { copyToClipboard } from '@/utils/clipboard';
+import { getPlatformIcon } from '@/utils/platformUtils';
 
 type TokenRange = 1 | 3 | 7;
 type ChartSeries = Array<{
@@ -308,7 +366,10 @@ interface ProviderRankingItem {
 
 interface UmoRankingItem {
   umo: string;
+  display_name?: string;
+  platform_type?: string;
   tokens: number;
+  icon?: string;
 }
 
 interface ProviderTokenStatsResponse {
@@ -330,7 +391,7 @@ interface ProviderTokenStatsResponse {
   today_by_provider: ProviderRankingItem[];
 }
 
-const { locale } = useI18n();
+const { locale, t: globalT } = useI18n();
 const { tm: t } = useModuleI18n('features/stats');
 const theme = useTheme();
 const loading = ref(true);
@@ -339,7 +400,8 @@ const baseStats = ref<BaseStatsResponse | null>(null);
 const providerStats = ref<ProviderTokenStatsResponse | null>(null);
 const t2iRuntimeStats = ref<T2iRuntimeStatsData | null>(null);
 const selectedRange = ref<TokenRange>(1);
-const lastUpdatedAt = ref<Date | null>(null);
+const copiedUmo = ref('');
+const failedCopyUmo = ref('');
 const isDark = computed(() => theme.global.current.value.dark);
 const themePalette = computed(() => {
   const colors = theme.global.current.value.colors as Record<string, string>;
@@ -361,6 +423,20 @@ const themePalette = computed(() => {
 });
 
 let refreshTimer: number | null = null;
+let copyFeedbackTimer: number | null = null;
+
+async function copyUmo(umo: string): Promise<void> {
+  const copied = await copyToClipboard(umo);
+  copiedUmo.value = copied ? umo : '';
+  failedCopyUmo.value = copied ? '' : umo;
+  if (copyFeedbackTimer !== null) {
+    window.clearTimeout(copyFeedbackTimer);
+  }
+  copyFeedbackTimer = window.setTimeout(() => {
+    copiedUmo.value = '';
+    failedCopyUmo.value = '';
+  }, 2000);
+}
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat(locale.value).format(value);
@@ -490,7 +566,6 @@ async function refreshStats(): Promise<void> {
       fetchProviderStats(),
       fetchT2iRuntimeStats(),
     ]);
-    lastUpdatedAt.value = new Date();
   } catch {
     console.error('Failed to load stats page data');
     errorMessage.value = t('errors.loadFailed');
@@ -504,15 +579,6 @@ const rangeOptions: ReadonlyArray<{ labelKey: string; value: TokenRange }> = [
   { labelKey: 'ranges.threeDays', value: 3 },
   { labelKey: 'ranges.oneWeek', value: 7 },
 ];
-
-const lastUpdatedLabel = computed(() => {
-  if (!lastUpdatedAt.value) return t('header.notUpdated');
-  return lastUpdatedAt.value.toLocaleTimeString(locale.value, {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-});
 
 const rangeLabel = computed(() => {
   if (selectedRange.value === 3) return t('rangeLabels.threeDays');
@@ -632,7 +698,10 @@ const rangeProviderRanking = computed(
 );
 
 const rangeUmoRanking = computed(() =>
-  (providerStats.value?.range_by_umo ?? []).slice(0, 10),
+  (providerStats.value?.range_by_umo ?? []).slice(0, 10).map((item) => ({
+    ...item,
+    icon: getPlatformIcon(item.platform_type || item.umo.split(':', 1)[0]),
+  })),
 );
 
 const rangeAvgTtftLabel = computed(() =>
@@ -658,7 +727,11 @@ const rangeSuccessRateLabel = computed(() => {
 const platformRanking = computed(() =>
   [...(baseStats.value?.platform ?? [])]
     .sort((left, right) => right.count - left.count)
-    .slice(0, 6),
+    .slice(0, 6)
+    .map((platform) => ({
+      ...platform,
+      icon: getPlatformIcon(platform.name),
+    })),
 );
 
 const startTimeLabel = computed(() =>
@@ -807,7 +880,6 @@ const providerChartOptions = computed<ApexOptions>(() => ({
 watch(selectedRange, async () => {
   try {
     await Promise.all([fetchBaseStats(), fetchProviderStats()]);
-    lastUpdatedAt.value = new Date();
   } catch {
     console.error('Failed to refresh stats range');
     errorMessage.value = t('errors.rangeFailed');
@@ -824,6 +896,9 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (refreshTimer !== null) {
     window.clearInterval(refreshTimer);
+  }
+  if (copyFeedbackTimer !== null) {
+    window.clearTimeout(copyFeedbackTimer);
   }
 });
 </script>
@@ -1279,6 +1354,60 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.provider-identity {
+  align-items: center;
+  display: flex;
+  gap: 9px;
+  min-width: 0;
+}
+
+.provider-identity--umo {
+  flex: 1 1 auto;
+}
+
+.platform-icon {
+  flex: 0 0 auto;
+  height: 20px;
+  object-fit: contain;
+  width: 20px;
+}
+
+.provider-name--alias {
+  border-bottom: 1px dotted currentColor;
+  cursor: help;
+}
+
+.umo-tooltip {
+  overflow-wrap: anywhere;
+}
+
+.umo-copy-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--stats-subtle);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 26px;
+  justify-content: center;
+  padding: 0;
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease;
+  width: 26px;
+}
+
+.umo-copy-button:hover {
+  background: rgba(var(--v-theme-on-surface), 0.07);
+  color: var(--stats-text);
+}
+
+.umo-copy-button--copied {
+  color: rgb(var(--v-theme-success));
 }
 
 .token-total-card .card-label,

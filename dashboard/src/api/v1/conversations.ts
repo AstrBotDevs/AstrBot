@@ -25,6 +25,13 @@ export const conversationApi = {
       ),
     );
   },
+  filterOptions(requestConfig?: AxiosRequestConfig) {
+    return typed<{ bots?: Array<{ id: string; type: string }> }>(
+      openApiV1.getConversationFilterOptions(
+        generatedOptions({}, requestConfig),
+      ),
+    );
+  },
   get(userId: string, cid: string) {
     return typed<ConversationRecordData>(
       openApiV1.getConversation({

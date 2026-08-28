@@ -4843,8 +4843,73 @@
               "type": "string"
             },
             "description": "Comma-separated platforms to exclude."
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Match conversation titles or message content."
+          },
+          {
+            "name": "umo",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Match the unified message origin."
+          },
+          {
+            "name": "sort_by",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["created_at", "updated_at"],
+              "default": "created_at"
+            }
+          },
+          {
+            "name": "sort_order",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["asc", "desc"],
+              "default": "desc"
+            }
+          },
+          {
+            "name": "group_by_session",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "Paginate by UMO and return all conversation summaries for each selected session."
+          },
+          {
+            "name": "include_history",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Include serialized message history in list results."
           }
         ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/conversations/filter-options": {
+      "get": {
+        "tags": ["Conversations"],
+        "summary": "List available conversation filters",
+        "operationId": "getConversationFilterOptions",
+        "x-astrbot-scope": "data",
         "responses": {
           "200": {
             "$ref": "#/components/responses/Ok"

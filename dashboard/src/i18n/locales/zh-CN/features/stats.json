@@ -26,7 +26,7 @@
     },
     "todayModelCalls": {
       "label": "今日模型调用",
-      "note": "词元（Tokens）"
+      "note": "Tokens"
     },
     "cpu": {
       "label": "CPU",
@@ -72,8 +72,7 @@
     }
   },
   "messageOverview": {
-    "title": "消息概览",
-    "subtitle": "机器人消息数据统计"
+    "title": "消息"
   },
   "messageTrend": {
     "title": "消息趋势",
@@ -85,8 +84,7 @@
     "subtitle": "{range}按聚合消息总量排序"
   },
   "modelCalls": {
-    "title": "模型调用",
-    "subtitle": "模型调用数据统计"
+    "title": "AI 模型"
   },
   "modelTrend": {
     "title": "模型调用趋势",
@@ -101,11 +99,11 @@
     "successRate": "调用成功率"
   },
   "modelRanking": {
-    "title": "{range}模型调用排名",
+    "title": "模型用量排名",
     "subtitle": "模型调用词元（Tokens）排名"
   },
   "sessionRanking": {
-    "title": "{range}会话词元（Tokens）Top 10",
+    "title": "{range}会话模型用量 Top 10",
     "subtitle": "词元（Tokens）用量最大的会话排名"
   },
   "empty": {

@@ -1,7 +1,16 @@
 <template>
-  <div ref="consoleWrapper" class="console-displayer-wrapper">
+  <div
+    ref="consoleWrapper"
+    class="console-displayer-wrapper"
+    :class="{ 'console-displayer-wrapper--workspace': props.workspaceMode }"
+  >
     <div v-if="props.showLevelBtns" class="filter-controls mb-2">
-      <v-chip-group v-model="selectedLevels" column multiple>
+      <v-chip-group
+        v-model="selectedLevels"
+        class="log-level-filters"
+        column
+        multiple
+      >
         <v-chip
           v-for="level in logLevels"
           :key="level"
@@ -18,6 +27,7 @@
         </v-chip>
       </v-chip-group>
       <v-spacer></v-spacer>
+      <slot name="header-actions"></slot>
       <v-btn
         :icon="isFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'"
         variant="text"
@@ -54,11 +64,13 @@ const props = withDefaults(
     showLevelBtns?: boolean;
     autoScroll?: boolean;
     hideUserChat?: boolean;
+    workspaceMode?: boolean;
   }>(),
   {
     showLevelBtns: true,
     autoScroll: true,
     hideUserChat: true,
+    workspaceMode: false,
   },
 );
 
@@ -402,6 +414,13 @@ onBeforeUnmount(() => {
   margin-bottom: 8px;
 }
 
+.console-displayer-wrapper--workspace {
+  background: var(--console-workspace-card, #f5f6f7);
+  border-radius: 16px;
+  overflow: hidden;
+  padding: 12px;
+}
+
 .console-term {
   background-color: #1e1e1e;
   border-radius: 8px;
@@ -410,6 +429,31 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   overflow-x: auto;
   padding: 16px;
+}
+
+.console-displayer-wrapper--workspace .filter-controls {
+  flex: 0 0 auto;
+  gap: 8px 12px;
+  margin-bottom: 10px !important;
+  min-height: 42px;
+  padding: 0 2px;
+}
+
+.console-displayer-wrapper--workspace .log-level-filters {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.console-displayer-wrapper--workspace .console-term {
+  background: #17191c;
+  border-radius: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 14px;
+}
+
+.console-displayer-wrapper--workspace .fullscreen-btn {
+  margin-inline-end: 0 !important;
 }
 
 .fullscreen-btn {
@@ -448,6 +492,35 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 768px) {
+  .console-displayer-wrapper--workspace {
+    border-radius: 14px;
+    padding: 10px;
+  }
+
+  .console-displayer-wrapper--workspace .filter-controls {
+    align-items: flex-start;
+    gap: 6px;
+    padding: 0;
+  }
+
+  .console-displayer-wrapper--workspace .filter-controls > .v-spacer {
+    display: none;
+  }
+
+  .console-displayer-wrapper--workspace .log-level-filters {
+    flex: 1 1 calc(100% - 38px);
+    order: 1;
+  }
+
+  .console-displayer-wrapper--workspace :deep(.console-header-actions) {
+    flex: 1 1 100%;
+    order: 3;
+  }
+
+  .console-displayer-wrapper--workspace .fullscreen-btn {
+    order: 2;
+  }
+
   :deep(.console-log-line--structured) {
     grid-template-columns: 1fr;
   }

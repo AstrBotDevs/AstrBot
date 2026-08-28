@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 269 icons */
+/* Auto-generated MDI subset – 272 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -156,16 +156,16 @@
   content: "\F00F3";
 }
 
+.mdi-chart-line::before {
+  content: "\F012A";
+}
+
 .mdi-chat::before {
   content: "\F0B79";
 }
 
 .mdi-chat-processing::before {
   content: "\F0B7B";
-}
-
-.mdi-chat-remove::before {
-  content: "\F1411";
 }
 
 .mdi-check::before {
@@ -254,6 +254,10 @@
 
 .mdi-cloud-upload::before {
   content: "\F0167";
+}
+
+.mdi-code-braces::before {
+  content: "\F0169";
 }
 
 .mdi-code-json::before {
@@ -704,6 +708,10 @@
   content: "\F0369";
 }
 
+.mdi-message-text-outline::before {
+  content: "\F036A";
+}
+
 .mdi-microphone::before {
   content: "\F036C";
 }
@@ -758,6 +766,10 @@
 
 .mdi-package-variant-closed::before {
   content: "\F03D7";
+}
+
+.mdi-package-variant-plus::before {
+  content: "\F19D8";
 }
 
 .mdi-page-first::before {
@@ -1036,6 +1048,10 @@
   content: "\F0A7A";
 }
 
+.mdi-tune::before {
+  content: "\F062E";
+}
+
 .mdi-tune-variant::before {
   content: "\F1542";
 }
@@ -1058,10 +1074,6 @@
 
 .mdi-vector-point::before {
   content: "\F01C4";
-}
-
-.mdi-view-dashboard::before {
-  content: "\F056E";
 }
 
 .mdi-volume-high::before {

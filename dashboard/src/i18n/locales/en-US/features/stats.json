@@ -72,7 +72,7 @@
     }
   },
   "messageOverview": {
-    "title": "Message Overview",
+    "title": "Messages",
     "subtitle": "Robot message statistics"
   },
   "messageTrend": {
@@ -85,7 +85,7 @@
     "subtitle": "{range}, sorted by aggregated message volume"
   },
   "modelCalls": {
-    "title": "Model Calls",
+    "title": "AI Models",
     "subtitle": "Model call statistics"
   },
   "modelTrend": {
@@ -101,11 +101,11 @@
     "successRate": "Success Rate"
   },
   "modelRanking": {
-    "title": "{range} model call ranking",
+    "title": "Model Usage Ranking",
     "subtitle": "Ranked by model call tokens"
   },
   "sessionRanking": {
-    "title": "{range} session token top 10",
+    "title": "{range} Session Model Usage Top 10",
     "subtitle": "Sessions ranked by token usage"
   },
   "empty": {

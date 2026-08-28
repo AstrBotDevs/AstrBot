@@ -225,3 +225,55 @@ async def test_stat_service_start_time_changelog_and_restart(tmp_path, monkeypat
     assert service.get_changelog("v1.2.3")["content"] == "notes"
     assert "1.2.3" in service.list_changelog_versions()["versions"]
     assert service.get_first_notice("zh-CN") == {"content": None}
+
+
+@pytest.mark.asyncio
+async def test_provider_token_ranking_includes_umo_display_names(temp_db):
+    aliased_umo = "qq:GroupMessage:group-1"
+    raw_umo = "webchat:FriendMessage:session-2"
+    await temp_db.insert_provider_stat(
+        umo=aliased_umo,
+        provider_id="provider-1",
+        stats={"token_usage": {"input_other": 3, "input_cached": 4, "output": 5}},
+    )
+    await temp_db.insert_provider_stat(
+        umo=raw_umo,
+        provider_id="provider-1",
+        stats={"token_usage": {"input_other": 1, "input_cached": 1, "output": 1}},
+    )
+    await temp_db.upsert_umo_alias(
+        umo=aliased_umo,
+        creator_sender_id="creator-1",
+        auto_name="研发群",
+        user_alias="产品讨论群",
+    )
+
+    service = StatService(
+        temp_db,
+        SimpleNamespace(),
+        {
+            "platform": [{"id": "qq", "type": "qq_official"}],
+            "dashboard": {"username": "astrbot"},
+        },
+        demo_mode=False,
+        start_time=int(time.time()) - 3600,
+        html_renderer=SimpleNamespace(get_runtime_stats=lambda: {}),
+        plugin_catalog=SimpleNamespace(all=lambda: ()),
+        platform_manager=SimpleNamespace(get_platform_count=lambda: 1),
+    )
+    result = await service.get_provider_token_stats(1)
+
+    assert result["range_by_umo"] == [
+        {
+            "umo": aliased_umo,
+            "display_name": "产品讨论群",
+            "platform_type": "qq_official",
+            "tokens": 12,
+        },
+        {
+            "umo": raw_umo,
+            "display_name": raw_umo,
+            "platform_type": "webchat",
+            "tokens": 3,
+        },
+    ]

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
 import ConsolePage from '@/views/ConsolePage.vue';
-import ConversationPage from '@/views/ConversationPage.vue';
+import ConversationWorkspacePage from '@/views/conversation/ConversationWorkspacePage.vue';
 import WelcomePage from '@/views/WelcomePage.vue';
 import KBList from '@/views/knowledge-base/KBList.vue';
 import { mountWithVuetify } from './utils/mountWithVuetify';
@@ -64,6 +64,9 @@ vi.mock('@/api/v1', () => ({
   },
   conversationApi: {
     list: testState.conversationListMock,
+    filterOptions: vi.fn().mockResolvedValue({
+      data: { status: 'ok', data: { bots: [] } },
+    }),
     get: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
@@ -183,22 +186,10 @@ type ConsolePageVm = {
   pipDialog: boolean;
 };
 
-type ConversationPageVm = {
-  selectedConversation: {
-    cid: string;
-    user_id: string;
-    title: string;
-  };
-  selectedItems: Array<{
-    cid: string;
-    user_id: string;
-    title: string;
-  }>;
-  dialogEdit: boolean;
-  dialogDelete: boolean;
-  dialogBatchDelete: boolean;
-  dialogView: boolean;
-  isEditingHistory: boolean;
+type ConversationWorkspaceVm = {
+  editDialog: boolean;
+  rawDataDialog: boolean;
+  rawHistoryText: string;
 };
 
 describe('view dialog layouts', () => {
@@ -385,111 +376,23 @@ describe('view dialog layouts', () => {
     wrapper.unmount();
   });
 
-  it('renders conversation maintenance dialogs inside bounded scroll containers', async () => {
+  it('renders conversation workspace dialogs without stacking extra scrollers', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const wrapper = mountWithVuetify(ConversationPage);
-    const vm = wrapper.vm as unknown as ConversationPageVm;
+    const wrapper = mountWithVuetify(ConversationWorkspacePage);
+    const vm = wrapper.vm as unknown as ConversationWorkspaceVm;
 
     await flushPromises();
 
-    vm.selectedConversation = {
-      cid: 'conv-1',
-      user_id: 'discord:group:session-1',
-      title: 'Conversation One',
-    };
-    vm.selectedItems = [
-      {
-        cid: 'conv-1',
-        user_id: 'discord:group:session-1',
-        title: 'Conversation One',
-      },
-      {
-        cid: 'conv-2',
-        user_id: 'discord:friend:session-2',
-        title: 'Conversation Two',
-      },
-    ];
-    vm.dialogEdit = true;
-    vm.dialogDelete = true;
-    vm.dialogBatchDelete = true;
+    vm.editDialog = true;
+    vm.rawHistoryText = '[]';
+    vm.rawDataDialog = true;
     await flushPromises();
 
-    expect(
-      document.body.querySelector('.conversation-edit-dialog'),
-    ).not.toBeNull();
-    expect(
-      document.body.querySelector('.conversation-delete-dialog'),
-    ).not.toBeNull();
-    expect(
-      document.body.querySelector('.conversation-batch-delete-dialog'),
-    ).not.toBeNull();
-    expect(
-      document.body.querySelector('.conversation-modal-body'),
-    ).not.toBeNull();
+    expect(document.body.querySelector('.raw-data-card')).not.toBeNull();
+    expect(document.body.querySelector('.raw-data-editor')).not.toBeNull();
     expect(hasCriticalRuntimeWarning(warnSpy.mock.calls)).toBe(false);
     expect(hasCriticalRuntimeWarning(errorSpy.mock.calls)).toBe(false);
-
-    wrapper.unmount();
-  });
-
-  it('lets the conversation card text own preview scrolling', async () => {
-    const wrapper = mountWithVuetify(ConversationPage);
-    const vm = wrapper.vm as unknown as ConversationPageVm;
-
-    await flushPromises();
-
-    vm.dialogView = true;
-    await flushPromises();
-
-    const detailCard = document.body.querySelector('.conversation-detail-card');
-    const actionBar = detailCard?.querySelector(
-      '.conversation-history-actions',
-    );
-    const cardText = detailCard?.querySelector('.v-card-text');
-    const preview = cardText?.querySelector('.conversation-messages-container');
-
-    expect(detailCard).not.toBeNull();
-    expect(actionBar).not.toBeNull();
-    expect(cardText).not.toBeNull();
-    expect(preview).not.toBeNull();
-    expect(actionBar?.parentElement).toBe(detailCard);
-    expect(cardText?.contains(actionBar ?? null)).toBe(false);
-
-    const wheelEvent = new WheelEvent('wheel', {
-      bubbles: true,
-      cancelable: true,
-      deltaY: 24,
-    });
-    preview?.dispatchEvent(wheelEvent);
-
-    expect(wheelEvent.defaultPrevented).toBe(false);
-
-    wrapper.unmount();
-  });
-
-  it('lets the conversation editor fill remaining dialog height', async () => {
-    const wrapper = mountWithVuetify(ConversationPage);
-    const vm = wrapper.vm as unknown as ConversationPageVm;
-
-    await flushPromises();
-
-    vm.dialogView = true;
-    vm.isEditingHistory = true;
-    await flushPromises();
-
-    const detailCard = document.body.querySelector(
-      '.conversation-detail-card.conversation-detail-card--edit',
-    );
-    const cardText = detailCard?.querySelector('.v-card-text');
-    const editor = cardText?.querySelector('.monaco-editor-container');
-    const preview = cardText?.querySelector('.conversation-messages-container');
-
-    expect(detailCard).not.toBeNull();
-    expect(cardText).not.toBeNull();
-    expect(editor).not.toBeNull();
-    expect(preview).toBeNull();
-    expect(cardText?.contains(editor ?? null)).toBe(true);
 
     wrapper.unmount();
   });

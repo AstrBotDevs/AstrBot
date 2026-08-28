@@ -128,6 +128,9 @@ class FakeDb:
     async def get_umo_aliases(self, _umos: list[str] | None = None) -> list[object]:
         return []
 
+    async def get_conversation_platform_ids(self) -> list[str]:
+        return ["webchat-main"]
+
     def add_api_key(self, raw_key: str, scopes: list[str]) -> None:
         key_id = f"key-{raw_key}"
         self.api_keys[ApiKeyService.hash_key(raw_key)] = FakeApiKey(
@@ -364,6 +367,11 @@ class FakeConversation:
 class FakeConversationManager:
     def __init__(self) -> None:
         user_id = "webchat:FriendMessage:webchat!user!session-1"
+        self.last_keyword_query = ""
+        self.last_umo_query = ""
+        self.last_sort = ("created_at", "desc")
+        self.last_group_by_session = False
+        self.last_include_history = True
         self.conversations: dict[tuple[str, str], FakeConversation] = {
             (user_id, "conversation/with/slash"): FakeConversation(
                 cid="conversation/with/slash",
@@ -381,7 +389,19 @@ class FakeConversationManager:
         search_query: str,
         exclude_ids: list[str],
         exclude_platforms: list[str],
+        keyword_query: str = "",
+        umo_query: str = "",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        group_by_session: bool = False,
+        include_history: bool = True,
+        **_kwargs,
     ):
+        self.last_keyword_query = keyword_query
+        self.last_umo_query = umo_query
+        self.last_sort = (sort_by, sort_order)
+        self.last_group_by_session = group_by_session
+        self.last_include_history = include_history
         conversations = list(self.conversations.values())
         if platforms:
             conversations = [
@@ -401,12 +421,29 @@ class FakeConversationManager:
                 for conversation in conversations
                 if search_query in conversation.title
             ]
+        if keyword_query:
+            conversations = [
+                conversation
+                for conversation in conversations
+                if keyword_query in conversation.title
+                or keyword_query in conversation.history
+            ]
+        if umo_query:
+            conversations = [
+                conversation
+                for conversation in conversations
+                if umo_query in conversation.user_id
+            ]
         conversations = [
             conversation
             for conversation in conversations
             if conversation.cid not in exclude_ids
             and conversation.platform_id not in exclude_platforms
         ]
+        conversations.sort(
+            key=lambda conversation: getattr(conversation, sort_by),
+            reverse=sort_order == "desc",
+        )
         start = (page - 1) * page_size
         return conversations[start : start + page_size], len(conversations)
 
