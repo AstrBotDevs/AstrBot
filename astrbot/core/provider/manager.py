@@ -459,6 +459,10 @@ class ProviderManager:
                 from .sources.gemini_source import (
                     ProviderGoogleGenAI as ProviderGoogleGenAI,
                 )
+            case "dashscope_token_plan_chat_completion":
+                from .sources.dashscope_token_plan_source import (
+                    ProviderDashScopeTokenPlan as ProviderDashScopeTokenPlan,
+                )
             case "sensevoice_stt_selfhost":
                 from .sources.sensevoice_selfhosted_source import (
                     ProviderSenseVoiceSTTSelfHost as ProviderSenseVoiceSTTSelfHost,
