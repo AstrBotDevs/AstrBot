@@ -46,7 +46,7 @@ from astrbot.api.web import error_response, json_response, request
 
 PLUGIN_NAME = "astrbot_plugin_page_demo"
 
-
+@register(f"{PLUGIN_NAME}", "Soulter", "a simple example pages plugin", "1.0.0", "repo url")
 class MyPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
