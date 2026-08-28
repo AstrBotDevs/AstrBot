@@ -104,6 +104,7 @@
   },
   "sessionRanking": {
     "title": "{range}会话模型用量 Top 10",
+    "openConversation": "查看对话",
     "subtitle": "词元（Tokens）用量最大的会话排名"
   },
   "empty": {

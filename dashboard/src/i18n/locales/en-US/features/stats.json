@@ -106,6 +106,7 @@
   },
   "sessionRanking": {
     "title": "{range} Session Model Usage Top 10",
+    "openConversation": "View conversation",
     "subtitle": "Sessions ranked by token usage"
   },
   "empty": {

@@ -67,7 +67,7 @@ Config profiles still control routed Agent, model, message-processing, and plugi
 
 ### Statistics
 
-The Statistics tab summarizes platform instances, messages, model calls, tokens, and uptime. It also shows message trends, platform rankings, model-call trends, model usage rankings, and session token rankings. You can switch the window between 1 day, 3 days, and 1 week. Session rankings show UMO aliases and can copy the raw UMO.
+The Statistics tab summarizes platform instances, messages, model calls, tokens, and uptime. It also shows message trends, platform rankings, model-call trends, model usage rankings, and session token rankings. You can switch the window between 1 day, 3 days, and 1 week. Session rankings show UMO aliases, can copy the raw UMO, and can open that UMO in the Conversations tab.
 
 The same page includes a local text-to-image section. It shows the in-process Chromium connection, render successes and failures, active pages, timing, reusable browser contexts, and aggregate output size. These values reset when AstrBot restarts and never include templates, rendered content, file paths, or user data.
 

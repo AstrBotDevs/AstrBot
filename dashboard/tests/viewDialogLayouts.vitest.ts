@@ -28,6 +28,10 @@ vi.mock('vue-router', async () => {
     ...actual,
     useRouter: () => ({
       push: testState.routerPushMock,
+      replace: vi.fn(),
+    }),
+    useRoute: () => ({
+      query: {},
     }),
   };
 });
