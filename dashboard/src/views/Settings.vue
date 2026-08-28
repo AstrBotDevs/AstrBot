@@ -354,7 +354,7 @@
                           variant="text"
                           class="ml-2"
                           :aria-label="tm('apiKey.docsLink')"
-                          href="https://docs.astrbot.app/dev/openapi.html"
+                          :href="docsHref('dev/openapi.html')"
                           target="_blank"
                           rel="noopener noreferrer"
                         >
@@ -572,6 +572,7 @@ import { stepUpHeaders } from '@/utils/stepUp';
 import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot';
 import { copyToClipboard } from '@/utils/clipboard';
 import { useModuleI18n } from '@/i18n/composables';
+import { docsHref } from '@/utils/docsHref';
 import { useTheme } from 'vuetify';
 import { applyUserThemeColors, defaultThemeColors } from '@/design/theme';
 import { useToastStore } from '@/stores/toast';

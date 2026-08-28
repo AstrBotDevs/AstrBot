@@ -33,10 +33,13 @@ uv run main.py
 ruff format .
 ruff check .
 make dev
+make build-docs
 make check
 make quality
 cd dashboard && pnpm generate:api
 ```
+
+`make run` 会把文档打进 WebUI 的 `/help/`。不要把文档链接指向上游 `docs.astrbot.app`。
 
 如果你修改了后端 OpenAPI、接口路由或响应结构，请同时刷新：
 
@@ -103,10 +106,13 @@ uv run main.py
 ruff format .
 ruff check .
 make dev
+make build-docs
 make check
 make quality
 cd dashboard && pnpm generate:api
 ```
+
+`make run` serves documentation from the WebUI at `/help/`. Do not point documentation links at upstream `docs.astrbot.app`.
 
 If you change backend OpenAPI routes, request schemas, or response schemas, also refresh:
 

@@ -28,7 +28,7 @@ X-API-Key: abk_xxx
 
 本地 OpenAPI 描述文件地址为 `http://localhost:6185/api/v1/openapi.json`，交互式文档地址为 `http://localhost:6185/api/v1/docs`。
 
-本地 schema 包含完整的 `/api/v1` 契约，其中也包括依赖 Dashboard 登录态的接口。公开文档站点上的 `https://docs.astrbot.app/scalar.html` 是由同一份规范裁剪出来的开发者子集。
+本地 schema 包含完整的 `/api/v1` 契约，其中也包括依赖 Dashboard 登录态的接口。WebUI 内置文档中的 `/help/scalar.html` 是由同一份规范裁剪出来的开发者子集。
 
 ## Scope 权限说明
 
@@ -223,4 +223,4 @@ node node_modules/prettier/bin/prettier.cjs --write docs/public/openapi.json
 
 交互式 API 文档请查看：
 
-- <https://docs.astrbot.app/scalar.html>
+- `/help/scalar.html`

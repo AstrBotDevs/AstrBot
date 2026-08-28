@@ -26,7 +26,7 @@
         variant="text"
         size="small"
         :aria-label="t('list.subtitle')"
-        href="https://docs.astrbot.app/use/knowledge-base.html"
+        :href="docsHref('use/knowledge-base.html')"
         target="_blank"
       />
     </div>
@@ -39,6 +39,7 @@
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useModuleI18n } from '@/i18n/composables';
+import { docsHref } from '@/utils/docsHref';
 
 const { tm: t } = useModuleI18n('features/knowledge-base/index');
 const route = useRoute();

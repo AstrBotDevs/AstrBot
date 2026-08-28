@@ -1,3 +1,5 @@
+import { docsHref } from '@/utils/docsHref';
+
 const PLATFORM_ICON_URLS: Record<string, string> = {
   aiocqhttp: new URL(
     '@/assets/images/platform_logos/onebot.png',
@@ -61,29 +63,27 @@ const PLATFORM_ICON_URLS: Record<string, string> = {
   ).href,
 };
 
-const TUTORIAL_LINKS: Record<string, string> = {
-  qq_official_webhook:
-    'https://docs.astrbot.app/platform/qqofficial/webhook.html',
-  qq_official: 'https://docs.astrbot.app/platform/qqofficial/websockets.html',
-  aiocqhttp: 'https://docs.astrbot.app/platform/aiocqhttp.html',
-  napcat: 'https://docs.astrbot.app/platform/napcat.html',
-  wecom: 'https://docs.astrbot.app/platform/wecom.html',
-  weixin_oc: 'https://docs.astrbot.app/platform/weixin_oc.html',
-  wecom_ai_bot: 'https://docs.astrbot.app/platform/wecom_ai_bot.html',
-  lark: 'https://docs.astrbot.app/platform/lark.html',
-  telegram: 'https://docs.astrbot.app/platform/telegram.html',
-  dingtalk: 'https://docs.astrbot.app/platform/dingtalk.html',
-  weixin_official_account:
-    'https://docs.astrbot.app/platform/weixin-official-account.html',
-  discord: 'https://docs.astrbot.app/platform/discord.html',
-  slack: 'https://docs.astrbot.app/platform/slack.html',
-  kook: 'https://docs.astrbot.app/platform/kook.html',
-  vocechat: 'https://docs.astrbot.app/platform/vocechat.html',
-  satori: 'https://docs.astrbot.app/platform/satori/guide.html',
-  misskey: 'https://docs.astrbot.app/platform/misskey.html',
-  line: 'https://docs.astrbot.app/platform/line.html',
-  matrix: 'https://docs.astrbot.app/platform/matrix.html',
-  mattermost: 'https://docs.astrbot.app/platform/mattermost.html',
+const TUTORIAL_PATHS: Record<string, string> = {
+  qq_official_webhook: 'platform/qqofficial/webhook.html',
+  qq_official: 'platform/qqofficial/websockets.html',
+  aiocqhttp: 'platform/aiocqhttp.html',
+  napcat: 'platform/napcat.html',
+  wecom: 'platform/wecom.html',
+  weixin_oc: 'platform/weixin_oc.html',
+  wecom_ai_bot: 'platform/wecom_ai_bot.html',
+  lark: 'platform/lark.html',
+  telegram: 'platform/telegram.html',
+  dingtalk: 'platform/dingtalk.html',
+  weixin_official_account: 'platform/weixin-official-account.html',
+  discord: 'platform/discord.html',
+  slack: 'platform/slack.html',
+  kook: 'platform/kook.html',
+  vocechat: 'platform/vocechat.html',
+  satori: 'platform/satori/guide.html',
+  misskey: 'platform/misskey.html',
+  line: 'platform/line.html',
+  matrix: 'platform/matrix.html',
+  mattermost: 'platform/mattermost.html',
 };
 
 const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
@@ -123,8 +123,9 @@ export function getPlatformIcon(name: string): string | undefined {
   return PLATFORM_ICON_URLS[name];
 }
 
-export function getTutorialLink(platformType: string): string {
-  return TUTORIAL_LINKS[platformType] || 'https://docs.astrbot.app';
+export function getTutorialLink(platformType: string, locale?: string): string {
+  const path = TUTORIAL_PATHS[platformType];
+  return docsHref(path || '', locale);
 }
 
 export function getPlatformDescription(

@@ -45,7 +45,7 @@ User-facing changes should update both language trees when an equivalent page
 exists. Keep internal links extensionless so VitePress validates them during
 the production build.
 
-The upstream public documentation at
-[https://docs.astrbot.app/](https://docs.astrbot.app/) describes upstream
-behavior. Documentation in this repository follows the current checkout.
-This fork does not operate a public issue tracker.
+The production Dashboard serves this site at `/help/`. `make build-docs` and
+`make run` set `ASTRBOT_DOCS_BASE=/help/` and copy the VitePress build into the
+WebUI `help/` directory. `make docs` / `pnpm run docs:dev` is a standalone
+preview with base `/`. This fork does not operate a public issue tracker.

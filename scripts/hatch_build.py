@@ -12,6 +12,8 @@ When enabled, this hook:
 2. Copies the resulting `dashboard/dist/` tree into
    `astrbot/dashboard/dist/` so the static assets are shipped
    inside the Python wheel.
+3. Builds VitePress with `ASTRBOT_DOCS_BASE=/help/` and copies
+   the output into `astrbot/dashboard/dist/help/`.
 """
 
 import os
@@ -34,6 +36,9 @@ class CustomBuildHook(BuildHookInterface):
             return
 
         root = Path(self.root)
+        sys.path.insert(0, str(root))
+        from scripts.sync_dashboard_dist import embed_docs_help
+
         dashboard_src = root / "dashboard"
         dist_src = dashboard_src / "dist"
         dist_target = root / "astrbot" / "dashboard" / "dist"
@@ -68,6 +73,28 @@ class CustomBuildHook(BuildHookInterface):
                 file=sys.stderr,
             )
             return
+
+        docs_src = root / "docs"
+        if (docs_src / "package.json").exists():
+            if not (docs_src / "node_modules").exists():
+                print("[hatch_build] Installing docs Node dependencies...")
+                subprocess.run(
+                    ["pnpm", "install", "--frozen-lockfile"],
+                    cwd=docs_src,
+                    check=True,
+                )
+            print("[hatch_build] Building VitePress documentation...")
+            env = os.environ.copy()
+            env["ASTRBOT_DOCS_BASE"] = "/help/"
+            subprocess.run(
+                ["pnpm", "run", "docs:build"],
+                cwd=docs_src,
+                check=True,
+                env=env,
+            )
+            help_dir = embed_docs_help(dist_src, repo_root=root)
+            if help_dir is not None:
+                print(f"[hatch_build] Docs dist copied → {help_dir.relative_to(root)}")
 
         # ── Copy into the Python package tree ────────────────────────────────
         if dist_target.exists():

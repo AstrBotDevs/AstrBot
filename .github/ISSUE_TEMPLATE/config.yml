@@ -7,11 +7,11 @@ contact_links:
   - name: 📖 Documentation / 文档
     url: https://github.com/Xero-Team/AstrBot/tree/master/docs
     about: |
-      In-repository docs (docs/zh, docs/en). This fork has no published docs
-      site and no public issue tracker. https://docs.astrbot.app describes
-      upstream AstrBot.
-      文档源在本仓库 docs/zh 与 docs/en。本 fork 没有独立文档站点，也不运营
-      公开 Issue 跟踪器。https://docs.astrbot.app 描述的是上游 AstrBot。
+      In-app docs are served at /help/ after starting the WebUI. Sources live
+      in this repository under docs/zh and docs/en. This fork does not operate
+      a public issue tracker.
+      启动 WebUI 后文档在 /help/。源文件在本仓库 docs/zh 与 docs/en。本 fork
+      不运营公开 Issue 跟踪器。
 
   - name: 🔒 Report a Security Vulnerability / 报告安全漏洞
     url: https://github.com/Xero-Team/AstrBot/security/advisories/new

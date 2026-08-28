@@ -34,8 +34,12 @@ class StaticFileService:
         re.compile(r"^/extension/[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$"),
     )
     NOT_FOUND_MESSAGE = (
-        "404 Not found。如果你初次使用打开面板发现 404, 请参考文档: "
-        "https://docs.astrbot.app/faq.html。如果你正在测试回调地址可达性，"
+        "404 Not found. If this is the first time you opened the panel, "
+        "build the WebUI from this checkout (`make run`) and retry. "
+        "If you are testing webhook reachability, this text means the "
+        "test succeeded.\n\n"
+        "404 Not found。如果初次打开面板看到 404，请先用当前 checkout 构建 "
+        "WebUI（`make run`）后再访问。如果正在测试回调地址可达性，"
         "显示这段文字说明测试成功了。"
     )
 
@@ -103,4 +107,20 @@ class StaticFileService:
 
         if target_file.is_file():
             return target_file
+        if target_file.is_dir():
+            index_file = (target_file / "index.html").resolve()
+            try:
+                index_file.relative_to(static_root)
+            except ValueError:
+                return None
+            if index_file.is_file():
+                return index_file
+        if not target_file.suffix:
+            html_file = Path(f"{target_file}.html").resolve()
+            try:
+                html_file.relative_to(static_root)
+            except ValueError:
+                return None
+            if html_file.is_file():
+                return html_file
         return None

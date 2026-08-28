@@ -46,14 +46,9 @@
       <div class="config-tabs-help">
         <small
           >{{ tm('help.helpPrefix') }}
-          <a href="https://docs.astrbot.app/" target="_blank">{{
+          <a :href="docsHref()" target="_blank" rel="noopener noreferrer">{{
             tm('help.documentation')
-          }}</a>
-          {{ tm('help.helpMiddle') }}
-          <a
-            href="https://qm.qq.com/cgi-bin/qm/qr?k=EYGsuUTfe00_iOu9JTXS7_TEpMkXOvwv&jump_from=webapi&authKey=uUEMKCROfsseS+8IzqPjzV3y1tzy4AkykwTib2jNkOFdzezF9s9XknqnIaf3CDft"
-            target="_blank"
-            >{{ tm('help.support') }}</a
+          }}</a
           >{{ tm('help.helpSuffix') }}
         </small>
       </div>
@@ -71,6 +66,7 @@ import { computed, ref, watch } from 'vue';
 import { useDisplay } from 'vuetify';
 import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
 import { useModuleI18n } from '@/i18n/composables';
+import { docsHref } from '@/utils/docsHref';
 
 interface ConfigMetadataItem {
   description?: string;

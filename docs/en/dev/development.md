@@ -56,7 +56,7 @@ It starts the backend and Vite Dashboard without a production build first:
 - backend: `http://127.0.0.1:6185`
 - Dashboard dev server: `http://localhost:3000`
 
-`make run` synchronizes the locked runtime environment, builds the Dashboard, copies it to `data/dist`, and then starts both processes. It does not build a Python wheel or sdist. Use `make status` to inspect the processes and `make stop` to stop them.
+`make run` synchronizes the locked runtime environment, builds the Dashboard and documentation, copies them to `data/dist` (docs under `help/`), and then starts both processes. It does not build a Python wheel or sdist. Use `make status` to inspect the processes and `make stop` to stop them. `make build-docs` only builds and syncs documentation; `make docs` starts a standalone VitePress preview with base `/`.
 
 `make clean` is not an ordinary process-control command. It stops the processes and broadly removes generated content including `dashboard/dist`, `data/dist`, `.tmp`, build/dist directories, logs, test/format caches, and `__pycache__`. Inspect the worktree and any local artifacts you need before running it.
 
@@ -150,7 +150,7 @@ Ordinary Dashboard JSON APIs follow this layout:
 - request models: `astrbot/dashboard/schemas.py`
 - source specification: `openspec/openapi-v1.yaml`
 
-After changing routes, request/response schemas, or OpenAPI, regenerate both the frontend client and public docs:
+After changing routes, request/response schemas, or OpenAPI, regenerate both the frontend client and the in-app OpenAPI JSON:
 
 ```bash
 cd dashboard
@@ -174,7 +174,7 @@ pnpm run docs:dev
 pnpm run docs:build
 ```
 
-The production build validates internal links. Do not edit `docs/.vitepress/dist/`; it is generated. `make check-md` enumerates only Git-tracked Markdown, so run Prettier and markdownlint explicitly for new pages that have not yet been added to the index.
+The production build validates internal links. Do not edit `docs/.vitepress/dist/`; it is generated. Production builds use base `/help/` and are served from the Dashboard. `make check-md` enumerates only Git-tracked Markdown, so run Prettier and markdownlint explicitly for new pages that have not yet been added to the index.
 
 ## Dependency Changes
 

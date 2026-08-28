@@ -942,8 +942,9 @@ async def test_md5_login_failure_includes_upgrade_faq_hint(
         assert data["status"] == "error"
         assert data["message"].startswith("Incorrect username or password.")
         assert "请参考" in data["message"]
-        assert "https://docs.astrbot.app/en/faq.html" in data["message"]
-        assert "https://docs.astrbot.app/faq.html" in data["message"]
+        assert "/help/en/faq.html" in data["message"]
+        assert "/help/faq.html" in data["message"]
+        assert "docs.astrbot.app" not in data["message"]
     finally:
         await _restore_dashboard_password_state(
             core_lifecycle_td,

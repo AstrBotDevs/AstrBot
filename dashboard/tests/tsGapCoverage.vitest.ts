@@ -190,7 +190,7 @@ describe('ts gap coverage', () => {
     expect(toast.current).toBeNull();
 
     expect(getPlatformIcon('telegram')).toBeTruthy();
-    expect(getTutorialLink('unknown')).toContain('docs.astrbot.app');
+    expect(getTutorialLink('unknown')).toBe('/help/');
     expect(getPlatformDescription({}, 'vocechat-bot')).toContain('Hikari');
     expect(getPlatformDescription({}, 'kook')).toContain('wuyan');
     expect(getPlatformDescription({}, 'telegram')).toBe('');

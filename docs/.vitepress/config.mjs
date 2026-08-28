@@ -1,11 +1,17 @@
 import { defineConfig } from 'vitepress';
 import { head } from './config/head';
 
+const isDevCommand = process.argv.includes('dev');
+const docsBase =
+  process.env.ASTRBOT_DOCS_BASE ?? (isDevCommand ? '/' : '/help/');
+const normalizedDocsBase = docsBase.endsWith('/') ? docsBase : `${docsBase}/`;
+
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
+  base: normalizedDocsBase,
   title: 'AstrBot',
   description: 'Documentation for the current Xero-Team AstrBot fork',
-  head: head,
+  head: head(normalizedDocsBase),
 
   rewrites: {
     'zh/:rest*': ':rest*',

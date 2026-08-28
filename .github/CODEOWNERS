@@ -33,7 +33,6 @@
 
 # Deployment manifests.
 /Dockerfile                 @BegoniaHe
-/Dockerfile.docs            @BegoniaHe
 /compose.yml                @BegoniaHe
 /compose-with-napcat.yml    @BegoniaHe
 /k8s/                       @BegoniaHe

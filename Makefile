@@ -1,5 +1,5 @@
 .PHONY: worktree worktree-add worktree-rm bootstrap doctor pr-test-neo pr-test-full pr-test-full-fast \
-	build build-all build-backend build-dashboard dev run run-backend run-dashboard \
+	build build-all build-backend build-dashboard build-docs dev run run-backend run-dashboard \
 	stop stop-backend stop-dashboard clean status docs napcat-schema-ob11-event napcat-schema-ob11-event-normalized napcat-models-ob11-event napcat-models-ob11-event-src napcat-codegen napcat-test napcat-check quality quality-report \
 	quality-all quality-sync quality-pyright quality-bandit quality-audit quality-web-audit quality-complexity quality-radon-cc quality-radon-mi \
 	quality-report-all quality-report-pyright quality-report-bandit quality-report-audit quality-report-radon-cc quality-report-radon-mi \
@@ -100,7 +100,7 @@ bootstrap: doctor
 
 build: build-all
 
-build-all: build-backend build-dashboard
+build-all: build-backend build-dashboard build-docs
 
 build-backend:
 	uv sync --locked
@@ -108,6 +108,11 @@ build-backend:
 build-dashboard:
 	cd $(DASHBOARD_DIR) && CI=true $(PNPM) install --frozen-lockfile
 	cd $(DASHBOARD_DIR) && $(PNPM) build
+	uv run python scripts/sync_dashboard_dist.py
+
+build-docs: build-dashboard
+	cd $(DOCS_DIR) && CI=true $(PNPM) install --frozen-lockfile
+	cd $(DOCS_DIR) && ASTRBOT_DOCS_BASE=/help/ $(PNPM) run docs:build
 	uv run python scripts/sync_dashboard_dist.py
 
 dev: run-backend run-dashboard status
@@ -138,7 +143,7 @@ clean: stop
 	@$(DEV_RUNNER) clean
 
 docs:
-	cd $(DOCS_DIR) && $(PNPM) install
+	cd $(DOCS_DIR) && CI=true $(PNPM) install --frozen-lockfile
 	cd $(DOCS_DIR) && $(PNPM) run docs:dev
 
 napcat-schema-ob11-event:
@@ -366,18 +371,21 @@ check-toml-all: $(CHECK_TOML_TARGETS)
 check-toml-format:
 	@echo "==> [toml] taplo fmt --check"
 	@for f in $$(git ls-files '*.toml' ':(exclude).pyscn.toml'); do \
+		[ -f "$$f" ] || continue; \
 		$(TAPLO) fmt --check --stdin-filepath "$$f" - < "$$f" || exit 1; \
 	done
 
 check-toml-lint:
 	@echo "==> [toml] taplo lint"
 	@for f in $$(git ls-files '*.toml'); do \
+		[ -f "$$f" ] || continue; \
 		$(TAPLO) lint - < "$$f" || exit 1; \
 	done
 
 format-toml:
 	@echo "==> [toml] taplo fmt"
 	@for f in $$(git ls-files '*.toml' ':(exclude).pyscn.toml'); do \
+		[ -f "$$f" ] || continue; \
 		tmp=$$(mktemp); \
 		$(TAPLO) fmt --stdin-filepath "$$f" - < "$$f" > "$$tmp" && mv "$$tmp" "$$f"; \
 	done
@@ -436,4 +444,4 @@ format-eol:
 check-docker:
 	@command -v hadolint >/dev/null 2>&1 || { echo "hadolint is required; run 'make doctor' for setup guidance." >&2; exit 2; }
 	@echo "==> [docker] hadolint"
-	@hadolint --config .hadolint.yaml Dockerfile Dockerfile.docs
+	@hadolint --config .hadolint.yaml Dockerfile

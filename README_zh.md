@@ -87,6 +87,8 @@ docker compose up -d --build
 docker compose logs -f astrbot
 ```
 
+登录 WebUI 后，文档在 `/help/`。
+
 Compose 默认构建完整运行时。如果不需要浏览器、文档转换、媒体处理、OCR、Node.js
 或 Docker CLI，可以通过 `ASTRBOT_FEATURES` 缩小镜像；它是构建参数，修改后需要重新构建：
 

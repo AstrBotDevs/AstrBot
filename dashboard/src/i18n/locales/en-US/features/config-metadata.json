@@ -152,25 +152,9 @@
         }
       }
     },
-    "file_extract": {
-      "description": "File Extract",
-      "provider_settings": {
-        "file_extract": {
-          "enable": {
-            "description": "Enable File Extract"
-          },
-          "provider": {
-            "description": "File Extract Provider"
-          },
-          "moonshotai_api_key": {
-            "description": "Moonshot AI API Key"
-          }
-        }
-      }
-    },
     "agent_computer_use": {
       "description": "Agent Computer Use",
-      "hint": "Allows the AstrBot to access and use your computer or an sandbox environment to perform more complex tasks. See: [Computer Use](https://docs.astrbot.app/use/computer.html).",
+      "hint": "Allows the AstrBot to access and use your computer or an sandbox environment to perform more complex tasks. See: [Computer Use](/help/en/use/computer.html).",
       "provider_settings": {
         "computer_use_runtime": {
           "description": "Computer Use Runtime",
@@ -228,7 +212,7 @@
     },
     "proactive_capability": {
       "description": "Proactive Agent",
-      "hint": "AstrBot will wake up, run your tasks, and deliver the results to you. See [Proactive Agent](https://docs.astrbot.app/en/use/proactive-agent.html)",
+      "hint": "AstrBot will wake up, run your tasks, and deliver the results to you. See [Proactive Agent](/help/en/use/proactive-agent.html)",
       "provider_settings": {
         "proactive_capability": {
           "add_cron_tools": {
@@ -239,7 +223,7 @@
       }
     },
     "truncate_and_compress": {
-      "hint": "[Context Management](https://docs.astrbot.app/en/use/context-compress.html)",
+      "hint": "[Context Management](/help/en/use/context-compress.html)",
       "description": "Context Management Strategy",
       "provider_settings": {
         "max_context_length": {
@@ -1893,11 +1877,8 @@
     }
   },
   "help": {
-    "documentation": "Official Documentation",
-    "support": "Join Support Group",
-    "helpText": "Don't understand the configuration? See {documentation} or {support}.",
-    "helpPrefix": "Don't understand the configuration? See",
-    "helpMiddle": "or",
+    "documentation": "in-app documentation",
+    "helpPrefix": "Don't understand the configuration? See the",
     "helpSuffix": "."
   }
 }

@@ -104,17 +104,11 @@ jobs:
         with:
           dockerfile: Dockerfile
           config: .hadolint.yaml
-      - name: hadolint docs image
-        uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
-        with:
-          dockerfile: Dockerfile.docs
-          config: .hadolint.yaml
       - name: Validate Compose and Docker build definitions
         run: |
           docker compose -f compose.yml config --quiet
           docker compose -f compose-with-napcat.yml config --quiet
           docker compose --dry-run -f compose.yml build astrbot
-          docker build --check --file Dockerfile.docs .
           docker build --check --file Dockerfile .
 
   powershell:

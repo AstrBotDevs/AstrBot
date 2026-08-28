@@ -18,11 +18,8 @@
     "validate": "Validate Configuration"
   },
   "help": {
-    "documentation": "Official Documentation",
-    "support": "Join Group for Help",
-    "helpText": "Don't understand the configuration? Please see {documentation} or {support}.",
-    "helpPrefix": "Don't understand the configuration? Please see",
-    "helpMiddle": "or",
+    "documentation": "in-app documentation",
+    "helpPrefix": "Don't understand the configuration? Please see the",
     "helpSuffix": "."
   },
   "messages": {

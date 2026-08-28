@@ -56,7 +56,7 @@ make dev
 - 后端：`http://127.0.0.1:6185`
 - Dashboard dev server：`http://localhost:3000`
 
-`make run` 会先同步 locked runtime 环境、构建 Dashboard 并复制到 `data/dist`，再启动两个进程；它不会构建 Python wheel/sdist。使用 `make status` 查看状态，`make stop` 只停止进程。
+`make run` 会先同步 locked runtime 环境、构建 Dashboard 和文档并复制到 `data/dist`（文档在 `help/`），再启动两个进程；它不会构建 Python wheel/sdist。使用 `make status` 查看状态，`make stop` 只停止进程。`make build-docs` 只构建并同步文档；`make docs` 启动独立的 VitePress 预览（base 为 `/`）。
 
 `make clean` 不是普通进程管理命令：它会先停止进程，然后广泛删除 `dashboard/dist`、`data/dist`、`.tmp`、build/dist、日志、测试/格式缓存和 `__pycache__` 等生成内容。运行前先检查工作树和需要保留的本地产物。
 
@@ -148,7 +148,7 @@ make format-md
 - 请求模型：`astrbot/dashboard/schemas.py`
 - 源规范：`openspec/openapi-v1.yaml`
 
-修改路由、请求/响应 schema 或 OpenAPI 后，必须同时生成前端客户端和公开文档：
+修改路由、请求/响应 schema 或 OpenAPI 后，必须同时生成前端客户端和内置文档使用的 OpenAPI JSON：
 
 ```bash
 cd dashboard
@@ -172,7 +172,7 @@ pnpm run docs:dev
 pnpm run docs:build
 ```
 
-生产构建会检查内部链接。不要编辑 `docs/.vitepress/dist/`；它是生成产物。`make check-md` 只枚举 Git 已跟踪的 Markdown，新建但尚未加入索引的页面还要显式运行 Prettier 和 markdownlint。
+生产构建会检查内部链接。不要编辑 `docs/.vitepress/dist/`；它是生成产物。生产构建默认 `base` 为 `/help/`，由 Dashboard 提供。`make check-md` 只枚举 Git 已跟踪的 Markdown，新建但尚未加入索引的页面还要显式运行 Prettier 和 markdownlint。
 
 ## 依赖变更
 

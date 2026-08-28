@@ -5,15 +5,15 @@
 
 ## 从源码构建
 
-需要完整功能、定制运行时功能，或同时运行本仓库文档站点时，请克隆本仓库，并使用根目录
-的 `Dockerfile`、`Dockerfile.docs` 和 Compose 文件在本地构建。
+需要完整功能或定制运行时功能时，请克隆本仓库，并使用根目录的 `Dockerfile` 和
+Compose 文件在本地构建。文档会随 Dashboard 构建进 WebUI 的 `/help/`。
 
 ## 选择 Compose 文件
 
 仓库提供两条本地构建路径：
 
-- `compose.yml`：运行 AstrBot 和本仓库构建的静态文档站点，适合接入 QQ 官方机器人、Telegram、Discord 等平台，或独立管理其他机器人协议端。
-- `compose-with-napcat.yml`：运行 AstrBot、静态文档站点和 NapCat，适合 QQ 个人号；AstrBot 与文档仍由本地源码构建，NapCat 使用所引用的 NapCat 容器镜像。
+- `compose.yml`：运行 AstrBot，适合接入 QQ 官方机器人、Telegram、Discord 等平台，或独立管理其他机器人协议端。
+- `compose-with-napcat.yml`：运行 AstrBot 和 NapCat，适合 QQ 个人号；AstrBot 仍由本地源码构建，NapCat 使用所引用的 NapCat 容器镜像。
 
 先克隆仓库：
 
@@ -47,11 +47,11 @@ docker compose --profile computer up -d --build computer
 ```
 
 该命令启动带 `docker.sock` 的 `computer` 服务，而不是默认的 `astrbot` 服务。请勿与默认
-`astrbot` 同时运行以免端口冲突。静态文档服务仍保持只读、非特权运行。
+`astrbot` 同时运行以免端口冲突。
 
-## 启动 AstrBot 和文档
+## 启动 AstrBot
 
-根 `compose.yml` 会使用根 `Dockerfile` 的 `runtime` 阶段，把当前仓库构建为本地镜像 `astrbot:local`；文档镜像为 `astrbot-docs:local`。根 `Dockerfile` 的 `dev` 阶段保留给开发工具环境：
+根 `compose.yml` 会使用根 `Dockerfile` 的 `runtime` 阶段，把当前仓库构建为本地镜像 `astrbot:local`。文档随 Dashboard 打进同一镜像，登录 WebUI 后访问 `/help/`。根 `Dockerfile` 的 `dev` 阶段保留给开发工具环境：
 
 ```bash
 docker build --target dev -t astrbot:dev .
@@ -115,17 +115,14 @@ docker compose config
 
 ```bash
 docker compose up -d --build
-docker compose logs -f astrbot docs
+docker compose logs -f astrbot
 ```
 
 默认挂载和端口为：
 
 - `./data` -> `/AstrBot/data`：配置、数据库、插件等运行时数据。
-- `127.0.0.1:6185:6185`：AstrBot WebUI。
+- `127.0.0.1:6185:6185`：AstrBot WebUI。文档在同一端口的 `/help/`。
 - `127.0.0.1:6199:6199`：可选的 OneBot v11 反向 WebSocket 入口。
-- `127.0.0.1:6186:8080`：本仓库构建的文档站点，可通过 `http://localhost:6186` 访问。
-
-文档是独立的只读静态服务，不读取 `data/`，也不复用 WebUI 的登录状态。仅在需要对外提供文档时才发布 `6186`，并按部署环境使用防火墙或 HTTPS 反向代理保护该端口。
 
 发布 `6199` 并不会自动让 OneBot 入口监听外部接口。仅当 OneBot 客户端位于 AstrBot 容器之外时，才把该平台的 `ws_reverse_host` 改为 `0.0.0.0`；同时配置 `ws_reverse_token`，并限制端口的网络访问范围。
 
@@ -141,7 +138,7 @@ docker compose logs -f astrbot docs
 
 ```bash
 docker compose -f compose-with-napcat.yml up -d --build
-docker compose -f compose-with-napcat.yml logs -f astrbot docs napcat
+docker compose -f compose-with-napcat.yml logs -f astrbot napcat
 ```
 
 Linux 上可让 NapCat 使用当前宿主用户的 UID/GID，以减少挂载目录权限问题：
@@ -153,8 +150,7 @@ NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) \
 
 该 Compose 默认发布（宿主机仅绑定环回地址）：
 
-- `6185`：AstrBot WebUI。
-- `6186`：本仓库构建的文档站点。
+- `6185`：AstrBot WebUI（文档在 `/help/`）。
 - `6099`：NapCat WebUI。
 
 并持久化：

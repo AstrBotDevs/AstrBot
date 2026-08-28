@@ -5,16 +5,16 @@ current checkout so the backend and Dashboard stay version-matched.
 
 ## Build from Source
 
-Clone this repository and build from its root `Dockerfile`, `Dockerfile.docs`,
-and Compose files when you need the full profile, custom runtime features, or
-the locally built documentation site.
+Clone this repository and build from its root `Dockerfile` and Compose files
+when you need the full profile or custom runtime features. Documentation is
+built into the Dashboard and served at `/help/`.
 
 ## Choose a Compose File
 
 The repository provides two locally built deployment paths:
 
-- `compose.yml`: runs AstrBot and the locally built static documentation site. Use it for QQ Official Bot, Telegram, Discord, and other platforms, or when you manage the bot protocol implementation separately.
-- `compose-with-napcat.yml`: runs AstrBot, the static documentation site, and NapCat together for personal QQ accounts. AstrBot and the documentation are still built from the local checkout; NapCat uses the referenced NapCat container image.
+- `compose.yml`: runs AstrBot. Use it for QQ Official Bot, Telegram, Discord, and other platforms, or when you manage the bot protocol implementation separately.
+- `compose-with-napcat.yml`: runs AstrBot and NapCat together for personal QQ accounts. AstrBot is still built from the local checkout; NapCat uses the referenced NapCat container image.
 
 Clone the repository first:
 
@@ -50,11 +50,11 @@ docker compose --profile computer up -d --build computer
 
 That starts the `computer` service (AstrBot plus docker.sock) instead of the
 default `astrbot` service. Do not run both at once or the published ports will
-conflict. The static documentation service remains read-only and unprivileged.
+conflict.
 
-## Start AstrBot and the Documentation Site
+## Start AstrBot
 
-The root `compose.yml` uses the root Dockerfile's `runtime` stage to build the current checkout as `astrbot:local`; the documentation image is `astrbot-docs:local`. The Dockerfile's `dev` stage remains available for the development tool environment:
+The root `compose.yml` uses the root Dockerfile's `runtime` stage to build the current checkout as `astrbot:local`. Documentation is bundled into that image and served from the WebUI at `/help/`. The Dockerfile's `dev` stage remains available for the development tool environment:
 
 ```bash
 docker build --target dev -t astrbot:dev .
@@ -125,17 +125,14 @@ documentation, while the selected features affect the final runtime image.
 
 ```bash
 docker compose up -d --build
-docker compose logs -f astrbot docs
+docker compose logs -f astrbot
 ```
 
 Its default mount and published ports are:
 
 - `./data` -> `/AstrBot/data`: configuration, database, plugins, and other runtime data.
-- `127.0.0.1:6185:6185`: AstrBot WebUI.
+- `127.0.0.1:6185:6185`: AstrBot WebUI. Documentation is at `/help/` on the same port.
 - `127.0.0.1:6199:6199`: optional OneBot v11 reverse WebSocket endpoint.
-- `127.0.0.1:6186:8080`: the locally built documentation site, available at `http://localhost:6186`.
-
-The documentation is an independent read-only static service. It neither reads `data/` nor shares the WebUI login state. Publish port `6186` only when you need to serve the documentation externally, and protect it with firewall rules or an HTTPS reverse proxy as appropriate.
 
 Publishing `6199` does not change the OneBot listener address. Only set that platform's `ws_reverse_host` to `0.0.0.0` when its OneBot client runs outside the AstrBot container. Also configure `ws_reverse_token` and restrict network access to the port.
 
@@ -151,7 +148,7 @@ The file currently also sets NapCat `MODE=astrbot`. On every NapCat startup, tha
 
 ```bash
 docker compose -f compose-with-napcat.yml up -d --build
-docker compose -f compose-with-napcat.yml logs -f astrbot docs napcat
+docker compose -f compose-with-napcat.yml logs -f astrbot napcat
 ```
 
 On Linux, you can run NapCat with your host user's UID/GID to reduce bind-mount permission issues:
@@ -163,8 +160,7 @@ NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) \
 
 This Compose file publishes (host ports bind to loopback by default):
 
-- `6185`: AstrBot WebUI.
-- `6186`: the locally built documentation site.
+- `6185`: AstrBot WebUI (documentation at `/help/`).
 - `6099`: NapCat WebUI.
 
 It persists:

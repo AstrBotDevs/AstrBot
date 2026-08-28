@@ -28,7 +28,7 @@ X-API-Key: abk_xxx
 
 The local OpenAPI schema is available at `http://localhost:6185/api/v1/openapi.json`, and the interactive docs are available at `http://localhost:6185/api/v1/docs`.
 
-The local schema contains the full `/api/v1` contract, including dashboard-session routes. The public docs site at `https://docs.astrbot.app/scalar.html` is a filtered developer-facing subset generated from the same source spec.
+The local schema contains the full `/api/v1` contract, including dashboard-session routes. The in-app document at `/help/scalar.html` is a filtered developer-facing subset generated from the same source spec.
 
 ## Scope Permissions
 
@@ -223,4 +223,4 @@ Do not hand-edit `dashboard/src/api/generated/openapi-v1/` or `docs/public/opena
 
 Use the interactive docs:
 
-- <https://docs.astrbot.app/scalar.html>
+- `/help/scalar.html`

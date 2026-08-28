@@ -37,6 +37,8 @@ jobs:
       - name: Build docs
         run: pnpm run docs:build
         working-directory: './docs'
+        env:
+          ASTRBOT_DOCS_BASE: /help/
       - name: Upload docs artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:

@@ -146,25 +146,9 @@
         }
       }
     },
-    "file_extract": {
-      "description": "文档解析能力",
-      "provider_settings": {
-        "file_extract": {
-          "enable": {
-            "description": "启用文档解析能力"
-          },
-          "provider": {
-            "description": "文档解析提供商"
-          },
-          "moonshotai_api_key": {
-            "description": "Moonshot AI API Key"
-          }
-        }
-      }
-    },
     "agent_computer_use": {
       "description": "使用电脑能力",
-      "hint": "让 AstrBot 访问和使用本机环境或者隔离的沙盒环境，以执行更复杂的任务。详见: [电脑使用](https://docs.astrbot.app/use/computer.html)。",
+      "hint": "让 AstrBot 访问和使用本机环境或者隔离的沙盒环境，以执行更复杂的任务。详见: [电脑使用](/help/use/computer.html)。",
       "provider_settings": {
         "computer_use_runtime": {
           "description": "运行环境",
@@ -222,7 +206,7 @@
     },
     "proactive_capability": {
       "description": "主动型能力",
-      "hint": "让 AstrBot 能够在某一时刻自动唤醒，帮你完成任务。详见: [主动型 Agent](https://docs.astrbot.app/use/proactive-agent.html)。",
+      "hint": "让 AstrBot 能够在某一时刻自动唤醒，帮你完成任务。详见: [主动型 Agent](/help/use/proactive-agent.html)。",
       "provider_settings": {
         "proactive_capability": {
           "add_cron_tools": {
@@ -233,7 +217,7 @@
       }
     },
     "truncate_and_compress": {
-      "hint": "AstrBot 如何管理工作记忆。详见: [上下文管理策略](https://docs.astrbot.app/use/context-compress.html)。",
+      "hint": "AstrBot 如何管理工作记忆。详见: [上下文管理策略](/help/use/context-compress.html)。",
       "description": "上下文管理策略",
       "provider_settings": {
         "max_context_length": {
@@ -1883,11 +1867,8 @@
     }
   },
   "help": {
-    "documentation": "官方文档",
-    "support": "加群询问",
-    "helpText": "不了解配置？请见 {documentation} 或 {support}。",
+    "documentation": "内置文档",
     "helpPrefix": "不了解配置？请见",
-    "helpMiddle": "或",
     "helpSuffix": "。"
   }
 }

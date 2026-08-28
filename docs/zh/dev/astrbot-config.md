@@ -68,19 +68,18 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 常用字段如下：
 
-| 键                                          | 默认值                                      | 说明                                                                                                        |
-| ------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `unique_session`                            | `false`                                     | 是否为群内成员拆分独立会话。                                                                                |
-| `group_sender_concurrency`                  | `false`                                     | 实验性。同群不同发送者可并行生成，发送仍按群整轮排队。与 `unique_session` 互斥；会关闭同群流式。            |
-| `rate_limit`                                | `60` 秒 / `30` 条 / `stall`                 | 超限时等待（`stall`）或丢弃（`discard`）。                                                                  |
-| `enable_id_white_list`                      | `true`                                      | 启用 ID 白名单；管理员是否绕过由两个 `wl_ignore_admin_*` 字段控制。                                         |
-| `reply_prefix`                              | `""`                                        | 所有回复的前缀。                                                                                            |
-| `reply_with_mention` / `reply_with_quote`   | `false`                                     | @ 用户或引用原消息，实际能力取决于适配器。                                                                  |
-| `forward_threshold`                         | `1500`                                      | 支持转发消息的平台上，长回复转发阈值。                                                                      |
-| `segmented_reply`                           | 见默认配置                                  | 非流式结果的分段、间隔、清理规则。                                                                          |
-| `path_mapping`                              | `[]`                                        | 将平台事件中的容器路径映射到 AstrBot 可访问路径，格式为 `原路径:目标路径`。该功能仍在收发 pipeline 中使用。 |
-| `group_wake_policy`                         | `{mention_bot: false, reply_to_bot: false}` | 为展示保留的 schema 字段，不影响运行时路由；群聊 LLM 访问由顶层 `llm_access` 控制。                         |
-| `ignore_bot_self_message` / `ignore_at_all` | `false`                                     | 忽略机器人自身消息或全体提及。                                                                              |
+| 键                                          | 默认值                      | 说明                                                                                                        |
+| ------------------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `unique_session`                            | `false`                     | 是否为群内成员拆分独立会话。                                                                                |
+| `group_sender_concurrency`                  | `false`                     | 实验性。同群不同发送者可并行生成，发送仍按群整轮排队。与 `unique_session` 互斥；会关闭同群流式。            |
+| `rate_limit`                                | `60` 秒 / `30` 条 / `stall` | 超限时等待（`stall`）或丢弃（`discard`）。                                                                  |
+| `enable_id_white_list`                      | `true`                      | 启用 ID 白名单；管理员是否绕过由两个 `wl_ignore_admin_*` 字段控制。                                         |
+| `reply_prefix`                              | `""`                        | 所有回复的前缀。                                                                                            |
+| `reply_with_mention` / `reply_with_quote`   | `false`                     | @ 用户或引用原消息，实际能力取决于适配器。                                                                  |
+| `forward_threshold`                         | `1500`                      | 支持转发消息的平台上，长回复转发阈值。                                                                      |
+| `segmented_reply`                           | 见默认配置                  | 非流式结果的分段、间隔、清理规则。                                                                          |
+| `path_mapping`                              | `[]`                        | 将平台事件中的容器路径映射到 AstrBot 可访问路径，格式为 `原路径:目标路径`。该功能仍在收发 pipeline 中使用。 |
+| `ignore_bot_self_message` / `ignore_at_all` | `false`                     | 忽略机器人自身消息或全体提及。                                                                              |
 
 `path_mapping` 示例：
 
@@ -145,7 +144,6 @@ Persona 的选择优先级和权限语义见 [Persona 人格设定](../use/perso
 - `buffer_intermediate_messages`：非流式多 step 运行时合并中间文本。
 - `sanitize_context_by_modalities`：按当前模型能力清理历史中的不支持模态和工具结构，会改变模型实际看到的上下文。
 - `proactive_capability.add_cron_tools`：向本地 Agent 提供主动任务/Cron 工具。
-- `file_extract`：实验性文档提取配置，目前模板面向 Moonshot API。
 
 ### 流式输出
 

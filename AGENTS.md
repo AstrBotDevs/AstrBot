@@ -18,6 +18,8 @@ forward-looking instead of extending compatibility indefinitely.
 - `compose.yml` and `compose-with-napcat.yml` intentionally build this checkout
   with `build:` and tag it `astrbot:local`. Preserve that source-build contract;
   do not replace it with `soulter/astrbot` or another upstream prebuilt image.
+  Documentation is served from the Dashboard at `/help/`; do not restore a
+  separate docs container or `docs.astrbot.app` links.
 
 ## Toolchain and setup
 
@@ -62,10 +64,12 @@ make stop
 Windows uses `scripts/make_dev.ps1`; POSIX uses `scripts/make_dev.sh`. PID files
 live in `.make/`, with backend logs in `backend_run*.log` and Dashboard logs in
 `frontend_run*.log`. `make dev` starts source-mode servers without a production
-Dashboard build. `make run` first syncs the locked runtime environment, builds
-the Dashboard, and copies `dashboard/dist` into `data/dist`; it does not build a
-Python wheel or sdist. The Vite command uses `--host`, so treat port 3000 as a
-development-only surface rather than a production endpoint.
+Dashboard or documentation build. `make run` first syncs the locked runtime
+environment, builds the Dashboard and documentation, and copies `dashboard/dist`
+(including `help/`) into `data/dist`; it does not build a Python wheel or sdist.
+`make build-docs` is the focused documentation target. `make docs` starts a
+standalone VitePress preview with base `/`. The Vite command uses `--host`, so
+treat port 3000 as a development-only surface rather than a production endpoint.
 
 For focused work, use the component directly:
 
@@ -75,10 +79,11 @@ uv run main.py
 
 cd dashboard
 pnpm install --frozen-lockfile
-pnpm dev
-pnpm build
-pnpm test
-cd ..
+  pnpm dev
+  pnpm build
+  pnpm test
+  pnpm i18n:check
+  cd ..
 
 cd docs
 pnpm install --frozen-lockfile
@@ -103,9 +108,8 @@ Keep each dependency surface with its actual installer:
 
 Runtime Python dependency changes must update `pyproject.toml`,
 `requirements.txt`, and `uv.lock`: local/quality jobs consume the uv lock, while
-the Docker and smoke-test paths still install `requirements.txt`. The historical
-root `pnpm-lock.yaml` is not used by the Makefile or CI for root tooling; do not
-treat it as authoritative or update it instead of `package-lock.json`.
+the Docker and smoke-test paths still install `requirements.txt`. Do not
+reintroduce a root `pnpm-lock.yaml`; root tooling uses `package-lock.json`.
 
 ## Tests, checks, and formatting
 
@@ -216,17 +220,18 @@ adapter.
 2. `EventBus` chooses the `PipelineScheduler` for the event's config id and
    dispatches it under bounded concurrency while retaining task references.
 3. `astrbot/core/pipeline/stage_order.py` defines the fixed sequence from
-   `WakingCheck` through `WhitelistCheck`, `SessionStatusCheck`, `RateLimit`,
-   `ContentSafetyCheck`, `PreProcess`, `GroupMessageHistory`, `Process`,
-   `ResultDecorate`, and finally `Respond`.
+   `WakingCheck` through `WhitelistCheck`, `SessionStatusCheck`,
+   `TurnCoalesce`, `RateLimit`, `ContentSafetyCheck`, `PreProcess`,
+   `GroupMessageHistory`, `Process`, `ResultDecorate`, and finally `Respond`.
 
 The scheduler supports async stages and async-generator onion middleware.
 Preserve stage ordering, stop-propagation, and cancellation semantics.
 
-Group wake behavior is explicit. `platform_settings.group_wake_policy`
-controls whether mentioning or replying to the bot wakes a group message, and
-`WakingCheckStage` records the selected `wake_reasons` on the event. Do not
-restore implicit mention/reply wakeups. Built-in command availability is stored
+Group wake behavior is explicit. `llm_access.group`, `llm_access.reply_to_bot`,
+and continuation state control whether mentioning or replying to the bot wakes
+a group message, and `WakingCheckStage` records the selected `wake_reasons` on
+the event. Do not restore `platform_settings.group_wake_policy` or implicit
+mention/reply wakeups. Built-in command availability is stored
 per handler in the command database; the removed `disable_builtin_commands`
 field is not migrated or read by runtime code and must not become a pipeline
 switch again. Command identity is `command_id`
@@ -387,8 +392,13 @@ index. During an uncommitted deletion, its wrapper may also pass the removed
 tracked path to Prettier, so use an existing-file-filtered invocation for the
 local check and still verify the post-commit target in CI.
 
-Do not commit `docs/.vitepress/dist`, and do not create ad-hoc summary/report
-Markdown files.
+The production Dashboard serves the VitePress build at `/help/`. `make run`,
+`make build-docs`, and the runtime image copy `docs/.vitepress/dist` into the
+WebUI `help/` directory with `ASTRBOT_DOCS_BASE=/help/`. Do not commit that
+generated tree, and do not create ad-hoc summary/report Markdown files. Do not
+point Dashboard, API errors, changelogs, plugin READMEs, or config hints at
+`docs.astrbot.app`. Do not restore `Dockerfile.docs` or a separate docs
+Compose service.
 
 ### NapCat generated models
 

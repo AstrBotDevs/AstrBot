@@ -4,6 +4,18 @@ import shutil
 from pathlib import Path
 
 
+def embed_docs_help(dist_dir: Path, *, repo_root: Path) -> Path | None:
+    """Copy VitePress output into ``dist_dir/help`` when a docs build exists."""
+    docs_src = repo_root / "docs" / ".vitepress" / "dist"
+    if not docs_src.is_dir():
+        return None
+    help_dir = dist_dir / "help"
+    if help_dir.exists():
+        shutil.rmtree(help_dir)
+    shutil.copytree(docs_src, help_dir)
+    return help_dir
+
+
 def sync_dashboard_dist(
     *,
     repo_root: Path | None = None,
@@ -22,6 +34,8 @@ def sync_dashboard_dist(
 
     if not src.is_dir():
         raise FileNotFoundError(f"Dashboard dist not found: {src}")
+
+    embed_docs_help(src, repo_root=repo_root)
 
     if dst.exists():
         shutil.rmtree(dst)

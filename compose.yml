@@ -44,17 +44,3 @@ services:
     volumes:
       - ./data:/AstrBot/data
       - /var/run/docker.sock:/var/run/docker.sock
-
-  docs:
-    build:
-      context: .
-      dockerfile: Dockerfile.docs
-    image: astrbot-docs:local
-    restart: always
-    security_opt:
-      - no-new-privileges:true
-    read_only: true
-    tmpfs:
-      - /tmp:mode=1777
-    ports:
-      - '${DOCS_BIND_ADDRESS:-127.0.0.1}:6186:8080' # AstrBot documentation

@@ -89,6 +89,8 @@ docker compose up -d --build
 docker compose logs -f astrbot
 ```
 
+After login, documentation is served from the WebUI at `/help/`.
+
 Compose builds the complete runtime by default. To omit optional browser,
 document-conversion, media, OCR, Node.js, or Docker CLI assets, set the
 `ASTRBOT_FEATURES` build argument and rebuild the image:

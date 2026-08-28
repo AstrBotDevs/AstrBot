@@ -13,6 +13,7 @@ import MarketPluginsTab from './extension/MarketPluginsTab.vue';
 import PluginDetailPage from './extension/PluginDetailPage.vue';
 import { useExtensionPage } from './extension/useExtensionPage';
 import { computed } from 'vue';
+import { docsHref } from '@/utils/docsHref';
 import defaultPluginIcon from '/favicon.svg';
 import { usePluginI18n } from '@/utils/pluginI18n';
 
@@ -325,7 +326,7 @@ const updateDialogPluginLogo = computed(() => {
         <v-btn
           variant="text"
           prepend-icon="mdi-book-open-variant"
-          href="https://docs.astrbot.app/dev/star/plugin-new.html"
+          :href="docsHref('dev/star/plugin-new.html')"
           rel="noopener noreferrer"
           target="_blank"
           color="primary"

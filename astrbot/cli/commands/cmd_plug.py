@@ -100,7 +100,8 @@ def new(name: str) -> None:
     # Rewrite README.md
     with open(plug_path / "README.md", "w", encoding="utf-8") as f:
         f.write(
-            f"# {name}\n\n{desc}\n\n# Support\n\n[Documentation](https://docs.astrbot.app)\n"
+            f"# {name}\n\n{desc}\n\n# Support\n\n"
+            "See the in-app documentation at `/help/` after starting AstrBot.\n"
         )
 
     # Rewrite main.py

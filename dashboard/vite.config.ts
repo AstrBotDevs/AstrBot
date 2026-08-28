@@ -155,6 +155,10 @@ export default defineConfig(({ command }) => ({
         changeOrigin: true,
         ws: true,
       },
+      '/help': {
+        target: `http://127.0.0.1:${dashboardApiPort}/`,
+        changeOrigin: true,
+      },
     },
   },
 }));

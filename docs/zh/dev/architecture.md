@@ -158,7 +158,7 @@ Mixin 只通过 `self.get_db()` 拿会话，不直接持有 engine，也不互�
 
 `TurnCoalesceStage` 位于白名单和会话检查之后。启用时，它把符合条件的私聊 LLM 消息片段交给生命周期持有的有界 `TurnWindowManager`，不会在流水线中等待。管理器负责合并片段、根据 NapCat 输入状态暂停、收到指令时丢弃未完成回合，并重新排队一个带签名的 flush 事件，让它经过限流及后续阶段。适配器提供的 flush 标志会被清除，只有管理器创建的事件可以携带 `route_kind=turn_flush`。通知和请求保持透传，因此临时的 `input_status` 不会变成 LLM 消息。
 
-`platform_settings.group_wake_policy` 在 schema 中保留但只用于展示；群聊 LLM 访问由 `llm_access.group`、`llm_access.reply_to_bot` 和续片状态控制。内置命令是否可用则按 handler 存储在命令数据库中；`disable_builtin_commands` 不迁移、不接受配置写入，也不被 Pipeline 读取。指令配置以 `command_id`（`{plugin}:{original path}`，空格换成点）为稳定标识；同步时按 `handler_full_name` 再按 `command_id` 认领活 handler，认领失败的行删除。`alter_cmd` 只读取 `command_id` 键，不从 Python 方法名或历史短名迁移。内置指令在 `resolution_strategy` 不是 `manual_rename` 时忽略库中的名字和别名覆盖。未使用的 `keep_original_alias` 列在独立事务中删除，失败不影响启动。
+群聊 LLM 访问由 `llm_access.group`、`llm_access.reply_to_bot` 和续片状态控制。内置命令是否可用则按 handler 存储在命令数据库中；`disable_builtin_commands` 不迁移、不接受配置写入，也不被 Pipeline 读取。指令配置以 `command_id`（`{plugin}:{original path}`，空格换成点）为稳定标识；同步时按 `handler_full_name` 再按 `command_id` 认领活 handler，认领失败的行删除。`alter_cmd` 只读取 `command_id` 键，不从 Python 方法名或历史短名迁移。内置指令在 `resolution_strategy` 不是 `manual_rename` 时忽略库中的名字和别名覆盖。未使用的 `keep_original_alias` 列在独立事务中删除，失败不影响启动。
 
 `platform_settings.group_sender_concurrency` 是实验性开关，默认关闭。启用且未开 `unique_session` 时，群聊 LLM 锁可按发送者拆分，不同群友可并行生成；整轮出站仍按群 UMO 排队，本轮强制非流式。对话历史在 `AssistantHistoryCommitter` 内合并并发完整轮次，不复活已截断历史。私聊、WebChat、live、定时任务和主动回复保持原 UMO 串行。
 

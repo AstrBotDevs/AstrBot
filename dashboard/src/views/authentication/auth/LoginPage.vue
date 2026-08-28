@@ -5,6 +5,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { useRouter } from 'vue-router';
 import { useModuleI18n } from '@/i18n/composables';
+import { docsHref } from '@/utils/docsHref';
 import { authApi, publicApi, type PublicVersionData } from '@/api/v1';
 
 const cardVisible = ref(false);
@@ -223,7 +224,7 @@ onBeforeUnmount(() => {
         </v-card-text>
         <v-card-actions class="version-dialog-actions">
           <v-btn
-            href="https://docs.astrbot.app/faq.html"
+            :href="docsHref('faq.html')"
             target="_blank"
             rel="noopener noreferrer"
             variant="text"

@@ -66,19 +66,18 @@ Routing checks commands before LLM access. A matched command wins; a bare comman
 
 ## `platform_settings`
 
-| Key                                         | Default                                     | Meaning                                                                                                                                                |
-| ------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `unique_session`                            | `false`                                     | Split separate sessions for members inside a group.                                                                                                    |
-| `group_sender_concurrency`                  | `false`                                     | Experimental. Different group senders may generate in parallel; a whole turn still sends one-at-a-time per group. Ignored when `unique_session` is on. |
-| `rate_limit`                                | `60` seconds / `30` messages / `stall`      | Wait (`stall`) or discard (`discard`) when the limit is exceeded.                                                                                      |
-| `enable_id_white_list`                      | `true`                                      | Enable the ID allowlist; the two `wl_ignore_admin_*` fields control administrator bypass.                                                              |
-| `reply_prefix`                              | `""`                                        | Prefix added to replies.                                                                                                                               |
-| `reply_with_mention` / `reply_with_quote`   | `false`                                     | Mention the sender or quote the source message when supported by the adapter.                                                                          |
-| `forward_threshold`                         | `1500`                                      | Long-reply forwarding threshold on platforms that support forwarded messages.                                                                          |
-| `segmented_reply`                           | See current defaults                        | Non-streaming segmentation, timing, and cleanup rules.                                                                                                 |
-| `path_mapping`                              | `[]`                                        | Map paths from a platform container into paths AstrBot can read, using `source:target`. This is still used by the receive/respond pipeline.            |
-| `group_wake_policy`                         | `{mention_bot: false, reply_to_bot: false}` | Retained schema field for display; it has no runtime routing effect. Group LLM access is controlled by top-level `llm_access`.                         |
-| `ignore_bot_self_message` / `ignore_at_all` | `false`                                     | Ignore the bot's own messages or mass mentions.                                                                                                        |
+| Key                                         | Default                                | Meaning                                                                                                                                                |
+| ------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `unique_session`                            | `false`                                | Split separate sessions for members inside a group.                                                                                                    |
+| `group_sender_concurrency`                  | `false`                                | Experimental. Different group senders may generate in parallel; a whole turn still sends one-at-a-time per group. Ignored when `unique_session` is on. |
+| `rate_limit`                                | `60` seconds / `30` messages / `stall` | Wait (`stall`) or discard (`discard`) when the limit is exceeded.                                                                                      |
+| `enable_id_white_list`                      | `true`                                 | Enable the ID allowlist; the two `wl_ignore_admin_*` fields control administrator bypass.                                                              |
+| `reply_prefix`                              | `""`                                   | Prefix added to replies.                                                                                                                               |
+| `reply_with_mention` / `reply_with_quote`   | `false`                                | Mention the sender or quote the source message when supported by the adapter.                                                                          |
+| `forward_threshold`                         | `1500`                                 | Long-reply forwarding threshold on platforms that support forwarded messages.                                                                          |
+| `segmented_reply`                           | See current defaults                   | Non-streaming segmentation, timing, and cleanup rules.                                                                                                 |
+| `path_mapping`                              | `[]`                                   | Map paths from a platform container into paths AstrBot can read, using `source:target`. This is still used by the receive/respond pipeline.            |
+| `ignore_bot_self_message` / `ignore_at_all` | `false`                                | Ignore the bot's own messages or mass mentions.                                                                                                        |
 
 Example path mapping:
 
@@ -143,7 +142,6 @@ See [Automatic Context Compression](../use/context-compress) for the full behavi
 - `buffer_intermediate_messages` combines intermediate text during non-streaming multi-step runs.
 - `sanitize_context_by_modalities` removes unsupported modalities and tool structures according to the current model, changing the history seen by that model.
 - `proactive_capability.add_cron_tools` exposes proactive/Cron tools to the local Agent.
-- `file_extract` is experimental document extraction currently templated for the Moonshot API.
 
 ### Streaming
 

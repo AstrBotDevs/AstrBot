@@ -111,7 +111,7 @@ def filter_public_openapi(spec: dict[str, Any]) -> dict[str, Any]:
         spec: Full OpenAPI spec loaded from the YAML source.
 
     Returns:
-        A filtered OpenAPI spec for the public docs site.
+        A filtered OpenAPI spec for the in-app `/help/scalar.html` document.
     """
     output = dict(spec)
     output["tags"] = [

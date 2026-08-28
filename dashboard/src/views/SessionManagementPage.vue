@@ -9,7 +9,7 @@
             size="small"
             variant="text"
             :aria-label="tm('customRules.title')"
-            href="https://docs.astrbot.app/use/custom-rules.html"
+            :href="docsHref('use/custom-rules.html')"
             target="_blank"
           ></v-btn>
           <v-chip size="small" class="ml-1"
@@ -1083,6 +1083,7 @@ import type {
 } from '@/api/generated/openapi-v1';
 import UmoDisplay from '@/components/shared/UmoDisplay.vue';
 import { useModuleI18n } from '@/i18n/composables';
+import { docsHref } from '@/utils/docsHref';
 import { getPlatformColor as resolvePlatformColor } from '@/utils/platformUtils';
 import {
   askForConfirmation as askForConfirmationDialog,
