@@ -26,8 +26,10 @@ class ProviderDashScopeTokenPlan(ProviderAnthropic):
         provider_settings: dict,
     ) -> None:
         merged_provider_config = dict(provider_config)
-        merged_provider_config.setdefault("api_base", DASHSCOPE_API_BASE)
-        merged_provider_config.setdefault("model", DASHSCOPE_DEFAULT_MODEL)
+        if not str(merged_provider_config.get("api_base", "")).strip():
+            merged_provider_config["api_base"] = DASHSCOPE_API_BASE
+        if not str(merged_provider_config.get("model", "")).strip():
+            merged_provider_config["model"] = DASHSCOPE_DEFAULT_MODEL
         merged_provider_config["custom_headers"] = self._resolve_custom_headers(
             merged_provider_config,
             required_headers={"User-Agent": DASHSCOPE_USER_AGENT},
