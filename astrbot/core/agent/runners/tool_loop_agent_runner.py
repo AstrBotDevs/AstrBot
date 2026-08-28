@@ -99,6 +99,16 @@ class FollowUpTicket:
     resolved: asyncio.Event = field(default_factory=asyncio.Event)
 
 
+@dataclass(slots=True)
+class _ContextUsageSnapshot:
+    """Store provider prompt usage bound to one request context."""
+
+    message_ids: tuple[int, ...]
+    prompt_tokens: int
+    provider: Provider
+    func_tool: ToolSet | None
+
+
 class _ToolExecutionInterrupted(Exception):
     """Raised when a running tool call is interrupted by a stop request."""
 
@@ -261,6 +271,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         )
 
         self.provider = provider
+        self._context_usage_snapshot: _ContextUsageSnapshot | None = None
         self.fallback_providers: list[Provider] = []
         seen_provider_ids: set[str] = {str(provider.provider_config.get("id", ""))}
         for fallback_provider in fallback_providers or []:
@@ -813,18 +824,51 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         llm_resp_result = None
 
         # Process request-time context before sending it to the provider.
-        # Persisted usage belongs to a previous provider request and may include
-        # provider-specific cache accounting, so it cannot describe these messages.
+        trusted_token_usage = 0
+        snapshot = self._context_usage_snapshot
+        current_func_tool = self._func_tool_for_provider()
+        if (
+            snapshot
+            and self.enforce_max_turns == -1
+            and snapshot.provider is self.provider
+            and snapshot.func_tool is current_func_tool
+            and len(self.run_context.messages) >= len(snapshot.message_ids)
+            and all(
+                id(message) == message_id
+                for message, message_id in zip(
+                    self.run_context.messages,
+                    snapshot.message_ids,
+                )
+            )
+        ):
+            # The previous provider prompt includes overhead such as tool schemas.
+            # Only reuse it while the current request preserves that exact prefix.
+            tail_messages = self.run_context.messages[len(snapshot.message_ids) :]
+            trusted_token_usage = snapshot.prompt_tokens + (
+                self.request_context_manager.token_counter.count_tokens(tail_messages)
+            )
         self._simple_print_message_role("[BefCompact]", self.run_context.messages)
         processed_messages = await self._await_or_stop(
             self.request_context_manager.process(
                 self.run_context.messages,
+                trusted_token_usage=trusted_token_usage,
             )
         )
         if processed_messages is None:
             yield await self._finalize_aborted_step()
             return
         self.run_context.messages = processed_messages
+        if snapshot and (
+            len(processed_messages) < len(snapshot.message_ids)
+            or any(
+                id(message) != message_id
+                for message, message_id in zip(
+                    processed_messages,
+                    snapshot.message_ids,
+                )
+            )
+        ):
+            self._context_usage_snapshot = None
         self._simple_print_message_role("[AftCompact]", self.run_context.messages)
 
         async for llm_response in self._iter_llm_responses_with_fallback():
@@ -868,6 +912,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 self.stats.current_context_tokens = llm_response.usage.input
                 if self.req.conversation:
                     self.req.conversation.token_usage = llm_response.usage.total
+                if llm_response.usage.input > 0:
+                    self._context_usage_snapshot = _ContextUsageSnapshot(
+                        message_ids=tuple(
+                            id(message) for message in self.run_context.messages
+                        ),
+                        prompt_tokens=llm_response.usage.input,
+                        provider=self.provider,
+                        func_tool=self._func_tool_for_provider(),
+                    )
             # end_time must be set before the yield serializes to_dict().
             self.stats.end_time = time.time()
             yield AgentResponse(
