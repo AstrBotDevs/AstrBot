@@ -874,7 +874,9 @@ async def test_wav_to_tencent_silk_skips_resample_for_supported_rate(
 
 
 # ---------------------------------------------------------------------------
-# convert_audio_format: extension vs magic-byte mismatch (issue #9594)
+# convert_audio_format: extension vs magic-byte mismatch (#9594, fixed in #9612)
+# These tests guard the magic-byte verification logic that prevents platforms
+# like NapCat from passing AMR content through with a .wav extension.
 # ---------------------------------------------------------------------------
 
 # Minimal AMR header (magic bytes: #!AMR)
@@ -903,6 +905,7 @@ def _patch_ffmpeg_not_called(monkeypatch, reason: str) -> None:
         monkeypatch: pytest monkeypatch fixture.
         reason: scenario description included in the failure message.
     """
+
     async def fake_exec(*args, **kwargs):
         raise AssertionError(f"ffmpeg should not be called {reason}")
 
@@ -965,14 +968,31 @@ async def test_convert_audio_format_real_wav_with_wav_extension_short_circuits(
 
 
 @pytest.mark.asyncio
-async def test_convert_audio_format_unknown_content_with_matching_ext_short_circuits(
+async def test_convert_audio_format_unknown_content_with_matching_ext_converts(
     tmp_path, monkeypatch
 ):
-    """When magic bytes cannot be identified, fall back to extension matching."""
+    """When magic bytes cannot be identified, proceed with conversion (safer)."""
     audio_file = tmp_path / "voice.wav"
     audio_file.write_bytes(b"\x00" * 64)
 
-    _patch_ffmpeg_not_called(monkeypatch, "for unrecognised content")
+    called = _patch_ffmpeg(monkeypatch, tmp_path, output_content=_make_wav_bytes())
+
+    result = await media_utils.convert_audio_format(str(audio_file), "wav")
+
+    assert called[0], (
+        "ffmpeg should be invoked for unrecognised content (safer to convert)"
+    )
+    assert result != str(audio_file)
+
+
+@pytest.mark.asyncio
+async def test_convert_audio_format_missing_file_with_matching_ext_returns_path(
+    tmp_path, monkeypatch
+):
+    """When the file does not exist yet (e.g. NapCat race), return the path as-is."""
+    audio_file = tmp_path / "voice.wav"  # never created
+
+    _patch_ffmpeg_not_called(monkeypatch, "for a missing file")
 
     result = await media_utils.convert_audio_format(str(audio_file), "wav")
     assert result == str(audio_file)
