@@ -786,8 +786,10 @@ function goToConfigPage() {
   --provider-surface: rgb(var(--v-theme-surface));
   --provider-border: rgb(var(--v-theme-outline-variant));
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
   min-width: 0;
   overflow: hidden;
   width: 100%;
@@ -867,6 +869,7 @@ function goToConfigPage() {
   display: grid;
   flex: 1;
   grid-template-columns: minmax(280px, 320px) 1px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
   width: 100%;
@@ -885,6 +888,8 @@ function goToConfigPage() {
 
 .provider-workbench__main {
   display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .provider-config-shell {

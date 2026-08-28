@@ -21,6 +21,7 @@ import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog,
 } from '@/utils/confirmDialog';
+import type { MessagePart } from '@/domain/chat';
 import { getPlatformIcon } from '@/utils/platformUtils';
 import { resolveErrorMessage } from '@/utils/errorUtils';
 
@@ -66,6 +67,37 @@ type ConversationListEntry =
       grouped: boolean;
     };
 
+type HistoryContentPart = {
+  type?: string;
+  text?: string;
+  image_url?: { url?: string };
+};
+
+type HistoryToolCall = {
+  id?: string;
+  name?: string;
+  arguments?: unknown;
+  function?: { name?: string; arguments?: unknown };
+};
+
+type HistoryMessage = {
+  role?: string;
+  content?: string | HistoryContentPart[] | Record<string, unknown>;
+  tool_call_id?: string;
+  tool_calls?: HistoryToolCall[];
+};
+
+function parseHistory(history: unknown): HistoryMessage[] {
+  if (Array.isArray(history)) {
+    return history as HistoryMessage[];
+  }
+  if (typeof history === 'string' && history.trim()) {
+    const parsed: unknown = JSON.parse(history);
+    return Array.isArray(parsed) ? (parsed as HistoryMessage[]) : [];
+  }
+  return [];
+}
+
 const { locale } = useI18n();
 const { tm } = useModuleI18n('features/conversation');
 const route = useRoute();
@@ -107,7 +139,7 @@ const listRequestId = ref(0);
 
 const selectedByKey = ref<Record<string, Conversation>>({});
 const activeConversation = ref<Conversation | null>(null);
-const conversationHistory = ref<any[]>([]);
+const conversationHistory = ref<HistoryMessage[]>([]);
 const previewLoading = ref(false);
 const previewRequestId = ref(0);
 const previewPageScroll = ref(0);
@@ -227,7 +259,7 @@ const formattedMessages = computed(() => {
       (message) => message?.role === 'user' || message?.role === 'assistant',
     )
     .map((message) => {
-      const parts: any[] = [];
+      const parts: MessagePart[] = [];
       const content = message.content;
       if (typeof content === 'string' && content.trim()) {
         parts.push({ type: 'plain', text: content });
@@ -253,11 +285,11 @@ const formattedMessages = computed(() => {
       ) {
         parts.push({
           type: 'tool_call',
-          tool_calls: message.tool_calls.map((toolCall: any) => ({
+          tool_calls: message.tool_calls.map((toolCall) => ({
             id: toolCall.id,
             name: toolCall.function?.name || toolCall.name,
             args: toolCall.function?.arguments ?? toolCall.arguments,
-            result: toolResultsById[toolCall.id],
+            result: toolCall.id ? toolResultsById[toolCall.id] : undefined,
             ts: 0,
             finished_ts: 1,
           })),
@@ -456,15 +488,10 @@ async function fetchConversations() {
         };
       }
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (controller.signal.aborted || requestId !== listRequestId.value) return;
     listError.value = true;
-    notify(
-      error?.response?.data?.message ||
-        error?.message ||
-        tm('messages.fetchError'),
-      'error',
-    );
+    notify(resolveErrorMessage(error, tm('messages.fetchError')), 'error');
   } finally {
     if (requestId === listRequestId.value) {
       listLoading.value = false;
@@ -544,19 +571,11 @@ async function openConversation(item: Conversation) {
     }
     const detail = response.data.data || {};
     activeConversation.value = { ...item, ...detail };
-    const history = detail.history || [];
-    conversationHistory.value = Array.isArray(history)
-      ? history
-      : JSON.parse(history || '[]');
-  } catch (error: any) {
+    conversationHistory.value = parseHistory(detail.history);
+  } catch (error: unknown) {
     if (requestId !== previewRequestId.value) return;
     conversationHistory.value = [];
-    notify(
-      error?.response?.data?.message ||
-        error?.message ||
-        tm('messages.historyError'),
-      'error',
-    );
+    notify(resolveErrorMessage(error, tm('messages.historyError')), 'error');
   } finally {
     if (requestId === previewRequestId.value) {
       previewLoading.value = false;
@@ -576,7 +595,9 @@ function closePreview() {
   activeConversation.value = null;
   conversationHistory.value = [];
   previewLoading.value = false;
-  void nextTick(() => window.scrollTo({ top: pageScroll, behavior: 'auto' }));
+  void nextTick(
+    () => void window.scrollTo({ top: pageScroll, behavior: 'auto' }),
+  );
 }
 
 function openRawData() {
@@ -614,13 +635,8 @@ async function saveTitle() {
     }
     editDialog.value = false;
     notify(tm('messages.saveSuccess'));
-  } catch (error: any) {
-    notify(
-      error?.response?.data?.message ||
-        error?.message ||
-        tm('messages.saveError'),
-      'error',
-    );
+  } catch (error: unknown) {
+    notify(resolveErrorMessage(error, tm('messages.saveError')), 'error');
   } finally {
     actionLoading.value = false;
   }
@@ -656,7 +672,7 @@ async function exportSelected() {
     link.remove();
     window.URL.revokeObjectURL(url);
     notify(tm('messages.exportSuccess'));
-  } catch (error: any) {
+  } catch (error: unknown) {
     notify(resolveErrorMessage(error, tm('messages.exportError')), 'error');
   } finally {
     actionLoading.value = false;
@@ -711,11 +727,9 @@ async function deleteSelected() {
         }),
       );
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     notify(
-      error?.response?.data?.message ||
-        error?.message ||
-        tm('messages.batchDeleteError'),
+      resolveErrorMessage(error, tm('messages.batchDeleteError')),
       'error',
     );
   } finally {
@@ -1498,10 +1512,11 @@ function changePage(nextPage: number) {
   display: grid;
   gap: 14px;
   grid-template-columns: minmax(220px, 252px) minmax(420px, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   height: calc(100dvh - 154px);
   margin: 0 auto;
   max-width: 1560px;
-  min-height: 560px;
+  min-height: 0;
 }
 
 .workspace-grid--preview {
@@ -1515,6 +1530,7 @@ function changePage(nextPage: number) {
   background: var(--workspace-card);
   border: 0;
   border-radius: 16px;
+  min-height: 0;
   min-width: 0;
   overflow: hidden;
 }

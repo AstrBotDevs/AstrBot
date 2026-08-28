@@ -817,9 +817,9 @@ function showError(errorMessage: string) {
   width: 280px;
   flex-shrink: 0;
   padding-right: 16px;
-  height: fit-content;
   max-height: calc(100vh - 200px);
-  overflow: hidden;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
 }

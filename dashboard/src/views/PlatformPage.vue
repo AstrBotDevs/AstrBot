@@ -626,8 +626,10 @@ function showError(error) {
   --platform-border: rgba(var(--v-theme-on-surface), 0.08);
   --platform-surface: rgb(var(--v-theme-surface));
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
   min-width: 0;
   overflow: hidden;
   width: 100%;
@@ -657,6 +659,7 @@ function showError(error) {
   display: grid;
   flex: 1;
   grid-template-columns: minmax(280px, 320px) 1px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
   width: 100%;
@@ -675,6 +678,8 @@ function showError(error) {
 
 .platform-workbench__main {
   display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .bot-list-panel {

@@ -2165,9 +2165,10 @@ onMounted(async () => {
 .skill-editor {
   display: grid;
   grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 16px;
   height: 100%;
-  min-height: 560px;
+  min-height: 0;
 }
 
 .skill-editor__files {
@@ -2232,6 +2233,7 @@ onMounted(async () => {
 .skill-editor__content {
   display: flex;
   flex-direction: column;
+  min-height: 0;
   min-width: 0;
 }
 

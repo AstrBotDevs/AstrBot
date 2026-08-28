@@ -364,6 +364,7 @@ async function confirmManualModel() {
   background: rgb(var(--v-theme-surface));
   display: grid;
   grid-template-columns: minmax(280px, 320px) 1px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
 }
@@ -392,6 +393,8 @@ async function confirmManualModel() {
 
 .provider-workbench__main {
   display: flex;
+  flex-direction: column;
+  height: 100%;
   overflow: hidden;
 }
 

@@ -161,14 +161,30 @@
   min-height: 0;
 }
 
-.dashboard-main--chat,
+.dashboard-main--chat {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .chat-mode-container,
 .chat-layout-content,
 .chat-layout-panel,
 .viewport-locked-container {
+  box-sizing: border-box;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   min-height: 0;
-  height: 100%;
   overflow: hidden;
+}
+
+.chat-layout-content > * {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
 }
 
 .router-progress {

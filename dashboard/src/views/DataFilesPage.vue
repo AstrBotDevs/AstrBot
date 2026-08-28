@@ -880,6 +880,7 @@ onBeforeUnmount(() => {
 .data-files-card {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   height: min(620px, calc(100vh - 180px));
   min-height: 420px;
   overflow: hidden;
