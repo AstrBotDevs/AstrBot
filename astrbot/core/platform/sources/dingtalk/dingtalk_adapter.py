@@ -140,6 +140,8 @@ class DingtalkPlatformAdapter(Platform):
             and plain_text
             and await self.send_text_card_by_session(session, plain_text)
         ):
+            # The base method records metrics only; it does not send another
+            # platform message.
             await super().send_by_session(session, message_chain)
             return
 
@@ -477,15 +479,8 @@ class DingtalkPlatformAdapter(Platform):
         text = "".join(parts).strip()
         return text or None
 
-    def _build_card_param_map(
-        self,
-        content: str,
-        flow_status: int | None = None,
-    ) -> dict[str, str]:
-        card_param_map = {self.card_content_key: content}
-        if flow_status is not None:
-            card_param_map["flowStatus"] = str(flow_status)
-        return card_param_map
+    def _build_card_param_map(self, content: str) -> dict[str, str]:
+        return {self.card_content_key: content}
 
     async def send_text_card_by_session(
         self,

@@ -36,15 +36,15 @@ class DingtalkMessageEvent(AstrMessageEvent):
                 message_id=getattr(self.message_obj, "message_id", ""),
                 content=plain_text,
             ):
+                # The base method records metrics and send state; it does not
+                # deliver another platform message.
                 await super().send(message)
                 return
-        await self.adapter.send_message_chain_with_incoming(
-            incoming_message=self.message_obj.raw_message,
-            message_chain=message,
-        )
-        await super().send(message)
+        await self._send_as_normal_message(message)
 
     async def send_streaming(self, generator, use_fallback: bool = False):
+        # The base method only records metrics and send state. It does not
+        # iterate the generator, so the stream remains available below.
         await super().send_streaming(generator, use_fallback)
 
         if not self.adapter:
@@ -67,7 +67,9 @@ class DingtalkMessageEvent(AstrMessageEvent):
 
         full_content = ""
         pending_chain = MessageChain()
+        fallback_chain = None
         last_update_at = 0.0
+        stream_updates_enabled = True
         update_interval = max(
             0.1,
             getattr(self.adapter, "card_update_interval", 0.35),
@@ -75,6 +77,11 @@ class DingtalkMessageEvent(AstrMessageEvent):
 
         try:
             async for chain in generator:
+                if fallback_chain is None:
+                    fallback_chain = chain.derive(list(chain.chain))
+                else:
+                    fallback_chain.chain.extend(chain.chain)
+
                 for segment in chain.chain:
                     if isinstance(segment, Plain):
                         full_content += segment.text
@@ -82,22 +89,32 @@ class DingtalkMessageEvent(AstrMessageEvent):
                         pending_chain.chain.append(segment)
 
                 now = time.monotonic()
-                if full_content and now - last_update_at >= update_interval:
+                if (
+                    stream_updates_enabled
+                    and full_content
+                    and now - last_update_at >= update_interval
+                ):
                     # DingTalk's AI card streaming API expects each full repaint
                     # with append=False; sending only the delta would replace the
                     # visible content with that delta in this card template.
-                    await self.adapter.send_card_message(
+                    stream_updates_enabled = await self.adapter.send_card_message(
                         card_token=card_token,
                         content=full_content,
                         is_final=False,
                     )
                     last_update_at = now
         finally:
-            await self.adapter.send_card_message(
+            card_finalized = await self.adapter.send_card_message(
                 card_token=card_token,
                 content=full_content,
                 is_final=True,
             )
+
+        if not card_finalized:
+            if fallback_chain is not None:
+                fallback_chain.squash_plain()
+                await self._send_as_normal_message(fallback_chain)
+            return None
 
         if pending_chain.chain:
             await self.send(pending_chain)
@@ -114,5 +131,20 @@ class DingtalkMessageEvent(AstrMessageEvent):
         if not buffer:
             return None
         buffer.squash_plain()
-        await self.send(buffer)
+        await self._send_as_normal_message(buffer)
+        return None
+
+    async def _send_as_normal_message(self, message: MessageChain) -> None:
+        if not self.adapter:
+            logger.error("钉钉消息发送失败: 缺少 adapter")
+            return
+        incoming_message = getattr(self.message_obj, "raw_message", None)
+        if incoming_message is None:
+            logger.error("钉钉消息发送失败: 缺少原始消息")
+            return
+        await self.adapter.send_message_chain_with_incoming(
+            incoming_message=incoming_message,
+            message_chain=message,
+        )
+        await super().send(message)
         return None
