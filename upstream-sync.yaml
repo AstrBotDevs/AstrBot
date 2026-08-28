@@ -5,23 +5,17 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 8ea8ce613a0bee4ddb48b21490afe23418277c75
-  synced_at_utc: 2026-08-26T20:33:48Z
+  commit: d2d7e5aefd2f9471d211974e7e193f321e0ebe0a
+  synced_at_utc: 2026-08-28T12:01:29Z
   sync_method: manual-adaptation
-  source_pr: '9803, 9801, 9812, 9647, 9820, 9824, 9814, 9827, 9815, 9830, 9832, 9825, 9818, 9833, 9738'
+  source_pr: '9846, 9847'
   note: >-
-    Reviewed the interval from 4d877c9919e58008f6f2cf4b19e18f9c48e4338f
-    through 8ea8ce613a0bee4ddb48b21490afe23418277c75. Adapted the default
-    T2I template onto Playwright (#9803), max_agent_step coercion for cron
-    and background wake-ups (#9801), monochrome provider icons (#9647),
-    the provider workspace (#9820), masked secret config fields (#9824),
-    UMO rate-limit isolation (#9814), hidden personal WeChat internals
-    (#9827), empty LLM request guards (#9815), dashboard auth/logout
-    (#9830), the bot workspace with fork quick actions and step-up
-    (#9825), sanitized proactive history (#9818), QQ Official unique-session
-    group routing (#9833), and Gemini pop(0) (#9738). Cherry-picked the
-    persona folder reset after a quote-style conflict (#9832). Skipped
-    the persona-manager mobile create-folder dropdown (#9812) because the
-    fork toolbar already always shows that action. No upstream version
-    bump occurred in this interval; absorbed user-visible changes were
-    added to the in-progress 4.27.5 changelog.
+    Reviewed the interval from 8ea8ce613a0bee4ddb48b21490afe23418277c75
+    through d2d7e5aefd2f9471d211974e7e193f321e0ebe0a. Adapted the data
+    dashboard consolidation onto /dashboard so /data stays the runtime file
+    manager, dropped LegacyConversationPage, kept Console and export
+    step-up, preserved the Playwright T2I card, and implemented conversation
+    filters on ConversationStore (#9846). Adapted session ranking shortcuts
+    into the conversation workspace with MDI icons (#9847). Omitted ru-RU.
+    No upstream version bump occurred in this interval; absorbed
+    user-visible changes were added to the in-progress 4.27.5 changelog.
