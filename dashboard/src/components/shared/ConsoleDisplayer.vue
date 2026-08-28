@@ -174,6 +174,9 @@ export default {
       });
 
       this.eventSource.onopen = () => {
+        if (this.isUnmounted) {
+          return;
+        }
         console.log("日志流连接成功！");
         this.retryAttempts = 0;
 
@@ -183,6 +186,9 @@ export default {
       };
 
       this.eventSource.onmessage = (event) => {
+        if (this.isUnmounted) {
+          return;
+        }
         try {
           if (event.lastEventId) {
             this.lastEventId = event.lastEventId;
@@ -230,6 +236,9 @@ export default {
         }
 
         this.retryTimer = setTimeout(async () => {
+          if (this.isUnmounted) {
+            return;
+          }
           this.retryAttempts++;
 
           if (!this.lastEventId) {
@@ -280,8 +289,14 @@ export default {
     },
 
     async fetchLogHistory() {
+      if (this.isUnmounted) {
+        return;
+      }
       try {
         const res = await logApi.history();
+        if (this.isUnmounted) {
+          return;
+        }
         if (res.data.data.logs && res.data.data.logs.length > 0) {
           this.processNewLogs(res.data.data.logs);
         }
