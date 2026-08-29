@@ -15,11 +15,19 @@ const customizer = useCustomizerStore();
 </template>
 
 <style scoped>
+:global(html:has(.chatbox-app)),
+:global(body:has(.chatbox-app)) {
+  height: 100%;
+  overflow: hidden;
+}
+
 .chatbox-app,
 .chatbox-app__content,
 #container {
   width: 100%;
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .chatbox-app__content {

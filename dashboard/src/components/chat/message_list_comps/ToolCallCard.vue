@@ -235,13 +235,13 @@ onUnmounted(() => {
 .detail-json {
   font-family: var(--astrbot-font-mono);
   white-space: pre-wrap;
-  max-height: 200px;
+  max-height: min(20vh, 160px);
   overflow-y: auto;
   margin: 0;
 }
 
 .detail-result {
-  max-height: 300px;
+  max-height: min(28vh, 200px);
   background-color: transparent;
 }
 

@@ -1678,7 +1678,10 @@ function toggleTheme() {
   --chat-border: rgb(var(--v-theme-outline-variant));
   --chat-muted: rgb(var(--v-theme-on-surface-variant));
   display: flex;
+  flex: 1 1 0%;
+  width: 100%;
   height: 100%;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
   background: var(--chat-page-bg);
@@ -1903,12 +1906,16 @@ function toggleTheme() {
 }
 
 .chat-main {
-  flex: 1;
+  flex: 1 1 0%;
   min-width: 0;
+  min-height: 0;
   height: 100%;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   position: relative;
+  overflow: hidden;
+  align-self: stretch;
 }
 
 .chat-drop-overlay {

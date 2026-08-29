@@ -161,9 +161,28 @@
   min-height: 0;
 }
 
+html:has(.dashboard-main--chat),
+body:has(.dashboard-main--chat) {
+  height: 100%;
+  overflow: hidden;
+}
+
+.dashboard-app:has(.dashboard-main--chat) {
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+.dashboard-app:has(.dashboard-main--chat) .v-application__wrap {
+  height: 100dvh;
+  max-height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .dashboard-main--chat {
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
@@ -175,14 +194,15 @@
 .viewport-locked-container {
   box-sizing: border-box;
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
 }
 
-.chat-layout-content > * {
-  flex: 1 1 auto;
+.chat-layout-content > *,
+.chat-layout-panel > * {
+  flex: 1 1 0%;
   min-height: 0;
   min-width: 0;
 }
