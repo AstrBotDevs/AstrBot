@@ -1056,3 +1056,48 @@ class TestConfigMetadataI18n:
             result["group"]["metadata"]["section"]["items"]["field"]["name"]
             == "group.section.field.name"
         )
+
+    def test_convert_to_i18n_keys_preserves_group_and_docs_fields(self):
+        metadata = {
+            "ai_group": {
+                "name": "AI Settings",
+                "docs": "use/webui.html",
+                "custom_flag": True,
+                "metadata": {
+                    "computer": {
+                        "description": "Computer use",
+                        "hint": "Hint text",
+                        "docs": "use/computer.html",
+                        "type": "object",
+                        "items": {
+                            "runtime": {
+                                "description": "Runtime",
+                                "docs": "use/computer.html",
+                                "type": "string",
+                            },
+                        },
+                    },
+                },
+            },
+        }
+
+        result = ConfigMetadataI18n.convert_to_i18n_keys(metadata)
+
+        assert result["ai_group"]["docs"] == "use/webui.html"
+        assert result["ai_group"]["custom_flag"] is True
+        assert result["ai_group"]["name"] == "ai_group.name"
+        computer = result["ai_group"]["metadata"]["computer"]
+        assert computer["docs"] == "use/computer.html"
+        assert computer["hint"] == "ai_group.computer.hint"
+        assert computer["items"]["runtime"]["docs"] == "use/computer.html"
+        assert (
+            computer["items"]["runtime"]["description"]
+            == "ai_group.computer.runtime.description"
+        )
+
+    def test_convert_to_i18n_keys_preserves_non_dict_groups(self):
+        metadata = {"note": "keep me"}
+
+        result = ConfigMetadataI18n.convert_to_i18n_keys(metadata)
+
+        assert result["note"] == "keep me"

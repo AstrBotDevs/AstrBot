@@ -7,6 +7,7 @@ import { ref, computed } from 'vue';
 import ConfigItemRenderer from './ConfigItemRenderer.vue';
 import TemplateListEditor from './TemplateListEditor.vue';
 import PersonaQuickPreview from './PersonaQuickPreview.vue';
+import ConfigDocsLink from './ConfigDocsLink.vue';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { useConfigTextResolver } from '@/composables/useConfigTextResolver';
 
@@ -230,7 +231,8 @@ function shouldShowSection() {
       class="config-section config-section--object"
     >
       <v-list-item-title class="config-title">
-        {{ translateIfKey(metadata[metadataKey]?.description) }}
+        <span>{{ translateIfKey(metadata[metadataKey]?.description) }}</span>
+        <ConfigDocsLink :docs="metadata[metadataKey]?.docs" />
       </v-list-item-title>
       <v-list-item-subtitle class="config-hint">
         <span
@@ -258,6 +260,7 @@ function shouldShowSection() {
               <v-list-item-title class="property-name">
                 {{ getItemDescription(itemKey, itemMeta) }}
                 <span class="property-key">({{ itemKey }})</span>
+                <ConfigDocsLink :docs="itemMeta?.docs" />
               </v-list-item-title>
 
               <v-list-item-subtitle class="property-hint">
@@ -390,6 +393,7 @@ function shouldShowSection() {
                   <v-list-item-title class="property-name">
                     {{ getItemDescription(itemKey, itemMeta) }}
                     <span class="property-key">({{ itemKey }})</span>
+                    <ConfigDocsLink :docs="itemMeta?.docs" />
                   </v-list-item-title>
 
                   <v-list-item-subtitle class="property-hint">
@@ -562,7 +566,9 @@ function shouldShowSection() {
 }
 
 .config-title {
-  /* font-weight: 600; */
+  display: flex;
+  align-items: center;
+  gap: var(--astrbot-space-2);
   font-size: 1.3rem;
   color: var(--v-theme-on-surface);
 }
@@ -626,8 +632,10 @@ function shouldShowSection() {
 }
 
 .property-name {
+  display: flex;
+  align-items: center;
+  gap: var(--astrbot-space-2);
   font-size: 0.875rem;
-  /* font-weight: 600; */
   color: var(--v-theme-on-surface);
 }
 

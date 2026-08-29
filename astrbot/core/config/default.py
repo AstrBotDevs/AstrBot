@@ -3655,7 +3655,8 @@ CONFIG_METADATA_3 = {
             },
             "agent_computer_use": {
                 "description": "Agent Computer Use",
-                "hint": "",
+                "hint": "让 AstrBot 访问和使用本机环境或者隔离的沙盒环境，以执行更复杂的任务。",
+                "docs": "use/computer.html",
                 "type": "object",
                 "items": {
                     "provider_settings.computer_use_runtime": {
@@ -3776,7 +3777,8 @@ CONFIG_METADATA_3 = {
             },
             "proactive_capability": {
                 "description": "主动型 Agent",
-                "hint": "/help/use/proactive-agent.html",
+                "hint": "让 AstrBot 能够在某一时刻自动唤醒，帮你完成任务。",
+                "docs": "use/proactive-agent.html",
                 "type": "object",
                 "items": {
                     "provider_settings.proactive_capability.add_cron_tools": {
@@ -3791,7 +3793,8 @@ CONFIG_METADATA_3 = {
                 },
             },
             "truncate_and_compress": {
-                "hint": "",
+                "hint": "AstrBot 如何管理工作记忆。",
+                "docs": "use/context-compress.html",
                 "description": "上下文管理策略",
                 "type": "object",
                 "items": {

@@ -43,12 +43,14 @@
         </v-container>
       </v-tabs-window-item>
 
-      <div class="config-tabs-help">
+      <div v-if="currentTabDocsHref" class="config-tabs-help">
         <small
           >{{ tm('help.helpPrefix') }}
-          <a :href="docsHref()" target="_blank" rel="noopener noreferrer">{{
-            tm('help.documentation')
-          }}</a
+          <a
+            :href="currentTabDocsHref"
+            target="_blank"
+            rel="noopener noreferrer"
+            >{{ tm('help.documentation') }}</a
           >{{ tm('help.helpSuffix') }}
         </small>
       </div>
@@ -65,17 +67,19 @@
 import { computed, ref, watch } from 'vue';
 import { useDisplay } from 'vuetify';
 import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
-import { useModuleI18n } from '@/i18n/composables';
-import { docsHref } from '@/utils/docsHref';
+import { useI18n, useModuleI18n } from '@/i18n/composables';
+import { configDocsHref } from '@/utils/docsHref';
 
 interface ConfigMetadataItem {
   description?: string;
   hint?: string;
+  docs?: string;
   items?: Record<string, ConfigMetadataItem>;
 }
 
 interface ConfigSectionValue {
   name?: string;
+  docs?: string;
   metadata?: Record<string, ConfigMetadataItem>;
 }
 
@@ -99,6 +103,7 @@ const props = withDefaults(
   },
 );
 
+const { locale } = useI18n();
 const { tm: tmConfig } = useModuleI18n('features/config');
 const { tm: tmMetadata } = useModuleI18n('features/config-metadata');
 const { mobile } = useDisplay();
@@ -192,6 +197,13 @@ watch(
   },
   { immediate: true },
 );
+
+const currentTabDocsHref = computed(() => {
+  const current = visibleSections.value.find(
+    (section) => section.key === tab.value,
+  );
+  return configDocsHref(current?.value.docs, locale.value);
+});
 </script>
 
 <style>
@@ -226,6 +238,7 @@ watch(
 .config-tabs-help {
   margin-left: var(--astrbot-space-4);
   padding-bottom: var(--astrbot-space-4);
+  pointer-events: auto;
 }
 
 .config-tabs-window--readonly {

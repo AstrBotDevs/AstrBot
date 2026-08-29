@@ -31,14 +31,17 @@ class ConfigMetadataI18n:
 
     @staticmethod
     def convert_to_i18n_keys(metadata: dict[str, Any]) -> dict[str, Any]:
-        """
-        将配置元数据转换为使用国际化键
+        """Convert config metadata text fields to i18n keys.
+
+        Replaces ``description``, ``hint``, ``labels``, and ``name`` with i18n
+        keys. Other fields, including ``docs``, are copied through unchanged.
+        Unknown top-level tab-group fields are also preserved.
 
         Args:
-            metadata: 原始配置元数据字典
+            metadata: Raw configuration metadata dictionary.
 
         Returns:
-            使用国际化键的配置元数据字典
+            Metadata dictionary whose translatable fields are i18n keys.
         """
         result = {}
 
@@ -92,10 +95,17 @@ class ConfigMetadataI18n:
             return items_result
 
         for group_key, group_data in metadata.items():
+            if not isinstance(group_data, dict):
+                result[group_key] = group_data
+                continue
+
             group_result = {
-                "name": f"{group_key}.name",
-                "metadata": {},
+                key: value
+                for key, value in group_data.items()
+                if key not in {"name", "metadata"}
             }
+            group_result["name"] = f"{group_key}.name"
+            group_result["metadata"] = {}
 
             for section_key, section_data in group_data.get("metadata", {}).items():
                 section_result = {

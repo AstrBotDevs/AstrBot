@@ -134,6 +134,40 @@ def test_config_metadata_locale_trees_match() -> None:
     assert sorted(en_keys - zh_keys) == []
 
 
+def test_config_metadata_docs_paths_are_relative_and_preserved() -> None:
+    converted = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)
+    ai_sections = converted["ai_group"]["metadata"]
+    assert ai_sections["agent_computer_use"]["docs"] == "use/computer.html"
+    assert ai_sections["proactive_capability"]["docs"] == "use/proactive-agent.html"
+    assert ai_sections["truncate_and_compress"]["docs"] == "use/context-compress.html"
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            docs = node.get("docs")
+            if docs is not None:
+                assert isinstance(docs, str)
+                assert docs
+                assert not docs.startswith("/")
+                assert not docs.startswith("help/")
+                assert not docs.startswith("en/")
+            for value in node.values():
+                walk(value)
+            return
+        if isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(converted)
+    walk(ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3_SYSTEM))
+
+
+def test_config_metadata_i18n_text_does_not_embed_help_paths() -> None:
+    for locale in LOCALES:
+        for key, value in _load_locale(locale).items():
+            if isinstance(value, str):
+                assert "/help/" not in value, f"{locale} {key}"
+
+
 def test_platform_adapter_i18n_resources_cover_metadata_fields() -> None:
     for name, metadata, resources in (
         ("line", LINE_CONFIG_METADATA, LINE_I18N_RESOURCES),

@@ -19,3 +19,14 @@ export function docsHref(path = '', locale?: string): string {
   }
   return `${prefix}/${clean}`;
 }
+
+export function configDocsHref(docs?: unknown, locale?: string): string {
+  if (typeof docs !== 'string') {
+    return '';
+  }
+  const clean = docs.trim().replace(/^\/+/, '');
+  if (!clean || clean === 'index.html') {
+    return '';
+  }
+  return docsHref(clean, locale);
+}

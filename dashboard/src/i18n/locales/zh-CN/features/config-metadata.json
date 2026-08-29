@@ -148,7 +148,7 @@
     },
     "agent_computer_use": {
       "description": "使用电脑能力",
-      "hint": "让 AstrBot 访问和使用本机环境或者隔离的沙盒环境，以执行更复杂的任务。详见: [电脑使用](/help/use/computer.html)。",
+      "hint": "让 AstrBot 访问和使用本机环境或者隔离的沙盒环境，以执行更复杂的任务。",
       "provider_settings": {
         "computer_use_runtime": {
           "description": "运行环境",
@@ -206,7 +206,7 @@
     },
     "proactive_capability": {
       "description": "主动型能力",
-      "hint": "让 AstrBot 能够在某一时刻自动唤醒，帮你完成任务。详见: [主动型 Agent](/help/use/proactive-agent.html)。",
+      "hint": "让 AstrBot 能够在某一时刻自动唤醒，帮你完成任务。",
       "provider_settings": {
         "proactive_capability": {
           "add_cron_tools": {
@@ -217,7 +217,7 @@
       }
     },
     "truncate_and_compress": {
-      "hint": "AstrBot 如何管理工作记忆。详见: [上下文管理策略](/help/use/context-compress.html)。",
+      "hint": "AstrBot 如何管理工作记忆。",
       "description": "上下文管理策略",
       "provider_settings": {
         "max_context_length": {
