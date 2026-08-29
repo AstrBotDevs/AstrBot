@@ -88,3 +88,6 @@ venv/
 
 # pyscn
 .pyscn/
+
+# playwright
+.playwright-mcp/
