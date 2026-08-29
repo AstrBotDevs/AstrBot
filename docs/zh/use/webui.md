@@ -63,7 +63,7 @@ AstrBot WebUI 支持基于 TOTP（Time-based One-Time Password）的双因素认
 
 ## 数据工作区
 
-点击侧栏 **更多 → 数据**，可以在 `/dashboard` 通过顶部标签切换 `统计`、`对话`、`日志` 和 `追踪`。旧路径 `/dashboard/default`、`/conversation`、`/console`、`/trace` 会重定向到对应标签。运行时 `data/` 文件管理器仍在 `/data`，见[数据文件](#数据文件)。
+点击侧栏 **更多 → 数据**，可以在 `/dashboard` 通过顶部标签切换 `统计`、`对话`、`日志` 和 `追踪`。运行时 `data/` 文件管理器仍在 `/data`，见[数据文件](#数据文件)。
 
 ### 统计
 
@@ -169,7 +169,7 @@ WebUI 支持多个 Dashboard 账户。首次启动会创建 bootstrap `root` 账
 
 在管理面板中，你可以通过左栏的 `插件` 来查看已安装的插件，以及安装新插件。
 
-点击插件市场标签栏，可以浏览默认市场源中的插件。该源指向上游 `AstrBotDevs/AstrBot_Plugins_Collection` 及其 CDN/兼容源，不是 Xero-Team 运营或审核的市场。本 fork 要求 Python 3.14+ 且不兼容旧插件 API，因此列表里的插件可能安装失败或加载失败。
+点击插件市场标签栏，可以浏览默认市场源中的插件。该源先指向上游 `cloud.astrbot.app` 市场 JSON，失败后再回退到 `AstrBotDevs/AstrBot_Plugins_Collection` 及其 CDN；不是 Xero-Team 运营或审核的市场。本 fork 要求 Python 3.14+ 且不兼容旧插件 API，因此列表里的插件可能安装失败或加载失败。
 
 ![image](https://files.astrbot.app/docs/source/images/webui/image-1.png)
 

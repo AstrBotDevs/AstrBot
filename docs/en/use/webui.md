@@ -63,7 +63,7 @@ Config profiles still control routed Agent, model, message-processing, and plugi
 
 ## Data workspace
 
-**More → Data** opens `/dashboard` with tabs for Statistics, Conversations, Logs, and Trace. The old paths `/dashboard/default`, `/conversation`, `/console`, and `/trace` redirect to those tabs. The runtime `data/` file manager remains at `/data`; see [Data files](#data-files).
+**More → Data** opens `/dashboard` with tabs for Statistics, Conversations, Logs, and Trace. The runtime `data/` file manager remains at `/data`; see [Data files](#data-files).
 
 ### Statistics
 
@@ -174,7 +174,7 @@ After editing, first click `Apply This Configuration`, which will apply the conf
 
 In the admin panel, you can view installed plugins and install new plugins through the `Plugins` section in the left sidebar.
 
-Click the Plugin Market tab to browse plugins from the default marketplace source. That source points at upstream `AstrBotDevs/AstrBot_Plugins_Collection` and its CDN/compatibility mirrors; Xero-Team does not operate or review it. This fork requires Python 3.14+ and does not keep legacy plugin APIs, so entries in that list may fail to install or load.
+Click the Plugin Market tab to browse plugins from the default marketplace source. That source first requests the upstream `cloud.astrbot.app` market JSON, then falls back to `AstrBotDevs/AstrBot_Plugins_Collection` and its CDN; Xero-Team does not operate or review it. This fork requires Python 3.14+ and does not keep legacy plugin APIs, so entries in that list may fail to install or load.
 
 ![image](https://files.astrbot.app/docs/source/images/webui/image-1.png)
 

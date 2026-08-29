@@ -153,7 +153,7 @@ font-family: 'Maple Mono', 'Noto Sans CJK SC', sans-serif;
 
 ### 市场插件安装后加载失败
 
-Dashboard 默认市场源是上游 `AstrBotDevs/AstrBot_Plugins_Collection`，不是本 fork 的官方市场。本分支要求 Python 3.14+，且不提供旧插件 API 或旧 Dashboard 页面兼容。安装前核对该插件的 `astrbot_version` 和 `requires.dashboard_extension`。失败时用 URL 安装已知兼容的插件，或查看插件加载错误，不要假定上游市场插件能在本分支运行。详见 [插件](/use/plugin) 和 [插件开发指南](/dev/star/plugin-new)。
+Dashboard 默认市场源是上游 `cloud.astrbot.app` 市场 JSON（失败后回退到 `AstrBotDevs/AstrBot_Plugins_Collection`），不是本 fork 的官方市场。本分支要求 Python 3.14+，且不提供旧插件 API 或旧 Dashboard 页面兼容。安装前核对该插件的 `astrbot_version` 和 `requires.dashboard_extension`。失败时用 URL 安装已知兼容的插件，或查看插件加载错误，不要假定上游市场插件能在本分支运行。详见 [插件](/use/plugin) 和 [插件开发指南](/dev/star/plugin-new)。
 
 ### 如何关闭长期记忆
 

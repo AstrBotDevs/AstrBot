@@ -153,7 +153,7 @@ Do not “fix” connectivity by disabling TLS verification. Reset the conversat
 
 ### A marketplace plugin fails to load after install
 
-The Dashboard default marketplace source is upstream `AstrBotDevs/AstrBot_Plugins_Collection`, not an official market for this fork. This branch requires Python 3.14+ and does not keep legacy plugin APIs or legacy Dashboard pages. Check the plugin's `astrbot_version` and `requires.dashboard_extension` before installing. If it fails, install a known-compatible plugin by URL or inspect the load error; do not assume an upstream marketplace plugin will run here. See [Plugins](/en/use/plugin) and [Plugin development](/en/dev/star/plugin-new).
+The Dashboard default marketplace source is the upstream `cloud.astrbot.app` market JSON, with a fallback to `AstrBotDevs/AstrBot_Plugins_Collection`. It is not an official market for this fork. This branch requires Python 3.14+ and does not keep legacy plugin APIs or legacy Dashboard pages. Check the plugin's `astrbot_version` and `requires.dashboard_extension` before installing. If it fails, install a known-compatible plugin by URL or inspect the load error; do not assume an upstream marketplace plugin will run here. See [Plugins](/en/use/plugin) and [Plugin development](/en/dev/star/plugin-new).
 
 ### How do I disable long-term memory?
 
