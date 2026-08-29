@@ -2,14 +2,14 @@
 
 from .base import BaseParser, MediaItem, ParseResult
 from .epub_parser import EpubParser
+from .markitdown_parser import MarkitdownParser
 from .pdf_parser import PDFParser
-from .text_parser import TextParser
 
 __all__ = [
     "BaseParser",
     "EpubParser",
+    "MarkitdownParser",
     "MediaItem",
     "PDFParser",
     "ParseResult",
-    "TextParser",
 ]

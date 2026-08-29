@@ -7,7 +7,6 @@ from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.utils.astrbot_path import get_astrbot_knowledge_base_path
 from astrbot.core.utils.error_redaction import safe_error
 
-# from .chunking.fixed_size import FixedSizeChunker
 from .chunking.recursive import RecursiveCharacterChunker
 from .kb_db_sqlite import KBSQLiteDatabase
 from .kb_helper import KBHelper
