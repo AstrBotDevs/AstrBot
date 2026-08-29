@@ -591,13 +591,16 @@ class TestRunActiveAgentJob:
     ):
         """Test active cron agent keeps structured history and provider settings."""
         provider_settings = {
-            "tool_call_timeout": 77,
             "fallback_chat_models": ["fallback-provider"],
         }
         ctx = MagicMock()
         ctx.get_config.return_value = {
             "admins_id": [],
             "provider_settings": provider_settings,
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"misc": {"tool_call_timeout": 77}},
+            },
         }
         cron_manager.ctx = ctx
 
@@ -695,7 +698,13 @@ class TestRunActiveAgentJob:
         ctx = MagicMock()
         ctx.get_config.return_value = {
             "admins_id": [],
-            "provider_settings": dict(provider_settings),
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {
+                    "misc": {"max_steps": provider_settings.get("max_agent_step", 30)}
+                },
+            },
         }
         cron_manager.ctx = ctx
 

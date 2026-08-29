@@ -11,6 +11,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from astrbot.core import file_token_service, logger
+from astrbot.core.config.agent_runner import normalize_agent_runner
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import (
     CONFIG_METADATA_2,
@@ -427,6 +428,9 @@ def save_config(
 ) -> None:
     if is_core:
         _log_computer_config_changes(dict(config), post_config)
+        post_config["agent_runner"] = normalize_agent_runner(
+            post_config.get("agent_runner")
+        )
 
     try:
         if is_core:
@@ -532,9 +536,14 @@ class ConfigProfileService:
                 "config:edit_admin scope is required to change admins_id",
                 status_code=403,
             )
+        profile_config = copy.deepcopy(config or DEFAULT_CONFIG)
+        if "agent_runner" in profile_config:
+            profile_config["agent_runner"] = normalize_agent_runner(
+                profile_config["agent_runner"]
+            )
         conf_id = await self.acm.create_conf(
             name=name,
-            config=config or DEFAULT_CONFIG,
+            config=profile_config,
         )
         await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
         return {"conf_id": conf_id}
@@ -1346,7 +1355,6 @@ class BotConfigService:
 class ProviderConfigService:
     CAPABILITY_TO_PROVIDER_TYPE = {
         "chat": "chat_completion",
-        "agent": "agent_runner",
         "stt": "speech_to_text",
         "tts": "text_to_speech",
         "embedding": "embedding",
@@ -1391,7 +1399,11 @@ class ProviderConfigService:
         for provider in provider_registry:
             if provider.default_config_tmpl:
                 provider_default_tmpl[provider.type] = provider.default_config_tmpl
-        providers = copy.deepcopy(self.config.get("provider", []))
+        providers = [
+            copy.deepcopy(provider)
+            for provider in self.config.get("provider", [])
+            if provider.get("provider_type") != "agent_runner"
+        ]
         from astrbot.core.utils.llm_metadata import LLM_METADATAS
 
         model_metadata = {}
@@ -1657,6 +1669,8 @@ class ProviderConfigService:
             for source in self.provider_manager.provider_sources_config
         }
         for provider in self.provider_manager.providers_config:
+            if provider.get("provider_type") == "agent_runner":
+                continue
             if source_id and provider.get("provider_source_id") != source_id:
                 continue
             if enabled is not None and bool(provider.get("enable", False)) != enabled:

@@ -28,17 +28,6 @@
 
         </div>
       </div>
-      <v-slide-y-transition>
-        <div v-if="fetched && hasUnsavedChanges" class="unsaved-changes-banner-wrap">
-          <v-banner
-            icon="$warning"
-            lines="one"
-            class="unsaved-changes-banner my-4"
-          >
-            {{ tm('messages.unsavedChangesNotice') }}
-          </v-banner>
-        </div>
-      </v-slide-y-transition>
       <!-- <v-progress-linear v-if="!fetched" indeterminate color="primary"></v-progress-linear> -->
 
       <v-slide-y-transition mode="out-in">
@@ -82,6 +71,18 @@
 
     </div>
   </div>
+
+  <v-slide-y-reverse-transition>
+    <div
+      v-if="fetched && hasUnsavedChanges"
+      class="unsaved-changes-pill"
+      role="status"
+      aria-live="polite"
+    >
+      <v-icon size="18">mdi-alert-circle-outline</v-icon>
+      <span>{{ tm('messages.unsavedChangesNotice') }}</span>
+    </div>
+  </v-slide-y-reverse-transition>
 
 
   <!-- Full Screen Editor Dialog -->
@@ -965,24 +966,25 @@ export default {
   text-transform: none !important;
 }
 
-.unsaved-changes-banner {
-  border-radius: 8px;
-}
-
-.v-theme--light .unsaved-changes-banner {
-  background-color: #f1f4f9 !important;
-}
-
-.v-theme--dark .unsaved-changes-banner {
-  background-color: #2d2d2d !important;
-}
-
-.unsaved-changes-banner-wrap {
-  position: sticky;
-  top: calc(var(--v-layout-top, 64px));
-  z-index: 20;
-  width: 100%;
-  margin-bottom: 6px;
+.unsaved-changes-pill {
+  position: fixed;
+  left: calc(var(--v-layout-left, 0px) + 32px);
+  bottom: 52px;
+  z-index: 1005;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(440px, calc(100vw - var(--v-layout-left, 0px) - 160px));
+  padding: 9px 14px 9px 12px;
+  border-radius: 999px;
+  background: rgba(var(--v-theme-surface), 0.94);
+  color: rgba(var(--v-theme-on-surface), 0.82);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(16px);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 /* 按钮切换样式优化 */
@@ -1046,6 +1048,14 @@ export default {
   .config-search-input {
     width: 100%;
     min-width: 0 !important;
+  }
+
+  .unsaved-changes-pill {
+    right: 16px;
+    bottom: 16px;
+    left: 16px;
+    max-width: none;
+    white-space: normal;
   }
 }
 

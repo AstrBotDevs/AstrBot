@@ -209,6 +209,8 @@ class MainAgentBuildConfig:
     add_cron_tools: bool = True
     """This will add cron job management tools to the main agent for proactive cron job execution."""
     provider_settings: dict = field(default_factory=dict)
+    fallback_provider_ids: list[str] = field(default_factory=list)
+    request_max_retries: int = 5
     subagent_orchestrator: dict = field(default_factory=dict)
     timezone: str | None = None
     max_quoted_fallback_images: int = 20
@@ -1341,12 +1343,11 @@ async def _get_compress_provider(
 
 
 def _get_fallback_chat_providers(
-    provider: Provider, plugin_context: Context, provider_settings: dict
+    provider: Provider, plugin_context: Context, fallback_ids: list[str]
 ) -> list[Provider]:
-    fallback_ids = provider_settings.get("fallback_chat_models", [])
     if not isinstance(fallback_ids, list):
         logger.warning(
-            "fallback_chat_models setting is not a list, skip fallback providers."
+            "Agent Runner fallback_provider_ids is not a list, skip fallback providers."
         )
         return []
 
@@ -1657,7 +1658,7 @@ async def build_main_agent(
         )
 
     fallback_providers = _get_fallback_chat_providers(
-        provider, plugin_context, config.provider_settings
+        provider, plugin_context, config.fallback_provider_ids
     )
     selected_provider = _select_image_chat_provider(provider, req, fallback_providers)
     if selected_provider is not provider:
@@ -1732,7 +1733,7 @@ async def build_main_agent(
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
         fallback_providers=fallback_providers,
-        request_max_retries=config.provider_settings.get("request_max_retries", 5),
+        request_max_retries=config.request_max_retries,
         tool_result_overflow_dir=(
             get_astrbot_system_tmp_path()
             if req.func_tool and req.func_tool.get_tool("astrbot_file_read_tool")

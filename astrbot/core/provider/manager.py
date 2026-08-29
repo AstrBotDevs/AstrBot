@@ -45,6 +45,13 @@ class ProviderManager:
         self.providers_config: list = config["provider"]
         self.provider_sources_config: list = config.get("provider_sources", [])
         self.provider_settings: dict = config["provider_settings"]
+        agent_runner = config.get("agent_runner", {})
+        agent_runner_config = agent_runner.get("config", {})
+        self.default_chat_provider_id = (
+            agent_runner_config.get("model", {}).get("provider_id", "")
+            if agent_runner.get("runner_type") == "local"
+            else ""
+        )
         self.provider_stt_settings: dict = config.get("provider_stt_settings", {})
         self.provider_tts_settings: dict = config.get("provider_tts_settings", {})
 
@@ -240,7 +247,12 @@ class ProviderManager:
             # default setting
             config = self.acm.get_conf(umo)
             if provider_type == ProviderType.CHAT_COMPLETION:
-                provider_id = config["provider_settings"].get("default_provider_id")
+                agent_runner = config.get("agent_runner", {})
+                provider_id = (
+                    agent_runner.get("config", {}).get("model", {}).get("provider_id")
+                    if agent_runner.get("runner_type") == "local"
+                    else None
+                )
                 provider = self.inst_map.get(provider_id)
                 if not provider:
                     provider = self.provider_insts[0] if self.provider_insts else None
@@ -337,7 +349,7 @@ class ProviderManager:
 
         selected_provider_id = await sp.get_async(
             key="curr_provider",
-            default=self.provider_settings.get("default_provider_id"),
+            default=self.default_chat_provider_id,
             scope="global",
             scope_id="global",
         )
@@ -760,10 +772,7 @@ class ProviderManager:
                         await inst.initialize()
 
                     self.provider_insts.append(inst)
-                    if (
-                        self.provider_settings.get("default_provider_id")
-                        == provider_config["id"]
-                    ):
+                    if self.default_chat_provider_id == provider_config["id"]:
                         self.curr_provider_inst = inst
                         logger.info(
                             f"Selected {provider_config['type']}({provider_config['id']}) as default chat model provider",

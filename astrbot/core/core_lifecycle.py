@@ -126,8 +126,7 @@ class AstrBotCoreLifecycle:
         if len(providers) == 0:
             return
 
-        provider_settings = getattr(pm, "provider_settings", None) or {}
-        default_id = provider_settings.get("default_provider_id")
+        default_id = getattr(pm, "default_chat_provider_id", "")
         fallback = pm.curr_provider_inst or providers[0]
         fallback_id = fallback.provider_config.get("id") or "unknown"
 
@@ -136,7 +135,7 @@ class AstrBotCoreLifecycle:
                 return
             self._default_chat_provider_warning_emitted = True
             logger.warning(
-                "Detected %d enabled chat providers but `provider_settings.default_provider_id` is empty. "
+                "Detected %d enabled chat providers but `agent_runner.config.model.provider_id` is empty. "
                 "AstrBot will use `%s` as the startup fallback chat provider. "
                 "Set a default chat model in the WebUI configuration page to avoid unexpected provider switching.",
                 len(providers),
@@ -148,7 +147,7 @@ class AstrBotCoreLifecycle:
         if not found:
             self._default_chat_provider_warning_emitted = True
             logger.warning(
-                "Configured `default_provider_id` is `%s` but no enabled provider matches that ID. "
+                "Configured Agent Runner model provider ID `%s` does not match an enabled provider. "
                 "AstrBot will use `%s` as the fallback chat provider. "
                 "Please check the WebUI configuration page.",
                 default_id,
