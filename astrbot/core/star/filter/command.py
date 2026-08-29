@@ -175,7 +175,7 @@ class CommandFilter(HandlerFilter):
             if callable(target):
                 return target(raw_value)
             return raw_value
-        except ValueError:
+        except (ValueError, TypeError):
             raise ValueError(
                 f"参数 {param_name} 类型错误。完整参数: {self.print_types()}",
             )
