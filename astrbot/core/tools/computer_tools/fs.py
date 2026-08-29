@@ -29,6 +29,7 @@ import stat
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from astrbot import logger
 from astrbot.core.agent.run_context import ContextWrapper
@@ -210,8 +211,11 @@ def _normalize_rw_path(
     normalized_path = _resolve_tool_path(path, local_env=local_env, umo=umo)
     if not normalized_path:
         raise ValueError("`path` must be a non-empty string.")
-    if restricted:
-        allowed_roots = _write_allowed_roots(umo) if write else _read_allowed_roots(umo)
+    allowed_roots: tuple[Path, ...] = (
+        (_write_allowed_roots(umo) if write else _read_allowed_roots(umo))
+        if restricted
+        else ()
+    )
     if restricted and not _is_path_within_allowed_roots(
         normalized_path,
         umo=umo,
@@ -284,10 +288,11 @@ class FileReadTool(FunctionTool):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        path: str,
-        offset: int | None = None,
-        limit: int | None = None,
+        **kwargs: Any,
     ) -> ToolExecResult:
+        path: str = kwargs["path"]
+        offset: int | None = kwargs.get("offset", None)
+        limit: int | None = kwargs.get("limit", None)
         local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
         try:
@@ -359,9 +364,10 @@ class FileWriteTool(FunctionTool):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        path: str,
-        content: str,
+        **kwargs: Any,
     ) -> ToolExecResult:
+        path: str = kwargs["path"]
+        content: str = kwargs["content"]
         local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
         try:
@@ -437,11 +443,12 @@ class FileEditTool(FunctionTool):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        path: str,
-        old: str,
-        new: str,
-        replace_all: bool = False,
+        **kwargs: Any,
     ) -> ToolExecResult:
+        path: str = kwargs["path"]
+        old: str = kwargs["old"]
+        new: str = kwargs["new"]
+        replace_all: bool = kwargs.get("replace_all", False)
         umo = str(context.context.event.unified_msg_origin)
         local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
@@ -642,12 +649,12 @@ class GrepTool(FunctionTool):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        pattern: str,
-        path: str | None = None,
-        glob: str | None = None,
-        result_limit: int = 100,
-        **kwargs,
+        **kwargs: Any,
     ) -> ToolExecResult:
+        pattern: str = kwargs["pattern"]
+        path: str | None = kwargs.get("path", None)
+        glob: str | None = kwargs.get("glob", None)
+        result_limit: int = kwargs.get("result_limit", 100)
         normalized_pattern = pattern.strip()
         if not normalized_pattern:
             return "Error: `pattern` must be a non-empty string."
@@ -739,8 +746,9 @@ class FileUploadTool(FunctionTool):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        local_path: str,
-    ) -> str | None:
+        **kwargs: Any,
+    ) -> ToolExecResult:
+        local_path: str = kwargs["local_path"]
         if permission_error := await check_admin_permission(
             context, "File upload/download"
         ):
@@ -808,9 +816,10 @@ class FileDownloadTool(FunctionTool):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        remote_path: str,
-        also_send_to_user: bool = True,
+        **kwargs: Any,
     ) -> ToolExecResult:
+        remote_path: str = kwargs["remote_path"]
+        also_send_to_user: bool = kwargs.get("also_send_to_user", True)
         if permission_error := await check_admin_permission(
             context, "File upload/download"
         ):

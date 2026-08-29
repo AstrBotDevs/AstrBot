@@ -26,7 +26,7 @@ class ProcessStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None]:
+    ) -> AsyncGenerator[None]:
         """处理事件"""
         activated_handlers: list[StarHandlerMetadata] = event.get_extra(
             "activated_handlers",

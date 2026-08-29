@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -17,11 +19,10 @@ class Star(PluginKVStoreMixin):
 
     author: str
     name: str
-    context: PluginContext
     logger: logging.Logger
 
     def __init__(self, context: PluginContext, config: dict | None = None) -> None:
-        self.context = context
+        self.context: PluginContext = context
         plugin_name = getattr(self.__class__, "__astrbot_plugin_logger_name__", None)
         self.logger = (
             LogManager.get_plugin_logger(plugin_name)

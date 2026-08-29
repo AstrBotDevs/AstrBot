@@ -3,7 +3,7 @@
 import asyncio
 from typing import Any, cast
 
-from aip import AipContentCensor
+from aip import AipContentCensor  # type: ignore[import-not-found]
 
 from . import ContentSafetyStrategy
 

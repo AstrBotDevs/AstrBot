@@ -16,7 +16,7 @@ from urllib.parse import urljoin, urlparse, urlunparse
 
 import aiohttp
 import certifi
-from aiohttp.abc import AbstractResolver
+from aiohttp.abc import AbstractResolver, ResolveResult
 
 from astrbot.core.utils.error_redaction import redact_sensitive_text, safe_error
 from astrbot.core.utils.io import ensure_dir
@@ -564,7 +564,7 @@ class ValidatingAiohttpResolver(AbstractResolver):
         host: str,
         port: int = 0,
         family: socket.AddressFamily = socket.AF_UNSPEC,
-    ) -> list[dict[str, Any]]:
+    ) -> list[ResolveResult]:
         hostname = _normalize_hostname(host)
         if hostname in _LOCAL_HOSTNAMES and not self._policy.allow_private_network:
             raise OutboundRequestError(
@@ -595,7 +595,7 @@ class ValidatingAiohttpResolver(AbstractResolver):
             raise OutboundRequestError(
                 "The destination URL cannot target a private or reserved address."
             )
-        records: list[dict[str, Any]] = []
+        records: list[ResolveResult] = []
         for address in addresses:
             family_value = socket.AF_INET6 if address.version == 6 else socket.AF_INET
             if family not in {socket.AF_UNSPEC, family_value}:
@@ -1034,7 +1034,9 @@ def pin_httpx_transport(transport: Any, policy: OutboundRequestPolicy) -> Any:
     """
 
     pool = getattr(transport, "_pool", None)
-    backend = getattr(pool, "_network_backend", None) if pool is not None else None
+    if pool is None:
+        return transport
+    backend = getattr(pool, "_network_backend", None)
     if backend is None:
         return transport
     pool._network_backend = PinnedAsyncNetworkBackend(backend, policy)

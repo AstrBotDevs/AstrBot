@@ -127,7 +127,7 @@ class ResultDecorateStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None]:
+    ) -> AsyncGenerator[None]:
         result = event.get_result()
         if result is None or not result.chain:
             return
@@ -173,6 +173,7 @@ class ResultDecorateStage(Stage):
         for handler in self.ctx.handlers.get_handlers_by_event_type(
             EventType.OnDecoratingResultEvent, plugins_name=event.plugins_name
         ):
+            plugin_name = handler.handler_module_path
             try:
                 plugin = self.ctx.plugins.get_by_module(handler.handler_module_path)
                 plugin_name = plugin.name if plugin else handler.handler_module_path
@@ -270,7 +271,10 @@ class ResultDecorateStage(Stage):
             None,
         )
         if callable(register_owned):
-            return await register_owned(file_path, event)
+            from collections.abc import Awaitable
+            from typing import cast
+
+            return await cast(Awaitable[str], register_owned(file_path, event))
         return await self.ctx.file_token_service.register_file(file_path)
 
     async def _apply_tts(self, event, result) -> bool:

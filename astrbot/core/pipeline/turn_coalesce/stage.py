@@ -1,7 +1,5 @@
 """Hand should_run_llm fragments to TurnWindowManager after allow-list checks."""
 
-from collections.abc import AsyncGenerator
-
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 from ..context import PipelineContext
@@ -24,7 +22,7 @@ class TurnCoalesceStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None]:
+    ) -> None:
         manager = getattr(self.ctx.execution_context, "turn_window_manager", None)
         if manager is None:
             return

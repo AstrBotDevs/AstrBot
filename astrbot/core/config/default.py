@@ -171,7 +171,7 @@ DEFAULT_CONFIG = {
         "tool_call_timeout": 120,
         "tool_schema_mode": "full",
         "llm_safety_mode": True,
-        "safety_mode_strategy": "system_prompt",  # TODO: llm judge
+        "safety_mode_strategy": "system_prompt",
         "proactive_capability": {
             "add_cron_tools": True,
         },

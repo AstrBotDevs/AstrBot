@@ -926,7 +926,7 @@ class AuthorizationService:
                         )
                         .values(revoked_at=now, revoked_by=actor.id)
                     )
-                    revoked = bool(result.rowcount)
+                    revoked = bool(getattr(result, "rowcount", 0))
                     if revoked:
                         audit_context = self._binding_audit_context(
                             actor, context, binding.config_id
@@ -1069,7 +1069,7 @@ class AuthorizationService:
                         )
                         .values(revoked_at=now, revoked_by=actor.id)
                     )
-                    if result.rowcount != len(binding_id_set):
+                    if getattr(result, "rowcount", 0) != len(binding_id_set):
                         raise AuthorizationValueError(
                             "Binding batch is no longer current"
                         )
@@ -1147,7 +1147,7 @@ class AuthorizationService:
                         < utc_now() - timedelta(days=max(1, retention_days))
                     )
                 )
-                return int(result.rowcount or 0)
+                return int(getattr(result, "rowcount", 0) or 0)
 
     async def authorize(
         self, subject: Subject, action: str, resource: Resource, context: AuthContext
@@ -1861,7 +1861,7 @@ class AuthorizationService:
                         col(AuthStepUpCredential.consumed_at).is_(None),
                     )
                     .values(consumed_at=now)
-                    .returning(AuthStepUpCredential.expires_at)
+                    .returning(col(AuthStepUpCredential.expires_at))
                 )
                 expires_at = result.scalar_one_or_none()
                 if expires_at is None:

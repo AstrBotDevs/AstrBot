@@ -1,9 +1,12 @@
 import abc
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Coroutine
+from typing import Any
 
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 from .context import PipelineContext
+
+StageProcessResult = Coroutine[Any, Any, None] | AsyncGenerator[None]
 
 
 class Stage(abc.ABC):
@@ -20,16 +23,15 @@ class Stage(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def process(
-        self,
-        event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None]:
+    def process(self, event: AstrMessageEvent) -> StageProcessResult:
         """处理事件
 
         Args:
             event (AstrMessageEvent): 事件对象，包含事件的相关信息
         Returns:
-            Union[None, AsyncGenerator[None, None]]: 处理结果，可能是 None 或者异步生成器, 如果为 None 则表示不需要继续处理, 如果为异步生成器则表示需要继续处理(进入下一个阶段)
+            Coroutine or async generator. A coroutine finishes the stage without
+            entering the onion-model nested stages. An async generator yields
+            control so later stages can run before post-processing resumes.
 
         """
         raise NotImplementedError

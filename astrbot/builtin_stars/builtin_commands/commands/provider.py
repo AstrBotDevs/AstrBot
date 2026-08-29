@@ -403,8 +403,11 @@ class ProviderCommands:
                 error_code = reachable.__class__.__name__
             elif isinstance(reachable, tuple):
                 reachable_flag, error_code, _ = reachable
+                reachable_flag = (
+                    bool(reachable_flag) if reachable_flag is not None else None
+                )
             else:
-                reachable_flag = reachable
+                reachable_flag = reachable if isinstance(reachable, bool) else None
 
             if provider_type == "llm":
                 info = f"{id_} ({meta.model})"

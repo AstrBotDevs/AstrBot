@@ -1,7 +1,6 @@
 import asyncio
 import random
 import traceback
-from collections.abc import AsyncGenerator
 from pathlib import Path
 
 from astrbot import logger
@@ -236,7 +235,7 @@ class PreProcessStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None]:
+    ) -> None:
         """在处理事件之前的预处理"""
         message_chain = event.get_messages()
         await self._send_pre_ack_emoji(event)

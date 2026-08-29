@@ -372,7 +372,7 @@ async def set_provider_enabled(
 @router.post("/providers/{provider_id:path}/test")
 async def test_provider(
     provider_id: str,
-    request: Request = None,
+    request: Request = None,  # type: ignore[assignment]
     auth: AuthContext = Depends(require_provider_scope),
     _auth: AuthContext | None = None,
     service: ProviderConfigService = Depends(get_service),

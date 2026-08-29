@@ -91,14 +91,15 @@ class GetExecutionHistoryTool(NeoSkillToolBase):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        exec_type: str | None = None,
-        success_only: bool = False,
-        limit: int = 100,
-        offset: int = 0,
-        tags: str | None = None,
-        has_notes: bool = False,
-        has_description: bool = False,
+        **kwargs: Any,
     ) -> ToolExecResult:
+        exec_type: str | None = kwargs.get("exec_type", None)
+        success_only: bool = kwargs.get("success_only", False)
+        limit: int = kwargs.get("limit", 100)
+        offset: int = kwargs.get("offset", 0)
+        tags: str | None = kwargs.get("tags", None)
+        has_notes: bool = kwargs.get("has_notes", False)
+        has_description: bool = kwargs.get("has_description", False)
         return await self._run(
             context,
             lambda _client, sandbox: sandbox.get_execution_history(
@@ -135,11 +136,12 @@ class AnnotateExecutionTool(NeoSkillToolBase):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        execution_id: str,
-        description: str | None = None,
-        tags: str | None = None,
-        notes: str | None = None,
+        **kwargs: Any,
     ) -> ToolExecResult:
+        execution_id: str = kwargs["execution_id"]
+        description: str | None = kwargs.get("description", None)
+        tags: str | None = kwargs.get("tags", None)
+        notes: str | None = kwargs.get("notes", None)
         return await self._run(
             context,
             lambda _client, sandbox: sandbox.annotate_execution(
@@ -187,9 +189,10 @@ class CreateSkillPayloadTool(NeoSkillToolBase):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        payload: dict[str, Any] | list[Any],
-        kind: str = "astrbot_skill_v1",
+        **kwargs: Any,
     ) -> ToolExecResult:
+        payload: dict[str, Any] | list[Any] = kwargs["payload"]
+        kind: str = kwargs.get("kind", "astrbot_skill_v1")
         return await self._run(
             context,
             lambda client, _sandbox: client.skills.create_payload(
@@ -218,8 +221,9 @@ class GetSkillPayloadTool(NeoSkillToolBase):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        payload_ref: str,
+        **kwargs: Any,
     ) -> ToolExecResult:
+        payload_ref: str = kwargs["payload_ref"]
         return await self._run(
             context,
             lambda client, _sandbox: client.skills.get_payload(payload_ref),
@@ -264,11 +268,12 @@ class CreateSkillCandidateTool(NeoSkillToolBase):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        skill_key: str,
-        source_execution_ids: list[str],
-        scenario_key: str | None = None,
-        payload_ref: str | None = None,
+        **kwargs: Any,
     ) -> ToolExecResult:
+        skill_key: str = kwargs["skill_key"]
+        source_execution_ids: list[str] = kwargs["source_execution_ids"]
+        scenario_key: str | None = kwargs.get("scenario_key", None)
+        payload_ref: str | None = kwargs.get("payload_ref", None)
         return await self._run(
             context,
             lambda client, _sandbox: client.skills.create_candidate(
@@ -302,11 +307,12 @@ class ListSkillCandidatesTool(NeoSkillToolBase):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        status: str | None = None,
-        skill_key: str | None = None,
-        limit: int = 100,
-        offset: int = 0,
+        **kwargs: Any,
     ) -> ToolExecResult:
+        status: str | None = kwargs.get("status", None)
+        skill_key: str | None = kwargs.get("skill_key", None)
+        limit: int = kwargs.get("limit", 100)
+        offset: int = kwargs.get("offset", 0)
         return await self._run(
             context,
             lambda client, _sandbox: client.skills.list_candidates(
@@ -341,12 +347,13 @@ class EvaluateSkillCandidateTool(NeoSkillToolBase):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        candidate_id: str,
-        passed: bool,
-        score: float | None = None,
-        benchmark_id: str | None = None,
-        report: str | None = None,
+        **kwargs: Any,
     ) -> ToolExecResult:
+        candidate_id: str = kwargs["candidate_id"]
+        passed: bool = kwargs["passed"]
+        score: float | None = kwargs.get("score", None)
+        benchmark_id: str | None = kwargs.get("benchmark_id", None)
+        report: str | None = kwargs.get("report", None)
         return await self._run(
             context,
             lambda client, _sandbox: client.skills.evaluate_candidate(
@@ -394,10 +401,11 @@ class PromoteSkillCandidateTool(NeoSkillToolBase):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        candidate_id: str,
-        stage: str = "canary",
-        sync_to_local: bool = True,
+        **kwargs: Any,
     ) -> ToolExecResult:
+        candidate_id: str = kwargs["candidate_id"]
+        stage: str = kwargs.get("stage", "canary")
+        sync_to_local: bool = kwargs.get("sync_to_local", True)
         if err := await check_admin_permission(context, "Using skill lifecycle tools"):
             return err
         if stage not in {"canary", "stable"}:
@@ -457,12 +465,13 @@ class ListSkillReleasesTool(NeoSkillToolBase):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        skill_key: str | None = None,
-        active_only: bool = False,
-        stage: str | None = None,
-        limit: int = 100,
-        offset: int = 0,
+        **kwargs: Any,
     ) -> ToolExecResult:
+        skill_key: str | None = kwargs.get("skill_key", None)
+        active_only: bool = kwargs.get("active_only", False)
+        stage: str | None = kwargs.get("stage", None)
+        limit: int = kwargs.get("limit", 100)
+        offset: int = kwargs.get("offset", 0)
         return await self._run(
             context,
             lambda client, _sandbox: client.skills.list_releases(
@@ -494,8 +503,9 @@ class RollbackSkillReleaseTool(NeoSkillToolBase):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        release_id: str,
+        **kwargs: Any,
     ) -> ToolExecResult:
+        release_id: str = kwargs["release_id"]
         return await self._run(
             context,
             lambda client, _sandbox: client.skills.rollback_release(release_id),
@@ -525,10 +535,11 @@ class SyncSkillReleaseTool(NeoSkillToolBase):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        release_id: str | None = None,
-        skill_key: str | None = None,
-        require_stable: bool = True,
+        **kwargs: Any,
     ) -> ToolExecResult:
+        release_id: str | None = kwargs.get("release_id", None)
+        skill_key: str | None = kwargs.get("skill_key", None)
+        require_stable: bool = kwargs.get("require_stable", True)
         return await self._run(
             context,
             lambda client, _sandbox: _sync_release_to_dict(

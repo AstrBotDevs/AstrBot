@@ -869,11 +869,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
 async def call_local_llm_tool(
     context: ContextWrapper[AstrAgentContext],
-    handler: T.Callable[
-        ...,
-        T.Awaitable[MessageEventResult | mcp.types.CallToolResult | str | None]
-        | T.AsyncGenerator[MessageEventResult | str | None],
-    ],
+    handler: T.Callable[..., T.Any],
     method_name: str,
     *args,
     **kwargs,

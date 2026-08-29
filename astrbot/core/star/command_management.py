@@ -210,7 +210,7 @@ async def rename_command(
     merged_extra = dict(existing_cfg.extra_data or {}) if existing_cfg else {}
     merged_extra["resolved_aliases"] = aliases or []
 
-    config = await db.upsert_command_config(
+    command_config = await db.upsert_command_config(
         handler_full_name=descriptor.handler_full_name,
         command_id=descriptor.command_id,
         previous_handler_full_name=(
@@ -227,7 +227,7 @@ async def rename_command(
         extra_data=merged_extra,
         auto_managed=False,
     )
-    _bind_descriptor_with_config(descriptor, config)
+    _bind_descriptor_with_config(descriptor, command_config)
     writer = getattr(db, "upsert_command_conflict", None)
     if writer is not None:
         await writer(

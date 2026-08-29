@@ -46,12 +46,17 @@ async def check_admin_permission(
         "Send message to another session": ("agent.manage", "send-message"),
     }.get(operation_name, ("tool.local_exec", "sensitive-operation"))
     authorization = getattr(context.context.context, "authorization", None)
-    if authorization is None or getattr(event, "subject", None) is None:
+    if authorization is None or event.subject is None or event.auth_context is None:
         return "error: Permission denied. Authorization context is unavailable."
+    config_id = (
+        event.resource.config_id
+        if event.resource is not None
+        else event.auth_context.config_id
+    )
     decision = await authorization.authorize(
         event.subject,
         action,
-        Resource.named("tool", resource_id, config_id=event.resource.config_id),
+        Resource.named("tool", resource_id, config_id=config_id),
         event.auth_context,
     )
     if not decision.allowed:

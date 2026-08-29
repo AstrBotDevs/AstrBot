@@ -137,6 +137,7 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
     """
     add_to_event_filters = False
     raise_error = True
+    parent_register_commandable = None
 
     # 判断是否是指令组，指令组则添加到指令组的CommandGroupFilter对象中在waking_check的时候一起判断
     if isinstance(custom_type_filter, RegisteringCommandable):
@@ -169,9 +170,10 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
                 **kwargs,
             )
 
-            if not add_to_event_filters and not isinstance(
-                awaitable,
-                RegisteringCommandable,
+            if (
+                not add_to_event_filters
+                and not isinstance(awaitable, RegisteringCommandable)
+                and parent_register_commandable is not None
             ):
                 # 底层子指令
                 handle_full_name = get_handler_full_name(awaitable)

@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import asyncio
 from collections import OrderedDict
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any
+from typing import Any, cast
 
 from astrbot import logger
 from astrbot.core.agent.history_sanitizer import sanitize_history_for_storage
@@ -322,7 +322,9 @@ async def _load_latest_history(
     if not callable(getter):
         return None
     try:
-        conversation = await getter(unified_msg_origin, conversation_id)
+        conversation = await cast(Callable[..., Awaitable[Any]], getter)(
+            unified_msg_origin, conversation_id
+        )
     except asyncio.CancelledError:
         raise
     except Exception as exc:  # noqa: BLE001

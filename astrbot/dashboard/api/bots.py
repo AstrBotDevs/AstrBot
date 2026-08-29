@@ -1,3 +1,5 @@
+from typing import NoReturn
+
 from fastapi import APIRouter, Depends, Query, Request
 
 from astrbot.core.auth.models import Resource
@@ -49,7 +51,7 @@ def get_platform_service(request: Request) -> PlatformService:
     return request.app.state.services.platforms
 
 
-def _raise_platform_error(exc: PlatformServiceError) -> None:
+def _raise_platform_error(exc: PlatformServiceError) -> NoReturn:
     raise ApiError(str(exc), status_code=exc.status_code) from exc
 
 

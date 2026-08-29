@@ -248,7 +248,11 @@ class TurnWindowManager:
         flush.session_id = last.session_id
         flush.platform_member_role = last.platform_member_role
         flush.platform_role_source = getattr(last, "platform_role_source", "none")
-        if last.subject is not None and last.resource is not None:
+        if (
+            last.subject is not None
+            and last.resource is not None
+            and last.auth_context is not None
+        ):
             flush.attach_authorization(
                 subject=last.subject,
                 resource=last.resource,

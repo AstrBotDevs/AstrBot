@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable
+from typing import Any, TypeGuard
 
 from astrbot.core.message.components import Json
 
@@ -76,7 +77,7 @@ def coalesce_prompt_with_json_cards(event: object, prompt: str | None) -> str:
     return json_card_prompt_from_event(event)
 
 
-def _select_card_detail(card_data: object) -> dict:
+def _select_card_detail(card_data: object) -> dict[str, Any]:
     """Pick the first share-card payload from known or generic meta objects."""
     if not isinstance(card_data, dict):
         return {}
@@ -101,7 +102,7 @@ def _select_card_detail(card_data: object) -> dict:
     return {}
 
 
-def _is_share_card_detail(candidate: object) -> bool:
+def _is_share_card_detail(candidate: object) -> TypeGuard[dict[str, Any]]:
     if not isinstance(candidate, dict):
         return False
     return any(

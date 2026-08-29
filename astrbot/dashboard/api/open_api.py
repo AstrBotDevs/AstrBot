@@ -122,7 +122,7 @@ async def _open_api_chat_response(
     chat_service: ChatService,
 ) -> StreamingResponse | JSONResponse:
     if auth.via != "api_key":
-        dashboard_principal = None
+        dashboard_principal: dict[str, object] | None = None
         if auth.account_id and auth.sid:
             dashboard_principal = {
                 "account_id": auth.account_id,

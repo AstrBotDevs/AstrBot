@@ -97,13 +97,13 @@ class ExecuteShellTool(FunctionTool):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        command: str,
-        background: bool = False,
-        timeout_seconds: int | None = None,
-        env: dict[str, Any] | None = None,
-        yield_time_ms: int = 10_000,
         **kwargs: Any,
     ) -> ToolExecResult:
+        command: str = kwargs["command"]
+        background: bool = kwargs.get("background", False)
+        timeout_seconds: int | None = kwargs.get("timeout_seconds", None)
+        env: dict[str, Any] | None = kwargs.get("env", None)
+        yield_time_ms: int = kwargs.get("yield_time_ms", 10_000)
         if permission_error := await check_admin_permission(context, "Shell execution"):
             return permission_error
 
@@ -229,14 +229,14 @@ class ShellSessionTool(FunctionTool):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        action: str,
-        session_id: str | None = None,
-        chars: str = "",
-        cursor: int | None = None,
-        yield_time_ms: int = 5_000,
-        max_output_chars: int = 10_000,
-        **_: Any,
+        **kwargs: Any,
     ) -> ToolExecResult:
+        action: str = kwargs["action"]
+        session_id: str | None = kwargs.get("session_id", None)
+        chars: str = kwargs.get("chars", "")
+        cursor: int | None = kwargs.get("cursor", None)
+        yield_time_ms: int = kwargs.get("yield_time_ms", 5_000)
+        max_output_chars: int = kwargs.get("max_output_chars", 10_000)
         if permission_error := await check_admin_permission(
             context, "Shell session management"
         ):

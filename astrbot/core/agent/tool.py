@@ -135,7 +135,9 @@ class FunctionTool[TContext](ToolSchema):
             f"description={self.description})"
         )
 
-    async def call(self, context: ContextWrapper[TContext], **kwargs) -> ToolExecResult:
+    async def call(
+        self, context: ContextWrapper[TContext], **kwargs: Any
+    ) -> ToolExecResult:
         """Run the tool with the given arguments. The handler field has priority."""
         raise NotImplementedError(
             "FunctionTool.call() must be implemented by subclasses or set a handler."

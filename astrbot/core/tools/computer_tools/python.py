@@ -58,7 +58,7 @@ async def handle_result(result: dict, event: AstrMessageEvent) -> ToolExecResult
         for img in images:
             resp.content.append(
                 mcp.types.ImageContent(
-                    type="image", data=img["image/png"], mimeType="image/png"
+                    type="image", data=img["image/png"], mime_type="image/png"
                 )
             )
 
@@ -85,11 +85,11 @@ class PythonTool(FunctionTool):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        code: str,
-        silent: bool = False,
-        timeout_seconds: int = 30,
         **kwargs: Any,
     ) -> ToolExecResult:
+        code: str = kwargs["code"]
+        silent: bool = kwargs.get("silent", False)
+        timeout_seconds: int = kwargs.get("timeout_seconds", 30)
         if permission_error := await check_admin_permission(
             context, "Python execution"
         ):
@@ -131,11 +131,11 @@ class LocalPythonTool(FunctionTool):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        code: str,
-        silent: bool = False,
-        timeout_seconds: int = 30,
         **kwargs: Any,
     ) -> ToolExecResult:
+        code: str = kwargs["code"]
+        silent: bool = kwargs.get("silent", False)
+        timeout_seconds: int = kwargs.get("timeout_seconds", 30)
         if permission_error := await check_admin_permission(
             context, "Python execution"
         ):

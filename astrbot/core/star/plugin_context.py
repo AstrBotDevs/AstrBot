@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import inspect
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar
@@ -952,6 +952,16 @@ class SessionCapability:
         )
 
 
+class AuthBindingView(Protocol):
+    """Plugin-visible authorization binding fields."""
+
+    subject_id: str
+    role: str
+    scope_type: str
+    binding_id: str
+    scope_id: str
+
+
 class AuthorizationCapability:
     """Event-bound authorization access without exposing database tables."""
 
@@ -1073,7 +1083,7 @@ class AuthorizationCapability:
             event.auth_context.config_id, umo or event.unified_msg_origin
         )
 
-    async def list_bindings(self, event: AstrMessageEvent) -> list[object]:
+    async def list_bindings(self, event: AstrMessageEvent) -> Sequence[AuthBindingView]:
         """List bindings visible to the caller's authorized scope.
 
         Session owners may inspect the bindings for their current session, while
@@ -1084,6 +1094,8 @@ class AuthorizationCapability:
 
         if self._plugin_id is not None and not self._allow_core_actions:
             raise PermissionError("Plugin cannot manage authorization bindings")
+        if event.auth_context is None or not event.auth_context.config_id:
+            raise PermissionError("Authorization context is unavailable")
         decision = await self.authorize(event, "identity.manage")
         if not decision.allowed:
             raise PermissionError("Authorization denied")
@@ -1114,6 +1126,8 @@ class AuthorizationCapability:
             raise PermissionError("Authorization denied")
         assert self._authorization is not None
         assert event.resource is not None
+        if event.subject is None:
+            raise PermissionError("Authorization context is unavailable")
         target = Subject.im(
             platform_instance=event.get_platform_id(),
             bot_account_id=event.get_self_id() or "default",
@@ -1141,6 +1155,8 @@ class AuthorizationCapability:
             raise PermissionError("Authorization denied")
         assert self._authorization is not None
         assert event.resource is not None
+        if event.subject is None:
+            raise PermissionError("Authorization context is unavailable")
         target = Subject.im(
             platform_instance=event.get_platform_id(),
             bot_account_id=event.get_self_id() or "default",

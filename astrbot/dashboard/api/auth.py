@@ -1,5 +1,7 @@
 import hashlib
+import inspect
 from dataclasses import dataclass
+from datetime import datetime
 from urllib.parse import urlsplit
 
 import jwt
@@ -58,8 +60,15 @@ class AuthContext:
     account_id: str | None = None
     sid: str | None = None
     auth_strength: str = "none"
-    issued_at: object | None = None
+    issued_at: datetime | None = None
     via: str = "jwt"
+
+
+async def _await_dashboard_principal(validate_principal, principal) -> bool:
+    result = validate_principal(principal)
+    if inspect.isawaitable(result):
+        result = await result
+    return bool(result)
 
 
 _SCOPE_ACTIONS = {
@@ -469,7 +478,9 @@ async def require_dashboard_user(request: Request) -> str:
         raise ApiError("Token 无效", status_code=401) from exc
     auth_service = getattr(request.app.state.services, "auth", None)
     validate_principal = getattr(auth_service, "validate_dashboard_principal", None)
-    if callable(validate_principal) and not await validate_principal(principal):
+    if callable(validate_principal) and not await _await_dashboard_principal(
+        validate_principal, principal
+    ):
         raise ApiError("Token 无效", status_code=401)
     if source == "cookie":
         _require_cookie_mutation_origin(request)
@@ -516,8 +527,8 @@ async def require_dashboard_session_principal(
     auth_service = getattr(request.app.state.services, "auth", None)
     validate_principal = getattr(auth_service, "validate_dashboard_principal", None)
     selected_principal = bearer_principal or cookie_principal
-    if callable(validate_principal) and not await validate_principal(
-        selected_principal
+    if callable(validate_principal) and not await _await_dashboard_principal(
+        validate_principal, selected_principal
     ):
         raise ApiError("Unauthorized", status_code=401)
     # An explicit Bearer credential is the API authentication path.  Only a
@@ -606,7 +617,9 @@ async def require_scope(
 
     auth_service = getattr(request.app.state.services, "auth", None)
     validate_principal = getattr(auth_service, "validate_dashboard_principal", None)
-    if callable(validate_principal) and not await validate_principal(principal):
+    if callable(validate_principal) and not await _await_dashboard_principal(
+        validate_principal, principal
+    ):
         raise ApiError("Invalid token", status_code=401)
 
     if source == "cookie":

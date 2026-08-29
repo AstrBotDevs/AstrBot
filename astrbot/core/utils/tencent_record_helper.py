@@ -111,7 +111,7 @@ async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
         RuntimeError: Raised when conversion does not produce a non-empty WAV file.
     """
     try:
-        from pyffmpeg import FFmpeg
+        from pyffmpeg import FFmpeg  # type: ignore[import-not-found]
 
         ff = FFmpeg()
         ff.convert(input_file=input_path, output_file=output_path)

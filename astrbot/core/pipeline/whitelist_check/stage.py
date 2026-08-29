@@ -1,5 +1,3 @@
-from collections.abc import AsyncGenerator
-
 from astrbot import logger
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
@@ -31,7 +29,7 @@ class WhitelistCheckStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None]:
+    ) -> None:
         if not self.enable_whitelist_check:
             # 白名单检查未启用
             return

@@ -1,8 +1,8 @@
 import copy
 import enum
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Literal, TypeVar, overload
+from typing import Any, TypeVar
 
 from .filter import HandlerFilter
 from .star import PluginRegistry
@@ -30,132 +30,6 @@ class HandlerRegistry[T: "StarHandlerMetadata"]:
     def _print_handlers(self) -> None:
         for handler in self._handlers:
             print(handler.handler_full_name)
-
-    @overload
-    def get_handlers_by_event_type(
-        self,
-        event_type: Literal[EventType.OnAstrBotLoadedEvent],
-        only_activated=True,
-        plugins_name: list[str] | None = None,
-    ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
-
-    @overload
-    def get_handlers_by_event_type(
-        self,
-        event_type: Literal[EventType.OnPlatformLoadedEvent],
-        only_activated=True,
-        plugins_name: list[str] | None = None,
-    ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
-
-    @overload
-    def get_handlers_by_event_type(
-        self,
-        event_type: Literal[EventType.AdapterMessageEvent],
-        only_activated=True,
-        plugins_name: list[str] | None = None,
-    ) -> list[
-        StarHandlerMetadata[Callable[..., Awaitable[Any] | AsyncGenerator[Any]]]
-    ]: ...
-
-    @overload
-    def get_handlers_by_event_type(
-        self,
-        event_type: Literal[EventType.OnLLMRequestEvent],
-        only_activated=True,
-        plugins_name: list[str] | None = None,
-    ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
-
-    @overload
-    def get_handlers_by_event_type(
-        self,
-        event_type: Literal[EventType.OnLLMResponseEvent],
-        only_activated=True,
-        plugins_name: list[str] | None = None,
-    ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
-
-    @overload
-    def get_handlers_by_event_type(
-        self,
-        event_type: Literal[EventType.OnAgentBeginEvent],
-        only_activated=True,
-        plugins_name: list[str] | None = None,
-    ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
-
-    @overload
-    def get_handlers_by_event_type(
-        self,
-        event_type: Literal[EventType.OnAgentDoneEvent],
-        only_activated=True,
-        plugins_name: list[str] | None = None,
-    ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
-
-    @overload
-    def get_handlers_by_event_type(
-        self,
-        event_type: Literal[EventType.OnDecoratingResultEvent],
-        only_activated=True,
-        plugins_name: list[str] | None = None,
-    ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
-
-    @overload
-    def get_handlers_by_event_type(
-        self,
-        event_type: Literal[EventType.OnCallingFuncToolEvent],
-        only_activated=True,
-        plugins_name: list[str] | None = None,
-    ) -> list[
-        StarHandlerMetadata[Callable[..., Awaitable[Any] | AsyncGenerator[Any]]]
-    ]: ...
-
-    @overload
-    def get_handlers_by_event_type(
-        self,
-        event_type: Literal[EventType.OnAfterMessageSentEvent],
-        only_activated=True,
-        plugins_name: list[str] | None = None,
-    ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
-
-    @overload
-    def get_handlers_by_event_type(
-        self,
-        event_type: Literal[EventType.OnAssistantHistoryFinalized],
-        only_activated=True,
-        plugins_name: list[str] | None = None,
-    ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
-
-    @overload
-    def get_handlers_by_event_type(
-        self,
-        event_type: Literal[EventType.OnPluginErrorEvent],
-        only_activated=True,
-        plugins_name: list[str] | None = None,
-    ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
-
-    @overload
-    def get_handlers_by_event_type(
-        self,
-        event_type: Literal[EventType.OnPluginLoadedEvent],
-        only_activated=True,
-        plugins_name: list[str] | None = None,
-    ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
-
-    @overload
-    def get_handlers_by_event_type(
-        self,
-        event_type: Literal[EventType.OnPluginUnloadedEvent],
-        only_activated=True,
-        plugins_name: list[str] | None = None,
-    ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
-
-    @overload
-    def get_handlers_by_event_type(
-        self,
-        event_type: EventType,
-        only_activated=True,
-        plugins_name: list[str] | None = None,
-    ) -> list[
-        StarHandlerMetadata[Callable[..., Awaitable[Any] | AsyncGenerator[Any]]]
-    ]: ...
 
     def get_handlers_by_event_type(
         self,

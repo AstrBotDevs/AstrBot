@@ -9,9 +9,9 @@ from .tool import FunctionTool
 
 class BaseFunctionToolExecutor[TContext]:
     @classmethod
-    async def execute(
+    def execute(
         cls,
         tool: FunctionTool,
         run_context: ContextWrapper[TContext],
-        **tool_args,
+        **tool_args: Any,
     ) -> AsyncGenerator[Any | mcp.types.CallToolResult]: ...

@@ -484,7 +484,7 @@ class At(BaseMessageComponent):
 
 
 class AtAll(At):
-    qq: str = "all"
+    qq: int | str = "all"
 
     def __init__(self, **_) -> None:
         super().__init__(**_)

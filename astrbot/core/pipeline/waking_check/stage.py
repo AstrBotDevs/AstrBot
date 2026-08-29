@@ -1,5 +1,5 @@
 import hashlib
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 
@@ -139,7 +139,7 @@ class WakingCheckStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None]:
+    ) -> None:
         self._apply_unique_session(event)
         await self._attach_authorization(event)
         if self._is_bot_self_message(event):
@@ -328,10 +328,11 @@ class WakingCheckStage(Stage):
             source = "webchat"
             scopes = ()
         else:
-            platform_instance = getattr(event, "get_platform_id", None)
+            get_platform_id = getattr(event, "get_platform_id", None)
+            platform_id = get_platform_id() if callable(get_platform_id) else None
             platform_instance = (
-                platform_instance()
-                if callable(platform_instance)
+                platform_id
+                if isinstance(platform_id, str)
                 else event.get_platform_name()
             )
             subject = Subject.im(
@@ -364,8 +365,11 @@ class WakingCheckStage(Stage):
             # verified thread row and is never accepted from the client.
             umo = f"webchat:FriendMessage:webchat!{event.get_sender_id()}!{parent_session_id}"
         resource = Resource.session(config_id, umo)
-        message_type = getattr(event, "get_message_type", None)
-        message_type = message_type().value if callable(message_type) else "friend"
+        get_message_type = getattr(event, "get_message_type", None)
+        message_type_obj = get_message_type() if callable(get_message_type) else None
+        message_type = getattr(message_type_obj, "value", "friend")
+        if not isinstance(message_type, str):
+            message_type = "friend"
         context = AuthContext(
             subject=subject,
             source=source,

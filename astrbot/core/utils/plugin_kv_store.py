@@ -1,4 +1,4 @@
-from typing import Protocol, TypeVar
+from typing import Any, Protocol, TypeVar
 
 SUPPORTED_VALUE_TYPES = int | float | str | bytes | bool | dict | list | None
 _VT = TypeVar("_VT")
@@ -29,7 +29,7 @@ class PluginKVStoreMixin:
     """为插件提供键值存储功能的 Mixin 类"""
 
     plugin_id: str
-    context: PluginKVContext
+    context: Any
 
     async def put_kv_data(
         self,

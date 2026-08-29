@@ -345,6 +345,8 @@ class AstrBotCoreLifecycle:
 
         self._register_cleanup("database", self.db.close)
         authorization = self.services.authorization
+        if authorization is None:
+            raise RuntimeError("AuthorizationService is required")
         if isinstance(self.db, SQLiteDatabase):
             self._register_cleanup("authorization", authorization.close)
         self._register_cleanup(

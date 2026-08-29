@@ -91,6 +91,7 @@ class PlatformManager:
         # PlatformManager must not depend on the concrete database implementation.
         self.database: WebChatStorageStore | None = None
         self.preferences: SharedPreferences | None = None
+        self.typing_signal: Callable[[str, int], None] | None = None
 
     def _create_platform_instance(
         self,

@@ -1,8 +1,10 @@
+import inspect
 import json
 import uuid
+from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import mcp
 from mcp.types import ContentBlock
@@ -14,6 +16,16 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.tools.computer_tools.util import check_admin_permission
 from astrbot.core.tools.registry import builtin_tool
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+
+
+async def _admin_permission_error(
+    context: ContextWrapper[AstrAgentContext], operation_name: str
+) -> str | None:
+    result = check_admin_permission(context, operation_name)
+    if inspect.isawaitable(result):
+        return await cast(Awaitable[str | None], result)
+    return result
+
 
 _CUA_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": "sandbox",
@@ -71,16 +83,11 @@ class CuaScreenshotTool(FunctionTool):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        send_to_user: bool = True,
-        return_image_to_llm: bool = True,
+        **kwargs: Any,
     ) -> ToolExecResult:
-        permission_result = check_admin_permission(context, "Taking CUA screenshots")
-        err = (
-            await permission_result
-            if hasattr(permission_result, "__await__")
-            else permission_result
-        )
-        if err:
+        send_to_user: bool = kwargs.get("send_to_user", True)
+        return_image_to_llm: bool = kwargs.get("return_image_to_llm", True)
+        if err := await _admin_permission_error(context, "Taking CUA screenshots"):
             return err
         try:
             gui = await _get_gui_component(context)
@@ -99,7 +106,7 @@ class CuaScreenshotTool(FunctionTool):
                     mcp.types.ImageContent(
                         type="image",
                         data=str(image_data),
-                        mimeType=str(payload.get("mime_type", "image/png")),
+                        mime_type=str(payload.get("mime_type", "image/png")),
                     )
                 )
             return mcp.types.CallToolResult(content=content)
@@ -131,17 +138,12 @@ class CuaMouseClickTool(FunctionTool):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        x: int,
-        y: int,
-        button: str = "left",
+        **kwargs: Any,
     ) -> ToolExecResult:
-        permission_result = check_admin_permission(context, "Using CUA mouse")
-        err = (
-            await permission_result
-            if hasattr(permission_result, "__await__")
-            else permission_result
-        )
-        if err:
+        x: int = kwargs["x"]
+        y: int = kwargs["y"]
+        button: str = kwargs.get("button", "left")
+        if err := await _admin_permission_error(context, "Using CUA mouse"):
             return err
         try:
             gui = await _get_gui_component(context)
@@ -168,15 +170,10 @@ class CuaKeyboardTypeTool(FunctionTool):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        text: str,
+        **kwargs: Any,
     ) -> ToolExecResult:
-        permission_result = check_admin_permission(context, "Using CUA keyboard")
-        err = (
-            await permission_result
-            if hasattr(permission_result, "__await__")
-            else permission_result
-        )
-        if err:
+        text: str = kwargs["text"]
+        if err := await _admin_permission_error(context, "Using CUA keyboard"):
             return err
         try:
             gui = await _get_gui_component(context)

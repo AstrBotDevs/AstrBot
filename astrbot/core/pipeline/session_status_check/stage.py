@@ -1,5 +1,3 @@
-from collections.abc import AsyncGenerator
-
 from astrbot import logger
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.command_ids import BUILTIN_COMMANDS_MODULE
@@ -39,7 +37,7 @@ class SessionStatusCheckStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None]:
+    ) -> None:
         if await self.session_services.is_session_enabled(event.unified_msg_origin):
             return
         if allows_disabled_session(event):

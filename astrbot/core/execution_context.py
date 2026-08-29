@@ -264,6 +264,7 @@ class CoreExecutionContext:
         self.subagent_orchestrator = subagent_orchestrator
         self.persona_runtime_manager: PersonaRuntimeManager | None = None
         self.memory_manager: MemoryManager | None = None
+        self.turn_window_manager: Any | None = None
         self.dashboard_extension_registry = DashboardExtensionRegistry()
         self.dashboard_extensions = DashboardExtensionAccess(
             self.dashboard_extension_registry
