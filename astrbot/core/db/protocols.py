@@ -810,7 +810,6 @@ class PlatformSessionStore(Protocol):
         platform_id: str = "webchat",
         session_id: str | None = None,
         display_name: str | None = None,
-        is_group: int = 0,
     ) -> PlatformSession: ...
 
     async def get_platform_session_by_id(
@@ -981,6 +980,7 @@ class DashboardStore(
     ApiKeyStore,
     ChatStore,
     CommandStore,
+    ConversationStore,
     DatabaseSessionStore,
     MemoryStore,
     StatisticsStore,

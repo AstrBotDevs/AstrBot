@@ -9,7 +9,7 @@ from astrbot.core.db.po.mixins import TimestampMixin
 class MemoryFact(TimestampMixin, SQLModel, table=True):
     """A remembered person fact scoped to its source chat stream."""
 
-    __tablename__: str = "memory_facts"
+    __tablename__ = "memory_facts"  # type: ignore
 
     id: int | None = Field(
         primary_key=True,
@@ -45,7 +45,7 @@ class MemoryFact(TimestampMixin, SQLModel, table=True):
 class MemoryProfile(TimestampMixin, SQLModel, table=True):
     """Aggregated person profile for one memory scope."""
 
-    __tablename__: str = "memory_profiles"
+    __tablename__ = "memory_profiles"  # type: ignore
 
     id: int | None = Field(
         primary_key=True,
@@ -71,7 +71,7 @@ class MemoryProfile(TimestampMixin, SQLModel, table=True):
 class MemoryEpisode(TimestampMixin, SQLModel, table=True):
     """A compact event memory built from one or more chat turns."""
 
-    __tablename__: str = "memory_episodes"
+    __tablename__ = "memory_episodes"  # type: ignore
 
     id: int | None = Field(
         primary_key=True,
@@ -97,7 +97,7 @@ class MemoryEpisode(TimestampMixin, SQLModel, table=True):
 class MemoryScopePolicyRecord(TimestampMixin, SQLModel, table=True):
     """Explicit memory sharing rule between isolated chat scopes."""
 
-    __tablename__: str = "memory_scope_policies"
+    __tablename__ = "memory_scope_policies"  # type: ignore
 
     id: int | None = Field(
         primary_key=True,
@@ -122,7 +122,7 @@ class MemoryScopePolicyRecord(TimestampMixin, SQLModel, table=True):
 class MemoryTuningTask(TimestampMixin, SQLModel, table=True):
     """Recorded retrieval tuning probe for one memory scope."""
 
-    __tablename__: str = "memory_tuning_tasks"
+    __tablename__ = "memory_tuning_tasks"  # type: ignore
 
     id: int | None = Field(
         primary_key=True,
@@ -140,7 +140,7 @@ class MemoryTuningTask(TimestampMixin, SQLModel, table=True):
 class MemoryOperationLog(TimestampMixin, SQLModel, table=True):
     """Audit log for memory writes and maintenance operations."""
 
-    __tablename__: str = "memory_operation_logs"
+    __tablename__ = "memory_operation_logs"  # type: ignore
 
     id: int | None = Field(
         primary_key=True,

@@ -12,7 +12,7 @@ class PlatformSession(TimestampMixin, SQLModel, table=True):
     Each session can have multiple conversations (对话) associated with it.
     """
 
-    __tablename__: str = "platform_sessions"
+    __tablename__ = "platform_sessions"  # type: ignore
 
     inner_id: int | None = Field(
         primary_key=True,
@@ -31,8 +31,6 @@ class PlatformSession(TimestampMixin, SQLModel, table=True):
     """Username of the session creator"""
     display_name: str | None = Field(default=None, max_length=255)
     """Display name for the session"""
-    is_group: int = Field(default=0, nullable=False)
-    """0 for private chat, 1 for group chat (not implemented yet)"""
 
     __table_args__ = (
         UniqueConstraint(
@@ -45,7 +43,7 @@ class PlatformSession(TimestampMixin, SQLModel, table=True):
 class UmoAlias(TimestampMixin, SQLModel, table=True):
     """User-facing names for unified message origins."""
 
-    __tablename__: str = "umo_aliases"
+    __tablename__ = "umo_aliases"  # type: ignore
 
     id: int | None = Field(
         primary_key=True,

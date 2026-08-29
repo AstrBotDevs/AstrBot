@@ -14,7 +14,6 @@ const sessions = Array.from({ length: 120 }, (_, index) => ({
   session_id: `session-${index}`,
   display_name: `Session ${index}`,
   platform_id: 'webchat',
-  is_group: false,
   created_at: '2026-08-04T12:00:00Z',
   updated_at: '2026-08-04T12:00:00Z',
 }));

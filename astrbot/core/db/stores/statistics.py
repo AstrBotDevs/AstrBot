@@ -4,9 +4,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, func, select, text
 
 from astrbot.core.db.po import PlatformStat, ProviderStat
+from astrbot.core.db.stores.mixin import DatabaseStoreMixin, store_session
 
 
-class StatisticsStoreMixin:
+class StatisticsStoreMixin(DatabaseStoreMixin):
     async def insert_platform_stats(
         self,
         platform_id,
@@ -15,7 +16,7 @@ class StatisticsStoreMixin:
         timestamp=None,
     ) -> None:
         """Insert a new platform statistic record."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 if timestamp is None:
@@ -42,7 +43,7 @@ class StatisticsStoreMixin:
 
     async def count_platform_stats(self) -> int:
         """Count the number of platform statistics records."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             result = await session.execute(
                 select(func.count(col(PlatformStat.platform_id))).select_from(
@@ -54,7 +55,7 @@ class StatisticsStoreMixin:
 
     async def get_platform_stats(self, offset_sec: int = 86400) -> list[PlatformStat]:
         """Get platform statistic rows within the specified offset in seconds."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             now = datetime.now()
             start_time = now - timedelta(seconds=offset_sec)
@@ -88,7 +89,7 @@ class StatisticsStoreMixin:
         end_time = float(stats.get("end_time", 0.0) or 0.0)
         time_to_first_token = float(stats.get("time_to_first_token", 0.0) or 0.0)
 
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 record = ProviderStat(

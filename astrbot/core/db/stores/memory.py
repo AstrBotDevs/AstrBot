@@ -11,9 +11,10 @@ from astrbot.core.db.po import (
     MemoryScopePolicyRecord,
     MemoryTuningTask,
 )
+from astrbot.core.db.stores.mixin import DatabaseStoreMixin, store_session
 
 
-class MemoryStoreMixin:
+class MemoryStoreMixin(DatabaseStoreMixin):
     async def upsert_memory_fact(
         self,
         *,
@@ -28,7 +29,7 @@ class MemoryStoreMixin:
         status: str = "active",
         ttl_at: datetime | None = None,
     ) -> tuple[MemoryFact, bool]:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 result = await session.execute(
@@ -78,7 +79,7 @@ class MemoryStoreMixin:
         limit: int = 20,
         offset: int = 0,
     ) -> list[MemoryFact]:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             stmt = select(MemoryFact)
             if status:
@@ -115,7 +116,7 @@ class MemoryStoreMixin:
         query: str | None = None,
         status: str | None = "active",
     ) -> int:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             stmt = select(func.count()).select_from(MemoryFact)
             if status:
@@ -139,7 +140,7 @@ class MemoryStoreMixin:
             return int(result.scalar_one() or 0)
 
     async def get_memory_fact(self, fact_id: int) -> MemoryFact | None:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             return await session.get(MemoryFact, fact_id)
 
@@ -153,7 +154,7 @@ class MemoryStoreMixin:
         operator: str,
         reason: str | None = None,
     ) -> MemoryFact | None:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 fact = await session.get(MemoryFact, fact_id)
@@ -204,7 +205,7 @@ class MemoryStoreMixin:
     ) -> bool:
         if status not in {"active", "deleted"}:
             raise ValueError(f"Unsupported memory fact status: {status}")
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 fact = await session.get(MemoryFact, fact_id)
@@ -236,7 +237,7 @@ class MemoryStoreMixin:
         profile_text: str,
         is_override: bool = False,
     ) -> MemoryProfile:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 result = await session.execute(
@@ -270,7 +271,7 @@ class MemoryStoreMixin:
         *,
         include_override: bool = True,
     ) -> MemoryProfile | None:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             stmt = select(MemoryProfile).where(
                 col(MemoryProfile.person_id) == person_id,
@@ -290,7 +291,7 @@ class MemoryStoreMixin:
         limit: int = 20,
         offset: int = 0,
     ) -> list[MemoryProfile]:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             stmt = select(MemoryProfile)
             if person_id:
@@ -311,7 +312,7 @@ class MemoryStoreMixin:
         person_id: str | None = None,
         chat_scope: str | None = None,
     ) -> int:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             stmt = select(func.count()).select_from(MemoryProfile)
             if person_id:
@@ -335,7 +336,7 @@ class MemoryStoreMixin:
         start_at: datetime | None = None,
         end_at: datetime | None = None,
     ) -> MemoryEpisode:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 result = await session.execute(
@@ -381,7 +382,7 @@ class MemoryStoreMixin:
         status: str = "active",
         limit: int = 10,
     ) -> list[MemoryEpisode]:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             stmt = select(MemoryEpisode).where(col(MemoryEpisode.status) == status)
             if chat_ids is not None:
@@ -410,7 +411,7 @@ class MemoryStoreMixin:
         *,
         status: str | None = "active",
     ) -> int:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             stmt = select(func.count()).select_from(MemoryEpisode)
             if status:
@@ -430,7 +431,7 @@ class MemoryStoreMixin:
     ) -> MemoryScopePolicyRecord:
         if sharing_mode not in {"group-shared", "global-shared"}:
             raise ValueError(f"Unsupported memory sharing mode: {sharing_mode}")
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 result = await session.execute(
@@ -478,7 +479,7 @@ class MemoryStoreMixin:
         enabled: bool = True,
         limit: int = 50,
     ) -> list[MemoryScopePolicyRecord]:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             stmt = select(MemoryScopePolicyRecord).where(
                 col(MemoryScopePolicyRecord.enabled) == enabled
@@ -501,7 +502,7 @@ class MemoryStoreMixin:
         evaluation_result: dict | None = None,
         status: str = "pending",
     ) -> MemoryTuningTask:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 result = await session.execute(
@@ -538,7 +539,7 @@ class MemoryStoreMixin:
         status: str | None = None,
         limit: int = 20,
     ) -> list[MemoryTuningTask]:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             stmt = select(MemoryTuningTask)
             if target_scope:
@@ -559,7 +560,7 @@ class MemoryStoreMixin:
         reason: str | None = None,
         payload: dict | None = None,
     ) -> MemoryOperationLog:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 record = MemoryOperationLog(
@@ -583,7 +584,7 @@ class MemoryStoreMixin:
         limit: int = 50,
         offset: int = 0,
     ) -> list[MemoryOperationLog]:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             stmt = select(MemoryOperationLog)
             if target_type:
@@ -604,7 +605,7 @@ class MemoryStoreMixin:
         target_type: str | None = None,
         target_id: str | None = None,
     ) -> int:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             stmt = select(func.count()).select_from(MemoryOperationLog)
             if target_type:

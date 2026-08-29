@@ -253,7 +253,6 @@ class ChatUIProjectService:
             "platform_id": session.platform_id,
             "creator": session.creator,
             "display_name": session.display_name,
-            "is_group": session.is_group,
             "created_at": to_utc_isoformat(session.created_at),
             "updated_at": to_utc_isoformat(session.updated_at),
         }

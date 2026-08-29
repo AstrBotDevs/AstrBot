@@ -6,7 +6,7 @@ from astrbot.core.db.po.mixins import TimestampMixin
 
 
 class ConversationV2(TimestampMixin, SQLModel, table=True):
-    __tablename__: str = "conversations"
+    __tablename__ = "conversations"  # type: ignore
 
     inner_conversation_id: int | None = Field(
         default=None,

@@ -10,7 +10,7 @@ class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
     or platform-specific messages.
     """
 
-    __tablename__: str = "platform_message_history"
+    __tablename__ = "platform_message_history"  # type: ignore
 
     id: int | None = Field(
         primary_key=True,

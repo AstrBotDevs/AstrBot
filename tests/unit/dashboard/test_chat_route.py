@@ -71,7 +71,6 @@ async def test_chat_stream_creates_missing_webchat_platform_session(
             creator="alice",
             platform_id="webchat",
             session_id=session_id,
-            is_group=0,
         )
     finally:
         await stream.aclose()

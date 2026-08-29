@@ -8,6 +8,7 @@ from sqlmodel import col, delete, desc, or_, select, update
 from astrbot.core.auth.models import persist_capability_config_id
 from astrbot.core.auth.registry import dashboard_api_capability_specs
 from astrbot.core.db.po import ApiKey, AuthCapability
+from astrbot.core.db.stores.mixin import DatabaseStoreMixin, store_session
 
 
 async def _upsert_capability_in_session(
@@ -53,7 +54,7 @@ async def _upsert_capability_in_session(
     return existing
 
 
-class ApiKeyStoreMixin:
+class ApiKeyStoreMixin(DatabaseStoreMixin):
     async def create_api_key(
         self,
         name: str,
@@ -64,7 +65,7 @@ class ApiKeyStoreMixin:
         expires_at: datetime | None = None,
     ) -> ApiKey:
         """Create a new API key record."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 api_key = ApiKey(
@@ -98,7 +99,7 @@ class ApiKeyStoreMixin:
 
     async def list_api_keys(self) -> list[ApiKey]:
         """List all API keys."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             result = await session.execute(
                 select(ApiKey).order_by(desc(ApiKey.created_at))
@@ -107,7 +108,7 @@ class ApiKeyStoreMixin:
 
     async def get_api_key_by_id(self, key_id: str) -> ApiKey | None:
         """Get an API key by key_id."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             result = await session.execute(
                 select(ApiKey).where(ApiKey.key_id == key_id)
@@ -116,7 +117,7 @@ class ApiKeyStoreMixin:
 
     async def get_active_api_key_by_hash(self, key_hash: str) -> ApiKey | None:
         """Get an active API key by hash (not revoked, not expired)."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             now = datetime.now(UTC)
             query = select(ApiKey).where(
@@ -129,7 +130,7 @@ class ApiKeyStoreMixin:
 
     async def touch_api_key(self, key_id: str) -> None:
         """Update last_used_at of an API key."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 await session.execute(
@@ -140,7 +141,7 @@ class ApiKeyStoreMixin:
 
     async def revoke_api_key(self, key_id: str) -> bool:
         """Revoke an API key."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 now = datetime.now(UTC)
@@ -163,7 +164,7 @@ class ApiKeyStoreMixin:
 
     async def delete_api_key(self, key_id: str) -> bool:
         """Delete an API key."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 await session.execute(
@@ -191,7 +192,7 @@ class ApiKeyStoreMixin:
         expires_at: datetime | None = None,
     ) -> AuthCapability:
         """Insert or revive one current-state capability row."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 return await _upsert_capability_in_session(

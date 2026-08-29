@@ -8,7 +8,7 @@ from astrbot.core.db.po.mixins import TimestampMixin
 class WebChatThread(TimestampMixin, SQLModel, table=True):
     """A side thread created from a selected WebChat assistant response."""
 
-    __tablename__: str = "webchat_threads"
+    __tablename__ = "webchat_threads"  # type: ignore
 
     id: int | None = Field(
         primary_key=True,

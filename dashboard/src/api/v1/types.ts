@@ -162,7 +162,6 @@ export interface ChatSessionSummary {
   updated_at: string;
   platform_id: string;
   creator: string;
-  is_group: number;
   created_at: string;
   [key: string]: unknown;
 }

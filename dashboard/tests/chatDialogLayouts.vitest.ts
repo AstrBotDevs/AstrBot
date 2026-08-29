@@ -102,7 +102,6 @@ describe('chat dialog layouts', () => {
       props: {
         sessionId: 'session-1',
         platformId: 'webchat',
-        isGroup: false,
       },
     });
 

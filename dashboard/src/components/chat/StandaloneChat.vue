@@ -392,7 +392,7 @@ async function ensureSession() {
 
 async function bindConfigToSession(sessionId: string) {
   const confId = props.configId || 'default';
-  const umo = buildWebchatUmoDetails(sessionId, false).umo;
+  const umo = buildWebchatUmoDetails(sessionId).umo;
   await configRouteApi.upsert(umo, { config_id: confId });
 }
 

@@ -9,7 +9,7 @@ from astrbot.core.db.po.mixins import TimestampMixin
 class ApiKey(TimestampMixin, SQLModel, table=True):
     """API keys used by external developers to access Open APIs."""
 
-    __tablename__: str = "api_keys"
+    __tablename__ = "api_keys"  # type: ignore
 
     inner_id: int | None = Field(
         primary_key=True,

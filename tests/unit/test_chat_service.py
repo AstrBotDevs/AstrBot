@@ -172,7 +172,6 @@ def _session(
         session_id=session_id,
         creator=creator,
         platform_id=platform_id,
-        is_group=0,
     )
 
 

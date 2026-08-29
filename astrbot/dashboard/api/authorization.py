@@ -1,7 +1,10 @@
 """Dashboard authorization bindings, step-up, and audit APIs."""
 
+import inspect
 import uuid
+from collections.abc import Awaitable
 from dataclasses import replace
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Request
 
@@ -100,8 +103,16 @@ async def _webchat_step_up_target(
         request.app.state, "db", None
     )
     get_session = getattr(chat_db, "get_platform_session_by_id", None)
-    session = await get_session(session_id) if callable(get_session) else None
-    if session is None and callable(getattr(chat_db, "create_platform_session", None)):
+    session = None
+    if callable(get_session):
+        loaded = get_session(session_id)
+        session = (
+            await cast(Awaitable[Any], loaded)
+            if inspect.isawaitable(loaded)
+            else loaded
+        )
+    create_session = getattr(chat_db, "create_platform_session", None)
+    if session is None and callable(create_session):
         # The chat UI can have a route for a freshly allocated conversation
         # before the first message persists its platform session.  Establish
         # the same Dashboard-owned session that ChatService would create for
@@ -115,17 +126,27 @@ async def _webchat_step_up_target(
             session = None
         else:
             try:
-                session = await chat_db.create_platform_session(
+                created = create_session(
                     creator=principal.username,
                     platform_id="webchat",
                     session_id=session_id,
-                    is_group=0,
+                )
+                session = (
+                    await cast(Awaitable[Any], created)
+                    if inspect.isawaitable(created)
+                    else created
                 )
             except Exception:
                 # A concurrent first message may have won the insert race.
                 # Re-read and apply the ownership check below; do not turn a
                 # collision into an account-adoption opportunity.
-                session = await get_session(session_id)
+                if callable(get_session):
+                    reloaded = get_session(session_id)
+                    session = (
+                        await cast(Awaitable[Any], reloaded)
+                        if inspect.isawaitable(reloaded)
+                        else reloaded
+                    )
     if (
         session is None
         or getattr(session, "platform_id", None) != "webchat"

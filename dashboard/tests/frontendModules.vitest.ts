@@ -135,9 +135,7 @@ describe('frontend modules', () => {
     setStoredSelectedChatConfigId('profile-1');
     expect(getStoredDashboardUsername()).toBe('alice');
     expect(getStoredSelectedChatConfigId()).toBe('profile-1');
-    expect(buildWebchatUmoDetails('sess-1', true).umo).toContain(
-      'GroupMessage',
-    );
+    expect(buildWebchatUmoDetails('sess-1').umo).toContain('FriendMessage');
     expect(buildWebchatUmoDetails('sess-2').umo).toContain('FriendMessage');
     Object.defineProperty(window, 'isSecureContext', {
       configurable: true,
@@ -240,7 +238,6 @@ describe('frontend modules', () => {
             updated_at: '',
             platform_id: 'webchat',
             creator: 'u',
-            is_group: 0,
             created_at: '',
           },
         ],

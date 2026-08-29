@@ -2,9 +2,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, select
 
 from astrbot.core.db.po import WebChatThread
+from astrbot.core.db.stores.mixin import DatabaseStoreMixin, store_session
 
 
-class WebChatThreadStoreMixin:
+class WebChatThreadStoreMixin(DatabaseStoreMixin):
     async def create_webchat_thread(
         self,
         creator: str,
@@ -14,7 +15,7 @@ class WebChatThreadStoreMixin:
         selected_text: str,
     ) -> WebChatThread:
         """Create a WebChat side thread."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 thread = WebChatThread(
@@ -34,7 +35,7 @@ class WebChatThreadStoreMixin:
         thread_id: str,
     ) -> WebChatThread | None:
         """Get a WebChat side thread by thread_id."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             result = await session.execute(
                 select(WebChatThread).where(WebChatThread.thread_id == thread_id)
@@ -47,7 +48,7 @@ class WebChatThreadStoreMixin:
         creator: str | None = None,
     ) -> list[WebChatThread]:
         """Get side threads for a parent WebChat session."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             query = select(WebChatThread).where(
                 WebChatThread.parent_session_id == parent_session_id
@@ -66,7 +67,7 @@ class WebChatThreadStoreMixin:
         creator: str | None = None,
     ) -> WebChatThread | None:
         """Get an existing side thread for the same selected text."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             query = select(WebChatThread).where(
                 WebChatThread.parent_session_id == parent_session_id,
@@ -80,7 +81,7 @@ class WebChatThreadStoreMixin:
 
     async def delete_webchat_thread(self, thread_id: str) -> None:
         """Delete a WebChat side thread."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 await session.execute(
@@ -98,7 +99,7 @@ class WebChatThreadStoreMixin:
         thread_ids = [thread.thread_id for thread in threads]
         if not thread_ids:
             return []
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 await session.execute(
@@ -116,7 +117,7 @@ class WebChatThreadStoreMixin:
         """Delete side threads linked to parent message IDs."""
         if not parent_message_ids:
             return []
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             result = await session.execute(
                 select(WebChatThread.thread_id).where(
@@ -127,7 +128,7 @@ class WebChatThreadStoreMixin:
             thread_ids = list(result.scalars().all())
         if not thread_ids:
             return []
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 await session.execute(

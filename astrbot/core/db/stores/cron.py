@@ -4,11 +4,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, desc, select, update
 
 from astrbot.core.db.po import CronJob
+from astrbot.core.db.stores.mixin import DatabaseStoreMixin, store_session
 
 CRON_FIELD_NOT_SET = object()
 
 
-class CronStoreMixin:
+class CronStoreMixin(DatabaseStoreMixin):
     async def create_cron_job(
         self,
         name: str,
@@ -24,7 +25,7 @@ class CronStoreMixin:
         status: str | None = None,
         job_id: str | None = None,
     ) -> CronJob:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 job = CronJob(
@@ -63,7 +64,7 @@ class CronStoreMixin:
         last_run_at: datetime | None | object = CRON_FIELD_NOT_SET,
         last_error: str | None | object = CRON_FIELD_NOT_SET,
     ) -> CronJob | None:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 updates: dict = {}
@@ -98,7 +99,7 @@ class CronStoreMixin:
                 return result.scalar_one_or_none()
 
     async def delete_cron_job(self, job_id: str) -> None:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 await session.execute(
@@ -106,7 +107,7 @@ class CronStoreMixin:
                 )
 
     async def get_cron_job(self, job_id: str) -> CronJob | None:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             result = await session.execute(
                 select(CronJob).where(col(CronJob.job_id) == job_id)
@@ -114,7 +115,7 @@ class CronStoreMixin:
             return result.scalar_one_or_none()
 
     async def list_cron_jobs(self, job_type: str | None = None) -> list[CronJob]:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             query = select(CronJob)
             if job_type:

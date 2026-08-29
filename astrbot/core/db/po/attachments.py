@@ -11,7 +11,7 @@ class Attachment(TimestampMixin, SQLModel, table=True):
     Attachments can be images, files, or other media types.
     """
 
-    __tablename__: str = "attachments"
+    __tablename__ = "attachments"  # type: ignore
 
     inner_attachment_id: int | None = Field(
         primary_key=True,

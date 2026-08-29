@@ -9,15 +9,16 @@ from astrbot.core.db.po import (
     PersonaJargonAsset,
     PersonaSessionState,
 )
+from astrbot.core.db.stores.mixin import DatabaseStoreMixin, store_session
 
 
-class PersonaRuntimeStoreMixin:
+class PersonaRuntimeStoreMixin(DatabaseStoreMixin):
     async def get_persona_session_state(
         self,
         persona_id: str,
         umo: str,
     ) -> PersonaSessionState | None:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             result = await session.execute(
                 select(PersonaSessionState).where(
@@ -40,7 +41,7 @@ class PersonaRuntimeStoreMixin:
         last_proactive_at: datetime | None = None,
         extra_state: dict | None = None,
     ) -> PersonaSessionState:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 result = await session.execute(
@@ -87,7 +88,7 @@ class PersonaRuntimeStoreMixin:
         score: float = 0.5,
         enabled: bool = True,
     ) -> PersonaExpressionAsset:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 result = await session.execute(
@@ -127,7 +128,7 @@ class PersonaRuntimeStoreMixin:
         enabled: bool = True,
         limit: int = 10,
     ) -> list[PersonaExpressionAsset]:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             result = await session.execute(
                 select(PersonaExpressionAsset)
@@ -153,7 +154,7 @@ class PersonaRuntimeStoreMixin:
         approved: bool = False,
         enabled: bool = True,
     ) -> PersonaJargonAsset:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 result = await session.execute(
@@ -196,7 +197,7 @@ class PersonaRuntimeStoreMixin:
         approved: bool | None = None,
         limit: int = 10,
     ) -> list[PersonaJargonAsset]:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             stmt = select(PersonaJargonAsset).where(
                 col(PersonaJargonAsset.persona_id) == persona_id,
@@ -220,7 +221,7 @@ class PersonaRuntimeStoreMixin:
         confidence: float = 0.5,
         enabled: bool = True,
     ) -> PersonaBehaviorPolicy:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 result = await session.execute(
@@ -260,7 +261,7 @@ class PersonaRuntimeStoreMixin:
         enabled: bool = True,
         limit: int = 10,
     ) -> list[PersonaBehaviorPolicy]:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             result = await session.execute(
                 select(PersonaBehaviorPolicy)

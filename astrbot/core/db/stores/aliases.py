@@ -4,9 +4,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from astrbot.core.db.po import UmoAlias
+from astrbot.core.db.stores.mixin import DatabaseStoreMixin, store_session
 
 
-class UmoAliasStoreMixin:
+class UmoAliasStoreMixin(DatabaseStoreMixin):
     async def upsert_umo_alias(
         self,
         umo: str,
@@ -15,7 +16,7 @@ class UmoAliasStoreMixin:
         user_alias: str | None,
     ) -> UmoAlias:
         """Create or update alias metadata for a UMO."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 result = await session.execute(
@@ -41,7 +42,7 @@ class UmoAliasStoreMixin:
 
     async def get_umo_alias(self, umo: str) -> UmoAlias | None:
         """Get alias metadata for one UMO."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             result = await session.execute(
                 select(UmoAlias).where(col(UmoAlias.umo) == umo)
@@ -53,7 +54,7 @@ class UmoAliasStoreMixin:
         if umos is not None and not umos:
             return []
 
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             query = select(UmoAlias)
             if umos is not None:

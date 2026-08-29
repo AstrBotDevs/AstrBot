@@ -5,12 +5,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, select
 
 from astrbot.core.db.po import Attachment
+from astrbot.core.db.stores.mixin import DatabaseStoreMixin, store_session
 
 
-class AttachmentStoreMixin:
+class AttachmentStoreMixin(DatabaseStoreMixin):
     async def insert_attachment(self, path, type, mime_type):
         """Insert a new attachment record."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 new_attachment = Attachment(
@@ -23,7 +24,7 @@ class AttachmentStoreMixin:
 
     async def get_attachment_by_id(self, attachment_id):
         """Get an attachment by its ID."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             query = select(Attachment).where(Attachment.attachment_id == attachment_id)
             result = await session.execute(query)
@@ -33,7 +34,7 @@ class AttachmentStoreMixin:
         """Get multiple attachments by their IDs."""
         if not attachment_ids:
             return []
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             query = select(Attachment).where(
                 col(Attachment.attachment_id).in_(attachment_ids)
@@ -46,7 +47,7 @@ class AttachmentStoreMixin:
 
         Returns True if the attachment was deleted, False if it was not found.
         """
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 query = delete(Attachment).where(
@@ -62,7 +63,7 @@ class AttachmentStoreMixin:
         """
         if not attachment_ids:
             return 0
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 query = delete(Attachment).where(

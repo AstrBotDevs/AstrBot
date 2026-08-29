@@ -4,9 +4,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, desc, select, update
 
 from astrbot.core.db.po import PlatformMessageHistory
+from astrbot.core.db.stores.mixin import DatabaseStoreMixin, store_session
 
 
-class MessageHistoryStoreMixin:
+class MessageHistoryStoreMixin(DatabaseStoreMixin):
     async def insert_platform_message_history(
         self,
         platform_id: str,
@@ -20,7 +21,7 @@ class MessageHistoryStoreMixin:
         max_messages: int | None = None,
     ) -> PlatformMessageHistory:
         """Insert a new platform message history record."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 new_history = PlatformMessageHistory(
@@ -75,7 +76,7 @@ class MessageHistoryStoreMixin:
         if not values:
             return
 
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 await session.execute(
@@ -86,7 +87,7 @@ class MessageHistoryStoreMixin:
 
     async def delete_platform_message_history_by_id(self, message_id: int) -> None:
         """Delete a platform message history record by ID."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 await session.execute(
@@ -102,7 +103,7 @@ class MessageHistoryStoreMixin:
         offset_sec: int = 86400,
     ) -> None:
         """Delete platform message history records newer than the specified offset."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 now = datetime.now()
@@ -126,7 +127,7 @@ class MessageHistoryStoreMixin:
         before_id: int | None = None,
     ) -> list[PlatformMessageHistory]:
         """Get platform message history records."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             offset = (page - 1) * page_size
             query = (
@@ -143,7 +144,7 @@ class MessageHistoryStoreMixin:
             if is_group is not None:
                 query = query.where(PlatformMessageHistory.is_group == is_group)
             if before_id is not None:
-                query = query.where(PlatformMessageHistory.id < before_id)
+                query = query.where(col(PlatformMessageHistory.id) < before_id)
             result = await session.execute(query.offset(offset).limit(page_size))
             return list(result.scalars().all())
 
@@ -169,7 +170,7 @@ class MessageHistoryStoreMixin:
         self, message_id: int
     ) -> PlatformMessageHistory | None:
         """Get a platform message history record by its ID."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             query = select(PlatformMessageHistory).where(
                 PlatformMessageHistory.id == message_id

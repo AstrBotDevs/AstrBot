@@ -174,7 +174,7 @@ class EmbeddingStorage:
         """
         assert self.index is not None, "FAISS index is not initialized."
         try:
-            self.index.remove_ids(np.array(ids, dtype=np.int64))
+            self.index.remove_ids(np.asarray(ids, dtype=np.int64))  # type: ignore[arg-type]
         except RuntimeError:
             # 幂等：删除已不存在的 ID，安全忽略
             pass

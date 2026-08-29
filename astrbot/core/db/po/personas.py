@@ -12,7 +12,7 @@ class PersonaFolder(TimestampMixin, SQLModel, table=True):
     用于组织和管理多个 Persona，类似于文件系统的目录结构。
     """
 
-    __tablename__: str = "persona_folders"
+    __tablename__ = "persona_folders"  # type: ignore
 
     id: int | None = Field(
         primary_key=True,
@@ -45,7 +45,7 @@ class Persona(TimestampMixin, SQLModel, table=True):
     It can be used to customize the behavior of LLMs.
     """
 
-    __tablename__: str = "personas"
+    __tablename__ = "personas"  # type: ignore
 
     id: int | None = Field(
         primary_key=True,
@@ -78,7 +78,7 @@ class Persona(TimestampMixin, SQLModel, table=True):
 class PersonaSessionState(TimestampMixin, SQLModel, table=True):
     """Runtime state for one persona inside one chat stream."""
 
-    __tablename__: str = "persona_session_states"
+    __tablename__ = "persona_session_states"  # type: ignore
 
     id: int | None = Field(
         primary_key=True,
@@ -107,7 +107,7 @@ class PersonaSessionState(TimestampMixin, SQLModel, table=True):
 class PersonaExpressionAsset(TimestampMixin, SQLModel, table=True):
     """Learned expression style asset for one persona and scope."""
 
-    __tablename__: str = "persona_expression_assets"
+    __tablename__ = "persona_expression_assets"  # type: ignore
 
     id: int | None = Field(
         primary_key=True,
@@ -136,7 +136,7 @@ class PersonaExpressionAsset(TimestampMixin, SQLModel, table=True):
 class PersonaJargonAsset(TimestampMixin, SQLModel, table=True):
     """Learned jargon or community term for one persona and scope."""
 
-    __tablename__: str = "persona_jargon_assets"
+    __tablename__ = "persona_jargon_assets"  # type: ignore
 
     id: int | None = Field(
         primary_key=True,
@@ -165,7 +165,7 @@ class PersonaJargonAsset(TimestampMixin, SQLModel, table=True):
 class PersonaBehaviorPolicy(TimestampMixin, SQLModel, table=True):
     """Learned behavior tendency for one persona and scope."""
 
-    __tablename__: str = "persona_behavior_policies"
+    __tablename__ = "persona_behavior_policies"  # type: ignore
 
     id: int | None = Field(
         primary_key=True,

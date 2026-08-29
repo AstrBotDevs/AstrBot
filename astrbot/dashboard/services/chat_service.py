@@ -153,13 +153,8 @@ def extract_platform_message_text(content: dict | None) -> str:
 
 
 def build_webchat_unified_msg_origin(session) -> str:
-    message_type = (
-        MessageType.GROUP_MESSAGE.value
-        if session.is_group
-        else MessageType.FRIEND_MESSAGE.value
-    )
     return (
-        f"{session.platform_id}:{message_type}:"
+        f"{session.platform_id}:{MessageType.FRIEND_MESSAGE.value}:"
         f"{session.platform_id}!{session.creator}!{session.session_id}"
     )
 
@@ -367,7 +362,6 @@ async def ensure_webchat_platform_session_owner(
             creator=username,
             platform_id="webchat",
             session_id=session_id,
-            is_group=0,
         )
     except Exception as exc:
         try:
@@ -1176,9 +1170,8 @@ class ChatService:
 
     async def delete_session_internal(self, session, username: str) -> None:
         session_id = session.session_id
-        message_type = "GroupMessage" if session.is_group else "FriendMessage"
         unified_msg_origin = (
-            f"{session.platform_id}:{message_type}:"
+            f"{session.platform_id}:{MessageType.FRIEND_MESSAGE.value}:"
             f"{session.platform_id}!{username}!{session_id}"
         )
         self.active_event_control.request_agent_stop_all(unified_msg_origin)
@@ -1308,7 +1301,6 @@ class ChatService:
         session = await self.db.create_platform_session(
             creator=username,
             platform_id=platform_id,
-            is_group=0,
         )
         return {
             "session_id": session.session_id,
@@ -1340,7 +1332,6 @@ class ChatService:
                     "platform_id": session.platform_id,
                     "creator": session.creator,
                     "display_name": session.display_name,
-                    "is_group": session.is_group,
                     "created_at": to_utc_isoformat(session.created_at),
                     "updated_at": to_utc_isoformat(session.updated_at),
                 }

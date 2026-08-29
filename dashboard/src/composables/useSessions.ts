@@ -12,7 +12,6 @@ export interface Session {
   updated_at: string;
   platform_id: string;
   creator: string;
-  is_group: number;
   created_at: string;
 }
 
@@ -67,7 +66,7 @@ export function useSessions(chatboxMode: boolean = false) {
         platformId === 'webchat'
       ) {
         try {
-          const umoDetails = buildWebchatUmoDetails(sessionId, false);
+          const umoDetails = buildWebchatUmoDetails(sessionId);
           await configRouteApi.upsert(umoDetails.umo, {
             config_id: selectedConfigId,
           });

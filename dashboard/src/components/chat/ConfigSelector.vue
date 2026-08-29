@@ -126,13 +126,11 @@ const props = withDefaults(
   defineProps<{
     sessionId?: string | null;
     platformId?: string;
-    isGroup?: boolean;
     initialConfigId?: string | null;
   }>(),
   {
     sessionId: null,
     platformId: 'webchat',
-    isGroup: false,
     initialConfigId: null,
   },
 );
@@ -159,9 +157,7 @@ const normalizedSessionId = computed(() => {
   return id ? id : null;
 });
 
-const messageType = computed(() =>
-  props.isGroup ? 'GroupMessage' : 'FriendMessage',
-);
+const messageType = computed(() => 'FriendMessage');
 
 const username = computed(() => getStoredDashboardUsername());
 
@@ -337,7 +333,7 @@ async function syncSelectionForSession() {
 }
 
 watch(
-  () => [props.sessionId, props.platformId, props.isGroup],
+  () => [props.sessionId, props.platformId],
   async () => {
     await syncSelectionForSession();
   },

@@ -219,7 +219,7 @@ class AuthCapability(TimestampMixin, SQLModel, table=True):
 class DashboardTrustedDevice(TimestampMixin, SQLModel, table=True):
     """Trusted dashboard device token used to skip TOTP for a limited time."""
 
-    __tablename__: str = "dashboard_trusted_devices"
+    __tablename__ = "dashboard_trusted_devices"  # type: ignore
 
     id: int | None = Field(
         default=None,

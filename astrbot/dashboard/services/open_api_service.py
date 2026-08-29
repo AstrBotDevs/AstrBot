@@ -215,7 +215,6 @@ class OpenApiService:
                 creator=username,
                 platform_id="webchat",
                 session_id=session_id,
-                is_group=0,
             )
         except Exception as exc:
             existing = await self.db.get_platform_session_by_id(session_id)
@@ -649,7 +648,6 @@ class OpenApiService:
                     "platform_id": session.platform_id,
                     "creator": session.creator,
                     "display_name": session.display_name,
-                    "is_group": session.is_group,
                     "created_at": to_utc_isoformat(session.created_at),
                     "updated_at": to_utc_isoformat(session.updated_at),
                 }

@@ -2,9 +2,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, select
 
 from astrbot.core.db.po import Preference
+from astrbot.core.db.stores.mixin import DatabaseStoreMixin, store_session
 
 
-class PreferenceStoreMixin:
+class PreferenceStoreMixin(DatabaseStoreMixin):
     async def insert_preference_or_update(
         self,
         scope: str,
@@ -13,7 +14,7 @@ class PreferenceStoreMixin:
         value: dict,
     ) -> Preference:
         """Insert a new preference record or update if it exists."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 query = select(Preference).where(
@@ -25,15 +26,15 @@ class PreferenceStoreMixin:
                 existing_preference = result.scalar_one_or_none()
                 if existing_preference:
                     existing_preference.value = value
-                else:
-                    new_preference = Preference(
-                        scope=scope,
-                        scope_id=scope_id,
-                        key=key,
-                        value=value,
-                    )
-                    session.add(new_preference)
-                return existing_preference or new_preference
+                    return existing_preference
+                new_preference = Preference(
+                    scope=scope,
+                    scope_id=scope_id,
+                    key=key,
+                    value=value,
+                )
+                session.add(new_preference)
+                return new_preference
 
     async def get_preference(
         self,
@@ -42,7 +43,7 @@ class PreferenceStoreMixin:
         key: str,
     ) -> Preference | None:
         """Get a preference by key."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             query = select(Preference).where(
                 Preference.scope == scope,
@@ -59,7 +60,7 @@ class PreferenceStoreMixin:
         key: str | None = None,
     ) -> list[Preference]:
         """Get preferences, optionally filtered by scope, scope ID, or key."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             query = select(Preference)
             if scope is not None:
@@ -73,7 +74,7 @@ class PreferenceStoreMixin:
 
     async def remove_preference(self, scope: str, scope_id: str, key: str) -> None:
         """Remove a preference by scope ID and key."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 await session.execute(
@@ -87,7 +88,7 @@ class PreferenceStoreMixin:
 
     async def clear_preferences(self, scope: str, scope_id: str) -> None:
         """Clear all preferences for a specific scope ID."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 await session.execute(

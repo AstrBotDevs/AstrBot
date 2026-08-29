@@ -6,30 +6,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, desc, func, select, update
 
 from astrbot.core.db.po import ChatUIProject, PlatformSession, SessionProjectRelation
+from astrbot.core.db.stores.mixin import DatabaseStoreMixin, store_session
 
 
-class PlatformSessionStoreMixin:
+class PlatformSessionStoreMixin(DatabaseStoreMixin):
     async def create_platform_session(
         self,
         creator: str,
         platform_id: str = "webchat",
         session_id: str | None = None,
         display_name: str | None = None,
-        is_group: int = 0,
     ) -> PlatformSession:
         """Create a new Platform session."""
         kwargs = {}
         if session_id:
             kwargs["session_id"] = session_id
 
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 new_session = PlatformSession(
                     creator=creator,
                     platform_id=platform_id,
                     display_name=display_name,
-                    is_group=is_group,
                     **kwargs,
                 )
                 session.add(new_session)
@@ -41,7 +40,7 @@ class PlatformSessionStoreMixin:
         self, session_id: str
     ) -> PlatformSession | None:
         """Get a Platform session by its ID."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             query = select(PlatformSession).where(
                 PlatformSession.session_id == session_id,
@@ -56,7 +55,7 @@ class PlatformSessionStoreMixin:
         if not session_ids:
             return []
 
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             query = select(PlatformSession).where(
                 col(PlatformSession.session_id).in_(session_ids)
@@ -147,7 +146,7 @@ class PlatformSessionStoreMixin:
         exclude_project_sessions: bool = False,
     ) -> tuple[list[dict], int]:
         """Get paginated Platform sessions for a creator with total count."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             offset = (page - 1) * page_size
 
@@ -178,7 +177,7 @@ class PlatformSessionStoreMixin:
         display_name: str | None = None,
     ) -> None:
         """Update a Platform session's updated_at timestamp and optionally display_name."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 values: dict[str, T.Any] = {"updated_at": datetime.now(UTC)}
@@ -193,7 +192,7 @@ class PlatformSessionStoreMixin:
 
     async def delete_platform_session(self, session_id: str) -> None:
         """Delete a Platform session by its ID."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 await session.execute(

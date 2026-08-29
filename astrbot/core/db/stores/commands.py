@@ -2,10 +2,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, select, text
 
 from astrbot.core.db.po import CommandConfig, CommandConflict
+from astrbot.core.db.stores.mixin import DatabaseStoreMixin, store_session
 from astrbot.core.db.stores.session import run_in_tx
 
 
-class CommandStoreMixin:
+class CommandStoreMixin(DatabaseStoreMixin):
     @staticmethod
     def _apply_updates(model, **updates) -> None:
         for field, value in updates.items():
@@ -76,7 +77,7 @@ class CommandStoreMixin:
         )
 
     async def get_command_configs(self) -> list[CommandConfig]:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             result = await session.execute(select(CommandConfig))
             return list(result.scalars().all())
@@ -85,7 +86,7 @@ class CommandStoreMixin:
         self,
         handler_full_name: str,
     ) -> CommandConfig | None:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             return await session.get(CommandConfig, handler_full_name)
 
@@ -93,7 +94,7 @@ class CommandStoreMixin:
         self,
         command_id: str,
     ) -> CommandConfig | None:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             result = await session.execute(
                 select(CommandConfig).where(CommandConfig.command_id == command_id),
@@ -197,7 +198,7 @@ class CommandStoreMixin:
         status: str | None = None,
         config_id: str | None = None,
     ) -> list[CommandConflict]:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             query = select(CommandConflict)
             if status:

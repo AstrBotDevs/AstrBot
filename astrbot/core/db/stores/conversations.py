@@ -8,6 +8,7 @@ from sqlalchemy.orm import defer
 from sqlmodel import col, delete, desc, func, or_, select, update
 
 from astrbot.core.db.po import ConversationV2, Persona, Preference
+from astrbot.core.db.stores.mixin import DatabaseStoreMixin, store_session
 
 
 def _ilike_pattern(value: str) -> str:
@@ -15,13 +16,13 @@ def _ilike_pattern(value: str) -> str:
     return f"%{escaped}%"
 
 
-class ConversationStoreMixin:
+class ConversationStoreMixin(DatabaseStoreMixin):
     async def get_conversations(
         self,
         user_id: str | None = None,
         platform_id: str | None = None,
     ) -> list[ConversationV2]:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             query = select(ConversationV2)
 
@@ -36,7 +37,7 @@ class ConversationStoreMixin:
             return list(result.scalars().all())
 
     async def get_conversation_by_id(self, cid: str) -> ConversationV2 | None:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             query = select(ConversationV2).where(ConversationV2.conversation_id == cid)
             result = await session.execute(query)
@@ -47,7 +48,7 @@ class ConversationStoreMixin:
         page: int = 1,
         page_size: int = 20,
     ) -> list[ConversationV2]:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             offset = (page - 1) * page_size
             result = await session.execute(
@@ -67,7 +68,7 @@ class ConversationStoreMixin:
         include_history: bool = True,
         **kwargs: T.Any,
     ) -> tuple[list[ConversationV2], int]:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             base_query = select(ConversationV2)
             conditions = []
@@ -141,12 +142,11 @@ class ConversationStoreMixin:
                 base_query = base_query.where(*conditions)
 
             group_by_session = bool(kwargs.get("group_by_session", False))
-            count_target = (
-                func.distinct(ConversationV2.user_id)
+            count_query = select(
+                func.count(func.distinct(col(ConversationV2.user_id)))
                 if group_by_session
-                else ConversationV2.inner_conversation_id
+                else func.count(col(ConversationV2.inner_conversation_id))
             )
-            count_query = select(func.count(count_target))
             if conditions:
                 count_query = count_query.where(*conditions)
             total = (await session.execute(count_query)).scalar_one()
@@ -155,15 +155,15 @@ class ConversationStoreMixin:
             sort_by = kwargs.get("sort_by", "created_at")
             sort_order = kwargs.get("sort_order", "desc")
             sort_column = (
-                ConversationV2.updated_at
+                col(ConversationV2.updated_at)
                 if sort_by == "updated_at"
-                else ConversationV2.created_at
+                else col(ConversationV2.created_at)
             )
             order = sort_column.asc if sort_order == "asc" else sort_column.desc
             tie_breaker = (
-                ConversationV2.inner_conversation_id.asc
+                col(ConversationV2.inner_conversation_id).asc
                 if sort_order == "asc"
-                else ConversationV2.inner_conversation_id.desc
+                else col(ConversationV2.inner_conversation_id).desc
             )
             if group_by_session:
                 session_sort = func.max(sort_column).label("session_sort")
@@ -214,7 +214,9 @@ class ConversationStoreMixin:
                     .limit(page_size)
                 )
             if not include_history:
-                result_query = result_query.options(defer(ConversationV2.content))
+                result_query = result_query.options(
+                    defer(ConversationV2.content)  # type: ignore[arg-type]
+                )
             conversations = list((await session.execute(result_query)).scalars().all())
             return conversations, total
 
@@ -224,7 +226,7 @@ class ConversationStoreMixin:
         Returns:
             Sorted platform IDs that have at least one conversation.
         """
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             result = await session.execute(
                 select(ConversationV2.platform_id)
@@ -251,7 +253,7 @@ class ConversationStoreMixin:
             kwargs["created_at"] = created_at
         if updated_at:
             kwargs["updated_at"] = updated_at
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 new_conversation = ConversationV2(
@@ -273,7 +275,7 @@ class ConversationStoreMixin:
         content: list[dict] | None = None,
         token_usage: int | None = None,
     ) -> ConversationV2 | None:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 query = update(ConversationV2).where(
@@ -295,7 +297,7 @@ class ConversationStoreMixin:
         return await self.get_conversation_by_id(cid)
 
     async def delete_conversation(self, cid: str) -> None:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 await session.execute(
@@ -305,7 +307,7 @@ class ConversationStoreMixin:
                 )
 
     async def delete_conversations_by_user_id(self, user_id: str) -> None:
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 await session.execute(
@@ -322,7 +324,7 @@ class ConversationStoreMixin:
         platform=None,
     ) -> tuple[list[dict], int]:
         """Get paginated session conversations with joined conversation and persona details."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             offset = (page - 1) * page_size
 

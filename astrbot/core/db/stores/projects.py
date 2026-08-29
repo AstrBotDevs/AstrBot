@@ -5,9 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, desc, select, update
 
 from astrbot.core.db.po import ChatUIProject, PlatformSession, SessionProjectRelation
+from astrbot.core.db.stores.mixin import DatabaseStoreMixin, store_session
 
 
-class ChatProjectStoreMixin:
+class ChatProjectStoreMixin(DatabaseStoreMixin):
     async def create_chatui_project(
         self,
         creator: str,
@@ -16,7 +17,7 @@ class ChatProjectStoreMixin:
         description: str | None = None,
     ) -> ChatUIProject:
         """Create a new ChatUI project."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 project = ChatUIProject(
@@ -32,7 +33,7 @@ class ChatProjectStoreMixin:
 
     async def get_chatui_project_by_id(self, project_id: str) -> ChatUIProject | None:
         """Get a ChatUI project by its ID."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             result = await session.execute(
                 select(ChatUIProject).where(
@@ -48,7 +49,7 @@ class ChatProjectStoreMixin:
         page_size: int = 100,
     ) -> list[ChatUIProject]:
         """Get all ChatUI projects for a specific creator."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             offset = (page - 1) * page_size
             result = await session.execute(
@@ -68,7 +69,7 @@ class ChatProjectStoreMixin:
         description: str | None = None,
     ) -> None:
         """Update a ChatUI project."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 values: dict[str, T.Any] = {"updated_at": datetime.now(UTC)}
@@ -87,7 +88,7 @@ class ChatProjectStoreMixin:
 
     async def delete_chatui_project(self, project_id: str) -> None:
         """Delete a ChatUI project by its ID."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 # First remove all session relations
@@ -109,7 +110,7 @@ class ChatProjectStoreMixin:
         project_id: str,
     ) -> SessionProjectRelation:
         """Add a session to a project."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 # First remove existing relation if any
@@ -130,7 +131,7 @@ class ChatProjectStoreMixin:
 
     async def remove_session_from_project(self, session_id: str) -> None:
         """Remove a session from its project."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 await session.execute(
@@ -146,7 +147,7 @@ class ChatProjectStoreMixin:
         page_size: int = 100,
     ) -> list[PlatformSession]:
         """Get all sessions in a project."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             offset = (page - 1) * page_size
             result = await session.execute(
@@ -167,7 +168,7 @@ class ChatProjectStoreMixin:
         self, session_id: str, creator: str
     ) -> ChatUIProject | None:
         """Get the project that a session belongs to."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             result = await session.execute(
                 select(ChatUIProject)

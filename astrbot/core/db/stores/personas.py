@@ -4,10 +4,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, select, update
 
 from astrbot.core.db.po import Persona, PersonaFolder
+from astrbot.core.db.stores.mixin import DatabaseStoreMixin, store_session
 from astrbot.core.sentinels import NOT_GIVEN
 
 
-class PersonaStoreMixin:
+class PersonaStoreMixin(DatabaseStoreMixin):
     async def insert_persona(
         self,
         persona_id: str,
@@ -20,7 +21,7 @@ class PersonaStoreMixin:
         sort_order: int = 0,
     ) -> Persona:
         """Insert a new persona record."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 new_persona = Persona(
@@ -40,7 +41,7 @@ class PersonaStoreMixin:
 
     async def get_persona_by_id(self, persona_id: str) -> Persona | None:
         """Get a persona by its ID."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             query = select(Persona).where(Persona.persona_id == persona_id)
             result = await session.execute(query)
@@ -48,7 +49,7 @@ class PersonaStoreMixin:
 
     async def get_personas(self) -> list[Persona]:
         """Get all personas for a specific bot."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             query = select(Persona)
             result = await session.execute(query)
@@ -64,7 +65,7 @@ class PersonaStoreMixin:
         custom_error_message: str | None | object = NOT_GIVEN,
     ) -> Persona | None:
         """Update a persona's system prompt or begin dialogs."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 query = update(Persona).where(col(Persona.persona_id) == persona_id)
@@ -87,7 +88,7 @@ class PersonaStoreMixin:
 
     async def delete_persona(self, persona_id) -> None:
         """Delete a persona by its ID."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 await session.execute(
@@ -106,7 +107,7 @@ class PersonaStoreMixin:
         sort_order: int = 0,
     ) -> PersonaFolder:
         """Insert a new persona folder."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 new_folder = PersonaFolder(
@@ -122,7 +123,7 @@ class PersonaStoreMixin:
 
     async def get_persona_folder_by_id(self, folder_id: str) -> PersonaFolder | None:
         """Get a persona folder by its folder_id."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             query = select(PersonaFolder).where(PersonaFolder.folder_id == folder_id)
             result = await session.execute(query)
@@ -137,7 +138,7 @@ class PersonaStoreMixin:
             parent_id: If None, returns root folders only. If specified, returns
                        children of that folder.
         """
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             if parent_id is None:
                 # Get root folders (parent_id is NULL)
@@ -157,7 +158,7 @@ class PersonaStoreMixin:
 
     async def get_all_persona_folders(self) -> list[PersonaFolder]:
         """Get all persona folders."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             query = select(PersonaFolder).order_by(
                 col(PersonaFolder.sort_order), col(PersonaFolder.name)
@@ -174,7 +175,7 @@ class PersonaStoreMixin:
         sort_order: int | None = None,
     ) -> PersonaFolder | None:
         """Update a persona folder."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 query = update(PersonaFolder).where(
@@ -201,7 +202,7 @@ class PersonaStoreMixin:
         Note: This will also set folder_id to NULL for all personas in this folder,
         moving them to the root directory.
         """
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 # Move personas to root directory
@@ -221,7 +222,7 @@ class PersonaStoreMixin:
         self, persona_id: str, folder_id: str | None
     ) -> Persona | None:
         """Move a persona to a folder (or root if folder_id is None)."""
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 await session.execute(
@@ -239,7 +240,7 @@ class PersonaStoreMixin:
         Args:
             folder_id: If None, returns personas in root directory.
         """
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             if folder_id is None:
                 query = (
@@ -271,7 +272,7 @@ class PersonaStoreMixin:
         if not items:
             return
 
-        async with self.get_db() as session:
+        async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
                 for item in items:

@@ -11,7 +11,7 @@ class ChatUIProject(TimestampMixin, SQLModel, table=True):
     Projects allow users to group related conversations together.
     """
 
-    __tablename__: str = "chatui_projects"
+    __tablename__ = "chatui_projects"  # type: ignore
 
     inner_id: int | None = Field(
         primary_key=True,
@@ -44,7 +44,7 @@ class ChatUIProject(TimestampMixin, SQLModel, table=True):
 class SessionProjectRelation(SQLModel, table=True):
     """This class represents the relationship between platform sessions and ChatUI projects."""
 
-    __tablename__: str = "session_project_relations"
+    __tablename__ = "session_project_relations"  # type: ignore
 
     id: int | None = Field(
         primary_key=True,

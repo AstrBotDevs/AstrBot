@@ -138,7 +138,6 @@ describe('frontend logic coverage', () => {
             updated_at: '2024-01-01',
             platform_id: 'webchat',
             creator: 'u',
-            is_group: 0,
             created_at: '',
           },
         ],

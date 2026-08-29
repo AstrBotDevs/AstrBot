@@ -10,7 +10,7 @@ from sqlmodel import text
 
 from astrbot.core.db import is_aiosqlite_worker_thread
 from astrbot.core.db.schema import (
-    _drop_keep_original_alias_column,
+    _drop_unused_column,
     initialize_sqlite_schema,
 )
 from astrbot.core.db.sqlite import SQLiteDatabase
@@ -230,7 +230,30 @@ async def test_initialize_drops_keep_original_alias_column(
 
 
 @pytest.mark.asyncio
-async def test_drop_keep_original_alias_swallows_operational_error():
+async def test_initialize_drops_platform_sessions_is_group_column(
+    temp_db: SQLiteDatabase,
+):
+    await temp_db.initialize()
+    async with temp_db.engine.begin() as conn:
+        await conn.execute(
+            text(
+                "ALTER TABLE platform_sessions "
+                "ADD COLUMN is_group INTEGER NOT NULL DEFAULT 0"
+            )
+        )
+
+    await initialize_sqlite_schema(temp_db.engine)
+
+    async with temp_db.engine.connect() as conn:
+        columns = await conn.run_sync(
+            lambda sync_conn: _column_map(sync_conn, "platform_sessions")
+        )
+
+    assert "is_group" not in columns
+
+
+@pytest.mark.asyncio
+async def test_drop_unused_column_swallows_operational_error():
     class BoomConnection:
         async def run_sync(self, fn):
             return True
@@ -248,7 +271,7 @@ async def test_drop_keep_original_alias_swallows_operational_error():
         def begin(self):
             return BoomConnection()
 
-    await _drop_keep_original_alias_column(BoomEngine())
+    await _drop_unused_column(BoomEngine(), "command_configs", "keep_original_alias")
 
 
 @pytest.mark.asyncio

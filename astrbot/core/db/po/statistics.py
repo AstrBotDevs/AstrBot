@@ -11,7 +11,7 @@ class PlatformStat(SQLModel, table=True):
     Note: In astrbot v4, we moved `platform` table to here.
     """
 
-    __tablename__: str = "platform_stats"
+    __tablename__ = "platform_stats"  # type: ignore
 
     id: int = Field(primary_key=True, sa_column_kwargs={"autoincrement": True})
     timestamp: datetime = Field(nullable=False)
@@ -32,7 +32,7 @@ class PlatformStat(SQLModel, table=True):
 class ProviderStat(TimestampMixin, SQLModel, table=True):
     """Per-response provider stats for internal agent runs."""
 
-    __tablename__: str = "provider_stats"
+    __tablename__ = "provider_stats"  # type: ignore
 
     id: int | None = Field(
         default=None,

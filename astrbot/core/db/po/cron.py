@@ -9,7 +9,7 @@ from astrbot.core.db.po.mixins import TimestampMixin
 class CronJob(TimestampMixin, SQLModel, table=True):
     """Cron job definition for scheduler and WebUI management."""
 
-    __tablename__: str = "cron_jobs"
+    __tablename__ = "cron_jobs"  # type: ignore
 
     id: int | None = Field(
         default=None,

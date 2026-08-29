@@ -6,7 +6,7 @@ from astrbot.core.db.po.mixins import TimestampMixin
 class Preference(TimestampMixin, SQLModel, table=True):
     """This class represents preferences for bots."""
 
-    __tablename__: str = "preferences"
+    __tablename__ = "preferences"  # type: ignore
 
     id: int | None = Field(
         default=None,
