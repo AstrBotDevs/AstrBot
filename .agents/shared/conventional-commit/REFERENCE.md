@@ -54,18 +54,18 @@ flowchart TD
     Q -->|No| S[refactor]
 ```
 
-| Type | Use when | Do not use when |
-|---|---|---|
-| `feat` | Adding, changing, or removing user-visible/API functionality | The change merely corrects an existing defect |
-| `fix` | Correcting a bug in existing API or UI behavior | Adding a new capability |
-| `refactor` | Restructuring code without changing external/API/UI behavior | The primary intent is performance improvement |
-| `perf` | Improving performance, memory use, latency, or throughput without intended behavior change | The change is a general cleanup |
-| `test` | Adding, correcting, or updating tests | Product code changes are the primary purpose |
-| `style` | Formatting, whitespace, lint-only changes, semicolons, import ordering, etc., with no behavior change | Code restructuring or functional changes |
-| `docs` | Documentation-only changes | Any code/configuration behavior change is included |
-| `build` | Build system, packaging, dependencies, project version, or release build components | Deployment, infrastructure, CI/CD, monitoring, or backup changes |
-| `ops` | Infrastructure-as-code, deployment scripts, CI/CD, backups, monitoring, recovery, operational configuration | Local developer tooling or package/build dependency work |
-| `chore` | Maintenance or non-code work, such as initialization or `.gitignore` changes | A more specific type accurately applies |
+| Type       | Use when                                                                                                    | Do not use when                                                  |
+| ---------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `feat`     | Adding, changing, or removing user-visible/API functionality                                                | The change merely corrects an existing defect                    |
+| `fix`      | Correcting a bug in existing API or UI behavior                                                             | Adding a new capability                                          |
+| `refactor` | Restructuring code without changing external/API/UI behavior                                                | The primary intent is performance improvement                    |
+| `perf`     | Improving performance, memory use, latency, or throughput without intended behavior change                  | The change is a general cleanup                                  |
+| `test`     | Adding, correcting, or updating tests                                                                       | Product code changes are the primary purpose                     |
+| `style`    | Formatting, whitespace, lint-only changes, semicolons, import ordering, etc., with no behavior change       | Code restructuring or functional changes                         |
+| `docs`     | Documentation-only changes                                                                                  | Any code/configuration behavior change is included               |
+| `build`    | Build system, packaging, dependencies, project version, or release build components                         | Deployment, infrastructure, CI/CD, monitoring, or backup changes |
+| `ops`      | Infrastructure-as-code, deployment scripts, CI/CD, backups, monitoring, recovery, operational configuration | Local developer tooling or package/build dependency work         |
+| `chore`    | Maintenance or non-code work, such as initialization or `.gitignore` changes                                | A more specific type accurately applies                          |
 
 ## 3. Description Rules
 
