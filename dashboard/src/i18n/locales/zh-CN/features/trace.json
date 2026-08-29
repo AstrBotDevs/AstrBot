@@ -11,6 +11,7 @@
   "table": {
     "time": "时间",
     "eventId": "事件 ID",
+    "umo": "UMO",
     "sender": "发送者",
     "outline": "内容"
   },

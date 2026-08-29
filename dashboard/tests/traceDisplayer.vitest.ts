@@ -57,4 +57,17 @@ describe('TraceDisplayer', () => {
     expect(state.sources).toHaveLength(1);
     expect(state.history).toHaveBeenCalledOnce();
   });
+
+  it('renders table chrome from the trace catalog', async () => {
+    const wrapper = mountWithVuetify(TraceDisplayer);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Time');
+    expect(wrapper.text()).toContain('Event ID');
+    expect(wrapper.text()).toContain('UMO');
+    expect(wrapper.text()).toContain('Sender');
+    expect(wrapper.text()).toContain('Content');
+    expect(wrapper.text()).toContain('No trace data yet');
+    expect(wrapper.text()).not.toContain('Outline');
+  });
 });

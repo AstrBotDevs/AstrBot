@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { logApi } from '@/api/v1';
+import { useModuleI18n } from '@/i18n/composables';
 import { EventSourcePolyfill } from 'event-source-polyfill';
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 
@@ -46,6 +47,8 @@ const props = withDefaults(
     maxItems: 300,
   },
 );
+
+const { tm } = useModuleI18n('features/trace');
 
 const events = ref<TraceEventGroup[]>([]);
 const eventIndex = ref<Record<string, TraceEventGroup>>({});
@@ -362,11 +365,11 @@ onBeforeUnmount(() => {
   <div class="trace-wrapper">
     <div ref="scrollEl" class="trace-table" :style="{ height: tableHeight }">
       <div class="trace-row trace-header">
-        <div class="trace-cell time">Time</div>
-        <div class="trace-cell span">Event ID</div>
-        <div class="trace-cell umo">UMO</div>
-        <div class="trace-cell sender">Sender</div>
-        <div class="trace-cell outline">Outline</div>
+        <div class="trace-cell time">{{ tm('table.time') }}</div>
+        <div class="trace-cell span">{{ tm('table.eventId') }}</div>
+        <div class="trace-cell umo">{{ tm('table.umo') }}</div>
+        <div class="trace-cell sender">{{ tm('table.sender') }}</div>
+        <div class="trace-cell outline">{{ tm('table.outline') }}</div>
         <div class="trace-cell fields"></div>
       </div>
       <div
@@ -400,7 +403,7 @@ onBeforeUnmount(() => {
               color="primary"
               @click="toggleEvent(event.span_id)"
             >
-              {{ event.collapsed ? 'Expand' : 'Collapse' }}
+              {{ event.collapsed ? tm('expand') : tm('collapse') }}
               <span v-if="event.hasAgentPrepare" class="agent-dot" />
             </v-btn>
           </div>
@@ -425,13 +428,13 @@ onBeforeUnmount(() => {
               color="primary"
               @click="showMore(event.span_id)"
             >
-              Show more
+              {{ tm('showMore') }}
             </v-btn>
           </div>
         </div>
       </div>
       <div v-if="events.length === 0" class="trace-empty">
-        No trace data yet.
+        {{ tm('empty') }}
       </div>
     </div>
   </div>

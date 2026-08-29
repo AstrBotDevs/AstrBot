@@ -11,6 +11,7 @@
   "table": {
     "time": "Time",
     "eventId": "Event ID",
+    "umo": "UMO",
     "sender": "Sender",
     "outline": "Content"
   },
