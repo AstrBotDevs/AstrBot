@@ -32,7 +32,7 @@ def _patch_streamed_wav_header(audio: bytes) -> bytes:
 
     patched = bytearray(audio)
     riff_size = int.from_bytes(patched[4:8], "little")
-    data_patched = False
+    data_found = False
 
     # Walk the chunk list to locate the ``data`` chunk. Chunk payloads are
     # padded to even lengths, which the walk accounts for.
@@ -42,10 +42,10 @@ def _patch_streamed_wav_header(audio: bytes) -> bytes:
         declared = int.from_bytes(patched[pos + 4 : pos + 8], "little")
         payload_start = pos + 8
         if chunk_id == b"data":
+            data_found = True
             if declared == WAV_SIZE_PLACEHOLDER:
                 actual = len(patched) - payload_start
                 patched[pos + 4 : pos + 8] = actual.to_bytes(4, "little")
-                data_patched = True
             break
         if declared == WAV_SIZE_PLACEHOLDER:
             # A placeholder size before ``data`` makes the walk unsafe;
@@ -53,7 +53,7 @@ def _patch_streamed_wav_header(audio: bytes) -> bytes:
             return audio
         pos = payload_start + declared + (declared & 1)
 
-    if data_patched and riff_size == WAV_SIZE_PLACEHOLDER:
+    if data_found and riff_size == WAV_SIZE_PLACEHOLDER:
         patched[4:8] = (len(patched) - 8).to_bytes(4, "little")
     return bytes(patched)
 

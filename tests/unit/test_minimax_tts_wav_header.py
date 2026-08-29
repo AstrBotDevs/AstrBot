@@ -66,6 +66,20 @@ class TestPatchStreamedWavHeader:
         ):
             assert _patch_streamed_wav_header(blob) == blob
 
+    def test_riff_placeholder_with_valid_data_size_patched(self):
+        # Mixed placeholder state: data size is already real but the RIFF
+        # size is still the placeholder -- only RIFF gets rewritten.
+        payload = b"\x00\x01" * 1000
+        fixed = _patch_streamed_wav_header(
+            _make_wav(
+                payload=payload, riff_size=WAV_SIZE_PLACEHOLDER, data_size=len(payload)
+            )
+        )
+
+        off = _data_size_offset(0)
+        assert int.from_bytes(fixed[4:8], "little") == len(fixed) - 8
+        assert int.from_bytes(fixed[off : off + 4], "little") == len(payload)
+
     def test_extra_chunks_before_data_still_patched(self):
         payload = b"\x00\x01" * 100
         info = b"INFOabcd"  # even length: no pad byte
