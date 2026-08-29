@@ -367,7 +367,6 @@ RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
 RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
     uv pip install \
         bandit[toml] \
-        commitizen \
         pip-audit \
         pyright \
         pytest \

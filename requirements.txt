@@ -48,7 +48,6 @@ qrcode>=8.2
 qq-botpy==1.2.1
 rank-bm25>=0.2.2
 shipyard-neo-sdk>=0.2.0
-shipyard-python-sdk>=0.2.4
 silk-python>=0.2.8
 slack-sdk>=3.43.0
 sqlalchemy[asyncio]>=2.0.52

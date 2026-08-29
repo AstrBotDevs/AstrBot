@@ -63,7 +63,6 @@ dependencies = [
   "markitdown-no-magika[docx,xls,xlsx]>=0.1.2",
   "xinference-client>=3.2.0",
   "tenacity>=9.1.4",
-  "shipyard-python-sdk>=0.2.4",
   "shipyard-neo-sdk>=0.2.0",
   "packaging>=26.3",
   "pyotp>=2.10.0",
@@ -74,7 +73,6 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-  "commitizen>=4.18.0",
   "bandit[toml]>=1.9.4",
   "pip-audit>=2.10.1",
   "pyright>=1.1.411",
