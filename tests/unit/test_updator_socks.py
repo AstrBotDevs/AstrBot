@@ -196,7 +196,7 @@ class _FakeZipArchive:
         return self._names
 
     def read(self, name: str) -> bytes:
-        if name.endswith(("metadata.yaml", "metadata.yml")):
+        if name.endswith("metadata.yaml"):
             return (
                 b"name: demo\ndesc: Demo plugin\nversion: 1.0.0\nauthor: AstrBot Team\n"
             )
@@ -210,7 +210,7 @@ def _build_fake_archive_entries(archive_root: str) -> list[str]:
     return [
         archive_root,
         posixpath.join(archive_root, ".dockerignore"),
-        posixpath.join(archive_root, "metadata.yml"),
+        posixpath.join(archive_root, "metadata.yaml"),
     ]
 
 
@@ -376,7 +376,7 @@ async def test_plugin_updator_install_prefers_download_url(
     assert calls["unzip"] == (str(expected_path) + ".zip", str(expected_path))
 
 
-def test_plugin_unzip_file_accepts_metadata_yml(tmp_path: Path) -> None:
+def test_plugin_unzip_file_rejects_metadata_yml(tmp_path: Path) -> None:
     zip_path = tmp_path / "plugin.zip"
     target_dir = tmp_path / "plugin"
     with zipfile.ZipFile(zip_path, "w") as archive:
@@ -394,11 +394,10 @@ def test_plugin_unzip_file_accepts_metadata_yml(tmp_path: Path) -> None:
         archive.writestr("demo-plugin/main.py", "VALUE = 1\n")
 
     updater = PluginUpdator.__new__(PluginUpdator)
-    updater.unzip_file(str(zip_path), str(target_dir))
+    with pytest.raises(ValueError, match="未找到 metadata.yaml"):
+        updater.unzip_file(str(zip_path), str(target_dir))
 
-    assert (target_dir / "metadata.yml").is_file()
-    assert (target_dir / "main.py").is_file()
-    assert not zip_path.exists()
+    assert not target_dir.exists()
 
 
 def test_plugin_unzip_file_rejects_archive_without_metadata(tmp_path: Path) -> None:
@@ -408,7 +407,7 @@ def test_plugin_unzip_file_rejects_archive_without_metadata(tmp_path: Path) -> N
         archive.writestr("demo-plugin/main.py", "VALUE = 1\n")
 
     updater = PluginUpdator.__new__(PluginUpdator)
-    with pytest.raises(ValueError, match="未找到 metadata.yaml 或 metadata.yml"):
+    with pytest.raises(ValueError, match="未找到 metadata.yaml"):
         updater.unzip_file(str(zip_path), str(target_dir))
 
     assert not target_dir.exists()
@@ -512,7 +511,7 @@ async def test_plugin_update_validates_archive_before_removing_existing_plugin(
         fake_download_from_repo_url,
     )
 
-    with pytest.raises(ValueError, match="未找到 metadata.yaml 或 metadata.yml"):
+    with pytest.raises(ValueError, match="未找到 metadata.yaml"):
         await updater.update(plugin)
 
     assert marker_path.read_text(encoding="utf-8") == "VALUE = 'old'\n"
