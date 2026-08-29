@@ -312,7 +312,10 @@ check-web-eslint:
 	@echo "==> [web] eslint"
 	cd $(DASHBOARD_DIR) && $(PNPM) exec eslint . --concurrency=auto --max-warnings=0
 
-check-web-smoke:
+# The Dashboard build regenerates the tracked MDI subset assets.  Run smoke
+# tests after that write completes so Vitest cannot observe a half-written
+# font/CSS pair when check-web uses parallel submakes.
+check-web-smoke: check-web-build
 	@echo "==> [web] smoke tests"
 	cd $(DASHBOARD_DIR) && $(PNPM) run test:smoke
 
