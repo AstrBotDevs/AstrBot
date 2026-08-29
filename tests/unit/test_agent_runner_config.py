@@ -1,17 +1,21 @@
 import copy
 import json
+from types import SimpleNamespace
 
 import pytest
 
 from astrbot.core.config.agent_runner import (
     AGENT_RUNNER_CONFIG_DEFAULTS,
-    finalize_agent_runner_migration,
     get_agent_runner_config_default,
     normalize_agent_runner,
-    prepare_agent_runner_migration,
 )
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import DEFAULT_CONFIG
+from astrbot.core.pipeline.process_stage.stage import AgentRequestSubStage
+from astrbot.core.utils.migra_helper import (
+    _migrate_agent_runner_config,
+    finalize_config_migrations,
+)
 
 
 @pytest.mark.parametrize(
@@ -53,6 +57,30 @@ def test_switching_runner_type_discards_previous_runner_fields():
     assert "provider_id" not in normalized["config"]
     assert "persona_id" not in normalized["config"]
     assert "model" not in normalized["config"]
+
+
+@pytest.mark.asyncio
+async def test_agent_request_normalizes_incomplete_runner_config():
+    config = {
+        "wake_prefix": [],
+        "provider_settings": {
+            "wake_prefix": "",
+            "streaming_response": True,
+            "unsupported_streaming_strategy": "aggregate",
+        },
+        "agent_runner": {
+            "runner_type": "dify",
+            "config": {"dify_api_key": "saved-key"},
+        },
+    }
+    stage = AgentRequestSubStage()
+
+    await stage.initialize(SimpleNamespace(astrbot_config=config))
+
+    assert stage.agent_sub_stage.runner_config == {
+        **get_agent_runner_config_default("dify"),
+        "dify_api_key": "saved-key",
+    }
 
 
 @pytest.mark.parametrize(
@@ -101,19 +129,14 @@ def test_local_legacy_fields_are_fully_migrated():
         },
     }
 
-    assert prepare_agent_runner_migration(config)
-    finalize_agent_runner_migration(
-        [
-            {
-                "provider": [
-                    {"id": "chat-main", "provider_type": "chat_completion"},
-                    {"id": "chat-backup", "provider_type": "chat_completion"},
-                    {"id": "compressor", "provider_type": "chat_completion"},
-                ]
-            },
-            config,
+    default_config = {
+        "provider": [
+            {"id": "chat-main", "provider_type": "chat_completion"},
+            {"id": "chat-backup", "provider_type": "chat_completion"},
+            {"id": "compressor", "provider_type": "chat_completion"},
         ]
-    )
+    }
+    assert _migrate_agent_runner_config(config, default_config)
     assert config["config_version"] == 3
     assert config["agent_runner"] == {
         "runner_type": "local",
@@ -186,19 +209,14 @@ def test_local_migration_replaces_default_root_inserted_before_version_bump():
         },
     }
 
-    assert prepare_agent_runner_migration(config)
-    finalize_agent_runner_migration(
-        [
-            {
-                "provider": [
-                    {"id": "chat-main", "provider_type": "chat_completion"},
-                    {"id": "chat-backup", "provider_type": "chat_completion"},
-                    {"id": "compressor", "provider_type": "chat_completion"},
-                ]
-            },
-            config,
+    default_config = {
+        "provider": [
+            {"id": "chat-main", "provider_type": "chat_completion"},
+            {"id": "chat-backup", "provider_type": "chat_completion"},
+            {"id": "compressor", "provider_type": "chat_completion"},
         ]
-    )
+    }
+    assert _migrate_agent_runner_config(config, default_config)
 
     assert config["agent_runner"] == {
         "runner_type": "local",
@@ -257,8 +275,7 @@ def test_missing_local_provider_references_are_removed():
         "provider": [{"id": "available", "provider_type": "chat_completion"}]
     }
 
-    prepare_agent_runner_migration(config)
-    finalize_agent_runner_migration([global_config, config])
+    _migrate_agent_runner_config(config, global_config)
 
     runner_config = config["agent_runner"]["config"]
     assert runner_config["model"]["provider_id"] == ""
@@ -319,8 +336,8 @@ def test_third_party_provider_config_is_copied_inline(
         ]
     }
 
-    prepare_agent_runner_migration(config)
-    assert finalize_agent_runner_migration([global_config, config])
+    assert _migrate_agent_runner_config(config, global_config)
+    assert finalize_config_migrations([global_config, config])
 
     runner_config = config["agent_runner"]["config"]
     assert config["agent_runner"]["runner_type"] == runner_type
@@ -336,6 +353,64 @@ def test_third_party_provider_config_is_copied_inline(
     assert global_config["provider"] == []
 
 
+def test_profile_migration_merges_runner_provider_source(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
+    data_path = tmp_path / "data"
+    profile_path = data_path / "config" / "abconf_profile.json"
+    profile_path.parent.mkdir(parents=True)
+    default_config = {
+        "provider_sources": [
+            {
+                "id": "dify-source",
+                "type": "dify",
+                "provider_type": "agent_runner",
+                "dify_api_key": "source-key",
+                "dify_api_base": "https://example.test/v1",
+            }
+        ],
+        "provider": [
+            {
+                "id": "dify-provider",
+                "provider_source_id": "dify-source",
+                "enable": True,
+            }
+        ],
+    }
+    (data_path / "cmd_config.json").write_text(
+        json.dumps(default_config), encoding="utf-8"
+    )
+    profile_config = {
+        "config_version": 2,
+        "provider": [],
+        "provider_settings": {
+            "agent_runner_type": "dify",
+            "dify_agent_runner_provider_id": "dify-provider",
+        },
+    }
+    profile_path.write_text(json.dumps(profile_config), encoding="utf-8")
+    monkeypatch.setattr(
+        "astrbot.core.utils.migra_helper.get_astrbot_config_path",
+        lambda: str(profile_path.parent),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.migra_helper.get_astrbot_data_path",
+        lambda: str(data_path),
+    )
+
+    loaded = AstrBotConfig(config_path=str(profile_path))
+
+    assert loaded["agent_runner"]["runner_type"] == "dify"
+    assert loaded["agent_runner"]["config"]["dify_api_key"] == "source-key"
+    assert (
+        loaded["agent_runner"]["config"]["dify_api_base"] == "https://example.test/v1"
+    )
+    assert "provider_source_id" not in loaded["agent_runner"]["config"]
+
+    assert finalize_config_migrations([default_config, loaded])
+    assert default_config["provider"] == []
+
+
 def test_missing_third_party_provider_uses_runner_defaults():
     config = {
         "provider": [],
@@ -346,8 +421,7 @@ def test_missing_third_party_provider_uses_runner_defaults():
         },
     }
 
-    prepare_agent_runner_migration(config)
-    finalize_agent_runner_migration([{"provider": []}, config])
+    _migrate_agent_runner_config(config)
 
     expected = get_agent_runner_config_default("coze")
     assert config["agent_runner"] == {
@@ -387,9 +461,8 @@ def test_legacy_default_provider_only_selects_actual_third_party_runner():
         ]
     }
 
-    prepare_agent_runner_migration(chat_config)
-    prepare_agent_runner_migration(runner_config)
-    finalize_agent_runner_migration([global_config, chat_config, runner_config])
+    _migrate_agent_runner_config(chat_config, global_config)
+    _migrate_agent_runner_config(runner_config, global_config)
 
     assert chat_config["agent_runner"]["runner_type"] == "local"
     assert chat_config["agent_runner"]["config"]["model"]["provider_id"] == "chat-model"
@@ -434,10 +507,10 @@ def test_multiple_profiles_can_copy_one_provider_and_migration_is_idempotent():
                 "default_personality": persona_id,
             },
         }
-        prepare_agent_runner_migration(profile)
+        _migrate_agent_runner_config(profile, global_config)
         profiles.append(profile)
 
-    finalize_agent_runner_migration([global_config, *profiles])
+    finalize_config_migrations([global_config, *profiles])
     first_result = copy.deepcopy([global_config, *profiles])
 
     assert [
@@ -447,7 +520,7 @@ def test_multiple_profiles_can_copy_one_provider_and_migration_is_idempotent():
         "persona_id" not in profile["agent_runner"]["config"] for profile in profiles
     )
     assert global_config["provider"] == []
-    assert not finalize_agent_runner_migration([global_config, *profiles])
+    assert not finalize_config_migrations([global_config, *profiles])
     assert [global_config, *profiles] == first_result
 
 

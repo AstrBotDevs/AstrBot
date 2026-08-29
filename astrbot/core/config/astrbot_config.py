@@ -6,6 +6,7 @@ import logging
 import os
 import tempfile
 import threading
+from pathlib import Path
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.auth_password import (
@@ -14,8 +15,8 @@ from astrbot.core.utils.auth_password import (
     hash_md5_dashboard_password,
     validate_dashboard_password,
 )
+from astrbot.core.utils.migra_helper import migrate_config_on_load
 
-from .agent_runner import prepare_agent_runner_migration
 from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
 
 ASTRBOT_CONFIG_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
@@ -85,12 +86,12 @@ class AstrBotConfig(dict):
                 "_dashboard_password_change_required_from_config",
                 True,
             )
-        agent_runner_migrated = False
+        config_migrated = False
         if default_config is DEFAULT_CONFIG:
-            agent_runner_migrated = prepare_agent_runner_migration(conf)
+            config_migrated = migrate_config_on_load(conf, Path(config_path))
         # 检查配置完整性，并插入
         has_new = self.check_config_integrity(default_config, conf)
-        has_new |= agent_runner_migrated
+        has_new |= config_migrated
         reset_dashboard_password = self._consume_reset_dashboard_password_flag()
         if reset_dashboard_password and "dashboard" in conf:
             self._reset_generated_dashboard_password(conf)
