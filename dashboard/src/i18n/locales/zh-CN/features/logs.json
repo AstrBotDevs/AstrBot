@@ -1,5 +1,5 @@
 {
-  "title": "平台日志",
+  "title": "日志",
   "autoScroll": {
     "label": "自动滚动",
     "enabled": "自动滚动已开启",
@@ -23,6 +23,6 @@
     "requestFailed": "请求失败。"
   },
   "debugHint": {
-    "text": "Debug 日志需要在「配置文件 → 系统 → 控制台日志级别」中开启"
+    "text": "Debug 日志需要在「设置 → 日志 → 控制台日志级别」中开启"
   }
 }

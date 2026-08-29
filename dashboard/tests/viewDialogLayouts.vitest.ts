@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
-import ConsolePage from '@/views/ConsolePage.vue';
+import LogsPage from '@/views/LogsPage.vue';
 import ConversationWorkspacePage from '@/views/conversation/ConversationWorkspacePage.vue';
 import WelcomePage from '@/views/WelcomePage.vue';
 import KBList from '@/views/knowledge-base/KBList.vue';
@@ -186,7 +186,7 @@ type WelcomePageVm = {
   showComputerAccessHelpDialog: boolean;
 };
 
-type ConsolePageVm = {
+type LogsPageVm = {
   pipDialog: boolean;
 };
 
@@ -359,11 +359,11 @@ describe('view dialog layouts', () => {
     wrapper.unmount();
   });
 
-  it('renders the console pip dialog inside a bounded scroll container', async () => {
+  it('renders the logs pip dialog inside a bounded scroll container', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const wrapper = mountWithVuetify(ConsolePage);
-    const vm = wrapper.vm as unknown as ConsolePageVm;
+    const wrapper = mountWithVuetify(LogsPage);
+    const vm = wrapper.vm as unknown as LogsPageVm;
 
     await flushPromises();
 

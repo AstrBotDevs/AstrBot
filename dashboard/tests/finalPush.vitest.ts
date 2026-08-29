@@ -49,9 +49,16 @@ describe('final coverage push', () => {
     expect(ChatBoxRoutes.path).toBe('/chatbox');
     expect(MainRoutes.redirect).toBe('/welcome');
     expect(MainRoutes.meta).toEqual({ requiresAuth: true });
-    expect(
-      MainRoutes.children.find((route) => route.path === '/normal')?.redirect,
-    ).toBe('/config');
+    expect(MainRoutes.children.map((route) => route.path)).not.toEqual(
+      expect.arrayContaining([
+        '/normal',
+        '/system',
+        '/dashboard/default',
+        '/conversation',
+        '/console',
+        '/trace',
+      ]),
+    );
 
     const loaders = [
       MainRoutes.component,

@@ -67,7 +67,7 @@ export const useAuthStore = defineStore('auth', {
         return;
       }
       if (onboardingCompleted) {
-        void router.push('/dashboard/default');
+        void router.push('/dashboard');
       } else {
         void router.push('/welcome');
       }

@@ -10,7 +10,7 @@ import { resolveErrorMessage } from '@/utils/errorUtils';
 import { stepUpHeaders } from '@/utils/stepUp';
 import { useToast } from '@/utils/toast';
 
-const { tm } = useModuleI18n('features/console');
+const { tm } = useModuleI18n('features/logs');
 const toast = useToast();
 const customizerStore = useCustomizerStore();
 const autoScrollEnabled = ref(

@@ -4,13 +4,6 @@ import {
   EXTENSION_ROUTE_NAME,
 } from './routeConstants';
 
-const redirectToDashboardTab =
-  (name: string) => (to: RouteLocationGeneric) => ({
-    name,
-    query: to.query,
-    hash: to.hash,
-  });
-
 const MainRoutes = {
   path: '/main',
   meta: {
@@ -65,18 +58,14 @@ const MainRoutes = {
       component: () => import('@/views/ConfigPage.vue'),
     },
     {
-      path: '/normal',
-      redirect: '/config',
-    },
-    {
-      path: '/system',
-      redirect: '/settings#system-config',
-    },
-    {
       name: 'DashboardWorkspace',
       path: '/dashboard',
       component: () => import('@/views/DashboardWorkspacePage.vue'),
-      redirect: redirectToDashboardTab('Stats'),
+      redirect: (to: RouteLocationGeneric) => ({
+        name: 'Stats',
+        query: to.query,
+        hash: to.hash,
+      }),
       children: [
         {
           name: 'Stats',
@@ -92,9 +81,9 @@ const MainRoutes = {
           meta: { dataTab: 'conversations' },
         },
         {
-          name: 'Console',
+          name: 'Logs',
           path: 'logs',
-          component: () => import('@/views/ConsolePage.vue'),
+          component: () => import('@/views/LogsPage.vue'),
           meta: { dataTab: 'logs' },
         },
         {
@@ -104,14 +93,6 @@ const MainRoutes = {
           meta: { dataTab: 'trace' },
         },
       ],
-    },
-    {
-      path: '/dashboard/default',
-      redirect: redirectToDashboardTab('Stats'),
-    },
-    {
-      path: '/conversation',
-      redirect: redirectToDashboardTab('Conversation'),
     },
     {
       name: 'SessionManagement',
@@ -137,14 +118,6 @@ const MainRoutes = {
       name: 'CronJobs',
       path: '/cron',
       component: () => import('@/views/CronJobPage.vue'),
-    },
-    {
-      path: '/console',
-      redirect: redirectToDashboardTab('Console'),
-    },
-    {
-      path: '/trace',
-      redirect: redirectToDashboardTab('Trace'),
     },
     {
       name: 'DataFiles',

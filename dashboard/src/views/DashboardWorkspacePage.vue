@@ -22,7 +22,7 @@ const tabs = computed(() => [
   {
     value: 'logs',
     label: t('core.navigation.dataTabs.logs'),
-    routeName: 'Console',
+    routeName: 'Logs',
     icon: 'mdi-console',
   },
   {

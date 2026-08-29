@@ -53,7 +53,7 @@ export class I18nLoader {
         name: 'features/config-metadata',
         path: 'features/config-metadata.json',
       },
-      { name: 'features/console', path: 'features/console.json' },
+      { name: 'features/logs', path: 'features/logs.json' },
       { name: 'features/trace', path: 'features/trace.json' },
       { name: 'features/about', path: 'features/about.json' },
       { name: 'features/settings', path: 'features/settings.json' },

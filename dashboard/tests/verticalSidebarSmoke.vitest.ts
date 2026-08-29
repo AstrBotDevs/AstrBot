@@ -9,9 +9,9 @@ import { mountWithVuetify } from './utils/mountWithVuetify';
 vi.mock('@/layouts/full/vertical-sidebar/sidebarItem', () => ({
   default: [
     {
-      title: 'core.navigation.dashboard',
+      title: 'core.navigation.data',
       icon: 'mdi-view-dashboard-outline',
-      to: '/dashboard/default',
+      to: '/dashboard',
     },
   ],
 }));

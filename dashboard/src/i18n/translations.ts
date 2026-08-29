@@ -18,7 +18,7 @@ import zhCNProvider from './locales/zh-CN/features/provider.json';
 import zhCNPlatform from './locales/zh-CN/features/platform.json';
 import zhCNConfig from './locales/zh-CN/features/config.json';
 import zhCNConfigMetadata from './locales/zh-CN/features/config-metadata.json';
-import zhCNConsole from './locales/zh-CN/features/console.json';
+import zhCNLogs from './locales/zh-CN/features/logs.json';
 import zhCNTrace from './locales/zh-CN/features/trace.json';
 import zhCNAbout from './locales/zh-CN/features/about.json';
 import zhCNSettings from './locales/zh-CN/features/settings.json';
@@ -59,7 +59,7 @@ import enUSProvider from './locales/en-US/features/provider.json';
 import enUSPlatform from './locales/en-US/features/platform.json';
 import enUSConfig from './locales/en-US/features/config.json';
 import enUSConfigMetadata from './locales/en-US/features/config-metadata.json';
-import enUSConsole from './locales/en-US/features/console.json';
+import enUSLogs from './locales/en-US/features/logs.json';
 import enUSTrace from './locales/en-US/features/trace.json';
 import enUSAbout from './locales/en-US/features/about.json';
 import enUSSettings from './locales/en-US/features/settings.json';
@@ -104,7 +104,7 @@ export const translations = {
       platform: zhCNPlatform,
       config: zhCNConfig,
       'config-metadata': zhCNConfigMetadata,
-      console: zhCNConsole,
+      logs: zhCNLogs,
       trace: zhCNTrace,
       about: zhCNAbout,
       settings: zhCNSettings,
@@ -153,7 +153,7 @@ export const translations = {
       platform: enUSPlatform,
       config: enUSConfig,
       'config-metadata': enUSConfigMetadata,
-      console: enUSConsole,
+      logs: enUSLogs,
       trace: enUSTrace,
       about: enUSAbout,
       settings: enUSSettings,

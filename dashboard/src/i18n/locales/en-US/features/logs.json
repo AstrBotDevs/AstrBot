@@ -1,5 +1,5 @@
 {
-  "title": "Console",
+  "title": "Logs",
   "autoScroll": {
     "label": "Auto-scroll",
     "enabled": "Auto-scroll enabled",
@@ -23,6 +23,6 @@
     "requestFailed": "Request failed."
   },
   "debugHint": {
-    "text": "Debug logs can be enabled in \"Configuration File → System → Console Log Level\""
+    "text": "Enable DEBUG logs in Settings → Logs → Console Log Level"
   }
 }

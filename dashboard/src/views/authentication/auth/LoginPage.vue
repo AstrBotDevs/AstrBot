@@ -120,7 +120,7 @@ onMounted(async () => {
   if (authStore.has_token()) {
     const onboardingCompleted = await authStore.checkOnboardingCompleted();
     if (onboardingCompleted) {
-      void router.push('/dashboard/default');
+      void router.push('/dashboard');
     } else {
       void router.push('/welcome');
     }

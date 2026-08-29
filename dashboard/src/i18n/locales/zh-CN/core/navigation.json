@@ -1,6 +1,5 @@
 {
   "welcome": "欢迎",
-  "dashboard": "数据统计",
   "platforms": "机器人",
   "providers": "模型提供商",
   "commands": "指令管理",
@@ -25,10 +24,7 @@
   "config": "配置文件",
   "chat": "聊天",
   "cron": "未来任务",
-  "conversation": "对话数据",
   "sessionManagement": "自定义规则",
-  "console": "平台日志",
-  "trace": "追踪",
   "dataFiles": "数据文件",
   "alkaid": "Alkaid",
   "alkaidMemory": "Alkaid 记忆",
@@ -52,10 +48,6 @@
     "notFound": "未找到该版本的更新日志",
     "selectVersion": "选择版本",
     "current": "当前"
-  },
-  "configTabs": {
-    "normal": "普通配置",
-    "system": "系统配置"
   },
   "pluginWebui": "插件页面"
 }
