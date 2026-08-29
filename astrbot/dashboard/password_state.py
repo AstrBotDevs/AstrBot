@@ -3,7 +3,6 @@ from collections.abc import MutableMapping
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.utils.auth_password import (
     hash_dashboard_password,
-    hash_md5_dashboard_password,
     is_md5_dashboard_password,
 )
 
@@ -119,7 +118,7 @@ def set_dashboard_password_hashes(
 ) -> None:
     """Set password hashes on a staged Dashboard configuration mapping."""
     dashboard_config["pbkdf2_password"] = hash_dashboard_password(raw_password)
-    dashboard_config["password"] = hash_md5_dashboard_password(raw_password)
+    dashboard_config["password"] = ""
 
 
 def set_dashboard_password_security_state(

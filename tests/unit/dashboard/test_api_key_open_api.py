@@ -14,10 +14,7 @@ from astrbot.core.auth.models import AuthContext as CoreAuthContext
 from astrbot.core.auth.models import Resource, Subject
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.log import LogBroker
-from astrbot.core.utils.auth_password import (
-    hash_dashboard_password,
-    hash_md5_dashboard_password,
-)
+from astrbot.core.utils.auth_password import hash_dashboard_password
 from astrbot.dashboard.api import open_api as open_api_routes
 from astrbot.dashboard.responses import ok
 from astrbot.dashboard.server import AstrBotDashboard
@@ -124,9 +121,7 @@ async def core_lifecycle_td(tmp_path_factory):
         core_lifecycle.astrbot_config["dashboard"]["pbkdf2_password"] = (
             hash_dashboard_password(dashboard_password)
         )
-        core_lifecycle.astrbot_config["dashboard"]["password"] = (
-            hash_md5_dashboard_password(dashboard_password)
-        )
+        core_lifecycle.astrbot_config["dashboard"]["password"] = ""
     object.__setattr__(
         core_lifecycle,
         "_dashboard_plain_password",

@@ -48,7 +48,7 @@ def hash_dashboard_password(raw_password: str) -> str:
 
 
 def hash_md5_dashboard_password(raw_password: str) -> str:
-    """Return the MD5 dashboard password hash kept for stored config fallback."""
+    """Return the MD5 hash used only to verify existing stored dashboard passwords."""
     if not isinstance(raw_password, str) or raw_password == "":
         raise ValueError("Password cannot be empty")
     return hashlib.md5(
@@ -87,7 +87,7 @@ def _is_pbkdf2_hash(stored: str) -> bool:
 
 
 def verify_dashboard_password(stored_hash: str, candidate_password: str) -> bool:
-    """Verify password against MD5 or PBKDF2-SHA256 storage."""
+    """Verify password against PBKDF2-SHA256, or an existing MD5 hash."""
     if not isinstance(stored_hash, str) or not isinstance(candidate_password, str):
         return False
 

@@ -72,7 +72,7 @@ uv run astrbot conf get dashboard.port
 uv run astrbot conf set dashboard.port 6185
 ```
 
-Supported common keys include `timezone`, `log_level`, `dashboard.port`, `dashboard.username`, `dashboard.password`, and `callback_api_base`. Password updates write the current password hashes; do not generate an MD5 value manually.
+Supported common keys include `timezone`, `log_level`, `dashboard.port`, `dashboard.username`, `dashboard.password`, and `callback_api_base`. Password updates write a PBKDF2 hash to `pbkdf2_password` and clear the legacy `password` field. Do not generate an MD5 value manually.
 
 The dedicated interactive command is also available:
 

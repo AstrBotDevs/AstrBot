@@ -110,9 +110,7 @@ async def core_lifecycle_td(tmp_path_factory):
         core_lifecycle.astrbot_config["dashboard"]["pbkdf2_password"] = (
             hash_dashboard_password(dashboard_password)
         )
-        core_lifecycle.astrbot_config["dashboard"]["password"] = (
-            hash_md5_dashboard_password(dashboard_password)
-        )
+        core_lifecycle.astrbot_config["dashboard"]["password"] = ""
         await set_password_storage_upgraded(
             core_lifecycle.astrbot_config,
             True,

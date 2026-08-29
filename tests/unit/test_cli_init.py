@@ -39,10 +39,7 @@ async def test_init_uses_initial_password_env_to_create_config(
         dashboard_config["pbkdf2_password"],
         initial_password,
     )
-    assert verify_dashboard_password(
-        dashboard_config["password"],
-        initial_password,
-    )
+    assert dashboard_config["password"] == ""
     assert dashboard_config["password_change_required"] is True
     assert dashboard_config["password_storage_upgraded"] is True
 

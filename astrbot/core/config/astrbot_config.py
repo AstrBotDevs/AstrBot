@@ -11,7 +11,6 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.auth_password import (
     generate_dashboard_password,
     hash_dashboard_password,
-    hash_md5_dashboard_password,
     validate_dashboard_password,
 )
 
@@ -147,7 +146,7 @@ class AstrBotConfig(dict):
         conf["dashboard"]["pbkdf2_password"] = hash_dashboard_password(
             generated_password
         )
-        conf["dashboard"]["password"] = hash_md5_dashboard_password(generated_password)
+        conf["dashboard"]["password"] = ""
         conf["dashboard"]["password_storage_upgraded"] = True
         conf["dashboard"]["password_change_required"] = True
         object.__setattr__(

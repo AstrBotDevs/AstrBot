@@ -271,10 +271,7 @@ class TestAstrBotConfigLoad:
             config["dashboard"]["pbkdf2_password"],
             DEFAULT_DASHBOARD_PASSWORD,
         )
-        assert verify_dashboard_password(
-            config["dashboard"]["password"],
-            generated_password,
-        )
+        assert config["dashboard"]["password"] == ""
 
     def test_empty_dashboard_password_uses_initial_password_env(
         self, temp_config_path, monkeypatch
@@ -299,10 +296,7 @@ class TestAstrBotConfigLoad:
             config["dashboard"]["pbkdf2_password"],
             env_password,
         )
-        assert verify_dashboard_password(
-            config["dashboard"]["password"],
-            env_password,
-        )
+        assert config["dashboard"]["password"] == ""
         assert config["dashboard"]["password_change_required"] is True
 
     def test_initial_dashboard_password_env_must_be_valid(
@@ -447,9 +441,7 @@ class TestAstrBotConfigLoad:
         assert not verify_dashboard_password(
             config["dashboard"]["pbkdf2_password"], old_password
         )
-        assert verify_dashboard_password(
-            config["dashboard"]["password"], generated_password
-        )
+        assert config["dashboard"]["password"] == ""
 
     def test_legacy_astrbot_user_without_change_flag_keeps_legacy_password(
         self, temp_config_path

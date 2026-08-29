@@ -135,10 +135,7 @@ def _get_nested_item(obj: dict[str, Any], path: str) -> Any:
 
 def _set_dashboard_password(config: dict[str, Any], raw_password: str) -> None:
     """Set dashboard password hashes and mark the password security state."""
-    from astrbot.core.utils.auth_password import (
-        hash_dashboard_password,
-        hash_md5_dashboard_password,
-    )
+    from astrbot.core.utils.auth_password import hash_dashboard_password
 
     _set_nested_item(
         config,
@@ -148,7 +145,7 @@ def _set_dashboard_password(config: dict[str, Any], raw_password: str) -> None:
     _set_nested_item(
         config,
         "dashboard.password",
-        hash_md5_dashboard_password(raw_password),
+        "",
     )
     _set_nested_item(config, "dashboard.password_storage_upgraded", True)
     _set_nested_item(config, "dashboard.password_change_required", False)

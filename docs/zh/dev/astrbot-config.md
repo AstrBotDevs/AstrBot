@@ -194,7 +194,7 @@ Alkaid [长期记忆](../use/long-term-memory) 当前没有对应的启停配置
 | `totp.*`                 | 由 WebUI 管理 | 为配置导出保留的 Dashboard TOTP 快照，不是账户认证的权威来源。                          |
 | `ssl.enable`             | `false`       | 由 AstrBot 直接终止 TLS；证书、私钥和可选 CA 使用对应路径字段。                         |
 
-密码以 PBKDF2 哈希存放在 `pbkdf2_password`。`password` 是迁移期使用的哈希字段，不要在 JSON 中写明文，也不要手工生成或交换哈希。忘记密码时使用：
+密码以 PBKDF2 哈希存放在 `pbkdf2_password`。新写入会把 `password` 留空。已有部署里 `password` 中的 MD5 值仍可用于登录，直到下次改密。不要在 JSON 中写明文，也不要手工生成或交换哈希。忘记密码时使用：
 
 ```bash
 uv run astrbot run --reset-password

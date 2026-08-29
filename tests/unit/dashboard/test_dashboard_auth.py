@@ -894,10 +894,7 @@ async def test_md5_dashboard_password_keeps_md5_auth_until_edit(
             core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"],
             changed_password,
         )
-        assert verify_dashboard_password(
-            core_lifecycle_td.astrbot_config["dashboard"]["password"],
-            changed_password,
-        )
+        assert core_lifecycle_td.astrbot_config["dashboard"]["password"] == ""
     finally:
         await _restore_dashboard_password_state(
             core_lifecycle_td,
@@ -1289,10 +1286,7 @@ async def test_local_setup_can_skip_default_password_auth(
             core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"],
             setup_password,
         )
-        assert verify_dashboard_password(
-            core_lifecycle_td.astrbot_config["dashboard"]["password"],
-            setup_password,
-        )
+        assert core_lifecycle_td.astrbot_config["dashboard"]["password"] == ""
     finally:
         await _restore_dashboard_password_state(
             core_lifecycle_td,
@@ -1349,10 +1343,7 @@ async def test_authenticated_default_password_login_can_complete_setup(
             core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"],
             setup_password,
         )
-        assert verify_dashboard_password(
-            core_lifecycle_td.astrbot_config["dashboard"]["password"],
-            setup_password,
-        )
+        assert core_lifecycle_td.astrbot_config["dashboard"]["password"] == ""
     finally:
         await _restore_dashboard_password_state(
             core_lifecycle_td,

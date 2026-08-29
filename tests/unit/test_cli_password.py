@@ -45,10 +45,7 @@ def test_password_command_changes_dashboard_password(monkeypatch, tmp_path):
         dashboard_config["pbkdf2_password"],
         "AstrbotChanged123",
     )
-    assert verify_dashboard_password(
-        dashboard_config["password"],
-        "AstrbotChanged123",
-    )
+    assert dashboard_config["password"] == ""
     assert dashboard_config["password_storage_upgraded"] is True
     assert dashboard_config["password_change_required"] is False
 
