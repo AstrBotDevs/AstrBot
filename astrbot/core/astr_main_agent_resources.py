@@ -57,18 +57,6 @@ CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT = (
     "Such as, user asked you to generate codes, you can add: Do you need me to run these codes for you?"
 )
 
-LIVE_MODE_SYSTEM_PROMPT = (
-    "You are in a real-time conversation. "
-    "Speak like a real person, casual and natural. "
-    "Keep replies short, one thought at a time. "
-    "No templates, no lists, no formatting. "
-    "No parentheses, quotes, or markdown. "
-    "It is okay to pause, hesitate, or speak in fragments. "
-    "Respond to tone and emotion. "
-    "Simple questions get simple answers. "
-    "Sound like a real conversation, not a Q&A system."
-)
-
 PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT = (
     "You are an autonomous proactive agent.\n\n"
     "You are awakened by a scheduled cron job, not by a user message.\n"

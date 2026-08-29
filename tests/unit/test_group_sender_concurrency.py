@@ -63,14 +63,13 @@ def test_unique_session_ignores_sender_concurrency():
 @pytest.mark.parametrize(
     "kwargs",
     [
-        {"extras": {"action_type": "live"}},
         {"extras": {"active_reply": True}},
         {"extras": {"cron_job": {"id": "1"}}},
         {"sender_id": ""},
         {"sender_id": "   "},
     ],
 )
-def test_live_proactive_and_missing_sender_stay_on_umo_lock(kwargs):
+def test_proactive_and_missing_sender_stay_on_umo_lock(kwargs):
     extras = kwargs.get("extras")
     sender_id = kwargs.get("sender_id", "user-a")
     event = _group_event(sender_id=sender_id, extras=extras)

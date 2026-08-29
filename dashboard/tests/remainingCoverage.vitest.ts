@@ -129,7 +129,6 @@ import DashboardTotpManageDialog from '@/components/shared/DashboardTotpManageDi
 import DashboardTotpManager from '@/components/shared/DashboardTotpManager.vue';
 import MarketPluginCard from '@/components/extension/MarketPluginCard.vue';
 import FolderTree from '@/views/persona/FolderTree.vue';
-import LiveMode from '@/components/chat/LiveMode.vue';
 import RegenerateMenu from '@/components/chat/RegenerateMenu.vue';
 import NavItem from '@/layouts/full/vertical-sidebar/NavItem.vue';
 import App from '@/App.vue';
@@ -166,7 +165,6 @@ import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
 import PlatformRegistrationAction from '@/components/platform/PlatformRegistrationAction.vue';
 import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
 import UnsavedChangesConfirmDialog from '@/components/config/UnsavedChangesConfirmDialog.vue';
-import MessagePartsRenderer from '@/components/chat/message_list_comps/MessagePartsRenderer.vue';
 import ToolCallCard from '@/components/chat/message_list_comps/ToolCallCard.vue';
 import ReasoningTimeline from '@/components/chat/message_list_comps/ReasoningTimeline.vue';
 import RefNode from '@/components/chat/message_list_comps/RefNode.vue';
@@ -350,7 +348,6 @@ describe('remaining coverage', () => {
         },
       ],
       [FolderTree, { props: { folderTree: [folder], currentFolderId: null } }],
-      [LiveMode, {}],
       [RegenerateMenu, {}],
       [
         NavItem,
@@ -373,10 +370,6 @@ describe('remaining coverage', () => {
       [PlatformRegistrationAction, {}],
       [AstrBotCoreConfigWrapper, { props: { schema: {}, modelValue: {} } }],
       [UnsavedChangesConfirmDialog, { props: { modelValue: true } }],
-      [
-        MessagePartsRenderer,
-        { props: { parts: [{ type: 'plain', text: 'hi' }] } },
-      ],
       [
         ToolCallCard,
         { props: { toolCall: { name: 'search', arguments: '{}' } } },

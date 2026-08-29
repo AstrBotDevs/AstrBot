@@ -17,7 +17,6 @@ from .data_files import router as data_files_router
 from .extensions import router as extensions_router
 from .files import router as files_router
 from .knowledge_bases import router as knowledge_bases_router
-from .live_chat import router as live_chat_router
 from .logs import router as logs_router
 from .memory import router as memory_router
 from .open_api import router as open_api_router
@@ -33,6 +32,7 @@ from .subagents import router as subagents_router
 from .t2i import router as t2i_router
 from .tools import router as tools_router
 from .updates import router as updates_router
+from .webchat import router as webchat_router
 
 API_V1_PREFIX = "/api/v1"
 
@@ -69,5 +69,5 @@ def build_api_router() -> APIRouter:
     router.include_router(personas_router)
     router.include_router(updates_router)
     router.include_router(open_api_router)
-    router.include_router(live_chat_router)
+    router.include_router(webchat_router)
     return router

@@ -900,5 +900,4 @@ async def test_v1_token_file_is_public(
 
 def test_v1_openapi_websocket_routes_are_mounted(asgi_app):
     assert str(asgi_app.url_path_for("chat_ws")) == "/api/v1/chat/ws"
-    assert str(asgi_app.url_path_for("live_chat_ws")) == "/api/v1/live-chat/ws"
     assert str(asgi_app.url_path_for("unified_chat_ws")) == "/api/v1/unified-chat/ws"

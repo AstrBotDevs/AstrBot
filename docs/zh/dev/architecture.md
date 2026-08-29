@@ -68,21 +68,24 @@ astrbot/core/db/
     mixins.py              # TimestampMixin
     ...                    # 按域拆分的表模块
   stores/
+    mixin.py               # store mixins 共用的带类型会话助手
     session.py             # 会话与事务作用域助手
     ...                    # 每个域协议一个 mixin
 ```
 
 `po/__init__.py` 再导出表模型，只是包入口。新代码可以写 `from astrbot.core.db.po.memory import MemoryFact`；`from astrbot.core.db.po import MemoryFact` 仍有效。模型注册由 `po.registry.import_all_models()` 显式完成，不能依赖业务模块碰巧导入。`schema.py` 必须先调用它，再执行 `SQLModel.metadata.create_all`。`tests/unit/db/test_schema.py` 用源码内固定的 `EXPECTED_TABLE_NAMES`（当前 35 张表）对照初始化后的数据库表名；registry 漏登时测试必须失败。
 
-`initialize()` 只做：
+`initialize()` 按以下顺序执行：
 
 1. `import_all_models()`
 2. `SQLModel.metadata.create_all`
-3. WAL / `busy_timeout` / `synchronous` / `cache_size` / `temp_store` / `mmap_size` / `optimize`
+3. 按需为已有指令表回填 `command_id` 和冲突作用域。
+4. 在独立事务中删除废弃的 `command_configs.keep_original_alias` 与 `platform_sessions.is_group` 列。
+5. WAL / `busy_timeout` / `synchronous` / `cache_size` / `temp_store` / `mmap_size` / `optimize`
 
-它不探测 `PRAGMA table_info`，也不执行 `ALTER TABLE`。`create_all` 只创建缺失表，不会给已有表加列。schema 变更后需要空库重建：停进程，删除 `data/data_v4.db*`，再启动。测试继续使用临时库。将来若确实需要 SQLite 的 `WHERE` 索引，必须把 `Index(..., sqlite_where=...)` 声明在模型上，让 `create_all` 在空库上创建。
+兼容步骤会检查 `PRAGMA table_info`，并只执行范围明确的 `ALTER TABLE`。`create_all` 仍只创建缺失表，不会为已有表补模型列。删除列失败只记录日志，不回滚建表或指令回填。测试继续使用临时库。将来若确实需要 SQLite 的 `WHERE` 索引，必须把 `Index(..., sqlite_where=...)` 声明在模型上，让 `create_all` 在空库上创建。
 
-Mixin 只通过 `self.get_db()` 拿会话，不直接持有 engine，也不互相导入对方的查询函数。跨域写入由 composite store 或 application/domain service 持有一个事务边界。
+Mixin 通过带类型的 `store_session(self)` 助手获取会话，不直接持有 engine，也不互相导入对方的查询函数。跨域写入由 composite store 或 application/domain service 持有一个事务边界。
 
 ### 协议与表
 
@@ -160,7 +163,7 @@ Mixin 只通过 `self.get_db()` 拿会话，不直接持有 engine，也不互�
 
 群聊 LLM 访问由 `llm_access.group`、`llm_access.reply_to_bot` 和续片状态控制。内置命令是否可用则按 handler 存储在命令数据库中；`disable_builtin_commands` 不迁移、不接受配置写入，也不被 Pipeline 读取。指令配置以 `command_id`（`{plugin}:{original path}`，空格换成点）为稳定标识；同步时按 `handler_full_name` 再按 `command_id` 认领活 handler，认领失败的行删除。`alter_cmd` 只读取 `command_id` 键，不从 Python 方法名或历史短名迁移。内置指令在 `resolution_strategy` 不是 `manual_rename` 时忽略库中的名字和别名覆盖。未使用的 `keep_original_alias` 列在独立事务中删除，失败不影响启动。
 
-`platform_settings.group_sender_concurrency` 是实验性开关，默认关闭。启用且未开 `unique_session` 时，群聊 LLM 锁可按发送者拆分，不同群友可并行生成；整轮出站仍按群 UMO 排队，本轮强制非流式。对话历史在 `AssistantHistoryCommitter` 内合并并发完整轮次，不复活已截断历史。私聊、WebChat、live、定时任务和主动回复保持原 UMO 串行。
+`platform_settings.group_sender_concurrency` 是实验性开关，默认关闭。启用且未开 `unique_session` 时，群聊 LLM 锁可按发送者拆分，不同群友可并行生成；整轮出站仍按群 UMO 排队，本轮强制非流式。对话历史在 `AssistantHistoryCommitter` 内合并并发完整轮次，不复活已截断历史。私聊、WebChat、定时任务和主动回复保持原 UMO 串行。
 
 ### 指令解析子系统
 
@@ -274,7 +277,7 @@ guest:<id>
 
 ### Step-up、审计与 API Key
 
-全局高风险操作只接受 Dashboard 控制面的一次性密码/TOTP step-up，凭证绑定 account、Dashboard `sid`、action、资源和上下文摘要，TTL 不超过 5 分钟，只能原子消费一次。Dashboard 驱动的 WebChat 使用独立的 `/authorization/webchat-step-up`，只覆盖六个实例级工具：`tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.browser_control`、`tool.mcp_write`、`tool.computer_use`。Live Voice 不复用该 proof。
+全局高风险操作只接受 Dashboard 控制面的一次性密码/TOTP step-up，凭证绑定 account、Dashboard `sid`、action、资源和上下文摘要，TTL 不超过 5 分钟，只能原子消费一次。Dashboard 驱动的 WebChat 使用独立的 `/authorization/webchat-step-up`，只覆盖六个实例级工具：`tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.browser_control`、`tool.mcp_write`、`tool.computer_use`。
 
 拒绝、高风险 allow、step-up 和绑定变更写脱敏审计。高风险 allow 在有界审计队列已满时 fail closed；绑定变更与 step-up 签发在同一业务事务中落库。
 
@@ -292,7 +295,7 @@ Dashboard 后端是 FastAPI 应用，使用 Hypercorn 运行。普通 JSON 路�
 
 所有 `/api/v1` 路由由 `astrbot/dashboard/api/router.py` 汇总。源规范是 `openspec/openapi-v1.yaml`；Dashboard 的 Hey API 客户端和文档站的 `public/openapi.json` 都由它生成，禁止手工修改生成客户端。
 
-Live Chat WebSocket 允许同一连接并发运行多个请求，以唯一 `message_id` 关联任务、响应和 interrupt。follow-up 捕获、`run_started` 与每轮 `agent_stats` 都必须保留原请求身份；不能用 session 级 busy 标志把协议退回单请求串行模型。
+Unified Chat WebSocket 允许同一连接并发运行多个请求，以唯一 `message_id` 关联任务、响应和 interrupt。follow-up 捕获、`run_started` 与每轮 `agent_stats` 都必须保留原请求身份；不能用 session 级 busy 标志把协议退回单请求串行模型。
 
 ### 数据文件管理器
 
@@ -353,7 +356,7 @@ Dashboard 在 `/data` 提供原生运行时 `data/` 文件管理器，不是 ifr
 | Dashboard API     | `astrbot/dashboard/api/`、`services/`、`schemas.py`          | OpenAPI、生成客户端、前后端测试                             |
 | 授权策略/绑定     | `astrbot/core/auth/`                                         | 动作注册表、step-up、平台事实、审计、插件 `context.authz`   |
 | 数据文件管理器    | `data_files.py`、`data_file_service.py`、`DataFilesPage.vue` | 路径穿越、符号链接、etag、step-up、OpenAPI tag 白名单       |
-| Live Chat 协议    | `live_chat_service.py`、`webchat/`                           | request identity、并发、interrupt、前端状态测试             |
+| Unified Chat 协议 | `webchat_service.py`、`webchat/`                             | request identity、并发、interrupt、前端状态测试             |
 | 插件 SDK/页面协议 | `astrbot/api/`、`astrbot/core/star/`                         | import boundary、插件指南、Vitest、Playwright               |
 | 配置持久化        | `astrbot/core/config/`                                       | 默认值/metadata、revision、并发保存测试                     |
 | 主 SQLite 库      | `astrbot/core/db/`                                           | 域协议、SQLModel 表、schema 初始化、`tests/unit/db/`        |

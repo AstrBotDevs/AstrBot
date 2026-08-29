@@ -1,11 +1,8 @@
 import asyncio
-import base64
 import json
 import os
 import re
-import time
 import uuid
-import wave
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
@@ -16,7 +13,7 @@ from astrbot import logger
 from astrbot.core.agent.mcp_client import MCPInteractionCoordinator, MCPInteractionKey
 from astrbot.core.auth.models import WEBCHAT_INSTANCE_TOOL_ACTIONS
 from astrbot.core.db.protocols import ChatStore
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.webchat.message_parts import (
@@ -50,7 +47,6 @@ from astrbot.dashboard.services.chat_service import (
 if TYPE_CHECKING:
     from astrbot.core.config.astrbot_config import AstrBotConfig
     from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
-    from astrbot.core.provider.manager import ProviderManager
     from astrbot.core.utils.shared_preferences import SharedPreferences
 
 SendJson = Callable[[dict], Awaitable[None]]
@@ -58,12 +54,12 @@ ReceiveJson = Callable[[], Awaitable[dict]]
 CloseWebSocket = Callable[[int, str], Awaitable[None]]
 
 
-class LiveChatAuthError(Exception):
+class WebChatAuthError(Exception):
     pass
 
 
-class LiveChatSession:
-    """Live Chat 会话管理器"""
+class WebChatSession:
+    """WebChat 会话管理器"""
 
     def __init__(
         self,
@@ -76,83 +72,20 @@ class LiveChatSession:
         self.dashboard_principal = dashboard_principal
         self.webchat_step_up_tokens: dict[str, str] = {}
         self.webchat_step_up_session_id: str | None = None
-        self.conversation_id = str(uuid.uuid4())
-        self.is_speaking = False
-        self.is_processing = False
-        self.should_interrupt = False
-        self.audio_frames: list[bytes] = []
-        self.current_stamp: str | None = None
-        self.temp_audio_path: str | None = None
         self.chat_subscriptions: dict[str, str] = {}
         self.chat_subscription_tasks: dict[str, asyncio.Task] = {}
         self.chat_request_tasks: dict[str, asyncio.Task] = {}
         self.interrupted_chat_requests: set[str] = set()
         self.ws_send_lock = asyncio.Lock()
 
-    def start_speaking(self, stamp: str) -> None:
-        self.is_speaking = True
-        self.current_stamp = stamp
-        self.audio_frames = []
-        logger.debug(f"[Live Chat] {self.username} 开始说话 stamp={stamp}")
 
-    def add_audio_frame(self, data: bytes) -> None:
-        if self.is_speaking:
-            self.audio_frames.append(data)
-
-    async def end_speaking(self, stamp: str) -> tuple[str | None, float]:
-        start_time = time.time()
-        if not self.is_speaking or stamp != self.current_stamp:
-            logger.warning(
-                f"[Live Chat] stamp 不匹配或未在说话状态: {stamp} vs {self.current_stamp}"
-            )
-            return None, 0.0
-
-        self.is_speaking = False
-
-        if not self.audio_frames:
-            logger.warning("[Live Chat] 没有音频帧数据")
-            return None, 0.0
-
-        try:
-            temp_dir = get_astrbot_temp_path()
-            os.makedirs(temp_dir, exist_ok=True)
-            audio_path = os.path.join(temp_dir, f"live_audio_{uuid.uuid4()}.wav")
-
-            with wave.open(audio_path, "wb") as wav_file:
-                wav_file.setnchannels(1)
-                wav_file.setsampwidth(2)
-                wav_file.setframerate(16000)
-                for frame in self.audio_frames:
-                    wav_file.writeframes(frame)
-
-            self.temp_audio_path = audio_path
-            logger.info(
-                f"[Live Chat] 音频文件已保存: {audio_path}, 大小: {os.path.getsize(audio_path)} bytes"
-            )
-            return audio_path, time.time() - start_time
-
-        except Exception as exc:
-            logger.error(f"[Live Chat] 组装 WAV 文件失败: {exc}", exc_info=True)
-            return None, 0.0
-
-    def cleanup(self) -> None:
-        if self.temp_audio_path and os.path.exists(self.temp_audio_path):
-            try:
-                os.remove(self.temp_audio_path)
-                logger.debug(f"[Live Chat] 已删除临时文件: {self.temp_audio_path}")
-            except Exception as exc:
-                logger.warning(f"[Live Chat] 删除临时文件失败: {exc}")
-        self.temp_audio_path = None
-
-
-class LiveChatService:
+class WebChatService:
     def __init__(
         self,
         db: ChatStore,
         *,
         preferences: SharedPreferences,
         config: AstrBotConfig,
-        provider_manager: ProviderManager,
         platform_message_history_manager: PlatformMessageHistoryManager,
         webchat_run_coordinator: WebChatRunCoordinator,
         mcp_interaction_coordinator: MCPInteractionCoordinator | None = None,
@@ -164,14 +97,13 @@ class LiveChatService:
         self.webchat_run_coordinator = webchat_run_coordinator
         self.mcp_interaction_coordinator = mcp_interaction_coordinator
         self.config = config
-        self.provider_manager = provider_manager
         self.token_validator = token_validator or DashboardTokenValidator(
             self.config["dashboard"].get("jwt_secret", "")
         )
         self.auth_service = auth_service
         self.platform_history_mgr = platform_message_history_manager
-        self.sessions: dict[str, LiveChatSession] = {}
-        self._mcp_publishers: dict[str, tuple[LiveChatSession, SendJson]] = {}
+        self.sessions: dict[str, WebChatSession] = {}
+        self._mcp_publishers: dict[str, tuple[WebChatSession, SendJson]] = {}
         self.attachments_dir = os.path.join(get_astrbot_data_path(), "attachments")
         self.webchat_img_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
         os.makedirs(self.attachments_dir, exist_ok=True)
@@ -192,13 +124,13 @@ class LiveChatService:
         token: str | None,
     ) -> str:
         if not token:
-            raise LiveChatAuthError("Missing authentication token")
+            raise WebChatAuthError("Missing authentication token")
         try:
             return self.token_validator.validate(token).username
         except jwt.ExpiredSignatureError as exc:
-            raise LiveChatAuthError("Token expired") from exc
+            raise WebChatAuthError("Token expired") from exc
         except jwt.InvalidTokenError as exc:
-            raise LiveChatAuthError("Invalid token") from exc
+            raise WebChatAuthError("Invalid token") from exc
 
     async def _validate_dashboard_principal(
         self, token: str
@@ -210,29 +142,29 @@ class LiveChatService:
         try:
             principal = self.token_validator.validate(token)
         except jwt.ExpiredSignatureError as exc:
-            raise LiveChatAuthError("Token expired") from exc
+            raise WebChatAuthError("Token expired") from exc
         except jwt.InvalidTokenError as exc:
-            raise LiveChatAuthError("Invalid token") from exc
+            raise WebChatAuthError("Invalid token") from exc
         if (
             not principal.account_id
             or not await self.auth_service.validate_dashboard_principal(principal)
         ):
-            raise LiveChatAuthError("Invalid token")
+            raise WebChatAuthError("Invalid token")
         return principal
 
     def create_session(
         self,
         username: str,
         dashboard_principal: DashboardSessionPrincipal | None = None,
-    ) -> LiveChatSession:
-        session_id = f"webchat_live!{username}!{uuid.uuid4()}"
-        session = LiveChatSession(session_id, username, dashboard_principal)
+    ) -> WebChatSession:
+        session_id = f"webchat!{username}!{uuid.uuid4()}"
+        session = WebChatSession(session_id, username, dashboard_principal)
         self.sessions[session_id] = session
         return session
 
     @staticmethod
     def _dashboard_principal_payload(
-        session: LiveChatSession,
+        session: WebChatSession,
         step_up_tokens: dict[str, str] | None = None,
         *,
         webchat_session_id: str | None = None,
@@ -272,16 +204,16 @@ class LiveChatService:
 
     async def _owns_chat_session(
         self,
-        session: LiveChatSession,
+        session: WebChatSession,
         chat_session_id: str,
     ) -> bool:
         """Check that a persistent WebChat session belongs to this user."""
 
         get_session = getattr(self.db, "get_platform_session_by_id", None)
         # Lightweight unit doubles without an authenticated Dashboard
-        # principal represent the legacy live-voice test path. An
-        # authenticated Dashboard WebSocket must always have the runtime DB;
-        # fail closed if that store is unavailable.
+        # principal are accepted only in tests. An authenticated Dashboard
+        # WebSocket must always have the runtime DB; fail closed if that store
+        # is unavailable.
         if not callable(get_session):
             return session.dashboard_principal is None
         try:
@@ -294,17 +226,15 @@ class LiveChatService:
             return False
         return True
 
-    async def cleanup_session(self, session: LiveChatSession) -> None:
+    async def cleanup_session(self, session: WebChatSession) -> None:
         if session.session_id in self.sessions:
             await self.cleanup_chat_subscriptions(session)
-            session.cleanup()
             del self.sessions[session.session_id]
 
     async def run_websocket_session(
         self,
         *,
         token: str | None,
-        force_ct: str | None,
         receive_json: ReceiveJson,
         send_json: SendJson,
         close: CloseWebSocket,
@@ -316,39 +246,38 @@ class LiveChatService:
                 if self.auth_service is not None and token is not None
                 else None
             )
-        except LiveChatAuthError as exc:
+        except WebChatAuthError as exc:
             await close(1008, str(exc))
             return
 
-        live_session = self.create_session(username, dashboard_principal)
-        self._mcp_publishers[live_session.session_id] = (live_session, send_json)
-        logger.info(f"[Live Chat] WebSocket 连接建立: {username}")
+        session = self.create_session(username, dashboard_principal)
+        self._mcp_publishers[session.session_id] = (session, send_json)
+        logger.info(f"[WebChat] WebSocket connection established: {username}")
 
         def finish_chat_request(completed: asyncio.Task, request_id: str) -> None:
-            if live_session.chat_request_tasks.get(request_id) is completed:
-                live_session.chat_request_tasks.pop(request_id, None)
+            if session.chat_request_tasks.get(request_id) is completed:
+                session.chat_request_tasks.pop(request_id, None)
             try:
                 completed.result()
             except asyncio.CancelledError:
                 pass
             except Exception as exc:
                 logger.error(
-                    "[Live Chat] WebSocket chat request failed: %s",
+                    "[WebChat] WebSocket chat request failed: %s",
                     safe_error("", exc),
                 )
 
         try:
             while True:
                 message = await receive_json()
-                ct = force_ct or message.get("ct", "live")
-                if ct == "chat":
+                if message.get("ct", "chat") == "chat":
                     if message.get("t") == "send":
                         request_id = str(message.get("message_id") or uuid.uuid4())
                         message["message_id"] = request_id
-                        existing_task = live_session.chat_request_tasks.get(request_id)
+                        existing_task = session.chat_request_tasks.get(request_id)
                         if existing_task and not existing_task.done():
                             await self.send_chat_payload(
-                                live_session,
+                                session,
                                 {
                                     "ct": "chat",
                                     "t": "error",
@@ -360,42 +289,40 @@ class LiveChatService:
                             )
                             continue
                         task = asyncio.create_task(
-                            self.handle_chat_message(live_session, message, send_json),
+                            self.handle_chat_message(session, message, send_json),
                             name=f"chat_ws_request_{request_id}",
                         )
-                        live_session.chat_request_tasks[request_id] = task
+                        session.chat_request_tasks[request_id] = task
                         task.add_done_callback(
                             lambda completed, request_id=request_id: (
-                                finish_chat_request(
-                                    completed,
-                                    request_id,
-                                )
+                                finish_chat_request(completed, request_id)
                             )
                         )
                     else:
-                        await self.handle_chat_message(
-                            live_session,
-                            message,
-                            send_json,
-                        )
+                        await self.handle_chat_message(session, message, send_json)
                 else:
-                    await self.handle_live_message(
-                        live_session,
-                        message,
+                    await self.send_chat_payload(
+                        session,
+                        {
+                            "ct": "chat",
+                            "t": "error",
+                            "data": "Unsupported message channel",
+                            "code": "INVALID_MESSAGE_FORMAT",
+                        },
                         send_json,
                     )
 
         except WebSocketDisconnect as exc:
             logger.debug(
-                f"[Live Chat] WebSocket disconnected: {username}, code={exc.code}"
+                f"[WebChat] WebSocket disconnected: {username}, code={exc.code}"
             )
         except Exception as exc:
-            logger.error(f"[Live Chat] WebSocket 错误: {exc}", exc_info=True)
+            logger.error(f"[WebChat] WebSocket error: {exc}", exc_info=True)
 
         finally:
-            await self.cleanup_session(live_session)
-            self._mcp_publishers.pop(live_session.session_id, None)
-            logger.info(f"[Live Chat] WebSocket 连接关闭: {username}")
+            await self.cleanup_session(session)
+            self._mcp_publishers.pop(session.session_id, None)
+            logger.info(f"[WebChat] WebSocket connection closed: {username}")
 
     async def create_attachment_from_file(
         self, filename: str, attach_type: str, display_name: str | None = None
@@ -491,7 +418,7 @@ class LiveChatService:
 
     async def send_chat_payload(
         self,
-        session: LiveChatSession,
+        session: WebChatSession,
         payload: dict,
         send_json: SendJson,
     ) -> None:
@@ -500,7 +427,7 @@ class LiveChatService:
 
     async def forward_chat_subscription(
         self,
-        session: LiveChatSession,
+        session: WebChatSession,
         run: WebChatRun,
         send_json: SendJson,
     ) -> None:
@@ -516,7 +443,7 @@ class LiveChatService:
             raise
         except Exception as exc:
             logger.error(
-                f"[Live Chat] chat subscription forward failed ({run.session_id}): {exc}",
+                f"[WebChat] chat subscription forward failed ({run.session_id}): {exc}",
                 exc_info=True,
             )
         finally:
@@ -526,7 +453,7 @@ class LiveChatService:
 
     async def ensure_chat_subscription(
         self,
-        session: LiveChatSession,
+        session: WebChatSession,
         chat_session_id: str,
         send_json: SendJson,
     ) -> str:
@@ -557,7 +484,7 @@ class LiveChatService:
         session.chat_subscription_tasks[chat_session_id] = task
         return request_id
 
-    async def cleanup_chat_subscriptions(self, session: LiveChatSession) -> None:
+    async def cleanup_chat_subscriptions(self, session: WebChatSession) -> None:
         tasks = [
             *session.chat_subscription_tasks.values(),
             *session.chat_request_tasks.values(),
@@ -578,7 +505,7 @@ class LiveChatService:
 
     async def handle_chat_message(
         self,
-        session: LiveChatSession,
+        session: WebChatSession,
         message: dict,
         send_json: SendJson,
     ) -> None:
@@ -601,8 +528,6 @@ class LiveChatService:
         session_id = message.get("session_id") or session.session_id
         selected_provider = message.get("selected_provider")
         selected_model = message.get("selected_model")
-        selected_stt_provider = message.get("selected_stt_provider")
-        selected_tts_provider = message.get("selected_tts_provider")
         persona_prompt = message.get("persona_prompt")
         show_reasoning = message.get("show_reasoning")
         enable_streaming = message.get("enable_streaming", True)
@@ -657,7 +582,7 @@ class LiveChatService:
                 session_id=session_id,
                 username=session.username,
                 request_id=message_id,
-                kind="live_chat",
+                kind="chat",
             )
             self.webchat_run_coordinator.bind_task(run)
         except DuplicateWebChatRunError:
@@ -694,8 +619,6 @@ class LiveChatService:
                     "message": message_parts,
                     "selected_provider": selected_provider,
                     "selected_model": selected_model,
-                    "selected_stt_provider": selected_stt_provider,
-                    "selected_tts_provider": selected_tts_provider,
                     "persona_prompt": persona_prompt,
                     "show_reasoning": show_reasoning,
                     "enable_streaming": enable_streaming,
@@ -751,7 +674,7 @@ class LiveChatService:
                     extracted_refs = merge_webchat_refs(extracted_refs, refs)
                 except Exception as exc:
                     logger.exception(
-                        f"[Live Chat] Failed to extract web search refs: {exc}",
+                        f"[WebChat] Failed to extract web search refs: {exc}",
                         exc_info=True,
                     )
                     extracted_refs = refs
@@ -879,7 +802,7 @@ class LiveChatService:
                     break
 
         except Exception as exc:
-            logger.error(f"[Live Chat] 处理 chat 消息失败: {exc}", exc_info=True)
+            logger.error(f"[WebChat] 处理 chat 消息失败: {exc}", exc_info=True)
             await self.send_chat_payload(
                 session,
                 {
@@ -897,7 +820,7 @@ class LiveChatService:
                     await pending_bot_message_flusher()
             except Exception as exc:
                 logger.exception(
-                    f"[Live Chat] Failed to persist pending chat message: {exc}",
+                    f"[WebChat] Failed to persist pending chat message: {exc}",
                     exc_info=True,
                 )
             session.interrupted_chat_requests.discard(message_id)
@@ -962,7 +885,7 @@ class LiveChatService:
 
     async def _handle_chat_control_message(
         self,
-        session: LiveChatSession,
+        session: WebChatSession,
         message: dict,
         send_json: SendJson,
         *,
@@ -1057,7 +980,7 @@ class LiveChatService:
 
     async def _handle_mcp_input_response(
         self,
-        session: LiveChatSession,
+        session: WebChatSession,
         message: dict,
         send_json: SendJson,
     ) -> None:
@@ -1104,272 +1027,5 @@ class LiveChatService:
             strict=False,
         )
 
-    async def handle_live_message(
-        self,
-        session: LiveChatSession,
-        message: dict,
-        send_json: SendJson,
-    ) -> None:
-        msg_type = message.get("t")
 
-        if msg_type == "start_speaking":
-            stamp = message.get("stamp")
-            if not stamp:
-                logger.warning("[Live Chat] start_speaking 缺少 stamp")
-                return
-            session.start_speaking(stamp)
-            return
-
-        if msg_type == "speaking_part":
-            audio_data_b64 = message.get("data")
-            if not audio_data_b64:
-                return
-            try:
-                audio_data = base64.b64decode(audio_data_b64)
-                session.add_audio_frame(audio_data)
-            except Exception as exc:
-                logger.error(f"[Live Chat] 解码音频数据失败: {exc}")
-            return
-
-        if msg_type == "end_speaking":
-            stamp = message.get("stamp")
-            if not stamp:
-                logger.warning("[Live Chat] end_speaking 缺少 stamp")
-                return
-
-            audio_path, assemble_duration = await session.end_speaking(stamp)
-            if not audio_path:
-                await send_json({"t": "error", "data": "音频组装失败"})
-                return
-
-            await self.process_audio(session, audio_path, assemble_duration, send_json)
-            return
-
-        if msg_type == "interrupt":
-            session.should_interrupt = True
-            logger.info(f"[Live Chat] 用户打断: {session.username}")
-
-    async def process_audio(
-        self,
-        session: LiveChatSession,
-        audio_path: str,
-        assemble_duration: float,
-        send_json: SendJson,
-    ) -> None:
-        try:
-            await send_json(
-                {"t": "metrics", "data": {"wav_assemble_time": assemble_duration}}
-            )
-            wav_assembly_finish_time = time.time()
-
-            session.is_processing = True
-            session.should_interrupt = False
-
-            stt_provider = self.provider_manager.stt_provider_insts[0]
-
-            if not stt_provider:
-                logger.error("[Live Chat] STT Provider 未配置")
-                await send_json({"t": "error", "data": "语音识别服务未配置"})
-                return
-
-            await send_json({"t": "metrics", "data": {"stt": stt_provider.meta().type}})
-
-            user_text = await stt_provider.get_text(audio_path)
-            if not user_text:
-                logger.warning("[Live Chat] STT 识别结果为空")
-                return
-
-            logger.info(f"[Live Chat] STT 结果: {user_text}")
-
-            await send_json(
-                {
-                    "t": "user_msg",
-                    "data": {"text": user_text, "ts": int(time.time() * 1000)},
-                }
-            )
-
-            conversation_id = session.conversation_id
-            message_id = str(uuid.uuid4())
-            run = self.webchat_run_coordinator.create_run(
-                session_id=conversation_id,
-                username=session.username,
-                request_id=message_id,
-                kind="live_audio",
-            )
-            self.webchat_run_coordinator.bind_task(run)
-            await self.webchat_run_coordinator.dispatch(
-                run,
-                {
-                    "message": [{"type": "plain", "text": user_text}],
-                    "action_type": "live",
-                    # Live Voice currently uses an ephemeral conversation id,
-                    # not the persistent WebChat session bound by the HTTP
-                    # step-up endpoint.  Do not carry a proof from a regular
-                    # chat run into this separate transport; high-risk tools
-                    # remain denied until Live Voice has an equivalent bound
-                    # session flow.
-                    **self._dashboard_principal_payload(
-                        session,
-                        include_step_up_tokens=False,
-                    ),
-                },
-            )
-
-            bot_text = ""
-            audio_playing = False
-
-            try:
-                while True:
-                    if session.should_interrupt or run.interrupt_requested.is_set():
-                        logger.info("[Live Chat] 检测到用户打断")
-                        await send_json({"t": "stop_play"})
-                        await self.save_interrupted_message(
-                            session, user_text, bot_text
-                        )
-                        while not run.back_queue.empty():
-                            try:
-                                run.back_queue.get_nowait()
-                            except asyncio.QueueEmpty:
-                                break
-                        break
-
-                    result = await self.webchat_run_coordinator.next_result(
-                        run,
-                        wait_seconds=0.5,
-                    )
-
-                    if not result:
-                        continue
-
-                    result_type = result.get("type")
-                    result_chain_type = result.get("chain_type")
-                    data = result.get("data", "")
-
-                    if result_chain_type == "agent_stats":
-                        try:
-                            stats = json.loads(data)
-                            await send_json(
-                                {
-                                    "t": "metrics",
-                                    "data": {
-                                        "llm_ttft": stats.get("time_to_first_token", 0),
-                                        "llm_total_time": stats.get("end_time", 0)
-                                        - stats.get("start_time", 0),
-                                    },
-                                }
-                            )
-                        except Exception as exc:
-                            logger.error(f"[Live Chat] 解析 AgentStats 失败: {exc}")
-                        continue
-
-                    if result_chain_type == "tts_stats":
-                        try:
-                            stats = json.loads(data)
-                            await send_json(
-                                {
-                                    "t": "metrics",
-                                    "data": stats,
-                                }
-                            )
-                        except Exception as exc:
-                            logger.error(f"[Live Chat] 解析 TTSStats 失败: {exc}")
-                        continue
-
-                    if result_type == "plain":
-                        bot_text += data
-
-                    elif result_type == "audio_chunk":
-                        if not audio_playing:
-                            audio_playing = True
-                            logger.debug("[Live Chat] 开始播放音频流")
-
-                            speak_to_first_frame_latency = (
-                                time.time() - wav_assembly_finish_time
-                            )
-                            await send_json(
-                                {
-                                    "t": "metrics",
-                                    "data": {
-                                        "speak_to_first_frame": speak_to_first_frame_latency
-                                    },
-                                }
-                            )
-
-                        text = result.get("text")
-                        if text:
-                            await send_json(
-                                {
-                                    "t": "bot_text_chunk",
-                                    "data": {"text": text},
-                                }
-                            )
-
-                        await send_json(
-                            {
-                                "t": "response",
-                                "data": data,
-                            }
-                        )
-
-                    elif result_type in ["complete", "end"]:
-                        logger.info(f"[Live Chat] Bot 回复完成: {bot_text}")
-
-                        if not audio_playing:
-                            await send_json(
-                                {
-                                    "t": "bot_msg",
-                                    "data": {
-                                        "text": bot_text,
-                                        "ts": int(time.time() * 1000),
-                                    },
-                                }
-                            )
-
-                        await send_json({"t": "end"})
-
-                        wav_to_tts_duration = time.time() - wav_assembly_finish_time
-                        await send_json(
-                            {
-                                "t": "metrics",
-                                "data": {"wav_to_tts_total_time": wav_to_tts_duration},
-                            }
-                        )
-                        break
-            finally:
-                await self.webchat_run_coordinator.close_run(run)
-
-        except Exception as exc:
-            logger.error(f"[Live Chat] 处理音频失败: {exc}", exc_info=True)
-            await send_json(
-                {
-                    "t": "error",
-                    "data": "Unable to process audio.",
-                    "code": "PROCESSING_ERROR",
-                }
-            )
-
-        finally:
-            session.is_processing = False
-            session.should_interrupt = False
-
-    @staticmethod
-    async def save_interrupted_message(
-        session: LiveChatSession, user_text: str, bot_text: str
-    ) -> None:
-        interrupted_text = bot_text + " [用户打断]"
-        logger.info(f"[Live Chat] 保存打断消息: {interrupted_text}")
-
-        try:
-            timestamp = int(time.time() * 1000)
-            logger.info(
-                f"[Live Chat] 用户消息: {user_text} (session: {session.session_id}, ts: {timestamp})"
-            )
-            if bot_text:
-                logger.info(
-                    f"[Live Chat] Bot 消息（打断）: {interrupted_text} (session: {session.session_id}, ts: {timestamp})"
-                )
-        except Exception as exc:
-            logger.error(f"[Live Chat] 记录消息失败: {exc}", exc_info=True)
-
-
-__all__ = ["LiveChatAuthError", "LiveChatService", "LiveChatSession"]
+__all__ = ["WebChatAuthError", "WebChatService", "WebChatSession"]

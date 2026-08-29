@@ -30,7 +30,6 @@ HTTP_METHODS = frozenset(
 RUNTIME_WEBSOCKET_OPERATIONS = frozenset(
     {
         ("get", "/api/v1/chat/ws"),
-        ("get", "/api/v1/live-chat/ws"),
         ("get", "/api/v1/unified-chat/ws"),
     }
 )
@@ -266,12 +265,10 @@ def test_public_openapi_is_exact_filtered_source() -> None:
     public_openapi = json.loads(PUBLIC_OPENAPI.read_text(encoding="utf-8"))
 
     assert public_filter.PUBLIC_OPEN_API_EXCLUDED_PATHS == {
-        "/api/v1/live-chat/ws",
         "/api/v1/unified-chat/ws",
     }
     assert public_openapi == public_filter.filter_public_openapi(source)
     assert "/api/v1/chat/ws" in public_openapi["paths"]
-    assert "/api/v1/live-chat/ws" not in public_openapi["paths"]
     assert "/api/v1/unified-chat/ws" not in public_openapi["paths"]
 
 

@@ -294,7 +294,7 @@ a separate transaction; a drop failure must not roll back schema creation.
 - The contract source is `openspec/openapi-v1.yaml`. Runtime routes, the source
   spec, generated clients/docs, frontend call sites, and backend/frontend tests
   must change together.
-- Live Chat WebSockets multiplex concurrent chat runs by unique `message_id`.
+- Unified Chat WebSockets multiplex concurrent chat runs by unique `message_id`.
   Request tasks, interrupts, follow-up capture, `run_started`, and streamed
   `agent_stats` metadata are request-scoped. Do not reintroduce a session-wide
   busy flag or emit a response without the originating request identity.

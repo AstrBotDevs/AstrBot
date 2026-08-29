@@ -135,7 +135,6 @@
             <ConfigSelector
               :session-id="sessionId || null"
               :platform-id="sessionPlatformId"
-              :is-group="sessionIsGroup"
               :initial-config-id="props.configId"
               @config-changed="handleConfigChange"
             />
@@ -255,17 +254,6 @@
               }}
             </v-tooltip>
           </v-btn>
-          <!-- <v-btn @click="$emit('openLiveMode')"
-                        icon
-                        variant="text"
-                        color="purple" 
-                        size="small"
-                    >
-                        <v-icon icon="mdi-phone-in-talk" variant="text" plain></v-icon>
-                        <v-tooltip activator="parent" location="top">
-                            {{ tm('voice.liveMode') }}
-                        </v-tooltip>
-                    </v-btn> -->
           <v-btn
             @click="handleRecordClick"
             icon
@@ -402,7 +390,6 @@ const emit = defineEmits<{
   pasteImage: [event: ClipboardEvent];
   fileSelect: [files: FileList];
   clearReply: [];
-  openLiveMode: [];
   toggleWebChatTools: [];
   'config-changed': [payload: { configId: string; agentRunnerType: string }];
 }>();
@@ -544,7 +531,6 @@ const localPrompt = computed({
 const sessionPlatformId = computed(
   () => props.currentSession?.platform_id || 'webchat',
 );
-const sessionIsGroup = computed(() => Boolean(props.currentSession?.is_group));
 
 const canSend = computed(() => {
   return (
@@ -718,11 +704,6 @@ function handleKeyDown(e: KeyboardEvent) {
 
   if (isSendHotkey) {
     e.preventDefault();
-    if (localPrompt.value.trim() === '/astr_live_dev') {
-      emit('openLiveMode');
-      localPrompt.value = '';
-      return;
-    }
     if (canSend.value) {
       emit('send');
     }

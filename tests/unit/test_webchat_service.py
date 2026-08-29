@@ -1,6 +1,5 @@
 import asyncio
 import json
-import os
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -14,17 +13,16 @@ from astrbot.dashboard.services.auth_service import (
     DashboardSessionPrincipal,
     DashboardTokenValidator,
 )
-from astrbot.dashboard.services.live_chat_service import LiveChatService
+from astrbot.dashboard.services.webchat_service import WebChatService
 
-_LIVE_CHAT_JWT_SECRET = "live-chat-test-secret-with-32-bytes"
+_WEBCHAT_JWT_SECRET = "webchat-test-secret-with-32-bytes"
 
 
-def _service(auth_service=None) -> LiveChatService:
-    return LiveChatService(
+def _service(auth_service=None) -> WebChatService:
+    return WebChatService(
         SimpleNamespace(),
         preferences=SimpleNamespace(temporary_cache={}),
-        config={"dashboard": {"jwt_secret": _LIVE_CHAT_JWT_SECRET}},
-        provider_manager=SimpleNamespace(stt_provider_insts=[None]),
+        config={"dashboard": {"jwt_secret": _WEBCHAT_JWT_SECRET}},
         platform_message_history_manager=SimpleNamespace(),
         webchat_run_coordinator=WebChatRunCoordinator(WebChatQueueManager()),
         auth_service=auth_service,
@@ -40,34 +38,12 @@ def _record(record_id: int):
 
 def test_authenticate_dashboard_session_token():
     service = _service()
-    token = DashboardTokenValidator(_LIVE_CHAT_JWT_SECRET).issue("dashboard-user")
+    token = DashboardTokenValidator(_WEBCHAT_JWT_SECRET).issue("dashboard-user")
 
     assert service.authenticate_token(token) == "dashboard-user"
 
 
-def test_live_voice_principal_payload_excludes_webchat_step_up_proof():
-    service = _service()
-    session = service.create_session(
-        "alice",
-        DashboardSessionPrincipal(
-            username="alice",
-            sid="dashboard-sid",
-            jti="jti",
-            account_id="account-1",
-        ),
-    )
-    session.webchat_step_up_tokens = {"tool.local_exec": "opaque-proof"}
-
-    payload = service._dashboard_principal_payload(
-        session,
-        include_step_up_tokens=False,
-    )
-
-    assert payload["_dashboard_principal"]["account_id"] == "account-1"
-    assert "step_up_tokens" not in payload["_dashboard_principal"]
-
-
-def test_live_chat_proof_cache_is_cleared_when_chat_session_changes():
+def test_webchat_proof_cache_is_cleared_when_chat_session_changes():
     service = _service()
     session = service.create_session(
         "alice",
@@ -100,7 +76,7 @@ def test_live_chat_proof_cache_is_cleared_when_chat_session_changes():
 
 
 @pytest.mark.asyncio
-async def test_live_chat_rejects_foreign_persistent_session():
+async def test_webchat_rejects_foreign_persistent_session():
     service = _service()
     service.db.get_platform_session_by_id = AsyncMock(
         return_value=SimpleNamespace(platform_id="webchat", creator="bob")
@@ -135,7 +111,7 @@ async def test_live_chat_rejects_foreign_persistent_session():
 
 
 @pytest.mark.asyncio
-async def test_live_chat_bind_creates_missing_webchat_session_for_owner():
+async def test_webchat_bind_creates_missing_webchat_session_for_owner():
     service = _service()
     service.db.get_platform_session_by_id = AsyncMock(return_value=None)
     service.db.create_platform_session = AsyncMock()
@@ -156,14 +132,13 @@ async def test_live_chat_bind_creates_missing_webchat_session_for_owner():
         creator="alice",
         platform_id="webchat",
         session_id="missing-session",
-        is_group=0,
     )
     service.ensure_chat_subscription.assert_awaited_once()
     assert sent[-1]["type"] == "session_bound"
 
 
 @pytest.mark.asyncio
-async def test_live_chat_send_creates_missing_webchat_session_before_validation():
+async def test_webchat_send_creates_missing_webchat_session_before_validation():
     service = _service()
     service.db.get_platform_session_by_id = AsyncMock(return_value=None)
     service.db.create_platform_session = AsyncMock()
@@ -189,7 +164,6 @@ async def test_live_chat_send_creates_missing_webchat_session_before_validation(
         creator="alice",
         platform_id="webchat",
         session_id="missing-session",
-        is_group=0,
     )
     assert sent[-1]["code"] == "INVALID_MESSAGE_FORMAT"
 
@@ -200,7 +174,7 @@ async def test_run_websocket_session_rejects_disabled_dashboard_account():
         validate_dashboard_principal=AsyncMock(return_value=False)
     )
     service = _service(auth_service)
-    token = DashboardTokenValidator(_LIVE_CHAT_JWT_SECRET).issue(
+    token = DashboardTokenValidator(_WEBCHAT_JWT_SECRET).issue(
         "dashboard-user", account_id="account-1"
     )
     closed: list[tuple[int, str]] = []
@@ -216,7 +190,6 @@ async def test_run_websocket_session_rejects_disabled_dashboard_account():
 
     await service.run_websocket_session(
         token=token,
-        force_ct=None,
         receive_json=receive_json,
         send_json=send_json,
         close=close,
@@ -242,7 +215,6 @@ async def test_run_websocket_session_closes_when_token_is_missing():
 
     await service.run_websocket_session(
         token=None,
-        force_ct=None,
         receive_json=receive_json,
         send_json=send_json,
         close=close,
@@ -254,12 +226,7 @@ async def test_run_websocket_session_closes_when_token_is_missing():
 @pytest.mark.asyncio
 async def test_run_websocket_session_routes_messages_and_cleans_session(monkeypatch):
     service = _service()
-    messages = iter(
-        [
-            {"ct": "chat", "t": "bind", "session_id": "chat-session"},
-            {"t": "start_speaking", "stamp": "s1"},
-        ]
-    )
+    messages = iter([{"ct": "chat", "t": "bind", "session_id": "chat-session"}])
     routed: list[tuple[str, str, dict]] = []
 
     monkeypatch.setattr(service, "authenticate_token", lambda _token: "alice")
@@ -267,11 +234,7 @@ async def test_run_websocket_session_routes_messages_and_cleans_session(monkeypa
     async def handle_chat_message(session, message, _send_json) -> None:
         routed.append(("chat", session.username, message))
 
-    async def handle_live_message(session, message, _send_json) -> None:
-        routed.append(("live", session.username, message))
-
     monkeypatch.setattr(service, "handle_chat_message", handle_chat_message)
-    monkeypatch.setattr(service, "handle_live_message", handle_live_message)
 
     async def receive_json() -> dict:
         try:
@@ -287,16 +250,12 @@ async def test_run_websocket_session_routes_messages_and_cleans_session(monkeypa
 
     await service.run_websocket_session(
         token="valid",
-        force_ct=None,
         receive_json=receive_json,
         send_json=send_json,
         close=close,
     )
 
-    assert [(kind, username) for kind, username, _ in routed] == [
-        ("chat", "alice"),
-        ("live", "alice"),
-    ]
+    assert [(kind, username) for kind, username, _ in routed] == [("chat", "alice")]
     assert service.sessions == {}
 
 
@@ -331,13 +290,12 @@ async def test_run_websocket_session_handles_disconnect_without_error_log(
         raise AssertionError("disconnect should not be logged as an error")
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.logger.error",
+        "astrbot.dashboard.services.webchat_service.logger.error",
         fail_error_log,
     )
 
     await service.run_websocket_session(
         token="valid",
-        force_ct=None,
         receive_json=receive_json,
         send_json=send_json,
         close=close,
@@ -399,7 +357,6 @@ async def test_run_websocket_session_multiplexes_chat_requests(monkeypatch):
 
     await service.run_websocket_session(
         token="valid",
-        force_ct=None,
         receive_json=receive_json,
         send_json=send_json,
         close=close,
@@ -542,7 +499,7 @@ async def test_run_websocket_session_logs_runtime_error_and_still_cleans_session
 
     monkeypatch.setattr(service, "authenticate_token", lambda _token: "alice")
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.logger.error",
+        "astrbot.dashboard.services.webchat_service.logger.error",
         lambda message, *args, **kwargs: logged_errors.append(str(message)),
     )
 
@@ -557,13 +514,12 @@ async def test_run_websocket_session_logs_runtime_error_and_still_cleans_session
 
     await service.run_websocket_session(
         token="valid",
-        force_ct=None,
         receive_json=receive_json,
         send_json=send_json,
         close=close,
     )
 
-    assert any("WebSocket 错误: socket boom" in message for message in logged_errors)
+    assert any("WebSocket error: socket boom" in message for message in logged_errors)
     assert service.sessions == {}
 
 
@@ -690,7 +646,7 @@ async def test_create_attachment_from_file_delegates_with_expected_paths(
         return {"attachment_id": "att-1", "type": attach_type}
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.create_attachment_part_from_existing_file",
+        "astrbot.dashboard.services.webchat_service.create_attachment_part_from_existing_file",
         fake_create_attachment_part_from_existing_file,
     )
 
@@ -803,12 +759,10 @@ async def test_cleanup_session_runs_subscription_cleanup_and_removes_session():
     service = _service()
     session = service.create_session("alice")
     service.cleanup_chat_subscriptions = AsyncMock()
-    session.cleanup = MagicMock()
 
     await service.cleanup_session(session)
 
     service.cleanup_chat_subscriptions.assert_awaited_once_with(session)
-    session.cleanup.assert_called_once_with()
     assert session.session_id not in service.sessions
 
 
@@ -818,12 +772,10 @@ async def test_cleanup_session_is_noop_for_unknown_session():
     session = service.create_session("alice")
     del service.sessions[session.session_id]
     service.cleanup_chat_subscriptions = AsyncMock()
-    session.cleanup = MagicMock()
 
     await service.cleanup_session(session)
 
     service.cleanup_chat_subscriptions.assert_not_awaited()
-    session.cleanup.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -863,7 +815,7 @@ async def test_ensure_chat_subscription_replaces_completed_task(monkeypatch):
     created_tasks: list[asyncio.Task] = []
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.uuid.uuid4",
+        "astrbot.dashboard.services.webchat_service.uuid.uuid4",
         lambda: SimpleNamespace(hex="new-sub-id"),
     )
 
@@ -874,7 +826,7 @@ async def test_ensure_chat_subscription_replaces_completed_task(monkeypatch):
         return task
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.asyncio.create_task",
+        "astrbot.dashboard.services.webchat_service.asyncio.create_task",
         fake_create_task,
     )
 
@@ -898,7 +850,7 @@ async def test_ensure_chat_subscription_create_task_failure_rolls_back_subscript
     session = service.create_session("alice")
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.uuid.uuid4",
+        "astrbot.dashboard.services.webchat_service.uuid.uuid4",
         lambda: SimpleNamespace(hex="broken-sub-id"),
     )
 
@@ -907,7 +859,7 @@ async def test_ensure_chat_subscription_create_task_failure_rolls_back_subscript
         raise RuntimeError("task create failed")
 
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.asyncio.create_task",
+        "astrbot.dashboard.services.webchat_service.asyncio.create_task",
         fail_create_task,
     )
 
@@ -1023,7 +975,6 @@ async def test_handle_chat_message_interrupt_without_request_id_targets_active_r
 
     await service.handle_chat_message(session, {"t": "interrupt"}, send_json)
 
-    assert session.should_interrupt is False
     assert session.interrupted_chat_requests == set()
     assert sent_payloads == [
         {
@@ -1058,8 +1009,6 @@ async def test_handle_chat_message_rejects_unsupported_message_type():
             "code": "INVALID_MESSAGE_FORMAT",
         }
     ]
-    assert session.is_processing is False
-    assert session.should_interrupt is False
 
 
 @pytest.mark.asyncio
@@ -1094,11 +1043,10 @@ async def test_handle_chat_message_bind_reuses_existing_subscription_request_id(
 
 
 @pytest.mark.asyncio
-async def test_handle_chat_message_send_is_not_blocked_by_live_processing():
+async def test_handle_chat_message_send_is_not_blocked_by_other_requests():
     service = _service()
     service.build_chat_message_parts = AsyncMock(return_value=[])
     session = service.create_session("alice")
-    session.is_processing = True
     sent_payloads: list[dict] = []
 
     async def send_json(payload: dict) -> None:
@@ -1108,7 +1056,7 @@ async def test_handle_chat_message_send_is_not_blocked_by_live_processing():
         session,
         {
             "t": "send",
-            "message_id": "request-while-live",
+            "message_id": "request-while-active",
             "message": [{"type": "plain", "text": "hello"}],
         },
         send_json,
@@ -1120,10 +1068,9 @@ async def test_handle_chat_message_send_is_not_blocked_by_live_processing():
             "t": "error",
             "data": "Message content is empty",
             "code": "INVALID_MESSAGE_FORMAT",
-            "message_id": "request-while-live",
+            "message_id": "request-while-active",
         }
     ]
-    assert session.is_processing is True
 
 
 @pytest.mark.asyncio
@@ -1150,8 +1097,6 @@ async def test_handle_chat_message_send_rejects_non_list_message_payload():
             "message_id": "not-a-list",
         }
     ]
-    assert session.is_processing is False
-    assert session.should_interrupt is False
 
 
 @pytest.mark.asyncio
@@ -1183,8 +1128,6 @@ async def test_handle_chat_message_send_rejects_empty_message_parts():
             "message_id": "empty-message",
         }
     ]
-    assert session.is_processing is False
-    assert session.should_interrupt is False
 
 
 @pytest.mark.asyncio
@@ -1238,8 +1181,6 @@ async def test_handle_chat_message_send_reports_processing_failure_and_cleans_qu
     assert "queue boom" in caplog.text
     assert "queue boom" not in sent_payloads[0]["data"]
     assert removed_request_ids == ["msg-error"]
-    assert session.is_processing is False
-    assert session.should_interrupt is False
 
 
 @pytest.mark.asyncio
@@ -1284,7 +1225,7 @@ async def test_handle_chat_message_send_logs_pending_flush_failure_and_still_cle
         removed_request_ids.append,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.logger.exception",
+        "astrbot.dashboard.services.webchat_service.logger.exception",
         lambda message, *args, **kwargs: logged_exceptions.append(str(message)),
     )
 
@@ -1304,8 +1245,6 @@ async def test_handle_chat_message_send_logs_pending_flush_failure_and_still_cle
 
     assert service.save_bot_message.await_count >= 1
     assert removed_request_ids == ["msg-flush"]
-    assert session.is_processing is False
-    assert session.should_interrupt is False
     assert any(
         "Failed to persist pending chat message: flush failed" in message
         for message in logged_exceptions
@@ -1467,7 +1406,6 @@ async def test_handle_chat_message_send_enqueues_and_persists_messages(monkeypat
         "streaming": False,
     }
     assert removed_request_ids == ["msg-1"]
-    assert session.is_processing is False
 
 
 @pytest.mark.asyncio
@@ -1563,8 +1501,6 @@ async def test_handle_chat_message_send_ignores_empty_mismatched_and_bad_agent_s
         "streaming": False,
     }
     assert removed_request_ids == ["msg-3"]
-    assert session.is_processing is False
-    assert session.should_interrupt is False
 
 
 @pytest.mark.asyncio
@@ -1622,7 +1558,7 @@ async def test_handle_chat_message_send_falls_back_when_extract_web_search_refs_
         MagicMock(side_effect=RuntimeError("refs boom")),
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.logger.exception",
+        "astrbot.dashboard.services.webchat_service.logger.exception",
         lambda message, *args, **kwargs: logged_exceptions.append(str(message)),
     )
 
@@ -1755,742 +1691,3 @@ async def test_handle_chat_message_send_persists_agent_stats_and_attachment(
         for payload in sent_payloads
     )
     assert removed_request_ids == ["msg-2"]
-    assert session.is_processing is False
-
-
-@pytest.mark.asyncio
-async def test_live_chat_session_end_speaking_writes_wav_and_cleanup_removes_file(
-    monkeypatch, tmp_path
-):
-    service = _service()
-    session = service.create_session("alice")
-    session.start_speaking("stamp-1")
-    session.add_audio_frame(b"\x00\x01\x02\x03")
-    session.add_audio_frame(b"\x04\x05\x06\x07")
-
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.get_astrbot_temp_path",
-        lambda: str(tmp_path),
-    )
-
-    audio_path, assemble_duration = await session.end_speaking("stamp-1")
-
-    assert audio_path is not None
-    assert os.path.exists(audio_path)
-    assert os.path.getsize(audio_path) > 0
-    assert assemble_duration >= 0
-    assert session.temp_audio_path == audio_path
-
-    session.cleanup()
-
-    assert not os.path.exists(audio_path)
-    assert session.temp_audio_path is None
-
-
-@pytest.mark.asyncio
-async def test_live_chat_session_end_speaking_rejects_mismatched_stamp():
-    service = _service()
-    session = service.create_session("alice")
-    session.start_speaking("stamp-1")
-    session.add_audio_frame(b"\x00\x01")
-
-    audio_path, assemble_duration = await session.end_speaking("stamp-2")
-
-    assert audio_path is None
-    assert assemble_duration == 0.0
-    assert session.is_speaking is True
-    assert session.current_stamp == "stamp-1"
-
-
-@pytest.mark.asyncio
-async def test_live_chat_session_end_speaking_returns_none_when_no_audio_frames():
-    service = _service()
-    session = service.create_session("alice")
-    session.start_speaking("stamp-1")
-
-    audio_path, assemble_duration = await session.end_speaking("stamp-1")
-
-    assert audio_path is None
-    assert assemble_duration == 0.0
-    assert session.is_speaking is False
-
-
-def test_live_chat_session_cleanup_swallows_file_delete_errors(monkeypatch):
-    service = _service()
-    session = service.create_session("alice")
-    session.temp_audio_path = "voice.wav"
-
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.os.path.exists",
-        lambda _path: True,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.os.remove",
-        MagicMock(side_effect=OSError("locked")),
-    )
-
-    session.cleanup()
-
-    assert session.temp_audio_path is None
-
-
-@pytest.mark.asyncio
-async def test_handle_live_message_routes_start_audio_and_interrupt(monkeypatch):
-    service = _service()
-    session = service.create_session("alice")
-    processed_audio_calls: list[tuple[str, float]] = []
-
-    async def fake_process_audio(
-        passed_session,
-        audio_path: str,
-        assemble_duration: float,
-        send_json,
-    ) -> None:
-        assert passed_session is session
-        processed_audio_calls.append((audio_path, assemble_duration))
-
-    monkeypatch.setattr(service, "process_audio", fake_process_audio)
-
-    sent_payloads: list[dict] = []
-
-    async def send_json(payload: dict) -> None:
-        sent_payloads.append(payload)
-
-    await service.handle_live_message(
-        session,
-        {"t": "start_speaking", "stamp": "stamp-1"},
-        send_json,
-    )
-    assert session.is_speaking is True
-
-    await service.handle_live_message(
-        session,
-        {"t": "speaking_part", "data": "AAE="},
-        send_json,
-    )
-    assert session.audio_frames == [b"\x00\x01"]
-
-    await service.handle_live_message(
-        session,
-        {"t": "interrupt"},
-        send_json,
-    )
-    assert session.should_interrupt is True
-
-    await service.handle_live_message(
-        session,
-        {"t": "end_speaking", "stamp": "stamp-1"},
-        send_json,
-    )
-
-    assert len(processed_audio_calls) == 1
-    assert processed_audio_calls[0][0] is not None
-    assert processed_audio_calls[0][1] >= 0
-    assert sent_payloads == []
-
-
-@pytest.mark.asyncio
-async def test_handle_live_message_reports_audio_assembly_failure(monkeypatch):
-    service = _service()
-    session = service.create_session("alice")
-    sent_payloads: list[dict] = []
-
-    async def send_json(payload: dict) -> None:
-        sent_payloads.append(payload)
-
-    monkeypatch.setattr(
-        session,
-        "end_speaking",
-        AsyncMock(return_value=(None, 0.0)),
-    )
-
-    await service.handle_live_message(
-        session,
-        {"t": "end_speaking", "stamp": "stamp-1"},
-        send_json,
-    )
-
-    assert sent_payloads == [{"t": "error", "data": "音频组装失败"}]
-
-
-@pytest.mark.asyncio
-async def test_handle_live_message_ignores_invalid_audio_chunks(monkeypatch):
-    service = _service()
-    session = service.create_session("alice")
-    logged_errors: list[str] = []
-
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.logger.error",
-        lambda message, *args, **kwargs: logged_errors.append(str(message)),
-    )
-
-    async def send_json(_payload: dict) -> None:
-        raise AssertionError("invalid chunks should not send payloads")
-
-    await service.handle_live_message(
-        session,
-        {"t": "start_speaking", "stamp": "stamp-1"},
-        send_json,
-    )
-    await service.handle_live_message(
-        session,
-        {"t": "speaking_part", "data": "%%%not-base64%%%"},
-        send_json,
-    )
-    await service.handle_live_message(
-        session,
-        {"t": "start_speaking"},
-        send_json,
-    )
-    await service.handle_live_message(
-        session,
-        {"t": "end_speaking"},
-        send_json,
-    )
-
-    assert session.audio_frames == []
-    assert any("解码音频数据失败" in message for message in logged_errors)
-
-
-@pytest.mark.asyncio
-async def test_process_audio_returns_error_when_stt_provider_missing():
-    service = _service()
-    session = service.create_session("alice")
-    service.provider_manager.stt_provider_insts = [None]
-    sent_payloads: list[dict] = []
-
-    async def send_json(payload: dict) -> None:
-        sent_payloads.append(payload)
-
-    await service.process_audio(
-        session,
-        audio_path="voice.wav",
-        assemble_duration=0.25,
-        send_json=send_json,
-    )
-
-    assert sent_payloads == [
-        {"t": "metrics", "data": {"wav_assemble_time": 0.25}},
-        {"t": "error", "data": "语音识别服务未配置"},
-    ]
-    assert session.is_processing is False
-    assert session.should_interrupt is False
-
-
-@pytest.mark.asyncio
-async def test_process_audio_returns_early_when_stt_text_is_empty(monkeypatch):
-    service = _service()
-    session = service.create_session("alice")
-    stt_provider = SimpleNamespace(
-        meta=lambda: SimpleNamespace(type="mock-stt"),
-        get_text=AsyncMock(return_value=""),
-    )
-    service.provider_manager.stt_provider_insts = [stt_provider]
-    sent_payloads: list[dict] = []
-
-    monkeypatch.setattr(
-        service.webchat_run_coordinator.queue_manager,
-        "get_or_create_queue",
-        lambda _conversation_id: (_ for _ in ()).throw(
-            AssertionError("queue should not be created when STT result is empty")
-        ),
-    )
-
-    async def send_json(payload: dict) -> None:
-        sent_payloads.append(payload)
-
-    await service.process_audio(
-        session,
-        audio_path="voice.wav",
-        assemble_duration=0.2,
-        send_json=send_json,
-    )
-
-    assert sent_payloads == [
-        {"t": "metrics", "data": {"wav_assemble_time": 0.2}},
-        {"t": "metrics", "data": {"stt": "mock-stt"}},
-    ]
-    assert session.is_processing is False
-    assert session.should_interrupt is False
-
-
-@pytest.mark.asyncio
-async def test_process_audio_reports_error_when_stt_raises():
-    service = _service()
-    session = service.create_session("alice")
-    stt_provider = SimpleNamespace(
-        meta=lambda: SimpleNamespace(type="mock-stt"),
-        get_text=AsyncMock(side_effect=RuntimeError("stt boom")),
-    )
-    service.provider_manager.stt_provider_insts = [stt_provider]
-    sent_payloads: list[dict] = []
-
-    async def send_json(payload: dict) -> None:
-        sent_payloads.append(payload)
-
-    await service.process_audio(
-        session,
-        audio_path="voice.wav",
-        assemble_duration=0.3,
-        send_json=send_json,
-    )
-
-    assert sent_payloads == [
-        {"t": "metrics", "data": {"wav_assemble_time": 0.3}},
-        {"t": "metrics", "data": {"stt": "mock-stt"}},
-        {
-            "t": "error",
-            "data": "Unable to process audio.",
-            "code": "PROCESSING_ERROR",
-        },
-    ]
-    assert session.is_processing is False
-    assert session.should_interrupt is False
-
-
-@pytest.mark.asyncio
-async def test_process_audio_streams_audio_chunks_without_plaintext_fallback(
-    monkeypatch,
-):
-    service = _service()
-    session = service.create_session(
-        "alice",
-        DashboardSessionPrincipal(
-            username="alice",
-            sid="dashboard-sid",
-            jti="jti",
-            account_id="account-1",
-        ),
-    )
-    session.webchat_step_up_tokens = {"tool.local_exec": "opaque-proof"}
-    stt_provider = SimpleNamespace(
-        meta=lambda: SimpleNamespace(type="mock-stt"),
-        get_text=AsyncMock(return_value="hello bot"),
-    )
-    service.provider_manager.stt_provider_insts = [stt_provider]
-    chat_queue: asyncio.Queue = asyncio.Queue()
-    back_queue: asyncio.Queue = asyncio.Queue()
-    sent_payloads: list[dict] = []
-    removed_request_ids: list[str] = []
-
-    back_queue.put_nowait(
-        {
-            "message_id": "reply-1",
-            "type": "audio_chunk",
-            "data": "pcm-chunk",
-            "text": "spoken text",
-        }
-    )
-    back_queue.put_nowait(
-        {
-            "message_id": "reply-1",
-            "type": "end",
-            "data": "",
-        }
-    )
-
-    monkeypatch.setattr(
-        service.webchat_run_coordinator.queue_manager,
-        "get_or_create_queue",
-        lambda _conversation_id: chat_queue,
-    )
-    monkeypatch.setattr(
-        service.webchat_run_coordinator.queue_manager,
-        "get_or_create_back_queue",
-        lambda _request_id, _conversation_id=None: back_queue,
-    )
-    monkeypatch.setattr(
-        service.webchat_run_coordinator.queue_manager,
-        "remove_back_queue",
-        removed_request_ids.append,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.uuid.uuid4",
-        lambda: "reply-1",
-    )
-
-    async def send_json(payload: dict) -> None:
-        sent_payloads.append(payload)
-
-    await service.process_audio(
-        session,
-        audio_path="voice.wav",
-        assemble_duration=0.1,
-        send_json=send_json,
-    )
-
-    queued_username, queued_conversation_id, queued_payload = await chat_queue.get()
-    assert queued_username == "alice"
-    assert queued_conversation_id == session.conversation_id
-    assert queued_payload["message"] == [{"type": "plain", "text": "hello bot"}]
-    assert queued_payload["action_type"] == "live"
-    assert "step_up_tokens" not in queued_payload["_dashboard_principal"]
-    message_id = queued_payload["message_id"]
-
-    assert sent_payloads[0] == {"t": "metrics", "data": {"wav_assemble_time": 0.1}}
-    assert sent_payloads[1] == {"t": "metrics", "data": {"stt": "mock-stt"}}
-    assert sent_payloads[2]["t"] == "user_msg"
-    assert sent_payloads[2]["data"]["text"] == "hello bot"
-    assert sent_payloads[3]["t"] == "metrics"
-    assert "speak_to_first_frame" in sent_payloads[3]["data"]
-    assert sent_payloads[4] == {"t": "bot_text_chunk", "data": {"text": "spoken text"}}
-    assert sent_payloads[5] == {"t": "response", "data": "pcm-chunk"}
-    assert sent_payloads[6] == {"t": "end"}
-    assert sent_payloads[7]["t"] == "metrics"
-    assert "wav_to_tts_total_time" in sent_payloads[7]["data"]
-    assert all(payload.get("t") != "bot_msg" for payload in sent_payloads)
-    assert removed_request_ids == [message_id]
-    assert session.is_processing is False
-    assert session.should_interrupt is False
-
-
-@pytest.mark.asyncio
-async def test_process_audio_ignores_mismatched_message_id_until_matching_result(
-    monkeypatch,
-):
-    service = _service()
-    session = service.create_session("alice")
-    stt_provider = SimpleNamespace(
-        meta=lambda: SimpleNamespace(type="mock-stt"),
-        get_text=AsyncMock(return_value="hello bot"),
-    )
-    service.provider_manager.stt_provider_insts = [stt_provider]
-    chat_queue: asyncio.Queue = asyncio.Queue()
-    back_queue: asyncio.Queue = asyncio.Queue()
-    sent_payloads: list[dict] = []
-    removed_request_ids: list[str] = []
-
-    back_queue.put_nowait(
-        {"message_id": "wrong-id", "type": "plain", "data": "skip me"}
-    )
-    back_queue.put_nowait({"message_id": "reply-4", "type": "plain", "data": "kept"})
-    back_queue.put_nowait({"message_id": "reply-4", "type": "end", "data": ""})
-
-    monkeypatch.setattr(
-        service.webchat_run_coordinator.queue_manager,
-        "get_or_create_queue",
-        lambda _conversation_id: chat_queue,
-    )
-    monkeypatch.setattr(
-        service.webchat_run_coordinator.queue_manager,
-        "get_or_create_back_queue",
-        lambda _request_id, _conversation_id=None: back_queue,
-    )
-    monkeypatch.setattr(
-        service.webchat_run_coordinator.queue_manager,
-        "remove_back_queue",
-        removed_request_ids.append,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.uuid.uuid4",
-        lambda: "reply-4",
-    )
-
-    async def send_json(payload: dict) -> None:
-        sent_payloads.append(payload)
-
-    await service.process_audio(
-        session,
-        audio_path="voice.wav",
-        assemble_duration=0.1,
-        send_json=send_json,
-    )
-
-    assert any(
-        payload.get("t") == "bot_msg" and payload.get("data", {}).get("text") == "kept"
-        for payload in sent_payloads
-    )
-    assert removed_request_ids == ["reply-4"]
-    assert session.is_processing is False
-    assert session.should_interrupt is False
-
-
-@pytest.mark.asyncio
-async def test_process_audio_falls_back_to_plain_bot_message_when_no_audio_chunks(
-    monkeypatch,
-):
-    service = _service()
-    session = service.create_session("alice")
-    stt_provider = SimpleNamespace(
-        meta=lambda: SimpleNamespace(type="mock-stt"),
-        get_text=AsyncMock(return_value="question"),
-    )
-    service.provider_manager.stt_provider_insts = [stt_provider]
-    chat_queue: asyncio.Queue = asyncio.Queue()
-    back_queue: asyncio.Queue = asyncio.Queue()
-    sent_payloads: list[dict] = []
-
-    back_queue.put_nowait(
-        {
-            "message_id": "reply-2",
-            "type": "plain",
-            "data": "final answer",
-        }
-    )
-    back_queue.put_nowait(
-        {
-            "message_id": "reply-2",
-            "type": "end",
-            "data": "",
-        }
-    )
-
-    monkeypatch.setattr(
-        service.webchat_run_coordinator.queue_manager,
-        "get_or_create_queue",
-        lambda _conversation_id: chat_queue,
-    )
-    monkeypatch.setattr(
-        service.webchat_run_coordinator.queue_manager,
-        "get_or_create_back_queue",
-        lambda _request_id, _conversation_id=None: back_queue,
-    )
-    monkeypatch.setattr(
-        service.webchat_run_coordinator.queue_manager,
-        "remove_back_queue",
-        lambda _request_id: None,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.uuid.uuid4",
-        lambda: "reply-2",
-    )
-
-    async def send_json(payload: dict) -> None:
-        sent_payloads.append(payload)
-
-    await service.process_audio(
-        session,
-        audio_path="voice.wav",
-        assemble_duration=0.1,
-        send_json=send_json,
-    )
-
-    assert any(
-        payload.get("t") == "bot_msg"
-        and payload.get("data", {}).get("text") == "final answer"
-        for payload in sent_payloads
-    )
-    assert not any(payload.get("t") == "response" for payload in sent_payloads)
-    assert sent_payloads[-2] == {"t": "end"}
-    assert sent_payloads[-1]["t"] == "metrics"
-
-
-@pytest.mark.asyncio
-async def test_process_audio_audio_chunk_without_text_skips_bot_text_chunk(
-    monkeypatch,
-):
-    service = _service()
-    session = service.create_session("alice")
-    stt_provider = SimpleNamespace(
-        meta=lambda: SimpleNamespace(type="mock-stt"),
-        get_text=AsyncMock(return_value="question"),
-    )
-    service.provider_manager.stt_provider_insts = [stt_provider]
-    chat_queue: asyncio.Queue = asyncio.Queue()
-    back_queue: asyncio.Queue = asyncio.Queue()
-    sent_payloads: list[dict] = []
-
-    back_queue.put_nowait(
-        {"message_id": "reply-5", "type": "audio_chunk", "data": "pcm"}
-    )
-    back_queue.put_nowait({"message_id": "reply-5", "type": "end", "data": ""})
-
-    monkeypatch.setattr(
-        service.webchat_run_coordinator.queue_manager,
-        "get_or_create_queue",
-        lambda _conversation_id: chat_queue,
-    )
-    monkeypatch.setattr(
-        service.webchat_run_coordinator.queue_manager,
-        "get_or_create_back_queue",
-        lambda _request_id, _conversation_id=None: back_queue,
-    )
-    monkeypatch.setattr(
-        service.webchat_run_coordinator.queue_manager,
-        "remove_back_queue",
-        lambda _request_id: None,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.uuid.uuid4",
-        lambda: "reply-5",
-    )
-
-    async def send_json(payload: dict) -> None:
-        sent_payloads.append(payload)
-
-    await service.process_audio(
-        session,
-        audio_path="voice.wav",
-        assemble_duration=0.1,
-        send_json=send_json,
-    )
-
-    assert any(payload == {"t": "response", "data": "pcm"} for payload in sent_payloads)
-    assert all(payload.get("t") != "bot_text_chunk" for payload in sent_payloads)
-
-
-@pytest.mark.asyncio
-async def test_process_audio_ignores_malformed_stats_and_still_completes(monkeypatch):
-    service = _service()
-    session = service.create_session("alice")
-    stt_provider = SimpleNamespace(
-        meta=lambda: SimpleNamespace(type="mock-stt"),
-        get_text=AsyncMock(return_value="question"),
-    )
-    service.provider_manager.stt_provider_insts = [stt_provider]
-    chat_queue: asyncio.Queue = asyncio.Queue()
-    back_queue: asyncio.Queue = asyncio.Queue()
-    sent_payloads: list[dict] = []
-
-    back_queue.put_nowait(
-        {
-            "message_id": "reply-bad-stats",
-            "type": "plain",
-            "data": "{bad json",
-            "chain_type": "agent_stats",
-        }
-    )
-    back_queue.put_nowait(
-        {
-            "message_id": "reply-bad-stats",
-            "type": "plain",
-            "data": "{bad json",
-            "chain_type": "tts_stats",
-        }
-    )
-    back_queue.put_nowait(
-        {
-            "message_id": "reply-bad-stats",
-            "type": "plain",
-            "data": "final answer",
-        }
-    )
-    back_queue.put_nowait(
-        {
-            "message_id": "reply-bad-stats",
-            "type": "end",
-            "data": "",
-        }
-    )
-
-    monkeypatch.setattr(
-        service.webchat_run_coordinator.queue_manager,
-        "get_or_create_queue",
-        lambda _conversation_id: chat_queue,
-    )
-    monkeypatch.setattr(
-        service.webchat_run_coordinator.queue_manager,
-        "get_or_create_back_queue",
-        lambda _request_id, _conversation_id=None: back_queue,
-    )
-    monkeypatch.setattr(
-        service.webchat_run_coordinator.queue_manager,
-        "remove_back_queue",
-        lambda _request_id: None,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.uuid.uuid4",
-        lambda: "reply-bad-stats",
-    )
-
-    async def send_json(payload: dict) -> None:
-        sent_payloads.append(payload)
-
-    await service.process_audio(
-        session,
-        audio_path="voice.wav",
-        assemble_duration=0.1,
-        send_json=send_json,
-    )
-
-    assert any(
-        payload.get("t") == "bot_msg"
-        and payload.get("data", {}).get("text") == "final answer"
-        for payload in sent_payloads
-    )
-    assert sent_payloads[-2] == {"t": "end"}
-    assert sent_payloads[-1]["t"] == "metrics"
-    assert session.is_processing is False
-    assert session.should_interrupt is False
-
-
-@pytest.mark.asyncio
-async def test_process_audio_interrupt_saves_partial_message_and_stops_playback(
-    monkeypatch,
-):
-    service = _service()
-    session = service.create_session("alice")
-    stt_provider = SimpleNamespace(
-        meta=lambda: SimpleNamespace(type="mock-stt"),
-        get_text=AsyncMock(return_value="question"),
-    )
-    service.provider_manager.stt_provider_insts = [stt_provider]
-    service.save_interrupted_message = AsyncMock()
-    chat_queue: asyncio.Queue = asyncio.Queue()
-    back_queue: asyncio.Queue = asyncio.Queue()
-    sent_payloads: list[dict] = []
-    removed_request_ids: list[str] = []
-    wait_for_calls = 0
-
-    monkeypatch.setattr(
-        service.webchat_run_coordinator.queue_manager,
-        "get_or_create_queue",
-        lambda _conversation_id: chat_queue,
-    )
-    monkeypatch.setattr(
-        service.webchat_run_coordinator.queue_manager,
-        "get_or_create_back_queue",
-        lambda _request_id, _conversation_id=None: back_queue,
-    )
-    monkeypatch.setattr(
-        service.webchat_run_coordinator.queue_manager,
-        "remove_back_queue",
-        removed_request_ids.append,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.uuid.uuid4",
-        lambda: "reply-3",
-    )
-
-    async def fake_wait_for(_awaitable, **_kwargs):
-        nonlocal wait_for_calls
-        _awaitable.close()
-        wait_for_calls += 1
-        if wait_for_calls == 1:
-            return {
-                "message_id": "reply-3",
-                "type": "plain",
-                "data": "partial answer",
-            }
-        session.should_interrupt = True
-        raise TimeoutError
-
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.live_chat_service.asyncio.wait_for",
-        fake_wait_for,
-    )
-
-    async def send_json(payload: dict) -> None:
-        sent_payloads.append(payload)
-
-    await service.process_audio(
-        session,
-        audio_path="voice.wav",
-        assemble_duration=0.1,
-        send_json=send_json,
-    )
-
-    queued_username, queued_conversation_id, queued_payload = await chat_queue.get()
-    assert queued_username == "alice"
-    assert queued_conversation_id == session.conversation_id
-    assert queued_payload["message"] == [{"type": "plain", "text": "question"}]
-
-    service.save_interrupted_message.assert_awaited_once_with(
-        session,
-        "question",
-        "partial answer",
-    )
-    assert {"t": "stop_play"} in sent_payloads
-    assert removed_request_ids == [queued_payload["message_id"]]
-    assert session.is_processing is False
-    assert session.should_interrupt is False

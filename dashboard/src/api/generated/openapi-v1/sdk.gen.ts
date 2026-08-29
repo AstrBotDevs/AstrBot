@@ -435,7 +435,6 @@ import type {
   MovePersonaItemData,
   MovePersonaItemResponses,
   OpenChatWebSocketData,
-  OpenLiveChatWebSocketData,
   OpenUnifiedChatWebSocketData,
   PromoteNeoSkillCandidateData,
   PromoteNeoSkillCandidateResponses,
@@ -2216,19 +2215,7 @@ export const openChatWebSocket = <ThrowOnError extends boolean = false>(
   });
 
 /**
- * Open the live voice chat WebSocket
- */
-export const openLiveChatWebSocket = <ThrowOnError extends boolean = false>(
-  options: Options<OpenLiveChatWebSocketData, ThrowOnError>,
-): RequestResult<unknown, unknown, ThrowOnError> =>
-  (options.client ?? client).get<unknown, unknown, ThrowOnError>({
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/live-chat/ws',
-    ...options,
-  });
-
-/**
- * Open the unified live/chat WebSocket
+ * Open the unified chat WebSocket
  */
 export const openUnifiedChatWebSocket = <ThrowOnError extends boolean = false>(
   options: Options<OpenUnifiedChatWebSocketData, ThrowOnError>,

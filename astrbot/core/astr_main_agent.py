@@ -27,7 +27,6 @@ from astrbot.core.astr_agent_run_util import AgentRunner
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.astr_main_agent_resources import (
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
-    LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
     SANDBOX_MODE_PROMPT,
     TOOL_CALL_PROMPT,
@@ -1967,10 +1966,6 @@ async def build_main_agent(
             )
 
         req.system_prompt += f"\n{tool_prompt}\n"
-
-    action_type = event.get_extra("action_type")
-    if action_type == "live":
-        req.system_prompt += f"\n{LIVE_MODE_SYSTEM_PROMPT}\n"
 
     _apply_web_search_citation_prompt(event, req)
 

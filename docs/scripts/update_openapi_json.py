@@ -34,7 +34,6 @@ PUBLIC_OPEN_API_TAGS = {
     "Subagents",
 }
 PUBLIC_OPEN_API_EXCLUDED_PATHS = {
-    "/api/v1/live-chat/ws",
     "/api/v1/unified-chat/ws",
 }
 COMPONENT_REF_PREFIX = "#/components/"

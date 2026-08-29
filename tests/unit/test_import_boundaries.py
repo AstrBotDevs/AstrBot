@@ -383,7 +383,7 @@ def test_dashboard_webchat_services_do_not_import_platform_source_runtime() -> N
     """Dashboard transports use core WebChat primitives, not adapter internals."""
     for filename in (
         "chat_service.py",
-        "live_chat_service.py",
+        "webchat_service.py",
         "open_api_service.py",
     ):
         modules = _imports(ROOT / "astrbot" / "dashboard" / "services" / filename)

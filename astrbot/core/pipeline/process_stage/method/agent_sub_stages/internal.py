@@ -1,7 +1,7 @@
 """本地 Agent 模式的 LLM 调用 Stage"""
 
 from collections.abc import AsyncGenerator
-from contextlib import nullcontext
+from contextlib import AbstractAsyncContextManager, nullcontext
 from copy import deepcopy
 from dataclasses import replace
 
@@ -59,7 +59,7 @@ from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.task_utils import create_tracked_task
 
-from .....astr_agent_run_util import AgentRunner, run_agent, run_live_agent
+from .....astr_agent_run_util import AgentRunner, run_agent
 from ....context import PipelineContext, call_event_hook
 
 _FALLBACK_HISTORY_COMMITTER = AssistantHistoryCommitter()
@@ -190,7 +190,7 @@ class InternalAgentSubStage:
         self,
         event: AstrMessageEvent,
         streaming_response: bool,
-    ) -> tuple[bool, str, object, bool]:
+    ) -> tuple[bool, str, AbstractAsyncContextManager[None], bool]:
         concurrent = is_group_sender_concurrent(event, self._profile_config(event))
         if concurrent:
             streaming_response = False
@@ -204,7 +204,7 @@ class InternalAgentSubStage:
             "group_outbound_gate",
             None,
         )
-        turn_cm: object = nullcontext()
+        turn_cm: AbstractAsyncContextManager[None] = nullcontext()
         if concurrent and outbound_gate is not None:
             turn_cm = bind_concurrent_turn(
                 ConcurrentTurn(
@@ -277,7 +277,6 @@ class InternalAgentSubStage:
         req: ProviderRequest,
         agent_runner: AgentRunner,
         *,
-        action_type: str | None,
         history_saved: bool,
     ) -> None:
         """Record Agent facts, then finalize accepted assistant history separately."""
@@ -523,8 +522,6 @@ class InternalAgentSubStage:
                             runner_stop_callback = None
                     self._register_follow_up_runner(event, agent_runner, concurrent)
                     runner_registered = True
-                    action_type = event.get_extra("action_type")
-
                     event.trace.record(
                         "astr_agent_prepare",
                         system_prompt=req.system_prompt,
@@ -536,47 +533,7 @@ class InternalAgentSubStage:
                         },
                     )
 
-                    # 检测 Live Mode
-                    if action_type == "live":
-                        # Live Mode: 使用 run_live_agent
-                        logger.info("[Internal Agent] 检测到 Live Mode，启用 TTS 处理")
-
-                        # 获取 TTS Provider
-                        tts_provider = (
-                            self.ctx.execution_context.get_using_tts_provider(
-                                event.unified_msg_origin
-                            )
-                        )
-
-                        if not tts_provider:
-                            logger.warning(
-                                "[Live Mode] TTS Provider 未配置，将使用普通流式模式"
-                            )
-
-                        # 使用 run_live_agent，总是使用流式响应
-                        event.set_result(
-                            MessageEventResult()
-                            .set_result_content_type(ResultContentType.STREAMING_RESULT)
-                            .set_async_stream(
-                                self._stream_with_pending_history(
-                                    event,
-                                    req,
-                                    agent_runner,
-                                    run_live_agent(
-                                        agent_runner,
-                                        tts_provider,
-                                        self.max_step,
-                                        self.show_tool_use,
-                                        self.show_tool_call_result,
-                                        show_reasoning=self.show_reasoning,
-                                        buffer_intermediate_messages=self.buffer_intermediate_messages,
-                                    ),
-                                ),
-                            ),
-                        )
-                        yield
-
-                    elif streaming_response and not stream_to_general:
+                    if streaming_response and not stream_to_general:
                         # 流式响应
                         event.set_result(
                             MessageEventResult()
@@ -632,7 +589,6 @@ class InternalAgentSubStage:
                         event,
                         req,
                         agent_runner,
-                        action_type=action_type,
                         history_saved=history_saved,
                     )
                 finally:
@@ -839,8 +795,10 @@ class InternalAgentSubStage:
         receipt = event.get_extra("delivery_receipt")
         if not isinstance(receipt, DeliveryReceipt):
             get_platform_id = getattr(event, "get_platform_id", None)
-            platform_id = get_platform_id() if callable(get_platform_id) else ""
-            receipt = DeliveryReceipt.skipped(platform_id=platform_id)
+            platform_id = get_platform_id() if callable(get_platform_id) else None
+            receipt = DeliveryReceipt.skipped(
+                platform_id=platform_id if isinstance(platform_id, str) else ""
+            )
         projection = make_projection(receipt)
         committer = getattr(
             self.ctx.execution_context,

@@ -2497,15 +2497,6 @@ export type OpenChatWebSocketData = {
   url: '/api/v1/chat/ws';
 };
 
-export type OpenLiveChatWebSocketData = {
-  body?: never;
-  path?: never;
-  query: {
-    token: string;
-  };
-  url: '/api/v1/live-chat/ws';
-};
-
 export type OpenUnifiedChatWebSocketData = {
   body?: never;
   path?: never;

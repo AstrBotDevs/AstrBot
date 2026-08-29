@@ -1180,27 +1180,10 @@ paths:
         '101':
           description: WebSocket upgrade accepted
 
-  /api/v1/live-chat/ws:
-    get:
-      tags: [Chat]
-      summary: Open the live voice chat WebSocket
-      operationId: openLiveChatWebSocket
-      x-websocket: true
-      x-astrbot-scope: chat
-      parameters:
-        - name: token
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '101':
-          description: WebSocket upgrade accepted
-
   /api/v1/unified-chat/ws:
     get:
       tags: [Chat]
-      summary: Open the unified live/chat WebSocket
+      summary: Open the unified chat WebSocket
       operationId: openUnifiedChatWebSocket
       x-websocket: true
       x-astrbot-scope: chat

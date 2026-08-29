@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 272 icons */
+/* Auto-generated MDI subset – 268 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -268,10 +268,6 @@
   content: "\F0174";
 }
 
-.mdi-code-tags-check::before {
-  content: "\F0694";
-}
-
 .mdi-cog::before {
   content: "\F0493";
 }
@@ -378,14 +374,6 @@
 
 .mdi-emoticon::before {
   content: "\F0C68";
-}
-
-.mdi-emoticon-confused::before {
-  content: "\F10DE";
-}
-
-.mdi-emoticon-confused-outline::before {
-  content: "\F10DF";
 }
 
 .mdi-export::before {
@@ -806,10 +794,6 @@
 
 .mdi-pencil-ruler::before {
   content: "\F1353";
-}
-
-.mdi-phone-in-talk::before {
-  content: "\F03F6";
 }
 
 .mdi-pin::before {

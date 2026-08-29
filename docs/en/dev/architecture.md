@@ -68,21 +68,24 @@ astrbot/core/db/
     mixins.py              # TimestampMixin
     ...                    # Table modules split by domain
   stores/
+    mixin.py               # Typed session helper shared by store mixins
     session.py             # Session and transaction-scope helpers
     ...                    # One mixin per domain protocol
 ```
 
 `po/__init__.py` re-exporting table models is a package entry point. New code may import `from astrbot.core.db.po.memory import MemoryFact`; `from astrbot.core.db.po import MemoryFact` stays valid. Model registration is owned by `po.registry.import_all_models()` and must not rely on a business module happening to import models. `schema.py` must call it before `SQLModel.metadata.create_all`. `tests/unit/db/test_schema.py` compares initialized table names with a source-level `EXPECTED_TABLE_NAMES` constant (currently 35 tables); a registry omission must fail the test.
 
-`initialize()` only:
+`initialize()` performs the following in order:
 
 1. `import_all_models()`
 2. `SQLModel.metadata.create_all`
-3. WAL / `busy_timeout` / `synchronous` / `cache_size` / `temp_store` / `mmap_size` / `optimize`
+3. Backfill `command_id` and conflict scope on existing command tables when needed.
+4. Drop the obsolete `command_configs.keep_original_alias` and `platform_sessions.is_group` columns in independent transactions.
+5. WAL / `busy_timeout` / `synchronous` / `cache_size` / `temp_store` / `mmap_size` / `optimize`
 
-It does not probe `PRAGMA table_info` and does not run `ALTER TABLE`. `create_all` creates missing tables only; it does not add columns to existing tables. After a schema change, rebuild an empty database: stop the process, delete `data/data_v4.db*`, then start again. Tests keep using temporary databases. If a SQLite `WHERE` index is genuinely needed later, declare `Index(..., sqlite_where=...)` on the model so `create_all` builds it on an empty database.
+The compatibility steps inspect `PRAGMA table_info` and use narrowly scoped `ALTER TABLE` statements. `create_all` still creates missing tables only; it does not add model columns to existing tables. Column-drop failures are logged without rolling back schema creation or command backfills. Tests keep using temporary databases. If a SQLite `WHERE` index is genuinely needed later, declare `Index(..., sqlite_where=...)` on the model so `create_all` builds it on an empty database.
 
-Mixins obtain sessions only through `self.get_db()` and must not hold the engine or import each other's query helpers. A composite store or application/domain service owns one transaction boundary for cross-domain writes.
+Mixins obtain sessions through the typed `store_session(self)` helper and must not hold the engine or import each other's query helpers. A composite store or application/domain service owns one transaction boundary for cross-domain writes.
 
 ### Protocol-to-table map
 
@@ -160,7 +163,7 @@ Inbound routing is a single decision in `WakingCheckStage`: command, LLM, passth
 
 Group LLM access is controlled by `llm_access.group`, `llm_access.reply_to_bot`, and continuation state. Built-in command availability is stored per handler in the command database; `disable_builtin_commands` is not migrated, accepted by Dashboard config writes, or read by the Pipeline. Command configs use a stable `command_id` (`{plugin}:{original path}` with spaces as dots). Sync claims live handlers by `handler_full_name` then `command_id` and deletes unmatched rows. `alter_cmd` is read only under `command_id`; Python method names and historical short-name keys are not migrated. Built-in commands ignore persisted names and aliases unless `resolution_strategy` is `manual_rename`. The unused `keep_original_alias` column is dropped in a separate transaction; a drop failure does not block startup.
 
-`platform_settings.group_sender_concurrency` is experimental and off by default. When it is on and `unique_session` is off, group LLM locks may split by sender so different members can generate in parallel. A whole turn still sends one-at-a-time per group UMO, and that turn is forced non-streaming. `AssistantHistoryCommitter` merges other senders' complete turns and never resurrects truncated history. Direct messages, WebChat, live mode, cron jobs, and proactive replies keep the original UMO lock.
+`platform_settings.group_sender_concurrency` is experimental and off by default. When it is on and `unique_session` is off, group LLM locks may split by sender so different members can generate in parallel. A whole turn still sends one-at-a-time per group UMO, and that turn is forced non-streaming. `AssistantHistoryCommitter` merges other senders' complete turns and never resurrects truncated history. Direct messages, WebChat, cron jobs, and proactive replies keep the original UMO lock.
 
 ### Command Parsing Subsystem
 
@@ -274,7 +277,7 @@ Plugin actions must use `plugin:<plugin-id>:<action>` and call `self.context.aut
 
 ### Step-up, audit, and API keys
 
-Global high-risk operations accept only a one-time Dashboard password/TOTP step-up bound to the account, Dashboard `sid`, action, resource, and context digest. TTL is at most five minutes, and the token is consumed atomically. Dashboard-driven WebChat uses `/authorization/webchat-step-up` for six instance tools only: `tool.local_exec`, `tool.python_exec`, `tool.file_write`, `tool.browser_control`, `tool.mcp_write`, and `tool.computer_use`. Live Voice does not reuse that proof.
+Global high-risk operations accept only a one-time Dashboard password/TOTP step-up bound to the account, Dashboard `sid`, action, resource, and context digest. TTL is at most five minutes, and the token is consumed atomically. Dashboard-driven WebChat uses `/authorization/webchat-step-up` for six instance tools only: `tool.local_exec`, `tool.python_exec`, `tool.file_write`, `tool.browser_control`, `tool.mcp_write`, and `tool.computer_use`.
 
 Denials, high-risk allows, step-up, and binding mutations write redacted audit events. A full bounded audit queue fails closed for high-risk allows. Binding mutations and step-up issuance commit in the same business transaction.
 
@@ -292,7 +295,7 @@ Ordinary JSON APIs use a `status` / `message` / `data` envelope. Common statuses
 
 `astrbot/dashboard/api/router.py` assembles all `/api/v1` routes. The source specification is `openspec/openapi-v1.yaml`; both the Hey API Dashboard client and `docs/public/openapi.json` are generated from it. Do not hand-edit generated clients.
 
-Live Chat WebSockets can run multiple requests concurrently on one connection. A unique `message_id` correlates each task, response, and interrupt. Follow-up capture, `run_started`, and per-call `agent_stats` must retain the originating request identity; do not reduce the protocol to a session-wide busy flag and one serialized request.
+Unified Chat WebSockets can run multiple requests concurrently on one connection. A unique `message_id` correlates each task, response, and interrupt. Follow-up capture, `run_started`, and per-call `agent_stats` must retain the originating request identity; do not reduce the protocol to a session-wide busy flag and one serialized request.
 
 ### Data file manager
 
@@ -353,7 +356,7 @@ Runtime-root helpers in `astrbot.core.utils.astrbot_path` currently return strin
 | Dashboard API              | `astrbot/dashboard/api/`, `services/`, `schemas.py`          | OpenAPI, generated client, backend/frontend tests                       |
 | Authorization              | `astrbot/core/auth/`                                         | action registry, step-up, platform facts, audit, plugin `context.authz` |
 | Data file manager          | `data_files.py`, `data_file_service.py`, `DataFilesPage.vue` | path escape, symlinks, etag, step-up, OpenAPI tag allowlist             |
-| Live Chat protocol         | `live_chat_service.py`, `webchat/`                           | request identity, concurrency, interrupts, frontend state tests         |
+| Unified Chat protocol      | `webchat_service.py`, `webchat/`                             | request identity, concurrency, interrupts, frontend state tests         |
 | Plugin SDK/page protocol   | `astrbot/api/`, `astrbot/core/star/`                         | import boundaries, plugin docs, Vitest, Playwright                      |
 | Configuration persistence  | `astrbot/core/config/`                                       | defaults/metadata, revisions, concurrent-save tests                     |
 | Main SQLite database       | `astrbot/core/db/`                                           | domain protocols, SQLModel tables, schema init, `tests/unit/db/`        |

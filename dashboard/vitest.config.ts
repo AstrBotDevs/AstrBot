@@ -43,7 +43,6 @@ export default mergeConfig(
           'src/plugins/**',
           'src/composables/useMessages.ts',
           'src/composables/useProviderSources.ts',
-          'src/composables/useVADRecording.ts',
           'src/utils/monacoLoader.ts',
           'src/utils/shiki.ts',
           'src/utils/shikiLimitedBundle.ts',

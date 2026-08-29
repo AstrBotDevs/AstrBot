@@ -129,8 +129,7 @@ This does not grant access to global Dashboard operations such as changing
 accounts, providers, plugins, system settings, exports, or restarts. The
 account's Persona, tool, sandbox, and path restrictions still apply. Anonymous
 WebChat, API keys, IM messages, plugins, and background continuations cannot
-reuse this authorization. Live Voice is also excluded because it does not use
-the same persistent ChatUI conversation.
+reuse this authorization.
 
 > [!NOTE]
 > To keep message delivery ordered, keep only one ChatUI page open for the same browser session. If you open chat in multiple tabs, the system may ask you to reconnect.

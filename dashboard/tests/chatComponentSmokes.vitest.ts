@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
 import ChatInput from '@/components/chat/ChatInput.vue';
-import LiveOrb from '@/components/chat/LiveOrb.vue';
 import ReasoningBlock from '@/components/chat/message_list_comps/ReasoningBlock.vue';
 import { mountWithVuetify } from './utils/mountWithVuetify';
 
@@ -111,7 +110,6 @@ describe('chat component smokes', () => {
         },
         currentSession: {
           platform_id: 'webchat',
-          is_group: false,
         },
       },
     });
@@ -197,20 +195,4 @@ describe('chat component smokes', () => {
     expect(wrapper.find('.reasoning-timeline-stub').text()).toBe('1|');
   });
 
-  it('renders LiveOrb in code mode without crashing', async () => {
-    const wrapper = mountWithVuetify(LiveOrb, {
-      props: {
-        energy: 0.6,
-        mode: 'processing',
-        codeMode: true,
-        nervousMode: false,
-      },
-    });
-
-    await flushPromises();
-
-    expect(wrapper.findAll('.eye')).toHaveLength(2);
-    expect(wrapper.findAll('.code-rain-container')).toHaveLength(2);
-    expect(wrapper.findAll('.code-column').length).toBeGreaterThan(0);
-  });
 });

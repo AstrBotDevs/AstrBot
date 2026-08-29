@@ -30,8 +30,7 @@
     "error": "Recording Failed",
     "listening": "Listening...",
     "speaking": "Speaking",
-    "startRecording": "Start Voice Input",
-    "liveMode": "Live Mode"
+    "startRecording": "Start Voice Input"
   },
   "welcome": {
     "title": "Welcome to AstrBot",
