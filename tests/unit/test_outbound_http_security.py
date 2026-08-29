@@ -78,6 +78,7 @@ def test_allows_clash_fake_ip_for_resolved_hostnames() -> None:
     fake_ip = _resolver(
         {
             "api.soulter.top": ["198.18.0.57"],
+            "cloud.astrbot.app": ["198.18.0.58"],
             "api.github.com": ["198.18.0.72"],
         }
     )
@@ -87,8 +88,13 @@ def test_allows_clash_fake_ip_for_resolved_hostnames() -> None:
         resolve_addresses=fake_ip,
     )
     validate_outbound_url(
-        "https://api.soulter.top/astrbot/plugins",
+        "https://cloud.astrbot.app/api/v1/market/plugins.json",
         PLUGIN_REGISTRY,
+        resolve_addresses=fake_ip,
+    )
+    validate_outbound_url(
+        "https://cloud.astrbot.app/api/v1/market/plugins.json",
+        JSON_FETCH,
         resolve_addresses=fake_ip,
     )
     validate_outbound_url(
@@ -496,36 +502,11 @@ async def test_fetch_json_does_not_leak_body_in_error(
     assert "secret-token-value" not in str(excinfo.value)
 
 
-@pytest.mark.asyncio
-async def test_fetch_text_reads_only_max_plus_one_bytes(
+def _patch_fetch_text_session(
     monkeypatch: pytest.MonkeyPatch,
+    outbound,
+    response,
 ) -> None:
-    from astrbot.core.utils import outbound_http as outbound
-
-    class FakeStream:
-        def __init__(self) -> None:
-            self.n: int | None = None
-
-        async def read(self, n: int = -1) -> bytes:
-            self.n = n
-            return b"x" * n
-
-    stream = FakeStream()
-
-    class FakeResponse:
-        status = 200
-        headers: dict[str, str] = {}
-        content = stream
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb) -> None:
-            return None
-
-        async def read(self) -> bytes:
-            raise AssertionError("unbounded response.read()")
-
     class FakeConnector:
         async def close(self) -> None:
             return None
@@ -542,7 +523,7 @@ async def test_fetch_text_reads_only_max_plus_one_bytes(
 
     async def fake_request(*args, **kwargs):
         del args, kwargs
-        return FakeResponse()
+        return response
 
     monkeypatch.setattr(outbound, "_request_with_manual_redirects", fake_request)
     monkeypatch.setattr(
@@ -564,6 +545,77 @@ async def test_fetch_text_reads_only_max_plus_one_bytes(
     )
     monkeypatch.setattr(outbound.aiohttp, "ClientSession", FakeSession)
 
+
+class _ChunkedFakeStream:
+    def __init__(self, chunks: tuple[bytes, ...]) -> None:
+        self.chunks = chunks
+        self.chunk_size: int | None = None
+
+    async def iter_chunked(self, size: int):
+        self.chunk_size = size
+        for chunk in self.chunks:
+            yield chunk
+
+    async def read(self, n: int = -1) -> bytes:
+        raise AssertionError(f"partial content.read({n})")
+
+
+class _ChunkedFakeResponse:
+    def __init__(
+        self,
+        chunks: tuple[bytes, ...],
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        self.status = 200
+        self.headers = headers or {}
+        self.content = _ChunkedFakeStream(chunks)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    async def read(self) -> bytes:
+        raise AssertionError("unbounded response.read()")
+
+
+@pytest.mark.asyncio
+async def test_fetch_text_joins_chunked_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from astrbot.core.utils import outbound_http as outbound
+
+    response = _ChunkedFakeResponse((b'{"ok":', b" true}"))
+    _patch_fetch_text_session(monkeypatch, outbound, response)
+    policy = outbound.OutboundRequestPolicy(
+        allowed_schemes=frozenset({"https"}),
+        allowed_hosts=None,
+        allowed_ports=frozenset({443}),
+        allow_private_network=False,
+        max_redirects=0,
+        max_url_length=2048,
+        max_response_bytes=64,
+        timeout_seconds=5,
+    )
+    status, text, _headers = await outbound.fetch_text(
+        "https://cdn.example/plugins",
+        policy,
+    )
+    assert status == 200
+    assert text == '{"ok": true}'
+    assert response.content.chunk_size == 8192
+
+
+@pytest.mark.asyncio
+async def test_fetch_text_stops_after_size_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from astrbot.core.utils import outbound_http as outbound
+
+    response = _ChunkedFakeResponse((b"x" * 8, b"y" * 8))
+    _patch_fetch_text_session(monkeypatch, outbound, response)
     policy = outbound.OutboundRequestPolicy(
         allowed_schemes=frozenset({"https"}),
         allowed_hosts=None,
@@ -576,4 +628,3 @@ async def test_fetch_text_reads_only_max_plus_one_bytes(
     )
     with pytest.raises(OutboundSizeLimitError):
         await outbound.fetch_text("https://cdn.example/plugins", policy)
-    assert stream.n == 9

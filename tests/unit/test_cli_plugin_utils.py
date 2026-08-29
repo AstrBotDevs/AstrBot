@@ -166,17 +166,17 @@ def test_build_plug_list_falls_back_after_non_object_source(monkeypatch, tmp_pat
 
     def handler(url: str):
         calls.append(url)
-        if "raw.githubusercontent.com" in url:
+        if "cloud.astrbot.app" in url:
             return ["not-an-object"]
-        if "jsdelivr.net" in url:
+        if "raw.githubusercontent.com" in url:
             return REMOTE_PLUGINS
         raise AssertionError(url)
 
     patch_fetch_json(monkeypatch, handler)
     plugins = build_plug_list(tmp_path)
     assert {plugin["name"] for plugin in plugins} == {"local-plugin", "remote-only"}
-    assert calls[0].startswith("https://raw.githubusercontent.com/")
-    assert "jsdelivr.net" in calls[1]
+    assert calls[0] == "https://cloud.astrbot.app/api/v1/market/plugins.json"
+    assert calls[1].startswith("https://raw.githubusercontent.com/")
 
 
 def test_build_plug_list_falls_back_after_fetch_error(monkeypatch, tmp_path):
@@ -184,13 +184,13 @@ def test_build_plug_list_falls_back_after_fetch_error(monkeypatch, tmp_path):
 
     def handler(url: str):
         calls.append(url)
-        if "raw.githubusercontent.com" in url:
+        if "cloud.astrbot.app" in url:
             raise OutboundRequestError("The remote response is not valid JSON.")
-        if "jsdelivr.net" in url:
+        if "raw.githubusercontent.com" in url:
             return REMOTE_PLUGINS
         raise AssertionError(url)
 
     patch_fetch_json(monkeypatch, handler)
     plugins = build_plug_list(tmp_path)
     assert "remote-only" in {plugin["name"] for plugin in plugins}
-    assert "jsdelivr.net" in calls[1]
+    assert calls[1].startswith("https://raw.githubusercontent.com/")

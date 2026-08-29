@@ -73,16 +73,18 @@ async def test_ghproxy_and_plugin_mirror_share_the_same_origin_validator() -> No
         await service.test_ghproxy_connection("https://127.0.0.1")
 
 
-def test_default_registry_prefers_github_collection(monkeypatch, tmp_path) -> None:
+def test_default_registry_prefers_astrbot_cloud(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
         "astrbot.dashboard.services.plugin_service.get_astrbot_data_path",
         lambda: str(tmp_path),
     )
     source = PluginService.build_registry_source(None)
     assert source.urls == list(DEFAULT_PLUGIN_MARKET_URLS)
-    assert source.urls[0].startswith("https://raw.githubusercontent.com/")
+    assert source.urls[0] == "https://cloud.astrbot.app/api/v1/market/plugins.json"
+    assert any(
+        url.startswith("https://raw.githubusercontent.com/") for url in source.urls
+    )
     assert any("jsdelivr.net" in url for url in source.urls)
-    assert source.urls[-1] == "https://api.soulter.top/astrbot/plugins"
     assert source.md5_url is None
 
 
@@ -105,9 +107,9 @@ async def test_get_online_plugins_falls_back_after_non_json_source(
     async def fake_fetch_json(url, policy, **kwargs):
         del policy, kwargs
         calls.append(url)
-        if "raw.githubusercontent.com" in url:
+        if "cloud.astrbot.app" in url:
             raise OutboundRequestError("The remote response is not valid JSON.")
-        if "jsdelivr.net" in url:
+        if "raw.githubusercontent.com" in url:
             return {"demo-plugin": {"desc": "ok", "version": "1.0.0"}}
         raise AssertionError(url)
 
@@ -129,8 +131,8 @@ async def test_get_online_plugins_falls_back_after_non_json_source(
 
     assert message is None
     assert "demo-plugin" in data
-    assert calls[0].startswith("https://raw.githubusercontent.com/")
-    assert "jsdelivr.net" in calls[1]
+    assert calls[0] == "https://cloud.astrbot.app/api/v1/market/plugins.json"
+    assert calls[1].startswith("https://raw.githubusercontent.com/")
     assert not any(record.levelno >= logging.ERROR for record in caplog.records)
 
 

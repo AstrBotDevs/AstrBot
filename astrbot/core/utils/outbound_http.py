@@ -77,16 +77,17 @@ GITHUB_RELATED_HOSTS = frozenset(
         "github.githubassets.com",
     }
 )
-SOULTER_REGISTRY_HOSTS = frozenset(
+UPSTREAM_REGISTRY_HOSTS = frozenset(
     {
         "api.soulter.top",
         "astrbot-registry.soulter.top",
+        "cloud.astrbot.app",
     }
 )
 DEFAULT_PLUGIN_MARKET_URLS = (
+    "https://cloud.astrbot.app/api/v1/market/plugins.json",
     "https://raw.githubusercontent.com/AstrBotDevs/AstrBot_Plugins_Collection/main/plugin_cache_original.json",
     "https://cdn.jsdelivr.net/gh/AstrBotDevs/AstrBot_Plugins_Collection@main/plugin_cache_original.json",
-    "https://api.soulter.top/astrbot/plugins",
 )
 _ARCHIVE_CONTENT_TYPES = frozenset(
     {
@@ -140,7 +141,7 @@ class ValidatedOutboundURL:
 
 PLUGIN_REPOSITORY = OutboundRequestPolicy(
     allowed_schemes=frozenset({"https"}),
-    allowed_hosts=GITHUB_RELATED_HOSTS | SOULTER_REGISTRY_HOSTS,
+    allowed_hosts=GITHUB_RELATED_HOSTS | UPSTREAM_REGISTRY_HOSTS,
     allowed_ports=_DEFAULT_HTTPS_PORTS,
     allow_private_network=False,
     max_redirects=5,
@@ -195,7 +196,7 @@ MCP_REMOTE = OutboundRequestPolicy(
 )
 JSON_FETCH = OutboundRequestPolicy(
     allowed_schemes=frozenset({"https"}),
-    allowed_hosts=GITHUB_RELATED_HOSTS | SOULTER_REGISTRY_HOSTS,
+    allowed_hosts=GITHUB_RELATED_HOSTS | UPSTREAM_REGISTRY_HOSTS,
     allowed_ports=_DEFAULT_HTTPS_PORTS,
     allow_private_network=False,
     max_redirects=2,
@@ -956,11 +957,26 @@ async def fetch_text(
                     if policy.max_response_bytes is not None
                     else _JSON_MAX_BYTES
                 )
-                raw = await response.content.read(limit + 1)
-                if len(raw) > limit:
-                    raise OutboundSizeLimitError(
-                        "The response is larger than the allowed size."
-                    )
+                content_length = response.headers.get("Content-Length")
+                if content_length:
+                    try:
+                        declared = int(content_length)
+                    except ValueError:
+                        declared = -1
+                    if declared > limit:
+                        raise OutboundSizeLimitError(
+                            "The response is larger than the allowed size."
+                        )
+                chunks: list[bytes] = []
+                total = 0
+                async for chunk in response.content.iter_chunked(8192):
+                    total += len(chunk)
+                    if total > limit:
+                        raise OutboundSizeLimitError(
+                            "The response is larger than the allowed size."
+                        )
+                    chunks.append(chunk)
+                raw = b"".join(chunks)
                 try:
                     text = _decode_text_payload(raw, max_bytes=limit)
                 except UnicodeDecodeError as exc:
