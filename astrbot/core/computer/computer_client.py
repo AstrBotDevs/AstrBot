@@ -713,10 +713,6 @@ class ComputerRuntime(_ComputerRuntimeState):
                         cua_kwargs["ttl"],
                     )
                     client = CuaBooter(**cua_kwargs)
-                elif booter_type == "boxlite":
-                    from .booters.boxlite import BoxliteBooter
-
-                    client = BoxliteBooter()
                 else:
                     raise ValueError(f"Unknown booter type: {booter_type}")
 

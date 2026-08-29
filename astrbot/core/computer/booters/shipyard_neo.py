@@ -348,8 +348,7 @@ class ShipyardNeoBooter(ComputerBooter):
     """Booter backed by Shipyard Neo (Bay).
 
     If *endpoint_url* is empty or set to ``"__auto__"``, Bay will be
-    started automatically as a Docker container (like Boxlite does for
-    Ship containers).
+    started automatically as a Docker container for Ship containers.
     """
 
     AUTO_SENTINEL = "__auto__"

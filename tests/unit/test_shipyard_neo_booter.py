@@ -307,7 +307,7 @@ class TestGetBooterRebuild:
 
         runtime = ComputerRuntime()
         runtime._session_booters["session-1"] = stale
-        runtime._session_booter_types["session-1"] = "boxlite"
+        runtime._session_booter_types["session-1"] = "local"
 
         with (
             patch(
