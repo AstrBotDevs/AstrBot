@@ -12,13 +12,13 @@ class TokenCounter(Protocol):
     """
 
     def count_tokens(
-        self, messages: list[Message], reported_token_usage: int = 0
+        self, messages: list[Message], trusted_token_usage: int = 0
     ) -> int:
         """Count the total tokens in the message list.
 
         Args:
             messages: The message list.
-            reported_token_usage: The total token usage that LLM API returned.
+            trusted_token_usage: The total token usage that LLM API returned.
                 For some cases, this value is more accurate.
                 But some API does not return it, so the value defaults to 0.
 
@@ -44,10 +44,10 @@ class EstimateTokenCounter:
     """
 
     def count_tokens(
-        self, messages: list[Message], reported_token_usage: int = 0
+        self, messages: list[Message], trusted_token_usage: int = 0
     ) -> int:
-        if reported_token_usage > 0:
-            return reported_token_usage
+        if trusted_token_usage > 0:
+            return trusted_token_usage
 
         total = 0
         for msg in messages:
