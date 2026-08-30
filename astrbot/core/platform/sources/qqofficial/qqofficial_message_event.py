@@ -124,6 +124,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         source = (
             self.message_obj.raw_message
         )  # 提前获取，避免 generator 为空时 NameError
+        # 累积已生成全文与已下发长度，用于断流兜底，避免回复被掐断
+        full_text = ""
+        sent_len = 0
+
+        def _plain_of(chain: MessageChain) -> str:
+            return "".join(c.text for c in chain.chain if isinstance(c, Plain))
+
         try:
             async for chain in generator:
                 source = self.message_obj.raw_message
@@ -151,10 +158,15 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         "reset": False,
                     }
                     last_edit_time = 0
+                    # 工具段结束后已下发前缀不再延续，重置全文追踪
+                    full_text = ""
+                    sent_len = 0
                     continue
 
                 # 累积内容（拷贝，避免上游复用 MessageChain 改写 buffer）
                 self._append_stream_delta(chain)
+                # 追踪已生成全文（用于断流兜底）
+                full_text += _plain_of(chain)
 
                 # 节流：按时间间隔发送中间分片
                 current_time = asyncio.get_running_loop().time()
@@ -168,19 +180,43 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     if ret_id is not None:
                         stream_payload["id"] = ret_id
                     last_edit_time = asyncio.get_running_loop().time()
+                    # 记录已下发长度（buffer 已清空）
+                    sent_len = len(full_text)
                     self.send_buffer = None  # 清空已发送的分片，避免下次重复发送旧内容
 
             if isinstance(source, botpy.message.C2CMessage):
-                # 结束流式对话，发送 buffer 中剩余内容
-                stream_payload["state"] = 10
-                ret = await self._post_send(stream=stream_payload)
+                # 结束流式对话：把尚未下发的尾段以 state=10 补齐，避免回复被截断
+                tail = full_text[sent_len:] if full_text else ""
+                if tail and stream_payload.get("id") is not None:
+                    self.send_buffer = MessageChain(use_t2i_=False, type="segment")
+                    self.send_buffer.chain.append(Plain(text=tail))
+                    stream_payload["state"] = 10
+                    ret = await self._post_send(stream=stream_payload)
             else:
                 ret = await self._post_send()
 
         except Exception as e:
             logger.error(f"发送流式消息时出错: {e}", exc_info=True)
-            # 避免累计内容在异常后被整包重复发送：仅清理缓存，不做非流式整包兜底
-            # 如需兜底，应该只发送未发送 delta（后续可继续优化）
+            # 断流兜底：把已生成但未下发的尾段以 state=10 补齐到同一条流式消息，
+            # 保证用户看到完整回答，而不是冻结在最后一个分片。
+            try:
+                tail = full_text[sent_len:] if full_text else ""
+                if (
+                    tail
+                    and isinstance(source, botpy.message.C2CMessage)
+                    and stream_payload.get("id") is not None
+                ):
+                    self.send_buffer = MessageChain(use_t2i_=False, type="segment")
+                    self.send_buffer.chain.append(Plain(text=tail))
+                    stream_payload["state"] = 10
+                    await self._post_send(stream=stream_payload)
+                elif full_text:
+                    # 无法以流式收尾（非 C2C 或尚未拿到 stream id）：以普通消息补发全文
+                    self.send_buffer = MessageChain(use_t2i_=False, type="segment")
+                    self.send_buffer.chain.append(Plain(text=full_text))
+                    await self._post_send()
+            except Exception as e2:
+                logger.error(f"断流兜底补发也失败: {e2}", exc_info=True)
             self.send_buffer = None
 
         return None
