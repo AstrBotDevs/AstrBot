@@ -185,13 +185,21 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     self.send_buffer = None  # 清空已发送的分片，避免下次重复发送旧内容
 
             if isinstance(source, botpy.message.C2CMessage):
-                # 结束流式对话：把尚未下发的尾段以 state=10 补齐，避免回复被截断
+                # 结束流式对话：把尚未下发的尾段以 state=10 补齐，避免回复被截断。
+                # 若所有内容已通过节流分片完整下发（tail 为空），仍需发送一条 state=10
+                # 收尾帧让 QQ 侧把流从「生成中」翻转为「完成」——空内容会被 _post_send
+                # 直接丢弃，故用 "\n" 作为收尾标记（仅多一个换行，不会重复正文）。
                 tail = full_text[sent_len:] if full_text else ""
-                if tail and stream_payload.get("id") is not None:
+                if stream_payload.get("id") is not None:
                     self.send_buffer = MessageChain(use_t2i_=False, type="segment")
-                    self.send_buffer.chain.append(Plain(text=tail))
+                    self.send_buffer.chain.append(Plain(text=tail if tail else "\n"))
                     stream_payload["state"] = 10
                     ret = await self._post_send(stream=stream_payload)
+                elif full_text:
+                    # 未拿到流式消息 id（中间分片返回无 id）：降级为普通消息补发全文
+                    self.send_buffer = MessageChain(use_t2i_=False, type="segment")
+                    self.send_buffer.chain.append(Plain(text=full_text))
+                    ret = await self._post_send()
             else:
                 ret = await self._post_send()
 
@@ -201,17 +209,16 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             # 保证用户看到完整回答，而不是冻结在最后一个分片。
             try:
                 tail = full_text[sent_len:] if full_text else ""
-                if (
-                    tail
-                    and isinstance(source, botpy.message.C2CMessage)
-                    and stream_payload.get("id") is not None
-                ):
+                if isinstance(source, botpy.message.C2CMessage) and stream_payload.get(
+                    "id"
+                ) is not None:
+                    # 有活跃流式消息：以 state=10 收尾帧补齐尾段（无尾段时用 "\n" 收尾）
                     self.send_buffer = MessageChain(use_t2i_=False, type="segment")
-                    self.send_buffer.chain.append(Plain(text=tail))
+                    self.send_buffer.chain.append(Plain(text=tail if tail else "\n"))
                     stream_payload["state"] = 10
                     await self._post_send(stream=stream_payload)
                 elif full_text:
-                    # 无法以流式收尾（非 C2C 或尚未拿到 stream id）：以普通消息补发全文
+                    # 未拿到流式消息 id（非 C2C 或中间分片无返回 id）：降级为普通消息补发全文
                     self.send_buffer = MessageChain(use_t2i_=False, type="segment")
                     self.send_buffer.chain.append(Plain(text=full_text))
                     await self._post_send()
