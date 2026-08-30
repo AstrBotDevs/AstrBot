@@ -201,6 +201,8 @@ def test_local_legacy_fields_are_fully_migrated():
 
 
 def test_local_migration_replaces_default_root_inserted_before_version_bump():
+    legacy_default_config = get_agent_runner_config_default("local")
+    legacy_default_config["compression"].pop("enable_manual_context_compression")
     config = {
         "config_version": 2,
         "provider": [
@@ -225,7 +227,7 @@ def test_local_migration_replaces_default_root_inserted_before_version_bump():
         },
         "agent_runner": {
             "runner_type": "local",
-            "config": get_agent_runner_config_default("local"),
+            "config": legacy_default_config,
         },
     }
 
