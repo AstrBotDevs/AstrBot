@@ -82,7 +82,8 @@ class ContextManager:
             # 2. 基于 token 的压缩
             if self.config.max_context_tokens > 0:
                 threshold_tokens = self.token_counter.count_tokens(
-                    result, trusted_token_usage
+                    result,
+                    reported_token_usage=trusted_token_usage,
                 )
 
                 if self.compressor.should_compress(
