@@ -40,6 +40,7 @@ _LEGACY_AGENT_RUNNER_SETTING_KEYS = (
     "tool_call_timeout",
     "sanitize_context_by_modalities",
     "context_limit_reached_strategy",
+    "enable_manual_context_compression",
     "llm_compress_instruction",
     "llm_compress_keep_recent_ratio",
     "llm_compress_provider_id",
@@ -221,6 +222,9 @@ def _migrate_agent_runner_config(
                 "trim_turns": provider_settings.get("dequeue_context_length", 1),
                 "overflow_strategy": provider_settings.get(
                     "context_limit_reached_strategy", "llm_compress"
+                ),
+                "enable_manual_context_compression": provider_settings.get(
+                    "enable_manual_context_compression", False
                 ),
                 "instruction": provider_settings.get("llm_compress_instruction", ""),
                 "keep_recent_ratio": provider_settings.get(

@@ -291,6 +291,16 @@ async def test_handle_chat_message_scopes_events_to_request_by_default():
             message_id,
             {
                 "type": "plain",
+                "data": '{"current_context_tokens": 42}',
+                "streaming": False,
+                "chain_type": "agent_stats",
+                "message_id": message_id,
+            },
+        )
+        await webchat_queue_mgr.put_back_queue(
+            message_id,
+            {
+                "type": "plain",
                 "data": "✅ Context compressed.",
                 "streaming": False,
                 "message_id": message_id,
@@ -314,9 +324,17 @@ async def test_handle_chat_message_scopes_events_to_request_by_default():
         assert [
             payload["data"] for payload in sent if payload.get("type") == "plain"
         ] == ["⏳ Compressing context...", "✅ Context compressed."]
+        assert [
+            payload["data"]
+            for payload in sent
+            if payload.get("type") == "agent_stats"
+        ] == [{"current_context_tokens": 42}]
         service.save_bot_message.assert_awaited_once()
-        saved_parts = service.save_bot_message.await_args.args[1]
-        assert saved_parts == [{"type": "plain", "text": "✅ Context compressed."}]
+        save_args = service.save_bot_message.await_args.args
+        assert save_args[1] == [
+            {"type": "plain", "text": "✅ Context compressed."}
+        ]
+        assert save_args[2] == {"current_context_tokens": 42}
     finally:
         if not task.done():
             task.cancel()
