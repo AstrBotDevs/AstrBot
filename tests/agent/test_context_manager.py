@@ -635,7 +635,7 @@ class TestContextManager:
         assert len(result) <= len(messages)
 
     @pytest.mark.asyncio
-    async def test_reported_usage_triggers_compression_before_provider_call(
+    async def test_trusted_usage_triggers_compression_before_provider_call(
         self, caplog
     ):
         caplog.set_level("INFO", logger="astrbot")
@@ -647,7 +647,7 @@ class TestContextManager:
         mock_compressor.should_compress = MagicMock(side_effect=[True, False])
         manager.compressor = mock_compressor
 
-        result = await manager.process(messages, reported_token_usage=83)
+        result = await manager.process(messages, trusted_token_usage=83)
 
         first_check = mock_compressor.should_compress.call_args_list[0]
         assert first_check.args == (messages, 83, 100)
@@ -658,7 +658,7 @@ class TestContextManager:
 
     @pytest.mark.asyncio
     async def test_force_compression_bypasses_automatic_guards(self):
-        """Forced compression ignores limits, reported usage, and truncation."""
+        """Forced compression ignores limits, trusted usage, and truncation."""
         config = ContextConfig(max_context_tokens=0, enforce_max_turns=1)
         manager = ContextManager(config)
         messages = self.create_messages(6)
@@ -674,7 +674,7 @@ class TestContextManager:
         ):
             result = await manager.process(
                 messages,
-                reported_token_usage=999,
+                trusted_token_usage=999,
                 force_compress=True,
             )
 
