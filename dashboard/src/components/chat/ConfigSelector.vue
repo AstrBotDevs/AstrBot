@@ -117,8 +117,8 @@ interface ConfigChangedPayload {
 }
 
 interface DashboardConfigProfile {
-  provider_settings?: {
-    agent_runner_type?: string;
+  agent_runner?: {
+    runner_type?: string;
   };
 }
 
@@ -256,7 +256,7 @@ async function getAgentRunnerType(confId: string): Promise<string> {
     const payload = res.data.data as
       { config?: DashboardConfigProfile } | undefined;
     const config = payload?.config || {};
-    const type = config?.provider_settings?.agent_runner_type || 'local';
+    const type = config?.agent_runner?.runner_type || 'local';
     configCache.value[confId] = type;
     return type;
   } catch (error) {

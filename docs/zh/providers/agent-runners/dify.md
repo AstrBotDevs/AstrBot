@@ -6,11 +6,11 @@
 
 ## 在 AstrBot 中配置 Dify
 
-在 WebUI 中，点击「模型提供商」->「新增提供商」，选择「Agent 执行器」，选择「Dify」，进入 Dify 的配置页面。
+在 WebUI 中，打开「配置」->「Agent 执行方式」，选择「Dify」，填写同页出现的 Dify 配置。
 
 ![image](https://files.astrbot.app/docs/source/images/dify/image.png)
 
-在 Dify 中，一个 `API Key` 唯一对应一个 Dify 应用。因此，您可以创建多个 Provider 以适配多个 Dify 应用。
+在 Dify 中，一个 `API Key` 唯一对应一个 Dify 应用。需要接入多个应用时，为每个应用创建一份配置文件。
 
 根据目前的 Dify 项目，一共有三种类型，分别是：
 
@@ -63,7 +63,7 @@ Workflow 应用接收输入变量，然后执行工作流，最后输出结果�
 
 ### 选择 Agent 执行器
 
-进入左边栏配置页面，点击「Agent 执行方式」，选择「Dify」，然后在下方出现的新的配置项中选择你刚刚创建的 Dify Agent 执行器的 ID，点击右下角「保存」，即可完成配置。
+进入左边栏配置页面，点击「Agent 执行方式」，选择「Dify」，填写 API Key 等配置后点击右下角「保存」，即可完成配置。
 
 ## 附录：在聊天时动态设置输入 Workflow 变量（可选）
 

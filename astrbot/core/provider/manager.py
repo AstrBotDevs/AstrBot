@@ -49,6 +49,13 @@ class ProviderManager:
         self.providers_config: list = config["provider"]
         self.provider_sources_config: list = config.get("provider_sources", [])
         self.provider_settings: dict = config["provider_settings"]
+        agent_runner = config.get("agent_runner", {})
+        agent_runner_config = agent_runner.get("config", {})
+        self.default_chat_provider_id = (
+            agent_runner_config.get("model", {}).get("provider_id", "")
+            if agent_runner.get("runner_type") == "local"
+            else ""
+        )
         self.provider_stt_settings: dict = config.get("provider_stt_settings", {})
         self.provider_tts_settings: dict = config.get("provider_tts_settings", {})
 
@@ -159,8 +166,32 @@ class ProviderManager:
                 prov,
                 Provider,
             ):
-                settings_key = "provider_settings"
-                selection = {"default_provider_id": provider_id}
+                config = self.acm.default_conf
+                next_config = copy.deepcopy(dict(config))
+                agent_runner = next_config.setdefault("agent_runner", {})
+                if agent_runner.get("runner_type", "local") != "local":
+                    return
+                runner_config = agent_runner.setdefault("config", {})
+                model_config = runner_config.setdefault("model", {})
+                model_config["provider_id"] = provider_id
+                previous = copy.deepcopy(dict(config))
+                config.clear()
+                config.update(next_config)
+                expected = copy.deepcopy(next_config)
+                try:
+                    committed = await config.save_config_async()
+                    if not committed:
+                        raise RuntimeError(
+                            "Provider selection was superseded by a newer configuration write."
+                        )
+                except BaseException:
+                    if dict(config) == expected:
+                        config.clear()
+                        config.update(previous)
+                    raise
+                self.default_chat_provider_id = provider_id
+                self._notify_provider_changed(provider_id, provider_type, umo)
+                return
 
             if settings_key is None:
                 return
@@ -288,7 +319,12 @@ class ProviderManager:
             # default setting
             config = self.acm.get_conf(umo)
             if provider_type == ProviderType.CHAT_COMPLETION:
-                provider_id = config["provider_settings"].get("default_provider_id")
+                agent_runner = config.get("agent_runner", {})
+                provider_id = (
+                    agent_runner.get("config", {}).get("model", {}).get("provider_id")
+                    if agent_runner.get("runner_type") == "local"
+                    else None
+                )
                 provider = self.inst_map.get(provider_id)
                 if not provider:
                     provider = self.provider_insts[0] if self.provider_insts else None

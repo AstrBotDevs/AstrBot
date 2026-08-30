@@ -6,7 +6,9 @@ import logging
 import os
 import tempfile
 import threading
+from pathlib import Path
 
+from astrbot.core.config.agent_runner_migration import migrate_config_on_load
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.auth_password import (
     generate_dashboard_password,
@@ -76,6 +78,8 @@ class AstrBotConfig(dict):
             )
         # 检查配置完整性，并插入
         has_new = self._migrate_openai_chat_completions_type(conf)
+        if default_config is DEFAULT_CONFIG:
+            has_new |= migrate_config_on_load(conf, Path(config_path))
         has_new |= self.check_config_integrity(default_config, conf)
         if self._should_reset_dashboard_password(conf):
             self._reset_generated_dashboard_password(conf)
@@ -252,6 +256,10 @@ class AstrBotConfig(dict):
             if not isinstance(conf[key], dict):
                 new_conf[key] = value
                 has_new = True
+                continue
+            if current_path == "agent_runner.config":
+                # Runner config is normalized according to runner_type when saved.
+                new_conf[key] = conf[key]
                 continue
             child_has_new = self.check_config_integrity(value, conf[key], current_path)
             new_conf[key] = conf[key]

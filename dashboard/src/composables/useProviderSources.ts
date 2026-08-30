@@ -103,13 +103,6 @@ export function resolveDefaultTab(value?: string) {
   const normalized = (value || '').toLowerCase();
 
   if (
-    normalized.startsWith('select_agent_runner_provider') ||
-    normalized === 'agent_runner'
-  ) {
-    return 'agent_runner';
-  }
-
-  if (
     normalized === 'select_provider_stt' ||
     normalized === 'speech_to_text' ||
     normalized.includes('stt')
@@ -177,11 +170,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       value: 'chat_completion',
       label: tm('providers.tabs.chatCompletion'),
       icon: 'mdi-message-text',
-    },
-    {
-      value: 'agent_runner',
-      label: tm('providers.tabs.agentRunner'),
-      icon: 'mdi-robot',
     },
     {
       value: 'speech_to_text',

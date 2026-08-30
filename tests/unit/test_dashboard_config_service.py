@@ -224,7 +224,11 @@ async def test_get_astrbot_config_redacts_sensitive_values(
                 {"id": "demo", "key": ["sk-live-1", "sk-live-2"]},
                 {"id": "embed", "embedding_api_key": "embed-secret"},
             ],
-            "provider_settings": {"default_provider_id": "demo"},
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"model": {"provider_id": "demo"}},
+            },
         },
     )
     service = config_service.ConfigDisplayService(
@@ -262,7 +266,7 @@ async def test_get_astrbot_config_redacts_sensitive_values(
         redacted["provider"][1]["embedding_api_key"]
         == config_service.REDACTED_SECRET_PLACEHOLDER
     )
-    assert redacted["provider_settings"]["default_provider_id"] == "demo"
+    assert redacted["agent_runner"]["config"]["model"]["provider_id"] == "demo"
 
 
 def test_inject_platform_metadata_with_i18n_rewrites_field_labels() -> None:
@@ -450,7 +454,11 @@ async def test_save_config_async_restores_redacted_sensitive_values(
                 {"id": "demo", "key": ["sk-live-1", "sk-live-2"]},
                 {"id": "embed", "embedding_api_key": "embed-secret"},
             ],
-            "provider_settings": {"default_provider_id": "demo"},
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"model": {"provider_id": "demo"}},
+            },
         }
     )
     posted = {
@@ -476,7 +484,11 @@ async def test_save_config_async_restores_redacted_sensitive_values(
                 "embedding_api_key": config_service.REDACTED_SECRET_PLACEHOLDER,
             },
         ],
-        "provider_settings": {"default_provider_id": "embed"},
+        "provider_settings": {},
+        "agent_runner": {
+            "runner_type": "local",
+            "config": {"model": {"provider_id": "embed"}},
+        },
     }
 
     await config_service.save_config_async(posted, current, is_core=True)
@@ -487,7 +499,7 @@ async def test_save_config_async_restores_redacted_sensitive_values(
     assert current.saved["dashboard"]["totp"]["recovery_code_hash"] == "recovery-hash"
     assert current.saved["provider"][0]["key"] == ["sk-live-1", "sk-live-2"]
     assert current.saved["provider"][1]["embedding_api_key"] == "embed-secret"
-    assert current.saved["provider_settings"]["default_provider_id"] == "embed"
+    assert current.saved["agent_runner"]["config"]["model"]["provider_id"] == "embed"
 
 
 @pytest.mark.asyncio

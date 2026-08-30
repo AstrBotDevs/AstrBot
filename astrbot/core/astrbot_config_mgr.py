@@ -6,6 +6,7 @@ from typing import TypedDict, TypeVar
 
 from astrbot import logger
 from astrbot.core.config import AstrBotConfig
+from astrbot.core.config.agent_runner_migration import finalize_config_migrations
 from astrbot.core.config.astrbot_config import ASTRBOT_CONFIG_PATH
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.platform.message_session import MessageSession
@@ -50,6 +51,14 @@ class AstrBotConfigManager:
 
     async def initialize(self) -> None:
         await self._load_all_configs()
+        configs = [
+            self.confs["default"],
+            *[conf for key, conf in self.confs.items() if key != "default"],
+        ]
+        if finalize_config_migrations(configs):
+            committed = await self.confs["default"].save_config_async()
+            if committed:
+                logger.info("Agent Runner configuration migration completed")
 
     def _get_abconf_data(self) -> dict[str, dict[str, str]]:
         """获取所有的 abconf 数据"""

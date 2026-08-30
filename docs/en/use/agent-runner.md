@@ -35,16 +35,10 @@ Platforms like Dify, Coze, Bailian Application, and DeerFlow have this loop buil
 
 By default, the AstrBot Built-in Agent Runner is the default runner. Using the default runner can already meet most needs, and you can use AstrBot's MCP, knowledge base, web search, and other features.
 
-If you need to use the capabilities of platforms like Dify, Coze, Bailian Application, or DeerFlow, you can create an Agent Runner and select the corresponding provider.
+If you need Dify, Coze, Bailian Application, or DeerFlow, switch the runner type on the configuration profile and fill in that runner's settings. Switching types loads the new type's defaults and does not keep the previous type's fields.
 
-## Creating an Agent Runner
+## Configure an Agent Runner
 
-![image](https://files.astrbot.app/docs/source/images/use/agent-runner/image-1.png)
+In the WebUI, open Configuration -> Agent Execution Method, choose a runner type, fill in that type's fields on the same page (API key, app ID, and so on), and save.
 
-In the WebUI, click "Model Provider" -> "Add Provider", select "Agent Runner", choose the platform or runner type you want to connect to, and fill in the relevant information.
-
-## Changing the Default Agent Runner
-
-![image](https://files.astrbot.app/docs/source/images/use/agent-runner/image.png)
-
-In the WebUI, click "Configuration" -> "Agent Execution Method", change the runner type to the Agent Runner type you just created, then select `XX Agent Runner Provider ID` as the ID of the Agent Runner provider you just created, and click save.
+The built-in Agent's chat model, persona, compression, and tool settings also live on the same profile. They are no longer separate model providers.

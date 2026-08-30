@@ -6,7 +6,7 @@ If you haven't installed Dify yet, please refer to the [Dify Installation Docume
 
 ## Configure Dify in AstrBot
 
-In the WebUI, click "Model Provider" -> "Add Provider", select "Agent Runner", select "Dify", and enter the Dify configuration page.
+In the WebUI, open Configuration -> Agent Execution Method, select Dify, and fill in the Dify fields on the same page.
 
 ![image](https://files.astrbot.app/docs/source/images/dify/image.png)
 
@@ -63,7 +63,7 @@ Copy the key and paste it into the `API Key` field in the configuration, then cl
 
 ### Select Agent Runner
 
-Go to the Configuration page in the left sidebar, click "Agent Execution Method", select "Dify", then select the ID of the Dify Agent Runner you just created in the new configuration options that appear below, and click "Save" in the bottom right corner to complete the configuration.
+Go to the Configuration page in the left sidebar, click "Agent Execution Method", select "Dify", fill in the API key and related fields, and click "Save" in the bottom right corner.
 
 ## Appendix: Dynamically Set Workflow Input Variables During Chat (Optional)
 

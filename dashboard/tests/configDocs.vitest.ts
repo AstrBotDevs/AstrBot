@@ -125,8 +125,10 @@ describe('config docs links', () => {
         iterable: {
           provider_settings: {
             enable: true,
-            agent_runner_type: 'local',
             proactive_capability: { add_cron_tools: false },
+          },
+          agent_runner: {
+            runner_type: 'local',
           },
         },
         metadataKey: 'proactive_capability',

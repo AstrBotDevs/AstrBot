@@ -427,12 +427,13 @@ class CronJobManager:
         cfg = self.ctx.get_config(umo=umo)
 
         provider_settings = cfg.get("provider_settings", {})
-        tool_call_timeout = provider_settings.get("tool_call_timeout", 120)
+        misc_config = cfg.get("agent_runner", {}).get("config", {}).get("misc", {})
+        tool_call_timeout = misc_config.get("tool_call_timeout", 120)
         max_agent_step = coerce_int_config(
-            provider_settings.get("max_agent_step", 30),
+            misc_config.get("max_steps", 30),
             default=30,
             min_value=1,
-            field_name="provider_settings.max_agent_step",
+            field_name="agent_runner.config.misc.max_steps",
         )
         config = MainAgentBuildConfig(
             tool_call_timeout=tool_call_timeout,

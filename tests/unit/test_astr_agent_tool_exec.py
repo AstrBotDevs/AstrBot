@@ -536,7 +536,20 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
         parameters={"type": "object", "properties": {}},
     )
     context = SimpleNamespace(
-        get_config=lambda **_kwargs: {"provider_settings": provider_settings},
+        get_config=lambda **_kwargs: {
+            "provider_settings": provider_settings,
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {
+                    "misc": {
+                        "max_steps": provider_settings.get("max_agent_step", 30),
+                        "tool_call_timeout": provider_settings.get(
+                            "tool_call_timeout", 120
+                        ),
+                    }
+                },
+            },
+        },
         get_llm_tool_manager=lambda: SimpleNamespace(
             get_builtin_tool=lambda _tool_cls: send_tool
         ),
@@ -646,7 +659,15 @@ async def test_background_wakeup_applies_max_agent_step(
         parameters={"type": "object", "properties": {}},
     )
     context = SimpleNamespace(
-        get_config=lambda **_kwargs: {"provider_settings": dict(provider_settings)},
+        get_config=lambda **_kwargs: {
+            "provider_settings": dict(provider_settings),
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {
+                    "misc": {"max_steps": provider_settings.get("max_agent_step", 30)}
+                },
+            },
+        },
         get_llm_tool_manager=lambda: SimpleNamespace(
             get_builtin_tool=lambda _tool_cls: send_tool
         ),

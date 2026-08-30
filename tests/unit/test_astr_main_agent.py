@@ -2007,9 +2007,8 @@ class TestBuildMainAgent:
                     llm_safety_mode=False,
                     computer_use_runtime="none",
                     add_cron_tools=False,
-                    provider_settings={
-                        "fallback_chat_models": ["image-provider"],
-                    },
+                    fallback_provider_ids=["image-provider"],
+                    provider_settings={},
                 ),
                 provider=text_provider,
                 req=req,
@@ -2064,9 +2063,8 @@ class TestBuildMainAgent:
                     llm_safety_mode=False,
                     computer_use_runtime="none",
                     add_cron_tools=False,
-                    provider_settings={
-                        "fallback_chat_models": ["missing-provider"],
-                    },
+                    fallback_provider_ids=["missing-provider"],
+                    provider_settings={},
                 ),
                 provider=text_provider,
                 req=req,

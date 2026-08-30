@@ -576,7 +576,6 @@ export interface BotListParams {
 export interface ProviderListParams {
   provider_type?:
     | 'chat_completion'
-    | 'agent_runner'
     | 'speech_to_text'
     | 'text_to_speech'
     | 'embedding'

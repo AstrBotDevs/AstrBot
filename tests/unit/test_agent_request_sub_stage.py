@@ -78,6 +78,7 @@ sys.modules[
 agent_request = importlib.import_module(
     "astrbot.core.pipeline.process_stage.method.agent_request"
 )
+agent_request = importlib.reload(agent_request)
 
 if _original_process_stage_module is not None:
     sys.modules["astrbot.core.pipeline.process_stage.stage"] = (
@@ -153,7 +154,12 @@ def _ctx(
             "provider_settings": {
                 "enable": provider_enable,
                 "wake_prefix": wake_prefix,
-                "agent_runner_type": agent_runner_type,
+                "streaming_response": False,
+                "unsupported_streaming_strategy": "turn_off",
+            },
+            "agent_runner": {
+                "runner_type": agent_runner_type,
+                "config": {},
             },
         },
     )
@@ -173,7 +179,7 @@ async def test_initialize_uses_internal_stage_and_strips_overlapping_wake_prefix
 @pytest.mark.asyncio
 async def test_initialize_uses_third_party_stage_for_non_local_runner():
     stage = agent_request.AgentRequestSubStage()
-    ctx = _ctx(agent_runner_type="remote", wake_prefix="!llm")
+    ctx = _ctx(agent_runner_type="dify", wake_prefix="!llm")
 
     await stage.initialize(ctx)
 

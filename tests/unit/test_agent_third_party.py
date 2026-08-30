@@ -482,27 +482,13 @@ async def test_resolve_persona_custom_error_message_returns_none_on_failure(
 
 
 @pytest.mark.asyncio
-async def test_third_party_process_returns_when_provider_id_missing(monkeypatch):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(
-        third_party.ThirdPartyAgentSubStage
-    )
-    event = FakeInternalProcessEvent(message_str="hello")
-    stage.conf = {"provider": [], "provider_settings": {}}
-    stage.prov_id = ""
-
-    yielded = [item async for item in stage.process(event)]
-
-    assert yielded == []
-
-
-@pytest.mark.asyncio
 async def test_third_party_process_uses_json_card_summary_when_prompt_is_empty(
     monkeypatch,
 ):
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
@@ -572,7 +558,7 @@ async def test_third_party_process_returns_early_when_request_has_no_prompt_or_m
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.ctx = _pipeline_context(SimpleNamespace())
     stage.conf = {"provider": [{"id": "runner-1"}]}
@@ -589,7 +575,7 @@ async def test_third_party_process_raises_for_unsupported_runner_type(monkeypatc
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "unknown"
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
@@ -617,7 +603,7 @@ async def test_third_party_process_uses_non_streaming_path_when_event_disables_s
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "ignore"
@@ -693,7 +679,7 @@ async def test_third_party_process_turns_streaming_into_general_when_platform_do
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "turn_off"
@@ -767,7 +753,7 @@ async def test_third_party_process_closes_runner_when_streaming_handler_raises_b
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "ignore"
@@ -854,7 +840,7 @@ async def test_third_party_process_closes_runner_when_reset_raises_and_skips_met
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
@@ -913,7 +899,7 @@ async def test_third_party_process_closes_runner_when_non_streaming_handler_rais
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
@@ -972,61 +958,11 @@ async def test_third_party_process_closes_runner_when_non_streaming_handler_rais
 
 
 @pytest.mark.asyncio
-async def test_third_party_process_returns_early_when_provider_id_missing(monkeypatch):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(
-        third_party.ThirdPartyAgentSubStage
-    )
-    stage.prov_id = ""
-    stage.runner_type = "dify"
-    stage.streaming_response = False
-    stage.unsupported_streaming_strategy = "ignore"
-    stage.ctx = _pipeline_context(SimpleNamespace())
-    stage.conf = {"provider_settings": {}}
-    event = FakeInternalProcessEvent(message_str="ask hello")
-    logger_error = MagicMock()
-
-    stage.conf["provider"] = []
-    monkeypatch.setattr(third_party.logger, "error", logger_error)
-
-    yielded = [item async for item in stage.process(event)]
-
-    assert yielded == []
-    logger_error.assert_called_once()
-    assert event.result_history == []
-
-
-@pytest.mark.asyncio
-async def test_third_party_process_returns_early_when_provider_config_missing(
-    monkeypatch,
-):
-    stage = third_party.ThirdPartyAgentSubStage.__new__(
-        third_party.ThirdPartyAgentSubStage
-    )
-    stage.prov_id = "runner-1"
-    stage.runner_type = "dify"
-    stage.streaming_response = False
-    stage.unsupported_streaming_strategy = "ignore"
-    stage.ctx = _pipeline_context(SimpleNamespace())
-    stage.conf = {"provider_settings": {}}
-    event = FakeInternalProcessEvent(message_str="ask hello")
-    logger_error = MagicMock()
-
-    stage.conf["provider"] = []
-    monkeypatch.setattr(third_party.logger, "error", logger_error)
-
-    yielded = [item async for item in stage.process(event)]
-
-    assert yielded == []
-    logger_error.assert_called_once()
-    assert event.result_history == []
-
-
-@pytest.mark.asyncio
 async def test_third_party_process_stops_when_llm_request_hook_blocks(monkeypatch):
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "ignore"
@@ -1066,7 +1002,7 @@ async def test_third_party_process_watchdog_closes_runner_when_stream_never_cons
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "ignore"
@@ -1141,7 +1077,7 @@ async def test_third_party_process_builds_media_only_request_and_uses_non_stream
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
@@ -1221,7 +1157,7 @@ async def test_third_party_process_inlines_qq_face_component_and_quote_context(
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.streaming_response = False
     stage.unsupported_streaming_strategy = "ignore"
@@ -1302,7 +1238,7 @@ async def test_third_party_process_streaming_consumed_closes_runner_after_stream
     stage = third_party.ThirdPartyAgentSubStage.__new__(
         third_party.ThirdPartyAgentSubStage
     )
-    stage.prov_id = "runner-1"
+    stage.runner_config = {"dify_api_key": "k"}
     stage.runner_type = "dify"
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "ignore"

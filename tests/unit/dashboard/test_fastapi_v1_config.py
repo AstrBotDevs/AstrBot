@@ -84,7 +84,11 @@ async def test_v1_system_config_update_preserves_independent_bot_provider_sectio
     payload["platform"] = []
     payload["provider_sources"] = []
     payload["provider"] = []
-    payload["provider_settings"] = {"default_provider_id": "gpt-mini"}
+    payload["provider_settings"] = {}
+    payload["agent_runner"] = {
+        "runner_type": "local",
+        "config": {"model": {"provider_id": "gpt-mini"}},
+    }
 
     response = await asgi_client.put(
         "/api/v1/system-config",
@@ -100,9 +104,12 @@ async def test_v1_system_config_update_preserves_independent_bot_provider_sectio
         == original_provider_sources
     )
     assert fake_core_lifecycle.astrbot_config["provider"] == original_providers
-    assert fake_core_lifecycle.astrbot_config["provider_settings"] == {
-        "default_provider_id": "gpt-mini"
-    }
+    assert (
+        fake_core_lifecycle.astrbot_config["agent_runner"]["config"]["model"][
+            "provider_id"
+        ]
+        == "gpt-mini"
+    )
     assert fake_core_lifecycle.reloaded_config_ids == ["default"]
 
 

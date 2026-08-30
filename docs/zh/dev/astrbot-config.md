@@ -30,11 +30,12 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 | 键                                                | 用途                                                                                         |
 | ------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `config_version`                                  | 当前核心配置结构版本，默认 `2`，不要手动降级。                                               |
+| `config_version`                                  | 当前核心配置结构版本，默认 `3`，不要手动降级。                                               |
 | `platform_settings`                               | 所有消息平台共用的收发、白名单、限流和分段回复行为。                                         |
 | `provider_sources`                                | API 端点和凭据等 Provider 来源。由“提供商”页面维护。                                         |
 | `provider`                                        | 具体聊天、STT、TTS、Embedding、Rerank 等模型实例。                                           |
-| `provider_settings`                               | 当前配置档的 Agent、默认模型、Persona、检索、上下文和工具行为。                              |
+| `agent_runner`                                    | 当前配置档的 Agent 执行器类型及其内联配置。                                                  |
+| `provider_settings`                               | 当前配置档的 AI 开关、检索、流式输出、Computer Use 等共用行为。                              |
 | `subagent_orchestrator`                           | 子代理 handoff 编排。                                                                        |
 | `provider_stt_settings` / `provider_tts_settings` | 语音转文本和文本转语音默认模型及开关。                                                       |
 | `provider_ltm_settings`                           | 旧名称下的群聊上下文、图片转述和主动回复设置；不是 Alkaid 长期记忆的数据开关。               |
@@ -135,11 +136,10 @@ Persona 的选择优先级和权限语义见 [Persona 人格设定](../use/perso
 
 ### Agent Runner 与工具
 
-- `agent_runner_type`：`local` 使用内置 Agent；也可选择已配置的 Dify、Coze、DashScope 或 DeerFlow Runner。
-- `*_agent_runner_provider_id`：对应外部 Runner 的 Provider ID。
-- `max_agent_step`：单次 Agent 运行最大 step，默认 `30`，也适用于当前子代理执行。
-- `tool_call_timeout`：单次工具调用超时秒数，默认 `120`。
-- `tool_schema_mode`：`full` 发送完整工具 schema；`skills_like` 使用较轻的两阶段 schema。
+- `agent_runner.runner_type`：`local` 使用内置 Agent；也可选择 Dify、Coze、DashScope 或 DeerFlow。第三方 Runner 的密钥和应用 ID 写在 `agent_runner.config` 中。
+- `agent_runner.config.misc.max_steps`：单次 Agent 运行最大 step，默认 `30`，也适用于当前子代理执行。
+- `agent_runner.config.misc.tool_call_timeout`：单次工具调用超时秒数，默认 `120`。
+- `agent_runner.config.misc.tool_schema_mode`：`full` 发送完整工具 schema；`skills_like` 使用较轻的两阶段 schema。
 - `show_tool_use_status` / `show_tool_call_result`：向用户显示工具状态及结果摘要。
 - `buffer_intermediate_messages`：非流式多 step 运行时合并中间文本。
 - `sanitize_context_by_modalities`：按当前模型能力清理历史中的不支持模态和工具结构，会改变模型实际看到的上下文。

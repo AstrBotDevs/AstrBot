@@ -19,7 +19,7 @@ Make sure DeerFlow is running properly and that AstrBot can reach the DeerFlow g
 
 ## Configure DeerFlow in AstrBot
 
-In the WebUI, click "Model Provider" -> "Add Provider", select "Agent Runner", select "DeerFlow", and enter the DeerFlow configuration page.
+In the WebUI, open Configuration -> Agent Execution Method, select DeerFlow, and fill in the DeerFlow fields on the same page.
 
 Fill in the following fields:
 
@@ -43,7 +43,7 @@ After filling in the configuration, click Save.
 
 ## Select Agent Runner
 
-Go to the Configuration page in the left sidebar, click "Agent Execution Method", select "DeerFlow", then select the ID of the DeerFlow Agent Runner you just created in the new configuration option below, and click "Save" in the bottom right corner to complete the configuration.
+Go to the Configuration page in the left sidebar, click "Agent Execution Method", select "DeerFlow", fill in the API fields, and click "Save" in the bottom right corner.
 
 ## Common Checks
 

@@ -15,9 +15,14 @@ def _execution(
     return SimpleNamespace(
         astrbot_config_mgr=SimpleNamespace(
             get_conf=lambda _umo: {
-                "provider_settings": {
-                    "agent_runner_type": agent_runner_type,
-                    "deerflow_agent_runner_provider_id": "deerflow-runner",
+                "agent_runner": {
+                    "runner_type": agent_runner_type,
+                    "config": {
+                        "deerflow_api_base": "http://127.0.0.1:2026",
+                        "deerflow_api_key": "token",
+                        "deerflow_auth_header": "",
+                        "proxy": "",
+                    },
                 }
             }
         ),

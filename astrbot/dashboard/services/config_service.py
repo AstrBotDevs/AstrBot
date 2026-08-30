@@ -10,6 +10,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from astrbot import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.config.agent_runner import (
+    get_agent_runner_config_default,
+    normalize_agent_runner,
+)
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import (
     CONFIG_METADATA_2,
@@ -659,6 +663,16 @@ async def save_config_async(
 
     if is_core:
         _log_computer_config_changes(current_config, post_config)
+        try:
+            post_config["agent_runner"] = normalize_agent_runner(
+                post_config.get("agent_runner")
+                or {
+                    "runner_type": "local",
+                    "config": get_agent_runner_config_default("local"),
+                }
+            )
+        except ValueError as exc:
+            raise DashboardValidationError(str(exc)) from exc
 
     try:
         if is_core:
@@ -782,7 +796,15 @@ class ConfigProfileService:
         name: str | None,
         config: dict | None,
     ) -> dict:
-        conf_id = await self.acm.create_conf(name=name, config=config or DEFAULT_CONFIG)
+        profile_config = copy.deepcopy(config or DEFAULT_CONFIG)
+        if "agent_runner" in profile_config:
+            try:
+                profile_config["agent_runner"] = normalize_agent_runner(
+                    profile_config["agent_runner"]
+                )
+            except ValueError as exc:
+                raise DashboardValidationError(str(exc)) from exc
+        conf_id = await self.acm.create_conf(name=name, config=profile_config)
         await self.core_control.reload_pipeline_scheduler(conf_id)
         return {"conf_id": conf_id}
 
@@ -1797,6 +1819,8 @@ class ProviderConfigService:
         providers = []
         model_metadata = {}
         for provider in self.provider_manager.providers_config:
+            if provider.get("provider_type") == "agent_runner":
+                continue
             if (
                 provider_source_id
                 and provider.get("provider_source_id") != provider_source_id

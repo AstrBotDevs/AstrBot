@@ -1,5 +1,6 @@
 from astrbot import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.config.agent_runner import get_persona_id
 from astrbot.core.db.po import Persona, PersonaFolder
 from astrbot.core.db.protocols import PersonaStore
 from astrbot.core.persona_runtime.models import Personality
@@ -28,8 +29,9 @@ class PersonaManager:
         self.db = db_helper
         self.acm = acm
         self.preferences = preferences
-        default_ps = acm.default_conf.get("provider_settings", {})
-        self.default_persona: str = default_ps.get("default_personality", "default")
+        self.default_persona: str = get_persona_id(
+            acm.default_conf.get("agent_runner", {})
+        )
         self.personas: list[Persona] = []
         self.runtime_personas: list[Personality] = []
         self.selected_runtime_persona: Personality | None = None
@@ -72,10 +74,7 @@ class PersonaManager:
     ) -> Personality:
         """获取默认 persona"""
         cfg = self.acm.get_conf(umo)
-        default_persona_id = cfg.get("provider_settings", {}).get(
-            "default_personality",
-            "default",
-        )
+        default_persona_id = get_persona_id(cfg.get("agent_runner", {}))
         return self.get_runtime_persona_by_id(default_persona_id) or DEFAULT_PERSONALITY
 
     async def resolve_selected_persona(
@@ -113,7 +112,12 @@ class PersonaManager:
             if persona_id == "[%None]":
                 pass
             elif persona_id is None:
-                persona_id = (provider_settings or {}).get("default_personality")
+                cfg = self.acm.get_conf(umo)
+                persona_id = get_persona_id(cfg.get("agent_runner", {}))
+                if provider_settings:
+                    persona_id = provider_settings.get(
+                        "default_personality", persona_id
+                    )
 
         persona = next(
             (item for item in self.runtime_personas if item["name"] == persona_id),

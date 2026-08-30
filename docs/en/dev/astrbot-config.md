@@ -30,11 +30,12 @@ At startup, AstrBot recursively inserts missing current defaults, fixes key orde
 
 | Key                                               | Purpose                                                                                                                                |
 | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `config_version`                                  | Current core configuration version, default `2`. Do not downgrade it manually.                                                         |
+| `config_version`                                  | Current core configuration version, default `3`. Do not downgrade it manually.                                                         |
 | `platform_settings`                               | Cross-platform receive, send, allowlist, rate-limit, and segmented-reply behavior.                                                     |
 | `provider_sources`                                | Provider endpoints and credentials, maintained by the Providers page.                                                                  |
 | `provider`                                        | Concrete chat, STT, TTS, embedding, rerank, and other model instances.                                                                 |
-| `provider_settings`                               | Agent, default-model, Persona, retrieval, context, and tool behavior for this profile.                                                 |
+| `agent_runner`                                    | Agent Runner type and inline configuration for this profile.                                                                           |
+| `provider_settings`                               | Shared AI switch, retrieval, streaming, and Computer Use behavior for this profile.                                                    |
 | `subagent_orchestrator`                           | SubAgent handoff orchestration.                                                                                                        |
 | `provider_stt_settings` / `provider_tts_settings` | Default speech-to-text and text-to-speech models and switches.                                                                         |
 | `provider_ltm_settings`                           | Group-context, image-caption, and proactive-reply settings under a historical name; it is not the Alkaid long-term-memory switch.      |
@@ -133,11 +134,10 @@ See [Automatic Context Compression](../use/context-compress) for the full behavi
 
 ### Agent Runner and tools
 
-- `agent_runner_type` selects the built-in `local` Agent or a configured Dify, Coze, DashScope, or DeerFlow runner.
-- `*_agent_runner_provider_id` selects the Provider record for an external runner.
-- `max_agent_step` defaults to `30` and also applies to current SubAgent executions.
-- `tool_call_timeout` is the per-tool timeout in seconds, default `120`.
-- `tool_schema_mode` uses `full` schemas or the lighter two-stage `skills_like` mode.
+- `agent_runner.runner_type` selects the built-in `local` Agent or Dify, Coze, DashScope, or DeerFlow. Third-party keys and app IDs live in `agent_runner.config`.
+- `agent_runner.config.misc.max_steps` defaults to `30` and also applies to current SubAgent executions.
+- `agent_runner.config.misc.tool_call_timeout` is the per-tool timeout in seconds, default `120`.
+- `agent_runner.config.misc.tool_schema_mode` uses `full` schemas or the lighter two-stage `skills_like` mode.
 - `show_tool_use_status` / `show_tool_call_result` expose tool state and a result preview to users.
 - `buffer_intermediate_messages` combines intermediate text during non-streaming multi-step runs.
 - `sanitize_context_by_modalities` removes unsupported modalities and tool structures according to the current model, changing the history seen by that model.

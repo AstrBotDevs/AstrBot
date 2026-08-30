@@ -86,7 +86,7 @@ def _pipeline_context(execution_context: SimpleNamespace) -> SimpleNamespace:
         execution_context.metrics = SimpleNamespace(upload=AsyncMock())
     return SimpleNamespace(
         execution_context=execution_context,
-        handlers=SimpleNamespace(),
+        handlers=SimpleNamespace(get_handlers_by_event_type=lambda *_args, **_kwargs: []),
         plugins=SimpleNamespace(),
     )
 

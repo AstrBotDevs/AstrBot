@@ -99,7 +99,11 @@ def _build_manager(config: dict | None = None) -> ProviderManager:
     default_config = config or {
         "provider": [],
         "provider_sources": [],
-        "provider_settings": {"default_provider_id": "default-provider"},
+        "provider_settings": {},
+        "agent_runner": {
+            "runner_type": "local",
+            "config": {"model": {"provider_id": "default-provider"}},
+        },
         "provider_stt_settings": {"enable": False, "provider_id": None},
         "provider_tts_settings": {"enable": False, "provider_id": None},
     }
@@ -328,7 +332,7 @@ async def test_set_provider_updates_global_defaults_for_chat_stt_and_tts(monkeyp
     await manager.set_provider("tts-global", ProviderType.TEXT_TO_SPEECH)
 
     assert (
-        manager.acm.default_conf["provider_settings"]["default_provider_id"]
+        manager.acm.default_conf["agent_runner"]["config"]["model"]["provider_id"]
         == "chat-global"
     )
     assert (
@@ -354,7 +358,7 @@ async def test_set_provider_rolls_back_global_selection_when_persistence_fails()
         manager.provider_settings,
     )
     manager.inst_map["chat-new"] = provider
-    previous_settings = copy.deepcopy(manager.acm.default_conf["provider_settings"])
+    previous_config = copy.deepcopy(dict(manager.acm.default_conf))
     hook = MagicMock()
     manager.register_provider_change_hook(hook)
     manager.acm.default_conf.save_config_async.side_effect = OSError("disk unavailable")
@@ -362,7 +366,7 @@ async def test_set_provider_rolls_back_global_selection_when_persistence_fails()
     with pytest.raises(OSError, match="disk unavailable"):
         await manager.set_provider("chat-new", ProviderType.CHAT_COMPLETION)
 
-    assert manager.acm.default_conf["provider_settings"] == previous_settings
+    assert dict(manager.acm.default_conf) == previous_config
     hook.assert_not_called()
 
 
@@ -378,9 +382,8 @@ async def test_set_provider_does_not_roll_back_a_newer_global_selection():
     manager.register_provider_change_hook(hook)
 
     async def superseded_by_newer_selection() -> bool:
-        manager.acm.default_conf["provider_settings"].clear()
-        manager.acm.default_conf["provider_settings"].update(
-            {"default_provider_id": "chat-newer"}
+        manager.acm.default_conf["agent_runner"]["config"]["model"]["provider_id"] = (
+            "chat-newer"
         )
         return False
 
@@ -391,9 +394,10 @@ async def test_set_provider_does_not_roll_back_a_newer_global_selection():
     with pytest.raises(RuntimeError, match="superseded"):
         await manager.set_provider("chat-new", ProviderType.CHAT_COMPLETION)
 
-    assert manager.acm.default_conf["provider_settings"] == {
-        "default_provider_id": "chat-newer"
-    }
+    assert (
+        manager.acm.default_conf["agent_runner"]["config"]["model"]["provider_id"]
+        == "chat-newer"
+    )
     hook.assert_not_called()
 
 
@@ -474,7 +478,11 @@ def test_get_provider_config_by_id_can_merge_provider_source():
                     "timeout": 30,
                 }
             ],
-            "provider_settings": {"default_provider_id": "chat-1"},
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"model": {"provider_id": "chat-1"}},
+            },
             "provider_stt_settings": {"enable": False, "provider_id": None},
             "provider_tts_settings": {"enable": False, "provider_id": None},
         }
@@ -507,7 +515,11 @@ def test_get_using_provider_warns_when_configured_provider_is_missing(monkeypatc
         {
             "provider": [],
             "provider_sources": [],
-            "provider_settings": {"default_provider_id": "missing-chat"},
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"model": {"provider_id": "missing-chat"}},
+            },
             "provider_stt_settings": {"enable": True, "provider_id": "missing-stt"},
             "provider_tts_settings": {"enable": True, "provider_id": "missing-tts"},
         }
@@ -542,7 +554,11 @@ async def test_load_provider_merges_source_initializes_and_selects_default(
                     "base_url": "https://example.test",
                 },
             ],
-            "provider_settings": {"default_provider_id": "chat-1"},
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"model": {"provider_id": "chat-1"}},
+            },
             "provider_stt_settings": {"enable": False, "provider_id": None},
             "provider_tts_settings": {"enable": False, "provider_id": None},
         },
@@ -583,7 +599,11 @@ async def test_load_provider_selects_default_tts_from_tts_settings(monkeypatch):
         {
             "provider": [],
             "provider_sources": [],
-            "provider_settings": {"default_provider_id": "chat-default"},
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"model": {"provider_id": "chat-default"}},
+            },
             "provider_stt_settings": {"enable": False, "provider_id": None},
             "provider_tts_settings": {"enable": True, "provider_id": "tts-1"},
         },
@@ -618,7 +638,11 @@ async def test_load_provider_replaces_existing_current_tts_when_configured_defau
         {
             "provider": [],
             "provider_sources": [],
-            "provider_settings": {"default_provider_id": "chat-default"},
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"model": {"provider_id": "chat-default"}},
+            },
             "provider_stt_settings": {"enable": False, "provider_id": None},
             "provider_tts_settings": {"enable": True, "provider_id": "tts-target"},
         },
@@ -813,7 +837,11 @@ async def test_initialize_selects_defaults_and_starts_mcp_init(monkeypatch):
                 {"id": "chat-b", "enable": True},
             ],
             "provider_sources": [],
-            "provider_settings": {"default_provider_id": "chat-a"},
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"model": {"provider_id": "chat-a"}},
+            },
             "provider_stt_settings": {"enable": True, "provider_id": "stt-a"},
             "provider_tts_settings": {"enable": True, "provider_id": "tts-a"},
         }
@@ -872,7 +900,11 @@ async def test_initialize_continues_after_load_provider_failure(monkeypatch):
                 {"id": "chat-ok", "enable": True},
             ],
             "provider_sources": [],
-            "provider_settings": {"default_provider_id": "chat-ok"},
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"model": {"provider_id": "chat-ok"}},
+            },
             "provider_stt_settings": {"enable": False, "provider_id": None},
             "provider_tts_settings": {"enable": False, "provider_id": None},
         }
@@ -913,7 +945,11 @@ async def test_initialize_falls_back_when_persisted_provider_ids_have_wrong_type
         {
             "provider": [{"id": "chat-a", "enable": True}],
             "provider_sources": [],
-            "provider_settings": {"default_provider_id": "chat-a"},
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"model": {"provider_id": "chat-a"}},
+            },
             "provider_stt_settings": {"enable": True, "provider_id": "stt-a"},
             "provider_tts_settings": {"enable": True, "provider_id": "tts-a"},
         }
@@ -1026,7 +1062,11 @@ async def test_reload_terminates_removed_provider_and_auto_selects_remaining(
                 {"id": "chat-b", "enable": True},
             ],
             "provider_sources": [],
-            "provider_settings": {"default_provider_id": "chat-a"},
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"model": {"provider_id": "chat-a"}},
+            },
             "provider_stt_settings": {"enable": False, "provider_id": None},
             "provider_tts_settings": {"enable": False, "provider_id": None},
         }
@@ -1075,7 +1115,11 @@ async def test_reload_loads_enabled_provider_and_prunes_out_of_config_instances(
                 {"id": "chat-keep", "enable": True},
             ],
             "provider_sources": [],
-            "provider_settings": {"default_provider_id": "chat-new"},
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"model": {"provider_id": "chat-new"}},
+            },
             "provider_stt_settings": {"enable": False, "provider_id": None},
             "provider_tts_settings": {"enable": False, "provider_id": None},
         }
@@ -1140,7 +1184,11 @@ async def test_reload_auto_selects_stt_and_tts_when_current_instances_are_none(
                 {"id": "tts-a", "enable": True},
             ],
             "provider_sources": [],
-            "provider_settings": {"default_provider_id": "chat-a"},
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"model": {"provider_id": "chat-a"}},
+            },
             "provider_stt_settings": {"enable": True, "provider_id": "stt-a"},
             "provider_tts_settings": {"enable": True, "provider_id": "tts-a"},
         }
@@ -1194,7 +1242,11 @@ async def test_delete_provider_by_source_id_terminates_matching_instances_and_sa
                 {"id": "chat-c", "provider_source_id": "source-2"},
             ],
             "provider_sources": [],
-            "provider_settings": {"default_provider_id": "chat-a"},
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"model": {"provider_id": "chat-a"}},
+            },
             "provider_stt_settings": {"enable": False, "provider_id": None},
             "provider_tts_settings": {"enable": False, "provider_id": None},
         }
@@ -1229,7 +1281,11 @@ async def test_update_provider_persists_new_config_and_reloads():
                 {"id": "chat-a", "type": "old-type", "enable": True},
             ],
             "provider_sources": [],
-            "provider_settings": {"default_provider_id": "chat-a"},
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"model": {"provider_id": "chat-a"}},
+            },
             "provider_stt_settings": {"enable": False, "provider_id": None},
             "provider_tts_settings": {"enable": False, "provider_id": None},
         }
@@ -1289,7 +1345,11 @@ async def test_update_provider_does_not_reload_when_config_persistence_fails():
                 {"id": "chat-a", "type": "old-type", "enable": True},
             ],
             "provider_sources": [],
-            "provider_settings": {"default_provider_id": "chat-a"},
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"model": {"provider_id": "chat-a"}},
+            },
             "provider_stt_settings": {"enable": False, "provider_id": None},
             "provider_tts_settings": {"enable": False, "provider_id": None},
         }

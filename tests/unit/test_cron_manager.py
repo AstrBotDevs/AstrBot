@@ -659,6 +659,16 @@ class TestRunActiveAgentJob:
         ctx = MagicMock()
         ctx.get_config.return_value = {
             "provider_settings": provider_settings,
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {
+                    "misc": {
+                        "tool_call_timeout": provider_settings.get(
+                            "tool_call_timeout", 120
+                        )
+                    }
+                },
+            },
         }
         cron_manager.ctx = ctx
 
@@ -756,6 +766,12 @@ class TestRunActiveAgentJob:
         ctx = MagicMock()
         ctx.get_config.return_value = {
             "provider_settings": dict(provider_settings),
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {
+                    "misc": {"max_steps": provider_settings.get("max_agent_step", 30)}
+                },
+            },
         }
         cron_manager.ctx = ctx
 

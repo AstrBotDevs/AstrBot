@@ -196,13 +196,20 @@ type StepState = 'pending' | 'completed' | 'skipped';
 type ComputerAccessRuntime = 'local' | 'none';
 
 interface ProviderSettings {
-  default_provider_id?: string;
   computer_use_runtime?: unknown;
   [key: string]: unknown;
 }
 
 interface DefaultConfigPayload {
   provider_settings?: ProviderSettings;
+  agent_runner?: {
+    runner_type?: string;
+    config?: {
+      model?: {
+        provider_id?: string;
+      };
+    };
+  };
   [key: string]: unknown;
 }
 
@@ -369,14 +376,15 @@ async function syncDefaultConfigProviderIfNeeded() {
   if (!targetProviderId) return;
 
   const configData = await fetchDefaultConfig();
-  if (!configData.provider_settings) {
-    configData.provider_settings = {};
-  }
-
-  if (configData.provider_settings.default_provider_id === targetProviderId)
+  if (configData?.agent_runner?.runner_type !== 'local') {
     return;
+  }
+  const modelConfig = configData.agent_runner.config?.model;
+  if (!modelConfig) return;
 
-  configData.provider_settings.default_provider_id = targetProviderId;
+  if (modelConfig.provider_id === targetProviderId) return;
+
+  modelConfig.provider_id = targetProviderId;
 
   const updateRes = await configProfileApi.update('default', configData);
   if (updateRes.data.status !== 'ok') {

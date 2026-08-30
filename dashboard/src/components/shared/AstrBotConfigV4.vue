@@ -348,11 +348,7 @@ function shouldShowSection() {
         </v-row>
 
         <v-row
-          v-if="
-            !itemMeta?.invisible &&
-            itemMeta?._special === 'select_persona' &&
-            itemKey === 'provider_settings.default_personality'
-          "
+          v-if="!itemMeta?.invisible && itemMeta?._special === 'select_persona'"
           class="persona-preview-row"
         >
           <v-col cols="12" class="persona-preview-display">
@@ -483,9 +479,7 @@ function shouldShowSection() {
 
             <v-row
               v-if="
-                !itemMeta?.invisible &&
-                itemMeta?._special === 'select_persona' &&
-                itemKey === 'provider_settings.default_personality'
+                !itemMeta?.invisible && itemMeta?._special === 'select_persona'
               "
               class="persona-preview-row"
             >

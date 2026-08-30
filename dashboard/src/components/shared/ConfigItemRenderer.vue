@@ -30,18 +30,6 @@
         @update:model-value="emitUpdate"
       />
     </template>
-    <template
-      v-else-if="
-        getSpecialName(itemMeta?._special) === 'select_agent_runner_provider'
-      "
-    >
-      <ProviderSelector
-        :model-value="modelValue"
-        :provider-type="'agent_runner'"
-        :provider-subtype="getSpecialSubtype(itemMeta?._special)"
-        @update:model-value="emitUpdate"
-      />
-    </template>
     <template v-else-if="itemMeta?._special === 'provider_pool'">
       <ProviderSelector
         :model-value="modelValue"
@@ -373,6 +361,15 @@ const { getRaw } = useModuleI18n('features/config-metadata');
 const { configText } = usePluginI18n();
 
 function emitUpdate(val) {
+  if (
+    props.itemMeta?._special === 'agent_runner_type' &&
+    props.configRoot?.agent_runner &&
+    props.itemMeta?.runner_defaults?.[val]
+  ) {
+    props.configRoot.agent_runner.config = JSON.parse(
+      JSON.stringify(props.itemMeta.runner_defaults[val]),
+    );
+  }
   emit('update:modelValue', val);
 }
 
@@ -439,25 +436,6 @@ function getSelectItems(itemMeta) {
     }));
   }
   return itemMeta.options || [];
-}
-
-function parseSpecialValue(value) {
-  if (!value || typeof value !== 'string') {
-    return { name: '', subtype: '' };
-  }
-  const [name, ...rest] = value.split(':');
-  return {
-    name,
-    subtype: rest.join(':') || '',
-  };
-}
-
-function getSpecialName(value) {
-  return parseSpecialValue(value).name;
-}
-
-function getSpecialSubtype(value) {
-  return parseSpecialValue(value).subtype;
 }
 </script>
 

@@ -21,7 +21,7 @@ AstrBot 支持接入 [DeerFlow](https://github.com/bytedance/deer-flow) Agent Ru
 
 ## 在 AstrBot 中配置 DeerFlow
 
-在 WebUI 中，点击「模型提供商」->「新增提供商」，选择「Agent 执行器」，选择「DeerFlow」，进入 DeerFlow 的配置页面。
+在 WebUI 中，打开「配置」->「Agent 执行方式」，选择「DeerFlow」，填写同页出现的 DeerFlow 配置。
 
 填写以下配置项：
 
@@ -46,7 +46,7 @@ AstrBot 支持接入 [DeerFlow](https://github.com/bytedance/deer-flow) Agent Ru
 
 ## 选择 Agent 执行器
 
-进入左边栏配置页面，点击「Agent 执行方式」，选择「DeerFlow」，然后在下方出现的新的配置项中选择你刚刚创建的 DeerFlow Agent 执行器提供商 ID，点击右下角「保存」，即可完成配置。
+进入左边栏配置页面，点击「Agent 执行方式」，选择「DeerFlow」，填写 API 地址等配置后点击右下角「保存」，即可完成配置。
 
 ## 常见检查项
 

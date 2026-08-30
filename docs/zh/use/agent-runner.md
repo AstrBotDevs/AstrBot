@@ -35,16 +35,10 @@ Dify、Coze、百炼应用、DeerFlow 等平台已经内置了这个循环，如
 
 默认情况下，AstrBot 内置 Agent 执行器为默认执行器。使用默认执行器已经可以满足大部分需求，并且可以使用 AstrBot 的 MCP、知识库、网页搜索等功能。
 
-如果你需要使用 Dify、Coze、百炼应用、DeerFlow 等平台的能力，可以创建一个 Agent 执行器，并选择相应的提供商。
+如果你需要使用 Dify、Coze、百炼应用、DeerFlow 等平台的能力，在对应配置文件中切换执行器并填写该类型的配置即可。切换执行器会使用新类型的默认配置，不会保留上一类型的参数。
 
-## 创建 Agent 执行器
+## 配置 Agent 执行器
 
-![image](https://files.astrbot.app/docs/source/images/use/agent-runner/image-1.png)
+在 WebUI 中，打开「配置」->「Agent 执行方式」，选择执行器类型，然后在同页出现的该类型配置项中填写 API Key、应用 ID 等参数，点击保存即可。
 
-在 WebUI 中，点击「模型提供商」->「新增提供商」，选择「Agent 执行器」，选择你想接入的平台或执行器类型，填写相关信息即可。
-
-## 更换默认 Agent 执行器
-
-![image](https://files.astrbot.app/docs/source/images/use/agent-runner/image.png)
-
-在 WebUI 中，点击「配置」->「Agent 执行方式」，将执行器类型更换为你刚刚创建的 Agent 执行器类型，然后选择 `XX Agent 执行器提供商 ID` 为你刚刚创建的 Agent 执行器提供商的 ID，点击保存即可。
+内置 Agent 的对话模型、人格、压缩和工具参数也写在同一配置文件中，不再作为独立的模型提供商。

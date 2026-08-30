@@ -61,4 +61,4 @@ Fill in the API Key and bot_id you just created, then click Save.
 
 ## Select Agent Runner
 
-Go to the Configuration page in the left sidebar, click "Agent Execution Method", select "Coze", then select the ID of the Coze Agent Runner you just created in the new configuration options that appear below, and click "Save" in the bottom right corner to complete the configuration.
+Go to the Configuration page in the left sidebar, click "Agent Execution Method", select "Coze", fill in the API key and bot ID, and click "Save" in the bottom right corner.

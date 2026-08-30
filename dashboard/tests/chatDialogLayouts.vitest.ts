@@ -52,8 +52,8 @@ describe('chat dialog layouts', () => {
       data: {
         data: {
           config: {
-            provider_settings: {
-              agent_runner_type: 'local',
+            agent_runner: {
+              runner_type: 'local',
             },
           },
         },
@@ -81,8 +81,10 @@ describe('chat dialog layouts', () => {
           project_id: 'project-1',
           title: 'Long form project',
           emoji: '📁',
-          description: Array.from({ length: 20 }, (_, index) => `Line ${index}`)
-            .join('\n'),
+          description: Array.from(
+            { length: 20 },
+            (_, index) => `Line ${index}`,
+          ).join('\n'),
           created_at: '2026-06-30T00:00:00Z',
           updated_at: '2026-06-30T00:00:00Z',
         },
