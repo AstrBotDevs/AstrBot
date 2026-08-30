@@ -5,17 +5,17 @@ upstream:
   branch: master
 
 last_synced:
-  commit: d2d7e5aefd2f9471d211974e7e193f321e0ebe0a
-  synced_at_utc: 2026-08-28T12:01:29Z
+  commit: fe3d77568b88ea3be83b2190d515da0a039da399
+  synced_at_utc: 2026-08-30T21:09:36Z
   sync_method: manual-adaptation
-  source_pr: '9846, 9847'
+  source_pr: '9821'
   note: >-
-    Reviewed the interval from 8ea8ce613a0bee4ddb48b21490afe23418277c75
-    through d2d7e5aefd2f9471d211974e7e193f321e0ebe0a. Adapted the data
-    dashboard consolidation onto /dashboard so /data stays the runtime file
-    manager, dropped LegacyConversationPage, kept Console and export
-    step-up, preserved the Playwright T2I card, and implemented conversation
-    filters on ConversationStore (#9846). Adapted session ranking shortcuts
-    into the conversation workspace with MDI icons (#9847). Omitted ru-RU.
-    No upstream version bump occurred in this interval; absorbed
-    user-visible changes were added to the in-progress 4.27.5 changelog.
+    Reviewed and adapted fe3d77568b88ea3be83b2190d515da0a039da399 (#9821).
+    Embedded Agent Runner configuration in profiles as agent_runner
+    (config_version 3). Implemented the current-path migration in
+    astrbot/core/config/agent_runner_migration.py without restoring
+    migra_helper.py. Kept fork-only provider_settings
+    (tool_history_policy, computer_use_runtime, sandbox). Omitted ru-RU.
+    Kept the ConfigPage unsaved banner. Masked runner API keys as secret.
+    No upstream version bump occurred; absorbed user-visible changes were
+    added to the in-progress 4.27.5 changelog.
