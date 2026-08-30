@@ -12,13 +12,13 @@ class TokenCounter(Protocol):
     """
 
     def count_tokens(
-        self, messages: list[Message], trusted_token_usage: int = 0
+        self, messages: list[Message], reported_token_usage: int = 0
     ) -> int:
         """Count the total tokens in the message list.
 
         Args:
             messages: The message list.
-            trusted_token_usage: The total token usage that LLM API returned.
+            reported_token_usage: The total token usage that LLM API returned.
                 For some cases, this value is more accurate.
                 But some API does not return it, so the value defaults to 0.
 
@@ -44,21 +44,8 @@ class EstimateTokenCounter:
     """
 
     def count_tokens(
-        self,
-        messages: list[Message],
-        reported_token_usage: int = 0,
-        **legacy_usage: int,
+        self, messages: list[Message], reported_token_usage: int = 0
     ) -> int:
-        unexpected = legacy_usage.keys() - {"trusted_token_usage"}
-        if unexpected:
-            name = next(iter(unexpected))
-            raise TypeError(
-                f"count_tokens() got an unexpected keyword argument '{name}'"
-            )
-        if reported_token_usage <= 0:
-            reported_token_usage = legacy_usage.get(
-                "trusted_token_usage", reported_token_usage
-            )
         if reported_token_usage > 0:
             return reported_token_usage
 

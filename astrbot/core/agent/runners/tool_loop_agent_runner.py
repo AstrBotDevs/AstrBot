@@ -818,7 +818,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         processed_messages = await self._await_or_stop(
             self.request_context_manager.process(
                 self.run_context.messages,
-                trusted_token_usage=token_usage,
+                reported_token_usage=token_usage,
             )
         )
         if processed_messages is None:
