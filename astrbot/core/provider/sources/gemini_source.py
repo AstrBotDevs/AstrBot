@@ -20,6 +20,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.media_utils import (
+    VENDOR_IMAGE_FORMATS,
     describe_media_ref,
     resolve_image_ref_to_images,
     resolve_media_ref_to_base64_data,
@@ -45,9 +46,7 @@ logging.getLogger("google_genai.types").addFilter(SuppressNonTextPartsWarning())
     "Google Gemini Chat Completion 提供商适配器",
 )
 class ProviderGoogleGenAI(Provider):
-    supported_image_formats = frozenset(
-        {"image/png", "image/jpeg", "image/webp", "image/heic", "image/heif"}
-    )
+    supported_image_formats = VENDOR_IMAGE_FORMATS["google"]
     """Formats accepted by the official Gemini vision API."""
 
     CATEGORY_MAPPING = {

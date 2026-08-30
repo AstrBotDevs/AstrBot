@@ -1,3 +1,5 @@
+from astrbot.core.utils.media_utils import VENDOR_IMAGE_FORMATS
+
 from ..register import register_provider_adapter
 from .openai_source import ProviderOpenAIOfficial
 
@@ -6,7 +8,7 @@ from .openai_source import ProviderOpenAIOfficial
     "xai_chat_completion", "xAI Chat Completion Provider Adapter"
 )
 class ProviderXAI(ProviderOpenAIOfficial):
-    supported_image_formats = frozenset({"image/jpeg", "image/png"})
+    supported_image_formats = VENDOR_IMAGE_FORMATS["xai"]
     """The official xAI vision API accepts only JPEG and PNG."""
 
     def __init__(

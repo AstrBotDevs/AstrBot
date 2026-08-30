@@ -17,6 +17,7 @@ from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.media_utils import (
+    VENDOR_IMAGE_FORMATS,
     describe_media_ref,
     detect_image_mime_type,
     resolve_image_ref_to_images,
@@ -38,9 +39,7 @@ from .request_retry import retry_provider_request, retry_provider_request_contex
 class ProviderAnthropic(Provider):
     _PROMPT_CACHE_CONTROL = {"type": "ephemeral"}
 
-    supported_image_formats = frozenset(
-        {"image/jpeg", "image/png", "image/gif", "image/webp"}
-    )
+    supported_image_formats = VENDOR_IMAGE_FORMATS["anthropic"]
     """Formats accepted by the official Anthropic vision API."""
 
     @staticmethod

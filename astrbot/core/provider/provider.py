@@ -21,6 +21,7 @@ from astrbot.core.utils.media_utils import (
     ANIMATED_STRATEGY_FIRST_FRAME,
     ANIMATED_STRATEGY_MULTI_FRAME,
     IMAGE_SHORT_MIME_TYPES,
+    VENDOR_IMAGE_FORMATS,
 )
 
 DEFAULT_FALLBACK_IMAGE_FORMATS = frozenset({"image/jpeg", "image/png"})
@@ -98,9 +99,10 @@ class Provider(AbstractProvider):
 
         Priority: ``provider_config["image_formats"]`` (per-instance override,
         short names like ``jpeg`` or MIME types, ``*`` disables restriction) >
+        the vendor-level set keyed by ``provider_config["provider"]`` (brand of
+        the provider source, for branded sources running on generic adapters) >
         the class-level ``supported_image_formats`` > the conservative
         DEFAULT_FALLBACK_IMAGE_FORMATS (jpeg/png).
-
         Returns:
             The allowed MIME types, or ``None`` when unrestricted.
         """
@@ -124,6 +126,11 @@ class Provider(AbstractProvider):
                 self.provider_config.get("id"),
                 sorted(normalized),
             )
+        brand = self.provider_config.get("provider")
+        if isinstance(brand, str):
+            vendor_formats = VENDOR_IMAGE_FORMATS.get(brand.strip().lower())
+            if vendor_formats is not None:
+                return vendor_formats
         if self.supported_image_formats is not None:
             return self.supported_image_formats
         return DEFAULT_FALLBACK_IMAGE_FORMATS

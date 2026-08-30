@@ -2,13 +2,15 @@
 # It is no longer specifically adapted to Zhipu's models. To ensure compatibility, this
 
 
+from astrbot.core.utils.media_utils import VENDOR_IMAGE_FORMATS
+
 from ..register import register_provider_adapter
 from .openai_source import ProviderOpenAIOfficial
 
 
 @register_provider_adapter("zhipu_chat_completion", "智谱 Chat Completion 提供商适配器")
 class ProviderZhipu(ProviderOpenAIOfficial):
-    supported_image_formats = frozenset({"image/jpeg", "image/png"})
+    supported_image_formats = VENDOR_IMAGE_FORMATS["zhipu"]
     """GLM vision officially guarantees JPEG/PNG; keep it conservative."""
 
     def __init__(

@@ -87,6 +87,62 @@ IMAGE_SHORT_MIME_TYPES = {
 }
 """User-facing short image format names mapped to MIME types."""
 
+IMAGE_MIME_SHORT_NAMES = {
+    "image/jpeg": "jpeg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "image/bmp": "bmp",
+    "image/tiff": "tiff",
+    "image/avif": "avif",
+    "image/heic": "heic",
+    "image/heif": "heif",
+}
+"""Canonical short display name for each known image MIME type."""
+
+_MINIMAX_IMAGE_FORMATS = frozenset(
+    {"image/jpeg", "image/png", "image/webp", "image/gif"}
+)
+_XIAOMI_IMAGE_FORMATS = frozenset(
+    {"image/jpeg", "image/png", "image/webp", "image/gif", "image/bmp"}
+)
+_MOONSHOT_IMAGE_FORMATS = frozenset(
+    {
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/gif",
+        "image/bmp",
+        "image/heic",
+        "image/heif",
+    }
+)
+
+VENDOR_IMAGE_FORMATS = {
+    "openai": frozenset({"image/jpeg", "image/png", "image/webp", "image/gif"}),
+    "azure": frozenset({"image/jpeg", "image/png", "image/webp", "image/gif"}),
+    "xai": frozenset({"image/jpeg", "image/png"}),
+    "deepseek": frozenset({"image/jpeg", "image/png", "image/gif", "image/webp"}),
+    "anthropic": frozenset({"image/jpeg", "image/png", "image/gif", "image/webp"}),
+    "google": frozenset(
+        {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
+    ),
+    "zhipu": frozenset({"image/jpeg", "image/png"}),
+    # NVIDIA NIM VLM docs list JPG/JPEG/PNG for most models (a few also take GIF).
+    "nvidia": frozenset({"image/jpeg", "image/png"}),
+    # Groq docs only demonstrate JPEG; PNG is the other reliably referenced type.
+    "groq": frozenset({"image/jpeg", "image/png"}),
+    "moonshot": _MOONSHOT_IMAGE_FORMATS,
+    "kimi-code": _MOONSHOT_IMAGE_FORMATS,
+    "minimax": _MINIMAX_IMAGE_FORMATS,
+    "minimax-token-plan": _MINIMAX_IMAGE_FORMATS,
+    "xiaomi": _XIAOMI_IMAGE_FORMATS,
+    "xiaomi-token-plan": _XIAOMI_IMAGE_FORMATS,
+}
+"""Image MIME types officially documented by each vendor (brand key from provider
+source templates). Absent brand = no vendor-level opinion; the adapter class
+declaration then governs."""
+
 ANIMATED_STRATEGY_FIRST_FRAME = "first_frame"
 """Keep only the first frame of an animated image."""
 

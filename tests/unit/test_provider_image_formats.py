@@ -218,3 +218,120 @@ async def test_anthropic_context_skips_unsupported_format():
         assert image_blocks == []
     finally:
         await provider.terminate()
+
+
+def _make_openai(provider_config: dict) -> ProviderOpenAIOfficial:
+    config = {
+        "id": "test-openai",
+        "type": "openai_chat_completion",
+        "model": "deepseek-v4-flash-vision-exp",
+        "key": ["test-key"],
+        **provider_config,
+    }
+    return ProviderOpenAIOfficial(config, {})
+
+
+@pytest.mark.asyncio
+async def test_vendor_brand_overrides_adapter_declared_formats():
+    provider = _make_openai({"provider": "xai", "type": "openai_responses"})
+    try:
+        assert provider.resolve_allowed_image_formats() == frozenset(
+            {"image/jpeg", "image/png"}
+        )
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_unknown_brand_keeps_adapter_declared_formats():
+    provider = _make_openai({"provider": "some-unknown-vendor"})
+    try:
+        assert provider.resolve_allowed_image_formats() == frozenset(
+            {"image/png", "image/jpeg", "image/webp", "image/gif"}
+        )
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_config_override_wins_over_vendor_brand():
+    provider = _make_openai({"provider": "xai", "image_formats": ["webp"]})
+    try:
+        assert provider.resolve_allowed_image_formats() == frozenset({"image/webp"})
+    finally:
+        await provider.terminate()
+
+
+def test_vendor_map_matches_adapter_declarations():
+    from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
+    from astrbot.core.provider.sources.gemini_source import ProviderGoogleGenAI
+    from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
+    from astrbot.core.provider.sources.xai_source import ProviderXAI
+    from astrbot.core.provider.sources.zhipu_source import ProviderZhipu
+    from astrbot.core.utils.media_utils import VENDOR_IMAGE_FORMATS
+
+    assert (
+        ProviderOpenAIOfficial.supported_image_formats is VENDOR_IMAGE_FORMATS["openai"]
+    )
+    assert ProviderXAI.supported_image_formats is VENDOR_IMAGE_FORMATS["xai"]
+    assert ProviderZhipu.supported_image_formats is VENDOR_IMAGE_FORMATS["zhipu"]
+    assert ProviderGoogleGenAI.supported_image_formats is VENDOR_IMAGE_FORMATS["google"]
+    assert (
+        ProviderAnthropic.supported_image_formats is VENDOR_IMAGE_FORMATS["anthropic"]
+    )
+
+
+def test_vendor_map_matches_vendor_adapter_declarations():
+    from astrbot.core.provider.sources.groq_source import ProviderGroq
+    from astrbot.core.provider.sources.kimi_code_source import ProviderKimiCode
+    from astrbot.core.provider.sources.minimax_token_plan_source import (
+        ProviderMiniMaxTokenPlan,
+    )
+    from astrbot.core.provider.sources.xiaomi_source import ProviderXiaomi
+    from astrbot.core.provider.sources.xiaomi_token_plan_source import (
+        ProviderXiaomiTokenPlan,
+    )
+    from astrbot.core.utils.media_utils import VENDOR_IMAGE_FORMATS
+
+    assert ProviderGroq.supported_image_formats is VENDOR_IMAGE_FORMATS["groq"]
+    assert ProviderXiaomi.supported_image_formats is VENDOR_IMAGE_FORMATS["xiaomi"]
+    assert ProviderKimiCode.supported_image_formats is VENDOR_IMAGE_FORMATS["kimi-code"]
+    assert (
+        ProviderMiniMaxTokenPlan.supported_image_formats
+        is VENDOR_IMAGE_FORMATS["minimax-token-plan"]
+    )
+    assert (
+        ProviderXiaomiTokenPlan.supported_image_formats
+        is VENDOR_IMAGE_FORMATS["xiaomi-token-plan"]
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("brand", "expected"),
+    [
+        ("deepseek", {"image/jpeg", "image/png", "image/webp", "image/gif"}),
+        (
+            "moonshot",
+            {
+                "image/jpeg",
+                "image/png",
+                "image/webp",
+                "image/gif",
+                "image/bmp",
+                "image/heic",
+                "image/heif",
+            },
+        ),
+        ("minimax", {"image/jpeg", "image/png", "image/webp", "image/gif"}),
+        ("xiaomi", {"image/jpeg", "image/png", "image/webp", "image/gif", "image/bmp"}),
+        ("groq", {"image/jpeg", "image/png"}),
+        ("nvidia", {"image/jpeg", "image/png"}),
+    ],
+)
+async def test_vendor_brand_format_sets(brand, expected):
+    provider = _make_openai({"provider": brand})
+    try:
+        assert provider.resolve_allowed_image_formats() == frozenset(expected)
+    finally:
+        await provider.terminate()

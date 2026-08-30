@@ -1281,7 +1281,7 @@
       },
       "image_formats": {
         "description": "Supported image formats",
-        "hint": "Image formats allowed when sending to this provider; incompatible formats are converted automatically. Leave empty to use built-in defaults (official APIs follow their documentation; unknown third parties default to jpeg/png). Selecting \"Unrestricted\" overrides all other options.",
+        "hint": "Image formats allowed when sending to this provider; incompatible formats are converted automatically. Selecting \"Unrestricted\" overrides all other options.",
         "labels": [
           "JPEG",
           "PNG",
@@ -1289,6 +1289,7 @@
           "GIF",
           "BMP",
           "HEIC",
+          "HEIF",
           "Unrestricted"
         ]
       },

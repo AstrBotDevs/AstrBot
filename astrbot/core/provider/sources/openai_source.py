@@ -30,6 +30,7 @@ from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
 from astrbot.core.utils.media_utils import (
+    VENDOR_IMAGE_FORMATS,
     ResolvedMediaData,
     describe_media_ref,
     resolve_image_ref_to_images,
@@ -53,9 +54,7 @@ from .request_retry import retry_provider_request
 class ProviderOpenAIOfficial(Provider):
     _ERROR_TEXT_CANDIDATE_MAX_CHARS = 4096
 
-    supported_image_formats = frozenset(
-        {"image/png", "image/jpeg", "image/webp", "image/gif"}
-    )
+    supported_image_formats = VENDOR_IMAGE_FORMATS["openai"]
     """Formats accepted by the official OpenAI vision API (non-animated GIF)."""
 
     @classmethod

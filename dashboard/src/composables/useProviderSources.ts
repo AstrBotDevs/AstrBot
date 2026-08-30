@@ -63,6 +63,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const isSourceModified = ref(false)
   const configSchema = ref<Record<string, any>>({})
   const providerTemplates = ref<Record<string, any>>({})
+  // Officially declared image format sets per provider type, from the backend schema API.
+  const providerTypeImageFormats = ref<Record<string, string[] | null>>({})
+  const providerBrandImageFormats = ref<Record<string, string[]>>({})
   const manualModelId = ref('')
   const modelSearch = ref('')
 
@@ -614,7 +617,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       modalities,
       custom_extra_body: {},
       max_context_tokens: max_context_tokens,
-      image_formats: [],
+      image_formats: [...(providerBrandImageFormats.value[selectedProviderSource.value.provider] ?? providerTypeImageFormats.value[selectedProviderSource.value.type] ?? ['jpeg', 'png'])],
       animated_image_strategy: 'first_frame',
       animated_image_max_frames: 4
     }
@@ -716,6 +719,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
           providerTemplates.value = configSchema.value.provider.config_template
         }
         providerSources.value = response.data.data.provider_sources || []
+        providerTypeImageFormats.value = response.data.data.provider_type_image_formats || {}
+        providerBrandImageFormats.value = response.data.data.provider_brand_image_formats || {}
         modelMetadata.value = (response.data.data.model_metadata || {}) as Record<string, any>
         providers.value = response.data.data.providers || []
       }
@@ -751,6 +756,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     isSourceModified,
     configSchema,
     providerTemplates,
+    providerTypeImageFormats,
+    providerBrandImageFormats,
     manualModelId,
     modelSearch,
 

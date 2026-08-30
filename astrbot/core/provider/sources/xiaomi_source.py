@@ -1,5 +1,6 @@
 from astrbot import logger
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
+from astrbot.core.utils.media_utils import VENDOR_IMAGE_FORMATS
 
 from ..register import register_provider_adapter
 
@@ -16,6 +17,7 @@ XIAOMI_MODELS = [
     "xiaomi_chat_completion", "Xiaomi API 提供商适配器 (OpenAI 兼容)"
 )
 class ProviderXiaomi(ProviderOpenAIOfficial):
+    supported_image_formats = VENDOR_IMAGE_FORMATS["xiaomi"]
     """Xiaomi provider using OpenAI-compatible API.
 
     Supports both standard API and multimodal capabilities.

@@ -2,6 +2,7 @@ import httpx
 
 from astrbot import logger
 from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
+from astrbot.core.utils.media_utils import VENDOR_IMAGE_FORMATS
 
 from ..register import register_provider_adapter
 
@@ -11,6 +12,7 @@ from ..register import register_provider_adapter
     "MiniMax Token Plan Provider Adapter",
 )
 class ProviderMiniMaxTokenPlan(ProviderAnthropic):
+    supported_image_formats = VENDOR_IMAGE_FORMATS["minimax-token-plan"]
     """MiniMax Token Plan provider.
 
     The model list is fetched dynamically from the MiniMax API's /v1/models
