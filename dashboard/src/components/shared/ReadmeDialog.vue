@@ -203,13 +203,15 @@ async function updateRenderedHtml() {
   const env = {};
   const tokens = md.parse(source, env);
 
-  try {
-    const languages = tokens
-      .filter((token) => token.type === 'fence')
-      .map((token) => normalizeShikiLanguage(token.info));
-    highlighter = await ensureShikiLanguages(languages);
-  } catch (err) {
-    console.error('Failed to initialize Shiki for README dialog:', err);
+  const languages = tokens
+    .filter((token) => token.type === 'fence')
+    .map((token) => normalizeShikiLanguage(token.info));
+  if (languages.length > 0) {
+    try {
+      highlighter = await ensureShikiLanguages(languages);
+    } catch (err) {
+      console.error('Failed to initialize Shiki for README dialog:', err);
+    }
   }
 
   if (renderId !== lastRenderId.value) return;

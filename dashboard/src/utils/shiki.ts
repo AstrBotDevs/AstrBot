@@ -32,15 +32,21 @@ export function escapeHtml(value = ''): string {
 export async function getShikiHighlighter(): Promise<ShikiHighlighter> {
   if (!highlighterPromise) {
     highlighterPromise = createHighlighter({
-      themes: Object.values(SHIKI_THEMES),
+      themes: [SHIKI_THEMES.light, SHIKI_THEMES.dark],
     });
   }
 
   return highlighterPromise;
 }
 
-export async function ensureShikiLanguages(): Promise<ShikiHighlighter> {
-  return getShikiHighlighter();
+export async function ensureShikiLanguages(
+  langs: string[] = [],
+): Promise<ShikiHighlighter> {
+  const highlighter = await getShikiHighlighter();
+  await Promise.all(
+    langs.map((language) => highlighter.ensureLanguage(language)),
+  );
+  return highlighter;
 }
 
 export function renderShikiCode(
