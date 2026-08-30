@@ -46,14 +46,14 @@ class ContextManager:
     async def process(
         self,
         messages: list[Message],
-        reported_token_usage: int = 0,
+        trusted_token_usage: int = 0,
         force_compress: bool = False,
     ) -> list[Message]:
         """Process the messages.
 
         Args:
             messages: The original message list.
-            reported_token_usage: Token usage reported by the previous provider call.
+            trusted_token_usage: Token usage reported by the previous provider call.
             force_compress: Whether to bypass automatic limits and run the configured
                 compressor immediately without a truncation fallback.
 
@@ -72,24 +72,27 @@ class ContextManager:
                 )
 
             if force_compress:
-                total_tokens = self.token_counter.count_tokens(result)
+                estimated_context_tokens = self.token_counter.count_tokens(result)
                 return await self._run_compression(
                     result,
-                    total_tokens,
+                    estimated_context_tokens,
                     allow_halving_fallback=False,
                 )
 
             # 2. 基于 token 的压缩
             if self.config.max_context_tokens > 0:
-                total_tokens = self.token_counter.count_tokens(
-                    result, reported_token_usage
+                threshold_tokens = self.token_counter.count_tokens(
+                    result, trusted_token_usage
                 )
 
                 if self.compressor.should_compress(
-                    result, total_tokens, self.config.max_context_tokens
+                    result, threshold_tokens, self.config.max_context_tokens
                 ):
-                    estimated_tokens = self.token_counter.count_tokens(result)
-                    result = await self._run_compression(result, estimated_tokens)
+                    estimated_context_tokens = self.token_counter.count_tokens(result)
+                    result = await self._run_compression(
+                        result,
+                        estimated_context_tokens,
+                    )
 
             return result
         except Exception as e:
