@@ -148,6 +148,7 @@ onMounted(async () => {
 .code-highlighted {
   border-radius: 6px;
   overflow: hidden;
+  font-family: var(--astrbot-font-mono);
   font-size: 12px;
   line-height: 1.5;
   max-height: min(28vh, 200px);
@@ -176,6 +177,7 @@ onMounted(async () => {
   overflow-x: auto;
   overflow-y: auto;
   max-height: min(28vh, 200px);
+  font-family: var(--astrbot-font-mono);
   font-size: 12px;
   line-height: 1.5;
   background-color: rgb(var(--v-theme-code-surface));

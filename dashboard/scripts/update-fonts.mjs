@@ -330,8 +330,16 @@ function buildCss(notoFiles) {
 :root {
   --astrbot-font-ui: "AstrBot UI", "AstrBot Noto Sans SC", system-ui, sans-serif;
   --astrbot-font-mono: "Maple Mono", "AstrBot Noto Sans SC", ui-monospace, monospace;
+  --ms-font-mono: var(--astrbot-font-mono);
   --v-font-body: var(--astrbot-font-ui);
   --v-font-heading: var(--astrbot-font-ui);
+}
+
+code,
+kbd,
+pre,
+samp {
+  font-family: var(--astrbot-font-mono);
 }
 `;
   return css;

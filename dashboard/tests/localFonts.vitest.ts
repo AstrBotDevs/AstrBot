@@ -33,5 +33,8 @@ describe('local font policy', () => {
     );
     expect(css).toContain('--v-font-body:');
     expect(css).toContain('--v-font-heading:');
+    expect(css).toContain('--astrbot-font-mono:');
+    expect(css).toContain('--ms-font-mono: var(--astrbot-font-mono);');
+    expect(css).toContain('font-family: var(--astrbot-font-mono);');
   });
 });
