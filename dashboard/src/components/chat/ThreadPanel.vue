@@ -33,6 +33,7 @@
           :messages="messages"
           :is-dark="isDark"
           :is-streaming="sending"
+          :is-touch-device="isTouchDevice"
           variant="thread"
         />
       </div>
@@ -61,7 +62,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { chatApi } from '@/api/v1';
 import { fetchWithAuth } from '@/api/http';
 import {
@@ -90,6 +91,7 @@ const props = defineProps<{
   modelValue: boolean;
   thread: ChatThread | null;
   isDark: boolean;
+  isTouchDevice?: boolean;
   deleting?: boolean;
   webChatStepUpTokens?: Record<string, string> | null;
 }>();
@@ -101,6 +103,12 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n('features/chat');
+const isTouchDevice = computed(
+  () =>
+    props.isTouchDevice ??
+    (typeof window !== 'undefined' &&
+      window.matchMedia('(pointer: coarse)').matches),
+);
 const messages = ref<ChatRecord[]>([]);
 const draft = ref('');
 const sending = ref(false);

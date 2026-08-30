@@ -113,7 +113,7 @@
                 icon="mdi-plus"
                 variant="outlined"
                 class="input-neutral-btn input-outline-control"
-                :aria-label="tm('input.upload')"
+                :aria-label="tm('input.moreOptions')"
               />
             </template>
 
@@ -156,33 +156,35 @@
                 }}
               </v-list-item-title>
             </v-list-item>
+
+            <v-list-item
+              class="styled-menu-item high-risk-tools-btn"
+              rounded="md"
+              :disabled="props.disabled"
+              @click="$emit('toggleWebChatTools')"
+            >
+              <template #prepend>
+                <v-icon
+                  icon="mdi-shield-key-outline"
+                  size="small"
+                  :color="props.webChatToolsEnabled ? 'warning' : undefined"
+                />
+              </template>
+              <v-list-item-title>
+                {{
+                  props.webChatToolsEnabled
+                    ? tm('input.disableHighRiskTools')
+                    : tm('input.enableHighRiskTools')
+                }}
+              </v-list-item-title>
+            </v-list-item>
           </StyledMenu>
         </div>
         <div class="input-field-shell">
-          <input
-            v-if="!inputIsMultiline"
-            ref="inputField"
-            v-model="localPrompt"
-            @keydown="handleKeyDown"
-            @input="handleInput"
-            @compositionstart="handleCompositionStart"
-            @compositionend="handleCompositionEnd"
-            @compositioncancel="handleCompositionEnd"
-            @blur="handleBlur"
-            @paste="handlePaste"
-            :disabled="disabled"
-            :placeholder="props.placeholder ?? tm('input.placeholder')"
-            class="chat-text-input"
-            autocomplete="off"
-            autocorrect="off"
-            autocapitalize="sentences"
-            spellcheck="false"
-            type="text"
-          />
           <textarea
-            v-else
             ref="inputField"
             v-model="localPrompt"
+            rows="1"
             @keydown="handleKeyDown"
             @input="handleInput"
             @compositionstart="handleCompositionStart"
@@ -233,32 +235,13 @@
             <span>{{ props.tokenUsage?.tooltip }}</span>
           </v-tooltip>
           <v-btn
-            @click="$emit('toggleWebChatTools')"
-            icon
-            variant="text"
-            class="input-icon-btn high-risk-tools-btn"
-            :color="props.webChatToolsEnabled ? 'warning' : undefined"
-            :disabled="props.disabled"
-            :aria-label="
-              props.webChatToolsEnabled
-                ? tm('input.disableHighRiskTools')
-                : tm('input.enableHighRiskTools')
-            "
-          >
-            <v-icon icon="mdi-shield-key-outline" size="24" />
-            <v-tooltip activator="parent" location="top">
-              {{
-                props.webChatToolsEnabled
-                  ? tm('input.disableHighRiskTools')
-                  : tm('input.enableHighRiskTools')
-              }}
-            </v-tooltip>
-          </v-btn>
-          <v-btn
             @click="handleRecordClick"
             icon
             variant="text"
             class="record-btn input-icon-btn"
+            :aria-label="
+              isRecording ? tm('voice.speaking') : tm('voice.startRecording')
+            "
           >
             <v-icon
               :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'"
@@ -272,25 +255,27 @@
             </v-tooltip>
           </v-btn>
           <v-btn
+            v-if="!isRunning"
+            @click="$emit('send')"
+            icon="mdi-arrow-up"
+            variant="tonal"
+            :disabled="!canSend"
+            class="send-btn input-action-btn"
+            :aria-label="tm('input.send')"
+          />
+          <v-btn
+            v-if="isRunning"
             icon
-            v-if="isRunning && !canSend"
             @click="$emit('stop')"
             variant="tonal"
-            class="send-btn input-action-btn"
+            class="stop-btn input-action-btn"
+            :aria-label="tm('input.stopGenerating')"
           >
             <v-icon icon="mdi-stop" variant="text" plain></v-icon>
             <v-tooltip activator="parent" location="top">
               {{ tm('input.stopGenerating') }}
             </v-tooltip>
           </v-btn>
-          <v-btn
-            v-else
-            @click="$emit('send')"
-            icon="mdi-arrow-up"
-            variant="tonal"
-            :disabled="!canSend"
-            class="send-btn input-action-btn"
-          />
         </div>
       </div>
     </div>
@@ -397,7 +382,7 @@ const emit = defineEmits<{
 const { tm } = useModuleI18n('features/chat');
 const isDark = computed(() => useCustomizerStore().uiTheme === themeNames.dark);
 
-const inputField = ref<HTMLInputElement | HTMLTextAreaElement | null>(null);
+const inputField = ref<HTMLTextAreaElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);
 const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(
   null,
@@ -591,40 +576,24 @@ const tokenUsagePercent = computed(() => {
 // Auto-resize textarea
 function autoResize() {
   const el = inputField.value;
-  if (!el) return;
-  if (!(el instanceof HTMLTextAreaElement)) {
-    if (!localPrompt.value) return;
-
-    const shouldExpand =
-      localPrompt.value.includes('\n') ||
-      (el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 4);
-    if (shouldExpand) {
-      const cursor = el.selectionStart ?? localPrompt.value.length;
-      inputIsMultiline.value = true;
-      void nextTick(() => {
-        inputField.value?.focus();
-        inputField.value?.setSelectionRange(cursor, cursor);
-        autoResize();
-      });
-    }
-    return;
-  }
+  if (!(el instanceof HTMLTextAreaElement)) return;
   const isMobileViewport =
     typeof window !== 'undefined' &&
     window.matchMedia('(max-width: 768px)').matches;
   const viewportHeight =
     typeof window !== 'undefined' ? window.innerHeight : 900;
-  const minHeight = isMobileViewport ? 56 : 52;
+  const minHeight = 52;
   const maxHeight = isMobileViewport
     ? Math.min(220, Math.round(viewportHeight * 0.42))
     : Math.min(420, Math.round(viewportHeight * 0.48));
   if (!localPrompt.value) {
     inputIsMultiline.value = false;
+    el.style.height = `${minHeight}px`;
     return;
   }
 
-  // Keep the expanded layout until the prompt is cleared. The single-line
-  // layout is narrower, so shrinking based on textarea height can oscillate.
+  const previousTransition = el.style.transition;
+  el.style.transition = 'none';
   el.style.height = 'auto';
   el.style.setProperty('min-height', '0', 'important');
   const measuredHeight = el.scrollHeight;
@@ -633,6 +602,13 @@ function autoResize() {
     Math.max(measuredHeight, minHeight),
     maxHeight,
   )}px`;
+  el.style.transition = previousTransition;
+
+  // Keep the expanded layout until the prompt is cleared. The single-line
+  // layout is narrower, so shrinking based on textarea height can oscillate.
+  if (localPrompt.value.includes('\n') || measuredHeight > minHeight + 4) {
+    inputIsMultiline.value = true;
+  }
 }
 
 watch(
@@ -707,21 +683,6 @@ function handleKeyDown(e: KeyboardEvent) {
     if (canSend.value) {
       emit('send');
     }
-    return;
-  }
-
-  if (!inputIsMultiline.value) {
-    e.preventDefault();
-    const target = e.target as HTMLInputElement;
-    const start = target.selectionStart ?? localPrompt.value.length;
-    const end = target.selectionEnd ?? start;
-    localPrompt.value = `${localPrompt.value.slice(0, start)}\n${localPrompt.value.slice(end)}`;
-    inputIsMultiline.value = true;
-    void nextTick(() => {
-      inputField.value?.focus();
-      inputField.value?.setSelectionRange(start + 1, start + 1);
-      autoResize();
-    });
   }
 }
 
@@ -839,24 +800,6 @@ function handleKeyUp(e: KeyboardEvent) {
 }
 
 function handlePaste(e: ClipboardEvent) {
-  const pastedText = e.clipboardData?.getData('text/plain') || '';
-  if (!inputIsMultiline.value && pastedText.includes('\n')) {
-    e.preventDefault();
-    const target = e.target as HTMLInputElement;
-    const start = target.selectionStart ?? localPrompt.value.length;
-    const end = target.selectionEnd ?? start;
-    localPrompt.value =
-      localPrompt.value.slice(0, start) +
-      pastedText +
-      localPrompt.value.slice(end);
-    inputIsMultiline.value = true;
-    void nextTick(() => {
-      inputField.value?.focus();
-      const cursor = start + pastedText.length;
-      inputField.value?.setSelectionRange(cursor, cursor);
-      autoResize();
-    });
-  }
   emit('pasteImage', e);
 }
 
@@ -1089,43 +1032,34 @@ defineExpose({
   align-items: flex-start;
 }
 
-.chat-text-input,
 .chat-textarea {
   display: block;
   width: 100%;
   box-sizing: border-box;
   min-width: 0;
   min-height: 52px;
-  max-height: 72px;
+  max-height: min(48vh, 420px);
+  height: 52px;
   margin: 0;
-  padding: 0;
+  padding: 12px 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
   resize: none;
   outline: none;
+  overflow-y: hidden;
+  overflow-wrap: break-word;
   font-family: inherit;
   font-size: 18px;
-}
-
-.chat-text-input {
-  height: 52px;
-  padding: 0;
-  line-height: normal;
-  overflow: hidden;
-}
-
-.chat-textarea {
-  max-height: min(48vh, 420px);
-  padding: 12px 0;
-  overflow-y: auto;
-  overflow-wrap: break-word;
   line-height: 28px;
   transition: height 0.16s ease;
 }
 
-.chat-text-input::placeholder,
+.input-container.is-multiline .chat-textarea {
+  overflow-y: auto;
+}
+
 .chat-textarea::placeholder {
   color: rgba(var(--v-theme-on-surface), 0.56);
   opacity: 1;
@@ -1496,32 +1430,24 @@ defineExpose({
     border-radius: 8px;
   }
 
-  .chat-text-input,
   .chat-textarea {
     min-height: 52px;
-    max-height: 132px;
+    max-height: min(42vh, 220px);
+    height: 52px;
+    padding: 4px 8px;
     border: 0;
     border-radius: 0;
     background: transparent;
     box-shadow: none;
+    overflow-y: hidden;
     font-size: 18px;
-  }
-
-  .chat-text-input {
-    height: 52px;
-    padding: 0 4px;
-    line-height: normal;
-    overflow: hidden;
-  }
-
-  .chat-textarea {
-    max-height: min(42vh, 220px);
-    padding: 4px 8px;
     line-height: 24px;
+  }
+
+  .input-container.is-multiline .chat-textarea {
     overflow-y: auto;
   }
 
-  .chat-text-input::placeholder,
   .chat-textarea::placeholder {
     color: rgba(var(--v-theme-on-surface), 0.56);
     opacity: 1;

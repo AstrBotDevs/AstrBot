@@ -7,13 +7,15 @@
     "send": "发送",
     "clear": "清空",
     "upload": "上传文件",
+    "moreOptions": "更多选项",
     "voice": "语音输入",
     "enableHighRiskTools": "启用高风险工具",
     "disableHighRiskTools": "停用高风险工具",
     "recordingPrompt": "录音中，请说话...",
     "chatPrompt": "聊天吧!",
     "dropToUpload": "松开鼠标上传文件",
-    "stopGenerating": "停止生成"
+    "stopGenerating": "停止生成",
+    "scrollToBottom": "回到底部"
   },
   "message": {
     "user": "用户",
@@ -120,7 +122,9 @@
     "thinkSummary": "思考了 {count} 次",
     "toolSummary": "使用了 {count} 次工具",
     "think": "思考",
-    "toolUsed": "使用工具"
+    "toolUsed": "使用工具",
+    "openInSidebar": "在侧栏打开",
+    "sidebarActive": "思考内容已在侧栏中打开"
   },
   "reply": {
     "replyTo": "引用",

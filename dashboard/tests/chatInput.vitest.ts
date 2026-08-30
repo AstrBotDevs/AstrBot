@@ -13,6 +13,19 @@ vi.mock('@/stores/customizer', () => ({
   useCustomizerStore: () => ({ uiTheme: 'AstrBotLight' }),
 }));
 
+vi.mock('@/components/chat/ConfigSelector.vue', () => ({
+  default: {
+    template: '<div class="config-selector-stub"></div>',
+  },
+}));
+
+vi.mock('@/components/shared/StyledMenu.vue', () => ({
+  default: {
+    template:
+      '<div class="styled-menu-stub"><slot name="activator" :props="{}" /><slot /></div>',
+  },
+}));
+
 vi.mock('@/api/v1', () => ({
   commandApi: {
     list: vi.fn().mockResolvedValue({
@@ -47,9 +60,9 @@ describe('ChatInput placeholders', () => {
     const wrapper = mountWithVuetify(ChatInput, { props: baseProps });
     await flushPromises();
 
-    expect(wrapper.get('input.chat-text-input').attributes('placeholder')).toBe(
-      'Default prompt',
-    );
+    expect(
+      wrapper.get('textarea.chat-textarea').attributes('placeholder'),
+    ).toBe('Default prompt');
   });
 
   it('uses custom placeholders, including an intentional empty string', async () => {
@@ -57,14 +70,14 @@ describe('ChatInput placeholders', () => {
       props: { ...baseProps, placeholder: 'Project prompt' },
     });
     await flushPromises();
-    expect(wrapper.get('input.chat-text-input').attributes('placeholder')).toBe(
-      'Project prompt',
-    );
+    expect(
+      wrapper.get('textarea.chat-textarea').attributes('placeholder'),
+    ).toBe('Project prompt');
 
     await wrapper.setProps({ placeholder: '' });
-    expect(wrapper.get('input.chat-text-input').attributes('placeholder')).toBe(
-      '',
-    );
+    expect(
+      wrapper.get('textarea.chat-textarea').attributes('placeholder'),
+    ).toBe('');
   });
 
   it('uses custom placeholders after expanding to a textarea', async () => {
@@ -83,21 +96,40 @@ describe('ChatInput placeholders', () => {
   });
 });
 
+describe('ChatInput stop and send controls', () => {
+  it('shows only stop while running with a non-empty prompt', async () => {
+    const wrapper = mountWithVuetify(ChatInput, {
+      props: { ...baseProps, prompt: 'follow up', isRunning: true },
+    });
+    await flushPromises();
+
+    expect(wrapper.find('[aria-label="input.stopGenerating"]').exists()).toBe(
+      true,
+    );
+    expect(wrapper.find('[aria-label="input.send"]').exists()).toBe(false);
+  });
+});
+
 describe('ChatInput high-risk tools control', () => {
-  it('renders an icon-sized control and emits its toggle event', async () => {
+  it('renders the high-risk tools control in the plus menu', async () => {
     const wrapper = mountWithVuetify(ChatInput, {
       props: { ...baseProps, webChatToolsEnabled: false },
     });
 
     await flushPromises();
 
+    expect(wrapper.find('[aria-label="input.moreOptions"]').exists()).toBe(
+      true,
+    );
+    expect(
+      wrapper.find('.input-right-actions .high-risk-tools-btn').exists(),
+    ).toBe(false);
+
     const control = wrapper.get('.high-risk-tools-btn');
-    expect(control.classes()).toContain('input-icon-btn');
     expect(control.find('.v-icon').classes()).toContain(
       'mdi-shield-key-outline',
     );
-    expect(control.attributes('aria-label')).toBe('input.enableHighRiskTools');
-    expect(control.text()).not.toContain('Enable high-risk tools');
+    expect(control.text()).toContain('input.enableHighRiskTools');
 
     await control.trigger('click');
     expect(wrapper.emitted('toggleWebChatTools')).toHaveLength(1);

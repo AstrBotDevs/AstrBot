@@ -1,8 +1,37 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
+import ChatMessageList from '@/components/chat/ChatMessageList.vue';
 import ProjectList from '@/components/chat/ProjectList.vue';
 import ToolCallItem from '@/components/chat/message_list_comps/ToolCallItem.vue';
 import { mountWithVuetify } from './utils/mountWithVuetify';
+
+const testState = vi.hoisted(() => ({
+  copyToClipboard: vi.fn(),
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
+}));
+
+vi.mock('markstream-vue', () => ({
+  setCustomComponents: vi.fn(),
+}));
+
+vi.mock('@/api/v1', () => ({
+  fileApi: {
+    contentUrl: (id: string) => `/attachments/${id}`,
+    byNameUrl: (name: string) => `/files/${name}`,
+  },
+}));
+
+vi.mock('@/utils/clipboard', () => ({
+  copyToClipboard: (...args: unknown[]) => testState.copyToClipboard(...args),
+}));
+
+vi.mock('@/utils/toast', () => ({
+  useToast: () => ({
+    success: testState.toastSuccess,
+    error: testState.toastError,
+  }),
+}));
 
 describe('chat interaction smokes', () => {
   afterEach(() => {
@@ -109,5 +138,38 @@ describe('chat interaction smokes', () => {
         ),
       ),
     ).toBe(false);
+  });
+
+  it('toasts copied messages and hides actions until hover on non-touch', async () => {
+    testState.copyToClipboard.mockResolvedValue(true);
+    const wrapper = mountWithVuetify(ChatMessageList, {
+      props: {
+        messages: [
+          {
+            id: 'user-1',
+            created_at: '2026-06-29T12:00:00Z',
+            content: {
+              type: 'user',
+              message: [{ type: 'plain', text: 'hello' }],
+            },
+          },
+        ],
+        isTouchDevice: false,
+      },
+    });
+    await flushPromises();
+
+    expect(wrapper.find('.chat-message-list').classes()).not.toContain(
+      'is-touch',
+    );
+    expect(wrapper.find('.message-meta-actions').exists()).toBe(true);
+
+    await wrapper.find('.message-copy-btn').trigger('click');
+    await flushPromises();
+    expect(testState.copyToClipboard).toHaveBeenCalledWith(
+      'hello',
+      expect.any(Object),
+    );
+    expect(testState.toastSuccess).toHaveBeenCalledWith('Copied');
   });
 });

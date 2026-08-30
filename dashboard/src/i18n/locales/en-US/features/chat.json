@@ -7,13 +7,15 @@
     "send": "Send",
     "clear": "Clear",
     "upload": "Upload File",
+    "moreOptions": "More options",
     "voice": "Voice Input",
     "enableHighRiskTools": "Enable high-risk tools",
     "disableHighRiskTools": "Disable high-risk tools",
     "recordingPrompt": "Recording, please speak...",
     "chatPrompt": "Let's chat!",
     "dropToUpload": "Drop files to upload",
-    "stopGenerating": "Stop generating"
+    "stopGenerating": "Stop generating",
+    "scrollToBottom": "Scroll to bottom"
   },
   "message": {
     "user": "User",
@@ -120,7 +122,9 @@
     "thinkSummary": "Thought {count} times",
     "toolSummary": "used {count} tools",
     "think": "Thinking",
-    "toolUsed": "Using Tool"
+    "toolUsed": "Using Tool",
+    "openInSidebar": "Open in sidebar",
+    "sidebarActive": "Reasoning is open in the sidebar"
   },
   "reply": {
     "replyTo": "Reply to",

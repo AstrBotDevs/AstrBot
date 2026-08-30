@@ -2,7 +2,7 @@
   <div
     ref="messageListRoot"
     class="message-list-root"
-    :class="{ 'is-dark': isDark }"
+    :class="{ 'is-dark': isDark, 'is-touch': isTouchDevice }"
   >
     <div v-if="isLoadingMessages" class="center-state">
       <v-progress-circular indeterminate size="32" width="3" />
@@ -193,62 +193,69 @@
           </div>
 
           <div v-if="showMessageMeta(msg, msgIndex)" class="message-meta">
-            <span v-if="msg.created_at">{{ formatTime(msg.created_at) }}</span>
-            <v-btn
-              v-if="!isUserMessage(msg)"
-              icon="mdi-content-copy"
-              size="x-small"
-              variant="text"
-              @click="copyMessage(msg)"
-            />
-            <v-menu v-if="messageContent(msg).agentStats" location="bottom">
-              <template #activator="{ props: statsProps }">
-                <v-btn
-                  v-bind="statsProps"
-                  icon="mdi-information-outline"
-                  size="x-small"
-                  variant="text"
-                />
-              </template>
-              <v-card class="stats-card" elevation="4">
-                <div
-                  v-if="cachedInputTokens(messageContent(msg).agentStats) > 0"
-                  class="stats-row"
-                >
-                  <span>{{ tm('stats.cachedTokens') }}</span>
-                  <strong>{{
-                    cachedInputTokens(messageContent(msg).agentStats)
-                  }}</strong>
-                </div>
-                <div class="stats-row">
-                  <span>{{ tm('stats.inputTokens') }}</span>
-                  <strong>{{
-                    inputTokens(messageContent(msg).agentStats)
-                  }}</strong>
-                </div>
-                <div class="stats-row">
-                  <span>{{ tm('stats.outputTokens') }}</span>
-                  <strong>{{
-                    outputTokens(messageContent(msg).agentStats)
-                  }}</strong>
-                </div>
-                <div
-                  v-if="agentTtft(messageContent(msg).agentStats)"
-                  class="stats-row"
-                >
-                  <span>{{ tm('stats.ttft') }}</span>
-                  <strong>{{
-                    agentTtft(messageContent(msg).agentStats)
-                  }}</strong>
-                </div>
-                <div class="stats-row">
-                  <span>{{ tm('stats.duration') }}</span>
-                  <strong>{{
-                    agentDuration(messageContent(msg).agentStats)
-                  }}</strong>
-                </div>
-              </v-card>
-            </v-menu>
+            <span v-if="msg.created_at" class="message-time">{{
+              formatTime(msg.created_at)
+            }}</span>
+            <div class="message-meta-actions">
+              <v-btn
+                v-if="plainTextFromMessage(msg)"
+                class="message-copy-btn"
+                icon="mdi-content-copy"
+                size="x-small"
+                variant="text"
+                :aria-label="tm('actions.copy')"
+                @click="copyMessage(msg)"
+              />
+              <v-menu v-if="messageContent(msg).agentStats" location="bottom">
+                <template #activator="{ props: statsProps }">
+                  <v-btn
+                    v-bind="statsProps"
+                    icon="mdi-information-outline"
+                    size="x-small"
+                    variant="text"
+                    :aria-label="t('core.common.info')"
+                  />
+                </template>
+                <v-card class="stats-card" elevation="4">
+                  <div
+                    v-if="cachedInputTokens(messageContent(msg).agentStats) > 0"
+                    class="stats-row"
+                  >
+                    <span>{{ tm('stats.cachedTokens') }}</span>
+                    <strong>{{
+                      cachedInputTokens(messageContent(msg).agentStats)
+                    }}</strong>
+                  </div>
+                  <div class="stats-row">
+                    <span>{{ tm('stats.inputTokens') }}</span>
+                    <strong>{{
+                      inputTokens(messageContent(msg).agentStats)
+                    }}</strong>
+                  </div>
+                  <div class="stats-row">
+                    <span>{{ tm('stats.outputTokens') }}</span>
+                    <strong>{{
+                      outputTokens(messageContent(msg).agentStats)
+                    }}</strong>
+                  </div>
+                  <div
+                    v-if="agentTtft(messageContent(msg).agentStats)"
+                    class="stats-row"
+                  >
+                    <span>{{ tm('stats.ttft') }}</span>
+                    <strong>{{
+                      agentTtft(messageContent(msg).agentStats)
+                    }}</strong>
+                  </div>
+                  <div class="stats-row">
+                    <span>{{ tm('stats.duration') }}</span>
+                    <strong>{{
+                      agentDuration(messageContent(msg).agentStats)
+                    }}</strong>
+                  </div>
+                </v-card>
+              </v-menu>
+            </div>
             <div v-if="messageRefs(msg).length" class="message-meta-refs">
               <ActionRef
                 :refs="resolvedMessageRefs(msg)"
@@ -308,8 +315,9 @@ import type {
   MessageDisplayBlock,
   MessagePart,
 } from '@/domain/chat';
-import { useModuleI18n } from '@/i18n/composables';
+import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { copyToClipboard } from '@/utils/clipboard';
+import { useToast } from '@/utils/toast';
 
 const props = withDefaults(
   defineProps<{
@@ -330,7 +338,12 @@ setCustomComponents('chat-message', {
   code_block: ThemeAwareMarkdownCodeBlock,
 });
 
+const { t } = useI18n();
 const { tm } = useModuleI18n('features/chat');
+const toast = useToast();
+const isTouchDevice =
+  typeof window !== 'undefined' &&
+  window.matchMedia('(pointer: coarse)').matches;
 const customMarkdownTags = ['ref'];
 const downloadingFiles = ref(new Set<string>());
 const messageListRoot = ref<HTMLElement | null>(null);
@@ -510,8 +523,18 @@ function parseJsonSafe(value: unknown) {
 
 async function copyMessage(message: ChatRecord) {
   const text = plainTextFromMessage(message);
-  if (!text) return;
-  await copyToClipboard(text, { container: messageListRoot.value });
+  if (!text) {
+    toast.error(t('core.common.copyFailed'));
+    return;
+  }
+  const copied = await copyToClipboard(text, {
+    container: messageListRoot.value,
+  });
+  if (copied) {
+    toast.success(t('core.common.copied'));
+    return;
+  }
+  toast.error(t('core.common.copyFailed'));
 }
 
 async function downloadPart(part: MessagePart) {
@@ -838,6 +861,25 @@ function formatDuration(seconds: number) {
   min-height: 24px;
   color: var(--chat-muted);
   font-size: 12px;
+}
+
+.message-time {
+  opacity: 0.72;
+}
+
+.message-meta-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.message-row:hover .message-meta-actions,
+.message-row:focus-within .message-meta-actions,
+.is-touch .message-meta-actions {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .message-meta-refs {

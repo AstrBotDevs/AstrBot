@@ -1,4 +1,4 @@
-import { defineComponent, ref } from 'vue';
+import { defineComponent, nextTick, ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
 import Chat from '@/components/chat/Chat.vue';
@@ -459,6 +459,58 @@ describe('Chat view smoke', () => {
       'current-provider',
       'current-model',
     );
+  });
+
+  it('shows a scroll-to-bottom control after leaving the latest messages', async () => {
+    testState.currSessionId = 'session-1';
+    testState.sessions = [
+      {
+        session_id: 'session-1',
+        display_name: 'Session 1',
+      },
+    ];
+    testState.activeMessages = [
+      {
+        id: 'msg-1',
+        content: {
+          type: 'bot',
+          message: [{ type: 'plain', text: 'hello' }],
+        },
+      },
+    ];
+
+    const wrapper = mountChat();
+    await flushPromises();
+
+    expect(wrapper.find('.scroll-to-bottom-btn').exists()).toBe(false);
+
+    const panel = wrapper.get('.messages-panel').element as HTMLElement;
+    Object.defineProperty(panel, 'scrollHeight', {
+      configurable: true,
+      value: 1200,
+    });
+    Object.defineProperty(panel, 'clientHeight', {
+      configurable: true,
+      value: 400,
+    });
+    Object.defineProperty(panel, 'scrollTop', {
+      configurable: true,
+      writable: true,
+      value: 0,
+    });
+
+    await wrapper.get('.messages-panel').trigger('scroll');
+    await flushPromises();
+
+    const button = wrapper.get('.scroll-to-bottom-btn');
+    expect(button.attributes('aria-label')).toBe('input.scrollToBottom');
+
+    await button.trigger('click');
+    await flushPromises();
+    await nextTick();
+    await nextTick();
+
+    expect(wrapper.find('.scroll-to-bottom-btn').exists()).toBe(false);
   });
 
   it('opens nested settings menus on click for coarse pointers', async () => {

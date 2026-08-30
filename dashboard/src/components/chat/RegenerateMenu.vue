@@ -13,6 +13,7 @@
         icon="mdi-refresh"
         size="x-small"
         variant="text"
+        :aria-label="tm('actions.retry')"
       />
     </template>
 

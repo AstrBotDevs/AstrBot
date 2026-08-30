@@ -13,6 +13,8 @@
         class="provider-trigger"
         :class="`provider-trigger--${variant}`"
         type="button"
+        :title="triggerAccessibleName"
+        :aria-label="triggerAccessibleName"
       >
         <span class="provider-trigger-copy">
           <span class="provider-trigger-title">{{ triggerTitle }}</span>
@@ -196,15 +198,34 @@ const selectedProvider = computed(() =>
 );
 
 const triggerTitle = computed(() => {
+  if (props.variant === 'input') {
+    return (
+      selectedProvider.value?.model ||
+      selectedModelName.value ||
+      selectedProvider.value?.id ||
+      selectedProviderId.value ||
+      'Model'
+    );
+  }
   if (selectedProvider.value?.id) return selectedProvider.value.id;
   if (selectedProviderId.value) return selectedProviderId.value;
-  return props.variant === 'header' ? 'Default model' : 'Model';
+  return 'Default model';
 });
 
 const triggerMeta = computed(() => {
   const model = selectedProvider.value?.model || selectedModelName.value;
   if (!model || model === triggerTitle.value) return '';
   return model;
+});
+
+const triggerAccessibleName = computed(() => {
+  const providerId =
+    selectedProvider.value?.id || selectedProviderId.value || '';
+  const model = selectedProvider.value?.model || selectedModelName.value || '';
+  if (providerId && model && providerId !== model) {
+    return `${providerId} / ${model}`;
+  }
+  return model || providerId || triggerTitle.value;
 });
 
 const filteredProviders = computed(() => {
@@ -385,8 +406,10 @@ defineExpose({
 
 .provider-trigger--input {
   height: 40px;
-  max-width: min(280px, 42vw);
-  padding: 0 12px;
+  max-width: clamp(88px, 30vw, 160px);
+  min-width: 0;
+  padding: 0 10px;
+  overflow: hidden;
   border: 1px solid rgba(var(--v-theme-on-surface), 0.18);
   border-radius: 999px;
 }
@@ -396,7 +419,15 @@ defineExpose({
   background: rgba(var(--v-theme-on-surface), 0.04);
 }
 
+.provider-trigger--input .provider-trigger-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .provider-trigger--input .provider-trigger-title {
+  display: block;
+  max-width: 100%;
   font-size: 14px;
   font-weight: 500;
 }
@@ -539,7 +570,7 @@ defineExpose({
 
   .provider-trigger--input {
     height: 38px;
-    max-width: 48vw;
+    max-width: clamp(88px, 30vw, 160px);
   }
 }
 </style>

@@ -1,27 +1,40 @@
 <template>
   <div class="reasoning-block" :class="{ 'reasoning-block--dark': isDark }">
-    <button
-      class="reasoning-header"
-      :class="{ 'reasoning-header--trigger': openInSidebar }"
-      type="button"
-      @click="handlePrimaryAction"
-    >
-      <span class="reasoning-title">
-        {{ reasoningTitle }}
-      </span>
-      <v-icon
-        size="22"
-        class="reasoning-icon"
-        :class="{ 'rotate-90': !openInSidebar && isExpanded }"
+    <div class="reasoning-header-row">
+      <button
+        class="reasoning-header"
+        type="button"
+        :disabled="sidebarActive"
+        :aria-expanded="showInlineContent"
+        :aria-label="
+          sidebarActive ? tm('reasoning.sidebarActive') : reasoningTitle
+        "
+        :title="sidebarActive ? tm('reasoning.sidebarActive') : undefined"
+        @click="toggleExpanded"
       >
-        mdi-chevron-right
-      </v-icon>
-    </button>
+        <span class="reasoning-title">
+          {{ reasoningTitle }}
+        </span>
+        <v-icon
+          size="22"
+          class="reasoning-icon"
+          :class="{ 'rotate-90': showInlineContent }"
+        >
+          mdi-chevron-right
+        </v-icon>
+      </button>
+      <v-btn
+        v-if="showSidebarAction"
+        class="reasoning-sidebar-btn"
+        icon="mdi-open-in-new"
+        size="x-small"
+        variant="text"
+        :aria-label="tm('reasoning.openInSidebar')"
+        @click.stop="openSidebar"
+      />
+    </div>
 
-    <div
-      v-if="!openInSidebar && isExpanded"
-      class="reasoning-content animate-fade-in"
-    >
+    <div v-if="showInlineContent" class="reasoning-content animate-fade-in">
       <ReasoningTimeline
         :parts="renderParts"
         :reasoning="reasoning"
@@ -59,7 +72,8 @@ const props = defineProps<{
   initialExpanded?: boolean;
   isStreaming?: boolean;
   hasNonReasoningContent?: boolean;
-  openInSidebar?: boolean;
+  showSidebarAction?: boolean;
+  sidebarActive?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -81,7 +95,11 @@ const renderParts = computed<MessagePart[]>(() => {
   return [];
 });
 
-const openInSidebar = computed(() => Boolean(props.openInSidebar));
+const showSidebarAction = computed(() => Boolean(props.showSidebarAction));
+const sidebarActive = computed(() => Boolean(props.sidebarActive));
+const showInlineContent = computed(
+  () => isExpanded.value && !sidebarActive.value,
+);
 
 const activityCounts = computed(() =>
   reasoningActivityCounts(renderParts.value, props.reasoning || ''),
@@ -101,7 +119,7 @@ const thinkingText = computed(() =>
 const showStreamingPreview = computed(
   () =>
     props.isStreaming &&
-    (openInSidebar.value || !isExpanded.value) &&
+    !showInlineContent.value &&
     !props.hasNonReasoningContent &&
     previewText.value,
 );
@@ -112,12 +130,13 @@ const previewTransitionName = computed(() =>
     : 'reasoning-preview-fade',
 );
 
-function handlePrimaryAction() {
-  if (openInSidebar.value) {
-    emit('open');
-    return;
-  }
+function toggleExpanded() {
   isExpanded.value = !isExpanded.value;
+}
+
+function openSidebar() {
+  isExpanded.value = false;
+  emit('open');
 }
 
 function latestReasoningPreview() {
@@ -157,7 +176,7 @@ function startPreviewTimer() {
 function syncPreviewTimer() {
   if (
     props.isStreaming &&
-    (openInSidebar.value || !isExpanded.value) &&
+    !showInlineContent.value &&
     !props.hasNonReasoningContent
   ) {
     if (!previewTimer && !previewStartTimer) {
@@ -165,7 +184,7 @@ function syncPreviewTimer() {
         previewStartTimer = null;
         if (
           props.isStreaming &&
-          (openInSidebar.value || !isExpanded.value) &&
+          !showInlineContent.value &&
           !props.hasNonReasoningContent
         ) {
           startPreviewTimer();
@@ -182,13 +201,19 @@ function syncPreviewTimer() {
   }
 }
 
+watch(sidebarActive, (active) => {
+  if (active) {
+    isExpanded.value = false;
+  }
+});
+
 watch(
   () => [
     props.isStreaming,
     isExpanded.value,
     props.hasNonReasoningContent,
     thinkingText.value,
-    openInSidebar.value,
+    sidebarActive.value,
   ],
   syncPreviewTimer,
   {
@@ -211,7 +236,15 @@ onBeforeUnmount(() => {
   line-height: inherit;
 }
 
+.reasoning-header-row {
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 2px;
+}
+
 .reasoning-header {
+  min-width: 0;
   max-width: 100%;
   border: 0;
   padding: 0;
@@ -230,6 +263,15 @@ onBeforeUnmount(() => {
   color: rgba(var(--v-theme-on-surface), 0.88);
 }
 
+.reasoning-header:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.reasoning-header:disabled:hover {
+  color: inherit;
+}
+
 .reasoning-icon {
   color: currentcolor;
   transition: transform 0.2s ease;
@@ -242,6 +284,16 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.reasoning-sidebar-btn {
+  flex: 0 0 auto;
+  color: inherit;
+  opacity: 0.72;
+}
+
+.reasoning-sidebar-btn:hover {
+  opacity: 1;
 }
 
 .reasoning-content {

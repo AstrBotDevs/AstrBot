@@ -2,7 +2,10 @@
   <div
     ref="listRoot"
     class="chat-message-list"
-    :class="[`variant-${variant}`, { 'is-dark': isDark }]"
+    :class="[
+      `variant-${variant}`,
+      { 'is-dark': isDark, 'is-touch': isTouchDevice },
+    ]"
   >
     <div class="messages-list">
       <div
@@ -145,7 +148,8 @@
                   :has-non-reasoning-content="
                     hasFollowingContentBlock(msg, blockIndex)
                   "
-                  :open-in-sidebar="variant === 'main'"
+                  :show-sidebar-action="variant === 'main'"
+                  :sidebar-active="isSidebarReasoningBlock(msg, blockIndex)"
                   @open="emit('openReasoning', { message: msg, blockIndex })"
                 />
 
@@ -309,78 +313,87 @@
           </div>
 
           <div v-if="showMessageMeta(msg, msgIndex)" class="message-meta">
-            <span v-if="msg.created_at">{{ formatTime(msg.created_at) }}</span>
-            <v-btn
-              v-if="canEditMessage(msg, msgIndex)"
-              icon="mdi-pencil-outline"
-              size="x-small"
-              variant="text"
-              @click="emit('openEdit', msg)"
-            />
-            <RegenerateMenu
-              v-if="canRegenerateMessage(msg, msgIndex)"
-              @retry="emit('regenerate', msg)"
-              @retry-with-model="emit('regenerateWithModel', msg, $event)"
-            />
-            <v-btn
-              v-if="enableCopy && !isUserMessage(msg)"
-              icon="mdi-content-copy"
-              size="x-small"
-              variant="text"
-              @click="copyMessage(msg)"
-            />
-            <v-menu
-              v-if="messageContent(msg).agentStats"
-              location="bottom"
-              transition="none"
-            >
-              <template #activator="{ props: statsProps }">
-                <v-btn
-                  v-bind="statsProps"
-                  icon="mdi-information-outline"
-                  size="x-small"
-                  variant="text"
-                />
-              </template>
-              <v-card class="stats-card" elevation="4">
-                <div
-                  v-if="cachedInputTokens(messageContent(msg).agentStats) > 0"
-                  class="stats-row"
-                >
-                  <span>{{ tm('stats.cachedTokens') }}</span>
-                  <strong>{{
-                    cachedInputTokens(messageContent(msg).agentStats)
-                  }}</strong>
-                </div>
-                <div class="stats-row">
-                  <span>{{ tm('stats.inputTokens') }}</span>
-                  <strong>{{
-                    inputTokens(messageContent(msg).agentStats)
-                  }}</strong>
-                </div>
-                <div class="stats-row">
-                  <span>{{ tm('stats.outputTokens') }}</span>
-                  <strong>{{
-                    outputTokens(messageContent(msg).agentStats)
-                  }}</strong>
-                </div>
-                <div
-                  v-if="agentTtft(messageContent(msg).agentStats)"
-                  class="stats-row"
-                >
-                  <span>{{ tm('stats.ttft') }}</span>
-                  <strong>{{
-                    agentTtft(messageContent(msg).agentStats)
-                  }}</strong>
-                </div>
-                <div class="stats-row">
-                  <span>{{ tm('stats.duration') }}</span>
-                  <strong>{{
-                    agentDuration(messageContent(msg).agentStats)
-                  }}</strong>
-                </div>
-              </v-card>
-            </v-menu>
+            <span v-if="msg.created_at" class="message-time">{{
+              formatTime(msg.created_at)
+            }}</span>
+            <div class="message-meta-actions">
+              <v-btn
+                v-if="canEditMessage(msg, msgIndex)"
+                class="message-edit-btn"
+                icon="mdi-pencil-outline"
+                size="x-small"
+                variant="text"
+                :aria-label="t('core.common.edit')"
+                @click="emit('openEdit', msg)"
+              />
+              <RegenerateMenu
+                v-if="canRegenerateMessage(msg, msgIndex)"
+                @retry="emit('regenerate', msg)"
+                @retry-with-model="emit('regenerateWithModel', msg, $event)"
+              />
+              <v-btn
+                v-if="enableCopy && plainTextFromMessage(msg)"
+                class="message-copy-btn"
+                icon="mdi-content-copy"
+                size="x-small"
+                variant="text"
+                :aria-label="tm('actions.copy')"
+                @click="copyMessage(msg)"
+              />
+              <v-menu
+                v-if="messageContent(msg).agentStats"
+                location="bottom"
+                transition="none"
+              >
+                <template #activator="{ props: statsProps }">
+                  <v-btn
+                    v-bind="statsProps"
+                    icon="mdi-information-outline"
+                    size="x-small"
+                    variant="text"
+                    :aria-label="t('core.common.info')"
+                  />
+                </template>
+                <v-card class="stats-card" elevation="4">
+                  <div
+                    v-if="cachedInputTokens(messageContent(msg).agentStats) > 0"
+                    class="stats-row"
+                  >
+                    <span>{{ tm('stats.cachedTokens') }}</span>
+                    <strong>{{
+                      cachedInputTokens(messageContent(msg).agentStats)
+                    }}</strong>
+                  </div>
+                  <div class="stats-row">
+                    <span>{{ tm('stats.inputTokens') }}</span>
+                    <strong>{{
+                      inputTokens(messageContent(msg).agentStats)
+                    }}</strong>
+                  </div>
+                  <div class="stats-row">
+                    <span>{{ tm('stats.outputTokens') }}</span>
+                    <strong>{{
+                      outputTokens(messageContent(msg).agentStats)
+                    }}</strong>
+                  </div>
+                  <div
+                    v-if="agentTtft(messageContent(msg).agentStats)"
+                    class="stats-row"
+                  >
+                    <span>{{ tm('stats.ttft') }}</span>
+                    <strong>{{
+                      agentTtft(messageContent(msg).agentStats)
+                    }}</strong>
+                  </div>
+                  <div class="stats-row">
+                    <span>{{ tm('stats.duration') }}</span>
+                    <strong>{{
+                      agentDuration(messageContent(msg).agentStats)
+                    }}</strong>
+                  </div>
+                </v-card>
+              </v-menu>
+            </div>
             <StyledMenu
               v-if="messageThreads(msg).length"
               location="bottom"
@@ -487,6 +500,7 @@ import type {
 } from '@/domain/chat';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { copyToClipboard } from '@/utils/clipboard';
+import { useToast } from '@/utils/toast';
 
 const props = withDefaults(
   defineProps<{
@@ -498,6 +512,9 @@ const props = withDefaults(
     enableRegenerate?: boolean;
     enableThreadSelection?: boolean;
     enableCopy?: boolean;
+    isTouchDevice?: boolean;
+    sidebarReasoningMessageId?: string | number | null;
+    sidebarReasoningBlockIndex?: number | null;
     manageRefsSidebar?: boolean;
     editingMessageId?: string | number | null;
     editDraft?: string;
@@ -511,6 +528,9 @@ const props = withDefaults(
     enableRegenerate: false,
     enableThreadSelection: false,
     enableCopy: true,
+    isTouchDevice: false,
+    sidebarReasoningMessageId: null,
+    sidebarReasoningBlockIndex: null,
     manageRefsSidebar: true,
     editingMessageId: null,
     editDraft: '',
@@ -542,6 +562,7 @@ setCustomComponents('chat-message', {
 
 const { t } = useI18n();
 const { tm } = useModuleI18n('features/chat');
+const toast = useToast();
 const customMarkdownTags = ['ref'];
 const downloadingFiles = ref(new Set<string>());
 const imagePreview = reactive({ visible: false, url: '' });
@@ -669,6 +690,21 @@ function hasFollowingContentBlock(message: ChatRecord, blockIndex: number) {
   return renderBlocks(message)
     .slice(blockIndex + 1)
     .some((block) => block.kind === 'content');
+}
+
+function isSidebarReasoningBlock(message: ChatRecord, blockIndex: number) {
+  if (
+    props.sidebarReasoningMessageId === null ||
+    props.sidebarReasoningMessageId === undefined ||
+    props.sidebarReasoningBlockIndex === null ||
+    props.sidebarReasoningBlockIndex === undefined
+  ) {
+    return false;
+  }
+  return (
+    props.sidebarReasoningBlockIndex === blockIndex &&
+    String(message.id) === String(props.sidebarReasoningMessageId)
+  );
 }
 
 function handleMouseUp(event: MouseEvent, message: ChatRecord) {
@@ -824,8 +860,16 @@ function toolCallStatusText(tool: Record<string, unknown>) {
 
 async function copyMessage(message: ChatRecord) {
   const text = plainTextFromMessage(message);
-  if (!text) return;
-  await copyToClipboard(text);
+  if (!text) {
+    toast.error(t('core.common.copyFailed'));
+    return;
+  }
+  const copied = await copyToClipboard(text, { container: listRoot.value });
+  if (copied) {
+    toast.success(t('core.common.copied'));
+    return;
+  }
+  toast.error(t('core.common.copyFailed'));
 }
 
 async function downloadPart(part: MessagePart) {
@@ -1295,6 +1339,25 @@ function formatDuration(seconds: number) {
   min-height: 24px;
   color: var(--chat-muted);
   font-size: 12px;
+}
+
+.message-time {
+  opacity: 0.72;
+}
+
+.message-meta-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.message-row:hover .message-meta-actions,
+.message-row:focus-within .message-meta-actions,
+.is-touch .message-meta-actions {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .message-meta-refs {

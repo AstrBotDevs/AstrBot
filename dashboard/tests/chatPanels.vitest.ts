@@ -69,6 +69,9 @@ describe('chat side panels', () => {
     await flushPromises();
 
     expect(wrapper.find('.reasoning-timeline-stub').text()).toBe('0-step 1');
+    expect(
+      wrapper.find('.reasoning-sidebar [aria-label="Close"]').exists(),
+    ).toBe(true);
     expect(hasNonElementRootWarning(warnSpy.mock.calls)).toBe(false);
   });
 

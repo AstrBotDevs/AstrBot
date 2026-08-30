@@ -131,17 +131,14 @@ describe('chat component smokes', () => {
     ).toBe(false);
   });
 
-  it('does not oscillate between single-line and multiline input layouts', async () => {
-    vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(
-      function (this: Element) {
-        return this instanceof HTMLInputElement ? 40 : 100;
-      },
-    );
-    vi.spyOn(Element.prototype, 'scrollWidth', 'get').mockImplementation(
-      function (this: Element) {
-        return this instanceof HTMLInputElement ? 80 : 100;
-      },
-    );
+  it('keeps a textarea and only expands the composer for multiline prompts', async () => {
+    vi.spyOn(
+      HTMLTextAreaElement.prototype,
+      'scrollHeight',
+      'get',
+    ).mockImplementation(function (this: HTMLTextAreaElement) {
+      return this.value.includes('\n') ? 96 : 52;
+    });
 
     const wrapper = mountWithVuetify(ChatInput, {
       props: {
@@ -156,22 +153,32 @@ describe('chat component smokes', () => {
     });
 
     await flushPromises();
-    expect(wrapper.find('.chat-text-input').exists()).toBe(true);
-    expect(wrapper.find('.chat-textarea').exists()).toBe(false);
-
-    await wrapper.setProps({ prompt: 'content that overflows' });
-    await flushPromises();
-    expect(wrapper.find('.chat-text-input').exists()).toBe(false);
     expect(wrapper.find('.chat-textarea').exists()).toBe(true);
+    expect(wrapper.find('.chat-text-input').exists()).toBe(false);
+    expect(wrapper.find('.input-container').classes()).not.toContain(
+      'is-multiline',
+    );
+
+    await wrapper.setProps({ prompt: 'first line\nsecond line' });
+    await flushPromises();
+    expect(wrapper.find('.chat-textarea').exists()).toBe(true);
+    expect(wrapper.find('.input-container').classes()).toContain(
+      'is-multiline',
+    );
 
     await wrapper.setProps({ prompt: 'short' });
     await flushPromises();
     expect(wrapper.find('.chat-textarea').exists()).toBe(true);
+    expect(wrapper.find('.input-container').classes()).toContain(
+      'is-multiline',
+    );
 
     await wrapper.setProps({ prompt: '' });
     await flushPromises();
-    expect(wrapper.find('.chat-text-input').exists()).toBe(true);
-    expect(wrapper.find('.chat-textarea').exists()).toBe(false);
+    expect(wrapper.find('.chat-textarea').exists()).toBe(true);
+    expect(wrapper.find('.input-container').classes()).not.toContain(
+      'is-multiline',
+    );
   });
 
   it('renders ReasoningBlock streaming preview and expands inline timeline', async () => {
@@ -179,7 +186,6 @@ describe('chat component smokes', () => {
       props: {
         parts: [{ type: 'think', think: 'First line\nSecond line' }],
         isStreaming: true,
-        openInSidebar: false,
       },
     });
 
@@ -193,6 +199,33 @@ describe('chat component smokes', () => {
 
     expect(wrapper.find('.reasoning-content').exists()).toBe(true);
     expect(wrapper.find('.reasoning-timeline-stub').text()).toBe('1|');
+    expect(wrapper.emitted('open')).toBeUndefined();
   });
 
+  it('opens the sidebar from the dedicated button and hides inline content', async () => {
+    const wrapper = mountWithVuetify(ReasoningBlock, {
+      props: {
+        parts: [{ type: 'think', think: 'First line\nSecond line' }],
+        showSidebarAction: true,
+      },
+    });
+
+    await wrapper.find('.reasoning-header').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('.reasoning-content').exists()).toBe(true);
+    expect(wrapper.emitted('open')).toBeUndefined();
+
+    await wrapper.find('.reasoning-sidebar-btn').trigger('click');
+    await flushPromises();
+    expect(wrapper.emitted('open')).toHaveLength(1);
+    expect(wrapper.find('.reasoning-content').exists()).toBe(false);
+
+    await wrapper.setProps({ sidebarActive: true });
+    await wrapper.find('.reasoning-header').trigger('click');
+    await flushPromises();
+    expect(
+      wrapper.find('.reasoning-header').attributes('disabled'),
+    ).toBeDefined();
+    expect(wrapper.find('.reasoning-content').exists()).toBe(false);
+  });
 });

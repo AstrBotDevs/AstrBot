@@ -8,7 +8,7 @@
             icon="mdi-close"
             size="small"
             variant="text"
-            aria-label="Close reasoning sidebar"
+            :aria-label="t('core.common.close')"
             @click="close"
           />
         </div>
@@ -36,7 +36,7 @@ import {
   reasoningActivityTitle,
 } from '@/composables/useMessages';
 import type { MessagePart } from '@/domain/chat';
-import { useModuleI18n } from '@/i18n/composables';
+import { useI18n, useModuleI18n } from '@/i18n/composables';
 import ReasoningTimeline from '@/components/chat/message_list_comps/ReasoningTimeline.vue';
 
 const props = defineProps<{
@@ -50,6 +50,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean];
 }>();
 
+const { t } = useI18n();
 const { tm } = useModuleI18n('features/chat');
 
 const activityCounts = computed(() =>
