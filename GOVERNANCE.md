@@ -38,9 +38,12 @@ Deviations_ sections.
 | Security / 安全                               | Follow [SECURITY.md](SECURITY.md); private until fixed / 按 SECURITY.md 处理，修复前保持私密                                                                                            |
 
 Decisions aim for consensus. The lead maintainer breaks ties and decides
-scope. PR titles use English Conventional Commits (see [CONTRIBUTING.md](CONTRIBUTING.md)).
+scope. PR titles use English Conventional Commits (see
+[CONTRIBUTING.md](CONTRIBUTING.md)). Commit-message types, description
+rules, and AI-assisted footer policy are in CONTRIBUTING.md and
+`.agents/shared/conventional-commit/REFERENCE.md`.
 
-> 决策以达成共识为目标；主维护者在僵局与范围问题上做最终裁定。PR 标题使用英文 Conventional Commits（见 [CONTRIBUTING.md](CONTRIBUTING.md)）。
+> 决策以达成共识为目标；主维护者在僵局与范围问题上做最终裁定。PR 标题使用英文 Conventional Commits（见 [CONTRIBUTING.md](CONTRIBUTING.md)）。提交说明的类型、描述规则与 AI 辅助 footer 见 CONTRIBUTING.md 与 `.agents/shared/conventional-commit/REFERENCE.md`。
 
 ## Scope / 范围
 

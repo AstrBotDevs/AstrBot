@@ -51,7 +51,11 @@ uv run python docs/scripts/update_openapi_json.py
 ### 提交代码
 
 - 分支名建议使用 `fix/`、`feat/`、`docs/`、`refactor/` 等前缀。
-- Commit 与 PR 标题请使用英文 Conventional Commits，例如 `fix: align openapi scope docs with backend`.
+- Commit 与 PR 标题使用英文 Conventional Commits，格式为 `<type>(<optional scope>): <description>`，例如 `fix: align openapi scope docs with backend`。
+- `type` 取自：`feat`、`fix`、`refactor`、`perf`、`style`、`test`、`docs`、`build`、`ops`、`chore`。不要使用 `ci`；持续集成与部署类改动用 `ops`。
+- `description` 使用祈使现在时、小写开头、句末不加句号；标题建议不超过约 70 个字符。
+- 破坏性变更在 `:` 前加 `!`，并在 footer 写 `BREAKING CHANGE:`。议题编号放在 footer（例如 `Fixes #123`），不要当作 scope。
+- AI 辅助生成或定稿的 commit message 必须遵守 [`.agents/shared/conventional-commit/REFERENCE.md`](.agents/shared/conventional-commit/REFERENCE.md)，并在 footer 附加 `AI-Generated: true` 与 UTC `Generated-At:`。人工撰写的提交可以省略这两项 footer。
 - 不要把“兼容旧版本”的文案或代码路径重新带回仓库。
 
 提交前至少运行：
@@ -124,7 +128,11 @@ uv run python docs/scripts/update_openapi_json.py
 ### Pull Requests
 
 - Prefer branch names such as `fix/...`, `feat/...`, `docs/...`, or `refactor/...`.
-- Use English Conventional Commit titles, for example `docs: align docker guide with repo compose files`.
+- Use English Conventional Commits for commit and PR titles: `<type>(<optional scope>): <description>`, for example `docs: align docker guide with repo compose files`.
+- Allowed types: `feat`, `fix`, `refactor`, `perf`, `style`, `test`, `docs`, `build`, `ops`, `chore`. Do not use `ci`; use `ops` for CI/CD and deployment changes.
+- Write a lowercase imperative description with no trailing period. Keep the header under about 70 characters.
+- Mark breaking changes with `!` before `:` and a `BREAKING CHANGE:` footer. Put issue IDs in footers (`Fixes #123`), never as scopes.
+- AI-assisted commit messages must follow [`.agents/shared/conventional-commit/REFERENCE.md`](.agents/shared/conventional-commit/REFERENCE.md) and append `AI-Generated: true` plus a UTC `Generated-At:` footer. Human-written commits may omit those footers.
 - Do not reintroduce legacy compatibility narratives or old code paths.
 
 Run at least these checks before submitting:

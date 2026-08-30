@@ -447,8 +447,20 @@ diff with its runtime/test changes.
   `soulter`, and other upstream links are allowed only when deliberately citing
   provenance, the upstream sync source, or a service the fork still consumes;
   label that relationship instead of implying fork ownership.
-- **Commits/PRs:** use English conventional commits (`feat:`, `fix:`,
-  `refactor:`, `chore:`), with titles under about 70 characters.
+- **Commits/PRs:** follow
+  `.agents/shared/conventional-commit/REFERENCE.md` when generating,
+  reviewing, or classifying commit messages. Use English Conventional
+  Commits: `<type>(<optional scope>): <description>`. Allowed types are
+  `feat`, `fix`, `refactor`, `perf`, `style`, `test`, `docs`, `build`,
+  `ops`, and `chore`. Write a lowercase imperative description without a
+  trailing period; keep the header under about 70 characters. Mark
+  breaking changes with `!` before `:` and a `BREAKING CHANGE:` footer.
+  Put issue IDs in footers (`Fixes #123`), never as scopes. When an
+  agent generates or finalizes the message, run
+  `date -u '+%Y-%m-%dT%H:%M:%SZ'` and append `AI-Generated: true` plus
+  `Generated-At: <result>` as footers. Commit, amend, or push only when
+  the user explicitly asks. Preserve upstream subjects verbatim on
+  cherry-pick/adapt; see the sync-upstream skill.
 
 ## Upstream synchronization
 

@@ -123,6 +123,10 @@ For an installation smoke test, run `uv run astrbot plug install --editable <plu
 
 Before handing off, report the generated files, the synchronized Python constraint and source path, checks run, and any unresolved assumption. Never claim a runtime or platform integration was tested when only static checks ran.
 
+## Commits
+
+Commit plugin files only when the user explicitly asks. Follow `.agents/shared/conventional-commit/REFERENCE.md` for the message, including the `AI-Generated` and `Generated-At` footers.
+
 ## Bundled resources
 
 - [references/astrbot-plugin-contract.md](references/astrbot-plugin-contract.md): compact current-fork contract and source links.

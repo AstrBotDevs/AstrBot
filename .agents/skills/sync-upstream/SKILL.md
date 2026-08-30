@@ -81,6 +81,13 @@ suffix. If the upstream subject has no PR suffix, do not invent one. Change a
 subject only when the fork's user-visible semantics materially differ, and
 explain that change in the commit body.
 
+Generated or rewritten messages must follow
+`.agents/shared/conventional-commit/REFERENCE.md`, including
+`AI-Generated: true` and a UTC `Generated-At:` footer from
+`date -u '+%Y-%m-%dT%H:%M:%SZ'`. Do not rewrite a preserved upstream
+subject to satisfy that reference. Do not add AI metadata to a message
+that `git cherry-pick -x` kept verbatim.
+
 Use the following method for each disposition:
 
 - `cherry-pick`: use `git cherry-pick -x <full-upstream-sha>`. This preserves
@@ -124,13 +131,17 @@ Upstream-PR: AstrBotDevs#<number>
 Sync-Disposition: adapt
 Fork-Adaptation: <what changed for this fork>
 Tested: <command>
+AI-Generated: true
+Generated-At: <UTC ISO 8601 timestamp>
 ```
 
 The final cursor update is a separate metadata-only commit with subject
-`chore(sync): record upstream integration`. Do not hide implementation changes
-inside this cursor commit. A release/version bump that is intentionally skipped
-still advances the cursor only after its `skip` decision is recorded and the
-skip rationale is written to `upstream-sync.yaml`.
+`chore(sync): record upstream integration`. Generate that message from
+the conventional-commit reference, including a body and AI footers. Do
+not hide implementation changes inside this cursor commit. A
+release/version bump that is intentionally skipped still advances the
+cursor only after its `skip` decision is recorded and the skip rationale
+is written to `upstream-sync.yaml`.
 
 After each implementation commit, verify the mapping before moving on:
 
