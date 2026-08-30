@@ -94,27 +94,33 @@ def _compact_history() -> list[dict]:
 def _compact_context(
     history: list[dict],
     *,
-    settings: dict | None = None,
+    provider_settings: dict | None = None,
+    runner_type: str = "local",
+    compression_settings: dict | None = None,
     unique_session: bool = False,
 ):
     """Create a command context and mocked conversation manager.
 
     Args:
         history: Persisted conversation history.
-        settings: Provider setting overrides.
+        provider_settings: Provider setting overrides.
+        runner_type: Embedded Agent Runner type.
+        compression_settings: Local compression setting overrides.
         unique_session: Whether group conversations are isolated by member.
 
     Returns:
         The fake command context and its conversation manager.
     """
-    provider_settings = {
-        "enable": True,
+    effective_provider_settings = {"enable": True}
+    effective_provider_settings.update(provider_settings or {})
+    compression_config = {
         "enable_manual_context_compression": True,
-        "agent_runner_type": "local",
-        "context_limit_reached_strategy": "llm_compress",
-        "llm_compress_keep_recent_ratio": 0.15,
+        "overflow_strategy": "llm_compress",
+        "instruction": "Keep the important context.",
+        "keep_recent_ratio": 0.15,
+        "provider_id": "compression-provider",
     }
-    provider_settings.update(settings or {})
+    compression_config.update(compression_settings or {})
     conversation = SimpleNamespace(history=json.dumps(history))
     manager = SimpleNamespace(
         get_curr_conversation_id=AsyncMock(return_value="cid-1"),
@@ -124,7 +130,15 @@ def _compact_context(
     context = SimpleNamespace(
         conversation_manager=manager,
         get_config=lambda **kwargs: {
-            "provider_settings": provider_settings,
+            "provider_settings": effective_provider_settings,
+            "agent_runner": {
+                "runner_type": runner_type,
+                "config": (
+                    {"compression": compression_config}
+                    if runner_type == "local"
+                    else {}
+                ),
+            },
             "platform_settings": {"unique_session": unique_session},
         },
     )
@@ -304,26 +318,54 @@ async def test_clear_third_party_agent_runner_state_removes_local_state_when_dee
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("settings", "group_id", "role", "unique_session", "expected"),
+    (
+        "provider_settings",
+        "runner_type",
+        "compression_settings",
+        "group_id",
+        "role",
+        "unique_session",
+        "expected",
+    ),
     [
-        ({"enable": False}, "", "member", False, "AI features are disabled"),
-        ({"enable_manual_context_compression": False}, "", "member", False, "disabled"),
-        ({"agent_runner_type": "dify"}, "", "member", False, "local agent"),
         (
-            {"context_limit_reached_strategy": "truncate_by_turns"},
+            {"enable": False},
+            "local",
+            {},
+            "",
+            "member",
+            False,
+            "AI features are disabled",
+        ),
+        (
+            {},
+            "local",
+            {"enable_manual_context_compression": False},
+            "",
+            "member",
+            False,
+            "disabled",
+        ),
+        ({}, "dify", {}, "", "member", False, "local agent"),
+        (
+            {},
+            "local",
+            {"overflow_strategy": "truncate_by_turns"},
             "",
             "member",
             False,
             "LLM context compression strategy",
         ),
-        ({}, "group-1", "member", False, "admin permission"),
-        ({}, "", "member", False, "No LLM provider"),
-        ({}, "group-1", "member", True, "No LLM provider"),
+        ({}, "local", {}, "group-1", "member", False, "admin permission"),
+        ({}, "local", {}, "", "member", False, "No LLM provider"),
+        ({}, "local", {}, "group-1", "member", True, "No LLM provider"),
     ],
 )
 async def test_compact_rejects_unsupported_configuration_and_shared_group_members(
     monkeypatch: pytest.MonkeyPatch,
-    settings: dict,
+    provider_settings: dict,
+    runner_type: str,
+    compression_settings: dict,
     group_id: str,
     role: str,
     unique_session: bool,
@@ -331,7 +373,9 @@ async def test_compact_rejects_unsupported_configuration_and_shared_group_member
 ):
     context, manager = _compact_context(
         _compact_history(),
-        settings=settings,
+        provider_settings=provider_settings,
+        runner_type=runner_type,
+        compression_settings=compression_settings,
         unique_session=unique_session,
     )
     event = FakeCompactEvent(group_id=group_id, role=role)
@@ -353,28 +397,79 @@ async def test_compact_rejects_unsupported_configuration_and_shared_group_member
 
 
 @pytest.mark.asyncio
+async def test_compact_rejects_missing_active_conversation(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    context, manager = _compact_context(_compact_history())
+    manager.get_curr_conversation_id.return_value = None
+    event = FakeCompactEvent()
+    provider_resolver = AsyncMock()
+    monkeypatch.setattr(
+        conversation_module,
+        "get_context_compression_provider",
+        provider_resolver,
+    )
+
+    await conversation_module.ConversationCommands(context).compact(event)
+
+    assert "not in a conversation" in _result_text(event)
+    provider_resolver.assert_not_awaited()
+    manager.update_conversation.assert_not_awaited()
+    assert event.sent == []
+
+
+@pytest.mark.asyncio
+async def test_compact_preserves_history_when_conversation_cannot_be_loaded(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    context, manager = _compact_context(_compact_history())
+    manager.get_conversation.return_value = None
+    event = FakeCompactEvent()
+    provider = FakeCompressionProvider()
+    monkeypatch.setattr(
+        conversation_module,
+        "get_context_compression_provider",
+        AsyncMock(return_value=provider),
+    )
+
+    await conversation_module.ConversationCommands(context).compact(event)
+
+    assert "could not be loaded" in _result_text(event)
+    manager.update_conversation.assert_not_awaited()
+    assert provider.call_count == 0
+    assert [chain.type for chain in event.sent] == ["webchat_ephemeral"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("platform_name", "sent_types"),
-    [("webchat", ["webchat_ephemeral", "agent_stats"]), ("telegram", [None])],
+    ("platform_name", "group_id", "role", "sent_types"),
+    [
+        ("webchat", "", "member", ["webchat_ephemeral", "agent_stats"]),
+        ("telegram", "", "member", [None]),
+        ("webchat", "group-1", "admin", ["webchat_ephemeral", "agent_stats"]),
+    ],
 )
 async def test_compact_writes_reduced_checkpoint_history_and_expected_stats(
     monkeypatch: pytest.MonkeyPatch,
     platform_name: str,
+    group_id: str,
+    role: str,
     sent_types: list[str | None],
 ):
     history = _compact_history()
     context, manager = _compact_context(history)
-    event = FakeCompactEvent(platform_name=platform_name)
+    event = FakeCompactEvent(
+        platform_name=platform_name,
+        group_id=group_id,
+        role=role,
+    )
     provider = FakeCompressionProvider()
-
-    async def get_provider(*args, **kwargs):
-        _ = args, kwargs
-        return provider
+    provider_resolver = AsyncMock(return_value=provider)
 
     monkeypatch.setattr(
         conversation_module,
         "get_context_compression_provider",
-        get_provider,
+        provider_resolver,
     )
 
     await conversation_module.ConversationCommands(context).compact(event)
@@ -387,6 +482,12 @@ async def test_compact_writes_reduced_checkpoint_history_and_expected_stats(
     assert {"role": "_checkpoint", "content": {"id": "cp-latest"}} in saved_history
     assert {"role": "_checkpoint", "content": {"id": "cp-old"}} not in saved_history
     assert provider.call_count == 1
+    provider_resolver.assert_awaited_once_with(
+        "llm_compress",
+        "compression-provider",
+        context,
+        event,
+    )
     assert [chain.type for chain in event.sent] == sent_types
     assert event.sent[0].get_plain_text() == "⏳ Compressing context..."
     if platform_name == "webchat":
@@ -395,15 +496,19 @@ async def test_compact_writes_reduced_checkpoint_history_and_expected_stats(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider_failure", [False, True])
-async def test_compact_does_not_write_when_summary_fails_or_is_unchanged(
+@pytest.mark.parametrize(
+    ("summary", "provider_failure"),
+    [("", False), ("", True), ("expanded summary " * 1000, False)],
+)
+async def test_compact_does_not_write_when_summary_fails_or_has_no_benefit(
     monkeypatch: pytest.MonkeyPatch,
+    summary: str,
     provider_failure: bool,
 ):
     history = _compact_history()
     context, manager = _compact_context(history)
     event = FakeCompactEvent()
-    provider = FakeCompressionProvider(summary="", fail=provider_failure)
+    provider = FakeCompressionProvider(summary=summary, fail=provider_failure)
 
     async def get_provider(*args, **kwargs):
         _ = args, kwargs
@@ -423,14 +528,21 @@ async def test_compact_does_not_write_when_summary_fails_or_is_unchanged(
 
 
 @pytest.mark.asyncio
-async def test_compact_reports_single_complete_round_as_not_enough_history(
+@pytest.mark.parametrize(
+    "history",
+    [
+        [],
+        [
+            {"role": "user", "content": "question"},
+            {"role": "assistant", "content": "answer"},
+            {"role": "_checkpoint", "content": {"id": "cp-latest"}},
+        ],
+    ],
+)
+async def test_compact_reports_insufficient_history_without_calling_provider(
     monkeypatch: pytest.MonkeyPatch,
+    history: list[dict],
 ):
-    history = [
-        {"role": "user", "content": "question"},
-        {"role": "assistant", "content": "answer"},
-        {"role": "_checkpoint", "content": {"id": "cp-latest"}},
-    ]
     context, manager = _compact_context(history)
     event = FakeCompactEvent()
     provider = FakeCompressionProvider()
@@ -527,12 +639,52 @@ async def test_compact_checks_force_stop_after_final_history_read(
 
 
 @pytest.mark.asyncio
-async def test_compact_does_not_write_after_stop_request(
+async def test_compact_force_stop_after_storage_update_skips_stats_and_result(
     monkeypatch: pytest.MonkeyPatch,
 ):
     context, manager = _compact_context(_compact_history())
-    event = FakeCompactEvent(extras={"agent_stop_requested": True})
+    event = FakeCompactEvent()
     provider = FakeCompressionProvider()
+
+    async def stop_after_update(*args, **kwargs):
+        _ = args, kwargs
+        event.stopped = True
+
+    manager.update_conversation.side_effect = stop_after_update
+    monkeypatch.setattr(
+        conversation_module,
+        "get_context_compression_provider",
+        AsyncMock(return_value=provider),
+    )
+
+    await conversation_module.ConversationCommands(context).compact(event)
+
+    manager.update_conversation.assert_awaited_once()
+    assert event.result is None
+    assert [chain.type for chain in event.sent] == ["webchat_ephemeral"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stop_during_summary", [False, True])
+async def test_compact_does_not_write_after_stop_request(
+    monkeypatch: pytest.MonkeyPatch,
+    stop_during_summary: bool,
+):
+    context, manager = _compact_context(_compact_history())
+    event = FakeCompactEvent(
+        extras={} if stop_during_summary else {"agent_stop_requested": True}
+    )
+    provider = FakeCompressionProvider()
+
+    if stop_during_summary:
+
+        async def request_stop_during_summary(**kwargs):
+            _ = kwargs
+            provider.call_count += 1
+            event.extras["agent_stop_requested"] = True
+            return SimpleNamespace(completion_text="Concise summary.")
+
+        provider.text_chat = request_stop_during_summary
 
     async def get_provider(*args, **kwargs):
         _ = args, kwargs
@@ -547,7 +699,7 @@ async def test_compact_does_not_write_after_stop_request(
     await conversation_module.ConversationCommands(context).compact(event)
 
     manager.update_conversation.assert_not_awaited()
-    assert provider.call_count == 0
+    assert provider.call_count == int(stop_during_summary)
     assert "cancelled" in _result_text(event)
 
 
