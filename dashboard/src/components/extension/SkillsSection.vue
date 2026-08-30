@@ -2403,6 +2403,11 @@ export default {
 }
 
 @media (max-width: 860px) {
+  .skill-editor-dialog {
+    max-height: none;
+    overflow-y: auto;
+  }
+
   .skills-list {
     grid-template-columns: minmax(0, 1fr);
   }
