@@ -44,10 +44,23 @@ class EstimateTokenCounter:
     """
 
     def count_tokens(
-        self, messages: list[Message], trusted_token_usage: int = 0
+        self,
+        messages: list[Message],
+        reported_token_usage: int = 0,
+        **legacy_usage: int,
     ) -> int:
-        if trusted_token_usage > 0:
-            return trusted_token_usage
+        unexpected = legacy_usage.keys() - {"trusted_token_usage"}
+        if unexpected:
+            name = next(iter(unexpected))
+            raise TypeError(
+                f"count_tokens() got an unexpected keyword argument '{name}'"
+            )
+        if reported_token_usage <= 0:
+            reported_token_usage = legacy_usage.get(
+                "trusted_token_usage", reported_token_usage
+            )
+        if reported_token_usage > 0:
+            return reported_token_usage
 
         total = 0
         for msg in messages:
