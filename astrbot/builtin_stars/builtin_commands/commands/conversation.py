@@ -237,6 +237,7 @@ class ConversationCommands:
         umo = message.unified_msg_origin
         cfg = self.context.get_config(umo=umo)
         provider_settings = cfg.get("provider_settings", {})
+        agent_runner = cfg.get("agent_runner", {})
         conversation_manager = self.context.conversation_manager
 
         is_unique_session = cfg.get("platform_settings", {}).get(
@@ -255,18 +256,20 @@ class ConversationCommands:
             reply("❌ AI features are disabled for this session.")
             return
 
-        if not provider_settings.get("enable_manual_context_compression", False):
+        if agent_runner.get("runner_type") != "local":
+            reply("❌ /compact is supported only by the local agent runner.")
+            return
+
+        runner_config = agent_runner.get("config", {})
+        compression_config = runner_config.get("compression", {})
+        if not compression_config.get("enable_manual_context_compression", False):
             reply(
                 "❌ Manual context compression is disabled. Enable it in Context "
                 "Management first."
             )
             return
 
-        if provider_settings.get("agent_runner_type", "local") != "local":
-            reply("❌ /compact is supported only by the local agent runner.")
-            return
-
-        strategy = provider_settings.get("context_limit_reached_strategy")
+        strategy = compression_config.get("overflow_strategy")
         if strategy != "llm_compress":
             reply("❌ /compact requires the LLM context compression strategy.")
             return
@@ -278,7 +281,7 @@ class ConversationCommands:
 
         compression_provider = await get_context_compression_provider(
             strategy,
-            provider_settings.get("llm_compress_provider_id", ""),
+            compression_config.get("provider_id", ""),
             self.context,
             message,
         )
@@ -332,11 +335,9 @@ class ConversationCommands:
 
                 context_manager = ContextManager(
                     ContextConfig(
-                        llm_compress_instruction=provider_settings.get(
-                            "llm_compress_instruction"
-                        ),
-                        llm_compress_keep_recent_ratio=provider_settings.get(
-                            "llm_compress_keep_recent_ratio",
+                        llm_compress_instruction=compression_config.get("instruction"),
+                        llm_compress_keep_recent_ratio=compression_config.get(
+                            "keep_recent_ratio",
                             0.15,
                         ),
                         llm_compress_preserve_latest_round=True,
@@ -416,6 +417,9 @@ class ConversationCommands:
                 type(error).__name__,
             )
             reply(preserved)
+            return
+
+        if message.is_stopped():
             return
 
         if message.get_platform_name() == "webchat":

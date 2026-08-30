@@ -22,6 +22,7 @@ AGENT_RUNNER_CONFIG_DEFAULTS: dict[str, dict[str, Any]] = {
             "max_turns": -1,
             "trim_turns": 1,
             "overflow_strategy": "llm_compress",
+            "enable_manual_context_compression": False,
             "instruction": "",
             "keep_recent_ratio": 0.15,
             "provider_id": "",

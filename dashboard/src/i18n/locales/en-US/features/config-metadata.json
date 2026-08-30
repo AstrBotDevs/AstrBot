@@ -324,6 +324,10 @@
           ],
           "hint": "Persistent conversation history uses this strategy only after exceeding 'Max Turns Before Compression'. Before each request, the same strategy may also protect the in-flight context when tokens approach the model window."
         },
+        "enable_manual_context_compression": {
+          "description": "Manual Context Compression (Experimental)",
+          "hint": "When enabled, /compact uses an LLM to summarize the current context. The summary may omit details, role state, or narrative facts. If compression fails, the original history is preserved."
+        },
         "instruction": {
           "description": "Context Compression Instruction",
           "hint": "If empty, the default prompt will be used."

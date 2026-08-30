@@ -32,7 +32,9 @@ def test_agent_runner_defaults_are_isolated_and_normalized(runner_type: str):
         "runner_type": runner_type,
         "config": second,
     }
-    if runner_type != "local":
+    if runner_type == "local":
+        assert second["compression"]["enable_manual_context_compression"] is False
+    else:
         assert "persona_id" not in second
 
 
@@ -44,6 +46,7 @@ def test_switching_runner_type_discards_previous_runner_fields():
                 "provider_id": "legacy-provider",
                 "persona_id": "legacy-persona",
                 "model": {"provider_id": "chat-model"},
+                "compression": {"enable_manual_context_compression": True},
                 "dify_api_key": "secret",
                 "unexpected": True,
             },
@@ -57,6 +60,17 @@ def test_switching_runner_type_discards_previous_runner_fields():
     assert "provider_id" not in normalized["config"]
     assert "persona_id" not in normalized["config"]
     assert "model" not in normalized["config"]
+    assert "compression" not in normalized["config"]
+
+    switched_back = normalize_agent_runner(
+        {"runner_type": "local", "config": normalized["config"]}
+    )
+    assert (
+        switched_back["config"]["compression"][
+            "enable_manual_context_compression"
+        ]
+        is False
+    )
 
 
 @pytest.mark.asyncio
@@ -88,9 +102,12 @@ async def test_agent_request_normalizes_incomplete_runner_config():
 )
 def test_each_runner_configuration_round_trips(tmp_path, runner_type: str):
     config = copy.deepcopy(DEFAULT_CONFIG)
+    runner_config = get_agent_runner_config_default(runner_type)
+    if runner_type == "local":
+        runner_config["compression"]["enable_manual_context_compression"] = True
     expected = {
         "runner_type": runner_type,
-        "config": get_agent_runner_config_default(runner_type),
+        "config": runner_config,
     }
     config["agent_runner"] = expected
     config_path = tmp_path / f"{runner_type}.json"
@@ -120,6 +137,7 @@ def test_local_legacy_fields_are_fully_migrated():
             "tool_call_timeout": 88,
             "sanitize_context_by_modalities": True,
             "context_limit_reached_strategy": "truncate_by_turns",
+            "enable_manual_context_compression": True,
             "llm_compress_instruction": "Summarize",
             "llm_compress_keep_recent_ratio": 0.2,
             "llm_compress_provider_id": "compressor",
@@ -155,6 +173,7 @@ def test_local_legacy_fields_are_fully_migrated():
                 "max_turns": 20,
                 "trim_turns": 3,
                 "overflow_strategy": "truncate_by_turns",
+                "enable_manual_context_compression": True,
                 "instruction": "Summarize",
                 "keep_recent_ratio": 0.2,
                 "provider_id": "compressor",
@@ -177,6 +196,7 @@ def test_local_legacy_fields_are_fully_migrated():
         "max_agent_step",
         "tool_call_timeout",
         "sanitize_context_by_modalities",
+        "enable_manual_context_compression",
     }.intersection(config["provider_settings"])
 
 
@@ -235,6 +255,7 @@ def test_local_migration_replaces_default_root_inserted_before_version_bump():
                 "max_turns": 24,
                 "trim_turns": 4,
                 "overflow_strategy": "llm_compress",
+                "enable_manual_context_compression": False,
                 "instruction": "Keep decisions",
                 "keep_recent_ratio": 0.15,
                 "provider_id": "compressor",
@@ -528,6 +549,7 @@ def test_new_agent_runner_config_is_authoritative_and_opaque_on_reload(tmp_path)
     config = copy.deepcopy(DEFAULT_CONFIG)
     config["config_version"] = 2
     config["provider_settings"]["agent_runner_type"] = "coze"
+    config["provider_settings"]["enable_manual_context_compression"] = True
     config["agent_runner"] = {
         "runner_type": "dify",
         "config": {
@@ -545,3 +567,4 @@ def test_new_agent_runner_config_is_authoritative_and_opaque_on_reload(tmp_path)
     assert loaded["agent_runner"]["config"]["dify_api_key"] == "saved-key"
     assert loaded["agent_runner"]["config"]["variables"] == {"nested": {"value": 1}}
     assert "agent_runner_type" not in loaded["provider_settings"]
+    assert "enable_manual_context_compression" not in loaded["provider_settings"]
