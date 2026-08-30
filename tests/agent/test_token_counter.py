@@ -116,6 +116,11 @@ class TestTrustedUsage:
         )
         tokens = counter.count_tokens([msg], trusted_token_usage=42)
         assert tokens == 42
+        assert counter.count_tokens([msg], reported_token_usage=43) == 43
+        assert (
+            counter.count_tokens([msg], reported_token_usage=43, trusted_token_usage=0)
+            == 43
+        )
 
 
 class TestToolCalls:
