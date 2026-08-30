@@ -1,7 +1,5 @@
 """Tests for EstimateTokenCounter multimodal support."""
 
-import pytest
-
 from astrbot.core.agent.context.token_counter import (
     AUDIO_TOKEN_ESTIMATE,
     IMAGE_TOKEN_ESTIMATE,
@@ -129,8 +127,8 @@ class TestEmojiCounting:
         assert counter.count_tokens([_msg("user", "你" * 100)]) == 60
 
 
-class TestTrustedUsage:
-    def test_trusted_overrides(self):
+class TestReportedUsage:
+    def test_reported_overrides(self):
         """如果 API 返回了 token 数，直接用它不做估算。"""
         msg = _msg(
             "user",
@@ -141,10 +139,8 @@ class TestTrustedUsage:
                 ),
             ],
         )
-        tokens = counter.count_tokens([msg], trusted_token_usage=42)
+        tokens = counter.count_tokens([msg], reported_token_usage=42)
         assert tokens == 42
-        with pytest.raises(TypeError, match="reported_token_usage"):
-            counter.count_tokens([msg], reported_token_usage=43)
 
 
 class TestToolCalls:
