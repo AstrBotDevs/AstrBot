@@ -95,7 +95,9 @@ class ProviderAnthropic(Provider):
             provider_settings,
         )
 
-        self.base_url = provider_config.get("api_base", "https://api.anthropic.com")
+        api_base = str(provider_config.get("api_base", "") or "").strip()
+        self.base_url = (api_base or "https://api.anthropic.com").rstrip("/")
+        self.base_url = self.base_url.removesuffix("/v1")
         self.timeout = provider_config.get("timeout", 120)
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
@@ -136,7 +138,14 @@ class ProviderAnthropic(Provider):
         try:
             from anthropic import _base_client as anthropic_base_client
 
-            httpx_module = getattr(anthropic_base_client, "httpx", httpx)
+            # anthropic <1.0.0 exposes the bundled httpx as ``_base_client.httpx``;
+            # 1.0.0+ renamed it to ``_base_client.httpx2``. Prefer the SDK's own
+            # module in either case and fall back to the global httpx import.
+            httpx_module = getattr(
+                anthropic_base_client,
+                "httpx",
+                getattr(anthropic_base_client, "httpx2", httpx),
+            )
         except ImportError:
             pass
         return create_proxy_client(

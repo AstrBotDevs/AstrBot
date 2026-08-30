@@ -30,11 +30,15 @@ LINE_CONFIG_METADATA = {
         "description": "LINE Channel Access Token",
         "type": "string",
         "hint": "LINE Messaging API 的 channel access token。",
+        "secret": True,
+        "show_key": True,
     },
     "channel_secret": {
         "description": "LINE Channel Secret",
         "type": "string",
         "hint": "用于校验 LINE Webhook 签名。",
+        "secret": True,
+        "show_key": True,
     },
 }
 
