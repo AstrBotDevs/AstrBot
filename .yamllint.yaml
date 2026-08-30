@@ -27,6 +27,7 @@ rules:
 
 ignore: |
   .codex/
+  .playwright-mcp/
   .tmp/
   .venv*/
   node_modules/
