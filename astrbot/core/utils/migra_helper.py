@@ -170,9 +170,18 @@ def _migrate_agent_runner_config(
         "runner_type": "local",
         "config": get_agent_runner_config_default("local"),
     }
+    comparable_agent_runner = copy.deepcopy(existing_agent_runner)
+    if isinstance(comparable_agent_runner, dict):
+        comparable_runner_config = comparable_agent_runner.get("config")
+        if isinstance(comparable_runner_config, dict):
+            comparable_compression = comparable_runner_config.get("compression")
+            if isinstance(comparable_compression, dict):
+                comparable_compression.setdefault(
+                    "enable_manual_context_compression", False
+                )
     default_root_inserted_before_migration = (
         legacy_version
-        and existing_agent_runner == default_local_agent_runner
+        and comparable_agent_runner == default_local_agent_runner
         and any(key in provider_settings for key in _LEGACY_AGENT_RUNNER_SETTING_KEYS)
     )
 
