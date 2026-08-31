@@ -711,7 +711,10 @@ export const useExtensionPage = (initialTab = "installed") => {
   const findMarketPluginForExtension = (extension) => {
     if (!extension) return null;
     const source = extension.install_source || {};
-    if (source.implicit === true || source.install_method !== "market") {
+    // Implicit records (legacy plugins installed before source persistence)
+    // still carry the plugin repo, so resolve them against the default market
+    // instead of treating them as unmatchable.
+    if (source.install_method !== "market") {
       return null;
     }
     if (extension.update_market_plugin) {
@@ -765,10 +768,12 @@ export const useExtensionPage = (initialTab = "installed") => {
       extension.update_market_plugin = null;
 
       const source = extension.install_source;
+      // Implicit records (legacy plugins with no persisted install source)
+      // resolve to the default registry, so keep them in the update check
+      // instead of skipping them entirely.
       if (
         !extension.updates_enabled ||
         !source ||
-        source.implicit === true ||
         source.install_method !== "market"
       ) {
         return;
