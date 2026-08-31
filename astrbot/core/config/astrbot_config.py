@@ -128,7 +128,7 @@ class AstrBotConfig(dict):
     def _ensure_config_file(self, default_config: dict) -> None:
         if self.check_exist():
             return
-        self.update(default_config)
+        self.update(copy.deepcopy(default_config))
         self.save_config(indent=4)
         object.__setattr__(self, "first_deploy", True)
 
@@ -250,18 +250,18 @@ class AstrBotConfig(dict):
             current_path = path + "." + key if path else key
             if key not in conf:
                 logger.info("Config key missing; added default.")
-                new_conf[key] = value
+                new_conf[key] = copy.deepcopy(value)
                 has_new = True
                 continue
             if conf[key] is None:
-                new_conf[key] = value
+                new_conf[key] = copy.deepcopy(value)
                 has_new = True
                 continue
             if not isinstance(value, dict):
                 new_conf[key] = conf[key]
                 continue
             if not isinstance(conf[key], dict):
-                new_conf[key] = value
+                new_conf[key] = copy.deepcopy(value)
                 has_new = True
                 continue
             if current_path == "agent_runner.config":

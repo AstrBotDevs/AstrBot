@@ -237,6 +237,21 @@ class TestAstrBotConfigLoad:
         assert config2.check_exist() is True
         assert os.path.exists(non_existent_path)
 
+    def test_partial_config_load_does_not_mutate_default_dashboard_password(
+        self, temp_config_path
+    ):
+        """Filling missing keys from DEFAULT_CONFIG must not alias nested dicts."""
+        original_password = DEFAULT_CONFIG["dashboard"]["pbkdf2_password"]
+        with open(temp_config_path, "w", encoding="utf-8-sig") as f:
+            json.dump({"config_version": 3, "provider": []}, f)
+
+        config = AstrBotConfig(config_path=temp_config_path)
+
+        assert DEFAULT_CONFIG["dashboard"]["pbkdf2_password"] == original_password
+        assert config["dashboard"] is not DEFAULT_CONFIG["dashboard"]
+        assert config["dashboard"]["pbkdf2_password"] != original_password
+        assert config["dashboard"]["pbkdf2_password"].startswith("pbkdf2_sha256$")
+
     def test_empty_dashboard_password_generates_random_password(self, temp_config_path):
         """Test that an empty dashboard password is replaced with a random password."""
         default_config = {
