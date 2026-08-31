@@ -142,9 +142,40 @@ class LarkPlatformAdapter(Platform):
     @staticmethod
     def _build_message_str_from_components(
         components: list[Comp.BaseMessageComponent],
+        *,
+        bot_self_id: str | None = None,
+        bot_name: str | None = None,
     ) -> str:
+        """Build the text projection for parsed Lark message components.
+
+        A leading bot-self mention is omitted when identity information is
+        provided; the original component list is not modified.
+
+        Args:
+            components: Parsed Lark message components.
+            bot_self_id: Bot identifier used to recognize a leading self mention.
+            bot_name: Bot display name used when the mention has no identifier.
+
+        Returns:
+            Normalized text used by wake-prefix and command matching.
+        """
+        normalized_self_id = str(bot_self_id or "").strip()
+        normalized_bot_name = str(bot_name or "").strip()
         parts: list[str] = []
-        for comp in components:
+        for index, comp in enumerate(components):
+            if index == 0 and isinstance(comp, Comp.At):
+                mention_id = str(comp.qq or "").strip()
+                mention_name = str(comp.name or "").strip()
+                is_self_mention = bool(
+                    normalized_self_id
+                    and mention_id
+                    and mention_id == normalized_self_id
+                )
+                if not mention_id and normalized_bot_name:
+                    is_self_mention = mention_name == normalized_bot_name
+                if is_self_mention:
+                    continue
+
             if isinstance(comp, Comp.Plain):
                 text = comp.text.strip()
                 if text:
@@ -714,7 +745,11 @@ class LarkPlatformAdapter(Platform):
             temporary_file_paths=getattr(abm, "temporary_file_paths", []),
         )
         abm.message.extend(parsed_components)
-        abm.message_str = self._build_message_str_from_components(parsed_components)
+        abm.message_str = self._build_message_str_from_components(
+            parsed_components,
+            bot_self_id=self.bot_open_id,
+            bot_name=self.bot_name,
+        )
 
         if message.message_id is None:
             logger.error("[Lark] 消息缺少 message_id")

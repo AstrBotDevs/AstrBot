@@ -68,6 +68,62 @@ async def test_lark_parse_message_components_text_dispatches_mentions_and_plain_
     )
 
 
+def test_lark_build_message_str_skips_leading_self_mention_by_id():
+    adapter = _adapter()
+    components = [
+        Comp.At(qq="bot-open", name="astrbot"),
+        Comp.Plain("hi"),
+    ]
+
+    assert (
+        adapter._build_message_str_from_components(
+            components,
+            bot_self_id="bot-open",
+            bot_name="astrbot",
+        )
+        == "hi"
+    )
+    assert [type(component) for component in components] == [Comp.At, Comp.Plain]
+
+
+def test_lark_build_message_str_skips_leading_self_mention_by_name():
+    adapter = _adapter()
+    components = [
+        Comp.At(qq="", name="astrbot"),
+        Comp.Plain("help"),
+    ]
+
+    assert (
+        adapter._build_message_str_from_components(
+            components,
+            bot_self_id="bot-open",
+            bot_name="astrbot",
+        )
+        == "help"
+    )
+
+
+def test_lark_build_message_str_keeps_non_self_and_quoted_mentions():
+    adapter = _adapter()
+    components = [
+        Comp.At(qq="ou_1", name="Alice"),
+        Comp.Plain("hi"),
+        Comp.At(qq="bot-open", name="astrbot"),
+    ]
+
+    assert (
+        adapter._build_message_str_from_components(
+            components,
+            bot_self_id="bot-open",
+            bot_name="astrbot",
+        )
+        == "@Alice hi @astrbot"
+    )
+    assert adapter._build_message_str_from_components(components) == (
+        "@Alice hi @astrbot"
+    )
+
+
 @pytest.mark.asyncio
 async def test_lark_parse_message_components_post_parses_mentions_links_and_images():
     adapter = _adapter()
@@ -434,7 +490,9 @@ async def test_lark_convert_msg_builds_group_message_with_reply_and_self_mention
         Comp.At,
         Comp.Plain,
     ]
-    assert abm.message_str == "@astrbot hi"
+    assert abm.message[1].qq == "bot-open"
+    assert abm.message[1].name == "astrbot"
+    assert abm.message_str == "hi"
 
 
 @pytest.mark.asyncio
