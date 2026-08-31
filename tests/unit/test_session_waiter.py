@@ -149,7 +149,8 @@ class TestCleanupRace:
     def setup_method(self):
         _clear_global_state()
 
-    def test_cleanup_does_not_evict_newer_waiter(self, caplog):
+    @pytest.mark.asyncio
+    async def test_cleanup_does_not_evict_newer_waiter(self, caplog):
         """When a newer waiter is registered under the same key, stale cleanup
         must not remove it from USER_SESSIONS or FILTERS."""
         filt = _StubFilter("test:session")
@@ -185,7 +186,8 @@ class TestCleanupRace:
             "skipping _cleanup" in record.getMessage() for record in caplog.records
         ), "Expected a warning when stale cleanup is skipped"
 
-    def test_cleanup_removes_self_when_still_active(self):
+    @pytest.mark.asyncio
+    async def test_cleanup_removes_self_when_still_active(self):
         """When the waiter is still the active one, cleanup removes it from
         USER_SESSIONS and its filter from FILTERS."""
         filt = _StubFilter("test:session2")
