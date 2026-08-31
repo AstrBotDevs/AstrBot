@@ -85,22 +85,27 @@
         "runners": {
             "local": {
                 "title": "Встроенный ИИ",
+                "summary": "Настройте возможности ИИ AstrBot, включая модели, персоны, базы знаний и инструменты.",
                 "description": "Встроенный ИИ AstrBot поддерживает модели, персоны, базы знаний и инструменты."
             },
             "dify": {
                 "title": "Dify",
+                "summary": "Диалоги ИИ обрабатываются приложением Dify.",
                 "description": "Подключите приложение Dify и настройте параметры доступа."
             },
             "coze": {
                 "title": "Coze",
+                "summary": "Диалоги ИИ обрабатываются ботом Coze.",
                 "description": "Подключите Coze Bot и настройте параметры доступа."
             },
             "dashscope": {
                 "title": "Alibaba Cloud Model Studio",
+                "summary": "Диалоги ИИ обрабатываются приложением Model Studio.",
                 "description": "Подключите приложение Model Studio и настройте параметры доступа."
             },
             "deerflow": {
                 "title": "DeerFlow",
+                "summary": "Диалоги ИИ обрабатываются DeerFlow.",
                 "description": "Подключите DeerFlow и настройте параметры выполнения."
             }
         }

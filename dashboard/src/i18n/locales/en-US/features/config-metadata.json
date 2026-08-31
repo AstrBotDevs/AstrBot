@@ -85,21 +85,21 @@
       "hint": "Configure the built-in Agent's chat models and shared image caption and speech models.",
       "agent_runner": { "config": { "model": {
         "provider_id": {
-          "description": "Default Chat Model",
+          "description": "Chat Model",
           "hint": "Uses the first model when left empty"
         },
         "fallback_provider_ids": {
-          "description": "Fallback Chat Model IDs",
+          "description": "Fallback Chat Models",
           "hint": "Try these chat models in order when the primary model request fails."
         },
         "request_max_retries": {
-          "description": "Request Max Retries",
+          "description": "Retries on Error",
           "hint": "Maximum attempts for a single model request when retryable errors occur."
         }
       } } },
       "provider_settings": {
         "default_image_caption_provider_id": {
-          "description": "Default Image Caption Model",
+          "description": "Image Caption Model",
           "hint": "Leave empty to disable; useful for non-multimodal models"
         },
         "image_caption_prompt": {

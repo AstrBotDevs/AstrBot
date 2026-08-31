@@ -85,22 +85,27 @@
     "runners": {
       "local": {
         "title": "内置 AI",
+        "summary": "配置 AstrBot 的 AI 能力，包括模型、人格、知识库和工具。",
         "description": "使用 AstrBot 内置 AI，支持模型、人格、知识库和工具能力。"
       },
       "dify": {
         "title": "Dify",
+        "summary": "当前由 Dify 应用处理 AI 对话。",
         "description": "连接 Dify 应用并配置它的访问参数。"
       },
       "coze": {
         "title": "Coze",
+        "summary": "当前由 Coze Bot 处理 AI 对话。",
         "description": "连接 Coze Bot 并配置它的访问参数。"
       },
       "dashscope": {
         "title": "阿里云百炼",
+        "summary": "当前由阿里云百炼应用处理 AI 对话。",
         "description": "连接阿里云百炼应用并配置它的访问参数。"
       },
       "deerflow": {
         "title": "DeerFlow",
+        "summary": "当前由 DeerFlow 处理 AI 对话。",
         "description": "连接 DeerFlow 服务并配置它的运行参数。"
       }
     }

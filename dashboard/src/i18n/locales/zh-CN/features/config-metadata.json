@@ -95,15 +95,15 @@
         "config": {
           "model": {
             "provider_id": {
-              "description": "默认对话模型",
+              "description": "对话模型",
               "hint": "留空时使用第一个模型"
             },
             "fallback_provider_ids": {
-              "description": "回退对话模型列表",
+              "description": "回退对话模型",
               "hint": "主对话模型请求失败时，按顺序切换到这些对话模型。"
             },
             "request_max_retries": {
-              "description": "请求最大重试次数",
+              "description": "异常重试次数",
               "hint": "单次模型请求遇到可重试错误时的最大尝试次数。"
             }
           }
@@ -111,7 +111,7 @@
       },
       "provider_settings": {
         "default_image_caption_provider_id": {
-          "description": "默认图片转述模型",
+          "description": "图片转述模型",
           "hint": "留空代表不使用,可用于非多模态模型"
         },
         "image_caption_prompt": {
@@ -1141,7 +1141,7 @@
         },
         "image_caption_provider_id": {
           "description": "群聊图片转述模型",
-          "hint": "用于群聊记录注入上下文的图片理解，与默认图片转述模型分开配置。"
+          "hint": "用于群聊记录注入上下文的图片理解，与图片转述模型分开配置。"
         },
         "group_message_history_enable": {
           "description": "持久化群聊消息记录",

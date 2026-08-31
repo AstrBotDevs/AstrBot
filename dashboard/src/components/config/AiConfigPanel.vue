@@ -3,6 +3,7 @@
     <header class="ai-config-panel__header">
       <div class="ai-config-panel__heading">
         <h2 class="ai-config-panel__title">{{ tm('aiSettings.title') }}</h2>
+        <p class="ai-config-panel__subtitle">{{ currentRunner.summary }}</p>
       </div>
 
       <div class="ai-config-panel__actions">
@@ -237,14 +238,15 @@ const runnerOptions = computed(() => {
   return availableTypes.map((value) => ({
     value,
     title: tm(`aiSettings.runners.${value}.title`),
-    description: tm(`aiSettings.runners.${value}.description`)
+    description: tm(`aiSettings.runners.${value}.description`),
+    summary: tm(`aiSettings.runners.${value}.summary`)
   }));
 });
 
 const currentRunner = computed(() => (
   runnerOptions.value.find((runner) => runner.value === runnerType.value)
   || runnerOptions.value[0]
-  || { value: 'local', title: 'AI', description: '' }
+  || { value: 'local', title: 'AI', description: '', summary: '' }
 ));
 
 const runnerSettingsTitle = computed(() => (
@@ -399,6 +401,7 @@ function confirmRunnerChange() {
   line-height: 1.25;
 }
 
+.ai-config-panel__subtitle,
 .ai-config-panel__section-subtitle {
   margin: 5px 0 0;
   color: rgba(var(--v-theme-on-surface), 0.62);

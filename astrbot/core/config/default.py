@@ -3473,7 +3473,7 @@ CONFIG_METADATA_3 = {
                 "type": "object",
                 "items": {
                     "agent_runner.config.model.provider_id": {
-                        "description": "默认对话模型",
+                        "description": "对话模型",
                         "type": "string",
                         "_special": "select_provider",
                         "hint": "留空时使用第一个模型",
@@ -3482,7 +3482,7 @@ CONFIG_METADATA_3 = {
                         },
                     },
                     "agent_runner.config.model.fallback_provider_ids": {
-                        "description": "回退对话模型列表",
+                        "description": "回退对话模型",
                         "type": "list",
                         "items": {"type": "string"},
                         "_special": "select_providers",
@@ -3492,7 +3492,7 @@ CONFIG_METADATA_3 = {
                         },
                     },
                     "agent_runner.config.model.request_max_retries": {
-                        "description": "请求最大重试次数",
+                        "description": "异常重试次数",
                         "type": "int",
                         "hint": "单次模型请求遇到可重试错误时的最大尝试次数。",
                         "condition": {
@@ -3500,7 +3500,7 @@ CONFIG_METADATA_3 = {
                         },
                     },
                     "provider_settings.default_image_caption_provider_id": {
-                        "description": "默认图片转述模型",
+                        "description": "图片转述模型",
                         "type": "string",
                         "_special": "select_provider",
                         "hint": "留空代表不使用，可用于非多模态模型",
@@ -4547,7 +4547,7 @@ CONFIG_METADATA_3 = {
                         "description": "群聊图片转述模型",
                         "type": "string",
                         "_special": "select_provider",
-                        "hint": "用于群聊记录注入上下文的图片理解，与默认图片转述模型分开配置。",
+                        "hint": "用于群聊记录注入上下文的图片理解，与图片转述模型分开配置。",
                         "condition": {
                             "provider_ltm_settings.group_icl_enable": True,
                             "provider_ltm_settings.image_caption": True,
