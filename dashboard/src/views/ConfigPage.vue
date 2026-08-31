@@ -1,34 +1,68 @@
 <template>
 
-  <div style="display: flex; flex-direction: column; align-items: center;">
-    <div v-if="selectedConfigID || isSystemConfig" class="mt-4 config-panel"
-      style="display: flex; flex-direction: column; align-items: start;">
+  <div class="config-page-shell">
+    <div v-if="selectedConfigID || isSystemConfig" class="config-panel">
 
-      <div class="config-toolbar d-flex flex-row pr-4"
-        style="margin-bottom: 16px; align-items: center; gap: 12px; width: 100%; justify-content: space-between;">
-        <div class="config-toolbar-controls d-flex flex-row align-center" style="gap: 12px;">
-          <v-select class="config-select" style="min-width: 130px;" :model-value="selectedConfigID" :items="configSelectItems" item-title="name" :disabled="initialConfigId !== null"
-            v-if="!isSystemConfig" item-value="id" :label="tm('configSelection.selectConfig')" hide-details density="compact" rounded="md"
-            variant="outlined" @update:model-value="onConfigSelect">
-          </v-select>
-          <v-text-field
-            class="config-search-input"
-            :model-value="configSearchKeyword"
-            @update:model-value="onConfigSearchInput"
-            prepend-inner-icon="mdi-magnify"
-            :label="tm('search.placeholder')"
-            clearable
-            hide-details
-            density="compact"
-            rounded="md"
-            variant="outlined"
-            style="min-width: 280px;"
+      <div class="config-toolbar-sticky">
+        <div
+          class="config-toolbar"
+          :class="{ 'config-toolbar--searching': configSearchExpanded }"
+        >
+          <div class="config-toolbar-controls">
+            <ConfigProfileMenu
+              v-if="!isSystemConfig"
+              :model-value="selectedConfigID || ''"
+              :items="configInfoList"
+              :disabled="initialConfigId !== null"
+              @select="onConfigSelect"
+              @manage="configManageDialog = true"
+            />
+          </div>
+
+          <div class="config-toolbar-actions">
+            <div
+              class="config-search-control"
+              :class="{ 'config-search-control--expanded': configSearchExpanded }"
+            >
+              <v-text-field
+                v-show="configSearchExpanded"
+                ref="configSearchInput"
+                class="config-search-input"
+                :model-value="configSearchKeyword"
+                @update:model-value="onConfigSearchInput"
+                @keydown.esc.prevent="closeConfigSearch"
+                prepend-inner-icon="mdi-magnify"
+                append-inner-icon="mdi-close"
+                :placeholder="tm('search.placeholder')"
+                :aria-label="tm('search.placeholder')"
+                hide-details
+                density="compact"
+                rounded="md"
+                variant="outlined"
+                @click:append-inner="closeConfigSearch"
+              />
+              <v-btn
+                v-show="!configSearchExpanded"
+                icon="mdi-magnify"
+                size="small"
+                variant="text"
+                :aria-label="tm('search.placeholder')"
+                :title="tm('search.placeholder')"
+                @click="openConfigSearch"
+              />
+            </div>
+          </div>
+        </div>
+        <div class="config-toolbar-separator">
+          <v-divider />
+          <v-progress-linear
+            v-if="!fetched"
+            indeterminate
+            color="primary"
+            class="config-loading"
           />
-          <!-- <a style="color: inherit;" href="https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6" target="_blank"><v-btn icon="mdi-help-circle" size="small" variant="plain"></v-btn></a> -->
-
         </div>
       </div>
-      <!-- <v-progress-linear v-if="!fetched" indeterminate color="primary"></v-progress-linear> -->
 
       <v-slide-y-transition mode="out-in">
         <div v-if="(selectedConfigID || isSystemConfig) && fetched" :key="configContentKey" class="config-content" style="width: 100%;">
@@ -128,7 +162,7 @@
 
         <!-- Config List -->
         <v-list lines="two">
-          <v-list-item v-for="config in configInfoList" :key="config.id" :title="config.name">
+          <v-list-item v-for="config in configInfoList" :key="config.id" :title="configDisplayName(config)">
             <template v-slot:append>
               <div class="d-flex align-center" style="gap: 8px;">
                 <v-btn icon="mdi-content-copy" size="small" variant="text" color="primary"
@@ -194,7 +228,7 @@
         <div>
           <span class="text-h6">测试配置</span>
           <div v-if="selectedConfigInfo.name" class="text-caption text-grey">
-            {{ selectedConfigInfo.name }} ({{ testConfigId }})
+            {{ configDisplayName(selectedConfigInfo) }} ({{ testConfigId }})
           </div>
         </div>
         <v-btn icon variant="text" @click="closeTestChat">
@@ -217,6 +251,7 @@
 <script>
 import { configProfileApi, systemConfigApi } from '@/api/v1';
 import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
+import ConfigProfileMenu from '@/components/config/ConfigProfileMenu.vue';
 import StandaloneChat from '@/components/chat/StandaloneChat.vue';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { useI18n, useModuleI18n } from '@/i18n/composables';
@@ -232,6 +267,7 @@ export default {
   name: 'ConfigPage',
   components: {
     AstrBotCoreConfigWrapper,
+    ConfigProfileMenu,
     VueMonacoEditor,
     StandaloneChat,
     UnsavedChangesConfirmDialog,
@@ -325,15 +361,6 @@ export default {
       const isNameEmpty = !this.normalizeConfigName(this.configFormData.name);
       return isNameEmpty || (this.isCopyingConfig && !this.copySourceConfigId);
     },
-    configSelectItems() {
-      const items = [...this.configInfoList];
-      items.push({
-        id: '_%manage%_',
-        name: this.tm('configManagement.manageConfigs'),
-        umop: []
-      });
-      return items;
-    },
     hasUnsavedChanges() {
       if (!this.fetched) {
         return false;
@@ -397,6 +424,7 @@ export default {
       // 配置类型切换
       configType: 'normal', // 'normal' 或 'system'
       configSearchKeyword: '',
+      configSearchExpanded: false,
 
       // 系统配置开关
       isSystemConfig: false,
@@ -464,6 +492,16 @@ export default {
     },
     onConfigSearchInput(value) {
       this.configSearchKeyword = normalizeTextInput(value);
+    },
+    openConfigSearch() {
+      this.configSearchExpanded = true;
+      this.$nextTick(() => {
+        this.$refs.configSearchInput?.focus?.();
+      });
+    },
+    closeConfigSearch() {
+      this.configSearchKeyword = '';
+      this.configSearchExpanded = false;
     },
     extractConfigTypeFromHash(hash) {
       const rawHash = String(hash || '');
@@ -695,6 +733,12 @@ export default {
     normalizeConfigName(name) {
       return typeof name === 'string' ? name.trim() : '';
     },
+    configDisplayName(config) {
+      if (config?.id === 'default') {
+        return this.tm('configSelection.defaultConfig');
+      }
+      return config?.name || config?.id || '';
+    },
     hasDuplicateConfigName(name, excludeId = null) {
       const normalizedName = this.normalizeConfigName(name);
       if (!normalizedName) {
@@ -713,11 +757,7 @@ export default {
     async onConfigSelect(value) {
       if (value === '_%manage%_') {
         this.configManageDialog = true;
-        // 重置选择到之前的值
-        this.$nextTick(() => {
-          this.selectedConfigID = this.selectedConfigInfo.id || 'default';
-          this.getConfig(this.selectedConfigID);
-        });
+        return;
       } else {
         // 检查是否有未保存的更改
         if (this.hasUnsavedChanges) {
@@ -962,8 +1002,109 @@ export default {
 </script>
 
 <style>
-.v-tab {
-  text-transform: none !important;
+.config-page-shell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  margin-top: -8px;
+}
+
+.config-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: min(100%, 940px);
+  padding: 0 18px 48px;
+}
+
+.config-toolbar-sticky {
+  position: sticky;
+  top: calc(var(--v-layout-top, 64px));
+  z-index: 20;
+  isolation: isolate;
+  margin-bottom: 28px;
+}
+
+.config-toolbar-sticky::before {
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: calc(100vw - var(--v-layout-left, 0px));
+  max-width: 100vw;
+  transform: translateX(-50%);
+  background: rgb(var(--v-theme-containerBg));
+  content: '';
+}
+
+.config-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  max-width: 840px;
+  padding: 4px 0;
+}
+
+.config-toolbar-controls {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.config-toolbar-actions {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.config-search-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.config-search-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 36px;
+  min-width: 36px;
+  overflow: hidden;
+  transition: width 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.config-search-control--expanded {
+  width: min(320px, 42vw);
+}
+
+.config-toolbar :is(.v-field) {
+  border-radius: 10px;
+}
+
+.config-toolbar-separator {
+  position: relative;
+  width: calc(100vw - var(--v-layout-left, 0px));
+  max-width: 100vw;
+  height: 1px;
+  margin-left: 50%;
+  transform: translateX(-50%);
+}
+
+.config-toolbar-separator :is(.v-divider) {
+  border-color: rgba(var(--v-theme-on-surface), 0.1);
+  opacity: 1;
+}
+
+.config-loading {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
 }
 
 .unsaved-changes-pill {
@@ -1020,12 +1161,6 @@ export default {
   font-style: italic;
 }
 
-@media (min-width: 768px) {
-  .config-panel {
-    width: 750px;
-  }
-}
-
 @media (max-width: 767px) {
   .v-container {
     padding: 4px;
@@ -1033,20 +1168,31 @@ export default {
 
   .config-panel {
     width: 100%;
+    padding: 0 14px 40px;
   }
 
   .config-toolbar {
+    flex-wrap: nowrap;
+    padding: 4px 0;
     padding-right: 0 !important;
   }
 
   .config-toolbar-controls {
-    width: 100%;
-    flex-wrap: wrap;
+    flex: 1;
+    width: auto;
   }
 
-  .config-select,
-  .config-search-input {
+  .config-toolbar--searching .config-toolbar-controls {
+    display: none;
+  }
+
+  .config-toolbar--searching .config-toolbar-actions,
+  .config-toolbar--searching .config-search-control,
+  .config-toolbar--searching .config-search-input {
     width: 100%;
+  }
+
+  .config-search-input {
     min-width: 0 !important;
   }
 
