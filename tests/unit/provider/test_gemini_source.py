@@ -24,10 +24,11 @@ class FakeToolSet:
         }
 
 
-def test_gemini_prepare_conversation_removes_leading_model_content():
+@pytest.mark.asyncio
+async def test_gemini_prepare_conversation_removes_leading_model_content():
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
 
-    contents = provider._prepare_conversation(
+    contents = await provider._prepare_conversation(
         {
             "messages": [
                 {"role": "assistant", "content": "stale assistant turn"},
@@ -42,10 +43,11 @@ def test_gemini_prepare_conversation_removes_leading_model_content():
     assert contents[0].parts[-1].text == "current user turn"
 
 
-def test_gemini_prepare_conversation_keeps_normal_user_first_history():
+@pytest.mark.asyncio
+async def test_gemini_prepare_conversation_keeps_normal_user_first_history():
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
 
-    contents = provider._prepare_conversation(
+    contents = await provider._prepare_conversation(
         {
             "messages": [
                 {"role": "user", "content": "first user turn"},
@@ -64,10 +66,11 @@ def test_gemini_prepare_conversation_keeps_normal_user_first_history():
     assert contents[-1].parts[-1].text == "current user turn"
 
 
-def test_gemini_prepare_conversation_preserves_user_model_history():
+@pytest.mark.asyncio
+async def test_gemini_prepare_conversation_preserves_user_model_history():
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
 
-    contents = provider._prepare_conversation(
+    contents = await provider._prepare_conversation(
         {
             "messages": [
                 {"role": "user", "content": "user turn"},
@@ -82,6 +85,40 @@ def test_gemini_prepare_conversation_preserves_user_model_history():
     ]
     assert contents[-1].parts is not None
     assert contents[-1].parts[-1].text == "assistant turn"
+
+
+@pytest.mark.asyncio
+async def test_gemini_prepare_conversation_resolves_local_history_image(tmp_path):
+    image_path = tmp_path / "history.webp"
+    image_bytes = (
+        b"RIFF\x16\x00\x00\x00WEBPVP8L\x0a\x00\x00\x00"
+        b"/\x00\x00\x00\x10\x07\x10\x11\x11\x88\x88\xfe\x07"
+    )
+    image_path.write_bytes(image_bytes)
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    contents = await provider._prepare_conversation(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "historical image"},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": str(image_path)},
+                        },
+                    ],
+                }
+            ]
+        }
+    )
+
+    assert contents[0].parts is not None
+    image_part = contents[0].parts[1]
+    assert image_part.inline_data is not None
+    assert image_part.inline_data.mime_type == "image/webp"
+    assert image_part.inline_data.data == image_bytes
 
 
 def test_gemini_empty_output_raises_empty_model_output_error():
@@ -169,11 +206,12 @@ async def test_gemini_get_models_retries_transient_request_error(monkeypatch):
     assert models.calls == 2
 
 
-def test_gemini_prepare_conversation_handles_tool_calls_and_multimodal_content():
+@pytest.mark.asyncio
+async def test_gemini_prepare_conversation_handles_tool_calls_and_multimodal_content():
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
     thought_signature = base64.b64encode(b"sig-bytes").decode("utf-8")
 
-    conversation = provider._prepare_conversation(
+    conversation = await provider._prepare_conversation(
         {
             "messages": [
                 {
@@ -227,7 +265,8 @@ def test_gemini_prepare_conversation_handles_tool_calls_and_multimodal_content()
     assert conversation[2].parts[0].function_response.name == "lookup"
 
 
-def test_gemini_prepare_conversation_drops_leading_assistant_and_uses_placeholders(
+@pytest.mark.asyncio
+async def test_gemini_prepare_conversation_drops_leading_assistant_and_uses_placeholders(
     monkeypatch,
 ):
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
@@ -237,7 +276,7 @@ def test_gemini_prepare_conversation_drops_leading_assistant_and_uses_placeholde
     logger_warning = MagicMock()
     monkeypatch.setattr(gemini_source_module.logger, "warning", logger_warning)
 
-    conversation = provider._prepare_conversation(
+    conversation = await provider._prepare_conversation(
         {
             "messages": [
                 {
@@ -459,7 +498,7 @@ async def test_gemini_query_stream_accumulates_text_and_reasoning(monkeypatch):
     provider.provider_config = {}
     provider.provider_settings = {}
     provider.get_model = lambda: "gemini-test"
-    provider._prepare_conversation = lambda payloads: ["conversation"]
+    provider._prepare_conversation = AsyncMock(return_value=["conversation"])
     provider._prepare_query_config = AsyncMock(return_value="config")
 
     class FakeStream:
@@ -552,7 +591,7 @@ async def test_gemini_query_stream_raises_when_all_chunks_are_empty(monkeypatch)
     provider.provider_config = {}
     provider.provider_settings = {}
     provider.get_model = lambda: "gemini-test"
-    provider._prepare_conversation = lambda payloads: ["conversation"]
+    provider._prepare_conversation = AsyncMock(return_value=["conversation"])
     provider._prepare_query_config = AsyncMock(return_value="config")
 
     class FakeStream:
@@ -1120,7 +1159,7 @@ async def test_gemini_query_stream_returns_function_call_response_immediately(
     provider.provider_config = {}
     provider.provider_settings = {}
     provider.get_model = lambda: "gemini-test"
-    provider._prepare_conversation = lambda payloads: ["conversation"]
+    provider._prepare_conversation = AsyncMock(return_value=["conversation"])
     provider._prepare_query_config = AsyncMock(return_value="config")
 
     class FakeStream:
@@ -1201,7 +1240,7 @@ async def test_gemini_query_retries_capability_fallbacks_before_success(monkeypa
     provider.provider_config = {"gm_resp_image_modal": True}
     provider.provider_settings = {}
     provider.get_model = lambda: "gemini-test"
-    provider._prepare_conversation = lambda payloads: ["conversation"]
+    provider._prepare_conversation = AsyncMock(return_value=["conversation"])
     provider._prepare_query_config = AsyncMock(return_value="config")
 
     result = SimpleNamespace(
@@ -1279,7 +1318,7 @@ async def test_gemini_query_raises_when_candidates_are_empty(monkeypatch):
     provider.provider_config = {}
     provider.provider_settings = {}
     provider.get_model = lambda: "gemini-test"
-    provider._prepare_conversation = lambda payloads: ["conversation"]
+    provider._prepare_conversation = AsyncMock(return_value=["conversation"])
     provider._prepare_query_config = AsyncMock(return_value="config")
     provider.client = SimpleNamespace(
         models=SimpleNamespace(
@@ -1318,7 +1357,7 @@ async def test_gemini_query_reraises_unrecognized_api_error(monkeypatch):
     provider.provider_config = {}
     provider.provider_settings = {}
     provider.get_model = lambda: "gemini-test"
-    provider._prepare_conversation = lambda payloads: ["conversation"]
+    provider._prepare_conversation = AsyncMock(return_value=["conversation"])
     provider._prepare_query_config = AsyncMock(return_value="config")
     provider.client = SimpleNamespace(
         models=SimpleNamespace(
@@ -1355,7 +1394,7 @@ async def test_gemini_query_recitation_retries_with_higher_temperature(monkeypat
     provider.provider_config = {}
     provider.provider_settings = {}
     provider.get_model = lambda: "gemini-test"
-    provider._prepare_conversation = lambda payloads: ["conversation"]
+    provider._prepare_conversation = AsyncMock(return_value=["conversation"])
     provider._prepare_query_config = AsyncMock(return_value="config")
 
     recitation = SimpleNamespace(
@@ -1420,7 +1459,7 @@ async def test_gemini_query_recitation_raises_after_temperature_exceeds_limit(
     provider.provider_config = {}
     provider.provider_settings = {}
     provider.get_model = lambda: "gemini-test"
-    provider._prepare_conversation = lambda payloads: ["conversation"]
+    provider._prepare_conversation = AsyncMock(return_value=["conversation"])
     provider._prepare_query_config = AsyncMock(return_value="config")
 
     recitation = SimpleNamespace(
@@ -1466,7 +1505,7 @@ async def test_gemini_query_stream_retries_after_capability_fallbacks(monkeypatc
     provider.provider_config = {}
     provider.provider_settings = {}
     provider.get_model = lambda: "gemini-test"
-    provider._prepare_conversation = lambda payloads: ["conversation"]
+    provider._prepare_conversation = AsyncMock(return_value=["conversation"])
     provider._prepare_query_config = AsyncMock(return_value="config")
 
     class FakeStream:
@@ -1555,7 +1594,7 @@ async def test_gemini_query_stream_final_tool_only_response_is_usable(monkeypatc
     provider.provider_config = {}
     provider.provider_settings = {}
     provider.get_model = lambda: "gemini-test"
-    provider._prepare_conversation = lambda payloads: ["conversation"]
+    provider._prepare_conversation = AsyncMock(return_value=["conversation"])
     provider._prepare_query_config = AsyncMock(return_value="config")
 
     class FakeStream:
@@ -1648,7 +1687,7 @@ async def test_gemini_query_stream_reraises_unrecognized_api_error(monkeypatch):
     provider.provider_config = {}
     provider.provider_settings = {}
     provider.get_model = lambda: "gemini-test"
-    provider._prepare_conversation = lambda payloads: ["conversation"]
+    provider._prepare_conversation = AsyncMock(return_value=["conversation"])
     provider._prepare_query_config = AsyncMock(return_value="config")
     provider.client = SimpleNamespace(
         models=SimpleNamespace(
