@@ -3506,7 +3506,7 @@ CONFIG_METADATA_3 = {
                         "hint": "留空代表不使用，可用于非多模态模型",
                     },
                     "provider_stt_settings.enable": {
-                        "description": "语音转述",
+                        "description": "语音识别",
                         "type": "bool",
                         "hint": "使用语音转文字模型将用户语音转述为文本，方便模型理解。",
                     },

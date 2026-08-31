@@ -394,6 +394,16 @@ export default {
   border-color: var(--config-divider);
 }
 
+.config-standard-section__groups :deep(.collapsed-config-toggle-row),
+:deep(.config-product-groups .collapsed-config-toggle-row) {
+  padding: 12px 16px 14px;
+}
+
+.config-standard-section__groups :deep(.collapsed-config-toggle),
+:deep(.config-product-groups .collapsed-config-toggle) {
+  margin-left: 0;
+}
+
 .config-workspace__empty {
   display: flex;
   flex-direction: column;

@@ -108,7 +108,7 @@
       },
       "provider_stt_settings": {
         "enable": {
-          "description": "Voice Transcription",
+          "description": "Speech Recognition",
           "hint": "Use a speech-to-text model to transcribe user voice messages into text for the model to understand."
         },
         "provider_id": {

@@ -120,7 +120,7 @@
       },
       "provider_stt_settings": {
         "enable": {
-          "description": "语音转述",
+          "description": "语音识别",
           "hint": "使用语音转文字模型将用户语音转述为文本，方便模型理解。"
         },
         "provider_id": {
