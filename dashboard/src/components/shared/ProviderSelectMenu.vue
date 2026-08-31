@@ -642,10 +642,15 @@ defineExpose({ getCurrentSelection });
 .provider-menu-card {
   width: min(420px, calc(100vw - 24px));
   overflow: hidden;
-  border: 0;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.09);
   border-radius: 14px !important;
   background: rgb(var(--v-theme-surface));
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.07) !important;
+}
+
+:global(.v-overlay.v-menu .v-overlay__content > .provider-menu-card) {
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.09) !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.07) !important;
 }
 
 .provider-menu-body {
