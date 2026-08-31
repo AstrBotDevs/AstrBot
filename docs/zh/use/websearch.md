@@ -13,11 +13,11 @@ AstrBot 内置的网页搜索功能依赖大模型提供 `函数调用` 能力�
 
 等等带有搜索意味的提示让大模型触发调用搜索工具。
 
-AstrBot 当前支持 6 种网页搜索源接入方式：`Tavily`、`BoCha`、`百度 AI 搜索`、`Brave`、`Firecrawl`、`Exa`。
+AstrBot 当前支持 7 种网页搜索源接入方式：`Tavily`、`BoCha`、`百度 AI 搜索`、`Brave`、`Firecrawl`、`Exa`、`AnySearch`。
 
 ![image](https://files.astrbot.app/docs/source/images/websearch/image.png)
 
-进入 `配置`，下拉找到网页搜索，您可选择 `Tavily`、`BoCha`、`百度 AI 搜索`、`Brave`、`Firecrawl` 或 `Exa`。
+进入 `配置`，下拉找到网页搜索，您可选择 `Tavily`、`BoCha`、`百度 AI 搜索`、`Brave`、`Firecrawl`、`Exa` 或 `AnySearch`。
 
 ## Tavily
 
@@ -46,3 +46,9 @@ AstrBot 当前支持 6 种网页搜索源接入方式：`Tavily`、`BoCha`、`�
 如果您使用 Tavily 作为网页搜索源，在 AstrBot ChatUI 上将会获得更好的体验优化，包括引用来源展示等：
 
 ![](https://files.astrbot.app/docs/source/images/websearch/image1.png)
+
+## AnySearch
+
+前往 [AnySearch 控制台](https://anysearch.com/console/api-keys) 获取 API Key，然后填写在相应的配置项。
+
+AnySearch 除通用网页搜索外，还提供学术、代码文档、金融、法律、安全情报等垂直领域检索能力。若 API Key 留空，将以匿名模式调用，每日有免费额度，便于快速试用。

@@ -883,6 +883,30 @@ class TestBuiltinToolInjection:
         assert req.func_tool.get_tool("web_search_firecrawl") is search_tool
         assert req.func_tool.get_tool("firecrawl_extract_web_page") is extract_tool
 
+    @pytest.mark.asyncio
+    async def test_apply_web_search_tools_adds_anysearch_tool(
+        self, mock_event, mock_context
+    ):
+        module = ama
+        req = ProviderRequest()
+        mock_context.get_config.return_value = {
+            "provider_settings": {
+                "web_search": True,
+                "websearch_provider": "anysearch",
+            }
+        }
+        builtin_tool = MagicMock(spec=FunctionTool)
+        builtin_tool.name = "web_search_anysearch"
+        tool_mgr = MagicMock()
+        tool_mgr.get_builtin_tool.return_value = builtin_tool
+        mock_context.get_llm_tool_manager.return_value = tool_mgr
+
+        await module._apply_web_search_tools(mock_event, req, mock_context)
+
+        tool_mgr.get_builtin_tool.assert_called_once_with(module.AnySearchWebSearchTool)
+        assert req.func_tool is not None
+        assert req.func_tool.get_tool("web_search_anysearch") is builtin_tool
+
     def test_apply_web_search_citation_prompt_for_webchat(self, mock_event):
         module = ama
         req = ProviderRequest(system_prompt="base")

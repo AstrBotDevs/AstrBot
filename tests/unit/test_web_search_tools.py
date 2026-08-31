@@ -825,3 +825,144 @@ async def test_exa_get_contents_raises_on_http_error(monkeypatch):
             {"websearch_exa_key": ["exa-key"]},
             {"ids": ["https://example.com"]},
         )
+
+
+@pytest.mark.asyncio
+async def test_anysearch_search_maps_results(monkeypatch):
+    session = _FakeFirecrawlSession(
+        _FakeFirecrawlResponse(
+            status=200,
+            json_data={
+                "code": 0,
+                "message": "success",
+                "data": {
+                    "results": [
+                        {
+                            "title": "AstrBot",
+                            "url": "https://github.com/Xero-Team/AstrBot",
+                            "snippet": "A powerful AI chatbot framework",
+                            "content": "AstrBot is a flexible AI chatbot framework...",
+                        },
+                        {
+                            "title": "AstrBot Documentation",
+                            "url": "https://example.com/docs",
+                            "content": "Getting started with AstrBot...",
+                        },
+                    ]
+                },
+            },
+        )
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    results = await tools._anysearch_search(
+        {"websearch_anysearch_key": ["test-key"]},
+        {"query": "AstrBot"},
+    )
+
+    assert session.posted["url"] == "https://api.anysearch.com/v1/search"
+    assert session.posted["headers"]["Authorization"] == "Bearer test-key"
+    assert results == [
+        tools.SearchResult(
+            title="AstrBot",
+            url="https://github.com/Xero-Team/AstrBot",
+            snippet="A powerful AI chatbot framework",
+        ),
+        tools.SearchResult(
+            title="AstrBot Documentation",
+            url="https://example.com/docs",
+            snippet="Getting started with AstrBot...",
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_anysearch_search_supports_anonymous_mode(monkeypatch):
+    session = _FakeFirecrawlSession(
+        _FakeFirecrawlResponse(status=200, json_data={"data": {"results": []}})
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    await tools._anysearch_search({"websearch_anysearch_key": []}, {"query": "test"})
+
+    assert session.posted is not None
+    assert "Authorization" not in session.posted["headers"]
+
+
+@pytest.mark.asyncio
+async def test_anysearch_search_key_failover_on_quota_exhausted_402(monkeypatch):
+    session = _CycleSession(
+        [
+            _FakeFirecrawlResponse(status=402, text_data="quota exhausted"),
+            _FakeFirecrawlResponse(status=200, json_data={"data": {"results": []}}),
+        ]
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    await tools._anysearch_search(
+        {"websearch_anysearch_key": ["key1", "key2"]},
+        {"query": "test"},
+    )
+
+    assert len(session.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_anysearch_search_does_not_failover_on_server_error_500(monkeypatch):
+    session = _CycleSession(
+        [
+            _FakeFirecrawlResponse(status=500, text_data="internal server error"),
+            _FakeFirecrawlResponse(status=200, json_data={"data": {"results": []}}),
+        ]
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    with pytest.raises(Exception, match="internal server error"):
+        await tools._anysearch_search(
+            {"websearch_anysearch_key": ["key1", "key2"]},
+            {"query": "test"},
+        )
+
+    assert len(session.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_anysearch_search_tool_clamps_max_results(monkeypatch):
+    session = _FakeFirecrawlSession(
+        _FakeFirecrawlResponse(status=200, json_data={"data": {"results": []}})
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    tool = tools.AnySearchWebSearchTool()
+    context = _context_with_provider_settings({"websearch_anysearch_key": ["test-key"]})
+
+    await tool.call(context, query="test", max_results=99)
+    assert session.posted["json"]["max_results"] == 20
+
+    await tool.call(context, query="test", max_results=0)
+    assert session.posted["json"]["max_results"] == 1

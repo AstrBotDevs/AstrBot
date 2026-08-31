@@ -13,11 +13,11 @@ When using a large language model that supports function calling with the web se
 
 And other prompts with search intent to trigger the model to invoke the search tool.
 
-AstrBot currently supports 6 web search providers: `Tavily`, `BoCha`, `Baidu AI Search`, `Brave`, `Firecrawl`, and `Exa`.
+AstrBot currently supports 7 web search providers: `Tavily`, `BoCha`, `Baidu AI Search`, `Brave`, `Firecrawl`, `Exa`, and `AnySearch`.
 
 ![image](https://files.astrbot.app/docs/source/images/websearch/image.png)
 
-Go to `Configuration`, scroll down to find Web Search, where you can select `Tavily`, `BoCha`, `Baidu AI Search`, `Brave`, `Firecrawl`, or `Exa`.
+Go to `Configuration`, scroll down to find Web Search, where you can select `Tavily`, `BoCha`, `Baidu AI Search`, `Brave`, `Firecrawl`, `Exa`, or `AnySearch`.
 
 ## Tavily
 
@@ -46,3 +46,9 @@ Go to [Exa](https://dashboard.exa.ai) to get an API Key, then fill it in the cor
 If you use Tavily as your web search source, you will get a better experience optimization on AstrBot ChatUI, including citation source display and more:
 
 ![](https://files.astrbot.app/docs/source/images/websearch/image1.png)
+
+## AnySearch
+
+Go to the [AnySearch Console](https://anysearch.com/console/api-keys) to get your API Key, then fill it in the corresponding configuration field.
+
+In addition to general web search, AnySearch also provides domain-specific retrieval capabilities across academic research, code documentation, finance, legal, and security intelligence. If the API Key is left empty, it will use anonymous mode with a daily free quota, making it easy to try out quickly.

@@ -316,6 +316,10 @@
           "description": "Exa API Key",
           "hint": "可添加多个 Key 进行轮询。获取 Key: https://dashboard.exa.ai"
         },
+        "websearch_anysearch_key": {
+          "description": "AnySearch API Key",
+          "hint": "可添加多个 Key 进行轮询。留空则使用匿名模式（每日免费额度）。"
+        },
         "websearch_firecrawl_key": {
           "description": "Firecrawl API Key",
           "hint": "可添加多个 Key 进行轮询。"
