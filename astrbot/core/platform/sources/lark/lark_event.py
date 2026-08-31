@@ -26,8 +26,20 @@ from lark_oapi.api.im.v1 import (
 
 from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import At, File, Json, Plain, Record, Video
+from astrbot.api.message_components import (
+    ActionRow,
+    At,
+    ButtonStyle,
+    CallbackAction,
+    File,
+    Json,
+    Plain,
+    Record,
+    UrlAction,
+    Video,
+)
 from astrbot.api.message_components import Image as AstrBotImage
+from astrbot.core.platform.button_interaction import encode_button_callback
 from astrbot.core.utils.media_utils import (
     MediaResolver,
     convert_audio_to_opus,
@@ -343,6 +355,91 @@ class LarkMessageEvent(AstrMessageEvent):
         )
 
     @staticmethod
+    def _build_button_card(
+        components: list[Plain | ActionRow],
+        message_type: str | None = None,
+    ) -> dict:
+        """Build a Card JSON 2.0 payload for portable buttons.
+
+        Args:
+            components: Plain text and button rows to render in order.
+            message_type: AstrBot message type used to restore click context.
+
+        Returns:
+            A Lark Card JSON 2.0 object.
+        """
+        style_map = {
+            ButtonStyle.DEFAULT: "default",
+            ButtonStyle.PRIMARY: "primary",
+            ButtonStyle.SUCCESS: "primary",
+            ButtonStyle.DANGER: "danger",
+        }
+        elements: list[dict] = []
+        for component in components:
+            if isinstance(component, Plain):
+                if component.text:
+                    elements.append({"tag": "markdown", "content": component.text})
+                continue
+
+            columns: list[dict] = []
+            for button in component.buttons:
+                lark_button = {
+                    "tag": "button",
+                    "type": style_map[button.style],
+                    "text": {
+                        "tag": "plain_text",
+                        "content": button.label,
+                    },
+                }
+                if isinstance(button.action, CallbackAction):
+                    callback = encode_button_callback(
+                        button.id,
+                        button.action.data,
+                    )
+                    callback_value = {"astrbot_callback": callback}
+                    if message_type:
+                        callback_value["astrbot_message_type"] = message_type
+                    lark_button["behaviors"] = [
+                        {
+                            "type": "callback",
+                            "value": callback_value,
+                        }
+                    ]
+                elif isinstance(button.action, UrlAction):
+                    lark_button["behaviors"] = [
+                        {
+                            "type": "open_url",
+                            "default_url": button.action.url,
+                        }
+                    ]
+
+                columns.append(
+                    {
+                        "tag": "column",
+                        "width": "auto",
+                        "vertical_align": "top",
+                        "elements": [lark_button],
+                    }
+                )
+
+            if columns:
+                elements.append(
+                    {
+                        "tag": "column_set",
+                        "flex_mode": "flow",
+                        "horizontal_spacing": "8px",
+                        "columns": columns,
+                    }
+                )
+
+        return {
+            "schema": "2.0",
+            "body": {
+                "elements": elements,
+            },
+        }
+
+    @staticmethod
     async def _send_interactive_card(
         card_json: dict,
         lark_client: lark.Client,
@@ -419,6 +516,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
+        message_type: str | None = None,
     ) -> None:
         """通用的消息链发送方法
 
@@ -428,6 +526,7 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id: 回复的消息ID（用于回复消息）
             receive_id: 接收者ID（用于主动发送）
             receive_id_type: 接收者ID类型，如 'open_id', 'chat_id'（用于主动发送）
+            message_type: AstrBot message type embedded in callback context
         """
         if lark_client.im is None:
             logger.error("[Lark] API Client im 模块未初始化")
@@ -470,6 +569,39 @@ class LarkMessageEvent(AstrMessageEvent):
                 receive_id_type=receive_id_type,
             ):
                 return
+
+        button_components = [
+            comp for comp in other_components if isinstance(comp, (Plain, ActionRow))
+        ]
+        action_rows = [
+            comp for comp in button_components if isinstance(comp, ActionRow)
+        ]
+        if action_rows:
+            other_components = [
+                comp
+                for comp in other_components
+                if not isinstance(comp, (Plain, ActionRow))
+            ]
+            card_json = LarkMessageEvent._build_button_card(
+                button_components,
+                message_type,
+            )
+            if not await LarkMessageEvent._send_interactive_card(
+                card_json,
+                lark_client=lark_client,
+                reply_message_id=reply_message_id,
+                receive_id=receive_id,
+                receive_id_type=receive_id_type,
+            ):
+                for component in button_components:
+                    if isinstance(component, Plain):
+                        other_components.append(component)
+                        continue
+                    fallback = component.fallback_text or " / ".join(
+                        button.label for button in component.buttons
+                    )
+                    if fallback:
+                        other_components.append(Plain(fallback))
 
         # 先发送非文件内容（如果有）
         if other_components:
@@ -555,6 +687,7 @@ class LarkMessageEvent(AstrMessageEvent):
             message,
             self.bot,
             reply_message_id=self.message_obj.message_id,
+            message_type=self.message_obj.type.value,
         )
         await super().send(message)
 

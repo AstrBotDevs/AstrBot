@@ -109,6 +109,32 @@ class DiscordBotClient(discord.Bot):
             message_data = self._create_message_data(message)
             await self.on_message_received(message_data)
 
+    async def on_interaction(self, interaction: discord.Interaction) -> None:
+        """Dispatch application commands and acknowledge callback buttons.
+
+        Args:
+            interaction: Discord interaction received by the bot.
+        """
+        if interaction.type != discord.InteractionType.component:
+            await super().on_interaction(interaction)
+            return
+
+        interaction_data = interaction.data or {}
+        if (
+            interaction_data.get("component_type") != discord.ComponentType.button.value
+            or not self.on_message_received
+        ):
+            await super().on_interaction(interaction)
+            return
+
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.defer()
+        except Exception as e:
+            logger.warning(f"[Discord] Failed to acknowledge interaction: {e}")
+
+        await self.on_message_received(self._create_interaction_data(interaction))
+
     def _extract_interaction_content(self, interaction: discord.Interaction) -> str:
         """从交互中提取内容"""
         interaction_type = interaction.type

@@ -6,14 +6,18 @@ from aiocqhttp import CQHttp, Event
 
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
+    ActionRow,
     At,
     BaseMessageComponent,
+    Button,
+    CallbackAction,
     File,
     Image,
     Node,
     Nodes,
     Plain,
     Record,
+    UrlAction,
     Video,
 )
 from astrbot.api.platform import Group, MessageMember
@@ -81,6 +85,30 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                     continue
                 d = await AiocqhttpMessageEvent._from_segment_to_dict(segment)
                 ret.append(d)
+            elif isinstance(segment, ActionRow | Button):
+                # OneBot v11 has no portable button segment. Keep URL actions usable
+                # as plain links and make callback degradation explicit.
+                lines = []
+                if isinstance(segment, ActionRow):
+                    buttons = segment.buttons
+                    if segment.fallback_text and segment.fallback_text.strip():
+                        lines.append(segment.fallback_text.strip())
+                else:
+                    buttons = [segment]
+
+                for button in buttons:
+                    if isinstance(button.action, UrlAction):
+                        lines.append(f"{button.label}: {button.action.url}")
+                    elif isinstance(button.action, CallbackAction):
+                        lines.append(f"[Button unavailable] {button.label}")
+
+                if lines:
+                    ret.append(
+                        {
+                            "type": "text",
+                            "data": {"text": "\n".join(lines)},
+                        }
+                    )
             else:
                 d = await AiocqhttpMessageEvent._from_segment_to_dict(segment)
                 ret.append(d)

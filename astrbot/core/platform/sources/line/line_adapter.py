@@ -7,7 +7,15 @@ from typing import Any, cast
 
 from astrbot.api import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, File, Image, Plain, Record, Video
+from astrbot.api.message_components import (
+    At,
+    ButtonInteraction,
+    File,
+    Image,
+    Plain,
+    Record,
+    Video,
+)
 from astrbot.api.platform import (
     AstrBotMessage,
     Group,
@@ -17,6 +25,7 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.button_interaction import decode_button_callback
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import MediaResolver
 from astrbot.core.utils.webhook_utils import log_webhook_info
@@ -172,7 +181,8 @@ class LinePlatformAdapter(Platform):
             await self.handle_msg(abm)
 
     async def convert_message(self, event: dict[str, Any]) -> AstrBotMessage | None:
-        if str(event.get("type", "")) != "message":
+        event_type = str(event.get("type", ""))
+        if event_type not in {"message", "postback"}:
             return None
         if str(event.get("mode", "active")) == "standby":
             return None
@@ -181,9 +191,12 @@ class LinePlatformAdapter(Platform):
         if not isinstance(source, dict):
             return None
 
-        message = event.get("message", {})
-        if not isinstance(message, dict):
-            return None
+        message: dict[str, Any] = {}
+        if event_type == "message":
+            raw_message = event.get("message", {})
+            if not isinstance(raw_message, dict):
+                return None
+            message = raw_message
 
         source_type = str(source.get("type", ""))
         user_id = str(source.get("userId", "")).strip()
@@ -228,7 +241,28 @@ class LinePlatformAdapter(Platform):
 
         abm.sender = MessageMember(user_id=sender_id, nickname=sender_id[:8])
 
-        components = await self._parse_line_message_components(message)
+        if event_type == "postback":
+            postback = event.get("postback", {})
+            if not isinstance(postback, dict):
+                return None
+            payload = postback.get("data")
+            if not isinstance(payload, str):
+                return None
+            try:
+                action_id, data = decode_button_callback(payload)
+            except ValueError:
+                logger.debug("[LINE] ignored unrecognized postback payload")
+                return None
+            components = [
+                ButtonInteraction(
+                    action_id=action_id,
+                    data=data,
+                    interaction_id=str(event.get("webhookEventId") or uuid.uuid4().hex),
+                    source_message_id=None,
+                )
+            ]
+        else:
+            components = await self._parse_line_message_components(message)
         if not components:
             return None
         abm.message = components
@@ -448,6 +482,8 @@ class LinePlatformAdapter(Platform):
                 parts.append("[audio]")
             elif isinstance(comp, File):
                 parts.append(str(comp.name or "[file]"))
+            elif isinstance(comp, ButtonInteraction):
+                parts.append(comp.action_id)
             else:
                 parts.append(f"[{comp.type}]")
         return " ".join(i for i in parts if i).strip()

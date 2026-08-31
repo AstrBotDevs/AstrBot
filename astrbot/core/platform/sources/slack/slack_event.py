@@ -9,12 +9,16 @@ from slack_sdk.web.async_client import AsyncWebClient
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
+    ActionRow,
     BaseMessageComponent,
+    CallbackAction,
     File,
     Image,
     Plain,
+    UrlAction,
 )
 from astrbot.api.platform import Group, MessageMember
+from astrbot.core.platform.button_interaction import encode_button_callback
 
 
 class SlackMessageEvent(AstrMessageEvent):
@@ -87,6 +91,40 @@ class SlackMessageEvent(AstrMessageEvent):
                     "text": f"文件: <{file_url}|{segment.name or '文件'}>",
                 },
             }
+        if isinstance(segment, ActionRow):
+            elements = []
+            for button in segment.buttons:
+                if len(button.label) > 75:
+                    raise ValueError("Slack button labels cannot exceed 75 characters")
+                if len(button.id) > 255:
+                    raise ValueError("Slack button IDs cannot exceed 255 characters")
+
+                element = {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": button.label},
+                    "action_id": button.id,
+                }
+                if isinstance(button.action, CallbackAction):
+                    value = encode_button_callback(button.id, button.action.data)
+                    if len(value.encode("utf-8")) > 2000:
+                        raise ValueError(
+                            "Slack callback payloads cannot exceed 2000 bytes"
+                        )
+                    element["value"] = value
+                elif isinstance(button.action, UrlAction):
+                    element["url"] = button.action.url
+
+                if button.style.value in {"primary", "success"}:
+                    element["style"] = "primary"
+                elif button.style.value == "danger":
+                    element["style"] = "danger"
+                elements.append(element)
+
+            if len(elements) > 25:
+                raise ValueError(
+                    "Slack action rows cannot contain more than 25 buttons"
+                )
+            return {"type": "actions", "elements": elements}
 
     @staticmethod
     async def _parse_slack_blocks(
@@ -96,10 +134,12 @@ class SlackMessageEvent(AstrMessageEvent):
         """解析成 Slack 块格式"""
         blocks = []
         text_content = ""
+        fallback_text = ""
 
         for segment in message_chain.chain:
             if isinstance(segment, Plain):
                 text_content += segment.text
+                fallback_text += segment.text
             else:
                 # 如果有文本内容，先添加文本块
                 if text_content.strip():
@@ -118,6 +158,10 @@ class SlackMessageEvent(AstrMessageEvent):
                 )
                 if block:
                     blocks.append(block)
+                if isinstance(segment, ActionRow):
+                    fallback_text += segment.fallback_text or " / ".join(
+                        button.label for button in segment.buttons
+                    )
 
         # 如果最后还有文本内容
         if text_content.strip():
@@ -125,7 +169,7 @@ class SlackMessageEvent(AstrMessageEvent):
                 {"type": "section", "text": {"type": "mrkdwn", "text": text_content}},
             )
 
-        return blocks, "" if blocks else text_content
+        return blocks, fallback_text
 
     async def send(self, message: MessageChain) -> None:
         blocks, text = await SlackMessageEvent._parse_slack_blocks(

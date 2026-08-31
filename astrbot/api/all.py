@@ -15,6 +15,7 @@ from astrbot.core.platform import AstrMessageEvent
 
 # star register
 from astrbot.core.star.register import (
+    register_button_interaction as button_interaction,
     register_command as command,
     register_command_group as command_group,
     register_event_message_type as event_message_type,

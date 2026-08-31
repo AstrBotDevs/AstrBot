@@ -131,6 +131,12 @@ interface CreateLocalExchangeOptions {
   parts: MessagePart[];
 }
 
+interface SendButtonInteractionOptions {
+  sessionId: string;
+  sourceMessageId?: string | number;
+  callbackData: string;
+}
+
 interface UseMessagesOptions {
   currentSessionId: Ref<string>;
   onSessionsChanged?: () => Promise<void> | void;
@@ -405,6 +411,43 @@ export function useMessages(options: UseMessagesOptions) {
       selectedModel,
       skipUserHistory,
       llmCheckpointId,
+    );
+  }
+
+  function sendButtonInteraction({
+    sessionId,
+    sourceMessageId,
+    callbackData,
+  }: SendButtonInteractionOptions) {
+    if (!sessionId || !callbackData) return;
+    const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+    const botRecord = reactive<ChatRecord>({
+      id: `local-button-bot-${messageId}`,
+      created_at: new Date().toISOString(),
+      content: {
+        type: "bot",
+        message: [],
+        reasoning: "",
+        isLoading: true,
+      },
+    });
+
+    startSseStream(
+      sessionId,
+      messageId,
+      [
+        {
+          type: "button_interaction",
+          callback_data: callbackData,
+          source_message_id: sourceMessageId,
+        },
+      ],
+      botRecord,
+      undefined,
+      true,
+      "",
+      "",
+      true,
     );
   }
 
@@ -953,12 +996,18 @@ export function useMessages(options: UseMessagesOptions) {
   function ensureBotRecordVisible(connection: ActiveConnection) {
     const { botRecord, userRecord } = connection;
     if (!botRecord) return;
-    const records = messagesBySession[connection.sessionId] || [];
+    const records =
+      messagesBySession[connection.sessionId] ||
+      (messagesBySession[connection.sessionId] = []);
     if (records.includes(botRecord)) {
       connection.botVisible = true;
       return;
     }
-    if (!userRecord) return;
+    if (!userRecord) {
+      records.push(botRecord);
+      connection.botVisible = true;
+      return;
+    }
 
     const userIndex = records.indexOf(userRecord);
     let insertionAnchor = connection.deferredBeforeBot;
@@ -1128,6 +1177,15 @@ export function useMessages(options: UseMessagesOptions) {
       return;
     }
 
+    if (msgType === "actionrow" && data && typeof data === "object") {
+      markMessageStarted(botRecord);
+      messageContent(botRecord).message.push({
+        type: "actionrow",
+        ...(data as Record<string, unknown>),
+      });
+      return;
+    }
+
     if (["image", "record", "file", "video"].includes(msgType)) {
       markMessageStarted(botRecord);
       const rawFilename = String(data)
@@ -1174,6 +1232,7 @@ export function useMessages(options: UseMessagesOptions) {
     loadSessionMessages,
     createLocalExchange,
     sendMessageStream,
+    sendButtonInteraction,
     editMessage,
     continueEditedMessage,
     regenerateMessage,
@@ -1365,6 +1424,13 @@ function partToPayload(part: MessagePart) {
       type: "reply",
       message_id: part.message_id,
       selected_text: part.selected_text || "",
+    };
+  }
+  if (part.type === "button_interaction") {
+    return {
+      type: "button_interaction",
+      callback_data: part.callback_data,
+      source_message_id: part.source_message_id,
     };
   }
   return {

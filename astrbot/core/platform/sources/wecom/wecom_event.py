@@ -1,13 +1,25 @@
 import asyncio
 import os
+import uuid
 
 from wechatpy.enterprise import WeChatClient
 from wechatpy.exceptions import WeChatClientException
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import File, Image, Plain, Record, Video
+from astrbot.api.message_components import (
+    ActionRow,
+    ButtonStyle,
+    CallbackAction,
+    File,
+    Image,
+    Plain,
+    Record,
+    UrlAction,
+    Video,
+)
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
+from astrbot.core.platform.button_interaction import encode_button_callback
 from astrbot.core.utils.media_utils import convert_audio_to_amr
 
 from .wecom_kf_message import WeChatKFMessage
@@ -194,6 +206,47 @@ class WecomPlatformEvent(AstrMessageEvent):
                             self.get_self_id(),
                             response["media_id"],
                         )
+                elif isinstance(comp, ActionRow):
+                    if not comp.buttons:
+                        continue
+                    menu_list = []
+                    for button in comp.buttons:
+                        if isinstance(button.action, CallbackAction):
+                            callback_id = encode_button_callback(
+                                button.id,
+                                button.action.data,
+                            )
+                            if len(callback_id.encode("utf-8")) > 64:
+                                raise ValueError(
+                                    "WeCom customer-service callback IDs cannot exceed "
+                                    "64 bytes."
+                                )
+                            menu_list.append(
+                                {
+                                    "type": "click",
+                                    "click": {
+                                        "id": callback_id,
+                                        "content": button.label,
+                                    },
+                                }
+                            )
+                        elif isinstance(button.action, UrlAction):
+                            menu_list.append(
+                                {
+                                    "type": "view",
+                                    "view": {
+                                        "url": button.action.url,
+                                        "content": button.label,
+                                    },
+                                }
+                            )
+                    kf_message_api.send_msgmenu(
+                        user_id,
+                        self.get_self_id(),
+                        comp.fallback_text or "",
+                        menu_list,
+                        "",
+                    )
                 else:
                     logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}。")
         else:
@@ -293,6 +346,50 @@ class WecomPlatformEvent(AstrMessageEvent):
                             message_obj.session_id,
                             response["media_id"],
                         )
+                elif isinstance(comp, ActionRow):
+                    if not comp.buttons:
+                        continue
+                    if len(comp.buttons) > 6:
+                        raise ValueError(
+                            "WeCom template cards support at most 6 buttons."
+                        )
+                    style_map = {
+                        ButtonStyle.DEFAULT: 1,
+                        ButtonStyle.PRIMARY: 2,
+                        ButtonStyle.DANGER: 3,
+                        ButtonStyle.SUCCESS: 4,
+                    }
+                    button_list = []
+                    for button in comp.buttons:
+                        item = {
+                            "text": button.label,
+                            "style": style_map[button.style],
+                        }
+                        if isinstance(button.action, CallbackAction):
+                            item["type"] = 0
+                            item["key"] = encode_button_callback(
+                                button.id,
+                                button.action.data,
+                            )
+                        elif isinstance(button.action, UrlAction):
+                            item["type"] = 1
+                            item["url"] = button.action.url
+                        button_list.append(item)
+                    self.client.message.send(
+                        message_obj.self_id,
+                        message_obj.session_id,
+                        msg={
+                            "msgtype": "template_card",
+                            "template_card": {
+                                "card_type": "button_interaction",
+                                "main_title": {
+                                    "title": comp.fallback_text or "请选择操作"
+                                },
+                                "button_list": button_list,
+                                "task_id": f"astrbot_{uuid.uuid4().hex}",
+                            },
+                        },
+                    )
                 else:
                     logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}。")
 

@@ -1,9 +1,14 @@
+import html
 from typing import TYPE_CHECKING
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
+    ActionRow,
     At,
+    Button,
+    ButtonStyle,
+    CallbackAction,
     File,
     Forward,
     Image,
@@ -12,9 +17,11 @@ from astrbot.api.message_components import (
     Plain,
     Record,
     Reply,
+    UrlAction,
     Video,
 )
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
+from astrbot.core.platform.button_interaction import encode_button_callback
 from astrbot.core.utils.media_utils import resolve_media_ref_to_base64_data
 
 if TYPE_CHECKING:
@@ -285,6 +292,47 @@ class SatoriPlatformEvent(AstrMessageEvent):
             elif isinstance(component, Forward):
                 return f'<message id="{component.id}" forward/>'
 
+            elif isinstance(component, (ActionRow, Button)):
+                buttons = (
+                    component.buttons
+                    if isinstance(component, ActionRow)
+                    else [component]
+                )
+                if not buttons:
+                    fallback_text = (
+                        component.fallback_text
+                        if isinstance(component, ActionRow)
+                        else ""
+                    )
+                    return html.escape(fallback_text or "")
+
+                theme_map = {
+                    ButtonStyle.DEFAULT: "secondary",
+                    ButtonStyle.PRIMARY: "primary",
+                    ButtonStyle.SUCCESS: "success",
+                    ButtonStyle.DANGER: "danger",
+                }
+                button_elements = []
+                for button in buttons:
+                    label = html.escape(button.label)
+                    theme = theme_map[button.style]
+                    if isinstance(button.action, CallbackAction):
+                        callback_id = html.escape(
+                            encode_button_callback(button.id, button.action.data),
+                            quote=True,
+                        )
+                        button_elements.append(
+                            f'<button id="{callback_id}" type="action" '
+                            f'theme="{theme}">{label}</button>'
+                        )
+                    elif isinstance(button.action, UrlAction):
+                        href = html.escape(button.action.url, quote=True)
+                        button_elements.append(
+                            f'<button type="link" href="{href}" '
+                            f'theme="{theme}">{label}</button>'
+                        )
+                return "".join(button_elements)
+
             # 对于其他未处理的组件类型，返回空字符串
             return ""
 
@@ -377,6 +425,47 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
             elif isinstance(component, Forward):
                 return f'<message id="{component.id}" forward/>'
+
+            elif isinstance(component, (ActionRow, Button)):
+                buttons = (
+                    component.buttons
+                    if isinstance(component, ActionRow)
+                    else [component]
+                )
+                if not buttons:
+                    fallback_text = (
+                        component.fallback_text
+                        if isinstance(component, ActionRow)
+                        else ""
+                    )
+                    return html.escape(fallback_text or "")
+
+                theme_map = {
+                    ButtonStyle.DEFAULT: "secondary",
+                    ButtonStyle.PRIMARY: "primary",
+                    ButtonStyle.SUCCESS: "success",
+                    ButtonStyle.DANGER: "danger",
+                }
+                button_elements = []
+                for button in buttons:
+                    label = html.escape(button.label)
+                    theme = theme_map[button.style]
+                    if isinstance(button.action, CallbackAction):
+                        callback_id = html.escape(
+                            encode_button_callback(button.id, button.action.data),
+                            quote=True,
+                        )
+                        button_elements.append(
+                            f'<button id="{callback_id}" type="action" '
+                            f'theme="{theme}">{label}</button>'
+                        )
+                    elif isinstance(button.action, UrlAction):
+                        href = html.escape(button.action.url, quote=True)
+                        button_elements.append(
+                            f'<button type="link" href="{href}" '
+                            f'theme="{theme}">{label}</button>'
+                        )
+                return "".join(button_elements)
 
             # 对于其他未处理的组件类型，返回空字符串
             return ""

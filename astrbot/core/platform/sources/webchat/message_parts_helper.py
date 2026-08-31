@@ -1,12 +1,16 @@
 import json
 import mimetypes
 import shutil
+import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 from astrbot.core.db.po import Attachment
 from astrbot.core.message.components import (
+    ActionRow,
+    ButtonInteraction,
+    CallbackAction,
     File,
     Image,
     Json,
@@ -16,6 +20,10 @@ from astrbot.core.message.components import (
     Video,
 )
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform.button_interaction import (
+    decode_button_callback,
+    encode_button_callback,
+)
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
 from astrbot.core.utils.media_utils import MediaResolver
 
@@ -52,8 +60,11 @@ def strip_message_parts_path_fields(message_parts: list[dict]) -> list[dict]:
 
 def webchat_message_parts_have_content(message_parts: list[dict]) -> bool:
     return any(
-        part.get("type") in ("plain", "image", "record", "file", "video")
-        and (part.get("text") or part.get("attachment_id") or part.get("filename"))
+        (
+            part.get("type") in ("plain", "image", "record", "file", "video")
+            and (part.get("text") or part.get("attachment_id") or part.get("filename"))
+        )
+        or (part.get("type") == "button_interaction" and part.get("callback_data"))
         for part in message_parts
     )
 
@@ -145,6 +156,35 @@ async def parse_webchat_message_parts(
             )
             continue
 
+        if part_type == "button_interaction":
+            callback_payload = part.get("callback_data")
+            if not isinstance(callback_payload, str):
+                if strict:
+                    raise ValueError("button_interaction part missing callback_data")
+                continue
+            try:
+                action_id, data = decode_button_callback(callback_payload)
+            except ValueError:
+                if strict:
+                    raise
+                continue
+            source_message_id = part.get("source_message_id")
+            components.append(
+                ButtonInteraction(
+                    action_id=action_id,
+                    data=data,
+                    interaction_id=str(part.get("interaction_id") or uuid.uuid4().hex),
+                    source_message_id=(
+                        str(source_message_id)
+                        if source_message_id is not None
+                        else None
+                    ),
+                )
+            )
+            text_parts.append(action_id)
+            has_content = True
+            continue
+
         if part_type not in MEDIA_PART_TYPES:
             if strict:
                 raise ValueError(f"unsupported message part type: {part_type}")
@@ -224,6 +264,28 @@ async def build_webchat_message_parts(
                     "type": "reply",
                     "message_id": message_id,
                     "selected_text": str(part.get("selected_text", "")),
+                }
+            )
+            continue
+
+        if part_type == "button_interaction":
+            callback_payload = part.get("callback_data")
+            if not isinstance(callback_payload, str):
+                if strict:
+                    raise ValueError("button_interaction part missing callback_data")
+                continue
+            try:
+                decode_button_callback(callback_payload)
+            except ValueError:
+                if strict:
+                    raise
+                continue
+            message_parts.append(
+                {
+                    "type": "button_interaction",
+                    "callback_data": callback_payload,
+                    "source_message_id": part.get("source_message_id"),
+                    "interaction_id": uuid.uuid4().hex,
                 }
             )
             continue
@@ -412,6 +474,21 @@ async def message_chain_to_storage_message_parts(
             parts.append(
                 {"type": "plain", "text": json.dumps(comp.data, ensure_ascii=False)}
             )
+            continue
+
+        if isinstance(comp, ActionRow):
+            row_data = comp.toDict()["data"]
+            for button, serialized_button in zip(
+                comp.buttons,
+                row_data["buttons"],
+                strict=True,
+            ):
+                if isinstance(button.action, CallbackAction):
+                    serialized_button["action"]["callback_data"] = (
+                        encode_button_callback(button.id, button.action.data)
+                    )
+                    serialized_button["action"].pop("data", None)
+            parts.append({"type": "actionrow", **row_data})
             continue
 
         if isinstance(comp, Image):

@@ -149,7 +149,12 @@ class BotMessageAccumulator:
         else:
             self.pending_text = result_text
 
-    def add_attachment(self, part: dict | None) -> None:
+    def add_part(self, part: dict | None) -> None:
+        """Append a structured non-text message part.
+
+        Args:
+            part: WebChat message part ready for history storage.
+        """
         if not part:
             return
         self._flush_pending_text()
@@ -994,7 +999,7 @@ class ChatService:
                         display_name=display_name,
                     )
                     for accumulator in (pending_accumulator, display_accumulator):
-                        accumulator.add_attachment(part)
+                        accumulator.add_part(part)
                     if part and part.get("attachment_id") and part.get("type"):
                         attachment_saved_payload = {
                             "type": "attachment_saved",
@@ -1003,6 +1008,10 @@ class ChatService:
                                 "type": part["type"],
                             },
                         }
+                elif msg_type == "actionrow" and isinstance(result_text, dict):
+                    part = {"type": "actionrow", **result_text}
+                    for accumulator in (pending_accumulator, display_accumulator):
+                        accumulator.add_part(part)
 
                 snapshot_accumulator = deepcopy(display_accumulator)
                 run.message_parts = snapshot_accumulator.build_message_parts(
@@ -1576,14 +1585,22 @@ class ChatService:
         if thread.creator != username:
             raise ChatServiceError("Permission denied")
 
+        message = data.get("message", [])
+        is_button_interaction = (
+            isinstance(message, list)
+            and len(message) == 1
+            and isinstance(message[0], dict)
+            and message[0].get("type") == "button_interaction"
+        )
         return {
             "session_id": thread.thread_id,
-            "message": data.get("message", []),
+            "message": message,
             "flags": resolve_webchat_request_flags(data),
             "selected_provider": data.get("selected_provider"),
             "selected_model": data.get("selected_model"),
             "_platform_history_id": "webchat_thread",
             "_thread_selected_text": thread.selected_text,
+            "_skip_user_history": is_button_interaction,
         }
 
     async def prepare_thread_chat_payload_from_dashboard_payload(

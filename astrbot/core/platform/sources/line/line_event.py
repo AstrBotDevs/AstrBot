@@ -8,14 +8,18 @@ from pathlib import Path
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
+    ActionRow,
     At,
     BaseMessageComponent,
+    CallbackAction,
     File,
     Image,
     Plain,
     Record,
+    UrlAction,
     Video,
 )
+from astrbot.core.platform.button_interaction import encode_button_callback
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import get_media_duration
 
@@ -23,6 +27,10 @@ from .line_api import LineAPIClient
 
 
 class LineMessageEvent(AstrMessageEvent):
+    POSTBACK_DATA_MAX_BYTES = 300
+    BUTTON_LABEL_MAX_CHARS = 20
+    BUTTONS_PER_TEMPLATE = 4
+
     def __init__(
         self,
         message_str,
@@ -97,6 +105,57 @@ class LineMessageEvent(AstrMessageEvent):
                 "fileName": file_name,
                 "fileSize": file_size,
                 "originalContentUrl": file_url,
+            }
+
+        if isinstance(segment, ActionRow):
+            actions: list[dict] = []
+            for button in segment.buttons:
+                label = button.label.strip()[: LineMessageEvent.BUTTON_LABEL_MAX_CHARS]
+                if not label:
+                    continue
+
+                if isinstance(button.action, CallbackAction):
+                    callback_data = encode_button_callback(
+                        button.id,
+                        button.action.data,
+                    )
+                    if (
+                        len(callback_data.encode("utf-8"))
+                        > LineMessageEvent.POSTBACK_DATA_MAX_BYTES
+                    ):
+                        raise ValueError(
+                            "LINE postback data must not exceed 300 bytes."
+                        )
+                    actions.append(
+                        {
+                            "type": "postback",
+                            "label": label,
+                            "data": callback_data,
+                            "displayText": label,
+                        }
+                    )
+                elif isinstance(button.action, UrlAction):
+                    actions.append(
+                        {
+                            "type": "uri",
+                            "label": label,
+                            "uri": button.action.url,
+                        }
+                    )
+
+            if not actions:
+                return None
+            if len(actions) > LineMessageEvent.BUTTONS_PER_TEMPLATE:
+                raise ValueError("LINE buttons templates support at most 4 actions.")
+            fallback_text = (segment.fallback_text or "").strip() or "Choose an option"
+            return {
+                "type": "template",
+                "altText": fallback_text[:400],
+                "template": {
+                    "type": "buttons",
+                    "text": fallback_text[:160],
+                    "actions": actions,
+                },
             }
 
         return None

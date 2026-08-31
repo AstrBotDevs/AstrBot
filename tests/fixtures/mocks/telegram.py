@@ -30,6 +30,8 @@ def create_mock_telegram_modules():
     mock_telegram = MagicMock()
     mock_telegram.BotCommand = MagicMock
     mock_telegram.Update = MagicMock
+    mock_telegram.InlineKeyboardButton = MagicMock
+    mock_telegram.InlineKeyboardMarkup = MagicMock
     mock_telegram.constants = MagicMock()
     mock_telegram.constants.ChatType = MagicMock()
     mock_telegram.constants.ChatType.PRIVATE = "private"
@@ -54,6 +56,7 @@ def create_mock_telegram_modules():
     mock_telegram_ext.filters = MagicMock()
     mock_telegram_ext.filters.ALL = MagicMock()
     mock_telegram_ext.MessageHandler = MagicMock
+    mock_telegram_ext.CallbackQueryHandler = MagicMock
 
     # Mock telegramify_markdown
     mock_telegramify = MagicMock()
