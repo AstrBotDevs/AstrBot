@@ -158,6 +158,7 @@ export function normalizeLimitedShikiLanguage(language) {
   const normalized = String(language || "text")
     .trim()
     .split(/\s+/, 1)[0]
+    .split(":", 1)[0]
     .toLowerCase();
 
   if (!normalized) return "text";

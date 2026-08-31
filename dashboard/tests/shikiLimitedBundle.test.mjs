@@ -8,7 +8,7 @@ import {
 } from "../src/utils/shikiLimitedBundle.js";
 
 const languageCases = {
-  c: ["c"],
+  c: ["c", "h"],
   cpp: ["cpp", "c++", "cc", "cxx", "h++", "hh", "hpp"],
   csharp: ["csharp", "cs"],
   dart: ["dart"],
@@ -33,6 +33,8 @@ test("normalizes aliases for the expanded language set", () => {
   }
 
   assert.equal(normalizeLimitedShikiLanguage("unknown-language"), "text");
+  assert.equal(normalizeLimitedShikiLanguage("c extra"), "c");
+  assert.equal(normalizeLimitedShikiLanguage("rust:rust"), "rust");
 });
 
 test("highlights every expanded language with Shiki tokens", async () => {
