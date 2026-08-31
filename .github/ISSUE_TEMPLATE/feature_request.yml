@@ -1,0 +1,58 @@
+name: Feature request
+description: Propose a change to this fork. Discuss before a large PR.
+title: '[feat] '
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        New features need a development Issue before a large PR
+        ([GOVERNANCE.md](https://github.com/Xero-Team/AstrBot/blob/master/GOVERNANCE.md)).
+        This is not a user-support queue.
+
+        Fill **exactly one** of Human note or Agent note. Agents must not fabricate a Human note. See AI_POLICY.md.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing Issues and PRs.
+          required: true
+        - label: This matches the current-branch, no-legacy, Python 3.14+ policy.
+          required: true
+        - label: I filled exactly one of Human note or Agent note, matching who wrote this Issue.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What does not work well today, and who is blocked.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Smallest current design. List non-goals.
+    validations:
+      required: true
+  - type: dropdown
+    id: author
+    attributes:
+      label: Author
+      options:
+        - Human
+        - Agent
+    validations:
+      required: true
+  - type: textarea
+    id: human_note
+    attributes:
+      label: Human note
+      description: Humans only. Mother tongue, own words. Leave empty if an agent is the author.
+  - type: textarea
+    id: agent_note
+    attributes:
+      label: Agent note
+      description: Agents only. Why this Issue exists now. Leave empty if a human is the author.

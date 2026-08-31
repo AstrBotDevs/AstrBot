@@ -153,11 +153,11 @@ Provider 模板来自代码注册表，后续版本可能变化；请以运行�
 
 ## ❤️ 贡献
 
-欢迎向当前仓库提交 Pull Request。请以本分支现行行为为准，而不是上游历史行为。本 fork 不运营公开 Issue 跟踪器。
+欢迎向当前仓库提交 Pull Request。请以本分支现行行为为准，而不是上游历史行为。本 fork 不运营用户支持队列。开发 Issue 跟踪缺陷与功能，不是客服。见 [AI_POLICY.md](AI_POLICY.md)。
 
 ### 如何贡献
 
-向 `Xero-Team/AstrBot` 开 Pull Request。不要在本仓库提交 GitHub Issue；安全漏洞按 [SECURITY.md](SECURITY.md) 私密报告。
+向 `Xero-Team/AstrBot` 开开发 Issue 和/或 Pull Request。不要把这里当客服。安全漏洞按 [SECURITY.md](SECURITY.md) 私密报告。智能体可以开 Issue/PR，不得自行合并。
 
 ### 开发环境
 

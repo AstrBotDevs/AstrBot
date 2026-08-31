@@ -10,6 +10,42 @@ auditable without repeatedly loading the entire sync history into context.
 Treat `AGENTS.md` as the policy source of truth and
 `upstream-decisions.jsonl` as the durable decision ledger.
 
+Cite `.agents/shared/ai-contribution/REFERENCE.md` and `AI_POLICY.md` when
+opening a branch, Issue, or PR. Paste-ready apply prompt:
+`APPLY_PROMPT.md` in this folder.
+
+## Locked
+
+- Default method is **cherry-pick**, not merge of `upstream/master`.
+- One implementation commit per absorbed upstream commit. Skip/revisit make
+  none.
+- Preserve upstream subjects on `cherry-pick -x`. Adapt uses upstream author
+  plus hyphenated trailers.
+- Python 3.14+, no legacy shims, source-build compose, in-app `/help/` docs.
+- Do not merge the resulting PR, push `master`, tag, or release. A human
+  maintainer does those actions; do not treat a verbal exception as
+  authorization.
+
+## Open
+
+Which commits to absorb in this window, and whether to open the PR in this
+session, unless the user already froze the plan in this conversation.
+
+## Do not
+
+- `git merge` / `rebase` onto `upstream/master`.
+- Combine several upstream feature/fix commits into one implementation commit.
+- Re-run an interval whose SHAs are already in the ledger.
+- File a public security Issue for an upstream vuln; follow `SECURITY.md`.
+- Invent a `pending` field in `upstream-sync.yaml`. Apply only the plan the
+  user approved in this conversation.
+
+## Handoff
+
+- Commit messages: `.agents/shared/conventional-commit/REFERENCE.md`.
+- Agent merge bar: `.agents/shared/ai-contribution/REFERENCE.md`.
+- Apply paste prompt: `.agents/skills/sync-upstream/APPLY_PROMPT.md`.
+
 ## Operating modes
 
 - **Review mode (default):** inspect the repository, fetch and compare
@@ -17,7 +53,8 @@ Treat `AGENTS.md` as the policy source of truth and
   return a focused plan. Do not cherry-pick, edit files, commit, or push.
 - **Apply mode:** enter only after the user explicitly asks to execute the
   approved plan. Apply commits oldest-first, one at a time, and record each
-  final decision. Do not push, merge, release, or tag unless separately asked.
+  final decision. Stay on a feature branch. You may open a pull request. Do
+  not merge, push `master`, release, or tag.
 
 ## Preflight
 
@@ -257,7 +294,7 @@ metadata before advancing the cursor:
    absorbed fork changes when the repository's release convention calls for
    one.
 
-## Cursor and verification
+## Verify
 
 Advance `upstream-sync.yaml` only after every commit in the audited interval has
 an explicit disposition and the implementation/skip rationale is complete. Use

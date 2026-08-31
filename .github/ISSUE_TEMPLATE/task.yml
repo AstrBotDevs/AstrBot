@@ -1,0 +1,51 @@
+name: Maintenance task
+description: Track a maintenance or agent-owned task that is not a user-facing feature.
+title: '[chore] '
+labels:
+  - task
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for upstream-sync windows, toolchain bumps, doc alignment, and
+        other maintenance. Agents may open this form. They must not merge the
+        follow-up PR. See AI_POLICY.md.
+
+        Fill **exactly one** of Human note or Agent note. Agents must not fabricate a Human note.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What done looks like. Name the files or commands that prove it.
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of scope
+  - type: checkboxes
+    id: author_ack
+    attributes:
+      label: Author note
+      options:
+        - label: I filled exactly one of Human note or Agent note, matching who wrote this Issue.
+          required: true
+  - type: dropdown
+    id: author
+    attributes:
+      label: Author
+      options:
+        - Human
+        - Agent
+    validations:
+      required: true
+  - type: textarea
+    id: human_note
+    attributes:
+      label: Human note
+      description: Humans only. Mother tongue, own words. Leave empty if an agent is the author.
+  - type: textarea
+    id: agent_note
+    attributes:
+      label: Agent note
+      description: Agents only. Goal, next PR, residual risk. Leave empty if a human is the author.

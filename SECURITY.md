@@ -19,12 +19,14 @@ their security issues are out of scope here.
 
 ## Reporting a Vulnerability / 报告漏洞
 
-**Do NOT open a public GitHub issue for security vulnerabilities.** This fork
-does not operate a public issue tracker. Public issues disclose the problem
-before a fix exists.
+**Do NOT open a public GitHub issue for security vulnerabilities.** Development
+Issues exist for maintainers and agents; they are not a disclosure channel.
+Public issues disclose the problem before a fix exists. Agents must not file
+a public Issue or public PR for a vulnerability. See [AI_POLICY.md](AI_POLICY.md).
 
-> **切勿为安全漏洞开启公开 Issue。** 本 fork 不运营公开 Issue 跟踪器。公开
-> Issue 会在修复前暴露问题。
+> **切勿为安全漏洞开启公开 Issue。** 开发 Issue 仅供维护者与智能体跟踪代码工作，
+> 不是披露渠道。公开 Issue 会在修复前暴露问题。智能体不得把漏洞写成公开 Issue
+> 或公开 PR。见 [AI_POLICY.md](AI_POLICY.md)。
 
 **Preferred channel / 推荐渠道 — GitHub Private Security Advisory:**
 

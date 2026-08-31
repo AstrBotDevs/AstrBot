@@ -37,4 +37,4 @@ VoceChat 是一个开源的支持多平台、搭建简单的即时通讯平台�
 
 ## 问题提交
 
-该适配器由社区插件提供。如有疑问，请提交 issue 至[插件仓库](https://github.com/HikariFroya/astrbot_plugin_vocechat/issues)。本 fork 不运营公开 Issue 跟踪器。
+该适配器由社区插件提供。如有疑问，请提交 issue 至[插件仓库](https://github.com/HikariFroya/astrbot_plugin_vocechat/issues)。本 fork 不运营用户支持队列。

@@ -48,4 +48,5 @@ the production build.
 The production Dashboard serves this site at `/help/`. `make build-docs` and
 `make run` set `ASTRBOT_DOCS_BASE=/help/` and copy the VitePress build into the
 WebUI `help/` directory. `make docs` / `pnpm run docs:dev` is a standalone
-preview with base `/`. This fork does not operate a public issue tracker.
+preview with base `/`. This fork does not operate a user-support queue;
+development Issues track defects and features, not deployment support.

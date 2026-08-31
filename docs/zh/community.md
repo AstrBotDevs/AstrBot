@@ -1,12 +1,12 @@
 # 社区
 
-本 fork 不运营公开 Issue 跟踪器或支持队列。本文档可能没有覆盖全部功能。安全漏洞按 [SECURITY.md](https://github.com/Xero-Team/AstrBot/blob/master/SECURITY.md) 私密报告。代码贡献走 Pull Request。
+本 fork 不运营用户支持队列或值班。本文档可能没有覆盖全部功能。安全漏洞按 [SECURITY.md](https://github.com/Xero-Team/AstrBot/blob/master/SECURITY.md) 私密报告。开发 Issue 跟踪缺陷与功能，不是客服。
 
 ## GitHub
 
 - [Xero-Team/AstrBot](https://github.com/Xero-Team/AstrBot)
 
-贡献方式见仓库根目录 [CONTRIBUTING.md](https://github.com/Xero-Team/AstrBot/blob/master/CONTRIBUTING.md)。Pull Request 的目标仓库是 `Xero-Team/AstrBot`。不要在本仓库提交 GitHub Issue。
+贡献方式见仓库根目录 [CONTRIBUTING.md](https://github.com/Xero-Team/AstrBot/blob/master/CONTRIBUTING.md) 与 [AI_POLICY.md](https://github.com/Xero-Team/AstrBot/blob/master/AI_POLICY.md)。Pull Request 的目标仓库是 `Xero-Team/AstrBot`。不要提交用户支持工单；开发 Issue 仅用于维护工作。
 
 ## 上游 AstrBot 社区渠道
 

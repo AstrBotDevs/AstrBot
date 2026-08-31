@@ -1,7 +1,7 @@
 # Agent Sandbox Environment ⛵️
 
 > [!TIP]
-> This feature is currently in technical preview and may have some bugs. This fork does not operate a public issue tracker.
+> This feature is currently in technical preview and may have some bugs. This fork does not operate a user-support queue.
 
 The Agent sandbox environment replaces the previous code executor path and provides Agents with safer and more flexible code execution and automation capabilities.
 
