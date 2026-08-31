@@ -50,7 +50,7 @@
         "enable": "Включить ИИ",
         "more": "Другие действия",
         "changeRunner": "Изменить режим выполнения",
-        "localSettingsTitle": "Настройки ИИ",
+        "localSettingsTitle": "Встроенный ИИ AstrBot",
         "settingsSuffix": "Настройки",
         "tabs": {
             "model": "Модель",

@@ -50,7 +50,7 @@
     "enable": "启用 AI",
     "more": "更多操作",
     "changeRunner": "更换执行方式",
-    "localSettingsTitle": "AI 设置",
+    "localSettingsTitle": "AstrBot 内置 AI",
     "settingsSuffix": "设置",
     "tabs": {
       "model": "模型",

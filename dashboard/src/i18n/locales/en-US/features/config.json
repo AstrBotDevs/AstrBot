@@ -50,7 +50,7 @@
     "enable": "Enable AI",
     "more": "More actions",
     "changeRunner": "Change execution mode",
-    "localSettingsTitle": "AI Settings",
+    "localSettingsTitle": "AstrBot Built-in AI",
     "settingsSuffix": "Settings",
     "tabs": {
       "model": "Model",
