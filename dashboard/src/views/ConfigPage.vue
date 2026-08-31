@@ -1020,7 +1020,7 @@ export default {
   justify-content: space-between;
   gap: 12px;
   width: 100%;
-  padding: 20px 0;
+  padding: 10px 0;
 }
 
 .config-toolbar-controls {
@@ -1140,7 +1140,7 @@ export default {
 
   .config-toolbar {
     flex-wrap: nowrap;
-    padding: 16px 0;
+    padding: 8px 0;
     padding-right: 0 !important;
   }
 
