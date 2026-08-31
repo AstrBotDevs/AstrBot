@@ -132,6 +132,9 @@
   },
   "configSelection": {
     "selectConfig": "选择配置文件",
+    "defaultConfig": "默认配置文件",
+    "search": "搜索配置文件",
+    "noResults": "没有匹配的配置文件",
     "normalConfig": "普通",
     "systemConfig": "系统"
   },
@@ -141,7 +144,7 @@
   },
   "configManagement": {
     "title": "配置文件管理",
-    "description": "AstrBot 支持针对不同机器人分别设置配置文件。默认会使用 `default` 配置。",
+    "description": "AstrBot 支持针对不同机器人分别设置配置文件。未指定时使用默认配置文件。",
     "newConfig": "新建配置文件",
     "copyConfig": "复制配置文件",
     "editConfig": "编辑配置文件",
