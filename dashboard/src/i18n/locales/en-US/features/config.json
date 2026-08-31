@@ -85,27 +85,22 @@
     "runners": {
       "local": {
         "title": "Built-in AI",
-        "summary": "Configure models, personas, and capabilities.",
         "description": "Use AstrBot's built-in AI with models, personas, knowledge bases, and tools."
       },
       "dify": {
         "title": "Dify",
-        "summary": "AI conversations are currently handled by a Dify application.",
         "description": "Connect a Dify application and configure its access parameters."
       },
       "coze": {
         "title": "Coze",
-        "summary": "AI conversations are currently handled by a Coze Bot.",
         "description": "Connect a Coze Bot and configure its access parameters."
       },
       "dashscope": {
         "title": "Alibaba Cloud Model Studio",
-        "summary": "AI conversations are currently handled by a Model Studio application.",
         "description": "Connect an Alibaba Cloud Model Studio application and configure its access parameters."
       },
       "deerflow": {
         "title": "DeerFlow",
-        "summary": "AI conversations are currently handled by DeerFlow.",
         "description": "Connect DeerFlow and configure its runtime parameters."
       }
     }

@@ -3,7 +3,6 @@
     <header class="ai-config-panel__header">
       <div class="ai-config-panel__heading">
         <h2 class="ai-config-panel__title">{{ tm('aiSettings.title') }}</h2>
-        <p class="ai-config-panel__subtitle">{{ currentRunner.summary }}</p>
       </div>
 
       <div class="ai-config-panel__actions">
@@ -44,7 +43,13 @@
       <section class="ai-config-panel__section">
         <div class="ai-config-panel__section-heading">
           <div>
-            <h3 class="ai-config-panel__section-title">{{ runnerSettingsTitle }}</h3>
+            <h3 class="ai-config-panel__section-title">
+              <span>{{ runnerSettingsTitle }}</span>
+              <AstrBotLogo
+                v-if="runnerType === 'local'"
+                class="ai-config-panel__brand-logo"
+              />
+            </h3>
             <p class="ai-config-panel__section-subtitle">
               {{ currentRunner.description }}
             </p>
@@ -176,6 +181,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue';
+import AstrBotLogo from '@/components/chat/ChatUILogo.vue';
 import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
 import StyledMenu from '@/components/shared/StyledMenu.vue';
 import { useModuleI18n } from '@/i18n/composables';
@@ -231,15 +237,14 @@ const runnerOptions = computed(() => {
   return availableTypes.map((value) => ({
     value,
     title: tm(`aiSettings.runners.${value}.title`),
-    description: tm(`aiSettings.runners.${value}.description`),
-    summary: tm(`aiSettings.runners.${value}.summary`)
+    description: tm(`aiSettings.runners.${value}.description`)
   }));
 });
 
 const currentRunner = computed(() => (
   runnerOptions.value.find((runner) => runner.value === runnerType.value)
   || runnerOptions.value[0]
-  || { value: 'local', title: 'AI', description: '', summary: '' }
+  || { value: 'local', title: 'AI', description: '' }
 ));
 
 const runnerSettingsTitle = computed(() => (
@@ -394,7 +399,6 @@ function confirmRunnerChange() {
   line-height: 1.25;
 }
 
-.ai-config-panel__subtitle,
 .ai-config-panel__section-subtitle {
   margin: 5px 0 0;
   color: rgba(var(--v-theme-on-surface), 0.62);
@@ -438,11 +442,20 @@ function confirmRunnerChange() {
 }
 
 .ai-config-panel__section-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   margin: 0;
   color: rgb(var(--v-theme-on-surface));
   font-size: 1.04rem;
   font-weight: 760;
   line-height: 1.32;
+}
+
+.ai-config-panel__brand-logo {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
 }
 
 .ai-config-tabs {
