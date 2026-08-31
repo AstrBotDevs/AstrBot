@@ -194,4 +194,4 @@ make check
 make quality
 ```
 
-如果改动涉及 Dashboard、启动流程、跨平台脚本或发布产物，再运行 `make pr-test-full`。Commit 与 PR 标题使用英文 Conventional Commits，类型、描述和破坏性变更规则见仓库根目录 [CONTRIBUTING.md](https://github.com/Xero-Team/AstrBot/blob/master/CONTRIBUTING.md)。AI 辅助生成或定稿的 commit message 另须遵守 `.agents/shared/conventional-commit/REFERENCE.md`。
+如果改动涉及 Dashboard、启动流程、跨平台脚本或发布产物，再运行 `make pr-test-full`。Commit 与 PR 标题使用英文 Conventional Commits，类型、描述和破坏性变更规则见仓库根目录 [CONTRIBUTING.md](https://github.com/Xero-Team/AstrBot/blob/master/CONTRIBUTING.md)。按类型选用 `.github/PULL_REQUEST_TEMPLATE/` 下的模板。AI 辅助生成或定稿的 commit message 另须遵守 `.agents/shared/conventional-commit/REFERENCE.md`。

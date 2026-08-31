@@ -471,8 +471,12 @@ diff with its runtime/test changes.
   `Generated-At: <result>` as footers. Agents may commit, push a feature
   branch, and open a PR as maintenance. They must not merge, push `master`,
   or tag. Agent-authored PRs end with `## Agent note`. Human-authored PRs
-  end with `## Human note`. Preserve upstream subjects verbatim on
-  cherry-pick/adapt; see the sync-upstream skill.
+  end with `## Human note`. Use the typed file under
+  `.github/PULL_REQUEST_TEMPLATE/` that matches the Conventional Commit
+  type (`feat.md`, `fix.md`, `docs.md`; group `perf`/`style` with
+  `refactor.md`; group `build`/`ops`/`test` with `chore.md`). Preserve
+  upstream subjects verbatim on cherry-pick/adapt; see the sync-upstream
+  skill.
 
 ## Upstream synchronization
 

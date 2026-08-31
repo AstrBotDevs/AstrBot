@@ -23,7 +23,10 @@ review, or decide whether a change is ready to merge.
 - English Conventional Commits. AI-finalized messages need `AI-Generated: true`
   and UTC `Generated-At:` from `date -u '+%Y-%m-%dT%H:%M:%SZ'`.
 - Human authors add `## Human note` in their own words. Agent authors add
-  `## Agent note`. Never fabricate the other.
+  `## Agent note`. Never fabricate the other. Open PRs with the typed
+  template under `.github/PULL_REQUEST_TEMPLATE/` (`feat.md`, `fix.md`,
+  `docs.md`; `perf`/`style` → `refactor.md`; `build`/`ops`/`test` →
+  `chore.md`).
 - Cite `AGENTS.md`, named skills, and named docs. Do not dump them.
 
 ## Open

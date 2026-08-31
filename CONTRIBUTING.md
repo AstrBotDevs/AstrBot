@@ -59,6 +59,18 @@ uv run python docs/scripts/update_openapi_json.py
 - 破坏性变更在 `:` 前加 `!`，并在 footer 写 `BREAKING CHANGE:`。议题编号放在 footer（例如 `Fixes #123`），不要当作 scope。
 - AI 辅助生成或定稿的 commit message 必须遵守 [`.agents/shared/conventional-commit/REFERENCE.md`](.agents/shared/conventional-commit/REFERENCE.md)，并在 footer 附加 `AI-Generated: true` 与 UTC `Generated-At:`。人工撰写的提交可以省略这两项 footer。
 - 使用 AI 的人类贡献者在 PR 末尾写 `## Human note`（母语、自己的话）。智能体作为作者时写 `## Agent note`，不要伪造 Human note。见 [AI_POLICY.md](AI_POLICY.md)。
+- 按 Conventional Commits 类型选用 PR 模板。GitHub 网页用 compare URL 的 `template=<file>`；`gh` 用 `--template`：
+
+  | 类型                            | 模板                                        |
+  | ------------------------------- | ------------------------------------------- |
+  | `feat`                          | `.github/PULL_REQUEST_TEMPLATE/feat.md`     |
+  | `fix`                           | `.github/PULL_REQUEST_TEMPLATE/fix.md`      |
+  | `docs`                          | `.github/PULL_REQUEST_TEMPLATE/docs.md`     |
+  | `refactor`、`perf`、`style`     | `.github/PULL_REQUEST_TEMPLATE/refactor.md` |
+  | `chore`、`build`、`ops`、`test` | `.github/PULL_REQUEST_TEMPLATE/chore.md`    |
+
+  未指定分型模板时，GitHub 会填入 [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md)。示例：`gh pr create --template .github/PULL_REQUEST_TEMPLATE/fix.md`。
+
 - 不要把“兼容旧版本”的文案或代码路径重新带回仓库。
 - 不要合并自己的 PR，也不要把提交直接推到 `master`。
 
@@ -149,6 +161,18 @@ uv run python docs/scripts/update_openapi_json.py
 - Mark breaking changes with `!` before `:` and a `BREAKING CHANGE:` footer. Put issue IDs in footers (`Fixes #123`), never as scopes.
 - AI-assisted commit messages must follow [`.agents/shared/conventional-commit/REFERENCE.md`](.agents/shared/conventional-commit/REFERENCE.md) and append `AI-Generated: true` plus a UTC `Generated-At:` footer. Human-written commits may omit those footers.
 - Humans who used AI end the PR with `## Human note` in their own words. Agent authors write `## Agent note` and must not fabricate a Human note. See [AI_POLICY.md](AI_POLICY.md).
+- Pick the PR template that matches the Conventional Commits type. On GitHub, add `template=<file>` to the compare URL; with `gh`, pass `--template`:
+
+  | Type                            | Template                                    |
+  | ------------------------------- | ------------------------------------------- |
+  | `feat`                          | `.github/PULL_REQUEST_TEMPLATE/feat.md`     |
+  | `fix`                           | `.github/PULL_REQUEST_TEMPLATE/fix.md`      |
+  | `docs`                          | `.github/PULL_REQUEST_TEMPLATE/docs.md`     |
+  | `refactor`, `perf`, `style`     | `.github/PULL_REQUEST_TEMPLATE/refactor.md` |
+  | `chore`, `build`, `ops`, `test` | `.github/PULL_REQUEST_TEMPLATE/chore.md`    |
+
+  GitHub fills in [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) when no typed template is selected. Example: `gh pr create --template .github/PULL_REQUEST_TEMPLATE/fix.md`.
+
 - Do not reintroduce legacy compatibility narratives or old code paths.
 - Do not merge your own pull request, and do not push commits to `master`.
 
