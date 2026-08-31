@@ -168,6 +168,16 @@ function openManager() {
   opacity: 0.55;
 }
 
+.config-profile-trigger:focus {
+  outline: none;
+}
+
+.config-profile-trigger:focus-visible {
+  border-radius: 6px;
+  outline: 2px solid rgba(var(--v-theme-primary), 0.42);
+  outline-offset: 3px;
+}
+
 .config-profile-trigger__title {
   min-width: 0;
   overflow: hidden;
