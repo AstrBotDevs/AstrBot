@@ -108,7 +108,8 @@
       },
       "provider_stt_settings": {
         "enable": {
-          "description": "Voice Transcription"
+          "description": "Voice Transcription",
+          "hint": "Use a speech-to-text model to transcribe user voice messages into text for the model to understand."
         },
         "provider_id": {
           "description": "Default Speech-to-Text Model",
@@ -117,7 +118,8 @@
       },
       "provider_tts_settings": {
         "enable": {
-          "description": "Voice Replies"
+          "description": "Voice Replies",
+          "hint": "Use a text-to-speech model to turn text into voice replies."
         },
         "provider_id": {
           "description": "Default Text-to-Speech Model"

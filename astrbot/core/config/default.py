@@ -3508,6 +3508,7 @@ CONFIG_METADATA_3 = {
                     "provider_stt_settings.enable": {
                         "description": "语音转述",
                         "type": "bool",
+                        "hint": "使用语音转文字模型将用户语音转述为文本，方便模型理解。",
                     },
                     "provider_stt_settings.provider_id": {
                         "description": "默认语音转文本模型",
@@ -3521,6 +3522,7 @@ CONFIG_METADATA_3 = {
                     "provider_tts_settings.enable": {
                         "description": "语音回复",
                         "type": "bool",
+                        "hint": "使用文字转语音模型将文字转为语音回复。",
                     },
                     "provider_tts_settings.provider_id": {
                         "description": "默认文本转语音模型",
@@ -3541,6 +3543,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.image_caption_prompt": {
                         "description": "图片转述提示词",
                         "type": "text",
+                        "collapsed": True,
                     },
                 },
                 "condition": {
