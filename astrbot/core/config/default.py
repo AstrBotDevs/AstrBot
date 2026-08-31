@@ -3294,6 +3294,7 @@ CONFIG_METADATA_3 = {
                     "agent_runner.config.dify_api_key": {
                         "description": "API Key",
                         "type": "string",
+                        "secret": True,
                     },
                     "agent_runner.config.dify_api_base": {
                         "description": "API Base URL",
@@ -3332,6 +3333,7 @@ CONFIG_METADATA_3 = {
                     "agent_runner.config.coze_api_key": {
                         "description": "API Key",
                         "type": "string",
+                        "secret": True,
                     },
                     "agent_runner.config.bot_id": {
                         "description": "Bot ID",
@@ -3371,6 +3373,7 @@ CONFIG_METADATA_3 = {
                     "agent_runner.config.dashscope_api_key": {
                         "description": "API Key",
                         "type": "string",
+                        "secret": True,
                     },
                     "agent_runner.config.dashscope_app_id": {
                         "description": "应用 ID",
@@ -3419,10 +3422,12 @@ CONFIG_METADATA_3 = {
                     "agent_runner.config.deerflow_api_key": {
                         "description": "API Key",
                         "type": "string",
+                        "secret": True,
                     },
                     "agent_runner.config.deerflow_auth_header": {
                         "description": "Authorization Header",
                         "type": "string",
+                        "secret": True,
                     },
                     "agent_runner.config.deerflow_assistant_id": {
                         "description": "Assistant ID",

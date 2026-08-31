@@ -1,13 +1,11 @@
 <template>
 
-  <div style="display: flex; flex-direction: column; align-items: center;">
-    <div v-if="selectedConfigID || isSystemConfig" class="mt-4 config-panel"
-      style="display: flex; flex-direction: column; align-items: start;">
+  <div class="config-page-shell">
+    <div v-if="selectedConfigID || isSystemConfig" class="config-panel">
 
-      <div class="config-toolbar d-flex flex-row pr-4"
-        style="margin-bottom: 16px; align-items: center; gap: 12px; width: 100%; justify-content: space-between;">
-        <div class="config-toolbar-controls d-flex flex-row align-center" style="gap: 12px;">
-          <v-select class="config-select" style="min-width: 130px;" :model-value="selectedConfigID" :items="configSelectItems" item-title="name" :disabled="initialConfigId !== null"
+      <div class="config-toolbar">
+        <div class="config-toolbar-controls">
+          <v-select class="config-select" :model-value="selectedConfigID" :items="configSelectItems" item-title="name" :disabled="initialConfigId !== null"
             v-if="!isSystemConfig" item-value="id" :label="tm('configSelection.selectConfig')" hide-details density="compact" rounded="md"
             variant="outlined" @update:model-value="onConfigSelect">
           </v-select>
@@ -22,13 +20,12 @@
             density="compact"
             rounded="md"
             variant="outlined"
-            style="min-width: 280px;"
           />
           <!-- <a style="color: inherit;" href="https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6" target="_blank"><v-btn icon="mdi-help-circle" size="small" variant="plain"></v-btn></a> -->
 
         </div>
       </div>
-      <!-- <v-progress-linear v-if="!fetched" indeterminate color="primary"></v-progress-linear> -->
+      <v-progress-linear v-if="!fetched" indeterminate color="primary" class="config-loading" />
 
       <v-slide-y-transition mode="out-in">
         <div v-if="(selectedConfigID || isSystemConfig) && fetched" :key="configContentKey" class="config-content" style="width: 100%;">
@@ -962,8 +959,52 @@ export default {
 </script>
 
 <style>
-.v-tab {
-  text-transform: none !important;
+.config-page-shell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.config-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: min(100%, 940px);
+  padding: 20px 18px 48px;
+}
+
+.config-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 24px;
+}
+
+.config-toolbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.config-select {
+  min-width: 170px;
+}
+
+.config-search-input {
+  width: min(320px, 42vw);
+  min-width: 260px;
+}
+
+.config-toolbar :is(.v-field) {
+  border-radius: 10px;
+}
+
+.config-loading {
+  margin: -16px 0 20px;
 }
 
 .unsaved-changes-pill {
@@ -1020,12 +1061,6 @@ export default {
   font-style: italic;
 }
 
-@media (min-width: 768px) {
-  .config-panel {
-    width: 750px;
-  }
-}
-
 @media (max-width: 767px) {
   .v-container {
     padding: 4px;
@@ -1033,6 +1068,7 @@ export default {
 
   .config-panel {
     width: 100%;
+    padding: 16px 14px 40px;
   }
 
   .config-toolbar {

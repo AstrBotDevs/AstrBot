@@ -45,6 +45,71 @@
     "notification": "Notification Settings",
     "moreConfig": "More Settings"
   },
+  "aiSettings": {
+    "title": "AI",
+    "enable": "Enable AI",
+    "more": "More actions",
+    "changeRunner": "Change execution mode",
+    "localSettingsTitle": "AI Settings",
+    "settingsSuffix": "Settings",
+    "tabs": {
+      "model": "Model",
+      "persona": "Persona",
+      "capabilities": "Capabilities",
+      "advanced": "Advanced"
+    },
+    "groups": {
+      "model": "Model",
+      "modelHint": "Choose the chat models and retry policy used by built-in AI.",
+      "execution": "Execution",
+      "executionHint": "Configure the tool-call loop and execution process.",
+      "media": "Media Models",
+      "mediaHint": "Configure image understanding, speech-to-text, and text-to-speech.",
+      "behavior": "Response Behavior",
+      "behaviorHint": "These settings apply to every execution mode in this profile."
+    },
+    "common": {
+      "title": "Common Settings",
+      "subtitle": "These settings remain unchanged when the execution mode changes."
+    },
+    "disabled": {
+      "title": "AI is disabled",
+      "subtitle": "Enable AI to process messages that require a model."
+    },
+    "runnerDialog": {
+      "title": "Change Execution Mode",
+      "subtitle": "Change this only when connecting an external AI application. Built-in AI is suitable for most users.",
+      "warning": "Switching loads the new mode's defaults and discards the current execution parameters.",
+      "confirm": "Use This Mode"
+    },
+    "runners": {
+      "local": {
+        "title": "Built-in AI",
+        "summary": "Configure models, personas, and capabilities.",
+        "description": "Use AstrBot's built-in AI with models, personas, knowledge bases, and tools."
+      },
+      "dify": {
+        "title": "Dify",
+        "summary": "AI conversations are currently handled by a Dify application.",
+        "description": "Connect a Dify application and configure its access parameters."
+      },
+      "coze": {
+        "title": "Coze",
+        "summary": "AI conversations are currently handled by a Coze Bot.",
+        "description": "Connect a Coze Bot and configure its access parameters."
+      },
+      "dashscope": {
+        "title": "Alibaba Cloud Model Studio",
+        "summary": "AI conversations are currently handled by a Model Studio application.",
+        "description": "Connect an Alibaba Cloud Model Studio application and configure its access parameters."
+      },
+      "deerflow": {
+        "title": "DeerFlow",
+        "summary": "AI conversations are currently handled by DeerFlow.",
+        "description": "Connect DeerFlow and configure its runtime parameters."
+      }
+    }
+  },
   "general": {
     "botName": "Bot Name",
     "language": "Interface Language",
