@@ -245,8 +245,11 @@ AstrBot 在载入插件时会检测插件目录下是否有 `_conf_schema.json` 
 ```py
 from astrbot.api import AstrBotConfig
 
+
 class ConfigPlugin(Star):
-    def __init__(self, context: Context, config: AstrBotConfig): # AstrBotConfig 继承自 Dict，拥有字典的所有方法
+    def __init__(
+        self, context: Context, config: AstrBotConfig
+    ):  # AstrBotConfig 继承自 Dict，拥有字典的所有方法
         super().__init__(context)
         self.config = config
         print(self.config)

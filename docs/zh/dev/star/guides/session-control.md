@@ -31,6 +31,7 @@ handler 内的代码可以如下：
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
 
+
 @filter.command("成语接龙")
 async def handle_empty_mention(self, event: AstrMessageEvent):
     """成语接龙具体实现"""
@@ -38,33 +39,43 @@ async def handle_empty_mention(self, event: AstrMessageEvent):
         yield event.plain_result("请发送一个成语~")
 
         # 具体的会话控制器使用方法
-        @session_waiter(timeout=60, record_history_chains=False) # 注册一个会话控制器，设置超时时间为 60 秒，不记录历史消息链
-        async def empty_mention_waiter(controller: SessionController, event: AstrMessageEvent):
-            idiom = event.message_str # 用户发来的成语，假设是 "一马当先"
+        @session_waiter(
+            timeout=60, record_history_chains=False
+        )  # 注册一个会话控制器，设置超时时间为 60 秒，不记录历史消息链
+        async def empty_mention_waiter(
+            controller: SessionController, event: AstrMessageEvent
+        ):
+            idiom = event.message_str  # 用户发来的成语，假设是 "一马当先"
 
-            if idiom == "退出":   # 假设用户想主动退出成语接龙，输入了 "退出"
+            if idiom == "退出":  # 假设用户想主动退出成语接龙，输入了 "退出"
                 await event.send(event.plain_result("已退出成语接龙~"))
-                controller.stop()    # 停止会话控制器，会立即结束。
+                controller.stop()  # 停止会话控制器，会立即结束。
                 return
 
-            if len(idiom) != 4:   # 假设用户输入的不是4字成语
-                await event.send(event.plain_result("成语必须是四个字的呢~"))  # 发送回复，不能使用 yield
+            if len(idiom) != 4:  # 假设用户输入的不是4字成语
+                await event.send(
+                    event.plain_result("成语必须是四个字的呢~")
+                )  # 发送回复，不能使用 yield
                 return
                 # 退出当前方法，不执行后续逻辑，但此会话并未中断，后续的用户输入仍然会进入当前会话
 
             # ...
             message_result = event.make_result()
-            message_result.chain = [Comp.Plain("先见之明")] # import astrbot.api.message_components as Comp
-            await event.send(message_result) # 发送回复，不能使用 yield
+            message_result.chain = [
+                Comp.Plain("先见之明")
+            ]  # import astrbot.api.message_components as Comp
+            await event.send(message_result)  # 发送回复，不能使用 yield
 
-            controller.keep(timeout=60, reset_timeout=True) # 重置超时时间为 60s，如果不重置，则会继续之前的超时时间计时。
+            controller.keep(
+                timeout=60, reset_timeout=True
+            )  # 重置超时时间为 60s，如果不重置，则会继续之前的超时时间计时。
 
             # controller.stop() # 停止会话控制器，会立即结束。
             # 如果记录了历史消息链，可以通过 controller.get_history_chains() 获取历史消息链
 
         try:
             await empty_mention_waiter(event)
-        except TimeoutError as _: # 当超时后，会话控制器会抛出 TimeoutError
+        except TimeoutError as _:  # 当超时后，会话控制器会抛出 TimeoutError
             yield event.plain_result("你超时了！")
         except Exception as e:
             yield event.plain_result("发生错误，请联系管理员: " + str(e))
@@ -98,13 +109,19 @@ from astrbot.core.utils.session_waiter import (
     SessionController,
 )
 
+
 # 沿用上面的 handler
 # ...
 class CustomFilter(SessionFilter):
     def filter(self, event: AstrMessageEvent) -> str:
-        return event.get_group_id() if event.get_group_id() else event.unified_msg_origin
+        return (
+            event.get_group_id() if event.get_group_id() else event.unified_msg_origin
+        )
 
-await empty_mention_waiter(event, session_filter=CustomFilter()) # 这里传入 session_filter
+
+await empty_mention_waiter(
+    event, session_filter=CustomFilter()
+)  # 这里传入 session_filter
 # ...
 ```
 
