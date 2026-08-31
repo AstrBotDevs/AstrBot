@@ -50,7 +50,13 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
 
-        self.api_client = DifyAPIClient(self.api_key, self.api_base)
+        from astrbot.core.utils.proxy_route import resolve_proxy_route
+
+        self.api_client = DifyAPIClient(
+            self.api_key,
+            self.api_base,
+            proxy_route=resolve_proxy_route(local_config=provider_config),
+        )
 
     @override
     async def step(self):

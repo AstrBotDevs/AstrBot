@@ -73,7 +73,10 @@ async def test_third_party_runner_receives_inline_profile_config(
     )
 
     config = {
-        "agent_runner": {"runner_type": runner_type, "config": inline_config},
+        "agent_runner": {
+            "runner_type": runner_type,
+            "config": {**inline_config, "max_steps": 17},
+        },
         "provider_settings": {
             "streaming_response": False,
             "unsupported_streaming_strategy": "turn_off",
@@ -106,5 +109,44 @@ async def test_third_party_runner_receives_inline_profile_config(
     results = [item async for item in stage.process(event)]
 
     assert results == [None]
-    assert runner.reset.await_args.kwargs["provider_config"] is inline_config
+    assert runner.reset.await_args.kwargs["provider_config"]["max_steps"] == 17
+    assert runner.reset.await_args.kwargs["provider_config"][config_key] == (
+        "inline-secret"
+    )
+    assert stage.max_step == 17
     assert runner_factory_calls == [True]
+
+
+@pytest.mark.asyncio
+async def test_third_party_persona_resolution_does_not_force_default_via_provider_settings(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured = {}
+
+    async def fake_resolve(**kwargs):
+        captured.update(kwargs)
+        return "custom-error"
+
+    monkeypatch.setattr(
+        third_party,
+        "resolve_event_conversation_persona_id",
+        AsyncMock(return_value="conversation-persona"),
+    )
+    monkeypatch.setattr(
+        third_party, "resolve_persona_custom_error_message", fake_resolve
+    )
+
+    stage = third_party.ThirdPartyAgentSubStage()
+    stage.ctx = SimpleNamespace(
+        execution_context=SimpleNamespace(
+            conversation_manager=MagicMock(),
+            persona_manager=MagicMock(),
+        )
+    )
+    event = MagicMock()
+
+    result = await stage._resolve_persona_custom_error_message(event)
+
+    assert result == "custom-error"
+    assert "provider_settings" not in captured
+    assert captured["conversation_persona_id"] == "conversation-persona"

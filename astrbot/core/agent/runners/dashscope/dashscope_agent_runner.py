@@ -4,6 +4,7 @@ import typing as T
 from collections.abc import AsyncGenerator, AsyncIterator
 from typing import Any, cast, override
 
+import aiohttp
 from dashscope import Application
 from dashscope.api_entities.api_request_factory import _build_api_request
 from dashscope.app.application_response import ApplicationResponse
@@ -12,6 +13,11 @@ import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.error_redaction import safe_error
+from astrbot.core.utils.proxy_route import (
+    ProxyRoute,
+    aiohttp_request_proxy,
+    resolve_proxy_route,
+)
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
 from ...hooks import BaseAgentRunHooks
@@ -23,8 +29,40 @@ from ..base import AgentResponse, AgentState, BaseAgentRunner
 _DASHSCOPE_REQUEST_FAILURE = "阿里云百炼请求失败，请稍后重试。"
 
 
+def create_dashscope_http_session(route: ProxyRoute) -> aiohttp.ClientSession:
+    """Create a per-runner aiohttp session for DashScope's async transport.
+
+    DashScope's ``HttpRequest`` accepts an external ``ClientSession`` but does
+    not forward per-request ``proxy`` kwargs. The returned session uses
+    ``trust_env=False`` and injects the resolved proxy URL into every request.
+
+    Args:
+        route: Resolved AstrBot proxy route.
+
+    Returns:
+        Session with ``trust_env=False`` that injects the resolved proxy URL.
+    """
+    session = aiohttp.ClientSession(trust_env=False)
+    proxy_url = aiohttp_request_proxy(route)
+    original_request = session._request
+
+    async def _request(method, url, **kwargs):
+        kwargs.setdefault("proxy", proxy_url)
+        return await original_request(method, url, **kwargs)
+
+    setattr(session, "_request", _request)
+    session._astrbot_proxy_url = proxy_url
+    return session
+
+
 class DashscopeAgentRunner(BaseAgentRunner[TContext]):
-    """Dashscope Agent Runner"""
+    """Dashscope Agent Runner.
+
+    Outbound HTTP uses DashScope's aiohttp transport with a per-runner
+    session. ``proxy_mode`` / ``proxy_url`` are resolved by
+    ``resolve_proxy_route`` and injected into that session. Process-wide
+    ``HTTP_PROXY`` is never mutated.
+    """
 
     @override
     async def reset(
@@ -83,6 +121,23 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             raise ValueError("阿里云百炼 timeout 必须为正整数。")
         if self.timeout <= 0:
             raise ValueError("阿里云百炼 timeout 必须为正整数。")
+
+        self._proxy_route = resolve_proxy_route(local_config=provider_config)
+        await self.close()
+
+    async def close(self) -> None:
+        """Close the per-runner DashScope HTTP session."""
+        previous = getattr(self, "_http_session", None)
+        self._http_session = None
+        if previous is not None and not previous.closed:
+            await previous.close()
+
+    def _ensure_http_session(self) -> aiohttp.ClientSession:
+        session = getattr(self, "_http_session", None)
+        if session is None or session.closed:
+            self._http_session = create_dashscope_http_session(self._proxy_route)
+        assert self._http_session is not None
+        return self._http_session
 
     def has_rag_options(self) -> bool:
         """判断是否有 RAG 选项
@@ -312,6 +367,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             workspace=workspace,
             api_key=api_key,
             is_service=False,
+            session=self._ensure_http_session(),
             **parameters,
         )
 

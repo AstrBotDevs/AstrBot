@@ -7,13 +7,28 @@ from typing import Any
 import aiohttp
 
 from astrbot import logger
+from astrbot.core.utils.proxy_route import (
+    ProxyRoute,
+    aiohttp_request_proxy,
+    resolve_proxy_route,
+)
 
 
 class CozeAPIClient:
-    def __init__(self, api_key: str, api_base: str = "https://api.coze.cn") -> None:
+    def __init__(
+        self,
+        api_key: str,
+        api_base: str = "https://api.coze.cn",
+        *,
+        proxy_route: ProxyRoute | None = None,
+    ) -> None:
         self.api_key = api_key
         self.api_base = api_base
+        self.route = proxy_route or resolve_proxy_route()
         self.session = None
+
+    def _request_proxy(self) -> str | None:
+        return aiohttp_request_proxy(self.route)
 
     async def _ensure_session(self):
         """确保HTTP session存在"""
@@ -38,6 +53,7 @@ class CozeAPIClient:
                 headers=headers,
                 timeout=timeout,
                 connector=connector,
+                trust_env=False,
             )
         return self.session
 
@@ -64,6 +80,7 @@ class CozeAPIClient:
                     "file": file_io,
                 },
                 timeout=aiohttp.ClientTimeout(total=60),
+                proxy=self._request_proxy(),
             ) as response:
                 if response.status == 401:
                     raise Exception("Coze API 认证失败，请检查 API Key 是否正确")
@@ -109,7 +126,7 @@ class CozeAPIClient:
         session = await self._ensure_session()
 
         try:
-            async with session.get(image_url) as response:
+            async with session.get(image_url, proxy=self._request_proxy()) as response:
                 if response.status != 200:
                     raise Exception(f"下载图片失败，状态码: {response.status}")
 
@@ -167,6 +184,7 @@ class CozeAPIClient:
                 json=payload,
                 params=params,
                 timeout=aiohttp.ClientTimeout(total=timeout_seconds),
+                proxy=self._request_proxy(),
             ) as response:
                 if response.status == 401:
                     raise Exception("Coze API 认证失败，请检查 API Key 是否正确")
@@ -222,7 +240,9 @@ class CozeAPIClient:
         payload = {"conversation_id": conversation_id}
 
         try:
-            async with session.post(url, json=payload) as response:
+            async with session.post(
+                url, json=payload, proxy=self._request_proxy()
+            ) as response:
                 response_text = await response.text()
 
                 if response.status == 401:
@@ -269,7 +289,9 @@ class CozeAPIClient:
         }
 
         try:
-            async with session.get(url, params=params) as response:
+            async with session.get(
+                url, params=params, proxy=self._request_proxy()
+            ) as response:
                 response.raise_for_status()
                 return await response.json()
 

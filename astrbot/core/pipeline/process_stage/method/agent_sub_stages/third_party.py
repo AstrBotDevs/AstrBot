@@ -194,10 +194,10 @@ class ThirdPartyAgentSubStage:
             source="Third-party runner config",
         )
         self.max_step: int = coerce_int_config(
-            settings.get("max_agent_step", 30),
+            self.runner_config.get("max_steps", 30),
             default=30,
             min_value=1,
-            field_name="max_agent_step",
+            field_name="max_steps",
             source="Third-party runner config",
         )
 
@@ -212,7 +212,6 @@ class ThirdPartyAgentSubStage:
             return await resolve_persona_custom_error_message(
                 event=event,
                 persona_manager=self.ctx.execution_context.persona_manager,
-                provider_settings={"default_personality": "default"},
                 conversation_persona_id=conversation_persona_id,
             )
         except Exception as e:
@@ -320,7 +319,14 @@ class ThirdPartyAgentSubStage:
         )
         settings = self.conf.get("provider_settings", {})
         build_config = MainAgentBuildConfig(
-            tool_call_timeout=int(settings.get("tool_call_timeout", 120)),
+            tool_call_timeout=coerce_int_config(
+                self.runner_config.get("timeout", 120),
+                default=120,
+                min_value=1,
+                field_name="timeout",
+                source="Third-party runner config",
+                warn=False,
+            ),
             provider_settings=settings,
         )
         await prepare_event_attachments(

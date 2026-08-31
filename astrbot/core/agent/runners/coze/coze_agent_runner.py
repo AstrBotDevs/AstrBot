@@ -58,8 +58,13 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
             self.timeout = int(self.timeout)
         self.auto_save_history = provider_config.get("auto_save_history", True)
 
-        # 创建 API 客户端
-        self.api_client = CozeAPIClient(api_key=self.api_key, api_base=self.api_base)
+        from astrbot.core.utils.proxy_route import resolve_proxy_route
+
+        self.api_client = CozeAPIClient(
+            api_key=self.api_key,
+            api_base=self.api_base,
+            proxy_route=resolve_proxy_route(local_config=provider_config),
+        )
 
         # 会话相关缓存
         self.file_id_cache: dict[str, dict[str, str]] = {}

@@ -6,6 +6,11 @@ from typing import Any
 from aiohttp import ClientResponse, ClientSession, ClientTimeout, FormData
 
 from astrbot import logger
+from astrbot.core.utils.proxy_route import (
+    ProxyRoute,
+    aiohttp_request_proxy,
+    resolve_proxy_route,
+)
 
 
 async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict]:
@@ -31,13 +36,23 @@ async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict]:
 
 
 class DifyAPIClient:
-    def __init__(self, api_key: str, api_base: str = "https://api.dify.ai/v1") -> None:
+    def __init__(
+        self,
+        api_key: str,
+        api_base: str = "https://api.dify.ai/v1",
+        *,
+        proxy_route: ProxyRoute | None = None,
+    ) -> None:
         self.api_key = api_key
         self.api_base = api_base
+        self.route = proxy_route or resolve_proxy_route()
         self.session = ClientSession(trust_env=False)
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",
         }
+
+    def _request_proxy(self) -> str | None:
+        return aiohttp_request_proxy(self.route)
 
     async def chat_messages(
         self,
@@ -61,6 +76,7 @@ class DifyAPIClient:
             json=payload,
             headers=self.headers,
             timeout=ClientTimeout(total=timeout_seconds),
+            proxy=self._request_proxy(),
         ) as resp:
             if resp.status != 200:
                 text = await resp.text()
@@ -90,6 +106,7 @@ class DifyAPIClient:
             json=payload,
             headers=self.headers,
             timeout=ClientTimeout(total=timeout_seconds),
+            proxy=self._request_proxy(),
         ) as resp:
             if resp.status != 200:
                 text = await resp.text()
@@ -149,6 +166,7 @@ class DifyAPIClient:
             url,
             data=form,
             headers=self.headers,  # 不包含 Content-Type，让 aiohttp 自动设置
+            proxy=self._request_proxy(),
         ) as resp:
             if resp.status != 200 and resp.status != 201:
                 text = await resp.text()
@@ -165,7 +183,12 @@ class DifyAPIClient:
             "user": user,
             "limit": limit,
         }
-        async with self.session.get(url, params=payload, headers=self.headers) as resp:
+        async with self.session.get(
+            url,
+            params=payload,
+            headers=self.headers,
+            proxy=self._request_proxy(),
+        ) as resp:
             return await resp.json()
 
     async def delete_chat_conv(self, user: str, conversation_id: str):
@@ -174,7 +197,12 @@ class DifyAPIClient:
         payload = {
             "user": user,
         }
-        async with self.session.delete(url, json=payload, headers=self.headers) as resp:
+        async with self.session.delete(
+            url,
+            json=payload,
+            headers=self.headers,
+            proxy=self._request_proxy(),
+        ) as resp:
             return await resp.json()
 
     async def rename(
@@ -191,5 +219,10 @@ class DifyAPIClient:
             "name": name,
             "auto_generate": auto_generate,
         }
-        async with self.session.post(url, json=payload, headers=self.headers) as resp:
+        async with self.session.post(
+            url,
+            json=payload,
+            headers=self.headers,
+            proxy=self._request_proxy(),
+        ) as resp:
             return await resp.json()
