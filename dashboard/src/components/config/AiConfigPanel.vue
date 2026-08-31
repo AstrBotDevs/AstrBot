@@ -8,13 +8,14 @@
 
       <div class="ai-config-panel__actions">
         <label class="ai-enable-control">
-          <span>{{ tm('aiSettings.enable') }}</span>
           <v-switch
             v-model="aiEnabled"
             color="primary"
             density="compact"
             hide-details
             inset
+            :aria-label="tm('aiSettings.enable')"
+            :title="tm('aiSettings.enable')"
           />
         </label>
 
@@ -411,11 +412,7 @@ function confirmRunnerChange() {
 .ai-enable-control {
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: rgba(var(--v-theme-on-surface), 0.7);
   cursor: pointer;
-  font-size: 0.8rem;
-  font-weight: 650;
 }
 
 .ai-enable-control :deep(.v-switch) {
