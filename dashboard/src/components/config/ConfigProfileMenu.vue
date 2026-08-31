@@ -196,10 +196,10 @@ function openManager() {
 .config-profile-menu {
   width: min(360px, calc(100vw - 24px));
   overflow: hidden;
-  border: 0;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.09) !important;
   border-radius: 14px !important;
   background: rgb(var(--v-theme-surface));
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.07) !important;
 }
 
 .config-profile-menu__body {

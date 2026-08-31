@@ -19,7 +19,7 @@
           />
         </label>
 
-        <StyledMenu location="bottom end" :offset="8" no-border>
+        <StyledMenu location="bottom end" :offset="8">
           <template #activator="{ props: menuProps }">
             <v-btn
               v-bind="menuProps"
