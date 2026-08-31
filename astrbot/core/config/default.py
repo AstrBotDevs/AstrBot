@@ -3506,7 +3506,7 @@ CONFIG_METADATA_3 = {
                         "hint": "留空代表不使用，可用于非多模态模型",
                     },
                     "provider_stt_settings.enable": {
-                        "description": "启用语音转文本",
+                        "description": "语音转述",
                         "type": "bool",
                         "hint": "STT 总开关",
                     },
@@ -3520,7 +3520,7 @@ CONFIG_METADATA_3 = {
                         },
                     },
                     "provider_tts_settings.enable": {
-                        "description": "启用文本转语音",
+                        "description": "语音回复",
                         "type": "bool",
                         "hint": "TTS 总开关",
                     },

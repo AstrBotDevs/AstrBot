@@ -108,7 +108,7 @@
       },
       "provider_stt_settings": {
         "enable": {
-          "description": "Enable Speech-to-Text",
+          "description": "Voice Transcription",
           "hint": "Master switch for STT"
         },
         "provider_id": {
@@ -118,7 +118,7 @@
       },
       "provider_tts_settings": {
         "enable": {
-          "description": "Enable Text-to-Speech",
+          "description": "Voice Replies",
           "hint": "Master switch for TTS"
         },
         "provider_id": {

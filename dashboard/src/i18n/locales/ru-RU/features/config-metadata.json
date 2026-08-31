@@ -59,7 +59,7 @@
             },
             "provider_stt_settings": {
                 "enable": {
-                    "description": "Включить преобразование речи в текст (STT)",
+                    "description": "Распознавание речи",
                     "hint": "Главный переключатель для STT"
                 },
                 "provider_id": {
@@ -69,7 +69,7 @@
             },
             "provider_tts_settings": {
                 "enable": {
-                    "description": "Включить преобразование текста в речь (TTS)",
+                    "description": "Голосовые ответы",
                     "hint": "Главный переключатель для TTS"
                 },
                 "provider_id": {
