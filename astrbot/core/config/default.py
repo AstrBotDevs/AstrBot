@@ -3320,9 +3320,24 @@ CONFIG_METADATA_3 = {
                         "description": "超时时间（秒）",
                         "type": "int",
                     },
-                    "agent_runner.config.proxy": {
-                        "description": "代理地址",
+                    "agent_runner.config.max_steps": {
+                        "description": "工具调用轮数上限",
+                        "type": "int",
+                    },
+                    "agent_runner.config.persona_id": {
+                        "description": "默认采用的人格",
                         "type": "string",
+                        "_special": "select_persona",
+                    },
+                    "agent_runner.config.proxy_mode": {
+                        "description": "代理模式",
+                        "type": "string",
+                        "hint": "inherit 跟随全局代理；direct 明确直连并忽略环境变量；custom 仅使用本项 proxy_url。",
+                    },
+                    "agent_runner.config.proxy_url": {
+                        "description": "自定义代理 URL",
+                        "type": "string",
+                        "hint": "仅在 proxy_mode=custom 时使用，例如 http://127.0.0.1:7890",
                     },
                 },
             },
@@ -3355,9 +3370,24 @@ CONFIG_METADATA_3 = {
                         "description": "超时时间（秒）",
                         "type": "int",
                     },
-                    "agent_runner.config.proxy": {
-                        "description": "代理地址",
+                    "agent_runner.config.max_steps": {
+                        "description": "工具调用轮数上限",
+                        "type": "int",
+                    },
+                    "agent_runner.config.persona_id": {
+                        "description": "默认采用的人格",
                         "type": "string",
+                        "_special": "select_persona",
+                    },
+                    "agent_runner.config.proxy_mode": {
+                        "description": "代理模式",
+                        "type": "string",
+                        "hint": "inherit 跟随全局代理；direct 明确直连并忽略环境变量；custom 仅使用本项 proxy_url。",
+                    },
+                    "agent_runner.config.proxy_url": {
+                        "description": "自定义代理 URL",
+                        "type": "string",
+                        "hint": "仅在 proxy_mode=custom 时使用，例如 http://127.0.0.1:7890",
                     },
                 },
             },
@@ -3405,9 +3435,24 @@ CONFIG_METADATA_3 = {
                         "description": "超时时间（秒）",
                         "type": "int",
                     },
-                    "agent_runner.config.proxy": {
-                        "description": "代理地址",
+                    "agent_runner.config.max_steps": {
+                        "description": "工具调用轮数上限",
+                        "type": "int",
+                    },
+                    "agent_runner.config.persona_id": {
+                        "description": "默认采用的人格",
                         "type": "string",
+                        "_special": "select_persona",
+                    },
+                    "agent_runner.config.proxy_mode": {
+                        "description": "代理模式",
+                        "type": "string",
+                        "hint": "inherit 跟随全局代理；direct 明确直连并忽略环境变量；custom 仅使用本项 proxy_url。",
+                    },
+                    "agent_runner.config.proxy_url": {
+                        "description": "自定义代理 URL",
+                        "type": "string",
+                        "hint": "仅在 proxy_mode=custom 时使用，例如 http://127.0.0.1:7890",
                     },
                 },
             },
@@ -3465,9 +3510,24 @@ CONFIG_METADATA_3 = {
                         "description": "超时时间（秒）",
                         "type": "int",
                     },
-                    "agent_runner.config.proxy": {
-                        "description": "代理地址",
+                    "agent_runner.config.max_steps": {
+                        "description": "工具调用轮数上限",
+                        "type": "int",
+                    },
+                    "agent_runner.config.persona_id": {
+                        "description": "默认采用的人格",
                         "type": "string",
+                        "_special": "select_persona",
+                    },
+                    "agent_runner.config.proxy_mode": {
+                        "description": "代理模式",
+                        "type": "string",
+                        "hint": "inherit 跟随全局代理；direct 明确直连并忽略环境变量；custom 仅使用本项 proxy_url。",
+                    },
+                    "agent_runner.config.proxy_url": {
+                        "description": "自定义代理 URL",
+                        "type": "string",
+                        "hint": "仅在 proxy_mode=custom 时使用，例如 http://127.0.0.1:7890",
                     },
                 },
             },

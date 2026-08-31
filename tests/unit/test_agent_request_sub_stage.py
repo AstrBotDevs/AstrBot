@@ -188,6 +188,17 @@ async def test_initialize_uses_third_party_stage_for_non_local_runner():
 
 
 @pytest.mark.asyncio
+async def test_initialize_falls_back_to_local_for_unknown_runner_type():
+    stage = agent_request.AgentRequestSubStage()
+    ctx = _ctx(agent_runner_type="unknown-runner")
+
+    await stage.initialize(ctx)
+
+    assert ctx.astrbot_config["agent_runner"]["runner_type"] == "local"
+    assert type(stage.agent_sub_stage).__name__ == "FakeInternalAgentSubStage"
+
+
+@pytest.mark.asyncio
 async def test_process_returns_early_when_provider_is_disabled(monkeypatch):
     stage = agent_request.AgentRequestSubStage()
     ctx = _ctx(provider_enable=False)

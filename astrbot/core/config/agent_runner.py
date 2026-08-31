@@ -1,10 +1,22 @@
 from __future__ import annotations
 
 import copy
+import logging
 from typing import Any
+
+from astrbot.core.utils.proxy_route import normalize_proxy_mode
+
+logger = logging.getLogger("astrbot")
 
 AGENT_RUNNER_TYPES = ("local", "dify", "coze", "dashscope", "deerflow")
 THIRD_PARTY_AGENT_RUNNER_TYPES = AGENT_RUNNER_TYPES[1:]
+
+_THIRD_PARTY_SHARED_DEFAULTS: dict[str, Any] = {
+    "max_steps": 30,
+    "persona_id": "default",
+    "proxy_mode": "inherit",
+    "proxy_url": "",
+}
 
 AGENT_RUNNER_CONFIG_DEFAULTS: dict[str, dict[str, Any]] = {
     "local": {
@@ -42,7 +54,7 @@ AGENT_RUNNER_CONFIG_DEFAULTS: dict[str, dict[str, Any]] = {
         "dify_query_input_key": "astrbot_text_query",
         "variables": {},
         "timeout": 60,
-        "proxy": "",
+        **_THIRD_PARTY_SHARED_DEFAULTS,
     },
     "coze": {
         "coze_api_key": "",
@@ -50,7 +62,7 @@ AGENT_RUNNER_CONFIG_DEFAULTS: dict[str, dict[str, Any]] = {
         "coze_api_base": "https://api.coze.cn",
         "auto_save_history": True,
         "timeout": 60,
-        "proxy": "",
+        **_THIRD_PARTY_SHARED_DEFAULTS,
     },
     "dashscope": {
         "dashscope_app_type": "agent",
@@ -63,7 +75,7 @@ AGENT_RUNNER_CONFIG_DEFAULTS: dict[str, dict[str, Any]] = {
         },
         "variables": {},
         "timeout": 60,
-        "proxy": "",
+        **_THIRD_PARTY_SHARED_DEFAULTS,
     },
     "deerflow": {
         "deerflow_api_base": "http://127.0.0.1:2026",
@@ -77,7 +89,7 @@ AGENT_RUNNER_CONFIG_DEFAULTS: dict[str, dict[str, Any]] = {
         "deerflow_max_concurrent_subagents": 3,
         "deerflow_recursion_limit": 1000,
         "timeout": 300,
-        "proxy": "",
+        **_THIRD_PARTY_SHARED_DEFAULTS,
     },
 }
 
@@ -97,6 +109,32 @@ def get_agent_runner_config_default(runner_type: str) -> dict[str, Any]:
     if runner_type not in AGENT_RUNNER_CONFIG_DEFAULTS:
         raise ValueError(f"Unsupported Agent Runner type: {runner_type}")
     return copy.deepcopy(AGENT_RUNNER_CONFIG_DEFAULTS[runner_type])
+
+
+def coerce_provider_id(value: object) -> str:
+    """Return a non-empty provider id string, or ``""``.
+
+    Args:
+        value: Untrusted provider id.
+
+    Returns:
+        The id when it is a non-empty string; otherwise an empty string.
+    """
+    return value if isinstance(value, str) and value else ""
+
+
+def coerce_provider_ids(value: object) -> list[str]:
+    """Return non-empty string provider ids from an untrusted list.
+
+    Args:
+        value: Untrusted fallback-id list.
+
+    Returns:
+        Only non-empty string ids, in original order.
+    """
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str) and item]
 
 
 def _normalize_value(value: Any, default: Any) -> Any:
@@ -134,6 +172,25 @@ def _normalize_value(value: Any, default: Any) -> Any:
     return copy.deepcopy(value) if value is not None else copy.deepcopy(default)
 
 
+def _upgrade_third_party_proxy_fields(config: dict[str, Any]) -> dict[str, Any]:
+    upgraded = dict(config)
+    proxy = upgraded.pop("proxy", None)
+    if isinstance(proxy, str) and proxy.strip():
+        upgraded["proxy_mode"] = "custom"
+        upgraded["proxy_url"] = proxy
+    elif proxy is not None:
+        upgraded["proxy_mode"] = "inherit"
+        upgraded["proxy_url"] = ""
+    proxy_url = upgraded.get("proxy_url")
+    if (
+        "proxy_mode" not in upgraded
+        and isinstance(proxy_url, str)
+        and proxy_url.strip()
+    ):
+        upgraded["proxy_mode"] = "custom"
+    return upgraded
+
+
 def normalize_agent_runner(agent_runner: object) -> dict[str, Any]:
     """Validate and normalize a complete Agent Runner configuration.
 
@@ -152,6 +209,8 @@ def normalize_agent_runner(agent_runner: object) -> dict[str, Any]:
     if runner_type not in AGENT_RUNNER_TYPES:
         raise ValueError(f"Unsupported Agent Runner type: {runner_type}")
     config = agent_runner.get("config", {})
+    if runner_type != "local" and isinstance(config, dict):
+        config = _upgrade_third_party_proxy_fields(config)
     default = AGENT_RUNNER_CONFIG_DEFAULTS[runner_type]
     normalized = _normalize_value(config, default)
     if runner_type == "local":
@@ -163,7 +222,49 @@ def normalize_agent_runner(agent_runner: object) -> dict[str, Any]:
             normalized["misc"]["max_steps"] = 1
         if normalized["compression"]["trim_turns"] < 1:
             normalized["compression"]["trim_turns"] = 1
+        normalized["model"]["provider_id"] = coerce_provider_id(
+            normalized["model"]["provider_id"]
+        )
+        normalized["model"]["fallback_provider_ids"] = coerce_provider_ids(
+            normalized["model"]["fallback_provider_ids"]
+        )
+        normalized["compression"]["provider_id"] = coerce_provider_id(
+            normalized["compression"]["provider_id"]
+        )
+    else:
+        if normalized["max_steps"] < 1:
+            normalized["max_steps"] = 1
+        normalized["proxy_mode"] = str(normalize_proxy_mode(normalized["proxy_mode"]))
+        normalized.pop("proxy", None)
     return {"runner_type": runner_type, "config": normalized}
+
+
+def normalize_agent_runner_for_load(agent_runner: object) -> dict[str, Any]:
+    """Normalize Agent Runner config for config load and pipeline init.
+
+    Invalid runner types and malformed roots fall back to the local default
+    instead of raising.
+
+    Args:
+        agent_runner: Untrusted root Agent Runner configuration.
+
+    Returns:
+        A normalized Agent Runner object.
+    """
+    try:
+        return normalize_agent_runner(agent_runner)
+    except ValueError:
+        runner_type = (
+            agent_runner.get("runner_type") if isinstance(agent_runner, dict) else None
+        )
+        logger.warning(
+            "Invalid agent_runner configuration (runner_type=%r); falling back to local defaults.",
+            runner_type,
+        )
+        return {
+            "runner_type": "local",
+            "config": get_agent_runner_config_default("local"),
+        }
 
 
 def get_persona_id(agent_runner: object, default: str = "default") -> str:
@@ -174,7 +275,8 @@ def get_persona_id(agent_runner: object, default: str = "default") -> str:
         default: Fallback persona id.
 
     Returns:
-        Persona id from the local runner, or ``default`` otherwise.
+        Local ``config.persona.persona_id``, third-party ``config.persona_id``,
+        or ``default`` when missing or invalid.
     """
     if not isinstance(agent_runner, dict):
         return default

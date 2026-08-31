@@ -8,6 +8,7 @@ import tempfile
 import threading
 from pathlib import Path
 
+from astrbot.core.config.agent_runner import normalize_agent_runner_for_load
 from astrbot.core.config.agent_runner_migration import migrate_config_on_load
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.auth_password import (
@@ -80,6 +81,12 @@ class AstrBotConfig(dict):
         has_new = self._migrate_openai_chat_completions_type(conf)
         if default_config is DEFAULT_CONFIG:
             has_new |= migrate_config_on_load(conf, Path(config_path))
+            normalized_runner = normalize_agent_runner_for_load(
+                conf.get("agent_runner")
+            )
+            if conf.get("agent_runner") != normalized_runner:
+                conf["agent_runner"] = normalized_runner
+                has_new = True
         has_new |= self.check_config_integrity(default_config, conf)
         if self._should_reset_dashboard_password(conf):
             self._reset_generated_dashboard_password(conf)

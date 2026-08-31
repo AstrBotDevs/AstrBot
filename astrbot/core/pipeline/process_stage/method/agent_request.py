@@ -1,7 +1,7 @@
 from collections.abc import AsyncGenerator
 
 from astrbot import logger
-from astrbot.core.config.agent_runner import normalize_agent_runner
+from astrbot.core.config.agent_runner import normalize_agent_runner_for_load
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.session_llm_manager import SessionServiceManager
 
@@ -19,7 +19,7 @@ class AgentRequestSubStage(Stage):
             raise RuntimeError("AgentRequestSubStage requires shared preferences")
         self.session_services = SessionServiceManager(ctx.preferences)
 
-        agent_runner = normalize_agent_runner(self.config.get("agent_runner"))
+        agent_runner = normalize_agent_runner_for_load(self.config.get("agent_runner"))
         self.config["agent_runner"] = agent_runner
         agent_runner_type = agent_runner["runner_type"]
         if agent_runner_type == "local":

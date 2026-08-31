@@ -3,12 +3,15 @@ from __future__ import annotations
 import copy
 import json
 import logging
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 from astrbot.core.config.agent_runner import (
     AGENT_RUNNER_TYPES,
     THIRD_PARTY_AGENT_RUNNER_TYPES,
+    coerce_provider_id,
+    coerce_provider_ids,
     get_agent_runner_config_default,
     normalize_agent_runner,
 )
@@ -136,10 +139,6 @@ def _copy_provider_config(
         for key, value in provider.items()
         if key not in _LEGACY_PROVIDER_IDENTITY_FIELDS
     }
-    if not runner_config.get("proxy"):
-        proxy_url = provider.get("proxy_url")
-        if isinstance(proxy_url, str) and proxy_url:
-            runner_config["proxy"] = proxy_url
     return normalize_agent_runner(
         {"runner_type": runner_type, "config": runner_config}
     )["config"]
@@ -248,24 +247,29 @@ def _migrate_agent_runner_config(
             available_model_provider_ids = {
                 provider_id
                 for provider_id, provider in provider_map.items()
-                if provider.get("provider_type") != "agent_runner"
+                if isinstance(provider_id, str)
+                and provider.get("provider_type") != "agent_runner"
                 and _get_provider_runner_type(provider) is None
             }
-            if (
-                runner_config["model"]["provider_id"]
-                not in available_model_provider_ids
-            ):
-                runner_config["model"]["provider_id"] = ""
+            provider_id = coerce_provider_id(runner_config["model"]["provider_id"])
+            runner_config["model"]["provider_id"] = (
+                provider_id if provider_id in available_model_provider_ids else ""
+            )
             runner_config["model"]["fallback_provider_ids"] = [
-                provider_id
-                for provider_id in runner_config["model"]["fallback_provider_ids"]
-                if provider_id in available_model_provider_ids
+                fallback_id
+                for fallback_id in coerce_provider_ids(
+                    runner_config["model"]["fallback_provider_ids"]
+                )
+                if fallback_id in available_model_provider_ids
             ]
-            if (
+            compression_provider_id = coerce_provider_id(
                 runner_config["compression"]["provider_id"]
-                not in available_model_provider_ids
-            ):
-                runner_config["compression"]["provider_id"] = ""
+            )
+            runner_config["compression"]["provider_id"] = (
+                compression_provider_id
+                if compression_provider_id in available_model_provider_ids
+                else ""
+            )
         else:
             provider_id = provider_settings.get(
                 _LEGACY_AGENT_RUNNER_PROVIDER_ID_KEYS[runner_type], ""
@@ -277,6 +281,14 @@ def _migrate_agent_runner_config(
                 runner_config = _copy_provider_config(runner_type, provider)
             else:
                 runner_config = get_agent_runner_config_default(runner_type)
+            persona_id = provider_settings.get("default_personality", "default")
+            if not isinstance(persona_id, str) or not persona_id:
+                persona_id = "default"
+            runner_config["persona_id"] = persona_id
+            runner_config["max_steps"] = provider_settings.get("max_agent_step", 30)
+            runner_config = normalize_agent_runner(
+                {"runner_type": runner_type, "config": runner_config}
+            )["config"]
 
         config["agent_runner"] = {
             "runner_type": runner_type,
@@ -324,7 +336,58 @@ def migrate_config_on_load(config: dict[str, Any], config_path: Path) -> bool:
     return _migrate_agent_runner_config(config, fallback_config)
 
 
-def finalize_config_migrations(configs: list[dict[str, Any]]) -> bool:
+def _is_agent_runner_source(source: object) -> bool:
+    """Return whether a provider source belongs to a deleted Agent Runner.
+
+    Args:
+        source: A provider_sources entry.
+
+    Returns:
+        True when the source is an Agent Runner source.
+    """
+    if not isinstance(source, dict):
+        return False
+    provider_type = source.get("provider_type")
+    if (
+        provider_type == "agent_runner"
+        or provider_type in THIRD_PARTY_AGENT_RUNNER_TYPES
+    ):
+        return True
+    runner_type = source.get("type") or source.get("provider")
+    return runner_type in THIRD_PARTY_AGENT_RUNNER_TYPES and provider_type in (
+        None,
+        "agent_runner",
+    )
+
+
+def _is_runner_provider(
+    provider: object, effective_provider_map: dict[str, dict[str, Any]]
+) -> bool:
+    """Return whether a provider record is a migrated Agent Runner instance.
+
+    Args:
+        provider: A provider list entry.
+        effective_provider_map: Providers with source fields merged in.
+
+    Returns:
+        True when the provider should be deleted as an Agent Runner.
+    """
+    if not isinstance(provider, dict):
+        return False
+    provider_id = provider.get("id")
+    effective = (
+        effective_provider_map.get(provider_id, provider)
+        if isinstance(provider_id, str)
+        else provider
+    )
+    return (
+        provider.get("provider_type") == "agent_runner"
+        or effective.get("provider_type") == "agent_runner"
+        or _get_provider_runner_type(effective) is not None
+    )
+
+
+def finalize_config_migrations(configs: Sequence[dict[str, Any]]) -> bool:
     """Clean legacy shared data after every profile has been migrated.
 
     Args:
@@ -338,27 +401,52 @@ def finalize_config_migrations(configs: list[dict[str, Any]]) -> bool:
     default_config = configs[0]
     providers = default_config.get("provider", [])
     if not isinstance(providers, list):
-        return False
+        providers = []
     effective_provider_map = _get_effective_provider_map(default_config)
     filtered_providers = [
         provider
         for provider in providers
-        if not (
-            isinstance(provider, dict)
-            and (
-                provider.get("provider_type") == "agent_runner"
-                or effective_provider_map.get(provider.get("id"), {}).get(
-                    "provider_type"
-                )
-                == "agent_runner"
-                or _get_provider_runner_type(
-                    effective_provider_map.get(provider.get("id"), provider)
-                )
-                is not None
-            )
-        )
+        if not _is_runner_provider(provider, effective_provider_map)
     ]
-    if len(filtered_providers) == len(providers):
-        return False
-    default_config["provider"] = filtered_providers
-    return True
+    remaining_source_ids = {
+        provider.get("provider_source_id")
+        for provider in filtered_providers
+        if isinstance(provider, dict) and provider.get("provider_source_id")
+    }
+    deleted_runner_source_ids = {
+        provider.get("provider_source_id")
+        for provider in providers
+        if _is_runner_provider(provider, effective_provider_map)
+        and isinstance(provider, dict)
+        and provider.get("provider_source_id")
+    }
+
+    changed = False
+    if filtered_providers != providers:
+        default_config["provider"] = filtered_providers
+        changed = True
+
+    sources = default_config.get("provider_sources")
+    if isinstance(sources, list):
+        filtered_sources = []
+        for source in sources:
+            if not isinstance(source, dict):
+                filtered_sources.append(source)
+                continue
+            source_id = source.get("id")
+            if _is_agent_runner_source(source):
+                continue
+            if source_id and source_id in remaining_source_ids:
+                filtered_sources.append(source)
+                continue
+            if (
+                source_id
+                and source_id not in remaining_source_ids
+                and source_id in deleted_runner_source_ids
+            ):
+                continue
+            filtered_sources.append(source)
+        if filtered_sources != sources:
+            default_config["provider_sources"] = filtered_sources
+            changed = True
+    return changed
