@@ -1045,6 +1045,7 @@ export default {
   justify-content: space-between;
   gap: 12px;
   width: 100%;
+  max-width: 840px;
   padding: 4px 0;
 }
 
