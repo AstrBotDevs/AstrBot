@@ -8,14 +8,11 @@ from astrbot.core.utils.auth_password import verify_dashboard_password
 
 
 def test_init_yes_skips_install_confirmation(monkeypatch, tmp_path):
-    async def fake_check_dashboard(_data_path):
-        return None
-
     def fail_confirm(*_args, **_kwargs):
         pytest.fail("-y should skip the installation confirmation")
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(cmd_init, "check_dashboard", fake_check_dashboard)
+    monkeypatch.delenv(cmd_init.DASHBOARD_INITIAL_PASSWORD_ENV, raising=False)
     monkeypatch.setattr(cmd_init.click, "confirm", fail_confirm)
 
     result = CliRunner().invoke(cmd_init.init, ["-y"])
@@ -25,6 +22,7 @@ def test_init_yes_skips_install_confirmation(monkeypatch, tmp_path):
     assert (tmp_path / "data" / "config").is_dir()
     assert (tmp_path / "data" / "plugins").is_dir()
     assert (tmp_path / "data" / "temp").is_dir()
+    assert not (tmp_path / "data" / "cmd_config.json").exists()
 
 
 @pytest.mark.asyncio
@@ -32,11 +30,7 @@ async def test_init_without_initial_password_env_does_not_create_config(
     monkeypatch,
     tmp_path,
 ):
-    async def fake_check_dashboard(_data_path):
-        return None
-
     monkeypatch.delenv(cmd_init.DASHBOARD_INITIAL_PASSWORD_ENV, raising=False)
-    monkeypatch.setattr(cmd_init, "check_dashboard", fake_check_dashboard)
     (tmp_path / ".astrbot").touch()
 
     await cmd_init.initialize_astrbot(tmp_path)
@@ -49,12 +43,8 @@ async def test_init_uses_initial_password_env_to_create_config(
     monkeypatch,
     tmp_path,
 ):
-    async def fake_check_dashboard(_data_path):
-        return None
-
     initial_password = "AstrBotInitialPassword123"
     monkeypatch.setenv(cmd_init.DASHBOARD_INITIAL_PASSWORD_ENV, initial_password)
-    monkeypatch.setattr(cmd_init, "check_dashboard", fake_check_dashboard)
     (tmp_path / ".astrbot").touch()
 
     await cmd_init.initialize_astrbot(tmp_path)
