@@ -63,9 +63,9 @@
       "modelHint": "选择内置 AI 使用的对话模型和失败重试策略。",
       "execution": "执行设置",
       "executionHint": "配置工具调用循环和执行过程。",
-      "media": "多媒体模型",
-      "mediaHint": "配置图片理解、语音转文字和文字转语音。",
-      "behavior": "回复行为",
+      "media": "图像与语音",
+      "mediaHint": "配置图片理解、语音识别和语音合成。",
+      "behavior": "消息处理",
       "behaviorHint": "这些设置适用于当前配置文件中的所有执行方式。"
     },
     "common": {

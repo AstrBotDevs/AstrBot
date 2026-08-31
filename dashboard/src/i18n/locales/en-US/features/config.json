@@ -63,9 +63,9 @@
       "modelHint": "Choose the chat models and retry policy used by built-in AI.",
       "execution": "Execution",
       "executionHint": "Configure the tool-call loop and execution process.",
-      "media": "Media Models",
+      "media": "Image and Voice",
       "mediaHint": "Configure image understanding, speech-to-text, and text-to-speech.",
-      "behavior": "Response Behavior",
+      "behavior": "Message Handling",
       "behaviorHint": "These settings apply to every execution mode in this profile."
     },
     "common": {
