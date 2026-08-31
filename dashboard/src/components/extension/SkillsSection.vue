@@ -643,6 +643,7 @@
     <v-dialog
       v-model="editorDialog.show"
       max-width="1180px"
+      :fullscreen="$vuetify.display.mdAndDown"
       :persistent="editorDialog.saving"
     >
       <v-card class="skill-editor-dialog">
@@ -2402,8 +2403,27 @@ export default {
 }
 
 @media (max-width: 860px) {
+  .skill-editor-dialog {
+    max-height: none;
+    overflow-y: auto;
+  }
+
   .skills-list {
     grid-template-columns: minmax(0, 1fr);
+  }
+  
+  .skill-editor {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .skill-editor__files {
+    max-height: 20vh;
+  }
+
+  .skill-editor__monaco {
+    min-height: 40vh;
   }
 
   .skill-list-item :deep(.outlined-action-list-item__actions) {
