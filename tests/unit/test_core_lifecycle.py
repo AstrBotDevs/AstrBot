@@ -9,6 +9,7 @@ import pytest
 
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.log import LogBroker
+from astrbot.core.star.context import Context
 
 
 @pytest.fixture
@@ -407,7 +408,34 @@ class TestAstrBotCoreLifecycleInitialize:
         mock_persona_mgr.initialize = AsyncMock()
 
         mock_provider_manager = MagicMock()
-        mock_provider_manager.initialize = AsyncMock()
+        mock_provider_manager.inst_map = {}
+        mock_provider_manager.provider_insts = []
+        mock_provider_manager.default_chat_provider_id = ""
+        mock_provider_manager.curr_provider_inst = None
+
+        target_provider = MagicMock()
+        target_provider.provider_config = {"id": "provider-target"}
+        fallback_provider = MagicMock()
+        fallback_provider.provider_config = {"id": "provider-fallback"}
+        plugin_modules_discovered = False
+        plugin_activation_completed = False
+
+        async def initialize_providers():
+            assert plugin_modules_discovered is True
+            mock_provider_manager.inst_map["provider-target"] = target_provider
+            mock_provider_manager.provider_insts.extend(
+                [target_provider, fallback_provider]
+            )
+            mock_provider_manager.curr_provider_inst = target_provider
+
+        mock_provider_manager.initialize = AsyncMock(side_effect=initialize_providers)
+
+        async def initialize_pending_providers():
+            assert plugin_activation_completed is True
+
+        mock_provider_manager.initialize_pending_registered_providers = AsyncMock(
+            side_effect=initialize_pending_providers
+        )
 
         mock_platform_manager = MagicMock()
         mock_platform_manager.initialize = AsyncMock()
@@ -421,11 +449,35 @@ class TestAstrBotCoreLifecycleInitialize:
 
         mock_cron_manager = MagicMock()
 
-        mock_star_context = MagicMock()
-        mock_star_context._register_tasks = []
-
         mock_plugin_manager = MagicMock()
-        mock_plugin_manager.reload = AsyncMock()
+
+        async def initialize_plugins(
+            *,
+            before_plugin_activation,
+            after_plugin_activation,
+        ):
+            nonlocal plugin_activation_completed, plugin_modules_discovered
+            assert before_plugin_activation is mock_provider_manager.initialize
+            assert (
+                after_plugin_activation
+                is mock_provider_manager.initialize_pending_registered_providers
+            )
+            plugin_modules_discovered = True
+            await before_plugin_activation()
+            assert isinstance(lifecycle.star_context, Context)
+            assert (
+                lifecycle.star_context.get_provider_by_id("provider-target")
+                is target_provider
+            )
+            mock_provider_manager.default_chat_provider_id = "provider-target"
+            plugin_activation_completed = True
+            await after_plugin_activation()
+            # One isolated plugin may fail without preventing Core startup.
+            return False, "one plugin failed"
+
+        mock_plugin_manager.initialize_plugins = AsyncMock(
+            side_effect=initialize_plugins
+        )
 
         mock_pipeline_scheduler = MagicMock()
         mock_pipeline_scheduler.initialize = AsyncMock()
@@ -474,9 +526,6 @@ class TestAstrBotCoreLifecycleInitialize:
                 return_value=mock_cron_manager,
             ),
             patch(
-                "astrbot.core.core_lifecycle.Context", return_value=mock_star_context
-            ),
-            patch(
                 "astrbot.core.core_lifecycle.PluginManager",
                 return_value=mock_plugin_manager,
             ),
@@ -514,15 +563,25 @@ class TestAstrBotCoreLifecycleInitialize:
 
         # Verify provider manager initialized
         mock_provider_manager.initialize.assert_awaited_once()
+        mock_provider_manager.initialize_pending_registered_providers.assert_awaited_once()
 
         # Verify platform manager initialized
         mock_platform_manager.initialize.assert_awaited_once()
 
-        # Verify plugin manager reloaded
-        mock_plugin_manager.reload.assert_awaited_once()
+        # Verify the startup-only two-phase plugin lifecycle was used.
+        mock_plugin_manager.initialize_plugins.assert_awaited_once_with(
+            before_plugin_activation=mock_provider_manager.initialize,
+            after_plugin_activation=(
+                mock_provider_manager.initialize_pending_registered_providers
+            ),
+        )
 
         # Verify knowledge base manager initialized
         mock_kb_manager.initialize.assert_awaited_once()
+
+        # Warning state is evaluated only after plugin activation mutates the
+        # effective Provider selection.
+        assert lifecycle._default_chat_provider_warning_emitted is False
 
         # Verify pipeline scheduler loaded
         assert lifecycle.pipeline_scheduler_mapping is not None
@@ -565,7 +624,10 @@ class TestAstrBotCoreLifecycleInitialize:
             ),
             patch(
                 "astrbot.core.core_lifecycle.ProviderManager",
-                return_value=MagicMock(initialize=AsyncMock()),
+                return_value=MagicMock(
+                    initialize=AsyncMock(),
+                    initialize_pending_registered_providers=AsyncMock(),
+                ),
             ),
             patch(
                 "astrbot.core.core_lifecycle.PlatformManager",
@@ -593,7 +655,7 @@ class TestAstrBotCoreLifecycleInitialize:
             ),
             patch(
                 "astrbot.core.core_lifecycle.PluginManager",
-                return_value=MagicMock(reload=AsyncMock()),
+                return_value=MagicMock(initialize_plugins=AsyncMock()),
             ),
             patch(
                 "astrbot.core.core_lifecycle.PipelineScheduler",
