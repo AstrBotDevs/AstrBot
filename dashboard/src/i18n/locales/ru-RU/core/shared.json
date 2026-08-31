@@ -34,6 +34,9 @@
     },
     "providerSelector": {
         "notSelected": "Не выбрано",
+        "defaultModel": "Модель по умолчанию",
+        "model": "Модель",
+        "searchPlaceholder": "Поиск моделей",
         "buttonText": "Выбрать провайдера...",
         "dialogTitle": "Выбор провайдера",
         "loading": "Загрузка...",
@@ -46,6 +49,7 @@
         "createProvider": "Создать провайдера",
         "manageProviders": "Управление провайдерами",
         "selectProviderPool": "Выбрать пул провайдеров...",
+        "selectedModelCount": "Выбрано моделей: {count}",
         "selectedCount": "Выбрано провайдеров: {count}"
     },
     "personaSelector": {

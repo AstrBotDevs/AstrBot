@@ -34,6 +34,9 @@
   },
   "providerSelector": {
     "notSelected": "未选择",
+    "defaultModel": "默认模型",
+    "model": "模型",
+    "searchPlaceholder": "搜索模型",
     "buttonText": "选择提供商...",
     "dialogTitle": "选择提供商",
     "loading": "加载中...",
@@ -46,6 +49,7 @@
     "createProvider": "创建提供商",
     "manageProviders": "提供商管理",
     "selectProviderPool": "选择提供商池...",
+    "selectedModelCount": "已选择 {count} 个模型",
     "selectedCount": "已选择 {count} 个提供商"
   },
   "personaSelector": {

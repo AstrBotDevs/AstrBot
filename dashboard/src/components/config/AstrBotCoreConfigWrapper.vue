@@ -382,6 +382,16 @@ export default {
   margin-left: auto;
 }
 
+.config-standard-section__groups :deep(.config-input .v-switch .v-input__control),
+:deep(.config-product-groups .config-input .v-switch .v-input__control) {
+  margin-left: auto;
+}
+
+.config-standard-section__groups :deep(.config-input .v-switch .v-selection-control),
+:deep(.config-product-groups .config-input .v-switch .v-selection-control) {
+  justify-content: flex-end;
+}
+
 .config-standard-section__groups :deep(.v-field),
 :deep(.config-product-groups .v-field) {
   border-radius: 10px;
