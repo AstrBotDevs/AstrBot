@@ -995,6 +995,299 @@ async def test_load_reports_unregistered_plugin_without_index_error(
 
 
 @pytest.mark.asyncio
+async def test_partial_import_rolls_back_only_its_provider_registration(
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+):
+    """A failed import removes only registrations owned by that plugin."""
+    from astrbot.core.provider.register import (
+        provider_cls_map,
+        provider_registry,
+        register_provider_adapter,
+    )
+
+    _clear_star_runtime_state()
+    registry_before = list(provider_registry)
+    map_before = dict(provider_cls_map)
+    plugin_name = "partial_provider_plugin"
+    provider_type = "partial_provider_adapter"
+    core_provider_type = "partial_provider_core_sentinel"
+    sibling_provider_type = "partial_provider_sibling_sentinel"
+    plugin_root = Path(plugin_manager_pm.plugin_store_path).parents[1]
+    plugin_path = Path(plugin_manager_pm.plugin_store_path) / plugin_name
+    plugin_path.mkdir(parents=True)
+    (plugin_path / "metadata.yaml").write_text(
+        yaml.dump(
+            {
+                "name": plugin_name,
+                "author": "AstrBot Team",
+                "desc": "Partial provider test plugin",
+                "version": "1.0.0",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (plugin_path / "main.py").write_text(
+        f"""from astrbot.core.provider.register import register_provider_adapter
+
+
+@register_provider_adapter("{provider_type}", "Partial test provider")
+class PartialProvider:
+    pass
+
+
+raise RuntimeError("import failed after registration")
+""",
+        encoding="utf-8",
+    )
+
+    class CoreSentinel:
+        pass
+
+    class SiblingSentinel:
+        pass
+
+    CoreSentinel.__module__ = "astrbot.core.provider.sources.test_sentinel"
+    SiblingSentinel.__module__ = f"data.plugins.{plugin_name}_extra.main"
+    register_provider_adapter(core_provider_type, "Core sentinel")(CoreSentinel)
+    register_provider_adapter(sibling_provider_type, "Sibling sentinel")(
+        SiblingSentinel
+    )
+    core_metadata = provider_cls_map[core_provider_type]
+    sibling_metadata = provider_cls_map[sibling_provider_type]
+
+    async def mock_global_get(key, default=None):
+        del key
+        return default
+
+    async def mock_sync_command_configs():
+        return None
+
+    monkeypatch.syspath_prepend(str(plugin_root))
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(
+        star_manager_module,
+        "sync_command_configs",
+        mock_sync_command_configs,
+    )
+
+    try:
+        success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
+
+        assert success is False
+        assert error is not None
+        assert "import failed after registration" in error
+        assert provider_type not in provider_cls_map
+        assert all(metadata.type != provider_type for metadata in provider_registry)
+        assert provider_cls_map[core_provider_type] is core_metadata
+        assert provider_cls_map[sibling_provider_type] is sibling_metadata
+        assert plugin_name in plugin_manager_pm.failed_plugin_dict
+
+        (plugin_path / "main.py").write_text(
+            f"""from astrbot.api.star import Star
+from astrbot.core.provider.register import register_provider_adapter
+
+
+@register_provider_adapter("{provider_type}", "Partial test provider")
+class PartialProvider:
+    pass
+
+
+class Main(Star):
+    pass
+""",
+            encoding="utf-8",
+        )
+
+        success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
+
+        assert success is True
+        assert error is None
+        assert sum(md.type == provider_type for md in provider_registry) == 1
+        assert plugin_name not in plugin_manager_pm.failed_plugin_dict
+    finally:
+        plugin_manager_pm._cleanup_plugin_state(plugin_name)
+        provider_registry[:] = registry_before
+        provider_cls_map.clear()
+        provider_cls_map.update(map_before)
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_dependency_recovery_reimports_partial_decorators_once(
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+):
+    """An in-process dependency retry first rolls back decorator side effects."""
+    from astrbot.core.provider.register import provider_cls_map, provider_registry
+
+    _clear_star_runtime_state()
+    registry_before = list(provider_registry)
+    map_before = dict(provider_cls_map)
+    plugin_name = "dependency_recovery_provider_plugin"
+    provider_type = "dependency_recovery_provider_adapter"
+    missing_dependency = "astrbot_test_recovered_dependency"
+    plain_tool_name = "dependency_recovery_plain_tool"
+    agent_name = "dependency_recovery_agent"
+    agent_tool_name = "dependency_recovery_agent_tool"
+    module_path = f"data.plugins.{plugin_name}.main"
+    plugin_root = Path(plugin_manager_pm.plugin_store_path).parents[1]
+    plugin_path = Path(plugin_manager_pm.plugin_store_path) / plugin_name
+    plugin_path.mkdir(parents=True)
+    (plugin_path / "metadata.yaml").write_text(
+        yaml.dump(
+            {
+                "name": plugin_name,
+                "author": "AstrBot Team",
+                "desc": "Provider dependency recovery test plugin",
+                "version": "1.0.0",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (plugin_path / "requirements.txt").write_text(
+        f"{missing_dependency}\n",
+        encoding="utf-8",
+    )
+    (plugin_path / "tools.py").write_text(
+        f"""from astrbot.core.star.register.star_handler import register_agent, register_llm_tool
+
+
+@register_llm_tool(name="{plain_tool_name}")
+async def plain_tool(self):
+    pass
+
+
+@register_agent(name="{agent_name}", instruction="Recovery helper")
+async def helper_agent(self):
+    pass
+
+
+@helper_agent.llm_tool(name="{agent_tool_name}")
+async def agent_tool(self):
+    pass
+""",
+        encoding="utf-8",
+    )
+    (plugin_path / "main.py").write_text(
+        f"""from astrbot.api.star import Star
+from astrbot.core.provider.register import register_provider_adapter
+
+
+@register_provider_adapter("{provider_type}", "Recovered provider")
+class RecoveredProvider:
+    pass
+
+
+from . import tools
+import {missing_dependency}
+
+
+class Main(Star):
+    pass
+""",
+        encoding="utf-8",
+    )
+    llm_tools = cast(Any, star_manager_module.llm_tools)
+    original_func_list = llm_tools.func_list
+    llm_tools.func_list = list(original_func_list)
+
+    async def unrelated_dynamic_tool():
+        return None
+
+    unrelated_dynamic_tool.__module__ = "external.runtime_tools"
+    unrelated_tool = star_manager_module.FunctionTool(
+        name="unrelated_dynamic_tool",
+        description="Registered outside the plugin import",
+        parameters={"type": "object", "properties": {}},
+        handler=unrelated_dynamic_tool,
+    )
+    llm_tools.func_list.append(unrelated_tool)
+    dependency_installed = False
+
+    async def mock_global_get(key, default=None):
+        del key
+        return default
+
+    async def mock_sync_command_configs():
+        return None
+
+    async def mock_check_plugin_dept_update(*, target_plugin=None):
+        nonlocal dependency_installed
+        assert target_plugin == plugin_name
+        dependency_installed = True
+        monkeypatch.setitem(
+            star_manager_module.sys.modules,
+            missing_dependency,
+            ModuleType(missing_dependency),
+        )
+
+    recovery_state = star_manager_module.ImportDependencyRecoveryState(
+        star_manager_module.ImportDependencyRecoveryMode.REINSTALL_ON_FAILURE,
+        MissingRequirementsPlan(
+            missing_names=frozenset({missing_dependency}),
+            install_lines=(missing_dependency,),
+            version_mismatch_names=frozenset({missing_dependency}),
+        ),
+    )
+
+    monkeypatch.syspath_prepend(str(plugin_root))
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(
+        star_manager_module,
+        "sync_command_configs",
+        mock_sync_command_configs,
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_resolve_import_dependency_recovery_state",
+        lambda *args, **kwargs: recovery_state,
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_check_plugin_dept_update",
+        mock_check_plugin_dept_update,
+    )
+
+    try:
+        success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
+
+        assert success is True
+        assert error is None
+        assert dependency_installed is True
+        assert sum(md.type == provider_type for md in provider_registry) == 1
+        plain_tools = [
+            tool for tool in llm_tools.func_list if tool.name == plain_tool_name
+        ]
+        handoff_tools = [
+            tool
+            for tool in llm_tools.func_list
+            if tool.name == f"transfer_to_{agent_name}"
+        ]
+        assert len(plain_tools) == 1
+        assert len(handoff_tools) == 1
+        nested_tools = [
+            tool
+            for tool in handoff_tools[0].agent.tools
+            if tool.name == agent_tool_name
+        ]
+        assert len(nested_tools) == 1
+        for tool in [plain_tools[0], handoff_tools[0], nested_tools[0]]:
+            assert tool.handler_module_path == module_path
+            assert isinstance(tool.handler, functools.partial)
+            assert tool.handler.func.__module__ == f"data.plugins.{plugin_name}.tools"
+        assert unrelated_tool.handler_module_path is None
+        assert unrelated_tool.active is True
+    finally:
+        plugin_manager_pm._cleanup_plugin_state(plugin_name)
+        provider_registry[:] = registry_before
+        provider_cls_map.clear()
+        provider_cls_map.update(map_before)
+        llm_tools.func_list = original_func_list
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
 async def test_ensure_plugin_requirements_reraises_cancelled_error(
     plugin_manager_pm: PluginManager, local_updater: Path, monkeypatch
 ):

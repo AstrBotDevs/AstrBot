@@ -31,7 +31,10 @@ from astrbot.core.agent.handoff import FunctionTool, HandoffTool
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import VERSION
 from astrbot.core.platform.register import unregister_platform_adapters_by_module
-from astrbot.core.provider.register import llm_tools
+from astrbot.core.provider.register import (
+    llm_tools,
+    unregister_provider_adapters_by_module,
+)
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
     get_astrbot_path,
@@ -455,6 +458,9 @@ class PluginManager:
         try:
             return __import__(path, fromlist=[module_str])
         except ModuleNotFoundError as import_exc:
+            # The failed import may already have executed decorators. Clear only
+            # this plugin's partial registrations before retrying in-process.
+            self._cleanup_plugin_state(root_dir_name, reserved)
             if recovery_state.mode in {
                 ImportDependencyRecoveryMode.PRELOAD_AND_RECOVER,
                 ImportDependencyRecoveryMode.RECOVER_ON_FAILURE,
@@ -468,6 +474,7 @@ class PluginManager:
                 )
                 if recovered_module is not None:
                     return recovered_module
+                self._cleanup_plugin_state(root_dir_name, reserved)
             elif (
                 recovery_state.mode is ImportDependencyRecoveryMode.REINSTALL_ON_FAILURE
             ):
@@ -480,6 +487,7 @@ class PluginManager:
                 )
 
             await self._check_plugin_dept_update(target_plugin=root_dir_name)
+            self._cleanup_plugin_state(root_dir_name, reserved)
             return __import__(path, fromlist=[module_str])
 
     @staticmethod
@@ -731,6 +739,25 @@ class PluginManager:
             )
         )
 
+    @staticmethod
+    def _plugin_root_module_path(plugin_module_path: str) -> str:
+        """Return the import prefix shared by every module in one plugin.
+
+        Args:
+            plugin_module_path: Plugin main or child module path.
+
+        Returns:
+            Plugin package import prefix.
+        """
+        parts = plugin_module_path.split(".")
+        for marker in ("plugins", "builtin_stars"):
+            if marker not in parts:
+                continue
+            marker_index = parts.index(marker)
+            if marker_index + 1 < len(parts):
+                return ".".join(parts[: marker_index + 2])
+        return plugin_module_path
+
     def _purge_modules(
         self,
         module_patterns: list[str] | None = None,
@@ -802,13 +829,18 @@ class PluginManager:
 
         # 清理工具
         for tool in list(llm_tools.func_list):
-            handler_module_path = getattr(tool, "handler_module_path", None)
-            if self._is_plugin_module_path(handler_module_path, module_prefix):
+            if any(
+                self._is_plugin_llm_tool(concrete_tool, module_prefix)
+                for concrete_tool in self._iter_concrete_llm_tools(tool)
+            ):
                 llm_tools.func_list.remove(tool)
                 logger.info(f"Removed tool: {tool.name}")
 
         for adapter_name in unregister_platform_adapters_by_module(module_prefix):
             logger.info(f"Removed platform adapter: {adapter_name}")
+
+        for adapter_name in unregister_provider_adapters_by_module(module_prefix):
+            logger.info(f"Removed provider adapter: {adapter_name}")
 
     def _build_failed_plugin_record(
         self,
@@ -877,14 +909,15 @@ class PluginManager:
 
     @staticmethod
     def _iter_concrete_llm_tools(func_tool: FunctionTool) -> Iterable[FunctionTool]:
-        """Return concrete function tools that may belong to a plugin.
+        """Return a registered tool and any tools nested in a handoff.
 
         Args:
             func_tool: A registered function tool, possibly a handoff tool.
 
         Returns:
-            The concrete function tools to inspect for plugin ownership.
+            Function tools to inspect for plugin ownership.
         """
+        yield func_tool
         if isinstance(func_tool, HandoffTool):
             agent = getattr(func_tool, "agent", None)
             tools = getattr(agent, "tools", None) if agent else None
@@ -892,10 +925,10 @@ class PluginManager:
                 if isinstance(tool, FunctionTool):
                     yield tool
             return
-        yield func_tool
 
-    @staticmethod
+    @classmethod
     def _is_plugin_llm_tool(
+        cls,
         func_tool: FunctionTool,
         plugin_module_path: str | None,
     ) -> bool:
@@ -909,15 +942,55 @@ class PluginManager:
             Whether the tool belongs to the plugin module.
         """
         module_path = getattr(func_tool, "handler_module_path", None)
+        raw_handler = (
+            func_tool.handler.func
+            if isinstance(func_tool.handler, functools.partial)
+            else func_tool.handler
+        )
+        raw_handler_module_path = getattr(raw_handler, "__module__", None)
         return bool(
             plugin_module_path
-            and module_path
             and (
-                module_path == plugin_module_path
-                or module_path.startswith(f"{plugin_module_path}.")
+                cls._is_plugin_module_path(module_path, plugin_module_path)
+                or cls._is_plugin_module_path(
+                    raw_handler_module_path,
+                    plugin_module_path,
+                )
             )
-            and not module_path.endswith(("astrbot.builtin_stars", "data.plugins"))
+            and not (module_path or "").endswith(
+                ("astrbot.builtin_stars", "data.plugins")
+            )
         )
+
+    @classmethod
+    def _claim_llm_tools_for_plugin(
+        cls,
+        plugin_module_path: str,
+    ) -> None:
+        """Assign plugin-owned tools to the plugin's canonical Star module.
+
+        Args:
+            plugin_module_path: Canonical Star module path for the plugin.
+
+        Returns:
+            None.
+        """
+        module_prefix = cls._plugin_root_module_path(plugin_module_path)
+        for func_tool in llm_tools.func_list:
+            for tool in cls._iter_concrete_llm_tools(func_tool):
+                raw_handler = (
+                    tool.handler.func
+                    if isinstance(tool.handler, functools.partial)
+                    else tool.handler
+                )
+                if cls._is_plugin_module_path(
+                    getattr(raw_handler, "__module__", None),
+                    module_prefix,
+                ) or cls._is_plugin_module_path(
+                    tool.handler_module_path,
+                    module_prefix,
+                ):
+                    tool.handler_module_path = plugin_module_path
 
     @classmethod
     def _iter_plugin_llm_tools(
@@ -1124,13 +1197,16 @@ class PluginManager:
 
                 # 尝试导入模块
                 try:
-                    module = await self._import_plugin_with_dependency_recovery(
-                        path=path,
-                        module_str=module_str,
-                        root_dir_name=root_dir_name,
-                        requirements_path=requirements_path,
-                        reserved=reserved,
-                    )
+                    try:
+                        module = await self._import_plugin_with_dependency_recovery(
+                            path=path,
+                            module_str=module_str,
+                            root_dir_name=root_dir_name,
+                            requirements_path=requirements_path,
+                            reserved=reserved,
+                        )
+                    finally:
+                        self._claim_llm_tools_for_plugin(path)
                 except Exception as e:
                     error_trace = traceback.format_exc()
                     logger.error(error_trace)
@@ -1273,19 +1349,21 @@ class PluginManager:
                     # Apply the same idempotent binding lifecycle to LLM tools.
                     for func_tool in llm_tools.func_list:
                         for ft in self._iter_concrete_llm_tools(func_tool):
-                            if ft.handler and (
-                                getattr(ft.handler, "__module__", None)
-                                == metadata.module_path
-                                or (
-                                    isinstance(ft.handler, functools.partial)
-                                    and ft.handler_module_path == metadata.module_path
+                            raw_handler = (
+                                ft.handler.func
+                                if isinstance(ft.handler, functools.partial)
+                                else ft.handler
+                            )
+                            if raw_handler and (
+                                self._is_plugin_module_path(
+                                    getattr(raw_handler, "__module__", None),
+                                    metadata.module_path,
+                                )
+                                or self._is_plugin_llm_tool(
+                                    ft,
+                                    metadata.module_path,
                                 )
                             ):
-                                raw_handler = (
-                                    ft.handler.func
-                                    if isinstance(ft.handler, functools.partial)
-                                    else ft.handler
-                                )
                                 ft.handler_module_path = metadata.module_path
                                 ft.handler = raw_handler
                                 if (
@@ -1429,6 +1507,8 @@ class PluginManager:
                         await handler.handler(metadata)
                     except Exception:
                         logger.error(traceback.format_exc())
+
+                self.failed_plugin_dict.pop(root_dir_name, None)
 
             except BaseException as e:
                 logger.error(f"----- Failed to load plugin {root_dir_name} -----")
@@ -1905,11 +1985,9 @@ class PluginManager:
         # llm_tools 中移除该插件的工具函数绑定
         to_remove = []
         for func_tool in llm_tools.func_list:
-            mp = func_tool.handler_module_path
-            if (
-                mp
-                and mp.startswith(plugin_module_path)
-                and not mp.endswith(("astrbot.builtin_stars", "data.plugins"))
+            if any(
+                self._is_plugin_llm_tool(tool, plugin_module_path)
+                for tool in self._iter_concrete_llm_tools(func_tool)
             ):
                 to_remove.append(func_tool)
         for func_tool in to_remove:
