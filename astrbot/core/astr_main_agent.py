@@ -5,10 +5,10 @@ import os
 import platform
 import re
 import zoneinfo
-from collections.abc import Coroutine
+from collections.abc import Coroutine, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TypeGuard, cast
+from typing import Any, TypeGuard, cast
 
 from astrbot import logger
 from astrbot.core.agent.chat_model import ChatModel
@@ -33,6 +33,7 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
 from astrbot.core.computer.booters.local import resolve_windows_shell
+from astrbot.core.config.agent_runner import coerce_provider_ids
 from astrbot.core.conversation_mgr import load_sanitized_history
 from astrbot.core.conversation_models import Conversation
 from astrbot.core.db.protocols import PlatformSessionStore
@@ -113,6 +114,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_system_tmp_path,
     get_astrbot_workspaces_path,
 )
+from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.media_utils import (
     IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
     IMAGE_COMPRESS_DEFAULT_QUALITY,
@@ -195,7 +197,7 @@ class MainAgentBuildConfig:
     kb_agentic_mode: bool = False
     """Whether to use agentic mode for knowledge base retrieval.
     This will inject the knowledge base query tool into the main agent's toolset to allow dynamic querying."""
-    context_limit_reached_strategy: str = "truncate_by_turns"
+    context_limit_reached_strategy: str = "llm_compress"
     """The strategy to handle context length limit reached."""
     llm_compress_instruction: str = ""
     """The instruction for compression in llm_compress strategy."""
@@ -226,6 +228,116 @@ class MainAgentBuildConfig:
     timezone: str | None = None
     max_quoted_fallback_images: int = 20
     """Maximum number of images injected from quoted-message fallback extraction."""
+
+
+def _mapping(value: object) -> dict[str, Any]:
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def local_agent_runtime_from_profile(
+    profile_config: Mapping[str, Any] | None,
+    **overrides: Any,
+) -> tuple[MainAgentBuildConfig, int]:
+    """Assemble local-agent build config and step bound from a profile.
+
+    Reads ``agent_runner.config`` for model fallback/retries, persona,
+    compression, and misc fields. Callers may override individual
+    ``MainAgentBuildConfig`` fields.
+
+    Args:
+        profile_config: Profile configuration containing ``agent_runner``.
+        **overrides: Fields forwarded to ``MainAgentBuildConfig``.
+
+    Returns:
+        The build config and the ``max_steps`` bound for ``step_until_done``.
+    """
+    profile = _mapping(profile_config)
+    agent_runner = _mapping(profile.get("agent_runner"))
+    runner_config = _mapping(agent_runner.get("config"))
+    model_config = _mapping(runner_config.get("model"))
+    persona_config = _mapping(runner_config.get("persona"))
+    compression_config = _mapping(runner_config.get("compression"))
+    misc_config = _mapping(runner_config.get("misc"))
+    settings = _mapping(profile.get("provider_settings"))
+    proactive_cfg = _mapping(settings.get("proactive_capability"))
+
+    max_context_length = compression_config.get("max_turns", -1)
+    if not isinstance(max_context_length, int) or isinstance(max_context_length, bool):
+        max_context_length = -1
+    configured_trim = coerce_int_config(
+        compression_config.get("trim_turns", 1),
+        default=1,
+        min_value=1,
+        field_name="agent_runner.config.compression.trim_turns",
+        warn=False,
+    )
+    if max_context_length == -1:
+        dequeue_context_length = configured_trim
+    else:
+        dequeue_context_length = min(configured_trim, max_context_length - 1)
+    if dequeue_context_length <= 0:
+        dequeue_context_length = 1
+
+    tool_schema_mode = misc_config.get("tool_schema_mode", "full")
+    if tool_schema_mode not in ("skills_like", "full"):
+        tool_schema_mode = "full"
+
+    max_steps = coerce_int_config(
+        misc_config.get("max_steps", 30),
+        default=30,
+        min_value=1,
+        field_name="agent_runner.config.misc.max_steps",
+    )
+    kwargs: dict[str, Any] = {
+        "tool_call_timeout": coerce_int_config(
+            misc_config.get("tool_call_timeout", 120),
+            default=120,
+            min_value=1,
+            field_name="agent_runner.config.misc.tool_call_timeout",
+            warn=False,
+        ),
+        "tool_schema_mode": tool_schema_mode,
+        "sanitize_context_by_modalities": bool(
+            misc_config.get("sanitize_context_by_modalities", False)
+        ),
+        "kb_agentic_mode": bool(profile.get("kb_agentic_mode", False)),
+        "context_limit_reached_strategy": compression_config.get(
+            "overflow_strategy", "llm_compress"
+        ),
+        "llm_compress_instruction": compression_config.get("instruction", "") or "",
+        "llm_compress_keep_recent_ratio": compression_config.get(
+            "keep_recent_ratio", 0.15
+        ),
+        "llm_compress_provider_id": compression_config.get("provider_id", "") or "",
+        "max_context_length": max_context_length,
+        "dequeue_context_length": dequeue_context_length,
+        "fallback_max_context_tokens": compression_config.get(
+            "fallback_max_tokens", 128000
+        ),
+        "llm_safety_mode": persona_config.get("safety_mode", True),
+        "safety_mode_strategy": persona_config.get(
+            "safety_mode_strategy", "system_prompt"
+        ),
+        "computer_use_runtime": settings.get("computer_use_runtime", "local"),
+        "sandbox_cfg": _mapping(settings.get("sandbox")),
+        "add_cron_tools": proactive_cfg.get("add_cron_tools", True),
+        "provider_settings": settings,
+        "fallback_provider_ids": coerce_provider_ids(
+            model_config.get("fallback_provider_ids", [])
+        ),
+        "request_max_retries": coerce_int_config(
+            model_config.get("request_max_retries", 5),
+            default=5,
+            min_value=1,
+            field_name="agent_runner.config.model.request_max_retries",
+            warn=False,
+        ),
+        "subagent_orchestrator": _mapping(profile.get("subagent_orchestrator")),
+        "timezone": profile.get("timezone"),
+        "max_quoted_fallback_images": settings.get("max_quoted_fallback_images", 20),
+    }
+    kwargs.update(overrides)
+    return MainAgentBuildConfig(**kwargs), max_steps
 
 
 @dataclass(slots=True)
@@ -635,7 +747,6 @@ async def _ensure_persona_and_skills(
         umo=event.unified_msg_origin,
         conversation_persona_id=req.conversation.persona_id,
         platform_name=event.get_platform_name(),
-        provider_settings=cfg,
     )
 
     set_persona_custom_error_message_on_event(

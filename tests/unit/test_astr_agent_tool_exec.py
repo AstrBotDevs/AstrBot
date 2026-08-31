@@ -500,8 +500,6 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
     monkeypatch: pytest.MonkeyPatch,
 ):
     provider_settings = {
-        "fallback_chat_models": ["fallback-provider"],
-        "request_max_retries": 3,
         "streaming_response": True,
     }
     history = [
@@ -541,12 +539,14 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
             "agent_runner": {
                 "runner_type": "local",
                 "config": {
+                    "model": {
+                        "fallback_provider_ids": ["fallback-provider"],
+                        "request_max_retries": 3,
+                    },
                     "misc": {
-                        "max_steps": provider_settings.get("max_agent_step", 30),
-                        "tool_call_timeout": provider_settings.get(
-                            "tool_call_timeout", 120
-                        ),
-                    }
+                        "max_steps": 30,
+                        "tool_call_timeout": 120,
+                    },
                 },
             },
         },
@@ -592,8 +592,9 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
     config = captured["config"]
     assert config.tool_call_timeout == 456
     assert config.streaming_response == provider_settings["streaming_response"]
+    assert config.fallback_provider_ids == ["fallback-provider"]
+    assert config.request_max_retries == 3
     assert config.provider_settings == provider_settings
-    assert config.provider_settings["fallback_chat_models"] == ["fallback-provider"]
     request = captured["req"]
     assert "old question" not in request.system_prompt
     assert "old answer" not in request.system_prompt
@@ -606,18 +607,18 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("provider_settings", "expected_max_step"),
+    ("misc_config", "expected_max_step"),
     [
-        pytest.param({"max_agent_step": 50}, 50, id="configured"),
+        pytest.param({"max_steps": 50}, 50, id="configured"),
         pytest.param({}, 30, id="missing_falls_back_to_default"),
-        pytest.param({"max_agent_step": True}, 30, id="boolean_falls_back_to_default"),
-        pytest.param({"max_agent_step": "50"}, 50, id="numeric_string_coerced"),
-        pytest.param({"max_agent_step": 0}, 1, id="zero_clamped_to_min"),
+        pytest.param({"max_steps": True}, 30, id="boolean_falls_back_to_default"),
+        pytest.param({"max_steps": "50"}, 50, id="numeric_string_coerced"),
+        pytest.param({"max_steps": 0}, 1, id="zero_clamped_to_min"),
     ],
 )
 async def test_background_wakeup_applies_max_agent_step(
     monkeypatch: pytest.MonkeyPatch,
-    provider_settings: dict,
+    misc_config: dict,
     expected_max_step: int,
 ):
     class _StepCapturingRunner:
@@ -660,11 +661,11 @@ async def test_background_wakeup_applies_max_agent_step(
     )
     context = SimpleNamespace(
         get_config=lambda **_kwargs: {
-            "provider_settings": dict(provider_settings),
+            "provider_settings": {},
             "agent_runner": {
                 "runner_type": "local",
                 "config": {
-                    "misc": {"max_steps": provider_settings.get("max_agent_step", 30)}
+                    "misc": dict(misc_config),
                 },
             },
         },

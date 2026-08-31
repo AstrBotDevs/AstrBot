@@ -49,7 +49,6 @@ from astrbot.core.tools.computer_tools import (
 )
 from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
@@ -645,9 +644,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         extra_result_fields: dict[str, T.Any] | None = None,
     ) -> None:
         from astrbot.core.astr_main_agent import (
-            MainAgentBuildConfig,
             _get_session_conv,
             build_main_agent,
+            local_agent_runtime_from_profile,
         )
 
         event = run_context.context.event
@@ -698,26 +697,16 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 metadata=metadata,
             )
         cfg = ctx.get_config(umo=event.unified_msg_origin) or {}
-        provider_settings = cfg.get("provider_settings") or {}
-        max_agent_step = coerce_int_config(
-            cfg.get("agent_runner", {})
-            .get("config", {})
-            .get("misc", {})
-            .get("max_steps", 30),
-            default=30,
-            min_value=1,
-            field_name="agent_runner.config.misc.max_steps",
-        )
         from astrbot.core.streaming_override import resolve_streaming_response
 
-        config = MainAgentBuildConfig(
+        config, max_agent_step = local_agent_runtime_from_profile(
+            cfg,
             tool_call_timeout=run_context.tool_call_timeout,
             streaming_response=await resolve_streaming_response(
                 cron_event,
                 cfg,
                 getattr(ctx, "preferences", None),
             ),
-            provider_settings=provider_settings,
         )
 
         req = ProviderRequest()

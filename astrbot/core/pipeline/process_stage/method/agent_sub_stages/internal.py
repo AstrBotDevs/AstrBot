@@ -25,9 +25,9 @@ from astrbot.core.assistant_history import (
 )
 from astrbot.core.astr_main_agent import (
     LLM_ERROR_MESSAGE_EXTRA_KEY,
-    MainAgentBuildConfig,
     MainAgentBuildResult,
     build_main_agent,
+    local_agent_runtime_from_profile,
 )
 from astrbot.core.conversation_mgr import load_sanitized_history
 from astrbot.core.group_sender_concurrency import (
@@ -93,26 +93,10 @@ class InternalAgentSubStage:
         self.ctx = ctx
         conf = ctx.astrbot_config
         settings = conf["provider_settings"]
-        runner_config = conf["agent_runner"]["config"]
-        model_config = runner_config["model"]
-        persona_config = runner_config["persona"]
-        compression_config = runner_config["compression"]
-        misc_config = runner_config["misc"]
         self.streaming_response: bool = settings["streaming_response"]
         self.unsupported_streaming_strategy: str = settings[
             "unsupported_streaming_strategy"
         ]
-        self.max_step: int = misc_config.get("max_steps", 30)
-        self.tool_call_timeout: int = misc_config.get("tool_call_timeout", 120)
-        self.tool_schema_mode: str = misc_config.get("tool_schema_mode", "full")
-        if self.tool_schema_mode not in ("skills_like", "full"):
-            logger.warning(
-                "Unsupported tool_schema_mode: %s, fallback to skills_like",
-                self.tool_schema_mode,
-            )
-            self.tool_schema_mode = "full"
-        if isinstance(self.max_step, bool):  # workaround: #2622
-            self.max_step = 30
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
         self.show_tool_call_result: bool = settings.get("show_tool_call_result", False)
         self.buffer_intermediate_messages: bool = settings.get(
@@ -120,79 +104,35 @@ class InternalAgentSubStage:
             False,
         )
         self.show_reasoning = settings.get("display_reasoning_text", False)
-        self.sanitize_context_by_modalities: bool = misc_config.get(
-            "sanitize_context_by_modalities",
-            False,
-        )
-        self.kb_agentic_mode: bool = conf.get("kb_agentic_mode", False)
-
-        # 上下文管理相关
-        self.context_limit_reached_strategy: str = compression_config.get(
-            "overflow_strategy", "truncate_by_turns"
-        )
-        self.llm_compress_instruction: str = compression_config.get("instruction", "")
-        self.llm_compress_keep_recent_ratio: float = compression_config.get(
-            "keep_recent_ratio", 0.15
-        )
-        self.llm_compress_provider_id: str = compression_config.get("provider_id", "")
-        self.max_context_length = compression_config.get("max_turns", -1)
-        configured_dequeue_context_length = max(
-            1, compression_config.get("trim_turns", 1)
-        )
-        if self.max_context_length == -1:
-            self.dequeue_context_length = configured_dequeue_context_length
-        else:
-            self.dequeue_context_length = min(
-                configured_dequeue_context_length,
-                self.max_context_length - 1,
-            )
-        if self.dequeue_context_length <= 0:
-            self.dequeue_context_length = 1
-        self.fallback_max_context_tokens: int = compression_config.get(
-            "fallback_max_tokens", 128000
-        )
-
-        self.llm_safety_mode = persona_config.get("safety_mode", True)
-        self.safety_mode_strategy = persona_config.get(
-            "safety_mode_strategy", "system_prompt"
-        )
-
-        self.computer_use_runtime = settings.get("computer_use_runtime")
-        self.sandbox_cfg = settings.get("sandbox", {})
-
-        # Proactive capability configuration
-        proactive_cfg = settings.get("proactive_capability", {})
-        self.add_cron_tools = proactive_cfg.get("add_cron_tools", True)
-
         self.conv_manager = ctx.execution_context.conversation_manager
-
-        self.main_agent_cfg = MainAgentBuildConfig(
-            tool_call_timeout=self.tool_call_timeout,
-            tool_schema_mode=self.tool_schema_mode,
-            sanitize_context_by_modalities=self.sanitize_context_by_modalities,
-            kb_agentic_mode=self.kb_agentic_mode,
-            context_limit_reached_strategy=self.context_limit_reached_strategy,
-            llm_compress_instruction=self.llm_compress_instruction,
-            llm_compress_keep_recent_ratio=self.llm_compress_keep_recent_ratio,
-            llm_compress_provider_id=self.llm_compress_provider_id,
-            max_context_length=self.max_context_length,
-            dequeue_context_length=self.dequeue_context_length,
-            fallback_max_context_tokens=self.fallback_max_context_tokens,
-            llm_safety_mode=self.llm_safety_mode,
-            safety_mode_strategy=self.safety_mode_strategy,
-            computer_use_runtime=self.computer_use_runtime,
-            sandbox_cfg=self.sandbox_cfg,
-            add_cron_tools=self.add_cron_tools,
-            provider_settings={
-                **settings,
-                "default_personality": persona_config.get("persona_id", "default"),
-            },
-            fallback_provider_ids=model_config.get("fallback_provider_ids", []),
-            request_max_retries=model_config.get("request_max_retries", 5),
-            subagent_orchestrator=conf.get("subagent_orchestrator", {}),
+        self.main_agent_cfg, self.max_step = local_agent_runtime_from_profile(
+            conf,
             timezone=self.ctx.execution_context.get_config().get("timezone"),
-            max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
         )
+        self.tool_call_timeout = self.main_agent_cfg.tool_call_timeout
+        self.tool_schema_mode = self.main_agent_cfg.tool_schema_mode
+        self.sanitize_context_by_modalities = (
+            self.main_agent_cfg.sanitize_context_by_modalities
+        )
+        self.kb_agentic_mode = self.main_agent_cfg.kb_agentic_mode
+        self.context_limit_reached_strategy = (
+            self.main_agent_cfg.context_limit_reached_strategy
+        )
+        self.llm_compress_instruction = self.main_agent_cfg.llm_compress_instruction
+        self.llm_compress_keep_recent_ratio = (
+            self.main_agent_cfg.llm_compress_keep_recent_ratio
+        )
+        self.llm_compress_provider_id = self.main_agent_cfg.llm_compress_provider_id
+        self.max_context_length = self.main_agent_cfg.max_context_length
+        self.dequeue_context_length = self.main_agent_cfg.dequeue_context_length
+        self.fallback_max_context_tokens = (
+            self.main_agent_cfg.fallback_max_context_tokens
+        )
+        self.llm_safety_mode = self.main_agent_cfg.llm_safety_mode
+        self.safety_mode_strategy = self.main_agent_cfg.safety_mode_strategy
+        self.computer_use_runtime = self.main_agent_cfg.computer_use_runtime
+        self.sandbox_cfg = self.main_agent_cfg.sandbox_cfg
+        self.add_cron_tools = self.main_agent_cfg.add_cron_tools
 
     def _prepare_group_sender_concurrency(
         self,

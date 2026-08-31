@@ -654,7 +654,6 @@ class TestRunActiveAgentJob:
         """Test active cron agent keeps structured history and provider settings."""
         provider_settings = {
             "tool_call_timeout": 77,
-            "fallback_chat_models": ["fallback-provider"],
         }
         ctx = MagicMock()
         ctx.get_config.return_value = {
@@ -662,11 +661,13 @@ class TestRunActiveAgentJob:
             "agent_runner": {
                 "runner_type": "local",
                 "config": {
+                    "model": {
+                        "fallback_provider_ids": ["fallback-provider"],
+                        "request_max_retries": 4,
+                    },
                     "misc": {
-                        "tool_call_timeout": provider_settings.get(
-                            "tool_call_timeout", 120
-                        )
-                    }
+                        "tool_call_timeout": 77,
+                    },
                 },
             },
         }
@@ -722,8 +723,9 @@ class TestRunActiveAgentJob:
 
         config = captured["config"]
         assert config.tool_call_timeout == 77
-        assert config.provider_settings is provider_settings
-        assert config.provider_settings["fallback_chat_models"] == ["fallback-provider"]
+        assert config.fallback_provider_ids == ["fallback-provider"]
+        assert config.request_max_retries == 4
+        assert config.provider_settings == provider_settings
         request = captured["req"]
         assert "old question" not in request.system_prompt
         assert "old answer" not in request.system_prompt
@@ -731,21 +733,19 @@ class TestRunActiveAgentJob:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        ("provider_settings", "expected_max_step"),
+        ("misc_config", "expected_max_step"),
         [
-            pytest.param({"max_agent_step": 50}, 50, id="configured"),
+            pytest.param({"max_steps": 50}, 50, id="configured"),
             pytest.param({}, 30, id="missing_falls_back_to_default"),
-            pytest.param(
-                {"max_agent_step": True}, 30, id="boolean_falls_back_to_default"
-            ),
-            pytest.param({"max_agent_step": "50"}, 50, id="numeric_string_coerced"),
-            pytest.param({"max_agent_step": 0}, 1, id="zero_clamped_to_min"),
+            pytest.param({"max_steps": True}, 30, id="boolean_falls_back_to_default"),
+            pytest.param({"max_steps": "50"}, 50, id="numeric_string_coerced"),
+            pytest.param({"max_steps": 0}, 1, id="zero_clamped_to_min"),
         ],
     )
     async def test_woke_main_agent_applies_max_agent_step(
-        self, cron_manager, provider_settings, expected_max_step
+        self, cron_manager, misc_config, expected_max_step
     ):
-        """Test the cron agent runner receives max_agent_step from provider settings."""
+        """Test the cron agent runner receives max_steps from agent_runner config."""
 
         class _StepCapturingRunner:
             def __init__(self):
@@ -765,11 +765,11 @@ class TestRunActiveAgentJob:
 
         ctx = MagicMock()
         ctx.get_config.return_value = {
-            "provider_settings": dict(provider_settings),
+            "provider_settings": {},
             "agent_runner": {
                 "runner_type": "local",
                 "config": {
-                    "misc": {"max_steps": provider_settings.get("max_agent_step", 30)}
+                    "misc": dict(misc_config),
                 },
             },
         }

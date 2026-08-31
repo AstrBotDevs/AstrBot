@@ -19,7 +19,6 @@ from astrbot.core.db.po import CronJob
 from astrbot.core.db.protocols import CronStore
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
-from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.task_utils import cancel_tracked_tasks, create_tracked_task
 
@@ -396,9 +395,9 @@ class CronJobManager:
     ) -> None:
         """Woke the main agent to handle the cron job message."""
         from astrbot.core.astr_main_agent import (
-            MainAgentBuildConfig,
             _get_session_conv,
             build_main_agent,
+            local_agent_runtime_from_profile,
         )
         from astrbot.core.astr_main_agent_resources import (
             PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT,
@@ -426,20 +425,10 @@ class CronJobManager:
         umo = cron_event.unified_msg_origin
         cfg = self.ctx.get_config(umo=umo)
 
-        provider_settings = cfg.get("provider_settings", {})
-        misc_config = cfg.get("agent_runner", {}).get("config", {}).get("misc", {})
-        tool_call_timeout = misc_config.get("tool_call_timeout", 120)
-        max_agent_step = coerce_int_config(
-            misc_config.get("max_steps", 30),
-            default=30,
-            min_value=1,
-            field_name="agent_runner.config.misc.max_steps",
-        )
-        config = MainAgentBuildConfig(
-            tool_call_timeout=tool_call_timeout,
+        config, max_agent_step = local_agent_runtime_from_profile(
+            cfg,
             llm_safety_mode=False,
             streaming_response=False,
-            provider_settings=provider_settings,
         )
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
