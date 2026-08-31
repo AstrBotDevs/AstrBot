@@ -24,7 +24,14 @@ async def test_empty_mention_reply_respects_provider_wake_prefix(
     messages,
     should_request_llm,
 ):
-    """Only request an immediate LLM reply when no extra prefix is required."""
+    """Verify that empty-mention replies respect the additional LLM wake prefix.
+
+    Args:
+        monkeypatch: Pytest fixture used to replace the 60-second session waiter.
+        provider_wake_prefix: Additional LLM wake prefix configured for the provider.
+        messages: Message components passed to the empty-mention handler.
+        should_request_llm: Whether an immediate LLM request should be produced.
+    """
 
     def skip_waiting(_timeout):
         def decorator(_callback):
