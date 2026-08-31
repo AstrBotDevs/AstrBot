@@ -41,6 +41,11 @@ withDefaults(defineProps<{
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.07) !important;
 }
 
+.v-overlay.v-menu .v-overlay__content > .styled-menu-card:not(.styled-menu-card-borderless) {
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.09) !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.07) !important;
+}
+
 .styled-menu-card-borderless {
   border: 0 !important;
 }

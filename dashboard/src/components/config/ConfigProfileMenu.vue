@@ -202,6 +202,11 @@ function openManager() {
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.07) !important;
 }
 
+:global(.v-overlay.v-menu .v-overlay__content > .config-profile-menu) {
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.09) !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.07) !important;
+}
+
 .config-profile-menu__body {
   padding: 10px;
 }
