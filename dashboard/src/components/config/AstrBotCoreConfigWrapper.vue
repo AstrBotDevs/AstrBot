@@ -28,6 +28,26 @@
         />
 
         <section
+          v-else-if="section.key === 'plugin_group' && tab === section.key"
+          class="config-plugin-section"
+        >
+          <header class="config-standard-section__heading">
+            <h2 class="config-standard-section__title">
+              {{ sharedTm('pluginSetSelector.title') }}
+            </h2>
+            <p class="config-plugin-section__subtitle">
+              {{ sharedTm('pluginSetSelector.subtitle') }}
+            </p>
+          </header>
+
+          <PluginSetSelector
+            v-model="config_data.plugin_set"
+            :search-keyword="searchKeyword"
+            inline
+          />
+        </section>
+
+        <section
           v-else-if="tab === section.key"
           class="config-standard-section"
         >
@@ -76,6 +96,7 @@
 <script>
 import AiConfigPanel from '@/components/config/AiConfigPanel.vue';
 import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
+import PluginSetSelector from '@/components/shared/PluginSetSelector.vue';
 import { useModuleI18n } from '@/i18n/composables';
 
 const SECTION_ORDER = ['ai_group', 'plugin_group', 'platform_group', 'ext_group'];
@@ -90,7 +111,8 @@ export default {
   name: 'AstrBotCoreConfigWrapper',
   components: {
     AiConfigPanel,
-    AstrBotConfigV4
+    AstrBotConfigV4,
+    PluginSetSelector
   },
   props: {
     metadata: {
@@ -115,6 +137,7 @@ export default {
   setup() {
     const { tm: tmConfig } = useModuleI18n('features/config');
     const { tm: tmMetadata } = useModuleI18n('features/config-metadata');
+    const { tm: sharedTm } = useModuleI18n('core/shared');
 
     const tm = (key) => {
       const metadataResult = tmMetadata(key);
@@ -124,7 +147,7 @@ export default {
       return tmConfig(key);
     };
 
-    return { tm };
+    return { tm, sharedTm };
   },
   data() {
     return {
@@ -150,7 +173,10 @@ export default {
       if (!this.normalizedSearchKeyword) {
         return allSections;
       }
-      return allSections.filter((section) => this.sectionHasSearchMatch(section.value));
+      return allSections.filter((section) => (
+        (section.key === 'plugin_group' && this.tab === 'plugin_group')
+        || this.sectionHasSearchMatch(section.value)
+      ));
     }
   },
   watch: {
@@ -282,6 +308,13 @@ export default {
   font-weight: 780;
   letter-spacing: 0;
   line-height: 1.25;
+}
+
+.config-plugin-section__subtitle {
+  margin: 6px 0 0;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  font-size: 0.8rem;
+  line-height: 1.45;
 }
 
 .config-standard-section__groups,
