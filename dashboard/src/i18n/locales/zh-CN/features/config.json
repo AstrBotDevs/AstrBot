@@ -79,7 +79,9 @@
     "runnerDialog": {
       "title": "更换执行方式",
       "subtitle": "只有在接入外部 AI 应用时才需要更改。大多数用户使用内置 AI 即可。",
-      "warning": "切换后会使用新执行方式的默认配置，当前执行参数不会保留。",
+      "warningPrefix": "切换后会使用新执行方式的默认配置，当前执行方式的配置",
+      "warningEmphasis": "不会保留",
+      "warningSuffix": "。",
       "confirm": "使用此方式"
     },
     "runners": {

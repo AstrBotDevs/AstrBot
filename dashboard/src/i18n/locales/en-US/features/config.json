@@ -79,7 +79,9 @@
     "runnerDialog": {
       "title": "Change Execution Mode",
       "subtitle": "Change this only when connecting an external AI application. Built-in AI is suitable for most users.",
-      "warning": "Switching loads the new mode's defaults and discards the current execution parameters.",
+      "warningPrefix": "Switching will use the new execution mode's default configuration. The current execution mode's configuration ",
+      "warningEmphasis": "will not be retained",
+      "warningSuffix": ".",
       "confirm": "Use This Mode"
     },
     "runners": {

@@ -161,17 +161,32 @@
             </button>
           </div>
 
-          <div class="runner-dialog-warning">
-            <v-icon size="17">mdi-alert-circle-outline</v-icon>
-            <span>{{ tm('aiSettings.runnerDialog.warning') }}</span>
-          </div>
+          <v-checkbox
+            v-model="runnerChangeAcknowledged"
+            class="runner-dialog-acknowledgement"
+            color="primary"
+            density="compact"
+            hide-details
+            :disabled="pendingRunnerType === runnerType"
+          >
+            <template #label>
+              <span class="runner-dialog-acknowledgement__label">
+                {{ tm('aiSettings.runnerDialog.warningPrefix') }}<strong>{{ tm('aiSettings.runnerDialog.warningEmphasis') }}</strong>{{ tm('aiSettings.runnerDialog.warningSuffix') }}
+              </span>
+            </template>
+          </v-checkbox>
         </v-card-text>
         <v-card-actions class="pa-4 pt-2">
           <v-spacer />
           <v-btn variant="text" @click="runnerDialog = false">
             {{ tm('buttons.cancel') }}
           </v-btn>
-          <v-btn color="primary" variant="tonal" @click="confirmRunnerChange">
+          <v-btn
+            color="primary"
+            variant="tonal"
+            :disabled="pendingRunnerType === runnerType || !runnerChangeAcknowledged"
+            @click="confirmRunnerChange"
+          >
             {{ tm('aiSettings.runnerDialog.confirm') }}
           </v-btn>
         </v-card-actions>
@@ -208,6 +223,7 @@ const { tm } = useModuleI18n('features/config');
 
 const runnerDialog = ref(false);
 const pendingRunnerType = ref('local');
+const runnerChangeAcknowledged = ref(false);
 const activeLocalTab = ref('model');
 
 const aiEnabled = computed({
@@ -356,8 +372,13 @@ watch(runnerType, () => {
   activeLocalTab.value = 'model';
 });
 
+watch(pendingRunnerType, () => {
+  runnerChangeAcknowledged.value = false;
+});
+
 function openRunnerDialog() {
   pendingRunnerType.value = runnerType.value;
+  runnerChangeAcknowledged.value = false;
   runnerDialog.value = true;
 }
 
@@ -371,6 +392,7 @@ function confirmRunnerChange() {
     props.configData.agent_runner.runner_type = nextRunnerType;
     props.configData.agent_runner.config = JSON.parse(JSON.stringify(defaults));
   }
+  runnerChangeAcknowledged.value = false;
   runnerDialog.value = false;
 }
 </script>
@@ -582,14 +604,18 @@ function confirmRunnerChange() {
   color: rgba(var(--v-theme-on-surface), 0.28);
 }
 
-.runner-dialog-warning {
-  display: flex;
-  align-items: flex-start;
-  gap: 7px;
+.runner-dialog-acknowledgement {
   margin-top: 14px;
+}
+
+.runner-dialog-acknowledgement__label {
   color: rgba(var(--v-theme-on-surface), 0.58);
   font-size: 0.76rem;
   line-height: 1.45;
+}
+
+.runner-dialog-acknowledgement__label strong {
+  font-weight: 700;
 }
 
 @media (max-width: 600px) {
