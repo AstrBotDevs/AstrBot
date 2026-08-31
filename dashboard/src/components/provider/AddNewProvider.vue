@@ -6,10 +6,6 @@
     >
       <v-card-text class="add-provider-dialog__content">
         <v-tabs v-model="activeProviderTab" grow>
-          <v-tab value="agent_runner" class="font-weight-medium px-3">
-            <v-icon start>mdi-cogs</v-icon>
-            {{ tm('dialogs.addProvider.tabs.agentRunner') }}
-          </v-tab>
           <v-tab value="speech_to_text" class="font-weight-medium px-3">
             <v-icon start>mdi-microphone-message</v-icon>
             {{ tm('dialogs.addProvider.tabs.speechToText') }}
@@ -111,7 +107,6 @@ import {
 
 type ProviderTab =
   | 'chat_completion'
-  | 'agent_runner'
   | 'speech_to_text'
   | 'text_to_speech'
   | 'embedding'
@@ -130,7 +125,6 @@ interface ProviderTemplateMetadata {
 }
 
 const AVAILABLE_PROVIDER_TABS: ProviderTab[] = [
-  'agent_runner',
   'speech_to_text',
   'text_to_speech',
   'embedding',
@@ -151,7 +145,7 @@ const props = withDefaults(
   {
     show: false,
     metadata: () => ({}),
-    currentProviderType: 'agent_runner',
+    currentProviderType: 'speech_to_text',
   },
 );
 
@@ -162,7 +156,7 @@ const emit = defineEmits<{
 
 const { tm } = useModuleI18n('features/provider');
 
-const activeProviderTab = ref<ProviderTab>('agent_runner');
+const activeProviderTab = ref<ProviderTab>('speech_to_text');
 
 const showDialog = computed({
   get: () => props.show,
@@ -193,7 +187,7 @@ function syncActiveProviderTab() {
     props.currentProviderType,
   )
     ? props.currentProviderType
-    : 'agent_runner';
+    : 'speech_to_text';
 }
 
 function closeDialog() {

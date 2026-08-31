@@ -42,8 +42,19 @@
           "timeout": {
             "description": "超时时间（秒）"
           },
-          "proxy": {
-            "description": "代理地址"
+          "max_steps": {
+            "description": "工具调用轮数上限"
+          },
+          "persona_id": {
+            "description": "默认采用的人格"
+          },
+          "proxy_mode": {
+            "description": "代理模式",
+            "hint": "inherit 跟随全局代理；direct 明确直连并忽略环境变量；custom 仅使用本项 proxy_url。"
+          },
+          "proxy_url": {
+            "description": "自定义代理 URL",
+            "hint": "仅在 proxy_mode=custom 时使用，例如 http://127.0.0.1:7890"
           }
         }
       }
@@ -67,8 +78,19 @@
           "timeout": {
             "description": "超时时间（秒）"
           },
-          "proxy": {
-            "description": "代理地址"
+          "max_steps": {
+            "description": "工具调用轮数上限"
+          },
+          "persona_id": {
+            "description": "默认采用的人格"
+          },
+          "proxy_mode": {
+            "description": "代理模式",
+            "hint": "inherit 跟随全局代理；direct 明确直连并忽略环境变量；custom 仅使用本项 proxy_url。"
+          },
+          "proxy_url": {
+            "description": "自定义代理 URL",
+            "hint": "仅在 proxy_mode=custom 时使用，例如 http://127.0.0.1:7890"
           }
         }
       }
@@ -103,8 +125,19 @@
           "timeout": {
             "description": "超时时间（秒）"
           },
-          "proxy": {
-            "description": "代理地址"
+          "max_steps": {
+            "description": "工具调用轮数上限"
+          },
+          "persona_id": {
+            "description": "默认采用的人格"
+          },
+          "proxy_mode": {
+            "description": "代理模式",
+            "hint": "inherit 跟随全局代理；direct 明确直连并忽略环境变量；custom 仅使用本项 proxy_url。"
+          },
+          "proxy_url": {
+            "description": "自定义代理 URL",
+            "hint": "仅在 proxy_mode=custom 时使用，例如 http://127.0.0.1:7890"
           }
         }
       }
@@ -146,8 +179,19 @@
           "timeout": {
             "description": "超时时间（秒）"
           },
-          "proxy": {
-            "description": "代理地址"
+          "max_steps": {
+            "description": "工具调用轮数上限"
+          },
+          "persona_id": {
+            "description": "默认采用的人格"
+          },
+          "proxy_mode": {
+            "description": "代理模式",
+            "hint": "inherit 跟随全局代理；direct 明确直连并忽略环境变量；custom 仅使用本项 proxy_url。"
+          },
+          "proxy_url": {
+            "description": "自定义代理 URL",
+            "hint": "仅在 proxy_mode=custom 时使用，例如 http://127.0.0.1:7890"
           }
         }
       }

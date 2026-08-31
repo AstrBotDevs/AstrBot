@@ -511,10 +511,13 @@ describe('high-value coverage mounts', () => {
     settingsTab.unmount();
 
     const provider = mountWithVuetify(AddNewProvider, {
+      props: { show: true },
       global: { stubs: monacoStubs },
     });
     await flushPromises();
     expect(provider.exists()).toBe(true);
+    expect(provider.text()).not.toMatch(/Agent Runner|Agent 执行器/);
+    expect(provider.html()).not.toContain('value="agent_runner"');
     provider.unmount();
   });
 });

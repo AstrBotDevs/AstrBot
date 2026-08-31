@@ -48,8 +48,19 @@
           "timeout": {
             "description": "Timeout (seconds)"
           },
-          "proxy": {
-            "description": "Proxy URL"
+          "max_steps": {
+            "description": "Maximum tool-call steps"
+          },
+          "persona_id": {
+            "description": "Default persona"
+          },
+          "proxy_mode": {
+            "description": "Proxy mode",
+            "hint": "inherit follows the global proxy; direct connects without environment proxies; custom uses only this proxy_url."
+          },
+          "proxy_url": {
+            "description": "Custom proxy URL",
+            "hint": "Used only when proxy_mode=custom, for example http://127.0.0.1:7890"
           }
         }
       }
@@ -73,8 +84,19 @@
           "timeout": {
             "description": "Timeout (seconds)"
           },
-          "proxy": {
-            "description": "Proxy URL"
+          "max_steps": {
+            "description": "Maximum tool-call steps"
+          },
+          "persona_id": {
+            "description": "Default persona"
+          },
+          "proxy_mode": {
+            "description": "Proxy mode",
+            "hint": "inherit follows the global proxy; direct connects without environment proxies; custom uses only this proxy_url."
+          },
+          "proxy_url": {
+            "description": "Custom proxy URL",
+            "hint": "Used only when proxy_mode=custom, for example http://127.0.0.1:7890"
           }
         }
       }
@@ -109,8 +131,19 @@
           "timeout": {
             "description": "Timeout (seconds)"
           },
-          "proxy": {
-            "description": "Proxy URL"
+          "max_steps": {
+            "description": "Maximum tool-call steps"
+          },
+          "persona_id": {
+            "description": "Default persona"
+          },
+          "proxy_mode": {
+            "description": "Proxy mode",
+            "hint": "inherit follows the global proxy; direct connects without environment proxies; custom uses only this proxy_url."
+          },
+          "proxy_url": {
+            "description": "Custom proxy URL",
+            "hint": "Used only when proxy_mode=custom, for example http://127.0.0.1:7890"
           }
         }
       }
@@ -152,8 +185,19 @@
           "timeout": {
             "description": "Timeout (seconds)"
           },
-          "proxy": {
-            "description": "Proxy URL"
+          "max_steps": {
+            "description": "Maximum tool-call steps"
+          },
+          "persona_id": {
+            "description": "Default persona"
+          },
+          "proxy_mode": {
+            "description": "Proxy mode",
+            "hint": "inherit follows the global proxy; direct connects without environment proxies; custom uses only this proxy_url."
+          },
+          "proxy_url": {
+            "description": "Custom proxy URL",
+            "hint": "Used only when proxy_mode=custom, for example http://127.0.0.1:7890"
           }
         }
       }

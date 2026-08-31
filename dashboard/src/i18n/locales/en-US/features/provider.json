@@ -1,6 +1,6 @@
 {
   "title": "Providers",
-  "subtitle": "Can configure chat models in \"Chat Completion\". Additionally, \"Agent Runner\" includes integrations with third-party services like Dify, Coze, and Alibaba Bailian(DashScope).",
+  "subtitle": "Configure chat models under Chat Completion, and manage speech, embedding, and rerank providers in the other tabs. Agent Runners are configured on the profile Config page.",
   "providers": {
     "title": "Service Providers",
     "settings": "Settings",
@@ -11,7 +11,6 @@
     "tabs": {
       "all": "All",
       "chatCompletion": "Chat Completion",
-      "agentRunner": "Agent Runner",
       "speechToText": "Speech to Text",
       "textToSpeech": "Text to Speech",
       "embedding": "Embedding",
@@ -51,7 +50,6 @@
       "title": "Service Provider",
       "tabs": {
         "basic": "Basic",
-        "agentRunner": "Agent Runner",
         "speechToText": "Speech to Text",
         "textToSpeech": "Text to Speech",
         "embedding": "Embedding",
