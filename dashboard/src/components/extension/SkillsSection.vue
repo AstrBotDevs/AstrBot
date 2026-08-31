@@ -620,6 +620,7 @@
       v-model="editorDialog.show"
       max-width="1180px"
       scrollable
+      :fullscreen="$vuetify.display.mdAndDown"
       :persistent="editorDialog.saving"
     >
       <v-card class="skill-editor-dialog">
@@ -2594,13 +2595,24 @@ onMounted(async () => {
 }
 
 @media (max-width: 860px) {
+  .skill-editor-dialog {
+    height: auto;
+    max-height: none;
+    overflow-y: auto;
+  }
+
   .skill-editor {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
     min-height: 0;
   }
 
   .skill-editor__files {
-    max-height: 240px;
+    max-height: 20vh;
+  }
+
+  .skill-editor__monaco {
+    min-height: 40vh;
   }
 
   .skills-upload-capabilities {

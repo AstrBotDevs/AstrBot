@@ -22,4 +22,11 @@ describe('SkillsSection builtin presets', () => {
     expect(skillsSection).toContain('skill-list-item--inactive');
     expect(skillsSection).toContain("tm('skills.pluginDisabled')");
   });
+
+  it('opens the skill editor fullscreen on compact viewports', () => {
+    expect(skillsSection).toContain(':fullscreen="$vuetify.display.mdAndDown"');
+    expect(skillsSection).toContain('max-height: none;');
+    expect(skillsSection).toContain('overflow-y: auto;');
+    expect(skillsSection).toContain('min-height: 40vh;');
+  });
 });
