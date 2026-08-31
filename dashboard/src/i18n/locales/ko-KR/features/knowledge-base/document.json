@@ -1,0 +1,55 @@
+{
+  "title": "문서 상세",
+  "backToKB": "지식 베이스로 돌아가기",
+  "info": {
+    "title": "문서 정보",
+    "name": "문서 이름",
+    "type": "파일 유형",
+    "size": "파일 크기",
+    "chunkCount": "청크 수",
+    "createdAt": "업로드 시간"
+  },
+  "chunks": {
+    "title": "청크",
+    "empty": "청크 없음",
+    "index": "번호",
+    "content": "내용",
+    "charCount": "문자 수",
+    "actions": "작업",
+    "view": "보기",
+    "edit": "편집",
+    "delete": "삭제",
+    "preview": "미리보기",
+    "search": "청크 검색",
+    "searchPlaceholder": "청크를 검색할 키워드를 입력하세요...",
+    "showing": "표시 중",
+    "deleteConfirm": "이 청크를 삭제하시겠습니까?",
+    "deleteSuccess": "청크가 삭제되었습니다",
+    "deleteFailed": "청크 삭제 실패"
+  },
+  "edit": {
+    "title": "청크 편집",
+    "content": "청크 내용",
+    "cancel": "취소",
+    "save": "저장",
+    "saveSuccess": "청크가 저장되었습니다",
+    "saveFailed": "청크 저장 실패"
+  },
+  "delete": {
+    "title": "청크 삭제",
+    "confirmText": "이 청크를 삭제하시겠습니까?",
+    "warning": "이 작업은 되돌릴 수 없으며 지식 베이스 검색 성능에 영향을 줄 수 있습니다.",
+    "cancel": "취소",
+    "confirm": "삭제",
+    "deleteSuccess": "청크가 삭제되었습니다",
+    "deleteFailed": "청크 삭제 실패"
+  },
+  "view": {
+    "title": "청크 세부 정보",
+    "index": "번호",
+    "content": "내용",
+    "charCount": "문자 수",
+    "vecDocId": "벡터 ID",
+    "close": "닫기"
+  }
+}

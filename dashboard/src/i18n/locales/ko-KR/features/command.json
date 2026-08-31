@@ -1,0 +1,95 @@
+{
+  "title": "명령어 관리",
+  "summary": {
+    "total": "표시된 명령어",
+    "disabled": "비활성화됨",
+    "conflicts": "충돌"
+  },
+  "conflictAlert": {
+    "title": "명령어 충돌 감지됨",
+    "description": "충돌하는 명령어가 {count}개 있습니다. 충돌하는 명령어는 여러 플러그인을 동시에 실행시켜 예상치 못한 동작을 일으킬 수 있습니다.",
+    "hint": "\"이름 변경\" 버튼을 클릭해 충돌하는 명령어의 이름을 변경하고 충돌을 해결하세요."
+  },
+  "table": {
+    "headers": {
+      "command": "명령어",
+      "type": "유형",
+      "plugin": "플러그인",
+      "description": "설명",
+      "permission": "권한",
+      "status": "상태",
+      "actions": "작업"
+    }
+  },
+  "type": {
+    "command": "명령어",
+    "group": "그룹",
+    "subCommand": "하위 명령어"
+  },
+  "status": {
+    "enabled": "활성화됨",
+    "disabled": "비활성화됨",
+    "conflict": "충돌"
+  },
+  "permission": {
+    "everyone": "모든 사용자",
+    "admin": "관리자"
+  },
+  "tooltips": {
+    "enable": "명령어 활성화",
+    "disable": "명령어 비활성화",
+    "rename": "명령어 이름 변경",
+    "viewDetails": "세부 정보 보기"
+  },
+  "dialogs": {
+    "rename": {
+      "title": "명령어 이름 변경",
+      "newName": "새 명령어 이름",
+      "aliases": "별칭 관리",
+      "addAlias": "별칭 추가",
+      "cancel": "취소",
+      "confirm": "확인"
+    },
+    "details": {
+      "title": "명령어 세부 정보",
+      "type": "명령어 유형",
+      "handler": "핸들러",
+      "module": "모듈 경로",
+      "originalCommand": "원본 명령어",
+      "effectiveCommand": "적용된 명령어",
+      "parentGroup": "상위 그룹",
+      "subCommands": "하위 명령어",
+      "aliases": "별칭",
+      "permission": "권한",
+      "conflictStatus": "충돌 상태"
+    }
+  },
+  "messages": {
+    "toggleSuccess": "명령어 상태가 업데이트되었습니다",
+    "toggleFailed": "명령어 상태 업데이트 실패",
+    "renameSuccess": "명령어 이름이 변경되었습니다",
+    "renameFailed": "이름 변경 실패",
+    "loadFailed": "명령어 불러오기 실패",
+    "updateSuccess": "업데이트 성공",
+    "updateFailed": "업데이트 실패"
+  },
+  "search": {
+    "placeholder": "명령어 검색..."
+  },
+  "empty": {
+    "noCommands": "명령어 없음",
+    "noCommandsDesc": "명령어를 찾을 수 없습니다"
+  },
+  "filters": {
+    "all": "전체",
+    "enabled": "활성화됨",
+    "disabled": "비활성화됨",
+    "conflict": "충돌",
+    "byPlugin": "플러그인별 필터",
+    "byType": "유형별 필터",
+    "byPermission": "권한별 필터",
+    "byStatus": "상태별 필터",
+    "showSystemPlugins": "시스템 플러그인 명령어 표시",
+    "systemPluginConflictHint": "시스템 플러그인 충돌이 감지되었습니다. 충돌을 해결하면 숨겨집니다."
+  }
+}

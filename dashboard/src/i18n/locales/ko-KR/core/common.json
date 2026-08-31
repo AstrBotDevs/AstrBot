@@ -1,0 +1,143 @@
+{
+  "save": "저장",
+  "cancel": "취소",
+  "close": "닫기",
+  "copy": "복사",
+  "copied": "복사됨",
+  "copyFailed": "복사 실패",
+  "delete": "삭제",
+  "edit": "편집",
+  "add": "추가",
+  "confirm": "확인",
+  "loading": "로딩 중...",
+  "success": "성공",
+  "error": "오류",
+  "warning": "경고",
+  "info": "정보",
+  "name": "이름",
+  "description": "설명",
+  "author": "작성자",
+  "status": "상태",
+  "actions": "작업",
+  "enable": "활성화",
+  "disable": "비활성화",
+  "enabled": "활성화됨",
+  "disabled": "비활성화됨",
+  "reload": "다시 불러오기",
+  "configure": "구성",
+  "install": "설치",
+  "uninstall": "제거",
+  "update": "업데이트",
+  "language": "언어",
+  "settings": "설정",
+  "locale": "ko-KR",
+  "type": "유형",
+  "press": "누르기",
+  "longPress": "길게 누르기",
+  "yes": "예",
+  "no": "아니요",
+  "imagePreview": "이미지 미리보기",
+  "autoDetect": "자동 감지",
+  "dialog": {
+    "confirmTitle": "작업 확인",
+    "confirmMessage": "이 작업을 실행하시겠습니까?",
+    "confirmButton": "확인",
+    "cancelButton": "취소"
+  },
+  "restart": {
+    "waiting": "AstrBot이 재시작되기를 기다리는 중...",
+    "maxRetriesReached": "최대 재시도 횟수에 도달했습니다. 수동으로 확인해주세요."
+  },
+  "upgradeRecovery": {
+    "title": "업그레이드 후 재시작 필요",
+    "description": "WebUI는 {dashboardVersion}(으)로 업데이트되었지만, AstrBot Core는 아직 {coreVersion}입니다. 이는 대개 업그레이드 도중 페이지를 새로고침하여 재시작 과정이 중단되었을 때 발생합니다. 재시작해도 문제가 해결되지 않으면 AstrBot 실행 디렉터리의 data/dist 폴더를 삭제한 후 AstrBot을 다시 시작해보세요.",
+    "hint": "백엔드를 재시작하면 업그레이드가 완료됩니다. AstrBot이 복구되면 이 페이지는 자동으로 새로고침됩니다.",
+    "restartButton": "백엔드 재시작",
+    "laterButton": "나중에",
+    "restarting": "백엔드 재시작을 요청하는 중...",
+    "waiting": "재시작이 요청되었습니다. 백엔드가 복구되기를 기다리는 중...",
+    "failed": "재시작 요청에 실패했습니다. AstrBot을 수동으로 재시작해주세요."
+  },
+  "readme": {
+    "title": "플러그인 문서",
+    "buttons": {
+      "viewOnGithub": "GitHub에서 저장소 보기",
+      "refresh": "문서 새로고침"
+    },
+    "loading": "README 문서를 불러오는 중...",
+    "errors": {
+      "fetchFailed": "README를 가져오지 못했습니다",
+      "fetchError": "README를 가져오는 중 오류가 발생했습니다"
+    },
+    "empty": {
+      "title": "이 플러그인은 문서 링크나 GitHub 저장소 주소를 제공하지 않습니다.",
+      "subtitle": "플러그인 마켓을 확인하거나 플러그인 작성자에게 문의해주세요."
+    }
+  },
+  "changelog": {
+    "title": "변경 이력",
+    "loading": "변경 이력을 불러오는 중...",
+    "empty": {
+      "title": "이 플러그인에는 변경 이력이 없습니다",
+      "subtitle": "개발자는 플러그인 디렉터리에 CHANGELOG.md 파일을 추가해 변경 이력을 제공할 수 있습니다"
+    }
+  },
+  "editor": {
+    "fullscreen": "전체 화면으로 편집",
+    "editingTitle": "내용 편집 중"
+  },
+  "templateList": {
+    "addEntry": "항목 추가",
+    "empty": "아직 항목이 없습니다. 템플릿을 선택해 추가해주세요",
+    "missingTemplate": "템플릿을 찾을 수 없습니다. 제거 후 다시 추가해주세요.",
+    "unknownTemplate": "템플릿이 지정되지 않음"
+  },
+  "list": {
+    "addItemPlaceholder": "새 항목 추가, Enter 키로 확인",
+    "addButton": "추가",
+    "addMore": "더 추가",
+    "batchImport": "일괄 가져오기",
+    "batchImportTitle": "일괄 가져오기",
+    "batchImportLabel": "한 줄에 항목 하나씩",
+    "batchImportPlaceholder": "예시:\n항목 1\n항목 2\n항목 3\n항목 4",
+    "batchImportHint": "각 줄은 별도의 항목으로 처리되며, 빈 줄은 무시됩니다",
+    "batchImportButton": "{count}개 항목 가져오기",
+    "noItems": "항목 없음",
+    "noItemsHint": "아직 항목이 없습니다. 위 입력란에 입력한 후 Enter 키를 눌러 추가하세요",
+    "inputPlaceholder": "입력 후 Enter 키를 눌러 추가",
+    "editTitle": "목록 항목 편집",
+    "modifyButton": "수정"
+  },
+  "itemCard": {
+    "enabled": "활성화됨",
+    "disabled": "비활성화됨",
+    "delete": "삭제",
+    "edit": "편집",
+    "copy": "복사",
+    "noData": "사용 가능한 데이터 없음"
+  },
+  "objectEditor": {
+    "dialogTitle": "키-값 쌍 편집",
+    "noItems": "항목 없음",
+    "noParams": "매개변수 없음",
+    "presets": "프리셋",
+    "newKeyLabel": "새 키",
+    "valueTypeLabel": "값 유형",
+    "keyExists": "이미 존재하는 키입니다",
+    "invalidJson": "잘못된 JSON 형식입니다",
+    "placeholders": {
+      "keyName": "키",
+      "stringValue": "문자열 값",
+      "numberValue": "숫자 값",
+      "jsonValue": "JSON"
+    }
+  },
+  "firstNotice": {
+    "title": "최초 공지",
+    "loading": "최초 공지를 불러오는 중...",
+    "empty": {
+      "title": "표시할 최초 공지 내용이 없습니다",
+      "subtitle": "FIRST_NOTICE.md 파일을 찾을 수 없거나 비어 있습니다."
+    }
+  }
+}
