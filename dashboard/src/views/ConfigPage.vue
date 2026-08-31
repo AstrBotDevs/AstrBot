@@ -3,26 +3,29 @@
   <div class="config-page-shell">
     <div v-if="selectedConfigID || isSystemConfig" class="config-panel">
 
-      <div
-        class="config-toolbar"
-        :class="{ 'config-toolbar--searching': configSearchExpanded }"
-      >
-        <div class="config-toolbar-controls">
-          <ConfigProfileMenu
-            v-if="!isSystemConfig"
-            :model-value="selectedConfigID || ''"
-            :items="configInfoList"
-            :disabled="initialConfigId !== null"
-            @select="onConfigSelect"
-            @manage="configManageDialog = true"
-          />
-        </div>
+      <div class="config-toolbar-sticky">
+        <div
+          class="config-toolbar"
+          :class="{ 'config-toolbar--searching': configSearchExpanded }"
+        >
+          <div class="config-toolbar-controls">
+            <ConfigProfileMenu
+              v-if="!isSystemConfig"
+              :model-value="selectedConfigID || ''"
+              :items="configInfoList"
+              :disabled="initialConfigId !== null"
+              @select="onConfigSelect"
+              @manage="configManageDialog = true"
+            />
+          </div>
 
-        <div class="config-toolbar-actions">
-          <div class="config-search-control">
-            <v-expand-x-transition mode="out-in">
+          <div class="config-toolbar-actions">
+            <div
+              class="config-search-control"
+              :class="{ 'config-search-control--expanded': configSearchExpanded }"
+            >
               <v-text-field
-                v-if="configSearchExpanded"
+                v-show="configSearchExpanded"
                 ref="configSearchInput"
                 class="config-search-input"
                 :model-value="configSearchKeyword"
@@ -39,7 +42,7 @@
                 @click:append-inner="closeConfigSearch"
               />
               <v-btn
-                v-else
+                v-show="!configSearchExpanded"
                 icon="mdi-magnify"
                 size="small"
                 variant="text"
@@ -47,18 +50,18 @@
                 :title="tm('search.placeholder')"
                 @click="openConfigSearch"
               />
-            </v-expand-x-transition>
+            </div>
           </div>
         </div>
-      </div>
-      <div class="config-toolbar-separator">
-        <v-divider />
-        <v-progress-linear
-          v-if="!fetched"
-          indeterminate
-          color="primary"
-          class="config-loading"
-        />
+        <div class="config-toolbar-separator">
+          <v-divider />
+          <v-progress-linear
+            v-if="!fetched"
+            indeterminate
+            color="primary"
+            class="config-loading"
+          />
+        </div>
       </div>
 
       <v-slide-y-transition mode="out-in">
@@ -1015,6 +1018,27 @@ export default {
   padding: 0 18px 48px;
 }
 
+.config-toolbar-sticky {
+  position: sticky;
+  top: calc(var(--v-layout-top, 64px));
+  z-index: 20;
+  isolation: isolate;
+  margin-bottom: 28px;
+}
+
+.config-toolbar-sticky::before {
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: calc(100vw - var(--v-layout-left, 0px));
+  max-width: 100vw;
+  transform: translateX(-50%);
+  background: rgb(var(--v-theme-containerBg));
+  content: '';
+}
+
 .config-toolbar {
   display: flex;
   align-items: center;
@@ -1038,15 +1062,23 @@ export default {
 }
 
 .config-search-input {
-  width: min(320px, 42vw);
-  min-width: 260px;
+  width: 100%;
+  min-width: 0;
 }
 
 .config-search-control {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  width: 36px;
   min-width: 36px;
+  overflow: hidden;
+  transition: width 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.config-search-control--expanded {
+  width: min(320px, 42vw);
 }
 
 .config-toolbar :is(.v-field) {
@@ -1058,7 +1090,6 @@ export default {
   width: calc(100vw - var(--v-layout-left, 0px));
   max-width: 100vw;
   height: 1px;
-  margin-bottom: 28px;
   margin-left: 50%;
   transform: translateX(-50%);
 }

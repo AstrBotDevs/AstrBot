@@ -211,7 +211,7 @@ export default {
 
 .config-workspace__nav {
   position: sticky;
-  top: 76px;
+  top: calc(var(--v-layout-top, 64px) + 52px);
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -261,6 +261,8 @@ export default {
 }
 
 .config-workspace__main {
+  width: 100%;
+  max-width: 680px;
   min-width: 0;
 }
 
@@ -426,6 +428,10 @@ export default {
     gap: 6px;
     overflow-x: auto;
     padding-bottom: 2px;
+  }
+
+  .config-workspace__main {
+    max-width: none;
   }
 
   .config-workspace__nav-item {
