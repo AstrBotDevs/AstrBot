@@ -289,7 +289,7 @@ class ProviderGoogleGenAI(Provider):
             ),
         )
 
-    def _prepare_conversation(self, payloads: dict) -> list[types.Content]:
+    async def _prepare_conversation(self, payloads: dict) -> list[types.Content]:
         """准备 Gemini SDK 的 Content 列表"""
 
         def create_text_part(text: str) -> types.Part:
@@ -298,11 +298,21 @@ class ProviderGoogleGenAI(Provider):
                 logger.warning("Text content is empty, added a space as placeholder.")
             return types.Part.from_text(text=content_a)
 
-        def process_image_url(image_url_dict: dict) -> types.Part:
+        async def process_image_url(image_url_dict: dict) -> types.Part:
             url = image_url_dict["url"]
-            mime_type = url.split(":")[1].split(";")[0]
-            image_bytes = base64.b64decode(url.split(",", 1)[1])
-            return types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
+            image_data = await resolve_media_ref_to_base64_data(
+                url,
+                media_type="image",
+                strict=True,
+            )
+            if image_data is None:
+                raise ValueError(
+                    f"Failed to resolve Gemini history image: {describe_media_ref(url)}"
+                )
+            return types.Part.from_bytes(
+                data=base64.b64decode(image_data.base64_data),
+                mime_type=image_data.mime_type,
+            )
 
         def process_audio_url(audio_url_dict: dict) -> types.Part:
             url = audio_url_dict["url"]
@@ -327,18 +337,14 @@ class ProviderGoogleGenAI(Provider):
 
             if role == "user":
                 if isinstance(content, list):
-                    parts = [
-                        (
-                            types.Part.from_text(text=item["text"] or " ")
-                            if item["type"] == "text"
-                            else (
-                                process_image_url(item["image_url"])
-                                if item["type"] == "image_url"
-                                else process_audio_url(item["audio_url"])
-                            )
-                        )
-                        for item in content
-                    ]
+                    parts = []
+                    for item in content:
+                        if item["type"] == "text":
+                            parts.append(types.Part.from_text(text=item["text"] or " "))
+                        elif item["type"] == "image_url":
+                            parts.append(await process_image_url(item["image_url"]))
+                        else:
+                            parts.append(process_audio_url(item["audio_url"]))
                 else:
                     parts = [create_text_part(content)]
                 append_or_extend(gemini_contents, parts, types.UserContent)
@@ -597,7 +603,7 @@ class ProviderGoogleGenAI(Provider):
         if self.provider_config.get("gm_resp_image_modal", False):
             modalities.append("IMAGE")
 
-        conversation = self._prepare_conversation(payloads)
+        conversation = await self._prepare_conversation(payloads)
         temperature = payloads.get("temperature", 0.7)
 
         result: types.GenerateContentResponse | None = None
@@ -692,7 +698,7 @@ class ProviderGoogleGenAI(Provider):
             None,
         )
         model = payloads.get("model", self.get_model())
-        conversation = self._prepare_conversation(payloads)
+        conversation = await self._prepare_conversation(payloads)
 
         result = None
         while True:
