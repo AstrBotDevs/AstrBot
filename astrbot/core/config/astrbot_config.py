@@ -296,6 +296,10 @@ class AstrBotConfig(dict):
             Whether the snapshot replaced the current configuration file.
         """
         directory = os.path.dirname(os.path.abspath(self.config_path)) or "."
+        # The directory may not exist yet when a config profile is created for
+        # the first time (e.g. `create_conf` instantiates AstrBotConfig with a
+        # brand-new path). mkstemp would raise FileNotFoundError otherwise.
+        os.makedirs(directory, exist_ok=True)
         fd, temp_path = tempfile.mkstemp(
             dir=directory,
             prefix=f".{os.path.basename(self.config_path)}.",
