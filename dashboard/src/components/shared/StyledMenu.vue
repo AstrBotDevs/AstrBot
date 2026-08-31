@@ -35,10 +35,15 @@ withDefaults(defineProps<{
 .styled-menu-card {
   min-width: 100px;
   width: fit-content;
-  border: 0 !important;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.09) !important;
   background: rgba(var(--v-theme-surface), 0.98) !important;
   backdrop-filter: blur(10px);
-  box-shadow: var(--astrbot-menu-shadow, 0 12px 28px rgba(0, 0, 0, 0.08)) !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.07) !important;
+}
+
+.v-overlay.v-menu .v-overlay__content > .styled-menu-card:not(.styled-menu-card-borderless) {
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.09) !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.07) !important;
 }
 
 .styled-menu-card-borderless {
@@ -71,7 +76,7 @@ withDefaults(defineProps<{
 /* 深色模式下的下拉框样式 - 需要全局样式才能检测主题 */
 .v-theme--PurpleThemeDark .styled-menu-card {
   background: rgba(var(--v-theme-surface), 0.98) !important;
-  border: 0 !important;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.09) !important;
 }
 
 .v-theme--PurpleThemeDark .styled-menu-card-borderless {
