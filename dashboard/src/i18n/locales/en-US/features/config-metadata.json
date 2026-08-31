@@ -380,11 +380,11 @@
           "hint": "When enabled, current time information will be appended to the system prompt."
         },
         "show_tool_use_status": {
-          "description": "Output Function Call Status"
+          "description": "Show Tool Call Information"
         },
         "show_tool_call_result": {
           "description": "Output Tool Call Results",
-          "hint": "Only takes effect when \"Output Function Call Status\" is enabled, and shows at most 70 characters."
+          "hint": "Only takes effect when \"Show Tool Call Information\" is enabled, and shows at most 70 characters."
         },
         "buffer_intermediate_messages": {
           "description": "Merge Agent Intermediate Messages",

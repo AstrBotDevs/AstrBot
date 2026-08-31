@@ -403,11 +403,11 @@
           "hint": "启用后,会在系统提示词中附带当前时间信息。"
         },
         "show_tool_use_status": {
-          "description": "输出函数调用状态"
+          "description": "输出工具调用信息"
         },
         "show_tool_call_result": {
-          "description": "输出函数调用返回结果",
-          "hint": "仅在启用“输出函数调用状态”时生效，且最多展示 70 个字符。"
+          "description": "输出工具调用结果",
+          "hint": "仅在启用“输出工具调用信息”时生效，且最多展示 70 个字符。"
         },
         "buffer_intermediate_messages": {
           "description": "合并 Agent 中间消息",

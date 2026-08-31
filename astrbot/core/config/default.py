@@ -4056,16 +4056,16 @@ CONFIG_METADATA_3 = {
                         },
                     },
                     "provider_settings.show_tool_use_status": {
-                        "description": "输出函数调用状态",
+                        "description": "输出工具调用信息",
                         "type": "bool",
                         "condition": {
                             "agent_runner.runner_type": "local",
                         },
                     },
                     "provider_settings.show_tool_call_result": {
-                        "description": "输出函数调用返回结果",
+                        "description": "输出工具调用结果",
                         "type": "bool",
-                        "hint": "仅在输出函数调用状态启用时生效，展示结果前 70 个字符。",
+                        "hint": "仅在输出工具调用信息启用时生效，展示结果前 70 个字符。",
                         "condition": {
                             "agent_runner.runner_type": "local",
                             "provider_settings.show_tool_use_status": True,
