@@ -48,11 +48,11 @@ Native `web_search` inside the source applies only to OpenAI Responses. Profile-
 
 ## Default models and fallback
 
-Configure these under **Config → Provider settings**:
+Configure these under **Config** in the Agent Runner section:
 
-- `default_provider_id` for the default chat model;
-- `fallback_chat_models` for ordered fallback after the primary fails;
-- `request_max_retries` for the retry limit on each model;
+- `agent_runner.config.model.provider_id` for the default chat model;
+- `agent_runner.config.model.fallback_provider_ids` for ordered fallback after the primary fails;
+- `agent_runner.config.model.request_max_retries` for the retry limit on each model;
 - default image-caption, STT, TTS, embedding, and rerank models.
 
 Several models on the same unstable endpoint are not true failure isolation. For resilient fallback, use different sources, credentials, or vendors where possible and account for worst-case total latency.

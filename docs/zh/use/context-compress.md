@@ -12,7 +12,7 @@ AstrBot 会在本地 Agent Runner 的上下文接近模型窗口上限时自动�
 
 1. 使用模型配置中的 `max_context_tokens`。
 2. 如果该值未设置或不大于 0，尝试从内置模型元数据获取。
-3. 如果仍无法识别，使用 `provider_settings.fallback_max_context_tokens`，默认值为 `128000`。
+3. 如果仍无法识别，使用 `agent_runner.config.compression.fallback_max_tokens`，默认值为 `128000`。
 
 因此，自定义模型 ID 或代理服务使用的模型名无法被自动识别时，最好在模型配置中填写准确的 `max_context_tokens`。过大的值可能导致请求先被服务商拒绝，过小的值则会过早压缩。
 
@@ -20,15 +20,15 @@ AstrBot 会在本地 Agent Runner 的上下文接近模型窗口上限时自动�
 
 ## 两种策略
 
-在配置档的 Provider 设置中，通过 `context_limit_reached_strategy` 选择策略。
+在配置档的 Agent Runner 设置中，通过 `agent_runner.config.compression.overflow_strategy` 选择策略。
 
 ### `llm_compress`：LLM 摘要（默认）
 
 AstrBot 把较早的完整对话轮次交给压缩模型生成摘要，再把摘要与最近的原始轮次组合成新的上下文。
 
-- `llm_compress_provider_id`：指定用于摘要的聊天模型。留空时使用当前会话正在使用的模型。
-- `llm_compress_keep_recent_ratio`：按压缩前 token 数计算、原样保留最近上下文的比例，默认 `0.15`。该值会限制在 `0` 到 `0.3` 之间，并按完整对话轮次保留；不会从轮次中间截断。最新的活动用户请求也会尽量原样保留。
-- `llm_compress_instruction`：自定义摘要指令。
+- `agent_runner.config.compression.provider_id`：指定用于摘要的聊天模型。留空时使用当前会话正在使用的模型。
+- `agent_runner.config.compression.keep_recent_ratio`：按压缩前 token 数计算、原样保留最近上下文的比例，默认 `0.15`。该值会限制在 `0` 到 `0.3` 之间，并按完整对话轮次保留；不会从轮次中间截断。最新的活动用户请求也会尽量原样保留。
+- `agent_runner.config.compression.instruction`：自定义摘要指令。
 
 默认指令要求摘要覆盖：
 
@@ -42,11 +42,11 @@ AstrBot 把较早的完整对话轮次交给压缩模型生成摘要，再把摘
 
 ### `truncate_by_turns`：按轮次截断
 
-此策略不额外调用 LLM，而是从最早的完整对话轮次开始移除。`dequeue_context_length` 控制每次至少丢弃多少轮，默认值为 `1`。它速度快且没有额外模型费用，但早期细节会直接丢失。
+此策略不额外调用 LLM，而是从最早的完整对话轮次开始移除。`agent_runner.config.compression.trim_turns` 控制每次至少丢弃多少轮，默认值为 `1`。它速度快且没有额外模型费用，但早期细节会直接丢失。
 
 ## 最大对话轮数
 
-`max_context_length` 是独立于 token 阈值的轮数限制：
+`agent_runner.config.compression.max_turns` 是独立于 token 阈值的轮数限制：
 
 - `-1`：不按轮数强制限制，这是默认值；
 - 正整数：在 token 压缩前先只保留最近的对应轮数。

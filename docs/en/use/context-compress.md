@@ -12,7 +12,7 @@ The window size is resolved in this order:
 
 1. Use `max_context_tokens` from the model configuration.
 2. If it is unset or not positive, look up the model in AstrBot's built-in model metadata.
-3. If the model is still unknown, use `provider_settings.fallback_max_context_tokens`, which defaults to `128000`.
+3. If the model is still unknown, use `agent_runner.config.compression.fallback_max_tokens`, which defaults to `128000`.
 
 For custom model IDs or model names rewritten by a proxy, set an accurate `max_context_tokens` value on the model. A value that is too large can let the provider reject the request first; a value that is too small causes premature compression.
 
@@ -20,15 +20,15 @@ For custom model IDs or model names rewritten by a proxy, set an accurate `max_c
 
 ## Compression strategies
 
-Choose a strategy with `context_limit_reached_strategy` in the profile's Provider settings.
+Choose a strategy with `agent_runner.config.compression.overflow_strategy` in the profile's Agent Runner settings.
 
 ### `llm_compress`: LLM summary (default)
 
 AstrBot asks a compression model to summarize complete older turns, then combines that summary with the most recent original turns.
 
-- `llm_compress_provider_id` selects the chat model used for summarization. When left empty, AstrBot uses the model active for the current session.
-- `llm_compress_keep_recent_ratio` is the share of the pre-compression token count preserved as exact recent context. It defaults to `0.15`, is clamped to the range `0`–`0.3`, and is mapped to whole conversation turns rather than splitting a turn. AstrBot also tries to preserve the active, latest user request exactly.
-- `llm_compress_instruction` overrides the summary instruction.
+- `agent_runner.config.compression.provider_id` selects the chat model used for summarization. When left empty, AstrBot uses the model active for the current session.
+- `agent_runner.config.compression.keep_recent_ratio` is the share of the pre-compression token count preserved as exact recent context. It defaults to `0.15`, is clamped to the range `0`–`0.3`, and is mapped to whole conversation turns rather than splitting a turn. AstrBot also tries to preserve the active, latest user request exactly.
+- `agent_runner.config.compression.instruction` overrides the summary instruction.
 
 The default instruction asks the summary to preserve:
 
@@ -42,11 +42,11 @@ If the configured compression model is unavailable, AstrBot tries the model acti
 
 ### `truncate_by_turns`: turn-based truncation
 
-This strategy makes no extra LLM call. It removes the oldest complete conversation turns, with `dequeue_context_length` controlling how many turns are dropped at a time. The default is `1`. It is fast and has no summary-model cost, but old details are discarded instead of condensed.
+This strategy makes no extra LLM call. It removes the oldest complete conversation turns, with `agent_runner.config.compression.trim_turns` controlling how many turns are dropped at a time. The default is `1`. It is fast and has no summary-model cost, but old details are discarded instead of condensed.
 
 ## Maximum conversation turns
 
-`max_context_length` is a turn limit independent of the token threshold:
+`agent_runner.config.compression.max_turns` is a turn limit independent of the token threshold:
 
 - `-1` disables the turn limit, which is the default;
 - a positive integer keeps only that many recent turns before token-based compression runs.

@@ -96,14 +96,55 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 这是局部示意，不应覆盖完整文件。Windows 驱动器号本身含冒号，建议通过 WebUI 配置并在实际平台消息上验证。
 
+## `agent_runner`
+
+配置档的 AI 执行入口。形状为 `{ "runner_type": "local"|"dify"|"coze"|"dashscope"|"deerflow", "config": {...} }`。聊天模型、Persona、压缩和步数上限都写在这里，不要再放到 `provider_settings`。
+
+### 模型选择与重试
+
+- `agent_runner.config.model.provider_id`：本地 Agent 的默认聊天模型 ID。
+- `agent_runner.config.model.fallback_provider_ids`：主模型失败时按顺序尝试的聊天模型 ID。
+- `agent_runner.config.model.request_max_retries`：单个模型请求最大重试次数，默认 `5`；fallback 与单模型重试是不同层次。
+
+### Persona
+
+- 本地 Runner：`agent_runner.config.persona.persona_id`。
+- 第三方 Runner：`agent_runner.config.persona_id`。
+- 健康模式：`agent_runner.config.persona.safety_mode`。
+
+选择优先级和权限语义见 [Persona 人格设定](../use/persona)。
+
+### 上下文压缩
+
+这些字段位于 `agent_runner.config.compression`：
+
+| 键                    | 默认值              | 说明                                                    |
+| --------------------- | ------------------- | ------------------------------------------------------- |
+| `overflow_strategy`   | `llm_compress`      | `llm_compress` 或 `truncate_by_turns`。                 |
+| `keep_recent_ratio`   | `0.15`              | 原样保留最近上下文的 token 比例，范围限制为 `0`–`0.3`。 |
+| `provider_id`         | `""`                | 留空时使用当前会话聊天模型。                            |
+| `instruction`         | 内置五点指令        | 摘要提示词。                                            |
+| `max_turns`           | `-1`                | 压缩前最多保留的对话轮数；`-1` 不限制。                 |
+| `trim_turns`          | `1`                 | 按轮截断时一次丢弃的轮数。                              |
+| `fallback_max_tokens` | 运行时默认 `128000` | 模型未配置窗口且内置元数据无法识别时的兜底值。          |
+
+完整行为见 [自动上下文压缩](../use/context-compress)。
+
+### 步数、工具与代理
+
+- `agent_runner.runner_type`：`local` 使用内置 Agent；也可选择 Dify、Coze、DashScope 或 DeerFlow。第三方 Runner 的密钥和应用 ID 写在 `agent_runner.config` 中。
+- `agent_runner.config.misc.max_steps`：本地 Agent 单次运行最大 step，默认 `30`，也适用于当前子代理执行。
+- `agent_runner.config.max_steps`：第三方 Runner 的 step 上限，默认 `30`。
+- `agent_runner.config.misc.tool_call_timeout`：单次工具调用超时秒数，默认 `120`。
+- `agent_runner.config.misc.tool_schema_mode`：`full` 发送完整工具 schema；`skills_like` 使用较轻的两阶段 schema。
+- `agent_runner.config.misc.sanitize_context_by_modalities`：按当前模型能力清理历史中的不支持模态和工具结构，会改变模型实际看到的上下文。
+- `agent_runner.config.proxy_mode` / `proxy_url`：第三方 Runner 的出站代理；`inherit` 跟随全局代理，`direct` 明确直连，`custom` 仅使用 `proxy_url`。
+
 ## `provider_settings`
 
 ### Provider 选择与重试
 
 - `enable`：是否启用 AI Provider 处理，默认 `true`。
-- `default_provider_id`：默认聊天模型 ID。
-- `fallback_chat_models`：主模型失败时按顺序尝试的聊天模型 ID。
-- `request_max_retries`：单个模型请求最大重试次数，默认 `5`；fallback 与单模型重试是不同层次。
 - `provider_pool`：本配置档可用 Provider 范围，`["*"]` 表示全部。
 - `default_image_caption_provider_id` 和 `image_caption_prompt`：主 Agent 当前请求和引用图片的转述，不受群聊历史限流影响。
 - `provider_ltm_settings.image_caption_*`：只作用于群聊历史上下文转述。`image_caption_scope` 为 `all` / `allowlist` / `denylist`；`image_caption_groups` 只接受完整 UMO；`image_caption_min_interval` 和 `image_caption_max_concurrency` 限制间隔与全局并发。`image_caption_cache_ttl` 默认 `0`（关闭），缓存按 UMO+内容隔离。`image_caption_lazy` 默认关闭。
@@ -113,36 +154,16 @@ API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志
 
 ### Persona、提示词与会话
 
-- `default_personality`：默认 Persona ID。
 - `persona_pool`：本配置档可选 Persona，`["*"]` 表示全部。
 - `prompt_prefix`：用户提示词模板，必须保留 `{{prompt}}` 才能包含原始输入。
 - `identifier`、`group_name_display`、`datetime_system_prompt`：向提示词加入用户 ID、群名或当前时间。
 
-Persona 的选择优先级和权限语义见 [Persona 人格设定](../use/persona)。
+默认 Persona ID 在 `agent_runner` 中配置。选择优先级见 [Persona 人格设定](../use/persona)。
 
-### 上下文管理
+### 工具展示
 
-| 键                               | 默认值              | 说明                                                    |
-| -------------------------------- | ------------------- | ------------------------------------------------------- |
-| `context_limit_reached_strategy` | `llm_compress`      | `llm_compress` 或 `truncate_by_turns`。                 |
-| `llm_compress_keep_recent_ratio` | `0.15`              | 原样保留最近上下文的 token 比例，范围限制为 `0`–`0.3`。 |
-| `llm_compress_provider_id`       | `""`                | 留空时使用当前会话聊天模型。                            |
-| `llm_compress_instruction`       | 内置五点指令        | 摘要提示词。                                            |
-| `max_context_length`             | `-1`                | 压缩前最多保留的对话轮数；`-1` 不限制。                 |
-| `dequeue_context_length`         | `1`                 | 按轮截断时一次丢弃的轮数。                              |
-| `fallback_max_context_tokens`    | 运行时默认 `128000` | 模型未配置窗口且内置元数据无法识别时的兜底值。          |
-
-完整行为见 [自动上下文压缩](../use/context-compress)。
-
-### Agent Runner 与工具
-
-- `agent_runner.runner_type`：`local` 使用内置 Agent；也可选择 Dify、Coze、DashScope 或 DeerFlow。第三方 Runner 的密钥和应用 ID 写在 `agent_runner.config` 中。
-- `agent_runner.config.misc.max_steps`：单次 Agent 运行最大 step，默认 `30`，也适用于当前子代理执行。
-- `agent_runner.config.misc.tool_call_timeout`：单次工具调用超时秒数，默认 `120`。
-- `agent_runner.config.misc.tool_schema_mode`：`full` 发送完整工具 schema；`skills_like` 使用较轻的两阶段 schema。
 - `show_tool_use_status` / `show_tool_call_result`：向用户显示工具状态及结果摘要。
 - `buffer_intermediate_messages`：非流式多 step 运行时合并中间文本。
-- `sanitize_context_by_modalities`：按当前模型能力清理历史中的不支持模态和工具结构，会改变模型实际看到的上下文。
 - `proactive_capability.add_cron_tools`：向本地 Agent 提供主动任务/Cron 工具。
 
 ### 流式输出

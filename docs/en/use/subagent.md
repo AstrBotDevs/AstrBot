@@ -68,4 +68,4 @@ With **Deduplicate main LLM tools** enabled, every same-named tool assigned to a
 - The feature is experimental and its configuration and behavior may continue to change.
 - SubAgents do not persist separate conversation histories. Each handoff builds context from that invocation, the Persona's opening dialogue, and tool results.
 - Persona Skills are not currently isolated and inherited by SubAgents.
-- SubAgents use profile-wide settings such as `max_agent_step`, streaming behavior, and tool timeout; there is no separate per-SubAgent step limit.
+- SubAgents use profile-wide settings such as `agent_runner.config.misc.max_steps`, streaming behavior, and tool timeout; there is no separate per-SubAgent step limit.

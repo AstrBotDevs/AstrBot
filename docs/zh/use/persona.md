@@ -19,7 +19,7 @@ Persona 决定 Agent 在一次会话中采用的系统提示词、预设对话�
 
 1. **会话管理**中针对该消息会话设置的强制 Persona；
 2. 当前对话记录选择的 Persona；
-3. 当前配置档的 `provider_settings.default_personality`。
+3. 当前配置档的默认 Persona：本地 Runner 读取 `agent_runner.config.persona.persona_id`，第三方 Runner 读取 `agent_runner.config.persona_id`。
 
 会话规则适合为某个平台、群组或用户固定角色。没有强制规则时，WebChat 可以在对话级切换 Persona。显式选择“不使用 Persona”时，不会再应用配置档默认 Persona。
 

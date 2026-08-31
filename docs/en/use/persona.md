@@ -19,7 +19,7 @@ The local Agent Runner resolves a Persona in this order:
 
 1. a forced Persona configured for the message session under **Session Management**;
 2. the Persona selected on the current conversation record;
-3. `provider_settings.default_personality` from the active profile.
+3. the profile default Persona: `agent_runner.config.persona.persona_id` for the local runner, or `agent_runner.config.persona_id` for a third-party runner.
 
 Session rules are useful for pinning a role to a platform, group, or user. Without a forced rule, WebChat can select a Persona per conversation. Explicitly selecting no Persona prevents the profile default from being applied.
 

@@ -48,11 +48,11 @@ Provider 来源内的原生 `web_search` 只作用于 OpenAI Responses；配置�
 
 ## 默认模型与 fallback
 
-在 **配置 → Provider 设置** 中配置：
+在 **配置** 页的 Agent Runner 中配置：
 
-- `default_provider_id`：默认聊天模型；
-- `fallback_chat_models`：主模型失败后按顺序尝试；
-- `request_max_retries`：每个模型的请求重试上限；
+- `agent_runner.config.model.provider_id`：默认聊天模型；
+- `agent_runner.config.model.fallback_provider_ids`：主模型失败后按顺序尝试；
+- `agent_runner.config.model.request_max_retries`：每个模型的请求重试上限；
 - `default_image_caption_provider_id`、STT、TTS、Embedding 和 Rerank 默认模型。
 
 避免把同一不稳定端点下的多个模型误当作真正的故障隔离。可靠 fallback 应尽量使用不同来源、不同凭据或不同供应商，并控制最坏情况下的总等待时间。

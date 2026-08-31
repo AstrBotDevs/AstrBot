@@ -94,14 +94,55 @@ Example path mapping:
 
 This is a partial illustration and must not replace the complete file. Because Windows drive letters contain a colon, configure mappings in the WebUI and validate them against real platform events.
 
+## `agent_runner`
+
+This is the profile AI execution object: `{ "runner_type": "local"|"dify"|"coze"|"dashscope"|"deerflow", "config": {...} }`. Chat model, Persona, compression, and step caps live here. Do not put them back under `provider_settings`.
+
+### Model selection and retries
+
+- `agent_runner.config.model.provider_id` selects the local Agent's default chat model.
+- `agent_runner.config.model.fallback_provider_ids` lists chat-model IDs tried in order after the primary model fails.
+- `agent_runner.config.model.request_max_retries` is the per-model maximum retry count and defaults to `5`. Fallback and retries are separate layers.
+
+### Persona
+
+- Local runner: `agent_runner.config.persona.persona_id`.
+- Third-party runners: `agent_runner.config.persona_id`.
+- Safety mode: `agent_runner.config.persona.safety_mode`.
+
+See [Personas](../use/persona) for selection priority and permission semantics.
+
+### Context compression
+
+These fields live under `agent_runner.config.compression`:
+
+| Key                   | Default                         | Meaning                                                                       |
+| --------------------- | ------------------------------- | ----------------------------------------------------------------------------- |
+| `overflow_strategy`   | `llm_compress`                  | `llm_compress` or `truncate_by_turns`.                                        |
+| `keep_recent_ratio`   | `0.15`                          | Exact recent-context token ratio, clamped to `0`–`0.3`.                       |
+| `provider_id`         | `""`                            | Empty means the chat model active for the current session.                    |
+| `instruction`         | Built-in five-point instruction | Summary prompt.                                                               |
+| `max_turns`           | `-1`                            | Conversation turns kept before compression; `-1` disables this turn limit.    |
+| `trim_turns`          | `1`                             | Turns removed per turn-based truncation pass.                                 |
+| `fallback_max_tokens` | Runtime default `128000`        | Fallback window when neither model config nor built-in metadata supplies one. |
+
+See [Automatic Context Compression](../use/context-compress) for the full behavior.
+
+### Steps, tools, and proxy
+
+- `agent_runner.runner_type` selects the built-in `local` Agent or Dify, Coze, DashScope, or DeerFlow. Third-party keys and app IDs live in `agent_runner.config`.
+- `agent_runner.config.misc.max_steps` is the local Agent step cap, default `30`, and also applies to current SubAgent executions.
+- `agent_runner.config.max_steps` is the third-party runner step cap, default `30`.
+- `agent_runner.config.misc.tool_call_timeout` is the per-tool timeout in seconds, default `120`.
+- `agent_runner.config.misc.tool_schema_mode` uses `full` schemas or the lighter two-stage `skills_like` mode.
+- `agent_runner.config.misc.sanitize_context_by_modalities` removes unsupported modalities and tool structures according to the current model, changing the history seen by that model.
+- `agent_runner.config.proxy_mode` / `proxy_url` control third-party outbound proxies: `inherit` follows the global proxy, `direct` connects without environment proxies, and `custom` uses only `proxy_url`.
+
 ## `provider_settings`
 
 ### Provider selection and retries
 
 - `enable` enables AI Provider processing and defaults to `true`.
-- `default_provider_id` selects the default chat model.
-- `fallback_chat_models` lists chat-model IDs tried in order after the primary model fails.
-- `request_max_retries` is the per-model maximum retry count and defaults to `5`. Fallback and retries are separate layers.
 - `provider_pool` limits Providers available to this profile; `["*"]` means all.
 - `default_image_caption_provider_id` and `image_caption_prompt` caption images in the current main-agent request and quoted messages. They are not affected by group-history caption limits.
 - `provider_ltm_settings.image_caption_*` applies only to group-history captions. `image_caption_scope` is `all`, `allowlist`, or `denylist`; `image_caption_groups` accepts full UMOs only; `image_caption_min_interval` and `image_caption_max_concurrency` bound interval and global concurrency. `image_caption_cache_ttl` defaults to `0` (off) and is scoped by UMO plus content id. `image_caption_lazy` defaults to off.
@@ -111,36 +152,16 @@ API keys are sensitive configuration. Never commit a real `cmd_config.json`, scr
 
 ### Persona, prompts, and sessions
 
-- `default_personality` selects the default Persona ID.
 - `persona_pool` limits selectable Personas; `["*"]` means all.
 - `prompt_prefix` is the user-prompt template. Keep `{{prompt}}` if the original input must be included.
 - `identifier`, `group_name_display`, and `datetime_system_prompt` add user identity, group name, or current time to the prompt.
 
-See [Personas](../use/persona) for selection priority and permission semantics.
+The default Persona ID is configured on `agent_runner`. See [Personas](../use/persona) for selection priority.
 
-### Context management
+### Tool display
 
-| Key                              | Default                         | Meaning                                                                       |
-| -------------------------------- | ------------------------------- | ----------------------------------------------------------------------------- |
-| `context_limit_reached_strategy` | `llm_compress`                  | `llm_compress` or `truncate_by_turns`.                                        |
-| `llm_compress_keep_recent_ratio` | `0.15`                          | Exact recent-context token ratio, clamped to `0`–`0.3`.                       |
-| `llm_compress_provider_id`       | `""`                            | Empty means the chat model active for the current session.                    |
-| `llm_compress_instruction`       | Built-in five-point instruction | Summary prompt.                                                               |
-| `max_context_length`             | `-1`                            | Conversation turns kept before compression; `-1` disables this turn limit.    |
-| `dequeue_context_length`         | `1`                             | Turns removed per turn-based truncation pass.                                 |
-| `fallback_max_context_tokens`    | Runtime default `128000`        | Fallback window when neither model config nor built-in metadata supplies one. |
-
-See [Automatic Context Compression](../use/context-compress) for the full behavior.
-
-### Agent Runner and tools
-
-- `agent_runner.runner_type` selects the built-in `local` Agent or Dify, Coze, DashScope, or DeerFlow. Third-party keys and app IDs live in `agent_runner.config`.
-- `agent_runner.config.misc.max_steps` defaults to `30` and also applies to current SubAgent executions.
-- `agent_runner.config.misc.tool_call_timeout` is the per-tool timeout in seconds, default `120`.
-- `agent_runner.config.misc.tool_schema_mode` uses `full` schemas or the lighter two-stage `skills_like` mode.
 - `show_tool_use_status` / `show_tool_call_result` expose tool state and a result preview to users.
 - `buffer_intermediate_messages` combines intermediate text during non-streaming multi-step runs.
-- `sanitize_context_by_modalities` removes unsupported modalities and tool structures according to the current model, changing the history seen by that model.
 - `proactive_capability.add_cron_tools` exposes proactive/Cron tools to the local Agent.
 
 ### Streaming

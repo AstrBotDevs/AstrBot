@@ -68,4 +68,4 @@ Persona 的 Skills 和自定义错误回复目前不会作为独立的子 Agent 
 - 功能仍为实验性，配置和行为可能继续调整。
 - 子 Agent 不保存为独立会话历史；每次 handoff 根据本次输入、Persona 开场对话和工具执行构建上下文。
 - Persona Skills 目前不会隔离并继承到子 Agent。
-- 子 Agent 使用配置档中的全局 `max_agent_step`、流式响应和工具超时等运行设置，没有单独的 step 上限。
+- 子 Agent 使用配置档中的 `agent_runner.config.misc.max_steps`、流式响应和工具超时等运行设置，没有单独的 step 上限。
