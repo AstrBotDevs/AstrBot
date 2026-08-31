@@ -60,6 +60,7 @@ class RankFusion:
         dense_results: list[Result],
         sparse_results: list[SparseResult],
         top_k: int = 20,
+        query: str | None = None,
     ) -> list[FusedResult]:
         """融合稠密和稀疏检索结果。
 
@@ -72,6 +73,9 @@ class RankFusion:
             dense_results: 稠密检索结果
             sparse_results: 稀疏检索结果
             top_k: 返回结果数量
+            query: 原始查询文本。提供时，对 Dense 完全未召回但 Sparse 命中
+                且内容包含查询词（大小写不敏感）的候选给予保底提升，避免
+                Dense embedding 的大小写敏感导致精确词面匹配被挤出 top_k。
 
         Returns:
             List[FusedResult]: 融合后的结果列表
@@ -152,6 +156,23 @@ class RankFusion:
                 rrf_score += 1.0 / (self.k + sparse_ranks[identifier])
 
             rrf_scores[identifier] = rrf_score
+
+        # 保护 Dense 漏召回的精确词面匹配：Dense embedding 对大小写敏感，
+        # 当查询词以大小写变体出现时（如查询 "oni" 而文档中是 "Oni"），
+        # 目标 chunk 可能完全不被 Dense 召回。此时若 Sparse 命中了该 chunk
+        # 且其内容大小写不敏感地包含查询词，则给予保底提升，使其不会被
+        # 大量纯 Dense 候选挤出 top_k。
+        if query is not None and query.strip():
+            lowered_query = query.strip().lower()
+            for identifier in all_chunk_ids:
+                if identifier in vec_doc_id_to_dense:
+                    continue
+                sparse_result = chunk_id_to_sparse.get(identifier)
+                if sparse_result and lowered_query in sparse_result.content.lower():
+                    fusion_scores[identifier] = max(
+                        fusion_scores[identifier],
+                        self.dense_weight + (1 - self.dense_weight) / 2,
+                    )
 
         # 5. 排序
         sorted_ids = sorted(
