@@ -108,8 +108,7 @@
       },
       "provider_stt_settings": {
         "enable": {
-          "description": "Voice Transcription",
-          "hint": "Master switch for STT"
+          "description": "Voice Transcription"
         },
         "provider_id": {
           "description": "Default Speech-to-Text Model",
@@ -118,8 +117,7 @@
       },
       "provider_tts_settings": {
         "enable": {
-          "description": "Voice Replies",
-          "hint": "Master switch for TTS"
+          "description": "Voice Replies"
         },
         "provider_id": {
           "description": "Default Text-to-Speech Model"

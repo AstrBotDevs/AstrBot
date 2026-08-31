@@ -120,8 +120,7 @@
       },
       "provider_stt_settings": {
         "enable": {
-          "description": "语音转述",
-          "hint": "STT 总开关"
+          "description": "语音转述"
         },
         "provider_id": {
           "description": "默认语音转文本模型",
@@ -130,8 +129,7 @@
       },
       "provider_tts_settings": {
         "enable": {
-          "description": "语音回复",
-          "hint": "TTS 总开关"
+          "description": "语音回复"
         },
         "provider_id": {
           "description": "默认文本转语音模型"

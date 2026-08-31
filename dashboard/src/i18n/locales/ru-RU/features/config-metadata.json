@@ -77,8 +77,7 @@
             },
             "provider_stt_settings": {
                 "enable": {
-                    "description": "Распознавание речи",
-                    "hint": "Главный переключатель для STT"
+                    "description": "Распознавание речи"
                 },
                 "provider_id": {
                     "description": "Модель STT по умолчанию",
@@ -87,8 +86,7 @@
             },
             "provider_tts_settings": {
                 "enable": {
-                    "description": "Голосовые ответы",
-                    "hint": "Главный переключатель для TTS"
+                    "description": "Голосовые ответы"
                 },
                 "provider_id": {
                     "description": "Модель TTS по умолчанию"

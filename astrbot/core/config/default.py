@@ -3508,7 +3508,6 @@ CONFIG_METADATA_3 = {
                     "provider_stt_settings.enable": {
                         "description": "语音转述",
                         "type": "bool",
-                        "hint": "STT 总开关",
                     },
                     "provider_stt_settings.provider_id": {
                         "description": "默认语音转文本模型",
@@ -3522,7 +3521,6 @@ CONFIG_METADATA_3 = {
                     "provider_tts_settings.enable": {
                         "description": "语音回复",
                         "type": "bool",
-                        "hint": "TTS 总开关",
                     },
                     "provider_tts_settings.provider_id": {
                         "description": "默认文本转语音模型",
