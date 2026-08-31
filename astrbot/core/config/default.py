@@ -3567,6 +3567,7 @@ CONFIG_METADATA_3 = {
                     "agent_runner.config.persona.safety_mode_strategy": {
                         "description": "健康模式策略",
                         "type": "string",
+                        "invisible": True,
                         "options": ["system_prompt"],
                         "hint": "选择健康模式的实现策略。",
                         "condition": {
