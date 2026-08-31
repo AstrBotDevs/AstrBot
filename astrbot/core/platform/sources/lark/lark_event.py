@@ -240,9 +240,10 @@ class LarkMessageEvent(AstrMessageEvent):
 
                 image_key = response.data.image_key
                 logger.debug(image_key)
-                ret.append(_stage)
+                if _stage:
+                    ret.append(_stage.copy())
+                    _stage.clear()
                 ret.append([{"tag": "img", "image_key": image_key}])
-                _stage.clear()
             elif isinstance(comp, File):
                 # 文件将通过 _send_file_message 方法单独发送，这里跳过
                 logger.debug("[Lark] 检测到文件组件，将单独发送")
