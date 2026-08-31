@@ -1,6 +1,6 @@
 import asyncio
 import json
-from collections.abc import Coroutine
+from collections.abc import AsyncGenerator, Coroutine
 from pathlib import Path
 from typing import Any
 
@@ -208,3 +208,19 @@ class KookEvent(AstrMessageEvent):
             logger.error(f"[kook] {err_msg}")
 
         await super().send(message)
+
+    async def send_streaming(
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+    ):
+        """KOOK 平台不支持流式输出, 调用此方法将回退到普通`send`方法"""
+        buffer = None
+        async for chain in generator:
+            if not buffer:
+                buffer = chain
+            else:
+                buffer.chain.extend(chain.chain)
+        if not buffer:
+            return None
+        buffer.squash_plain()
+        await self.send(buffer)
+        return await super().send_streaming(generator, use_fallback)
