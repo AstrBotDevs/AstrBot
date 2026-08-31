@@ -83,7 +83,6 @@ class PersonaManager:
         umo: str | MessageSession,
         conversation_persona_id: str | None,
         platform_name: str,
-        provider_settings: dict | None = None,
     ) -> tuple[str | None, Personality | None, str | None, bool]:
         """解析当前会话最终生效的人格。
 
@@ -114,10 +113,6 @@ class PersonaManager:
             elif persona_id is None:
                 cfg = self.acm.get_conf(umo)
                 persona_id = get_persona_id(cfg.get("agent_runner", {}))
-                if provider_settings:
-                    persona_id = provider_settings.get(
-                        "default_personality", persona_id
-                    )
 
         persona = next(
             (item for item in self.runtime_personas if item["name"] == persona_id),

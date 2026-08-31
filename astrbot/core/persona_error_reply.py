@@ -58,7 +58,6 @@ async def resolve_persona_custom_error_message(
     *,
     event: Any,
     persona_manager: Any,
-    provider_settings: dict | None = None,
     conversation_persona_id: str | None = None,
 ) -> str | None:
     """Resolve normalized custom error reply text for the selected persona."""
@@ -71,7 +70,6 @@ async def resolve_persona_custom_error_message(
         umo=event.unified_msg_origin,
         conversation_persona_id=conversation_persona_id,
         platform_name=event.get_platform_name(),
-        provider_settings=provider_settings,
     )
     return extract_persona_custom_error_message_from_persona(persona)
 

@@ -196,7 +196,6 @@ class ConversationCommands:
             for conv in conversations_all
         }
         cfg = self.context.config.get(umo=message.unified_msg_origin)
-        provider_settings = cfg.get("provider_settings", {})
         platform_name = message.get_platform_name()
         none_persona = await self.context.i18n.t(
             message, "conversation.list.none_persona"
@@ -217,7 +216,6 @@ class ConversationCommands:
                 umo=message.unified_msg_origin,
                 conversation_persona_id=conv.persona_id,
                 platform_name=platform_name,
-                provider_settings=provider_settings,
             )
             if persona_id == "[%None]":
                 persona_name = none_persona

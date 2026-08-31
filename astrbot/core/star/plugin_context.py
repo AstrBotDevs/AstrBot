@@ -742,14 +742,12 @@ class PersonaCapability:
         umo: str,
         conversation_persona_id: str | None,
         platform_name: str,
-        provider_settings: dict,
     ) -> tuple[str | None, Any, str | None, Any]:
         """Resolve the effective persona under session routing rules."""
         return await self._manager.resolve_selected_persona(
             umo=umo,
             conversation_persona_id=conversation_persona_id,
             platform_name=platform_name,
-            provider_settings=provider_settings,
         )
 
 

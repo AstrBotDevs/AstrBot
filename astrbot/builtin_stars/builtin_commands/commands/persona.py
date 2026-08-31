@@ -61,9 +61,6 @@ class PersonaCommands:
                 )
                 return
 
-            provider_settings = self.context.config.get(umo=umo).get(
-                "provider_settings", {}
-            )
             (
                 selected_persona_id,
                 _,
@@ -73,7 +70,6 @@ class PersonaCommands:
                 umo=umo,
                 conversation_persona_id=conversation.persona_id,
                 platform_name=message.get_platform_name(),
-                provider_settings=provider_settings,
             )
             if selected_persona_id == "[%None]":
                 current_persona = none_label
@@ -174,9 +170,6 @@ class PersonaCommands:
             await reply_i18n(self.context, message, "persona.set.no_conversation")
             return
 
-        provider_settings = self.context.config.get(umo=umo).get(
-            "provider_settings", {}
-        )
         (
             _,
             _,
@@ -186,7 +179,6 @@ class PersonaCommands:
             umo=umo,
             conversation_persona_id=conversation.persona_id,
             platform_name=message.get_platform_name(),
-            provider_settings=provider_settings,
         )
         await self.context.conversations.update(
             umo,
