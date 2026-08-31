@@ -11,13 +11,15 @@ are not a helpdesk.
 1. Read the in-app documentation at `/help/` after starting the WebUI, or the
    sources in [`docs/zh/`](docs/zh/) / [`docs/en/`](docs/en/).
 2. Check the FAQ — [docs/en/faq.md](docs/en/faq.md) / [docs/zh/faq.md](docs/zh/faq.md).
-3. Check the latest changes — [CHANGELOG.md](CHANGELOG.md).
-4. Security reports go to [SECURITY.md](SECURITY.md) (private advisory only).
+3. Backup and restore drill — [docs/en/deploy/astrbot/backup.md](docs/en/deploy/astrbot/backup.md) /
+   [docs/zh/deploy/astrbot/backup.md](docs/zh/deploy/astrbot/backup.md).
+4. Check the latest changes — [CHANGELOG.md](CHANGELOG.md).
+5. Security reports go to [SECURITY.md](SECURITY.md) (private advisory only).
    Do not file a public Issue for a vulnerability.
-5. Code contributions go through a development Issue and/or Pull Request. See
+6. Code contributions go through a development Issue and/or Pull Request. See
    [CONTRIBUTING.md](CONTRIBUTING.md) and [AI_POLICY.md](AI_POLICY.md).
 
-> 请先阅读 WebUI `/help/`、本仓库 `docs/`、FAQ 和 CHANGELOG。安全漏洞按
+> 请先阅读 WebUI `/help/`、本仓库 `docs/`、FAQ、备份演练和 CHANGELOG。安全漏洞按
 > SECURITY.md 私密报告，不要开公开 Issue。代码贡献走开发 Issue 与 Pull Request。
 > 不要把上游 Discord / QQ 群当作本 fork 支持。
 

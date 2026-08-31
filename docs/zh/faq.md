@@ -73,7 +73,7 @@ Docker 发布 `6185` 端口也需要这个监听覆盖，详见 [Docker 部署](
 
 运行根目录默认是启动 AstrBot 时的当前工作目录，运行数据位于 `<root>/data`。源码仓库根目录执行 `uv run main.py` 时通常就是 `AstrBot/data`。
 
-设置 `ASTRBOT_ROOT` 后，数据位于 `$ASTRBOT_ROOT/data`。配置、SQLite 数据库、插件、Skills、知识库、临时文件和备份都可能在这里，升级前应整体备份。
+设置 `ASTRBOT_ROOT` 后，数据位于 `$ASTRBOT_ROOT/data`。配置、SQLite 数据库、插件、Skills、知识库、临时文件和备份都可能在这里，升级前应整体备份。步骤见 [备份、恢复与升级演练](./deploy/astrbot/backup)。
 
 当前 fork 不提供独立 Desktop 或 Launcher 部署；外部启动器的目录布局不属于本仓库保证范围。
 

@@ -65,7 +65,7 @@ During import:
 > [!WARNING]
 > Persona JSON is prompt input. Review third-party files before importing them, then immediately configure tools and Skills; otherwise the imported Persona inherits every currently available capability. The export is not a complete backup.
 
-Use AstrBot runtime-data backup for a complete migration instead of relying on Persona JSON alone. After restoration, verify that referenced plugins, MCP servers, Skills, and Providers still exist because a Persona stores their names rather than their implementations.
+Use AstrBot [runtime-data backup](../deploy/astrbot/backup) for a complete migration instead of relying on Persona JSON alone. After restoration, verify that referenced plugins, MCP servers, Skills, and Providers still exist because a Persona stores their names rather than their implementations.
 
 ## Related features
 
