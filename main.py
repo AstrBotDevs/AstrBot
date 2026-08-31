@@ -32,6 +32,7 @@ def _apply_startup_env_flags(argv: list[str]) -> None:
 _apply_startup_env_flags(sys.argv[1:])
 
 from astrbot.core import LogBroker, LogManager, db_helper, logger  # noqa: E402
+from astrbot.core.dashboard_assets import resolve_dashboard_dist  # noqa: E402
 from astrbot.core.initial_loader import InitialLoader  # noqa: E402
 from astrbot.core.updater import AstrBotUpdater  # noqa: E402
 from astrbot.core.utils.astrbot_path import (  # noqa: E402
@@ -96,15 +97,35 @@ async def check_dashboard_files(webui_dir: str | None = None):
     # 指定webui目录
     if webui_dir:
         if os.path.exists(webui_dir):
-            logger.info("Using WebUI directory: %s", webui_dir)
-            return webui_dir
-        logger.warning("WebUI directory not found: %s. Using default.", webui_dir)
+            resolved_dist = resolve_dashboard_dist(webui_dir)
+            if resolved_dist is not None:
+                logger.info("Using WebUI directory: %s", resolved_dist)
+                return str(resolved_dist)
+            logger.warning(
+                "WebUI directory is incompatible with this desktop-managed core: "
+                "%s. Attempting repair.",
+                webui_dir,
+            )
+        else:
+            logger.warning("WebUI directory not found: %s. Using default.", webui_dir)
 
     try:
-        return str(await AstrBotUpdater().ensure_dashboard())
+        prepared_dist = await AstrBotUpdater().ensure_dashboard()
     except Exception as e:
         logger.critical(f"Failed to download dashboard files: {e}.")
         return None
+
+    # The updater only prepares managed or bundled assets. Resolve without an
+    # explicit path so the legacy Desktop package exception cannot admit an
+    # unversioned data/dist returned after a failed repair.
+    resolved_dist = resolve_dashboard_dist()
+    if resolved_dist is None:
+        logger.critical(
+            "Prepared dashboard files are not compatible with the running core: %s.",
+            prepared_dist,
+        )
+        return None
+    return str(resolved_dist)
 
 
 async def main_async(webui_dir_arg: str | None) -> None:
