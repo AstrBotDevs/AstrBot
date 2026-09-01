@@ -36,7 +36,7 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 
 指令由配置档的 `command_prefixes`（默认 `["/"]`）标记，并在已启用的指令 catalog 中匹配。路由总是先匹配指令，再判断 LLM 访问：命中指令时只执行指令，裸指令组显示帮助，未知子指令返回 Orbit 诊断，不会被当作 LLM 提示词。非指令消息遵循当前配置档的 `llm_access` 策略；其中的前缀是用户实际输入的完整字符串，不会与 `command_prefixes` 自动拼接。
 
-已启用的指令路径、别名、子路径和非空 LLM 前缀根共享同一作用域命名空间。发生冲突时，路径会被拒绝或从运行时 catalog 排除，直到通过 Dashboard 重命名或接管解决。内置 LLM 状态指令是 `/llm status`、`/llm enable` 和 `/llm disable`；`/chat` 不是它们的兼容别名。
+已启用的指令路径、别名、子路径和非空 LLM 前缀根共享同一作用域命名空间。发生冲突时，路径会被拒绝或从运行时 catalog 排除，直到 Dashboard 重命名只剩一个所有者，或指令更新 API 记录接管。Dashboard 会高亮冲突并提供重命名，没有接管按钮。内置 LLM 状态指令是 `/llm status`、`/llm enable` 和 `/llm disable`；`/chat` 不是它们的兼容别名。
 
 ## 指令列表
 

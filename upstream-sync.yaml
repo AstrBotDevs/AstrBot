@@ -19,4 +19,4 @@ last_synced:
     and the bundled plugin-guide formatting rewrite. Kept the ConfigPage
     unsaved banner, step-up, and in-app /help docs. Regenerated the MDI
     subset. No upstream version bump in this interval; absorbed user-visible
-    changes were added to the in-progress 4.27.5 changelog.
+    changes were added to the 4.27.5 changelog.

@@ -36,7 +36,7 @@ Declared options can appear before or after positional arguments and support `--
 
 Commands are framed by the profile's `command_prefixes` (default `["/"]`) and matched against the enabled command catalog. Command matching happens before LLM access: a matched command always wins, a bare command group shows its help, and an unknown subcommand returns an Orbit diagnostic instead of becoming an LLM prompt. Non-command messages follow the profile's `llm_access` policy. Its prefixes are complete user-typed strings; they are not automatically combined with `command_prefixes`.
 
-Enabled command paths, aliases, descendants, and non-empty LLM prefix roots share one scoped namespace. A conflict is rejected or excluded from the runtime catalog until it is resolved by a Dashboard rename or takeover. The built-in LLM state commands are `/llm status`, `/llm enable`, and `/llm disable`; `/chat` is not their compatibility alias.
+Enabled command paths, aliases, descendants, and non-empty LLM prefix roots share one scoped namespace. A conflict is rejected or excluded from the runtime catalog until Dashboard rename leaves one owner, or the command-update API records a takeover. Dashboard highlights conflicts and exposes rename; it does not offer a takeover button. The built-in LLM state commands are `/llm status`, `/llm enable`, and `/llm disable`; `/chat` is not their compatibility alias.
 
 ## Command Reference
 

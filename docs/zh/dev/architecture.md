@@ -167,7 +167,7 @@ Mixin 通过带类型的 `store_session(self)` 助手获取会话，不直接持
 
 指令参数由 `astrbot/core/command/` 下的 Orbit Command Syntax 子系统处理。`catalog.py` 为已启用指令、指令组和各级别名建立不可变最长匹配索引；`lexer.py` 实现不执行 expansion 或 operator 的确定性 POSIX word 子集；`schema.py` 在 handler 注册期编译签名；`binder.py` 负责位置参数、option、默认值和类型转换；`engine.py` 统一执行 resolve、lex 和 bind。
 
-插件管理器按 Pipeline 配置显式拥有 `CommandCatalogStore`。插件加载、卸载、重载、启禁，以及 Dashboard 中的指令启禁、重命名和别名修改都会构建新 snapshot 并原子替换引用。`WakingCheckStage` 的消息热路径只读取 snapshot：先完成配置的指令前缀移除和最长指令头匹配，命中后只 lex 一次，再按 `handler_full_name` 分别绑定所有匹配 handler。完全未知根指令不会进入 Orbit，因此带 `$`、URL 或不完整引号的普通 LLM prompt 不会被指令解析器拦截。已启用的指令路径、别名、子路径和每个非空 LLM 前缀的第一个 token 共享同一作用域命名空间；冲突路径会从 catalog 排除，直到 Dashboard 重命名或接管后只剩一个所有者。内置 LLM 状态组为 `/llm`（`status`、`enable`、`disable`）。
+插件管理器按 Pipeline 配置显式拥有 `CommandCatalogStore`。插件加载、卸载、重载、启禁，以及 Dashboard 中的指令启禁、重命名和别名修改都会构建新 snapshot 并原子替换引用。`WakingCheckStage` 的消息热路径只读取 snapshot：先完成配置的指令前缀移除和最长指令头匹配，命中后只 lex 一次，再按 `handler_full_name` 分别绑定所有匹配 handler。完全未知根指令不会进入 Orbit，因此带 `$`、URL 或不完整引号的普通 LLM prompt 不会被指令解析器拦截。已启用的指令路径、别名、子路径和每个非空 LLM 前缀的第一个 token 共享同一作用域命名空间；冲突路径会从 catalog 排除，直到 Dashboard 重命名只剩一个所有者，或指令更新 API 记录接管。Dashboard 会高亮冲突并提供重命名，接管不是 Dashboard 按钮。内置 LLM 状态组为 `/llm`（`status`、`enable`、`disable`）。
 
 核心结构化诊断只保存稳定错误码、Unicode code-point span、参数和 hint code；zh-CN/en-US 文本及源码 caret 在展示边界渲染。插件公开入口是 `astrbot.api.command` 以及 `astrbot.api.event.filter` 中的 `option`、`GreedyStr`，内部 catalog、engine 和 handler metadata 不属于插件 API。
 
