@@ -769,3 +769,46 @@ def test_split_message_chain_by_media_preserves_use_markdown():
     assert len(chunks) == 2
     assert chunks[0].chain[0].text == "text before"
     assert all(chunk.use_markdown_ is False for chunk in chunks)
+
+
+@pytest.mark.asyncio
+async def test_group_send_by_session_falls_back_to_content_when_markdown_rejected():
+    # When QQ rejects a markdown payload, the proactive send must retry in content
+    # mode instead of propagating the exception. Regression test for the sourcery
+    # review of the proactive markdown payload.
+    adapter = QQOfficialPlatformAdapter(
+        {
+            "id": "qq-official-test",
+            "appid": "123",
+            "secret": "secret",
+            "enable_group_c2c": True,
+            "enable_guild_direct_message": False,
+        },
+        {},
+        asyncio.Queue(),
+    )
+    posting = AsyncMock(
+        side_effect=[
+            botpy.errors.ServerError("不允许发送原生 markdown"),
+            {"id": "sent-fallback"},
+        ]
+    )
+    adapter.client.api = SimpleNamespace(
+        post_group_message=posting,
+        post_message=AsyncMock(),
+    )
+    adapter._session_scene["group-1"] = "group"
+
+    await adapter.send_by_session(
+        MessageSession("qq_official", MessageType.GROUP_MESSAGE, "group-1"),
+        MessageChain(chain=[Plain("**bold** text")]),
+    )
+
+    assert posting.await_count == 2
+    first = posting.await_args_list[0].kwargs
+    second = posting.await_args_list[1].kwargs
+    assert first["markdown"]["content"] == "**bold** text"
+    assert first["msg_type"] == 2
+    assert "markdown" not in second
+    assert second["content"] == "**bold** text"
+    assert second["msg_type"] == 0

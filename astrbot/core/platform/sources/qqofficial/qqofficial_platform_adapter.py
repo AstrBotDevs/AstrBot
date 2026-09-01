@@ -463,18 +463,26 @@ class QQOfficialPlatformAdapter(Platform):
                         payload.pop("markdown", None)
                         payload["content"] = plain_text or None
                         payload.pop("msg_id", None)
-                ret = await self.client.api.post_group_message(
-                    group_openid=session.session_id,
-                    **payload,
+                ret = await QQOfficialMessageEvent._send_with_markdown_fallback(
+                    send_func=lambda retry_payload: self.client.api.post_group_message(
+                        group_openid=session.session_id,
+                        **retry_payload,
+                    ),
+                    payload=payload,
+                    plain_text=plain_text,
                 )
             else:
                 if image_path:
                     payload["file_image"] = image_path
                 # Guild text-channel send API does not use the QQ v2 msg_type field.
                 payload.pop("msg_type", None)
-                ret = await self.client.api.post_message(
-                    channel_id=session.session_id,
-                    **payload,
+                ret = await QQOfficialMessageEvent._send_with_markdown_fallback(
+                    send_func=lambda retry_payload: self.client.api.post_message(
+                        channel_id=session.session_id,
+                        **retry_payload,
+                    ),
+                    payload=payload,
+                    plain_text=plain_text,
                 )
 
         elif session.message_type == MessageType.FRIEND_MESSAGE:
@@ -531,10 +539,14 @@ class QQOfficialPlatformAdapter(Platform):
                     payload.pop("markdown", None)
                     payload["content"] = plain_text or None
 
-            ret = await QQOfficialMessageEvent.post_c2c_message(
-                send_helper,  # type: ignore
-                openid=session.session_id,
-                **payload,
+            ret = await QQOfficialMessageEvent._send_with_markdown_fallback(
+                send_func=lambda retry_payload: QQOfficialMessageEvent.post_c2c_message(
+                    send_helper,  # type: ignore
+                    openid=session.session_id,
+                    **retry_payload,
+                ),
+                payload=payload,
+                plain_text=plain_text,
             )
         else:
             logger.warning(
