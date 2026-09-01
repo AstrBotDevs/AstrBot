@@ -99,6 +99,24 @@ class MockToolExecutor:
         return generator()
 
 
+class MultiYieldToolExecutor:
+    """Simulate a local tool that yields multiple results for one call."""
+
+    @classmethod
+    def execute(cls, tool, run_context, **tool_args):
+        async def generator():
+            from mcp.types import CallToolResult, TextContent
+
+            yield CallToolResult(
+                content=[TextContent(type="text", text="first streamed result")]
+            )
+            yield CallToolResult(
+                content=[TextContent(type="text", text="second streamed result")]
+            )
+
+        return generator()
+
+
 class LargeTextToolExecutor:
     """模拟返回超长文本的工具执行器"""
 
@@ -181,6 +199,16 @@ class MockFailingProvider(MockProvider):
     async def text_chat(self, **kwargs) -> LLMResponse:
         self.call_count += 1
         raise RuntimeError("primary provider failed")
+
+
+class CapturingFailingProvider(MockFailingProvider):
+    def __init__(self):
+        super().__init__()
+        self.received_contexts = []
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.received_contexts.append(list(kwargs.get("contexts") or []))
+        return await super().text_chat(**kwargs)
 
 
 class MockErrProvider(MockProvider):
@@ -615,6 +643,34 @@ async def test_tool_loop_next_request_includes_tool_result(
     assert len(tool_messages) == 1
     assert tool_messages[0].tool_call_id == "call_context_refresh"
     assert "工具执行结果" in tool_messages[0].content
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_merges_multiple_results_from_one_tool_call(
+    runner, provider_request, mock_hooks
+):
+    """Multiple executor yields must remain one complete provider tool result."""
+    provider = CapturingToolLoopProvider("test_tool")
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=MultiYieldToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert provider.call_count == 2
+    second_contexts = provider.received_contexts[1]
+    tool_messages = [msg for msg in second_contexts if msg.role == "tool"]
+    assert len(tool_messages) == 1
+    assert tool_messages[0].tool_call_id == "call_context_refresh"
+    assert "first streamed result" in tool_messages[0].content
+    assert "second streamed result" in tool_messages[0].content
 
 
 @pytest.mark.asyncio
@@ -1277,6 +1333,61 @@ async def test_fallback_provider_used_when_primary_raises(
     assert final_resp.completion_text == "这是我的最终回答"
     assert primary_provider.call_count == 1
     assert fallback_provider.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_fallback_providers_receive_only_complete_tool_history(
+    runner, mock_tool_executor, mock_hooks
+):
+    primary_provider = CapturingFailingProvider()
+    fallback_provider = CapturingProvider(modalities=[])
+    request = ProviderRequest(
+        prompt="Continue",
+        contexts=[
+            {"role": "user", "content": "Run both tools"},
+            {
+                "role": "assistant",
+                "content": "Calling tools",
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "first", "arguments": "{}"},
+                    },
+                    {
+                        "id": "call_2",
+                        "type": "function",
+                        "function": {"name": "second", "arguments": "{}"},
+                    },
+                ],
+            },
+            {"role": "tool", "content": "first result", "tool_call_id": "call_1"},
+        ],
+    )
+
+    await runner.reset(
+        provider=primary_provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        fallback_providers=[fallback_provider],
+    )
+
+    async for _ in runner.step_until_done(5):
+        pass
+
+    for contexts in [
+        primary_provider.received_contexts[0],
+        fallback_provider.received_contexts[0],
+    ]:
+        assert all(message.role != "tool" for message in contexts)
+        assert all(not message.tool_calls for message in contexts)
+
+    final_resp = runner.get_final_llm_resp()
+    assert final_resp is not None
+    assert final_resp.completion_text == "final"
 
 
 @pytest.mark.asyncio

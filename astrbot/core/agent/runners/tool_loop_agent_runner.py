@@ -1107,11 +1107,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         logger.info(f"Agent 使用工具: {llm_response.tools_call_name}")
 
         def _append_tool_call_result(tool_call_id: str, content: str) -> None:
+            content = self._merge_follow_up_notice(content)
+            if (
+                len(tool_call_result_blocks) > tool_result_blocks_start
+                and tool_call_result_blocks[-1].tool_call_id == tool_call_id
+            ):
+                previous = tool_call_result_blocks[-1]
+                previous.content = f"{previous.content}\n\n{content}"
+                return
             tool_call_result_blocks.append(
                 ToolCallMessageSegment(
                     role="tool",
                     tool_call_id=tool_call_id,
-                    content=self._merge_follow_up_notice(content),
+                    content=content,
                 ),
             )
 
