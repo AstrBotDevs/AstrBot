@@ -5,6 +5,7 @@ from collections.abc import AsyncGenerator
 from aiocqhttp import CQHttp, Event
 from aiocqhttp.exceptions import ActionFailed
 
+from astrbot import logger
 from astrbot.core.message.components import (
     At,
     BaseMessageComponent,
@@ -315,50 +316,94 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         )
 
     async def get_group(self, group_id=None, **kwargs):
-        if isinstance(group_id, str) and group_id.isdigit():
-            group_id = int(group_id)
-        elif self.get_group_id():
-            group_id = int(self.get_group_id())
-        else:
+        """Get OneBot group details while preserving inbound data on failures.
+
+        Args:
+            group_id: Optional OneBot group identifier.
+            **kwargs: Reserved compatibility arguments.
+
+        Returns:
+            Enriched group information, or a basic group when an API is unavailable.
+        """
+        resolved_group_id = group_id or self.get_group_id()
+        if not resolved_group_id:
             return None
+        resolved_group_id = str(resolved_group_id)
+        api_group_id = (
+            int(resolved_group_id) if resolved_group_id.isdigit() else resolved_group_id
+        )
+
+        current_group = self.message_obj.group
+        group = (
+            current_group
+            if current_group and current_group.group_id == resolved_group_id
+            else Group(group_id=resolved_group_id)
+        )
 
         routing_params = {}
         if getattr(self.message_obj, "self_id", None):
             routing_params["self_id"] = self.message_obj.self_id
 
-        info: dict = await self._bot.call_action(
-            "get_group_info",
-            group_id=group_id,
-            **routing_params,
-        )
+        try:
+            info = await self._bot.call_action(
+                "get_group_info",
+                group_id=api_group_id,
+                **routing_params,
+            )
+            if isinstance(info, dict):
+                group.group_name = info.get("group_name") or group.group_name
+                member_count = info.get("member_count")
+                if member_count is not None:
+                    try:
+                        group.member_count = int(member_count)
+                    except TypeError, ValueError:
+                        logger.warning(
+                            "[aiocqhttp] Invalid member_count for group %s",
+                            resolved_group_id,
+                        )
+        except Exception as exc:
+            logger.warning(
+                "[aiocqhttp] Failed to get group information for %s: %s",
+                resolved_group_id,
+                exc,
+            )
 
-        members: list[dict] = await self._bot.call_action(
-            "get_group_member_list",
-            group_id=group_id,
-            **routing_params,
-        )
+        try:
+            members = await self._bot.call_action(
+                "get_group_member_list",
+                group_id=api_group_id,
+                **routing_params,
+            )
+        except Exception as exc:
+            logger.warning(
+                "[aiocqhttp] Failed to get members for group %s: %s",
+                resolved_group_id,
+                exc,
+            )
+            return group
+        if not isinstance(members, list):
+            return group
 
         owner_id = None
-        admin_ids = []
+        admin_ids: list[str] = []
         for member in members:
+            if not isinstance(member, dict) or member.get("user_id") is None:
+                continue
             if member.get("role") == "owner":
-                owner_id = member["user_id"]
+                owner_id = str(member["user_id"])
             if member.get("role") == "admin":
-                admin_ids.append(member["user_id"])
+                admin_ids.append(str(member["user_id"]))
 
-        group = Group(
-            group_id=str(group_id),
-            group_name=info.get("group_name"),
-            group_avatar="",
-            group_admins=admin_ids,
-            group_owner=str(owner_id) if owner_id is not None else "",
-            members=[
-                MessageMember(
-                    user_id=member["user_id"],
-                    nickname=member.get("nickname") or member.get("card"),
-                )
-                for member in members
-            ],
-        )
-
+        group.group_admins = admin_ids
+        group.group_owner = owner_id
+        group.members = [
+            MessageMember(
+                user_id=str(member["user_id"]),
+                nickname=member.get("nickname") or member.get("card"),
+            )
+            for member in members
+            if isinstance(member, dict) and member.get("user_id") is not None
+        ]
+        if group.member_count is None:
+            group.member_count = len(group.members)
         return group

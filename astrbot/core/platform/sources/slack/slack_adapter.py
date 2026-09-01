@@ -17,6 +17,7 @@ from astrbot.core.message.components import *
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     Platform,
@@ -144,7 +145,7 @@ class SlackAdapter(Platform):
             abm.type = MessageType.FRIEND_MESSAGE
         else:
             abm.type = MessageType.GROUP_MESSAGE
-            abm.group_id = channel_id
+            abm.group = Group(group_id=channel_id)
 
         # 设置会话ID
         if abm.type == MessageType.GROUP_MESSAGE:

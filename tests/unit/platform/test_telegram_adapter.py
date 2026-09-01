@@ -9,6 +9,7 @@ import pytest
 
 import astrbot.api.message_components as Comp
 from astrbot.api.event import MessageChain
+from astrbot.core.platform import Group
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import PluginRegistry, StarMetadata
@@ -1694,3 +1695,341 @@ async def test_telegram_group_admin_role_stays_in_current_session(tmp_path):
     finally:
         await service.close()
         await db.close()
+
+
+@pytest.mark.asyncio
+async def test_telegram_topic_with_missing_name_falls_back_to_group_name():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    update = create_mock_update(
+        chat_type="supergroup",
+        chat_id=-100123,
+        message_thread_id=42,
+        is_topic_message=True,
+    )
+    update.message.chat.title = "Engineering"
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert result.group is not None
+    assert result.group.group_id == "-100123#42"
+    assert result.group.group_name == "Engineering"
+
+
+@pytest.mark.asyncio
+async def test_telegram_regular_supergroup_message_uses_group_name():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    update = create_mock_update(chat_type="supergroup", chat_id=-100123)
+    update.message.chat.title = "Engineering"
+    update.message.chat.is_forum = False
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert result.group is not None
+    assert result.group.group_id == "-100123"
+    assert result.group.group_name == "Engineering"
+
+
+@pytest.mark.asyncio
+async def test_telegram_forum_topic_name_is_learned_and_updated_from_events():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    created_update = create_mock_update(
+        chat_type="supergroup",
+        chat_id=-100123,
+        message_thread_id=42,
+        is_topic_message=True,
+    )
+    created_update.message.chat.title = "Engineering"
+    created_update.message.chat.is_forum = True
+    created_update.message.forum_topic_created = SimpleNamespace(name="Backend")
+
+    created = await adapter.convert_message(created_update, _build_context())
+
+    assert created is not None
+    assert created.group is not None
+    assert created.group.group_name == "Engineering-Backend"
+
+    regular_update = create_mock_update(
+        chat_type="supergroup",
+        chat_id=-100123,
+        message_thread_id=42,
+        is_topic_message=True,
+    )
+    regular_update.message.chat.title = "Engineering"
+    regular_update.message.chat.is_forum = True
+
+    regular = await adapter.convert_message(regular_update, _build_context())
+
+    assert regular is not None
+    assert regular.group is not None
+    assert regular.group.group_name == "Engineering-Backend"
+
+    empty_edit_update = create_mock_update(
+        chat_type="supergroup",
+        chat_id=-100123,
+        message_thread_id=42,
+        is_topic_message=True,
+    )
+    empty_edit_update.message.chat.title = "Engineering"
+    empty_edit_update.message.chat.is_forum = True
+    empty_edit_update.message.forum_topic_edited = SimpleNamespace(name="   ")
+
+    empty_edit = await adapter.convert_message(empty_edit_update, _build_context())
+
+    assert empty_edit is not None
+    assert empty_edit.group is not None
+    assert empty_edit.group.group_name == "Engineering-Backend"
+
+    edited_update = create_mock_update(
+        chat_type="supergroup",
+        chat_id=-100123,
+        message_thread_id=42,
+        is_topic_message=True,
+    )
+    edited_update.message.chat.title = "Engineering"
+    edited_update.message.chat.is_forum = True
+    edited_update.message.forum_topic_edited = SimpleNamespace(name="Platform")
+
+    edited = await adapter.convert_message(edited_update, _build_context())
+
+    assert edited is not None
+    assert edited.group is not None
+    assert edited.group.group_name == "Engineering-Platform"
+
+
+@pytest.mark.asyncio
+async def test_telegram_forum_topic_cache_evicts_oldest_entry():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    assert TelegramPlatformAdapter._FORUM_TOPIC_NAME_CACHE_MAX_SIZE == 1000
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    adapter._FORUM_TOPIC_NAME_CACHE_MAX_SIZE = 2
+
+    for thread_id, topic_name in [(41, "One"), (42, "Two"), (43, "Three")]:
+        update = create_mock_update(
+            chat_type="supergroup",
+            chat_id=-100123,
+            message_thread_id=thread_id,
+            is_topic_message=True,
+        )
+        update.message.chat.title = "Engineering"
+        update.message.chat.is_forum = True
+        update.message.forum_topic_created = SimpleNamespace(name=topic_name)
+        await adapter.convert_message(update, _build_context())
+
+    assert list(adapter._forum_topic_names) == [("-100123", 42), ("-100123", 43)]
+
+
+@pytest.mark.asyncio
+async def test_telegram_forum_topic_name_is_read_from_topic_root_reply():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    topic_root = create_mock_update(
+        chat_type="supergroup",
+        chat_id=-100123,
+        message_id=42,
+    ).message
+    topic_root.forum_topic_created = SimpleNamespace(name="Backend")
+    update = create_mock_update(
+        chat_type="supergroup",
+        chat_id=-100123,
+        message_thread_id=42,
+        is_topic_message=True,
+        reply_to_message=topic_root,
+    )
+    update.message.chat.title = "Engineering"
+    update.message.chat.is_forum = True
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert result.group is not None
+    assert result.group.group_name == "Engineering-Backend"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("message_thread_id", "is_topic_message"),
+    [(None, False), (1, True)],
+)
+async def test_telegram_general_forum_topic_without_known_name_uses_group_name(
+    message_thread_id, is_topic_message
+):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    update = create_mock_update(
+        chat_type="supergroup",
+        chat_id=-100123,
+        message_thread_id=message_thread_id,
+        is_topic_message=is_topic_message,
+    )
+    update.message.chat.title = "Engineering"
+    update.message.chat.is_forum = True
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert result.group is not None
+    assert result.group.group_id == "-100123"
+    assert result.group.group_name == "Engineering"
+
+
+@pytest.mark.asyncio
+async def test_telegram_general_forum_topic_uses_observed_custom_name():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    edited_update = create_mock_update(chat_type="supergroup", chat_id=-100123)
+    edited_update.message.chat.title = "Engineering"
+    edited_update.message.chat.is_forum = True
+    edited_update.message.forum_topic_edited = SimpleNamespace(name="Lobby")
+
+    edited = await adapter.convert_message(edited_update, _build_context())
+
+    assert edited is not None
+    assert edited.group is not None
+    assert edited.group.group_name == "Engineering-Lobby"
+
+    regular_update = create_mock_update(chat_type="supergroup", chat_id=-100123)
+    regular_update.message.chat.title = "Engineering"
+    regular_update.message.chat.is_forum = True
+
+    regular = await adapter.convert_message(regular_update, _build_context())
+
+    assert regular is not None
+    assert regular.group is not None
+    assert regular.group.group_name == "Engineering-Lobby"
+
+
+@pytest.mark.asyncio
+async def test_telegram_get_group_keeps_forum_topic_name():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    update = create_mock_update(
+        chat_type="supergroup",
+        chat_id=-100123,
+        message_thread_id=42,
+        is_topic_message=True,
+    )
+    update.message.chat.title = "Engineering"
+    update.message.chat.is_forum = True
+    update.message.forum_topic_created = SimpleNamespace(name="Backend")
+    message = await adapter.convert_message(update, _build_context())
+    assert message is not None
+
+    event = TelegramPlatformEvent.__new__(TelegramPlatformEvent)
+    event.message_obj = message
+    event._client = SimpleNamespace(
+        get_chat=AsyncMock(
+            return_value=SimpleNamespace(title="Engineering 2", photo=None)
+        ),
+        get_chat_member_count=AsyncMock(return_value=24),
+        get_chat_administrators=AsyncMock(return_value=[]),
+    )
+
+    group = await event.get_group()
+
+    assert group is not None
+    assert group.group_name == "Engineering 2-Backend"
+
+
+@pytest.mark.asyncio
+async def test_telegram_get_group_enriches_available_metadata():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = SimpleNamespace(
+        get_chat=AsyncMock(
+            return_value=SimpleNamespace(
+                title="Engineering",
+                photo=SimpleNamespace(big_file_id="photo-1"),
+            )
+        ),
+        get_file=AsyncMock(
+            return_value=SimpleNamespace(
+                file_path="https://api.telegram.org/file/group.jpg"
+            )
+        ),
+        get_chat_member_count=AsyncMock(return_value=24),
+        get_chat_administrators=AsyncMock(
+            return_value=[
+                SimpleNamespace(status="creator", user=SimpleNamespace(id=1)),
+                SimpleNamespace(status="administrator", user=SimpleNamespace(id=2)),
+            ]
+        ),
+    )
+    event = TelegramPlatformEvent.__new__(TelegramPlatformEvent)
+    event.message_obj = SimpleNamespace(
+        group=Group(group_id="-100123#42", group_name="Cached title"),
+        group_id="-100123#42",
+    )
+    event._client = client
+
+    group = await event.get_group()
+
+    assert group is not None
+    assert group.group_id == "-100123#42"
+    assert group.group_name == "Engineering"
+    assert group.group_avatar == "https://api.telegram.org/file/group.jpg"
+    assert group.member_count == 24
+    assert group.group_owner == "1"
+    assert group.group_admins == ["2"]
+    assert group.members is None
+    client.get_chat.assert_awaited_once_with(chat_id=-100123)
+    client.get_chat_member_count.assert_awaited_once_with(chat_id=-100123)
+    client.get_chat_administrators.assert_awaited_once_with(chat_id=-100123)
+
+
+@pytest.mark.asyncio
+async def test_telegram_get_group_keeps_basic_metadata_when_apis_fail():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = SimpleNamespace(
+        get_chat=AsyncMock(side_effect=RuntimeError("chat unavailable")),
+        get_chat_member_count=AsyncMock(side_effect=RuntimeError("count unavailable")),
+        get_chat_administrators=AsyncMock(
+            side_effect=RuntimeError("administrators unavailable")
+        ),
+    )
+    event = TelegramPlatformEvent.__new__(TelegramPlatformEvent)
+    event.message_obj = SimpleNamespace(
+        group=Group(group_id="-100123#42", group_name="Cached title"),
+        group_id="-100123#42",
+    )
+    event._client = client
+
+    group = await event.get_group()
+
+    assert group == Group(group_id="-100123#42", group_name="Cached title")

@@ -396,6 +396,7 @@ async def test_napcat_get_group_returns_group_details():
     assert group is not None
     assert group.group_id == "654321"
     assert group.group_name == "NapCat Group"
+    assert group.member_count == 3
     assert group.group_owner == "1"
     assert group.group_admins == ["2"]
     assert [member.user_id for member in group.members] == ["1", "2", "3"]

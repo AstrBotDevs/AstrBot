@@ -8,6 +8,7 @@ from typing import Any, cast
 from uuid import uuid4
 
 import lark_oapi as lark
+from lark_oapi.api.contact.v3 import GetUserRequest
 from lark_oapi.api.im.v1 import (
     GetMessageRequest,
     GetMessageResourceRequest,
@@ -38,6 +39,10 @@ from .server import LarkWebhookServer
 
 LARK_REPLY_FETCH_TIMEOUT_SECONDS = 0.35
 LARK_SLOW_REPLY_FETCH_LOG_THRESHOLD_SECONDS = 0.2
+USER_NAME_CACHE_TTL_SECONDS = 1800
+USER_NAME_FAILURE_CACHE_TTL_SECONDS = 60
+USER_NAME_CACHE_MAX_SIZE = 1000
+USER_NAME_LOOKUP_TIMEOUT_SECONDS = 5
 
 
 @register_platform_adapter(
@@ -106,6 +111,7 @@ class LarkPlatformAdapter(Platform):
             self.webhook_server.set_callback(self.handle_webhook_event)
 
         self.event_id_timestamps: dict[str, float] = {}
+        self._user_name_cache: dict[str, tuple[str, float]] = {}
 
     async def _download_message_resource(
         self,
@@ -765,10 +771,59 @@ class LarkPlatformAdapter(Platform):
 
         abm.message_id = message.message_id
         abm.raw_message = message
-        abm.sender = MessageMember(
-            user_id=event.event.sender.sender_id.open_id,
-            nickname=event.event.sender.sender_id.open_id[:8],
-        )
+        sender_open_id = event.event.sender.sender_id.open_id
+        sender_name = sender_open_id[:8]
+        if (
+            abm.type == MessageType.FRIEND_MESSAGE
+            and getattr(event.event.sender, "sender_type", "user") == "user"
+        ):
+            cached_name = self._user_name_cache.get(sender_open_id)
+            if cached_name and time.time() <= cached_name[1]:
+                sender_name = cached_name[0]
+            else:
+                self._user_name_cache.pop(sender_open_id, None)
+                sender_name = ""
+            if not sender_name:
+                name_cache_ttl = USER_NAME_FAILURE_CACHE_TTL_SECONDS
+                try:
+                    if self.lark_api.contact is None:
+                        raise RuntimeError("Lark contact API is unavailable")
+                    request = (
+                        GetUserRequest.builder()
+                        .user_id(sender_open_id)
+                        .user_id_type("open_id")
+                        .build()
+                    )
+                    response = await asyncio.wait_for(
+                        self.lark_api.contact.v3.user.aget(request),
+                        timeout=USER_NAME_LOOKUP_TIMEOUT_SECONDS,
+                    )
+                    if response.success() and response.data and response.data.user:
+                        sender_name = str(response.data.user.name or "").strip()
+                        if sender_name:
+                            name_cache_ttl = USER_NAME_CACHE_TTL_SECONDS
+                    else:
+                        logger.debug(
+                            "[Lark] Sender name lookup failed for %s: code=%s, msg=%s",
+                            sender_open_id,
+                            getattr(response, "code", None),
+                            getattr(response, "msg", None),
+                        )
+                except Exception as exc:
+                    logger.debug(
+                        "[Lark] Sender name lookup failed for %s: %s",
+                        sender_open_id,
+                        exc,
+                    )
+                sender_name = sender_name or sender_open_id[:8]
+                self._user_name_cache[sender_open_id] = (
+                    sender_name,
+                    time.time() + name_cache_ttl,
+                )
+                if len(self._user_name_cache) > USER_NAME_CACHE_MAX_SIZE:
+                    self._user_name_cache.pop(next(iter(self._user_name_cache)))
+
+        abm.sender = MessageMember(user_id=sender_open_id, nickname=sender_name)
         if abm.type == MessageType.GROUP_MESSAGE:
             abm.session_id = abm.group_id
         else:

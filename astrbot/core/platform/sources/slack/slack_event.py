@@ -1,6 +1,6 @@
 import asyncio
 import re
-from collections.abc import AsyncGenerator, Iterable
+from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import cast
 
@@ -188,46 +188,100 @@ class SlackMessageEvent(AstrMessageEvent):
         )
 
     async def get_group(self, group_id=None, **kwargs):
-        if group_id:
-            channel_id = group_id
-        elif self.get_group_id():
-            channel_id = self.get_group_id()
-        else:
+        """Gets Slack channel information and all visible members.
+
+        Args:
+            group_id: Optional Slack channel identifier.
+            **kwargs: Reserved compatibility arguments.
+
+        Returns:
+            Enriched channel information, or a basic group if lookup fails.
+        """
+        channel_id = group_id or self.get_group_id()
+        if not channel_id:
             return None
+
+        current_group = self.message_obj.group
+        group = Group(
+            group_id=channel_id,
+            group_name=(
+                current_group.group_name
+                if current_group and current_group.group_id == channel_id
+                else None
+            ),
+        )
 
         try:
-            # 获取频道信息
-            channel_info = await self.web_client.conversations_info(channel=channel_id)
-
-            # 获取频道成员
-            members_response = await self.web_client.conversations_members(
+            channel_info = await self.web_client.conversations_info(
                 channel=channel_id,
+                include_num_members=True,
             )
-
-            members = []
-            for member_id in cast(Iterable, members_response["members"]):
-                try:
-                    user_info = await self.web_client.users_info(user=member_id)
-                    user_data = cast(dict, user_info["user"])
-                    members.append(
-                        MessageMember(
-                            user_id=member_id,
-                            nickname=user_data.get("real_name")
-                            or user_data.get("name", member_id),
-                        ),
-                    )
-                except Exception:
-                    # 如果获取用户信息失败，使用默认信息
-                    members.append(MessageMember(user_id=member_id, nickname=member_id))
-
             channel_data = cast(dict, channel_info["channel"])
-            return Group(
-                group_id=channel_id,
-                group_name=channel_data.get("name", ""),
-                group_avatar="",
-                group_admins=[],  # Slack 的管理员信息需要特殊权限获取
-                group_owner=channel_data.get("creator", ""),
-                members=members,
+            group.group_name = channel_data.get("name") or group.group_name
+            group.member_count = channel_data.get("num_members")
+        except Exception as exc:
+            logger.debug("Slack channel info lookup failed for %s: %s", channel_id, exc)
+            return group
+
+        member_ids: list[str] = []
+        cursor: str | None = None
+        try:
+            while True:
+                request: dict[str, str | int] = {
+                    "channel": channel_id,
+                    "limit": 200,
+                }
+                if cursor:
+                    request["cursor"] = cursor
+                members_response = await self.web_client.conversations_members(
+                    **request,
+                )
+                member_ids.extend(
+                    str(member_id) for member_id in members_response["members"]
+                )
+                response_metadata = members_response.get("response_metadata") or {}
+                cursor = str(response_metadata.get("next_cursor") or "")
+                if not cursor:
+                    break
+        except Exception as exc:
+            logger.debug(
+                "Slack channel member lookup failed for %s: %s",
+                channel_id,
+                exc,
             )
-        except Exception:
-            return None
+            return group
+
+        unique_member_ids = list(dict.fromkeys(member_ids))
+        members: list[MessageMember] = []
+        for offset in range(0, len(unique_member_ids), 20):
+            member_id_batch = unique_member_ids[offset : offset + 20]
+            user_responses = await asyncio.gather(
+                *(
+                    self.web_client.users_info(user=member_id)
+                    for member_id in member_id_batch
+                ),
+                return_exceptions=True,
+            )
+            for member_id, user_response in zip(
+                member_id_batch, user_responses, strict=True
+            ):
+                if isinstance(user_response, BaseException):
+                    members.append(MessageMember(user_id=member_id, nickname=member_id))
+                    continue
+                try:
+                    user_data = cast(dict, user_response["user"])
+                    nickname = (
+                        user_data.get("real_name") or user_data.get("name") or member_id
+                    )
+                except KeyError, TypeError, AttributeError:
+                    nickname = member_id
+                members.append(
+                    MessageMember(
+                        user_id=member_id,
+                        nickname=nickname,
+                    ),
+                )
+
+        group.members = members
+        group.member_count = group.member_count or len(members)
+        return group

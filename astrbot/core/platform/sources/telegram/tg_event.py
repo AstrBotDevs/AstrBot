@@ -21,7 +21,7 @@ from astrbot.core.message.components import (
     Video,
 )
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.platform import AstrBotMessage, MessageType, PlatformMetadata
+from astrbot.core.platform import AstrBotMessage, Group, MessageType, PlatformMetadata
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 
@@ -331,6 +331,102 @@ class TelegramPlatformEvent(AstrMessageEvent):
             self.route_identity.target_id,
         )
         return await super().send(message)
+
+    async def get_group(
+        self, group_id: str | None = None, **kwargs: Any
+    ) -> Group | None:
+        """Get Telegram group metadata available to the bot.
+
+        Telegram topics use ``<chat_id>#<thread_id>`` inside AstrBot. The Bot API
+        calls target the parent chat while the returned group keeps the topic-aware ID.
+
+        Args:
+            group_id: AstrBot group ID to query. Defaults to the current group.
+            **kwargs: Reserved for compatibility with the platform event interface.
+
+        Returns:
+            Enriched group metadata, or ``None`` when no group ID is available.
+        """
+        requested_group_id = str(group_id or self.get_group_id())
+        if not requested_group_id:
+            return None
+
+        current_group = self.message_obj.group
+        group = Group(
+            group_id=requested_group_id,
+            group_name=(
+                current_group.group_name
+                if current_group and current_group.group_id == requested_group_id
+                else None
+            ),
+        )
+        topic_name = (
+            getattr(self.message_obj, "_telegram_topic_name", None)
+            if current_group and current_group.group_id == requested_group_id
+            else None
+        )
+        chat_id = requested_group_id.split("#", 1)[0]
+        api_chat_id: str | int = (
+            int(chat_id) if chat_id.lstrip("-").isdigit() else chat_id
+        )
+
+        try:
+            chat = await self._client.get_chat(chat_id=api_chat_id)
+            title = getattr(chat, "title", None)
+            if isinstance(title, str):
+                group.group_name = (
+                    f"{title}-{topic_name}"
+                    if isinstance(topic_name, str) and topic_name
+                    else title
+                )
+
+            photo = getattr(chat, "photo", None)
+            file_id = getattr(photo, "big_file_id", None) if photo else None
+            if file_id:
+                try:
+                    photo_file = await self._client.get_file(file_id=file_id)
+                    file_path = getattr(photo_file, "file_path", None)
+                    if file_path:
+                        group.group_avatar = str(file_path)
+                except Exception as exc:
+                    logger.warning(
+                        f"[Telegram] Failed to get group photo for {chat_id}: {exc}"
+                    )
+        except Exception as exc:
+            logger.warning(
+                f"[Telegram] Failed to get group information for {chat_id}: {exc}"
+            )
+
+        try:
+            group.member_count = await self._client.get_chat_member_count(
+                chat_id=api_chat_id
+            )
+        except Exception as exc:
+            logger.warning(
+                f"[Telegram] Failed to get group member count for {chat_id}: {exc}"
+            )
+
+        try:
+            administrators = await self._client.get_chat_administrators(
+                chat_id=api_chat_id
+            )
+            group.group_admins = []
+            for administrator in administrators:
+                status = getattr(administrator, "status", None)
+                user = getattr(administrator, "user", None)
+                user_id = getattr(user, "id", None)
+                if user_id is None:
+                    continue
+                if status == "creator":
+                    group.group_owner = str(user_id)
+                elif status == "administrator":
+                    group.group_admins.append(str(user_id))
+        except Exception as exc:
+            logger.warning(
+                f"[Telegram] Failed to get group administrators for {chat_id}: {exc}"
+            )
+
+        return group
 
     async def react(self, emoji: str | None, big: bool = False) -> None:
         """给原消息添加 Telegram 反应：

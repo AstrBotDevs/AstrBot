@@ -34,7 +34,7 @@
 > App ID 获取方式：回到 AstrBot 的 `机器人` 页，找到刚刚创建的飞书机器人，点击 `编辑`，弹出的对话框中可以看到 App ID。
 >
 > ```text
-> https://open.feishu.cn/app/<APP_ID>/auth?q=contact:contact.base:readonly,im:message.p2p_msg:readonly,im:message.group_at_msg:readonly,im:message:send,im:message,im:message:send_as_bot,im:resource:upload,im:resource,cardkit:card:write,im:message.group_at_msg:readonly,im:message.group_msg&op_from=openapi&token_type=tenant
+> https://open.feishu.cn/app/<APP_ID>/auth?q=contact:contact.base:readonly,contact:user.base:readonly,im:message.p2p_msg:readonly,im:message.group_at_msg:readonly,im:message:send,im:message,im:message:send_as_bot,im:resource:upload,im:resource,cardkit:card:write,im:message.group_at_msg:readonly,im:message.group_msg&op_from=openapi&token_type=tenant
 > ```
 
 扫码创建完成后，建议继续检查后文的事件订阅、权限、版本发布和拉入群组步骤。
@@ -112,6 +112,8 @@
 接下来，点击权限管理，点击开通权限，输入 `im:message,im:message:send_as_bot`。添加筛选到的权限。
 
 再次输入 `im:resource:upload,im:resource` 开通上传图片相关的权限。
+
+开通 `contact:contact.base:readonly` 和 `contact:user.base:readonly`，用于读取私聊发送者的显示名。
 
 如果需要在群聊里使用，请额外开通 `im:message.group_at_msg:readonly` 和 `im:message.group_msg` 权限。
 

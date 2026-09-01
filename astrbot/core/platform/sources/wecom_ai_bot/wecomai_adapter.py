@@ -555,6 +555,8 @@ class WecomAIBotAdapter(Platform):
             if message_data.get("chattype") == "group"
             else MessageType.FRIEND_MESSAGE
         )
+        if abm.type == MessageType.GROUP_MESSAGE and message_data.get("chatid"):
+            abm.group_id = str(message_data["chatid"])
         abm.session_id = session_id
 
         # 消息内容

@@ -16,6 +16,7 @@ from astrbot.core.message.components import (
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     Platform,
@@ -468,7 +469,10 @@ class KookPlatformAdapter(Platform):
             case KookChannelType.GROUP:
                 session_id = data.target_id or "unknown"
                 abm.type = MessageType.GROUP_MESSAGE
-                abm.group_id = session_id
+                abm.group = Group(
+                    group_id=session_id,
+                    group_name=data.extra.channel_name or None,
+                )
                 abm.session_id = session_id
             case KookChannelType.PERSON:
                 abm.type = MessageType.FRIEND_MESSAGE

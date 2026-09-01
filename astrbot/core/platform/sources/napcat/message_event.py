@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
+from astrbot import logger
 from astrbot.core.message.components import Forward, OnlineFile
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import Group, MessageMember
@@ -818,14 +819,24 @@ class NapCatMessageEvent(AstrMessageEvent):
         return await self._adapter.client.get_forward_message(resolved_id)
 
     async def get_group(self, group_id=None, **kwargs):
+        """Get OneBot group details while preserving inbound data on failures.
+
+        Args:
+            group_id: Optional OneBot group identifier.
+            **kwargs: Optional ``no_cache`` forwarded to member-list lookup.
+
+        Returns:
+            Enriched group information, or a basic group when an API is unavailable.
+        """
         resolved_group_id = str(group_id) if group_id else self.get_group_id()
         if not resolved_group_id:
             return None
 
-        info = await self._adapter.client.get_group_info(group_id=resolved_group_id)
-        members = await self._adapter.client.get_group_member_list(
-            resolved_group_id,
-            no_cache=kwargs.get("no_cache"),
+        current_group = self.message_obj.group
+        group = (
+            current_group
+            if current_group and current_group.group_id == resolved_group_id
+            else Group(group_id=resolved_group_id)
         )
 
         def _value(item: object, field: str):
@@ -836,6 +847,48 @@ class NapCatMessageEvent(AstrMessageEvent):
             return (
                 None if value is None or value.__class__.__name__ == "Unset" else value
             )
+
+        try:
+            info = await self._adapter.client.get_group_info(group_id=resolved_group_id)
+        except Exception as exc:
+            logger.warning(
+                "[napcat] Failed to get group information for %s: %s",
+                resolved_group_id,
+                exc,
+            )
+            info = None
+
+        if info is not None:
+            info_group_id = _value(info, "group_id")
+            info_group_name = _value(info, "group_name")
+            if isinstance(info_group_id, float | int):
+                group.group_id = str(int(info_group_id))
+            if info_group_name is not None:
+                group.group_name = str(info_group_name)
+            member_count = _value(info, "member_count")
+            if member_count is not None:
+                try:
+                    group.member_count = int(member_count)
+                except TypeError, ValueError:
+                    logger.warning(
+                        "[napcat] Invalid member_count for group %s",
+                        resolved_group_id,
+                    )
+
+        try:
+            members = await self._adapter.client.get_group_member_list(
+                resolved_group_id,
+                no_cache=kwargs.get("no_cache"),
+            )
+        except Exception as exc:
+            logger.warning(
+                "[napcat] Failed to get members for group %s: %s",
+                resolved_group_id,
+                exc,
+            )
+            return group
+        if not isinstance(members, list):
+            return group
 
         owner_id = None
         admin_ids: list[str] = []
@@ -858,17 +911,12 @@ class NapCatMessageEvent(AstrMessageEvent):
                 )
             )
 
-        info_group_id = _value(info, "group_id")
-        info_group_name = _value(info, "group_name")
-        return Group(
-            group_id=str(int(info_group_id))
-            if isinstance(info_group_id, float | int)
-            else resolved_group_id,
-            group_name=str(info_group_name) if info_group_name is not None else None,
-            group_owner=owner_id,
-            group_admins=admin_ids,
-            members=group_members,
-        )
+        group.group_owner = owner_id
+        group.group_admins = admin_ids
+        group.members = group_members
+        if group.member_count is None:
+            group.member_count = len(group_members)
+        return group
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         return await self.send_non_streaming_response(

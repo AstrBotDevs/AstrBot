@@ -3,6 +3,7 @@ import random
 import time
 import traceback
 import zlib
+from typing import Any
 
 import aiohttp
 import pydantic
@@ -69,6 +70,119 @@ class KookClient:
     @property
     def http_client(self):
         return self._http_client
+
+    async def _get_api_data(
+        self,
+        url: str,
+        params: dict[str, str | int],
+    ) -> dict[str, Any]:
+        """Gets and validates an object payload from a KOOK API endpoint.
+
+        Args:
+            url: Absolute KOOK API endpoint URL.
+            params: Query parameters for the request.
+
+        Returns:
+            The response's data object.
+
+        Raises:
+            RuntimeError: If the HTTP or KOOK API response is unsuccessful.
+        """
+        async with self._http_client.get(url, params=params) as resp:
+            if resp.status != 200:
+                raise RuntimeError(
+                    f"KOOK GET {url} failed: {resp.status} {await resp.text()}"
+                )
+            payload = await resp.json()
+            if not isinstance(payload, dict) or payload.get("code") != 0:
+                raise RuntimeError(f"KOOK GET {url} returned an error: {payload}")
+            data = payload.get("data")
+            if not isinstance(data, dict):
+                raise RuntimeError(f"KOOK GET {url} returned invalid data: {payload}")
+            return data
+
+    async def get_channel(self, channel_id: str) -> dict[str, Any]:
+        """Gets a KOOK channel.
+
+        Args:
+            channel_id: KOOK channel identifier.
+
+        Returns:
+            KOOK channel data.
+        """
+        return await self._get_api_data(
+            KookApiPaths.CHANNEL_VIEW,
+            {"target_id": channel_id},
+        )
+
+    async def get_guild(self, guild_id: str) -> dict[str, Any]:
+        """Gets a KOOK guild.
+
+        Args:
+            guild_id: KOOK guild identifier.
+
+        Returns:
+            KOOK guild data.
+        """
+        return await self._get_api_data(
+            KookApiPaths.GUILD_VIEW,
+            {"guild_id": guild_id},
+        )
+
+    async def get_guild_users(
+        self,
+        guild_id: str,
+        *,
+        channel_id: str,
+        page: int,
+        page_size: int,
+    ) -> dict[str, Any]:
+        """Gets one page of KOOK guild members.
+
+        Args:
+            guild_id: KOOK guild identifier.
+            channel_id: KOOK channel used to filter visible members.
+            page: One-based page index.
+            page_size: Maximum members requested per page.
+
+        Returns:
+            Guild member items and pagination metadata.
+        """
+        return await self._get_api_data(
+            KookApiPaths.GUILD_USER_LIST,
+            {
+                "guild_id": guild_id,
+                "channel_id": channel_id,
+                "page": page,
+                "page_size": page_size,
+            },
+        )
+
+    async def get_guild_roles(
+        self,
+        guild_id: str,
+        *,
+        page: int,
+        page_size: int,
+    ) -> dict[str, Any]:
+        """Gets one page of KOOK guild roles.
+
+        Args:
+            guild_id: KOOK guild identifier.
+            page: One-based page index.
+            page_size: Maximum roles requested per page.
+
+        Returns:
+            Guild role items and pagination metadata.
+        """
+        return await self._get_api_data(
+            KookApiPaths.GUILD_ROLE_LIST,
+            {
+                "guild_id": guild_id,
+                "page": page,
+                "page_size": page_size,
+            },
+        )
 
     async def get_bot_info(self) -> None:
         """获取机器人账号信息"""

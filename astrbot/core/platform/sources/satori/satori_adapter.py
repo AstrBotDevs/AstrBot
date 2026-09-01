@@ -23,6 +23,7 @@ from astrbot.core.message.components import (
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     Platform,
@@ -355,7 +356,11 @@ class SatoriPlatformAdapter(Platform):
 
             if guild and guild.get("id"):
                 abm.type = MessageType.GROUP_MESSAGE
-                abm.group_id = guild.get("id", "")
+                abm.group = Group(
+                    group_id=str(guild["id"]),
+                    group_name=guild.get("name"),
+                    group_avatar=guild.get("avatar"),
+                )
                 abm.session_id = channel.get("id", "")
             else:
                 abm.type = MessageType.FRIEND_MESSAGE

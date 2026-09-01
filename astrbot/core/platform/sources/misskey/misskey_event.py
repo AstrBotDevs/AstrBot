@@ -3,7 +3,7 @@ from collections.abc import AsyncGenerator
 
 from astrbot import logger
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.platform import AstrBotMessage, PlatformMetadata
+from astrbot.core.platform import AstrBotMessage, Group, MessageMember, PlatformMetadata
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.send_result import PlatformSendResult
 
@@ -136,3 +136,119 @@ class MisskeyPlatformEvent(AstrMessageEvent):
             use_fallback=use_fallback,
             sentence_pattern=re.compile(r"[^。？！~…]+[。？！~…]+"),
         )
+
+    async def get_group(
+        self,
+        group_id: str | None = None,
+        **kwargs,
+    ) -> Group | None:
+        """Retrieve Misskey chat room information and all room members.
+
+        Args:
+            group_id: Room ID to query. Defaults to the current room ID.
+            **kwargs: Reserved for compatibility with the platform event interface.
+
+        Returns:
+            Room information, or ``None`` when no room ID is available. If the
+            instance does not support the room APIs, returns the basic room
+            information already present on the incoming message.
+        """
+        del kwargs
+        room_id = str(group_id or self.get_group_id() or "")
+        if not room_id:
+            return None
+
+        current_group = self.message_obj.group
+        cached_room = getattr(self._client, "_user_cache", {}).get(
+            f"room:{room_id}",
+            {},
+        )
+        fallback_group = Group(
+            group_id=room_id,
+            group_name=(
+                current_group.group_name
+                if current_group and current_group.group_id == room_id
+                else cached_room.get("room_name") or None
+            ),
+            group_owner=(
+                current_group.group_owner
+                if current_group and current_group.group_id == room_id
+                else str(cached_room.get("owner_id") or "") or None
+            ),
+        )
+
+        api = getattr(self._client, "api", None)
+        if api is None or not hasattr(api, "_make_request"):
+            return fallback_group
+
+        try:
+            room = await api._make_request(
+                "chat/rooms/show",
+                {"roomId": room_id},
+            )
+            if not isinstance(room, dict):
+                raise TypeError("Misskey room response must be an object")
+
+            memberships: list[dict] = []
+            until_id = None
+            while True:
+                payload = {"roomId": room_id, "limit": 100}
+                if until_id:
+                    payload["untilId"] = until_id
+                page = await api._make_request("chat/rooms/members", payload)
+                if not isinstance(page, list):
+                    raise TypeError("Misskey room members response must be a list")
+                memberships.extend(
+                    membership for membership in page if isinstance(membership, dict)
+                )
+                if len(page) < 100:
+                    break
+                next_until_id = page[-1].get("id")
+                if not next_until_id or next_until_id == until_id:
+                    raise ValueError(
+                        "Misskey room members pagination cursor is missing"
+                    )
+                until_id = next_until_id
+        except Exception as exc:
+            logger.warning(
+                f"[MisskeyEvent] Failed to retrieve room information for {room_id}: {exc}",
+            )
+            return fallback_group
+
+        owner_id = str(room.get("ownerId") or fallback_group.group_owner or "")
+        members = []
+        member_ids = set()
+        for membership in memberships:
+            user = membership.get("user")
+            user = user if isinstance(user, dict) else {}
+            user_id = str(membership.get("userId") or user.get("id") or "")
+            if not user_id or user_id in member_ids:
+                continue
+            member_ids.add(user_id)
+            members.append(
+                MessageMember(
+                    user_id=user_id,
+                    nickname=user.get("name") or user.get("username") or None,
+                ),
+            )
+
+        # Misskey does not create a membership record for the room owner.
+        if owner_id and owner_id not in member_ids:
+            owner = room.get("owner")
+            owner = owner if isinstance(owner, dict) else {}
+            members.append(
+                MessageMember(
+                    user_id=owner_id,
+                    nickname=owner.get("name") or owner.get("username") or None,
+                ),
+            )
+
+        group = Group(
+            group_id=room_id,
+            group_name=room.get("name") or fallback_group.group_name,
+            group_owner=owner_id or None,
+            group_admins=[],
+            members=members,
+            member_count=len(members),
+        )
+        return group

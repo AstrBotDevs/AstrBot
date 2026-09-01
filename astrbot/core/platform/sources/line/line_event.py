@@ -16,6 +16,7 @@ from astrbot.core.message.components import (
     Video,
 )
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform import Group, MessageMember
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -258,3 +259,108 @@ class LineMessageEvent(AstrMessageEvent):
             use_fallback=use_fallback,
             sentence_pattern=re.compile(r"[^。？！~…]+[。？！~…]+"),
         )
+
+    async def get_group(
+        self,
+        group_id: str | None = None,
+        **kwargs,
+    ) -> Group | None:
+        """Get LINE group or multi-person chat information.
+
+        Group summaries provide a name and icon. LINE doesn't expose a room
+        summary endpoint, so room enrichment is limited to its member count and
+        accessible members. Member enumeration is unavailable to unverified
+        accounts; in that case the basic group object is still returned.
+
+        Args:
+            group_id: Group or room ID. Defaults to the current message chat.
+            **kwargs: Optional ``chat_type`` override (``group`` or ``room``).
+
+        Returns:
+            Enriched group information, a basic group object when LINE denies
+            enrichment, or ``None`` for a private event without a group ID.
+        """
+        resolved_group_id = str(group_id or self.get_group_id()).strip()
+        if not resolved_group_id:
+            return None
+
+        current_group = self.message_obj.group
+        if current_group and current_group.group_id == resolved_group_id:
+            result = Group(
+                group_id=resolved_group_id,
+                group_name=current_group.group_name,
+                group_avatar=current_group.group_avatar,
+                group_owner=current_group.group_owner,
+                group_admins=current_group.group_admins,
+                members=current_group.members,
+                member_count=current_group.member_count,
+            )
+        else:
+            result = Group(group_id=resolved_group_id)
+
+        chat_type = str(kwargs.get("chat_type", "")).strip().lower()
+        raw = self.message_obj.raw_message
+        if chat_type not in {"group", "room"} and isinstance(raw, dict):
+            source = raw.get("source")
+            if isinstance(source, dict):
+                source_type = str(source.get("type", "")).strip().lower()
+                source_id = str(
+                    source.get("groupId") or source.get("roomId") or ""
+                ).strip()
+                if source_id == resolved_group_id and source_type in {"group", "room"}:
+                    chat_type = source_type
+        if chat_type not in {"group", "room"}:
+            chat_type = "room" if resolved_group_id.startswith("R") else "group"
+
+        calls = []
+        if chat_type == "group":
+            calls.append(self.line_api.get_group_summary(resolved_group_id))
+        calls.extend(
+            [
+                self.line_api.get_chat_member_count(chat_type, resolved_group_id),
+                self.line_api.get_chat_member_ids(chat_type, resolved_group_id),
+            ]
+        )
+        responses = await asyncio.gather(*calls, return_exceptions=True)
+
+        if chat_type == "group":
+            summary, member_count, member_ids = responses
+            if isinstance(summary, dict):
+                group_name = str(summary.get("groupName", "")).strip()
+                group_avatar = str(summary.get("pictureUrl", "")).strip()
+                if group_name:
+                    result.group_name = group_name
+                if group_avatar:
+                    result.group_avatar = group_avatar
+        else:
+            member_count, member_ids = responses
+
+        if isinstance(member_count, int) and member_count >= 0:
+            result.member_count = member_count
+
+        if isinstance(member_ids, list):
+            profile_responses = await asyncio.gather(
+                *(
+                    self.line_api.get_chat_member_profile(
+                        chat_type,
+                        resolved_group_id,
+                        member_id,
+                    )
+                    for member_id in member_ids
+                ),
+                return_exceptions=True,
+            )
+            result.members = []
+            for member_id, profile in zip(
+                member_ids,
+                profile_responses,
+                strict=True,
+            ):
+                nickname = None
+                if isinstance(profile, dict):
+                    nickname = str(profile.get("displayName", "")).strip() or None
+                result.members.append(
+                    MessageMember(user_id=member_id, nickname=nickname),
+                )
+
+        return result

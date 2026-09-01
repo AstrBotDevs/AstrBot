@@ -29,7 +29,7 @@ from tenacity import (
 from astrbot import logger
 from astrbot.core.message.components import At, File, Image, Plain, Record, Video
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.platform import AstrBotMessage, PlatformMetadata
+from astrbot.core.platform import AstrBotMessage, Group, PlatformMetadata
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.platform.sources.qqofficial.qqofficial_chunked_upload import (
@@ -132,6 +132,107 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self._bot = bot
         self.send_buffer = None
+
+    async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
+        """Get QQ group or guild-channel information for this event.
+
+        QQ group metadata is restricted to allowlisted bots. When the API is
+        unavailable, the basic group object attached to the incoming message is
+        returned so callers can still rely on the group identifier.
+
+        Args:
+            group_id: Optional QQ group OpenID or guild channel ID. Defaults to
+                the current message group identifier.
+            **kwargs: Reserved for compatibility with the base event API.
+
+        Returns:
+            Available group information, or ``None`` for a private event without
+            an explicit group identifier.
+        """
+        del kwargs
+        target_id = group_id or self.message_obj.group_id
+        if not target_id:
+            return None
+
+        current_group = self.message_obj.group
+        group = (
+            current_group
+            if current_group and current_group.group_id == target_id
+            else Group(group_id=target_id)
+        )
+        source = self.message_obj.raw_message
+
+        if isinstance(source, botpy.message.GroupMessage):
+            try:
+                route = Route(
+                    "GET",
+                    "/v2/groups/{group_openid}/info",
+                    group_openid=target_id,
+                )
+                payload = await self._bot.api._http.request(route)
+                if not isinstance(payload, dict):
+                    logger.warning(
+                        "[QQOfficial] Group info API returned an invalid response for %s",
+                        target_id,
+                    )
+                    return group
+
+                group.group_name = payload.get("group_name") or group.group_name
+                member_count = payload.get(
+                    "group_member_num",
+                    payload.get("member_count"),
+                )
+                if member_count is not None:
+                    try:
+                        group.member_count = int(member_count)
+                    except TypeError, ValueError:
+                        logger.warning(
+                            "[QQOfficial] Group info API returned an invalid member_count for %s",
+                            target_id,
+                        )
+            except Exception as exc:
+                logger.warning(
+                    "[QQOfficial] Failed to get group info for %s: %s",
+                    target_id,
+                    exc,
+                )
+            return group
+
+        if isinstance(source, botpy.message.Message):
+            try:
+                channel = await self._bot.api.get_channel(target_id)
+                if not isinstance(channel, dict):
+                    logger.warning(
+                        "[QQOfficial] Channel API returned an invalid response for %s",
+                        target_id,
+                    )
+                    return group
+
+                group.group_name = channel.get("name") or group.group_name
+                guild_id = channel.get("guild_id") or getattr(source, "guild_id", None)
+                if guild_id:
+                    guild = await self._bot.api.get_guild(str(guild_id))
+                    if isinstance(guild, dict):
+                        group.group_avatar = guild.get("icon") or group.group_avatar
+                        group.group_owner = guild.get("owner_id") or group.group_owner
+                        member_count = guild.get("member_count")
+                        if member_count is not None:
+                            try:
+                                group.member_count = int(member_count)
+                            except TypeError, ValueError:
+                                logger.warning(
+                                    "[QQOfficial] Guild API returned an invalid member_count for %s",
+                                    guild_id,
+                                )
+            except Exception as exc:
+                logger.warning(
+                    "[QQOfficial] Failed to get channel info for %s: %s",
+                    target_id,
+                    exc,
+                )
+            return group
+
+        return group
 
     async def send(self, message: MessageChain) -> PlatformSendResult | None:
         self.send_buffer = message

@@ -12,6 +12,7 @@ from astrbot.core.message.components import At, Plain
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     Platform,
@@ -242,7 +243,12 @@ class MattermostPlatformAdapter(Platform):
             abm.type = MessageType.FRIEND_MESSAGE
         else:
             abm.type = MessageType.GROUP_MESSAGE
-            abm.group_id = channel_id
+            abm.group = Group(
+                group_id=channel_id,
+                group_name=(
+                    data.get("channel_display_name") or data.get("channel_name") or None
+                ),
+            )
 
         if file_ids:
             attachment_infos = post.get("metadata", {}).get("files")

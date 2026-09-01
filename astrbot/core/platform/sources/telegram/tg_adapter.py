@@ -17,6 +17,7 @@ from astrbot import logger
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     Platform,
@@ -47,6 +48,8 @@ def _telegram_member_status(raw_message: object) -> str | None:
 
 @register_platform_adapter("telegram", "telegram 适配器")
 class TelegramPlatformAdapter(Platform):
+    _FORUM_TOPIC_NAME_CACHE_MAX_SIZE = 1000
+
     def __init__(
         self,
         platform_config: dict,
@@ -121,6 +124,7 @@ class TelegramPlatformAdapter(Platform):
         self._polling_recovery_threshold = 3
         self._polling_failure_window = 60.0
         self._application_started = False
+        self._forum_topic_names: dict[tuple[str, int | None], str] = {}
         self._build_application()
 
         # Media group handling
@@ -621,11 +625,69 @@ class TelegramPlatformAdapter(Platform):
             message.type = MessageType.FRIEND_MESSAGE
         else:
             message.type = MessageType.GROUP_MESSAGE
-            message.group_id = str(update.message.chat.id)
-            if update.message.is_topic_message and update.message.message_thread_id:
+            chat_id = str(update.message.chat.id)
+            group_id = chat_id
+            is_forum = getattr(update.message.chat, "is_forum", False) is True
+            raw_thread_id = (
+                update.message.message_thread_id
+                if update.message.is_topic_message
+                else None
+            )
+            thread_id = (
+                raw_thread_id
+                if raw_thread_id and not (is_forum and raw_thread_id == 1)
+                else None
+            )
+            if thread_id is not None:
                 # Telegram Topic Group: include thread id to isolate per-topic sessions.
-                message.group_id += "#" + str(update.message.message_thread_id)
-                message.session_id = message.group_id
+                group_id += "#" + str(thread_id)
+                message.session_id = group_id
+
+            chat_title = getattr(update.message.chat, "title", None)
+            group_name = chat_title if isinstance(chat_title, str) else None
+            topic_name = None
+            topic_created = getattr(update.message, "forum_topic_created", None)
+            topic_edited = getattr(update.message, "forum_topic_edited", None)
+            discovered_topic_name = getattr(topic_created, "name", None)
+            if not isinstance(discovered_topic_name, str):
+                discovered_topic_name = getattr(topic_edited, "name", None)
+            if not isinstance(discovered_topic_name, str):
+                reply_message = update.message.reply_to_message
+                reply_topic_created = getattr(
+                    reply_message, "forum_topic_created", None
+                )
+                discovered_topic_name = getattr(reply_topic_created, "name", None)
+
+            topic_key = None
+            if thread_id is not None:
+                topic_key = (chat_id, thread_id)
+            elif is_forum:
+                topic_key = (chat_id, None)
+
+            if topic_key is not None:
+                cached_topic_name = self._forum_topic_names.pop(topic_key, None)
+                if (
+                    isinstance(discovered_topic_name, str)
+                    and discovered_topic_name.strip()
+                ):
+                    cached_topic_name = discovered_topic_name.strip()
+                if cached_topic_name:
+                    self._forum_topic_names[topic_key] = cached_topic_name
+                    if (
+                        len(self._forum_topic_names)
+                        > self._FORUM_TOPIC_NAME_CACHE_MAX_SIZE
+                    ):
+                        oldest_topic_key = next(iter(self._forum_topic_names))
+                        del self._forum_topic_names[oldest_topic_key]
+                topic_name = cached_topic_name
+
+            if group_name and topic_name:
+                group_name = f"{group_name}-{topic_name}"
+            message.group = Group(
+                group_id=group_id,
+                group_name=group_name,
+            )
+            message._telegram_topic_name = topic_name
         message.message_id = str(update.message.message_id)
         _from_user = update.message.from_user
         if not _from_user:

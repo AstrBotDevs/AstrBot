@@ -354,18 +354,20 @@ async def test_slack_get_group_builds_members_and_falls_back_on_member_lookup_fa
     assert group is not None
     assert group.group_id == "C1"
     assert group.group_name == "general"
-    assert group.group_owner == "owner-1"
+    assert group.group_owner is None
     assert [member.nickname for member in group.members] == ["Alice", "U2"]
 
 
 @pytest.mark.asyncio
-async def test_slack_get_group_returns_none_when_channel_lookup_fails():
+async def test_slack_get_group_keeps_basic_group_when_channel_lookup_fails():
     event = _build_event(group_id="C1")
     event.web_client.conversations_info = AsyncMock(side_effect=RuntimeError("boom"))
 
     group = await event.get_group()
 
-    assert group is None
+    assert group is not None
+    assert group.group_id == "C1"
+    assert group.members is None
 
 
 @pytest.mark.asyncio
@@ -384,7 +386,7 @@ async def test_slack_get_group_uses_explicit_group_id_without_event_group_contex
     assert group is not None
     assert group.group_id == "C-explicit"
     assert group.group_name == "alerts"
-    assert group.group_owner == "owner-2"
+    assert group.group_owner is None
     assert [member.nickname for member in group.members] == ["botops-user"]
 
 

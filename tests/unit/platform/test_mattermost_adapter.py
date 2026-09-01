@@ -309,6 +309,15 @@ def _build_event() -> MattermostMessageEvent:
             get_channel=AsyncMock(
                 return_value={"display_name": "Town Square", "name": "town-square"}
             ),
+            get_channel_stats=AsyncMock(return_value={"member_count": 1}),
+            get_channel_members=AsyncMock(
+                return_value=[{"user_id": "user-1", "roles": "channel_user"}]
+            ),
+            get_users_by_ids=AsyncMock(
+                return_value=[
+                    {"id": "user-1", "nickname": "Alice", "username": "alice"}
+                ]
+            ),
         ),
     )
 
@@ -422,6 +431,7 @@ async def test_mattermost_event_get_group_maps_channel_display_name():
     assert group is not None
     assert group.group_id == "channel-1"
     assert group.group_name == "Town Square"
+    assert group.member_count == 1
     assert group.members[0].user_id == "user-1"
     assert group.members[0].nickname == "Alice"
 

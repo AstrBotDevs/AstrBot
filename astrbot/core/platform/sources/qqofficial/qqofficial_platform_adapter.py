@@ -27,6 +27,7 @@ from astrbot.core.message.components import (
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     Platform,
@@ -808,7 +809,14 @@ class QQOfficialPlatformAdapter(Platform):
                     message.author.member_openid,
                     getattr(message.author, "username", "") or "",
                 )
-                abm.group_id = message.group_openid
+                raw_data = getattr(message, "raw_data", {})
+                group_name = getattr(message, "group_name", None)
+                if not group_name and isinstance(raw_data, dict):
+                    group_name = raw_data.get("group_name")
+                abm.group = Group(
+                    group_id=cast(str, message.group_openid),
+                    group_name=str(group_name) if group_name else None,
+                )
                 bot_mentions = [
                     mention
                     for mention in (getattr(message, "mentions", None) or [])
@@ -880,7 +888,14 @@ class QQOfficialPlatformAdapter(Platform):
             msg.append(Plain(plain_content))
 
             if isinstance(message, botpy.message.Message):
-                abm.group_id = message.channel_id
+                raw_data = getattr(message, "raw_data", {})
+                channel_name = getattr(message, "channel_name", None)
+                if not channel_name and isinstance(raw_data, dict):
+                    channel_name = raw_data.get("channel_name")
+                abm.group = Group(
+                    group_id=message.channel_id,
+                    group_name=str(channel_name) if channel_name else None,
+                )
         else:
             raise ValueError(f"Unknown message type: {message_type}")
         if not abm.self_id:

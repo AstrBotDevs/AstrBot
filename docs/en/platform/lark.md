@@ -34,7 +34,7 @@ Under `Creation Method`, select `One-click QR Creation`, choose the China or int
 > To find the App ID, go back to AstrBot's `Bots` page, find the Lark bot you just created, click `Edit`, and check the dialog that opens.
 >
 > ```text
-> https://open.feishu.cn/app/<APP_ID>/auth?q=contact:contact.base:readonly,im:message.p2p_msg:readonly,im:message.group_at_msg:readonly,im:message:send,im:message,im:message:send_as_bot,im:resource:upload,im:resource,cardkit:card:write,im:message.group_at_msg:readonly,im:message.group_msg&op_from=openapi&token_type=tenant
+> https://open.feishu.cn/app/<APP_ID>/auth?q=contact:contact.base:readonly,contact:user.base:readonly,im:message.p2p_msg:readonly,im:message.group_at_msg:readonly,im:message:send,im:message,im:message:send_as_bot,im:resource:upload,im:resource,cardkit:card:write,im:message.group_at_msg:readonly,im:message.group_msg&op_from=openapi&token_type=tenant
 > ```
 
 After QR creation succeeds, continue checking the event subscription, permissions, version release, and group installation steps below.
@@ -112,6 +112,8 @@ Then click the `Save` button at the top.
 Next, click on "Permission Management," click "Enable Permissions," and enter `im:message:send,im:message,im:message:send_as_bot`. Add the filtered permissions.
 
 Enter `im:resource:upload,im:resource` again to enable image upload permissions.
+
+Enable `contact:contact.base:readonly` and `contact:user.base:readonly` so private-message senders can be shown by their display names.
 
 If you want to use the bot in group chats, additionally enable `im:message.group_at_msg:readonly` and `im:message.group_msg`.
 

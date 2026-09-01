@@ -9,6 +9,7 @@ from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, File, Image, Plain, Record, Video
 from astrbot.api.platform import MessageType
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.platform.route_identity import PlatformRouteIdentity
 from astrbot.core.platform.sources.dingtalk import dingtalk_adapter
 from astrbot.core.platform.sources.dingtalk.dingtalk_adapter import (
@@ -1193,3 +1194,42 @@ def test_dingtalk_create_event_does_not_promote_roles():
     event = adapter.create_event(message)
     assert event.platform_member_role == "member"
     assert event.platform_role_source == "none"
+
+
+@pytest.mark.asyncio
+async def test_dingtalk_group_message_includes_available_group_details():
+    adapter = _build_adapter()
+    adapter.download_ding_file = AsyncMock()
+    adapter._remember_sender_binding = AsyncMock()
+    message = SimpleNamespace(
+        create_at=1_700_000_000_123,
+        conversation_type="2",
+        sender_id="$:LWCP_v1:$user-1",
+        sender_nick="Alice",
+        chatbot_user_id="$:LWCP_v1:$bot-1",
+        message_id="msg-group",
+        at_users=[],
+        conversation_id="conversation",
+        conversation_title="AstrBot Group",
+        message_type="text",
+        robot_code="robot-code",
+        extensions={"content": {}},
+        text=SimpleNamespace(content="hello"),
+        sender_staff_id="",
+        isAdmin=True,
+    )
+
+    result = await adapter.convert_msg(message)
+
+    assert result.group is not None
+    assert result.group.group_id == "conversation"
+    assert result.group.group_name == "AstrBot Group"
+    assert result.group.group_admins is None
+
+    event = DingtalkMessageEvent(
+        result.message_str,
+        result,
+        PlatformMetadata(name="dingtalk", description="DingTalk", id="dingtalk"),
+        result.session_id,
+    )
+    assert await event.get_group() is result.group
