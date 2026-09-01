@@ -17,6 +17,8 @@ class PipelineEvent:
         self.requires_empty_completion = False
         self.unified_msg_origin = "webchat:FriendMessage:pipeline"
         self.cleaned = False
+        self._extras: dict[str, object] = {}
+        self.sent_none = False
 
     def is_stopped(self) -> bool:
         return self.stopped
@@ -32,6 +34,18 @@ class PipelineEvent:
 
     def get_message_outline(self) -> str:
         return "hi"
+
+    def get_extra(self, key: str | None = None, default=None):
+        if key is None:
+            return self._extras
+        return self._extras.get(key, default)
+
+    def set_extra(self, key, value) -> None:
+        self._extras[key] = value
+
+    async def send(self, message) -> None:
+        if message is None:
+            self.sent_none = True
 
 
 class OnionStage(Stage):
@@ -111,3 +125,26 @@ async def test_pipeline_execute_reraises_cancelled_error_and_unregisters():
 
     assert event.cleaned is True
     assert event.unified_msg_origin not in registry._events
+
+
+@pytest.mark.asyncio
+async def test_pipeline_skips_empty_completion_when_coalesce_defers_it():
+    scheduler = _scheduler([TraceStage("only")])
+    event = PipelineEvent()
+    event.requires_empty_completion = True
+    event.set_extra("skip_empty_completion", True)
+
+    await scheduler.execute(event)
+
+    assert event.sent_none is False
+
+
+@pytest.mark.asyncio
+async def test_pipeline_sends_empty_completion_for_webchat_when_not_skipped():
+    scheduler = _scheduler([TraceStage("only")])
+    event = PipelineEvent()
+    event.requires_empty_completion = True
+
+    await scheduler.execute(event)
+
+    assert event.sent_none is True

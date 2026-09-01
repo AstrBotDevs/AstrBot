@@ -238,12 +238,16 @@ class TurnWindowManager:
             chains.extend(list(fragment.get_messages()))
         message_obj.message = chains
         message_obj.message_id = getattr(last.message_obj, "message_id", "")
-        flush = last.__class__(
-            "\n".join(texts),
-            message_obj,
-            last.platform_meta,
-            last.session_id,
-        )
+        flush = copy.copy(last)
+        flush.message_str = "\n".join(texts)
+        flush.message_obj = message_obj
+        flush._extras = {}
+        flush._result = None
+        flush._force_stopped = False
+        flush._has_send_oper = False
+        flush.call_llm = False
+        flush._temporary_local_files = []
+        flush._background_tasks = set()
         flush.unified_msg_origin = last.unified_msg_origin
         flush.session_id = last.session_id
         flush.platform_member_role = last.platform_member_role

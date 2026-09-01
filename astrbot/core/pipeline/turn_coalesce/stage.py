@@ -64,4 +64,5 @@ class TurnCoalesceStage(Stage):
             wait_seconds=self.wait_seconds,
             max_total_seconds=self.max_total_seconds,
         )
+        event.set_extra("skip_empty_completion", True)
         event.stop_event()

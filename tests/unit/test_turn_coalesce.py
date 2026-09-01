@@ -1,6 +1,7 @@
 """Turn coalescing: discard-on-command, waiter bypass, forged flush, cancel."""
 
 import asyncio
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -17,6 +18,8 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
+from astrbot.core.platform.sources.webchat.webchat_event import WebChatMessageEvent
+from astrbot.core.webchat.queue_manager import WebChatQueueManager
 
 
 def _event(text: str, *, message_id: str = "1", extras=None) -> AstrMessageEvent:
@@ -155,6 +158,44 @@ async def test_coalesce_stage_buffers_private_llm_when_enabled():
     event.set_extra("should_run_llm", True)
     await stage.process(event)
     assert event.is_stopped() is True
+    assert event.get_extra("skip_empty_completion") is True
     assert manager.has_open_window(manager.window_key(event)) is True
     assert queued == []
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_flush_clones_webchat_event_without_reinvoking_constructor():
+    queued: list[AstrMessageEvent] = []
+    manager = TurnWindowManager(lambda event: queued.append(event) or True)
+    queue_manager = WebChatQueueManager()
+    message = AstrBotMessage()
+    message.type = MessageType.FRIEND_MESSAGE
+    message.self_id = "webchat"
+    message.session_id = "webchat!astrbot!conv-1"
+    message.message_id = "req-1"
+    message.sender = MessageMember("astrbot", "astrbot")
+    message.message = []
+    message.message_str = "hello"
+    event = WebChatMessageEvent(
+        "hello",
+        message,
+        PlatformMetadata(name="webchat", description="webchat", id="webchat"),
+        "webchat!astrbot!conv-1",
+        queue_manager,
+        Path("unused-attachments"),
+    )
+    event.set_extra("should_run_llm", True)
+
+    manager.accept(event, wait_seconds=0.01, max_total_seconds=1)
+    await asyncio.sleep(0.05)
+
+    assert len(queued) == 1
+    flush = queued[0]
+    assert isinstance(flush, WebChatMessageEvent)
+    assert flush is not event
+    assert flush._webchat_queue_manager is queue_manager
+    assert flush._attachments_dir == Path("unused-attachments")
+    assert flush.message_str == "hello"
+    assert is_manager_flush(flush._extras) is True
     await manager.terminate()

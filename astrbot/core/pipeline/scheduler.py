@@ -91,9 +91,13 @@ class PipelineScheduler:
             await self._process_stages(event)
 
             # 发送一个空消息, 以便于后续的处理
-            if event.requires_empty_completion:
+            if event.requires_empty_completion and not event.get_extra(
+                "skip_empty_completion"
+            ):
                 # Only adapters whose send implementation accepts ``None`` set this
                 # flag. The base event contract deliberately remains message-only.
+                # Coalesced fragments skip this so WebChat does not emit ``end``
+                # before the later flush event replies.
                 await cast(_EmptyCompletionEvent, event).send(None)
 
             elapsed = time() - started_at
