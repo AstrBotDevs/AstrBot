@@ -59,10 +59,24 @@ class EventBus:
                     f"PipelineScheduler not found for id: {conf_id}, event ignored."
                 )
                 continue
-            self._schedule_umo_auto_name_recording(event)
-            task = asyncio.create_task(scheduler.execute(event))
+            task = asyncio.create_task(self._execute_pipeline(scheduler, event))
             self._pending_tasks.add(task)
             task.add_done_callback(self._on_task_done)
+
+    async def _execute_pipeline(
+        self,
+        scheduler: PipelineScheduler,
+        event: AstrMessageEvent,
+    ) -> None:
+        """Execute the pipeline and record the UMO name after a successful wake.
+
+        Args:
+            scheduler: Pipeline scheduler selected for the event configuration.
+            event: Inbound platform event to process.
+        """
+        await scheduler.execute(event)
+        if event.is_wake:
+            self._schedule_umo_auto_name_recording(event)
 
     def _schedule_umo_auto_name_recording(self, event: AstrMessageEvent) -> None:
         """Queue a changed automatic UMO name for background persistence.

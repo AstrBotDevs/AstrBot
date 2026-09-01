@@ -113,8 +113,9 @@ class TestEventBusDispatch:
         processed = asyncio.Event()
         processed_count = 0
 
-        async def execute_and_count(event):  # noqa: ARG001
+        async def execute_and_count(event):
             nonlocal processed_count
+            event.is_wake = True
             processed_count += 1
             if processed_count == 3:
                 processed.set()
@@ -176,7 +177,8 @@ class TestEventBusDispatch:
             database_started.set()
             await release_database.wait()
 
-        async def execute_and_signal(event):  # noqa: ARG001
+        async def execute_and_signal(event):
+            event.is_wake = True
             pipeline_started.set()
 
         db_helper = MagicMock()
@@ -215,6 +217,53 @@ class TestEventBusDispatch:
                 await task
 
     @pytest.mark.asyncio
+    async def test_dispatch_skips_auto_name_when_event_does_not_wake(
+        self,
+        event_queue,
+        mock_pipeline_scheduler,
+        mock_config_manager,
+    ):
+        """Do not persist names from events ignored by the waking stage."""
+        processed = asyncio.Event()
+
+        async def execute_without_waking(event):
+            event.is_wake = False
+            processed.set()
+
+        mock_pipeline_scheduler.execute.side_effect = execute_without_waking
+        db_helper = MagicMock()
+        db_helper.upsert_umo_auto_name = AsyncMock()
+        bus = EventBus(
+            event_queue=event_queue,
+            pipeline_scheduler_mapping={"test-conf-id": mock_pipeline_scheduler},
+            astrbot_config_mgr=mock_config_manager,
+            db_helper=db_helper,
+        )
+        mock_event = MagicMock()
+        mock_event.unified_msg_origin = "test-platform:GroupMessage:group-1"
+        mock_event.message_obj = SimpleNamespace(
+            group=SimpleNamespace(group_name="Engineering Group")
+        )
+        mock_event.get_group_id.return_value = "group-1"
+        mock_event.get_platform_id.return_value = "test-platform"
+        mock_event.get_platform_name.return_value = "Test Platform"
+        mock_event.get_sender_name.return_value = "Alice"
+        mock_event.get_sender_id.return_value = "sender-1"
+        mock_event.get_message_outline.return_value = "Hello"
+        await event_queue.put(mock_event)
+
+        task = asyncio.create_task(bus.dispatch())
+        try:
+            await asyncio.wait_for(processed.wait(), timeout=1.0)
+            await asyncio.sleep(0)
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+        db_helper.upsert_umo_auto_name.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_dispatch_bounds_auto_name_cache(
         self,
         event_queue,
@@ -225,8 +274,9 @@ class TestEventBusDispatch:
         processed = asyncio.Event()
         processed_count = 0
 
-        async def execute_and_count(event):  # noqa: ARG001
+        async def execute_and_count(event):
             nonlocal processed_count
+            event.is_wake = True
             processed_count += 1
             if processed_count == 3:
                 processed.set()
@@ -329,8 +379,9 @@ class TestEventBusDispatch:
         processed = asyncio.Event()
         processed_count = 0
 
-        async def execute_and_count(event):  # noqa: ARG001
+        async def execute_and_count(event):
             nonlocal processed_count
+            event.is_wake = True
             processed_count += 1
             if processed_count == 2:
                 processed.set()
