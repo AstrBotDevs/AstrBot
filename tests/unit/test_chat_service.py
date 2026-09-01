@@ -1216,6 +1216,61 @@ async def test_prepare_regenerate_message_payload_rewrites_latest_turn():
 
 
 @pytest.mark.asyncio
+async def test_prepare_regenerate_retries_failed_turn_without_conversation_checkpoint():
+    service = _service()
+    session = _session()
+    target_record = _history_record(
+        20,
+        {
+            "type": "bot",
+            "message": [
+                {"type": "plain", "text": "Error occurred during AI execution."}
+            ],
+        },
+        checkpoint_id="ck-failed",
+    )
+    source_user_record = _history_record(
+        19,
+        {"type": "user", "message": [{"type": "plain", "text": "你好"}]},
+        checkpoint_id="ck-failed",
+    )
+
+    service.db.get_platform_session_by_id = AsyncMock(return_value=session)
+    service.db.get_platform_message_history_by_id = AsyncMock(
+        return_value=target_record
+    )
+    service.load_current_conversation_history = AsyncMock(
+        return_value=(
+            "conv-1",
+            [
+                {"role": "user", "content": "older"},
+                {"role": "_checkpoint", "content": {"id": "older"}},
+            ],
+        )
+    )
+    service.get_sorted_platform_history = AsyncMock(
+        return_value=[source_user_record, target_record]
+    )
+    service.conv_mgr.update_conversation = AsyncMock()
+    service.db.delete_webchat_threads_by_parent_message_ids = AsyncMock(return_value=[])
+    service.platform_history_mgr.delete_by_id = AsyncMock()
+    service.platform_history_mgr.update = AsyncMock()
+
+    result = await service.prepare_regenerate_message_payload(
+        "alice",
+        {"session_id": "session-1", "message_id": 20},
+    )
+
+    service.conv_mgr.update_conversation.assert_not_awaited()
+    service.platform_history_mgr.delete_by_id.assert_awaited_once_with(20)
+    update_kwargs = service.platform_history_mgr.update.await_args.kwargs
+    assert update_kwargs["message_id"] == 19
+    assert result["message"] == [{"type": "plain", "text": "你好"}]
+    assert result["_skip_user_history"] is True
+    assert result["_llm_checkpoint_id"] == update_kwargs["llm_checkpoint_id"]
+
+
+@pytest.mark.asyncio
 async def test_prepare_regenerate_message_payload_rejects_non_latest_turn():
     service = _service()
     session = _session()

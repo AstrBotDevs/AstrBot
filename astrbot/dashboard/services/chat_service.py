@@ -1701,15 +1701,15 @@ class ChatService:
 
         conversation_id, history = await self.load_current_conversation_history(session)
         turn_range = find_turn_range(history, checkpoint_id)
-        if not conversation_id or not turn_range:
-            raise ChatServiceError("Linked checkpoint not found")
-        if not is_latest_checkpoint(history, checkpoint_id):
-            raise ChatServiceError("Regenerating older turns requires branching")
-
-        start, end = turn_range
-        user_index = find_turn_user_index(history, start, end)
-        if user_index is None:
-            raise ChatServiceError("Linked user message not found")
+        if turn_range:
+            if not conversation_id:
+                raise ChatServiceError("Linked checkpoint not found")
+            if not is_latest_checkpoint(history, checkpoint_id):
+                raise ChatServiceError("Regenerating older turns requires branching")
+            start, end = turn_range
+            user_index = find_turn_user_index(history, start, end)
+            if user_index is None:
+                raise ChatServiceError("Linked user message not found")
 
         platform_history = await self.get_sorted_platform_history(session)
         source_user_record = next(
@@ -1737,12 +1737,14 @@ class ChatService:
             raise ChatServiceError("Linked bot display message not found")
 
         new_checkpoint_id = str(uuid.uuid4())
-        new_history = history[:start] + history[end + 1 :]
-        await self.conv_mgr.update_conversation(
-            unified_msg_origin=build_webchat_unified_msg_origin(session),
-            conversation_id=conversation_id,
-            history=new_history,
-        )
+        if turn_range and conversation_id:
+            start, end = turn_range
+            new_history = history[:start] + history[end + 1 :]
+            await self.conv_mgr.update_conversation(
+                unified_msg_origin=build_webchat_unified_msg_origin(session),
+                conversation_id=conversation_id,
+                history=new_history,
+            )
         thread_ids = await self.db.delete_webchat_threads_by_parent_message_ids(
             session_id,
             old_bot_record_ids,
