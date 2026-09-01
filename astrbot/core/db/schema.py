@@ -1,11 +1,8 @@
 """Create the main SQLite schema from registered SQLModel tables."""
 
-from sqlalchemy import inspect as sa_inspect
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlmodel import SQLModel, text
 
-from astrbot import logger
 from astrbot.core.db.po.registry import import_all_models
 
 _SQLITE_RUNTIME_PRAGMAS = (
@@ -22,131 +19,17 @@ _SQLITE_RUNTIME_PRAGMAS = (
 async def initialize_sqlite_schema(engine: AsyncEngine) -> None:
     """Register table models, create missing tables, and apply SQLite PRAGMAs.
 
+    Startup does not inspect or patch an existing file. Upgrading to this
+    schema means deleting ``data/data_v4.db*`` and starting with an empty
+    database.
+
     Args:
         engine: Async SQLAlchemy engine bound to the main database file.
     """
     import_all_models()
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
-        await _ensure_command_id_columns(conn)
-        await _ensure_command_conflict_scope(conn)
-    await _drop_unused_column(engine, "command_configs", "keep_original_alias")
-    await _drop_unused_column(engine, "platform_sessions", "is_group")
     async with engine.connect() as conn:
         for pragma in _SQLITE_RUNTIME_PRAGMAS:
             await conn.execute(text(pragma))
         await conn.commit()
-
-
-def _column_exists(sync_conn, table_name: str, column_name: str) -> bool:
-    inspector = sa_inspect(sync_conn)
-    if table_name not in inspector.get_table_names():
-        return False
-    return any(
-        column["name"] == column_name for column in inspector.get_columns(table_name)
-    )
-
-
-async def _ensure_command_id_columns(conn) -> None:
-    """Add command_id to existing command tables created before the column existed."""
-    config_table_exists, has_config_column = await conn.run_sync(
-        lambda sync_conn: (
-            "command_configs" in sa_inspect(sync_conn).get_table_names(),
-            _column_exists(sync_conn, "command_configs", "command_id"),
-        ),
-    )
-    if config_table_exists and not has_config_column:
-        await conn.execute(
-            text("ALTER TABLE command_configs ADD COLUMN command_id VARCHAR(512)"),
-        )
-        await conn.execute(
-            text(
-                "UPDATE command_configs SET command_id = "
-                "plugin_name || ':' || replace(original_command, ' ', '.') "
-                "WHERE command_id IS NULL OR command_id = ''"
-            ),
-        )
-        await conn.execute(
-            text(
-                "CREATE UNIQUE INDEX IF NOT EXISTS uix_command_configs_command_id "
-                "ON command_configs (command_id)"
-            ),
-        )
-
-    conflict_table_exists, has_conflict_column = await conn.run_sync(
-        lambda sync_conn: (
-            "command_conflicts" in sa_inspect(sync_conn).get_table_names(),
-            _column_exists(sync_conn, "command_conflicts", "command_id"),
-        ),
-    )
-    if conflict_table_exists and not has_conflict_column:
-        await conn.execute(
-            text("ALTER TABLE command_conflicts ADD COLUMN command_id VARCHAR(512)"),
-        )
-        await conn.execute(
-            text(
-                "UPDATE command_conflicts SET command_id = "
-                "plugin_name || ':' || replace(conflict_key, ' ', '.') "
-                "WHERE command_id IS NULL OR command_id = ''"
-            ),
-        )
-
-
-async def _ensure_command_conflict_scope(conn) -> None:
-    """Scope command_conflicts by config_id, public path, and command_id."""
-    table_exists, has_config_id = await conn.run_sync(
-        lambda sync_conn: (
-            "command_conflicts" in sa_inspect(sync_conn).get_table_names(),
-            _column_exists(sync_conn, "command_conflicts", "config_id"),
-        ),
-    )
-    if not table_exists:
-        return
-    if not has_config_id:
-        await conn.execute(
-            text(
-                "ALTER TABLE command_conflicts "
-                "ADD COLUMN config_id VARCHAR(255) NOT NULL DEFAULT ''"
-            ),
-        )
-    await conn.execute(
-        text(
-            "UPDATE command_conflicts SET command_id = "
-            "plugin_name || ':' || replace(conflict_key, ' ', '.') "
-            "WHERE command_id IS NULL OR command_id = ''"
-        ),
-    )
-    await conn.execute(text("DROP INDEX IF EXISTS uix_conflict_handler"))
-    await conn.execute(
-        text(
-            "CREATE UNIQUE INDEX IF NOT EXISTS uix_conflict_scope "
-            "ON command_conflicts (config_id, conflict_key, command_id)"
-        ),
-    )
-
-
-async def _drop_unused_column(
-    engine: AsyncEngine, table_name: str, column_name: str
-) -> None:
-    """Drop an unused column in a separate transaction.
-
-    The column is absent from the SQLModel table. Failure must not roll back
-    create_all or command_id backfill.
-    """
-    try:
-        async with engine.begin() as conn:
-            has_column = await conn.run_sync(
-                lambda sync_conn: _column_exists(sync_conn, table_name, column_name),
-            )
-            if not has_column:
-                return
-            await conn.execute(
-                text(f"ALTER TABLE {table_name} DROP COLUMN {column_name}")
-            )
-    except OperationalError:
-        logger.warning(
-            "Failed to drop unused %s.%s; leaving the column in place.",
-            table_name,
-            column_name,
-            exc_info=True,
-        )

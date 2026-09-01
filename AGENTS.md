@@ -245,8 +245,9 @@ switch again. Command identity is `command_id`
 (`{plugin}:{original path with dots}`). Do not restore handler-name or fossil
 short-name lookup for `alter_cmd` or `command_configs`. Built-in names and
 aliases stay as declared unless the row has `resolution_strategy=manual_rename`.
-Unmatched command_config rows are deleted. Drop unused `keep_original_alias` in
-a separate transaction; a drop failure must not roll back schema creation.
+Unmatched command_config rows are deleted. Startup does not patch leftover
+columns onto an existing main database; upgrading deletes `data/data_v4.db*`
+and recreates an empty file from the current models.
 
 ### Agents, providers, and runners
 

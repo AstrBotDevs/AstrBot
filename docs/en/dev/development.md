@@ -75,7 +75,7 @@ pnpm dev
 
 Runtime state is written under `data/` in the current runtime root. Tests and temporary checks must not read from or write to a developer's real `data/`; use pytest temporary fixtures or a separate `ASTRBOT_ROOT`.
 
-The main SQLite schema is locked by SQLModel tables, `po/registry.py`, and `tests/unit/db/test_schema.py`. `initialize()` does not add columns to an existing `data/data_v4.db`. Locally, stop the process, delete `data/data_v4.db*`, and start again; tests use temporary databases. See [Project Architecture](/en/dev/architecture#main-sqlite-database).
+The main SQLite schema is locked by SQLModel tables, `po/registry.py`, and `tests/unit/db/test_schema.py`. `initialize()` does not add or drop columns on an existing `data/data_v4.db`. Locally, stop the process, delete `data/data_v4.db*`, and start again; tests use temporary databases. See [Project Architecture](/en/dev/architecture#main-sqlite-database).
 
 ## Tests
 

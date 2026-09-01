@@ -75,7 +75,7 @@ pnpm dev
 
 运行时数据写入当前 runtime root 的 `data/`。测试和临时验证不要读取或覆盖开发者真实的 `data/` 目录；使用 pytest 的临时目录 fixture 或设置独立的 `ASTRBOT_ROOT`。
 
-主 SQLite schema 只由 SQLModel 表、`po/registry.py` 和 `tests/unit/db/test_schema.py` 锁定。`initialize()` 不会给已有 `data/data_v4.db` 加列。本机停进程后删除 `data/data_v4.db*` 再启动即可；测试使用临时库。架构见[项目架构](/dev/architecture#主-sqlite-库)。
+主 SQLite schema 只由 SQLModel 表、`po/registry.py` 和 `tests/unit/db/test_schema.py` 锁定。`initialize()` 不会给已有 `data/data_v4.db` 加列或删列。本机停进程后删除 `data/data_v4.db*` 再启动即可；测试使用临时库。架构见[项目架构](/dev/architecture#主-sqlite-库)。
 
 ## 测试
 

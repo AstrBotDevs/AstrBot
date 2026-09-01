@@ -79,11 +79,9 @@ astrbot/core/db/
 
 1. `import_all_models()`
 2. `SQLModel.metadata.create_all`
-3. Backfill `command_id` and conflict scope on existing command tables when needed.
-4. Drop the obsolete `command_configs.keep_original_alias` and `platform_sessions.is_group` columns in independent transactions.
-5. WAL / `busy_timeout` / `synchronous` / `cache_size` / `temp_store` / `mmap_size` / `optimize`
+3. WAL / `busy_timeout` / `synchronous` / `cache_size` / `temp_store` / `mmap_size` / `optimize`
 
-The compatibility steps inspect `PRAGMA table_info` and use narrowly scoped `ALTER TABLE` statements. `create_all` still creates missing tables only; it does not add model columns to existing tables. Column-drop failures are logged without rolling back schema creation or command backfills. Tests keep using temporary databases. If a SQLite `WHERE` index is genuinely needed later, declare `Index(..., sqlite_where=...)` on the model so `create_all` builds it on an empty database.
+Startup does not inspect `PRAGMA table_info` or run `ALTER TABLE` on an existing file. `create_all` creates missing tables only; leftover columns on an old `data_v4.db` stay in place. Upgrading to 4.27.5 means deleting `data/data_v4.db*` and starting from an empty file. Tests keep using temporary databases. If a SQLite `WHERE` index is genuinely needed later, declare `Index(..., sqlite_where=...)` on the model so `create_all` builds it on an empty database.
 
 Mixins obtain sessions through the typed `store_session(self)` helper and must not hold the engine or import each other's query helpers. A composite store or application/domain service owns one transaction boundary for cross-domain writes.
 
@@ -161,7 +159,7 @@ Inbound routing is a single decision in `WakingCheckStage`: command, LLM, passth
 
 `TurnCoalesceStage` runs after the allow-list and session checks. When enabled, it hands eligible private-message LLM fragments to the lifecycle-owned, bounded `TurnWindowManager` without waiting in the pipeline. The manager merges fragments, pauses on NapCat typing notices, discards a buffered turn when a command arrives, and requeues one signed flush event through rate limiting and the remaining stages. Adapter-supplied flush flags are stripped; only manager-created events can carry `route_kind=turn_flush`. Notice and request events remain passthrough events, so ephemeral `input_status` never becomes an LLM message.
 
-Group LLM access is controlled by `llm_access.group`, `llm_access.reply_to_bot`, and continuation state. Built-in command availability is stored per handler in the command database; `disable_builtin_commands` is not migrated, accepted by Dashboard config writes, or read by the Pipeline. Command configs use a stable `command_id` (`{plugin}:{original path}` with spaces as dots). Sync claims live handlers by `handler_full_name` then `command_id` and deletes unmatched rows. `alter_cmd` is read only under `command_id`; Python method names and historical short-name keys are not migrated. Built-in commands ignore persisted names and aliases unless `resolution_strategy` is `manual_rename`. The unused `keep_original_alias` column is dropped in a separate transaction; a drop failure does not block startup.
+Group LLM access is controlled by `llm_access.group`, `llm_access.reply_to_bot`, and continuation state. Built-in command availability is stored per handler in the command database; `disable_builtin_commands` is not migrated, accepted by Dashboard config writes, or read by the Pipeline. Command configs use a stable `command_id` (`{plugin}:{original path}` with spaces as dots). Sync claims live handlers by `handler_full_name` then `command_id` and deletes unmatched rows. `alter_cmd` is read only under `command_id`; Python method names and historical short-name keys are not migrated. Built-in commands ignore persisted names and aliases unless `resolution_strategy` is `manual_rename`. Unused columns such as `keep_original_alias` are absent from the models; they are not dropped from an old file.
 
 `platform_settings.group_sender_concurrency` is experimental and off by default. When it is on and `unique_session` is off, group LLM locks may split by sender so different members can generate in parallel. A whole turn still sends one-at-a-time per group UMO, and that turn is forced non-streaming. `AssistantHistoryCommitter` merges other senders' complete turns and never resurrects truncated history. Direct messages, WebChat, cron jobs, and proactive replies keep the original UMO lock.
 

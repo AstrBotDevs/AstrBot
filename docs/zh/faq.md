@@ -95,7 +95,7 @@ uv run python scripts/sync_dashboard_dist.py
 
 ### 升级到 4.27.5 后主库无法启动
 
-4.27.5 以当前 SQLModel 表重建主 SQLite schema，不做旧库 `ALTER TABLE` 或数据迁移。`create_all` 只创建缺失表，不会给已有 `data_v4.db` 加列或补索引。
+4.27.5 以当前 SQLModel 表重建主 SQLite schema，不做旧库 `ALTER TABLE` 或数据迁移。`create_all` 只创建缺失表；已有 `data_v4.db` 上的残留列和索引会留在原地。
 
 停进程并备份 `data/` 后，删除 runtime root 下的 `data/data_v4.db`、`data/data_v4.db-wal` 和 `data/data_v4.db-shm`，再启动。会话、长期记忆、授权绑定和 API Key 等主库记录不会从旧文件迁出。`data/knowledge_base/` 不受这次切库影响。架构说明见[项目架构](/dev/architecture#主-sqlite-库)。
 

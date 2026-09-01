@@ -95,7 +95,7 @@ Read the intervening files under `changelogs/` and current unreleased commits fi
 
 ### The main database fails to start after upgrading to 4.27.5
 
-4.27.5 rebuilds the main SQLite schema from the current SQLModel tables. It does not run `ALTER TABLE` on an old file or migrate data. `create_all` creates missing tables only; it does not add columns or indexes to an existing `data_v4.db`.
+4.27.5 rebuilds the main SQLite schema from the current SQLModel tables. It does not run `ALTER TABLE` on an old file or migrate data. `create_all` creates missing tables only; leftover columns and indexes on an existing `data_v4.db` stay in place.
 
 Stop the process, back up `data/`, then delete `data/data_v4.db`, `data/data_v4.db-wal`, and `data/data_v4.db-shm` under the runtime root before starting again. Conversations, long-term memory, authorization bindings, and API keys in the old main database are not migrated. `data/knowledge_base/` is not part of this cutover. See [Project Architecture](/en/dev/architecture#main-sqlite-database).
 

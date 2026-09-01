@@ -79,11 +79,9 @@ astrbot/core/db/
 
 1. `import_all_models()`
 2. `SQLModel.metadata.create_all`
-3. 按需为已有指令表回填 `command_id` 和冲突作用域。
-4. 在独立事务中删除废弃的 `command_configs.keep_original_alias` 与 `platform_sessions.is_group` 列。
-5. WAL / `busy_timeout` / `synchronous` / `cache_size` / `temp_store` / `mmap_size` / `optimize`
+3. WAL / `busy_timeout` / `synchronous` / `cache_size` / `temp_store` / `mmap_size` / `optimize`
 
-兼容步骤会检查 `PRAGMA table_info`，并只执行范围明确的 `ALTER TABLE`。`create_all` 仍只创建缺失表，不会为已有表补模型列。删除列失败只记录日志，不回滚建表或指令回填。测试继续使用临时库。将来若确实需要 SQLite 的 `WHERE` 索引，必须把 `Index(..., sqlite_where=...)` 声明在模型上，让 `create_all` 在空库上创建。
+启动时不检查 `PRAGMA table_info`，也不对已有文件执行 `ALTER TABLE`。`create_all` 只创建缺失表；旧 `data_v4.db` 上的残留列会留在原地。升级到 4.27.5 需要删除 `data/data_v4.db*` 后从空文件启动。测试继续使用临时库。将来若确实需要 SQLite 的 `WHERE` 索引，必须把 `Index(..., sqlite_where=...)` 声明在模型上，让 `create_all` 在空库上创建。
 
 Mixin 通过带类型的 `store_session(self)` 助手获取会话，不直接持有 engine，也不互相导入对方的查询函数。跨域写入由 composite store 或 application/domain service 持有一个事务边界。
 
@@ -161,7 +159,7 @@ Mixin 通过带类型的 `store_session(self)` 助手获取会话，不直接持
 
 `TurnCoalesceStage` 位于白名单和会话检查之后。启用时，它把符合条件的私聊 LLM 消息片段交给生命周期持有的有界 `TurnWindowManager`，不会在流水线中等待。管理器负责合并片段、根据 NapCat 输入状态暂停、收到指令时丢弃未完成回合，并重新排队一个带签名的 flush 事件，让它经过限流及后续阶段。适配器提供的 flush 标志会被清除，只有管理器创建的事件可以携带 `route_kind=turn_flush`。通知和请求保持透传，因此临时的 `input_status` 不会变成 LLM 消息。
 
-群聊 LLM 访问由 `llm_access.group`、`llm_access.reply_to_bot` 和续片状态控制。内置命令是否可用则按 handler 存储在命令数据库中；`disable_builtin_commands` 不迁移、不接受配置写入，也不被 Pipeline 读取。指令配置以 `command_id`（`{plugin}:{original path}`，空格换成点）为稳定标识；同步时按 `handler_full_name` 再按 `command_id` 认领活 handler，认领失败的行删除。`alter_cmd` 只读取 `command_id` 键，不从 Python 方法名或历史短名迁移。内置指令在 `resolution_strategy` 不是 `manual_rename` 时忽略库中的名字和别名覆盖。未使用的 `keep_original_alias` 列在独立事务中删除，失败不影响启动。
+群聊 LLM 访问由 `llm_access.group`、`llm_access.reply_to_bot` 和续片状态控制。内置命令是否可用则按 handler 存储在命令数据库中；`disable_builtin_commands` 不迁移、不接受配置写入，也不被 Pipeline 读取。指令配置以 `command_id`（`{plugin}:{original path}`，空格换成点）为稳定标识；同步时按 `handler_full_name` 再按 `command_id` 认领活 handler，认领失败的行删除。`alter_cmd` 只读取 `command_id` 键，不从 Python 方法名或历史短名迁移。内置指令在 `resolution_strategy` 不是 `manual_rename` 时忽略库中的名字和别名覆盖。`keep_original_alias` 等未使用列不在模型上，也不会从旧文件删除。
 
 `platform_settings.group_sender_concurrency` 是实验性开关，默认关闭。启用且未开 `unique_session` 时，群聊 LLM 锁可按发送者拆分，不同群友可并行生成；整轮出站仍按群 UMO 排队，本轮强制非流式。对话历史在 `AssistantHistoryCommitter` 内合并并发完整轮次，不复活已截断历史。私聊、WebChat、定时任务和主动回复保持原 UMO 串行。
 
