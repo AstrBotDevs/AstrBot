@@ -67,8 +67,9 @@ async def test_discord_private_message_does_not_get_group_name():
     abm = await adapter.convert_message({"message": message})
 
     assert abm.type == MessageType.FRIEND_MESSAGE
-    assert abm.group is not None
-    assert abm.group.group_name is None
+    assert abm.group is None
+    assert abm.group_id == ""
+    assert abm.sender.nickname == "tester"
 
 
 def test_discord_group_name_falls_back_when_one_name_is_missing():
