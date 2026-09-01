@@ -1,10 +1,12 @@
 import base64
 from io import BytesIO
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
 from astrbot.api.message_components import Image, Record
+from astrbot.api.platform import Group, MessageType
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.sources.discord import (
     discord_platform_adapter,
@@ -22,6 +24,231 @@ _PNG_BYTES = base64.b64decode(
 )
 _WAV_BYTES = b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 16
 _WAV_PATH = "/tmp/discord_voice.wav"
+
+
+@pytest.mark.asyncio
+async def test_discord_group_message_includes_guild_and_channel_name():
+    adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
+    adapter.bot_self_id = "1"
+    adapter.client = SimpleNamespace(user=SimpleNamespace(id=1))
+    guild = SimpleNamespace(name="AstrBot", get_member=lambda member_id: None)
+    message = SimpleNamespace(
+        id=42,
+        content="hello",
+        channel=SimpleNamespace(id=123, name="general", guild=guild),
+        author=SimpleNamespace(id=2, display_name="tester"),
+        attachments=[],
+        guild=guild,
+        role_mentions=[],
+    )
+
+    abm = await adapter.convert_message({"message": message})
+
+    assert abm.group is not None
+    assert abm.group.group_id == "123"
+    assert abm.group.group_name == "AstrBot-general"
+
+
+@pytest.mark.asyncio
+async def test_discord_private_message_does_not_get_group_name():
+    adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
+    adapter.bot_self_id = "1"
+    adapter.client = SimpleNamespace(user=SimpleNamespace(id=1))
+    message = SimpleNamespace(
+        id=42,
+        content="hello",
+        channel=SimpleNamespace(id=123, name="direct-message", guild=None),
+        author=SimpleNamespace(id=2, display_name="tester"),
+        attachments=[],
+        guild=None,
+        role_mentions=[],
+    )
+
+    abm = await adapter.convert_message({"message": message})
+
+    assert abm.type == MessageType.FRIEND_MESSAGE
+    assert abm.group is not None
+    assert abm.group.group_name is None
+
+
+def test_discord_group_name_falls_back_when_one_name_is_missing():
+    assert (
+        DiscordPlatformAdapter._get_group_name(
+            SimpleNamespace(name="general", guild=SimpleNamespace(name=None))
+        )
+        == "general"
+    )
+    assert (
+        DiscordPlatformAdapter._get_group_name(
+            SimpleNamespace(name=None, guild=SimpleNamespace(name="AstrBot"))
+        )
+        == "AstrBot"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("guild_name", "channel_name", "expected_name"),
+    [(None, "general", "general"), ("AstrBot", None, "AstrBot")],
+)
+async def test_discord_get_group_name_falls_back_when_one_name_is_missing(
+    guild_name, channel_name, expected_name
+):
+    guild = SimpleNamespace(
+        name=guild_name,
+        icon=None,
+        owner_id=None,
+        member_count=None,
+        members=[],
+        chunked=False,
+    )
+    channel = SimpleNamespace(id=123, name=channel_name, guild=guild)
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event.message_obj = SimpleNamespace(
+        type=MessageType.GROUP_MESSAGE,
+        group=Group(group_id="123", group_name="cached"),
+        group_id="123",
+    )
+    event.client = SimpleNamespace(
+        get_channel=lambda channel_id: channel,
+        intents=SimpleNamespace(members=False),
+    )
+
+    group = await event.get_group()
+
+    assert group is not None
+    assert group.group_name == expected_name
+
+
+@pytest.mark.asyncio
+async def test_discord_get_group_fetches_uncached_guild_name():
+    channel = SimpleNamespace(
+        id=123,
+        name="general",
+        guild=SimpleNamespace(id=456),
+    )
+    guild = SimpleNamespace(
+        id=456,
+        name="AstrBot",
+        icon=None,
+        owner_id=None,
+        member_count=None,
+        members=[],
+        chunked=False,
+    )
+    client = SimpleNamespace(
+        get_channel=lambda channel_id: None,
+        fetch_channel=AsyncMock(return_value=channel),
+        get_guild=lambda guild_id: None,
+        fetch_guild=AsyncMock(return_value=guild),
+        intents=SimpleNamespace(members=False),
+    )
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event.message_obj = SimpleNamespace(
+        type=MessageType.GROUP_MESSAGE,
+        group=Group(group_id="123"),
+        group_id="123",
+    )
+    event.client = client
+
+    group = await event.get_group()
+
+    assert group is not None
+    assert group.group_name == "AstrBot-general"
+    client.fetch_channel.assert_awaited_once_with(123)
+    client.fetch_guild.assert_awaited_once_with(456)
+
+
+@pytest.mark.asyncio
+async def test_discord_get_group_enriches_guild_metadata_from_complete_cache():
+    members = [
+        SimpleNamespace(
+            id=1,
+            display_name="owner",
+            guild_permissions=SimpleNamespace(administrator=True),
+        ),
+        SimpleNamespace(
+            id=2,
+            display_name="admin",
+            guild_permissions=SimpleNamespace(administrator=True),
+        ),
+        SimpleNamespace(
+            id=3,
+            display_name="member",
+            guild_permissions=SimpleNamespace(administrator=False),
+        ),
+    ]
+    guild = SimpleNamespace(
+        name="AstrBot",
+        icon=SimpleNamespace(url="https://cdn.discordapp.com/guild.png"),
+        owner_id=1,
+        member_count=3,
+        members=members,
+        chunked=True,
+    )
+    channel = SimpleNamespace(
+        id=123,
+        name="general",
+        guild=guild,
+        permissions_for=lambda member: SimpleNamespace(view_channel=True),
+    )
+    client = SimpleNamespace(
+        get_channel=lambda channel_id: channel,
+        fetch_channel=AsyncMock(),
+        intents=SimpleNamespace(members=True),
+    )
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event.message_obj = SimpleNamespace(
+        type=MessageType.GROUP_MESSAGE,
+        group=Group(group_id="123", group_name="general"),
+        group_id="123",
+    )
+    event.client = client
+
+    group = await event.get_group()
+
+    assert group is not None
+    assert group.group_id == "123"
+    assert group.group_name == "AstrBot-general"
+    assert group.group_avatar == "https://cdn.discordapp.com/guild.png"
+    assert group.group_owner == "1"
+    assert group.member_count == 3
+    assert group.group_admins == ["2"]
+    assert group.members is not None
+    assert [member.user_id for member in group.members] == ["1", "2", "3"]
+    client.fetch_channel.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_discord_get_group_returns_none_for_private_message():
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event.message_obj = SimpleNamespace(
+        type=MessageType.FRIEND_MESSAGE,
+        group=None,
+        group_id="123",
+    )
+    event.client = SimpleNamespace()
+
+    assert await event.get_group() is None
+
+
+@pytest.mark.asyncio
+async def test_discord_get_group_keeps_basic_metadata_when_channel_fetch_fails():
+    client = SimpleNamespace(
+        get_channel=lambda channel_id: None,
+        fetch_channel=AsyncMock(side_effect=RuntimeError("channel unavailable")),
+    )
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event.message_obj = SimpleNamespace(
+        type=MessageType.GROUP_MESSAGE,
+        group=Group(group_id="123", group_name="general"),
+        group_id="123",
+    )
+    event.client = client
+
+    group = await event.get_group()
+
+    assert group == Group(group_id="123", group_name="general")
 
 
 @pytest.mark.asyncio
