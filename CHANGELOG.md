@@ -6,12 +6,15 @@ not duplicate the per-version notes. The repository currently publishes no
 PyPI package or GitHub release assets, so the `changelogs/` directory is the
 authoritative release record for this branch.
 
-> 本仓库的所有变更以**每个版本一个文件**的形式记录在 [`changelogs/`](./changelogs/) 下。本文件仅作索引，不重复各版本的完整说明。当前 fork 不发布 PyPI 包或 GitHub Release 资产，`changelogs/` 目录是本分支权威的版本记录。
+> 本仓库的所有变更以**每个版本一个文件**的形式记录在 [`changelogs/`](./changelogs/) 下。本文件仅作索引，不重复各版本的完整说明。新版本从 [`changelogs/TEMPLATE.md`](./changelogs/TEMPLATE.md) 复制为 `changelogs/vX.Y.Z.md`；未发布前日期写 `[WIP]`。当前 fork 不发布 PyPI 包或 GitHub Release 资产，`changelogs/` 目录是本分支权威的版本记录。
 
 ## Where the notes live / 说明文件位置
 
 - Per-version entries: [`changelogs/`](./changelogs/) — spanning `v3.4.0`
   through the current `v4.27.x` series.
+- New-entry skeleton: [`changelogs/TEMPLATE.md`](./changelogs/TEMPLATE.md).
+  Copy it to `changelogs/vX.Y.Z.md`. Use `[WIP]` in place of the ISO date
+  until the version is published.
 - Each entry is **bilingual**: English first, followed by a `## 中文` section
   that mirrors the same categories.
 
