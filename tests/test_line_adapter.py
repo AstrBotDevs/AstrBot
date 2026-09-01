@@ -117,7 +117,15 @@ async def test_line_get_group_enriches_summary_count_and_members():
         ]
     )
 
-    result = await adapter.create_event(message).get_group()
+    metadata_result = await adapter.create_event(message).get_group()
+
+    assert metadata_result is not None
+    assert metadata_result.member_count == 2
+    assert metadata_result.members is None
+    adapter.line_api.get_chat_member_ids.assert_not_awaited()
+    adapter.line_api.get_chat_member_profile.assert_not_awaited()
+
+    result = await adapter.create_event(message).get_group(include_members=True)
 
     assert result is not None
     assert result.group_id == "C-group"
@@ -129,7 +137,8 @@ async def test_line_get_group_enriches_summary_count_and_members():
         ("U-one", "Alice"),
         ("U-two", None),
     ]
-    adapter.line_api.get_chat_member_count.assert_awaited_once_with("group", "C-group")
+    assert adapter.line_api.get_chat_member_count.await_count == 2
+    adapter.line_api.get_chat_member_count.assert_awaited_with("group", "C-group")
 
 
 @pytest.mark.asyncio
@@ -160,6 +169,7 @@ async def test_line_get_room_uses_room_endpoints_without_summary():
     assert result.members is None
     adapter.line_api.get_group_summary.assert_not_awaited()
     adapter.line_api.get_chat_member_count.assert_awaited_once_with("room", "R-room")
+    adapter.line_api.get_chat_member_ids.assert_not_awaited()
     adapter.line_api.get_chat_member_profile.assert_not_awaited()
 
 

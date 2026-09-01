@@ -55,12 +55,15 @@ class LarkMessageEvent(AstrMessageEvent):
     async def get_group(
         self,
         group_id: str | None = None,
+        *,
+        include_members: bool = False,
         **kwargs,
     ) -> Group | None:
-        """Get Lark chat details and members.
+        """Get Lark chat details and optionally its members.
 
         Args:
             group_id: Chat ID to query. Defaults to the current chat ID.
+            include_members: Whether to fetch all accessible chat members.
             **kwargs: Reserved for platform-compatible query options.
 
         Returns:
@@ -127,6 +130,9 @@ class LarkMessageEvent(AstrMessageEvent):
             group_admins=list(chat_data.user_manager_id_list or []),
             member_count=member_count,
         )
+
+        if not include_members:
+            return group
 
         members: list[MessageMember] = []
         members_complete = False

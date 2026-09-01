@@ -70,11 +70,18 @@ class MattermostMessageEvent(AstrMessageEvent):
             await self.send(MessageChain([Plain(text_buffer)]))
         return None
 
-    async def get_group(self, group_id=None, **kwargs):
-        """Gets Mattermost channel information and all visible members.
+    async def get_group(
+        self,
+        group_id=None,
+        *,
+        include_members: bool = False,
+        **kwargs,
+    ):
+        """Get Mattermost channel information and optionally its visible members.
 
         Args:
             group_id: Optional Mattermost channel identifier.
+            include_members: Whether to fetch all visible channel members.
             **kwargs: Reserved compatibility arguments.
 
         Returns:
@@ -116,6 +123,9 @@ class MattermostMessageEvent(AstrMessageEvent):
                 channel_id,
                 exc,
             )
+
+        if not include_members:
+            return group
 
         memberships: list[dict] = []
         page = 0

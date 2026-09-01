@@ -90,7 +90,14 @@ async def test_lark_get_group_fetches_details_and_all_member_pages():
         ),
     )
 
-    group = await _lark_event(bot).get_group()
+    metadata_group = await _lark_event(bot).get_group()
+
+    assert metadata_group is not None
+    assert metadata_group.member_count == 3
+    assert metadata_group.members is None
+    members_api.aget.assert_not_awaited()
+
+    group = await _lark_event(bot).get_group(include_members=True)
 
     assert group is not None
     assert group.group_id == "chat-1"
@@ -179,7 +186,7 @@ async def test_lark_get_group_does_not_publish_a_truncated_member_list():
         ),
     )
 
-    group = await _lark_event(bot).get_group()
+    group = await _lark_event(bot).get_group(include_members=True)
 
     assert group is not None
     assert group.member_count == 10

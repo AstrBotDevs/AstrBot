@@ -503,7 +503,13 @@ class AstrMessageEvent(abc.ABC):
         """
         await self.send(MessageChain([Plain(emoji)]))
 
-    async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
+    async def get_group(
+        self,
+        group_id: str | None = None,
+        *,
+        include_members: bool = False,
+        **kwargs,
+    ) -> Group | None:
         """Get group information.
 
         Platform event subclasses can enrich the result through their APIs. The
@@ -512,6 +518,7 @@ class AstrMessageEvent(abc.ABC):
 
         Args:
             group_id: Group ID to query. Defaults to the current message group.
+            include_members: Whether to fetch and return the complete member list.
             **kwargs: Extra platform-specific query options.
 
         Returns:

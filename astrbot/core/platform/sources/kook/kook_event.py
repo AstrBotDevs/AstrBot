@@ -209,11 +209,18 @@ class KookEvent(AstrMessageEvent):
 
         await super().send(message)
 
-    async def get_group(self, group_id=None, **kwargs):
-        """Gets KOOK channel and guild member information.
+    async def get_group(
+        self,
+        group_id=None,
+        *,
+        include_members: bool = False,
+        **kwargs,
+    ):
+        """Get KOOK channel metadata and optionally its guild members.
 
         Args:
             group_id: Optional KOOK channel identifier.
+            include_members: Whether to fetch all visible guild members.
             **kwargs: Reserved compatibility arguments.
 
         Returns:
@@ -257,11 +264,19 @@ class KookEvent(AstrMessageEvent):
             guild = await self.client.get_guild(guild_id)
             group.group_avatar = guild.get("icon") or None
             group.group_owner = str(guild.get("user_id") or "") or None
-            guild_roles.extend(
-                role for role in (guild.get("roles") or []) if isinstance(role, dict)
-            )
+            if isinstance(guild.get("user_count"), int):
+                group.member_count = guild["user_count"]
+            if include_members:
+                guild_roles.extend(
+                    role
+                    for role in (guild.get("roles") or [])
+                    if isinstance(role, dict)
+                )
         except Exception as exc:
             logger.debug("KOOK guild lookup failed for %s: %s", guild_id, exc)
+
+        if not include_members:
+            return group
 
         if not guild_roles:
             role_page_number = 1

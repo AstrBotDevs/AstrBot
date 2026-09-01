@@ -286,6 +286,8 @@ class LineMessageEvent(AstrMessageEvent):
     async def get_group(
         self,
         group_id: str | None = None,
+        *,
+        include_members: bool = False,
         **kwargs,
     ) -> Group | None:
         """Get LINE group or multi-person chat information.
@@ -297,6 +299,7 @@ class LineMessageEvent(AstrMessageEvent):
 
         Args:
             group_id: Group or room ID. Defaults to the current message chat.
+            include_members: Whether to fetch member IDs and individual profiles.
             **kwargs: Optional ``chat_type`` override (``group`` or ``room``).
 
         Returns:
@@ -338,16 +341,16 @@ class LineMessageEvent(AstrMessageEvent):
         calls = []
         if chat_type == "group":
             calls.append(self.line_api.get_group_summary(resolved_group_id))
-        calls.extend(
-            [
-                self.line_api.get_chat_member_count(chat_type, resolved_group_id),
-                self.line_api.get_chat_member_ids(chat_type, resolved_group_id),
-            ]
-        )
+        calls.append(self.line_api.get_chat_member_count(chat_type, resolved_group_id))
+        if include_members:
+            calls.append(
+                self.line_api.get_chat_member_ids(chat_type, resolved_group_id)
+            )
         responses = await asyncio.gather(*calls, return_exceptions=True)
 
         if chat_type == "group":
-            summary, member_count, member_ids = responses
+            summary, member_count = responses[:2]
+            member_ids = responses[2] if include_members else None
             if isinstance(summary, dict):
                 group_name = str(summary.get("groupName", "")).strip()
                 group_avatar = str(summary.get("pictureUrl", "")).strip()
@@ -356,7 +359,8 @@ class LineMessageEvent(AstrMessageEvent):
                 if group_avatar:
                     result.group_avatar = group_avatar
         else:
-            member_count, member_ids = responses
+            member_count = responses[0]
+            member_ids = responses[1] if include_members else None
 
         if isinstance(member_count, int) and member_count >= 0:
             result.member_count = member_count

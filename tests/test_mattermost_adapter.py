@@ -152,7 +152,15 @@ async def test_mattermost_get_group_returns_members_and_channel_admins():
     )
     event = adapter.create_event(message)
 
-    group = await event.get_group()
+    metadata_group = await event.get_group()
+
+    assert metadata_group.member_count == 2
+    assert metadata_group.group_admins is None
+    assert metadata_group.members is None
+    adapter.client.get_channel_members.assert_not_awaited()
+    adapter.client.get_users_by_ids.assert_not_awaited()
+
+    group = await event.get_group(include_members=True)
 
     assert group.group_name == "Town Square"
     assert group.group_owner is None

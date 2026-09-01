@@ -348,7 +348,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
         await super().send(message)
 
     async def get_group(
-        self, group_id: str | None = None, **kwargs: Any
+        self,
+        group_id: str | None = None,
+        *,
+        include_members: bool = False,
+        **kwargs: Any,
     ) -> Group | None:
         """Get Telegram group metadata available to the bot.
 
@@ -357,6 +361,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
         Args:
             group_id: AstrBot group ID to query. Defaults to the current group.
+            include_members: Reserved for API consistency; Telegram bots cannot
+                enumerate the complete member list here.
             **kwargs: Reserved for compatibility with the platform event interface.
 
         Returns:

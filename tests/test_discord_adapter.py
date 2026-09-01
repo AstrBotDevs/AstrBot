@@ -205,7 +205,14 @@ async def test_discord_get_group_enriches_guild_metadata_from_complete_cache():
     )
     event.client = client
 
-    group = await event.get_group()
+    metadata_group = await event.get_group()
+
+    assert metadata_group is not None
+    assert metadata_group.member_count == 3
+    assert metadata_group.group_admins is None
+    assert metadata_group.members is None
+
+    group = await event.get_group(include_members=True)
 
     assert group is not None
     assert group.group_id == "123"

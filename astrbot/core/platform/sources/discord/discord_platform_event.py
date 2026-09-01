@@ -137,7 +137,11 @@ class DiscordPlatformEvent(AstrMessageEvent):
             return None
 
     async def get_group(
-        self, group_id: str | None = None, **kwargs: object
+        self,
+        group_id: str | None = None,
+        *,
+        include_members: bool = False,
+        **kwargs: object,
     ) -> Group | None:
         """Get Discord channel and guild metadata without fetching all members.
 
@@ -147,6 +151,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
 
         Args:
             group_id: Discord channel or thread ID. Defaults to the current group.
+            include_members: Whether to include members from a complete local cache.
             **kwargs: Reserved for compatibility with the platform event interface.
 
         Returns:
@@ -234,6 +239,9 @@ class DiscordPlatformEvent(AstrMessageEvent):
         member_count = getattr(guild, "member_count", None)
         if isinstance(member_count, int):
             group.member_count = member_count
+
+        if not include_members:
+            return group
 
         cached_members = getattr(guild, "members", None)
         members_intent = bool(
