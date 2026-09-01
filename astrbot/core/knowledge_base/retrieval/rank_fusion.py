@@ -160,24 +160,29 @@ class RankFusion:
         # 保护 Dense 漏召回的精确词面匹配：Dense embedding 对大小写敏感，
         # 当查询词以大小写变体出现时（如查询 "oni" 而文档中是 "Oni"），
         # 目标 chunk 可能完全不被 Dense 召回。此时若 Sparse 命中了该 chunk
-        # 且其内容大小写不敏感地包含查询词，则给予保底提升，使其不会被
-        # 大量纯 Dense 候选挤出 top_k。
+        # 且其内容仅以大小写变体形式包含查询词，则将其显式排到所有普通
+        # 候选之前，确保它不会被大量纯 Dense 候选挤出 top_k。
+        # 仅保护"大小写变体"匹配（原样查询词未出现、小写形式出现），
+        # 避免改变普通精确命中的既有排序。
+        protected_ids: set[str] = set()
         if query is not None and query.strip():
-            lowered_query = query.strip().lower()
+            raw_query = query.strip()
+            lowered_query = raw_query.lower()
             for identifier in all_chunk_ids:
                 if identifier in vec_doc_id_to_dense:
                     continue
                 sparse_result = chunk_id_to_sparse.get(identifier)
-                if sparse_result and lowered_query in sparse_result.content.lower():
-                    fusion_scores[identifier] = max(
-                        fusion_scores[identifier],
-                        self.dense_weight + (1 - self.dense_weight) / 2,
-                    )
+                if not sparse_result:
+                    continue
+                content = sparse_result.content or ""
+                if raw_query not in content and lowered_query in content.lower():
+                    protected_ids.add(identifier)
 
-        # 5. 排序
+        # 5. 排序。受保护的大小写变体精确匹配优先于所有普通候选。
         sorted_ids = sorted(
             fusion_scores,
             key=lambda cid: (
+                cid not in protected_ids,
                 -fusion_scores[cid],
                 -rrf_scores[cid],
                 dense_ranks.get(cid, float("inf")),
