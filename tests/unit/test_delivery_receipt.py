@@ -212,10 +212,14 @@ async def test_send_exception_is_unknown_not_success():
 @pytest.mark.asyncio
 async def test_empty_message_is_skipped():
     event = _Event(MessageEventResult(chain=[]), [])
+    stage = _stage()
 
-    await _stage().process(event)
+    await stage.process(event)
 
-    assert event.get_extra("delivery_receipt").status == "skipped"
+    event.send.assert_not_awaited()
+    stage.ctx.execution_context.persist_accepted_group_response.assert_not_awaited()
+    assert event.get_extra("delivery_receipt") is None
+    assert event.get_result() is not None
 
 
 @pytest.mark.asyncio
@@ -288,3 +292,30 @@ def test_delivery_receipt_preserves_partial_and_failed_semantics():
     assert partial.status == "partial"
     assert partial.history_text == "first"
     assert failed.status == "failed"
+
+
+@pytest.mark.asyncio
+async def test_respond_stage_still_sends_empty_streaming_result():
+    async def stream():
+        if False:
+            yield None
+
+    event = _Event(
+        MessageEventResult(
+            result_content_type=ResultContentType.STREAMING_RESULT,
+            async_stream=stream(),
+        ),
+        [],
+    )
+    event._result.chain = []
+
+    async def send_streaming(generator, _fallback):
+        async for _ in generator:
+            pass
+        return _success()
+
+    event.send_streaming.side_effect = send_streaming
+    await _stage().process(event)
+
+    event.send_streaming.assert_awaited_once()
+    assert event.get_extra("delivery_receipt") is not None

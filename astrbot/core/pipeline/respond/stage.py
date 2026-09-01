@@ -464,6 +464,11 @@ class RespondStage(Stage):
         if result.result_content_type == ResultContentType.STREAMING_FINISH:
             event.set_extra("_streaming_finished", True)
             return
+        if (
+            not result.chain
+            and result.result_content_type != ResultContentType.STREAMING_RESULT
+        ):
+            return
         sent_plain_texts = event.get_extra(
             "_send_message_to_user_current_session_plain_texts",
             [],
