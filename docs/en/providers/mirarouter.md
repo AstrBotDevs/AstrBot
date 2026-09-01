@@ -9,13 +9,15 @@
 
 ## Configure AstrBot
 
-Open the AstrBot dashboard and go to **Providers → Add Provider → OpenAI**. Enter the following values:
+Open the AstrBot dashboard and go to **Providers → Add Provider → MiraRouter**. Enter the following values:
 
 | Field | Value |
 | --- | --- |
 | Provider Name | `MiraRouter` |
 | API Base URL | `https://api.mirarouter.com/v1` |
 | API Key | The API key created in the MiraRouter console |
+
+AstrBot automatically adds the `X-APP-CODE: astrbot` identifier to MiraRouter requests.
 
 Save the provider, then open its card and add the models you want to use from the [MiraRouter models and pricing](https://mirarouter.com/models) page.
 
