@@ -5,18 +5,18 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 34743f4adfe666e52422426e792b8ff7c88b92ec
-  synced_at_utc: 2026-09-01T00:08:05Z
+  commit: 385e4b6bfb87952d78d56ce21fc1caff1e68a85e
+  synced_at_utc: 2026-09-01T14:56:49Z
   sync_method: cherry-pick-and-manual-adaptation
-  source_pr: '9883'
+  source_pr: '9653'
   note: >-
-    Reviewed fe3d77568b88ea3be83b2190d515da0a039da399..34743f4adfe666e52422426e792b8ff7c88b92ec
-    (8 commits). Adapted #9873, #9872, #9874, #9767, and #9883. Cherry-picked
-    #9841. Skipped #9856 (already equivalent via 4e909eca1) and #9879
-    (dashboard deferral already present; omitted migra_webchat_session.py;
-    kept fork 404 pointing at make run). AnySearch uses the fork HTTP session
-    and key rotator; empty keys issue one anonymous request. Omitted ru-RU
-    and the bundled plugin-guide formatting rewrite. Kept the ConfigPage
-    unsaved banner, step-up, and in-app /help docs. Regenerated the MDI
-    subset. No upstream version bump in this interval; absorbed user-visible
-    changes were added to the 4.27.5 changelog.
+    Reviewed 34743f4adfe666e52422426e792b8ff7c88b92ec..385e4b6bfb87952d78d56ce21fc1caff1e68a85e
+    (4 commits). Adapted #9887, #9885, #9851, and #9653. No cherry-picks and no
+    skips. Plugin list payloads use online_version; the TypeScript Dashboard
+    already matches plugins without persisted install sources by repo/name.
+    CodeQL is pinned to the peeled v4.37.9 SHA. Group metadata is enriched
+    across adapters, including NapCat; Slack inbound conversion still skips
+    conversations_info. Empty non-streaming chains skip Respond without logs,
+    receipts, or after-send hooks. Lark docs add contact:user.base:readonly.
+    No upstream version bump in this interval; absorbed user-visible changes
+    were added to the 4.27.5 changelog.
