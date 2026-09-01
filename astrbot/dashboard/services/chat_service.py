@@ -1441,11 +1441,13 @@ class ChatService:
 
         conversation_id, history = await self.load_current_conversation_history(session)
         turn_range = find_turn_range(history, checkpoint_id)
-        if not conversation_id or not turn_range:
-            raise ChatServiceError("Linked checkpoint not found")
-
-        _start, end = turn_range
-        base_history = history[: end + 1]
+        if turn_range:
+            if not conversation_id:
+                raise ChatServiceError("Linked checkpoint not found")
+            _start, end = turn_range
+            base_history = history[: end + 1]
+        else:
+            base_history = history
         thread = await self.db.create_webchat_thread(
             creator=username,
             parent_session_id=session_id,
@@ -1614,18 +1616,19 @@ class ChatService:
 
         conversation_id, history = await self.load_current_conversation_history(session)
         turn_range = find_turn_range(history, checkpoint_id)
-        if not conversation_id or not turn_range:
-            raise ChatServiceError("Linked checkpoint not found")
-        if not is_latest_checkpoint(history, checkpoint_id):
-            raise ChatServiceError("Only the latest turn can be edited")
-
-        start, end = turn_range
-        target_index = find_turn_user_index(history, start, end)
-        if target_index is None:
-            raise ChatServiceError("Linked user message not found")
+        truncated_history = None
+        if turn_range:
+            if not conversation_id:
+                raise ChatServiceError("Linked checkpoint not found")
+            if not is_latest_checkpoint(history, checkpoint_id):
+                raise ChatServiceError("Only the latest turn can be edited")
+            start, end = turn_range
+            target_index = find_turn_user_index(history, start, end)
+            if target_index is None:
+                raise ChatServiceError("Linked user message not found")
+            truncated_history = history[:start]
 
         new_checkpoint_id = str(uuid.uuid4())
-        truncated_history = history[:start]
         await self.platform_history_mgr.update(
             message_id=message_id,
             content=content,
@@ -1639,11 +1642,12 @@ class ChatService:
             deleted_message_ids,
         )
         await self.delete_threads_by_ids(thread_ids, username)
-        await self.conv_mgr.update_conversation(
-            unified_msg_origin=build_webchat_unified_msg_origin(session),
-            conversation_id=conversation_id,
-            history=truncated_history,
-        )
+        if truncated_history is not None and conversation_id:
+            await self.conv_mgr.update_conversation(
+                unified_msg_origin=build_webchat_unified_msg_origin(session),
+                conversation_id=conversation_id,
+                history=truncated_history,
+            )
         await self.db.update_platform_session(session_id=session_id)
         updated = await self.db.get_platform_message_history_by_id(message_id)
         return {
