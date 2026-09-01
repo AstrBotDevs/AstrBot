@@ -428,7 +428,9 @@ async def test_ws_group_send_by_session_without_cached_msg_id_omits_msg_id():
     adapter.client.api.post_group_message.assert_awaited_once()
     kwargs = adapter.client.api.post_group_message.await_args.kwargs
     assert kwargs["group_openid"] == "group-1"
-    assert kwargs["content"] == "proactive hello"
+    assert kwargs["markdown"]["content"] == "proactive hello"
+    assert kwargs["msg_type"] == 2
+    assert "content" not in kwargs
     assert "msg_id" not in kwargs
     assert "msg_seq" in kwargs
     assert adapter._session_last_message_id["group-1"] == "sent-1"
@@ -462,7 +464,9 @@ async def test_ws_group_send_by_session_with_cached_msg_id_still_omits_msg_id():
     adapter.client.api.post_group_message.assert_awaited_once()
     kwargs = adapter.client.api.post_group_message.await_args.kwargs
     assert kwargs["group_openid"] == "group-1"
-    assert kwargs["content"] == "proactive with cache"
+    assert kwargs["markdown"]["content"] == "proactive with cache"
+    assert kwargs["msg_type"] == 2
+    assert "content" not in kwargs
     assert "msg_id" not in kwargs
     assert "msg_seq" in kwargs
 
@@ -515,7 +519,9 @@ async def test_webhook_group_send_by_session_without_cached_msg_id_omits_msg_id(
     adapter.client.api.post_group_message.assert_awaited_once()
     kwargs = adapter.client.api.post_group_message.await_args.kwargs
     assert kwargs["group_openid"] == "group-1"
-    assert kwargs["content"] == "webhook proactive hello"
+    assert kwargs["markdown"]["content"] == "webhook proactive hello"
+    assert kwargs["msg_type"] == 2
+    assert "content" not in kwargs
     assert "msg_id" not in kwargs
     assert "msg_seq" in kwargs
     assert adapter._session_last_message_id["group-1"] == "sent-1"
@@ -614,3 +620,134 @@ async def test_result_decorate_segments_qqofficial_ws_plain_result():
         "第一段",
         "第二段",
     ]
+
+
+@pytest.mark.asyncio
+async def test_ws_group_send_by_session_use_markdown_false_sends_content():
+    adapter = QQOfficialPlatformAdapter(
+        {
+            "id": "qq-official-test",
+            "appid": "123",
+            "secret": "secret",
+            "enable_group_c2c": True,
+            "enable_guild_direct_message": False,
+        },
+        {},
+        asyncio.Queue(),
+    )
+    adapter.client.api = SimpleNamespace(
+        post_group_message=AsyncMock(return_value={"id": "sent-1"}),
+        post_message=AsyncMock(),
+    )
+    adapter._session_scene["group-1"] = "group"
+
+    await adapter.send_by_session(
+        MessageSession("qq_official", MessageType.GROUP_MESSAGE, "group-1"),
+        MessageChain(chain=[Plain("plain content")], use_markdown_=False),
+    )
+
+    kwargs = adapter.client.api.post_group_message.await_args.kwargs
+    assert kwargs["content"] == "plain content"
+    assert "markdown" not in kwargs
+    assert "msg_type" not in kwargs
+
+
+@pytest.mark.asyncio
+async def test_ws_group_send_by_session_with_media_uses_msg_type_7(monkeypatch):
+    adapter = QQOfficialPlatformAdapter(
+        {
+            "id": "qq-official-test",
+            "appid": "123",
+            "secret": "secret",
+            "enable_group_c2c": True,
+            "enable_guild_direct_message": False,
+        },
+        {},
+        asyncio.Queue(),
+    )
+    adapter.client.api = SimpleNamespace(
+        post_group_message=AsyncMock(return_value={"id": "sent-media"}),
+        post_message=AsyncMock(),
+    )
+    adapter._session_scene["group-1"] = "group"
+
+    async def fake_parse(message_chain):
+        return ("caption", "fake-base64", None, None, None, None, None)
+
+    async def fake_upload_image(self_, image_base64, file_type, **kwargs):
+        return {"file_uuid": "u-1", "file_info": "i-1", "ttl": 0}
+
+    monkeypatch.setattr(QQOfficialMessageEvent, "_parse_to_qqofficial", fake_parse)
+    monkeypatch.setattr(
+        QQOfficialMessageEvent, "upload_group_and_c2c_image", fake_upload_image
+    )
+
+    await adapter.send_by_session(
+        MessageSession("qq_official", MessageType.GROUP_MESSAGE, "group-1"),
+        MessageChain(chain=[Plain("caption")]),
+    )
+
+    kwargs = adapter.client.api.post_group_message.await_args.kwargs
+    assert kwargs["msg_type"] == 7
+    assert "markdown" not in kwargs
+    assert kwargs["content"] == "caption"
+    assert kwargs["media"]["file_uuid"] == "u-1"
+
+
+@pytest.mark.asyncio
+async def test_friend_send_by_session_renders_markdown():
+    adapter = QQOfficialPlatformAdapter(
+        {
+            "id": "qq-official-test",
+            "appid": "123",
+            "secret": "secret",
+            "enable_group_c2c": True,
+            "enable_guild_direct_message": False,
+        },
+        {},
+        asyncio.Queue(),
+    )
+    request = AsyncMock(return_value={"id": "sent-c2c"})
+    adapter.client.api = SimpleNamespace(_http=SimpleNamespace(request=request))
+
+    await adapter.send_by_session(
+        MessageSession("qq_official", MessageType.FRIEND_MESSAGE, "user-1"),
+        MessageChain(chain=[Plain("hello friend")]),
+    )
+
+    request.assert_awaited_once()
+    json_payload = request.await_args.kwargs["json"]
+    assert json_payload["markdown"]["content"] == "hello friend"
+    assert json_payload["msg_type"] == 2
+
+
+@pytest.mark.asyncio
+async def test_guild_channel_send_by_session_drops_msg_type():
+    adapter = QQOfficialPlatformAdapter(
+        {
+            "id": "qq-official-test",
+            "appid": "123",
+            "secret": "secret",
+            "enable_group_c2c": True,
+            "enable_guild_direct_message": False,
+        },
+        {},
+        asyncio.Queue(),
+    )
+    adapter.client.api = SimpleNamespace(
+        post_group_message=AsyncMock(),
+        post_message=AsyncMock(return_value={"id": "sent-guild"}),
+    )
+    adapter._session_scene["guild-channel-1"] = "channel"
+    adapter._session_last_message_id["guild-channel-1"] = "cached-msg-id"
+
+    await adapter.send_by_session(
+        MessageSession("qq_official", MessageType.GROUP_MESSAGE, "guild-channel-1"),
+        MessageChain(chain=[Plain("guild text")]),
+    )
+
+    adapter.client.api.post_message.assert_awaited_once()
+    kwargs = adapter.client.api.post_message.await_args.kwargs
+    assert kwargs["channel_id"] == "guild-channel-1"
+    assert kwargs["markdown"]["content"] == "guild text"
+    assert "msg_type" not in kwargs
