@@ -3740,8 +3740,13 @@ CONFIG_METADATA_3 = {
                     "provider_settings.sandbox.booter": {
                         "description": "沙箱环境驱动器",
                         "type": "string",
-                        "options": ["shipyard_neo", "shipyard", "cua"],
-                        "labels": ["Shipyard Neo", "Shipyard", "CUA"],
+                        "options": ["shipyard_neo", "shipyard", "cua", "native"],
+                        "labels": [
+                            "Shipyard Neo",
+                            "Shipyard",
+                            "CUA",
+                            "原生沙箱 (Windows)",
+                        ],
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                         },

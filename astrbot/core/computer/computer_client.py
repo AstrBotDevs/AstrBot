@@ -636,6 +636,10 @@ async def get_booter(
             from .booters.boxlite import BoxliteBooter
 
             client = BoxliteBooter()
+        elif booter_type == "native":
+            from .booters.native import NativeBooter
+
+            client = NativeBooter(sandbox_cfg)
         else:
             raise ValueError(f"Unknown booter type: {booter_type}")
 
@@ -644,7 +648,13 @@ async def get_booter(
             logger.info(
                 f"[Computer] Sandbox booted successfully: type={booter_type}, session={session_id}"
             )
-            await _sync_skills_to_sandbox(client)
+            if booter_type == "native":
+                # The skill sync commands are POSIX-only and would not run in
+                # the native sandbox's shell; skills sync is out of scope for
+                # this booter for now.
+                logger.info("[Computer] Skipping skill sync for the native booter")
+            else:
+                await _sync_skills_to_sandbox(client)
         except Exception as e:
             logger.error(f"Error booting sandbox for session {session_id}: {e}")
             try:
