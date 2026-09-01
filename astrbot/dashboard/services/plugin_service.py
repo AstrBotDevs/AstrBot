@@ -586,7 +586,7 @@ class PluginService:
             "version": plugin.version,
             "reserved": plugin.reserved,
             "activated": plugin.activated,
-            "online_vesion": "",
+            "online_version": "",
             "display_name": plugin.display_name,
             "logo": logo_url,
             "support_platforms": plugin.support_platforms,

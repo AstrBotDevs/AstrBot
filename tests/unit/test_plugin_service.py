@@ -1,5 +1,6 @@
 import ipaddress
 import logging
+from types import SimpleNamespace
 
 import pytest
 
@@ -153,3 +154,31 @@ async def test_default_registry_cache_ignores_soulter_md5(
     )
     service = PluginService.__new__(PluginService)
     assert await service.is_cache_valid(source) is False
+
+
+def test_serialize_plugin_base_uses_online_version_without_install_source() -> None:
+    plugin = SimpleNamespace(
+        name="astrbot_plugin_demo",
+        repo="https://github.com/AstrBotDevs/astrbot-plugin-demo",
+        author="demo",
+        desc="demo plugin",
+        version="1.0.0",
+        reserved=False,
+        activated=True,
+        display_name="Demo",
+        support_platforms=[],
+        astrbot_version=None,
+        i18n={},
+        root_dir_name="astrbot_plugin_demo",
+    )
+
+    payload = PluginService.serialize_plugin_base(
+        plugin,
+        logo_url=None,
+        installed_at=None,
+        install_source=None,
+    )
+
+    assert "online_vesion" not in payload
+    assert payload["online_version"] == ""
+    assert payload["updates_enabled"] is False
