@@ -47,4 +47,6 @@ async def test_wecomai_group_message_includes_chat_id():
         api_client=None,
         queue_mgr=WecomAIQueueMgr(),
     )
-    assert await event.get_group() is message.group
+    group = await event.get_group()
+    assert group is not message.group
+    assert group == message.group
