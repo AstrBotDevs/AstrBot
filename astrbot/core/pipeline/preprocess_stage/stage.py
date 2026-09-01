@@ -1,5 +1,6 @@
 import asyncio
 import random
+import time
 import traceback
 from collections.abc import AsyncGenerator
 from pathlib import Path
@@ -13,6 +14,7 @@ from astrbot.core.utils.media_utils import (
     ensure_jpeg,
     ensure_wav,
     file_uri_to_path,
+    get_media_duration,
     is_file_uri,
 )
 
@@ -182,20 +184,29 @@ class PreProcessStage(Stage):
             async def _stt_record(record_comp: Record, is_reply: bool = False):
                 """对单个 Record 组件执行语音转文本，成功返回 Plain，失败返回 None。"""
                 prefix = "referenced " if is_reply else ""
+                suffix = " (referenced message)" if is_reply else ""
                 try:
                     path = await record_comp.convert_to_file_path()
                 except Exception as e:
                     logger.warning(f"Failed to resolve the {prefix}voice path: {e}")
                     return None
 
+                # 探测音频时长（毫秒），用于计算实时率 RTF；失败时为 None
+                try:
+                    audio_duration_ms = await get_media_duration(path)
+                except Exception:
+                    audio_duration_ms = None
+
+                stt_start = time.time()
+                status = "failed"
                 retry = 5
                 for i in range(retry):
                     try:
                         result = await stt_provider.get_text(audio_url=path)
                         if result:
-                            suffix = " (referenced message)" if is_reply else ""
+                            status = "success"
                             logger.info(f"Speech-to-text{suffix} result: " + result)
-                            return Plain(result)
+                            break
                         break
                     except FileNotFoundError:
                         # napcat workaround: file may not be ready immediately
@@ -206,9 +217,38 @@ class PreProcessStage(Stage):
                         continue
                     except BaseException as e:
                         logger.error(traceback.format_exc())
-                        suffix = " (referenced message)" if is_reply else ""
                         logger.error(f"Speech-to-text{suffix} failed: {e}")
                         break
+
+                stt_duration = time.time() - stt_start
+                rtf = (
+                    stt_duration / (audio_duration_ms / 1000.0)
+                    if audio_duration_ms
+                    else None
+                )
+
+                provider_type = getattr(stt_provider.meta(), "type", "")
+                provider_model = stt_provider.get_model()
+                logger.info(
+                    f"Speech-to-text{suffix} stats: provider={provider_type} "
+                    f"model={provider_model} duration={stt_duration * 1000:.0f}ms "
+                    f"audio={audio_duration_ms if audio_duration_ms is not None else 'N/A'}ms "
+                    f"rtf={rtf if rtf is not None else 'N/A'} status={status}"
+                )
+                event.trace.record(
+                    "stt",
+                    provider=provider_type,
+                    model=provider_model,
+                    status=status,
+                    referenced=is_reply,
+                    audio_duration_ms=audio_duration_ms,
+                    stt_duration=stt_duration,
+                    rtf=rtf,
+                    audio=Path(path).name,
+                )
+
+                if status == "success":
+                    return Plain(result)
                 return None
 
             message_chain = event.get_messages()

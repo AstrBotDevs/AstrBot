@@ -29,6 +29,7 @@ from astrbot.core.platform.sources.webchat.request_flags import (
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id, to_utc_isoformat
+from astrbot.core.utils.media_utils import get_media_duration
 from astrbot.dashboard.services.chat_service import (
     BotMessageAccumulator,
     build_bot_history_content,
@@ -884,7 +885,36 @@ class LiveChatService:
 
             await send_json({"t": "metrics", "data": {"stt": stt_provider.meta().type}})
 
+            stt_start = time.time()
             user_text = await stt_provider.get_text(audio_path)
+            stt_duration = time.time() - stt_start
+
+            # 探测音频时长（毫秒）并计算实时率（RTF），探测失败时优雅降级
+            try:
+                audio_duration_ms = await get_media_duration(audio_path)
+            except Exception:
+                audio_duration_ms = None
+            audio_duration_sec = (
+                audio_duration_ms / 1000.0 if audio_duration_ms else None
+            )
+            rtf = stt_duration / audio_duration_sec if audio_duration_sec else None
+            logger.info(
+                f"[Live Chat] STT stats: provider={stt_provider.meta().type} "
+                f"model={stt_provider.get_model()} duration={stt_duration * 1000:.0f}ms "
+                f"audio={audio_duration_ms if audio_duration_ms is not None else 'N/A'}ms "
+                f"rtf={rtf if rtf is not None else 'N/A'}"
+            )
+            await send_json(
+                {
+                    "t": "metrics",
+                    "data": {
+                        "stt_total_time": stt_duration,
+                        "stt_audio_duration": audio_duration_sec,
+                        "stt_rtf": rtf,
+                    },
+                }
+            )
+
             if not user_text:
                 logger.warning("[Live Chat] STT 识别结果为空")
                 return
