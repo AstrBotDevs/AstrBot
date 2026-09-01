@@ -898,6 +898,21 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             return
 
+        # When the tool set has been removed (e.g. the forced finalization step
+        # after max_step), some models still emit tool calls as hallucination.
+        # Strip them and finalize with a plain assistant reply so the run never
+        # produces a dangling assistant(tool_calls) message nor leaves the
+        # runner stuck in RUNNING without a final response.
+        if llm_resp.tools_call_name and not self.req.func_tool:
+            logger.warning(
+                "LLM returned tool calls but no tools are available; "
+                "treating them as hallucination and finalizing with a plain response."
+            )
+            llm_resp.tools_call_name = []
+            llm_resp.tools_call_args = []
+            llm_resp.tools_call_ids = []
+            llm_resp.tools_call_extra_content = {}
+
         if not llm_resp.tools_call_name:
             await self._complete_with_assistant_response(llm_resp)
 
@@ -992,6 +1007,27 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             except _ToolExecutionInterrupted:
                 yield await self._finalize_aborted_step()
                 return
+
+            # Protocol safety net: every tool_call_id must have a matching tool
+            # result, otherwise the context would contain a dangling
+            # assistant(tool_calls) message that providers reject.
+            if len(tool_call_result_blocks) < len(llm_resp.tools_call_ids):
+                for tool_call_id in llm_resp.tools_call_ids:
+                    if not any(
+                        block.tool_call_id == tool_call_id
+                        for block in tool_call_result_blocks
+                    ):
+                        tool_call_result_blocks.append(
+                            ToolCallMessageSegment(
+                                role="tool",
+                                tool_call_id=tool_call_id,
+                                content=(
+                                    "error: tool execution produced no result (tools may have been "
+                                    "removed or the call was interrupted); ignore this call and "
+                                    "answer based on the information gathered so far."
+                                ),
+                            )
+                        )
 
             # 将结果添加到上下文中
             parts = []
