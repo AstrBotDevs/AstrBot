@@ -451,6 +451,10 @@ class ProviderManager:
                 from .sources.oai_aihubmix_source import (
                     ProviderAIHubMix as ProviderAIHubMix,
                 )
+            case "mirarouter_chat_completion":
+                from .sources.mirarouter_source import (
+                    ProviderMiraRouter as ProviderMiraRouter,
+                )
             case "openrouter_chat_completion":
                 from .sources.openrouter_source import (
                     ProviderOpenRouter as ProviderOpenRouter,
