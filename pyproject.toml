@@ -41,6 +41,7 @@ dependencies = [
   "pydantic>=2.12.5",
   "pydub>=0.25.1",
   "pyjwt>=2.10.1",
+  "pywin32>=306; sys_platform == 'win32'",
   "qrcode>=8.2",
   "quart>=0.20.0",
   "python-telegram-bot>=22.6",
