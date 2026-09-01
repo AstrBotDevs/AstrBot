@@ -28,6 +28,7 @@ const languageSpecs = [
   ["cpp", "cpp"],
   ["csharp", "csharp"],
   ["dart", "dart"],
+  ["go", "go"],
   ["html", "html"],
   ["javascript", "javascript"],
   ["json", "json"],
