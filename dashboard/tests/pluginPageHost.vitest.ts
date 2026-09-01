@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { computed, reactive } from 'vue';
 
 import { initI18n, useI18n, useModuleI18n } from '@/i18n/composables';
+import PluginDetailPage from '@/views/extension/PluginDetailPage.vue';
+import PluginPageHost from '@/views/extension/PluginPageHost.vue';
 
 const route = reactive({
   params: {
@@ -172,8 +174,6 @@ beforeEach(async () => {
 
 describe('PluginPageHost', () => {
   it('creates a session before mounting the strictly sandboxed iframe', async () => {
-    const { default: PluginPageHost } =
-      await import('@/views/extension/PluginPageHost.vue');
     const wrapper = mount(PluginPageHost, {
       global: { stubs: globalStubs },
     });
@@ -196,8 +196,6 @@ describe('PluginPageHost', () => {
   });
 
   it('performs one source-bound handshake and forwards context and JSON Actions', async () => {
-    const { default: PluginPageHost } =
-      await import('@/views/extension/PluginPageHost.vue');
     const wrapper = mount(PluginPageHost, {
       global: { stubs: globalStubs },
     });
@@ -267,8 +265,6 @@ describe('PluginPageHost', () => {
   });
 
   it('destroys the instance after an unexpected second iframe load or lifecycle event', async () => {
-    const { default: PluginPageHost } =
-      await import('@/views/extension/PluginPageHost.vue');
     const wrapper = mount(PluginPageHost, {
       global: { stubs: globalStubs },
     });
@@ -303,8 +299,6 @@ describe('PluginPageHost', () => {
   });
 
   it('keeps Page components in their own group and opens the v1 route', async () => {
-    const { default: PluginDetailPage } =
-      await import('@/views/extension/PluginDetailPage.vue');
     const { tm } = useModuleI18n('features.extension');
     const plugin = {
       name: 'astrbot_plugin_palette',
@@ -350,8 +344,6 @@ describe('PluginPageHost', () => {
   });
 
   it('shows a localized update time for marketplace plugin details', async () => {
-    const { default: PluginDetailPage } =
-      await import('@/views/extension/PluginDetailPage.vue');
     const { tm } = useModuleI18n('features.extension');
     const plugin = {
       name: 'astrbot_plugin_palette',
