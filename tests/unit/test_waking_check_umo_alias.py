@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from astrbot.core.pipeline.waking_check.stage import WakingCheckStage
+from astrbot.core.pipeline.waking_check.umo_auto_name import UmoAutoNameRecorder
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
 
@@ -90,11 +91,11 @@ async def test_waking_stage_records_only_awakened_events(monkeypatch):
 
     ignored_event = make_group_event("group-1", "Engineering", "hello")
     await stage.process(ignored_event)
-    assert stage._umo_auto_name_writer_task is None
+    assert stage._umo_auto_name_recorder._writer_task is None
 
     awakened_event = make_group_event("group-1", "Engineering")
     await stage.process(awakened_event)
-    writer_task = stage._umo_auto_name_writer_task
+    writer_task = stage._umo_auto_name_recorder._writer_task
     assert writer_task is not None
     await writer_task
 
@@ -110,12 +111,12 @@ async def test_waking_stage_coalesces_auto_name_changes():
     """Persist only the latest name from an event burst for one UMO."""
     db_helper = MagicMock()
     db_helper.upsert_umo_auto_name = AsyncMock()
-    stage = await make_stage(db_helper)
+    recorder = UmoAutoNameRecorder(db_helper, "test-conf-id")
 
     for group_name in ("Engineering", "Engineering", "Renamed"):
-        stage._schedule_umo_auto_name_recording(make_group_event("group-1", group_name))
+        recorder.schedule(make_group_event("group-1", group_name))
 
-    writer_task = stage._umo_auto_name_writer_task
+    writer_task = recorder._writer_task
     assert writer_task is not None
     await writer_task
 
@@ -131,9 +132,9 @@ async def test_waking_stage_skips_missing_group_and_sender_names():
     """Do not persist ID fallbacks when platform names are unavailable."""
     db_helper = MagicMock()
     db_helper.upsert_umo_auto_name = AsyncMock()
-    stage = await make_stage(db_helper)
+    recorder = UmoAutoNameRecorder(db_helper, "test-conf-id")
 
-    stage._schedule_umo_auto_name_recording(make_group_event("group-1", None))
+    recorder.schedule(make_group_event("group-1", None))
 
     friend_event = MagicMock()
     friend_event.unified_msg_origin = "test-platform:FriendMessage:sender-2"
@@ -141,10 +142,10 @@ async def test_waking_stage_skips_missing_group_and_sender_names():
     friend_event.get_group_id.return_value = ""
     friend_event.get_sender_name.return_value = ""
     friend_event.get_sender_id.return_value = "sender-2"
-    stage._schedule_umo_auto_name_recording(friend_event)
+    recorder.schedule(friend_event)
 
-    assert stage._umo_auto_name_writer_task is None
-    assert not stage._umo_auto_name_cache
+    assert recorder._writer_task is None
+    assert not recorder._cache
     db_helper.upsert_umo_auto_name.assert_not_awaited()
 
 
@@ -153,22 +154,20 @@ async def test_waking_stage_bounds_auto_name_cache():
     """Evict old UMO names when the per-stage cache reaches its bound."""
     db_helper = MagicMock()
     db_helper.upsert_umo_auto_name = AsyncMock()
-    stage = await make_stage(db_helper)
+    recorder = UmoAutoNameRecorder(db_helper, "test-conf-id")
 
     with patch(
-        "astrbot.core.pipeline.waking_check.stage.MAX_UMO_AUTO_NAME_CACHE_SIZE",
+        "astrbot.core.pipeline.waking_check.umo_auto_name.MAX_UMO_AUTO_NAME_CACHE_SIZE",
         2,
     ):
         for index in range(3):
-            stage._schedule_umo_auto_name_recording(
-                make_group_event(f"group-{index}", f"Group {index}")
-            )
+            recorder.schedule(make_group_event(f"group-{index}", f"Group {index}"))
 
-        writer_task = stage._umo_auto_name_writer_task
+        writer_task = recorder._writer_task
         assert writer_task is not None
         await writer_task
 
-    assert list(stage._umo_auto_name_cache) == [
+    assert list(recorder._cache) == [
         "test-platform:GroupMessage:group-1",
         "test-platform:GroupMessage:group-2",
     ]
@@ -182,19 +181,19 @@ async def test_waking_stage_retries_after_database_failure():
     db_helper.upsert_umo_auto_name = AsyncMock(
         side_effect=[RuntimeError("database unavailable"), None]
     )
-    stage = await make_stage(db_helper)
+    recorder = UmoAutoNameRecorder(db_helper, "test-conf-id")
     event = make_group_event("group-1", "Engineering")
 
-    with patch("astrbot.core.pipeline.waking_check.stage.logger"):
-        stage._schedule_umo_auto_name_recording(event)
-        first_writer = stage._umo_auto_name_writer_task
+    with patch("astrbot.core.pipeline.waking_check.umo_auto_name.logger"):
+        recorder.schedule(event)
+        first_writer = recorder._writer_task
         assert first_writer is not None
         await first_writer
 
-    assert event.unified_msg_origin not in stage._umo_auto_name_cache
+    assert event.unified_msg_origin not in recorder._cache
 
-    stage._schedule_umo_auto_name_recording(event)
-    second_writer = stage._umo_auto_name_writer_task
+    recorder.schedule(event)
+    second_writer = recorder._writer_task
     assert second_writer is not None
     await second_writer
 
@@ -213,11 +212,11 @@ async def test_waking_stage_writer_does_not_block_processing():
 
     db_helper = MagicMock()
     db_helper.upsert_umo_auto_name = AsyncMock(side_effect=block_database_write)
-    stage = await make_stage(db_helper)
-    stage._schedule_umo_auto_name_recording(make_group_event("group-1", "Engineering"))
+    recorder = UmoAutoNameRecorder(db_helper, "test-conf-id")
+    recorder.schedule(make_group_event("group-1", "Engineering"))
 
     await asyncio.wait_for(database_started.wait(), timeout=1.0)
     release_database.set()
-    writer_task = stage._umo_auto_name_writer_task
+    writer_task = recorder._writer_task
     if writer_task is not None:
         await writer_task

@@ -39,7 +39,7 @@ async def test_waking_check_enforces_api_key_admin_authorization(
     stage.ignore_at_all = False
     stage.disable_builtin_commands = False
     stage.no_permission_reply = True
-    stage.db_helper = None
+    stage._umo_auto_name_recorder = MagicMock()
 
     event = MagicMock()
     event.message_str = "hello"
