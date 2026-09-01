@@ -93,7 +93,7 @@
                 v-else
                 variant="tonal"
                 size="small"
-                prepend-icon="mdi-checkbox-marked"
+                prepend-icon="mdi-select-multiple"
                 :disabled="deletableSkills.length === 0"
                 @click="startBatchSelection"
               >
