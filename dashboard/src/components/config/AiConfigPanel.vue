@@ -387,6 +387,38 @@ const activeLocalGroups = computed(
     localTabGroups.value[activeLocalTab.value] || localTabGroups.value.model,
 );
 
+const normalizedSearchKeyword = computed(() =>
+  String(props.searchKeyword || '')
+    .trim()
+    .toLowerCase(),
+);
+
+function metadataMatchesSearch(metaObject, keyword) {
+  if (!metaObject || typeof metaObject !== 'object') {
+    return false;
+  }
+  const directText = [
+    tm(metaObject.description || ''),
+    tm(metaObject.hint || ''),
+  ]
+    .join(' ')
+    .toLowerCase();
+  if (directText.includes(keyword)) {
+    return true;
+  }
+  return Object.entries(metaObject.items || {}).some(
+    ([itemKey, itemMeta]) =>
+      itemKey.toLowerCase().includes(keyword) ||
+      metadataMatchesSearch(itemMeta, keyword),
+  );
+}
+
+function tabMatchesSearch(tabValue, keyword) {
+  return (localTabGroups.value[tabValue] || []).some((group) =>
+    metadataMatchesSearch(group.metadata, keyword),
+  );
+}
+
 const thirdPartyRunnerGroup = computed(() => {
   const key = `${runnerType.value}_runner`;
   return props.metadata?.[key] ? { key, metadata: props.metadata[key] } : null;
@@ -413,9 +445,24 @@ const commonGroups = computed(() =>
   ].filter(Boolean),
 );
 
-watch(runnerType, () => {
-  activeLocalTab.value = 'model';
-});
+watch(
+  [runnerType, normalizedSearchKeyword],
+  ([nextRunner, keyword], previous) => {
+    if (nextRunner !== previous?.[0]) {
+      activeLocalTab.value = 'model';
+      return;
+    }
+    if (!keyword || runnerType.value !== 'local') {
+      return;
+    }
+    const matchingTab = localTabs.value.find((tab) =>
+      tabMatchesSearch(tab.value, keyword),
+    );
+    if (matchingTab) {
+      activeLocalTab.value = matchingTab.value;
+    }
+  },
+);
 
 watch(pendingRunnerType, () => {
   runnerChangeAcknowledged.value = false;

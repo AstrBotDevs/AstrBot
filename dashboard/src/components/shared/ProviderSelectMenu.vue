@@ -279,10 +279,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, ref, watch } from 'vue';
 import { providerApi } from '@/api/v1';
-import ProviderChatCompletionPanel from '@/components/provider/ProviderChatCompletionPanel.vue';
-import ProviderPage from '@/views/ProviderPage.vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { useToast } from '@/utils/toast';
 import {
@@ -291,6 +289,13 @@ import {
   type ProviderModelMetadata,
   type ProviderMetadataSource,
 } from '@/utils/providerMetadata';
+
+const ProviderChatCompletionPanel = defineAsyncComponent(
+  () => import('@/components/provider/ProviderChatCompletionPanel.vue'),
+);
+const ProviderPage = defineAsyncComponent(
+  () => import('@/views/ProviderPage.vue'),
+);
 
 interface ProviderConfig extends ProviderMetadataSource {
   id: string;
@@ -305,6 +310,7 @@ const props = withDefaults(
     modelValue?: string | string[];
     fallbackModel?: string;
     providerType?: string;
+    buttonText?: string;
     variant?: 'config' | 'input' | 'header';
     allowEmpty?: boolean;
     multiple?: boolean;
@@ -313,6 +319,7 @@ const props = withDefaults(
     modelValue: '',
     fallbackModel: '',
     providerType: 'chat_completion',
+    buttonText: '',
     variant: 'config',
     allowEmpty: true,
     multiple: false,
@@ -358,13 +365,22 @@ const triggerTitle = computed(() => {
         })
       : sharedTm('providerSelector.notSelected');
   }
+  if (props.variant === 'input') {
+    return (
+      selectedProvider.value?.model ||
+      props.fallbackModel ||
+      selectedProvider.value?.id ||
+      (typeof props.modelValue === 'string' && props.modelValue) ||
+      sharedTm('providerSelector.model')
+    );
+  }
   if (selectedProvider.value?.id) return selectedProvider.value.id;
   if (typeof props.modelValue === 'string' && props.modelValue) {
     return props.modelValue;
   }
   if (props.variant === 'header')
     return sharedTm('providerSelector.defaultModel');
-  if (props.variant === 'input') return sharedTm('providerSelector.model');
+  if (props.buttonText) return props.buttonText;
   return sharedTm('providerSelector.notSelected');
 });
 

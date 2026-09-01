@@ -2,6 +2,7 @@
   <ProviderSelectMenu
     :model-value="modelValue"
     :provider-type="providerType"
+    :button-text="buttonText"
     variant="config"
     :allow-empty="!multiple"
     :multiple="multiple"

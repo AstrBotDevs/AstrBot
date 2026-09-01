@@ -88,11 +88,6 @@
       </div>
     </main>
   </div>
-  <v-container v-if="visibleSections.length === 0" fluid class="px-0">
-    <v-alert type="info" variant="tonal">
-      {{ tm('search.noResult') }}
-    </v-alert>
-  </v-container>
 </template>
 
 <script setup lang="ts">
@@ -127,6 +122,12 @@ const SECTION_ICONS: Record<string, string> = {
   platform_group: 'mdi-robot-outline',
   ext_group: 'mdi-tune-variant',
 };
+const SECTION_ORDER = [
+  'ai_group',
+  'plugin_group',
+  'platform_group',
+  'ext_group',
+];
 
 const props = withDefaults(
   defineProps<{
@@ -194,23 +195,24 @@ const normalizedSearchKeyword = computed(() =>
 function metaObjectHasSearchMatch(
   metaObject: ConfigMetadataItem | undefined,
   keyword: string,
-) {
+): boolean {
   if (!metaObject || typeof metaObject !== 'object') {
     return false;
   }
-  const target = [
+  const directText = [
     tm(metaObject.description || ''),
     tm(metaObject.hint || ''),
-    ...Object.entries(metaObject.items || {}).flatMap(([itemKey, itemMeta]) => [
-      itemKey,
-      tm(itemMeta.description || ''),
-      tm(itemMeta.hint || ''),
-    ]),
   ]
     .join(' ')
     .toLowerCase();
-
-  return target.includes(keyword);
+  if (directText.includes(keyword)) {
+    return true;
+  }
+  return Object.entries(metaObject.items || {}).some(
+    ([itemKey, itemMeta]) =>
+      itemKey.toLowerCase().includes(keyword) ||
+      metaObjectHasSearchMatch(itemMeta, keyword),
+  );
 }
 
 function sectionHasSearchMatch(section: ConfigSectionValue) {
@@ -231,10 +233,22 @@ const visibleSections = computed<ConfigSectionEntry[]>(() => {
       value,
     }),
   );
+  allSections.sort((left, right) => {
+    const leftIndex = SECTION_ORDER.indexOf(left.key);
+    const rightIndex = SECTION_ORDER.indexOf(right.key);
+    return (
+      (leftIndex === -1 ? SECTION_ORDER.length : leftIndex) -
+      (rightIndex === -1 ? SECTION_ORDER.length : rightIndex)
+    );
+  });
   if (!normalizedSearchKeyword.value) {
     return allSections;
   }
-  return allSections.filter((section) => sectionHasSearchMatch(section.value));
+  return allSections.filter(
+    (section) =>
+      (section.key === 'plugin_group' && tab.value === 'plugin_group') ||
+      sectionHasSearchMatch(section.value),
+  );
 });
 
 watch(
