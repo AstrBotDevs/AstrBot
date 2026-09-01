@@ -1348,8 +1348,10 @@ export default {
         if (batchSelectionEnabled.value && deletableNames.size === 0) {
           batchSelectionEnabled.value = false;
         }
+        return true;
       } catch (_err) {
         showMessage(tm("skills.loadFailed"), "error");
+        return false;
       } finally {
         loading.value = false;
       }
@@ -1482,17 +1484,24 @@ export default {
           }
         }
 
-        await fetchSkills();
-        const currentDeletableNames = new Set(
-          skills.value
-            .filter((skill) => !isReadOnlySourceSkill(skill))
-            .map((skill) => skill.name),
-        );
-        selectedSkillNames.value = failed.filter((name) =>
-          currentDeletableNames.has(name),
-        );
+        const refreshed = await fetchSkills();
+        if (refreshed) {
+          const currentDeletableNames = new Set(
+            skills.value
+              .filter((skill) => !isReadOnlySourceSkill(skill))
+              .map((skill) => skill.name),
+          );
+          selectedSkillNames.value = failed.filter((name) =>
+            currentDeletableNames.has(name),
+          );
+        } else {
+          selectedSkillNames.value = failed;
+          batchSelectionEnabled.value = failed.length > 0;
+        }
         batchDeleteDialog.value = false;
         batchDeleteTargets.value = [];
+
+        if (!refreshed) return;
 
         if (failed.length === 0) {
           batchSelectionEnabled.value = false;

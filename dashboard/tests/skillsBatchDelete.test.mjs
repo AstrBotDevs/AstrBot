@@ -49,6 +49,7 @@ test("batch deletion runs serially and resets selection after success", async ()
     fetchSkills: async () => {
       fetchCount += 1;
       skills.value = [];
+      return true;
     },
     skills,
     isReadOnlySourceSkill: () => false,
@@ -101,6 +102,7 @@ test("batch deletion continues after failures and retains retryable names", asyn
     },
     fetchSkills: async () => {
       skills.value = [{ name: "beta" }, { name: "gamma" }];
+      return true;
     },
     skills,
     isReadOnlySourceSkill: () => false,
@@ -127,6 +129,49 @@ test("batch deletion continues after failures and retains retryable names", asyn
       message: 'skills.batchDeletePartial:{"succeeded":1,"failed":2}',
       color: "warning",
     },
+  ]);
+});
+
+test("batch deletion preserves refresh errors and retryable targets", async () => {
+  const calls = [];
+  const messages = [];
+  const scope = {
+    batchDeleting: { value: false },
+    batchDeleteTargets: { value: ["alpha", "beta"] },
+    skillApi: {
+      delete: async (name) => {
+        calls.push(name);
+        if (name === "beta") return { data: { status: "error" } };
+        return { data: { status: "ok" } };
+      },
+    },
+    fetchSkills: async () => {
+      messages.push({ message: "skills.loadFailed", color: "error" });
+      return false;
+    },
+    skills: { value: [{ name: "alpha" }, { name: "beta" }] },
+    isReadOnlySourceSkill: () => false,
+    selectedSkillNames: { value: ["alpha", "beta"] },
+    batchDeleteDialog: { value: true },
+    batchSelectionEnabled: { value: true },
+    showMessage: (message, color) => messages.push({ message, color }),
+    tm: (key, params) => `${key}:${JSON.stringify(params)}`,
+  };
+  const deleteSelectedSkills = instantiateHandler(
+    "deleteSelectedSkills",
+    scope,
+  );
+
+  await deleteSelectedSkills();
+
+  assert.deepEqual(calls, ["alpha", "beta"]);
+  assert.deepEqual(scope.selectedSkillNames.value, ["beta"]);
+  assert.equal(scope.batchSelectionEnabled.value, true);
+  assert.equal(scope.batchDeleteDialog.value, false);
+  assert.deepEqual(scope.batchDeleteTargets.value, []);
+  assert.equal(scope.batchDeleting.value, false);
+  assert.deepEqual(messages, [
+    { message: "skills.loadFailed", color: "error" },
   ]);
 });
 
