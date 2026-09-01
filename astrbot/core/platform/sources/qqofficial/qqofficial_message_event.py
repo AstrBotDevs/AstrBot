@@ -154,12 +154,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         if not target_id:
             return None
 
-        current_group = self.message_obj.group
-        group = (
-            current_group
-            if current_group and current_group.group_id == target_id
-            else Group(group_id=target_id)
-        )
+        group = Group.from_inbound(self.message_obj.group, target_id)
         source = self.message_obj.raw_message
 
         if isinstance(source, botpy.message.GroupMessage):
@@ -194,7 +189,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 logger.warning(
                     "[QQOfficial] Failed to get group info for %s: %s",
                     target_id,
-                    exc,
+                    safe_error("", exc),
                 )
             return group
 
@@ -228,7 +223,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 logger.warning(
                     "[QQOfficial] Failed to get channel info for %s: %s",
                     target_id,
-                    exc,
+                    safe_error("", exc),
                 )
             return group
 

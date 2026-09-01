@@ -8,6 +8,7 @@ import pytest
 import astrbot.api.message_components as Comp
 from astrbot.api.event import MessageChain
 from astrbot.api.platform import MessageType
+from astrbot.core.platform.astrbot_message import Group
 from astrbot.core.platform.sources.mattermost.client import MattermostClient
 from astrbot.core.platform.sources.mattermost.mattermost_adapter import (
     MattermostPlatformAdapter,
@@ -434,6 +435,31 @@ async def test_mattermost_event_get_group_maps_channel_display_name():
     assert group.member_count == 1
     assert group.members[0].user_id == "user-1"
     assert group.members[0].nickname == "Alice"
+
+
+@pytest.mark.asyncio
+async def test_mattermost_get_group_caps_member_pages_and_omits_truncated_list():
+    event = _build_event()
+    event.message_obj.group = Group(group_id="channel-1", group_name="cached")
+
+    async def endless_members(channel_id, *, page, per_page):
+        del channel_id
+        return [
+            {"user_id": f"user-{page}-{index}", "roles": "channel_user"}
+            for index in range(per_page)
+        ]
+
+    event._client.get_channel_stats = AsyncMock(return_value={"member_count": 2500})
+    event._client.get_channel_members = AsyncMock(side_effect=endless_members)
+    event._client.get_users_by_ids = AsyncMock()
+
+    group = await event.get_group()
+
+    assert group is not event.message_obj.group
+    assert group.member_count == 2500
+    assert group.members is None
+    assert event._client.get_channel_members.await_count == 10
+    event._client.get_users_by_ids.assert_not_awaited()
 
 
 @pytest.mark.asyncio

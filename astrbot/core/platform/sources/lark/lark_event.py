@@ -32,7 +32,9 @@ from astrbot.core.message.components import Image as AstrBotImage
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import Group, MessageMember
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astrbot_message import group_member_lookup_over_cap
 from astrbot.core.platform.send_result import PlatformSendResult
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.media_utils import (
     MediaResolver,
     convert_audio_to_opus,
@@ -72,12 +74,7 @@ class LarkMessageEvent(AstrMessageEvent):
         if not resolved_group_id:
             return None
 
-        basic_group = Group(group_id=resolved_group_id)
-        if (
-            self.message_obj.group
-            and self.message_obj.group.group_id == resolved_group_id
-        ):
-            basic_group = self.message_obj.group
+        basic_group = Group.from_inbound(self.message_obj.group, resolved_group_id)
 
         if self._bot.im is None:
             logger.warning("[Lark] IM API is unavailable while getting chat details")
@@ -95,7 +92,7 @@ class LarkMessageEvent(AstrMessageEvent):
             logger.warning(
                 "[Lark] Failed to get chat details for %s: %s",
                 resolved_group_id,
-                exc,
+                safe_error("", exc),
             )
             return basic_group
 
@@ -132,8 +129,16 @@ class LarkMessageEvent(AstrMessageEvent):
         members: list[MessageMember] = []
         members_complete = False
         page_token: str | None = None
+        page_count = 0
         try:
             while True:
+                if group_member_lookup_over_cap(
+                    pages=page_count + 1,
+                    members=len(members),
+                ):
+                    members_complete = False
+                    members = []
+                    break
                 request_builder = (
                     GetChatMembersRequest.builder()
                     .chat_id(resolved_group_id)
@@ -155,14 +160,28 @@ class LarkMessageEvent(AstrMessageEvent):
                     break
 
                 members_data = members_response.data
-                for member in members_data.items or []:
-                    if member.member_id:
-                        members.append(
-                            MessageMember(
-                                user_id=member.member_id,
-                                nickname=member.name,
-                            ),
-                        )
+                page_count += 1
+                page_items = [
+                    MessageMember(
+                        user_id=member.member_id,
+                        nickname=member.name,
+                    )
+                    for member in members_data.items or []
+                    if member.member_id
+                ]
+                if group_member_lookup_over_cap(
+                    pages=page_count,
+                    members=len(members) + len(page_items),
+                ):
+                    members_complete = False
+                    members = []
+                    if (
+                        group.member_count is None
+                        and members_data.member_total is not None
+                    ):
+                        group.member_count = members_data.member_total
+                    break
+                members.extend(page_items)
                 if group.member_count is None and members_data.member_total is not None:
                     group.member_count = members_data.member_total
 
@@ -171,6 +190,8 @@ class LarkMessageEvent(AstrMessageEvent):
                         "[Lark] Member list for chat %s was truncated by its security policy",
                         resolved_group_id,
                     )
+                    members_complete = False
+                    members = []
                     break
 
                 page_token = members_data.page_token
@@ -181,11 +202,10 @@ class LarkMessageEvent(AstrMessageEvent):
             logger.warning(
                 "[Lark] Failed to get members for chat %s: %s",
                 resolved_group_id,
-                exc,
+                safe_error("", exc),
             )
 
-        if members_complete:
-            group.members = members
+        group.members = members if members_complete else None
         return group
 
     @staticmethod

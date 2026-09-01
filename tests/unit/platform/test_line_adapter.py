@@ -8,7 +8,9 @@ import pytest
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, File, Image, Plain, Record, Video
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
+from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.platform.sources.line.line_adapter import LinePlatformAdapter
+from astrbot.core.platform.sources.line.line_api import LineAPIClient
 from astrbot.core.platform.sources.line.line_event import LineMessageEvent
 
 pytestmark = pytest.mark.platform
@@ -797,3 +799,176 @@ def test_line_is_duplicate_event_reaccepts_event_after_expiration(monkeypatch):
     current["value"] = 2001.0
 
     assert adapter._is_duplicate_event("evt-1") is False
+
+
+def _line_event(message, line_api) -> LineMessageEvent:
+    return LineMessageEvent(
+        message_str=message.message_str,
+        message_obj=message,
+        platform_meta=PlatformMetadata(
+            name="line",
+            description="LINE",
+            id="line-test",
+            support_streaming_message=False,
+        ),
+        session_id=message.session_id,
+        line_api=line_api,
+    )
+
+
+@pytest.mark.asyncio
+async def test_line_get_group_fills_summary_and_count_without_members():
+    adapter = _adapter()
+    message = await adapter.convert_message(
+        {
+            "type": "message",
+            "source": {"type": "group", "groupId": "C-group", "userId": "U-sender"},
+            "message": {"id": "message-1", "type": "text", "text": "hello"},
+        }
+    )
+    assert message is not None
+    inbound = message.group
+    adapter.line_api.get_group_summary = AsyncMock(
+        return_value={
+            "groupId": "C-group",
+            "groupName": "LINE group",
+            "pictureUrl": "https://example.com/group.png",
+        }
+    )
+    adapter.line_api.get_chat_member_count = AsyncMock(return_value=2)
+    adapter.line_api.get_chat_member_ids = AsyncMock(return_value=["U-one"])
+    adapter.line_api.get_chat_member_profile = AsyncMock()
+
+    result = await _line_event(message, adapter.line_api).get_group()
+
+    assert result is not inbound
+    assert result.group_id == "C-group"
+    assert result.group_name == "LINE group"
+    assert result.group_avatar == "https://example.com/group.png"
+    assert result.member_count == 2
+    assert result.members is None
+    adapter.line_api.get_group_summary.assert_awaited_once_with("C-group")
+    adapter.line_api.get_chat_member_count.assert_awaited_once_with("group", "C-group")
+    adapter.line_api.get_chat_member_ids.assert_not_awaited()
+    adapter.line_api.get_chat_member_profile.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_line_get_room_uses_count_without_summary_or_members():
+    adapter = _adapter()
+    message = await adapter.convert_message(
+        {
+            "type": "message",
+            "source": {"type": "room", "roomId": "R-room", "userId": "U-sender"},
+            "message": {"id": "message-1", "type": "text", "text": "hello"},
+        }
+    )
+    assert message is not None
+    adapter.line_api.get_group_summary = AsyncMock()
+    adapter.line_api.get_chat_member_count = AsyncMock(return_value=3)
+    adapter.line_api.get_chat_member_ids = AsyncMock()
+    adapter.line_api.get_chat_member_profile = AsyncMock()
+
+    result = await _line_event(message, adapter.line_api).get_group()
+
+    assert result.group_id == "R-room"
+    assert result.group_name is None
+    assert result.member_count == 3
+    assert result.members is None
+    adapter.line_api.get_group_summary.assert_not_awaited()
+    adapter.line_api.get_chat_member_count.assert_awaited_once_with("room", "R-room")
+    adapter.line_api.get_chat_member_ids.assert_not_awaited()
+    adapter.line_api.get_chat_member_profile.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_line_get_group_keeps_inbound_name_when_apis_fail():
+    adapter = _adapter()
+    message = await adapter.convert_message(
+        {
+            "type": "message",
+            "source": {
+                "type": "group",
+                "groupId": "C-group",
+                "userId": "U-sender",
+                "groupName": "Webhook group",
+            },
+            "message": {"id": "message-1", "type": "text", "text": "hello"},
+        }
+    )
+    assert message is not None
+    inbound = message.group
+    adapter.line_api.get_group_summary = AsyncMock(side_effect=RuntimeError("denied"))
+    adapter.line_api.get_chat_member_count = AsyncMock(
+        side_effect=RuntimeError("denied")
+    )
+    adapter.line_api.get_chat_member_ids = AsyncMock()
+
+    result = await _line_event(message, adapter.line_api).get_group()
+
+    assert result is not inbound
+    assert result.group_id == "C-group"
+    assert result.group_name == "Webhook group"
+    assert result.member_count is None
+    assert result.members is None
+    adapter.line_api.get_chat_member_ids.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_line_member_id_api_follows_pagination_tokens():
+    client = LineAPIClient(
+        channel_access_token="test-token",
+        channel_secret="test-secret",
+    )
+    client._get_json = AsyncMock(
+        side_effect=[
+            {"memberIds": ["U-one"], "next": "next-page"},
+            {"memberIds": ["U-two", "U-one"]},
+        ]
+    )
+
+    result = await client.get_chat_member_ids("group", "C-group")
+
+    assert result == ["U-one", "U-two"]
+    assert client._get_json.await_count == 2
+    assert client._get_json.await_args_list[0].kwargs["params"] is None
+    assert client._get_json.await_args_list[1].kwargs["params"] == {
+        "start": "next-page"
+    }
+
+
+@pytest.mark.asyncio
+async def test_line_member_id_api_returns_none_when_restricted():
+    client = LineAPIClient(
+        channel_access_token="test-token",
+        channel_secret="test-secret",
+    )
+    client._get_json = AsyncMock(return_value=None)
+
+    result = await client.get_chat_member_ids("room", "R-room")
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_line_group_summary_and_member_count_helpers():
+    client = LineAPIClient(
+        channel_access_token="test-token",
+        channel_secret="test-secret",
+    )
+    client._get_json = AsyncMock(
+        side_effect=[
+            {"groupName": "LINE group", "pictureUrl": "https://example.com/g.png"},
+            {"count": 4},
+            None,
+        ]
+    )
+
+    summary = await client.get_group_summary("C-group")
+    count = await client.get_chat_member_count("group", "C-group")
+    profile = await client.get_chat_member_profile("group", "C-group", "U-one")
+
+    assert summary["groupName"] == "LINE group"
+    assert count == 4
+    assert profile is None
+    assert client._get_json.await_count == 3

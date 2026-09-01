@@ -900,7 +900,8 @@ class TestGetGroup:
 
         result = await astr_message_event.get_group()
 
-        assert result is astr_message_event.message_obj.group
+        assert result is not astr_message_event.message_obj.group
+        assert result == astr_message_event.message_obj.group
 
 
 class TestMessageTypeHandling:

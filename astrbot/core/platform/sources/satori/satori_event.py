@@ -17,6 +17,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import AstrBotMessage, Group, MessageMember, PlatformMetadata
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.send_result import PlatformSendResult
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.media_utils import resolve_media_ref_to_base64_data
 
 if TYPE_CHECKING:
@@ -75,19 +76,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
         if not target_id:
             return None
 
-        current_group = self.message_obj.group
-        if current_group and current_group.group_id == target_id:
-            group = Group(
-                group_id=target_id,
-                group_name=current_group.group_name,
-                group_avatar=current_group.group_avatar,
-                group_owner=current_group.group_owner,
-                group_admins=current_group.group_admins,
-                members=current_group.members,
-                member_count=current_group.member_count,
-            )
-        else:
-            group = Group(group_id=target_id)
+        group = Group.from_inbound(self.message_obj.group, target_id)
 
         features = None
         for login in getattr(self._adapter, "logins", []):
@@ -112,7 +101,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 logger.warning(
                     "[Satori] Failed to get guild %s: %s",
                     target_id,
-                    exc,
+                    safe_error("", exc),
                 )
                 guild = {}
             if guild:
@@ -142,7 +131,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 logger.warning(
                     "[Satori] Failed to get members for guild %s: %s",
                     target_id,
-                    exc,
+                    safe_error("", exc),
                 )
                 break
             if not response or not isinstance(response.get("data"), list):

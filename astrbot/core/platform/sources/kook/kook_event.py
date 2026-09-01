@@ -26,6 +26,8 @@ from astrbot.core.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astrbot_message import group_member_lookup_over_cap
+from astrbot.core.utils.error_redaction import safe_error
 
 from .kook_client import KookClient
 from .kook_types import (
@@ -229,21 +231,17 @@ class KookEvent(AstrMessageEvent):
         if not channel_id:
             return None
 
-        current_group = self.message_obj.group
-        group = Group(
-            group_id=channel_id,
-            group_name=(
-                current_group.group_name
-                if current_group and current_group.group_id == channel_id
-                else None
-            ),
-        )
+        group = Group.from_inbound(self.message_obj.group, channel_id)
 
         try:
             channel = await self._client.get_channel(channel_id)
             group.group_name = channel.get("name") or group.group_name
         except Exception as exc:
-            logger.debug("KOOK channel lookup failed for %s: %s", channel_id, exc)
+            logger.debug(
+                "KOOK channel lookup failed for %s: %s",
+                channel_id,
+                safe_error("", exc),
+            )
             return group
 
         guild_id = str(channel.get("guild_id") or "")
@@ -271,7 +269,11 @@ class KookEvent(AstrMessageEvent):
                 role for role in (guild.get("roles") or []) if isinstance(role, dict)
             )
         except Exception as exc:
-            logger.debug("KOOK guild lookup failed for %s: %s", guild_id, exc)
+            logger.debug(
+                "KOOK guild lookup failed for %s: %s",
+                guild_id,
+                safe_error("", exc),
+            )
 
         if not guild_roles:
             role_page_number = 1
@@ -300,7 +302,11 @@ class KookEvent(AstrMessageEvent):
                         break
                     role_page_number += 1
             except Exception as exc:
-                logger.debug("KOOK guild role lookup failed for %s: %s", guild_id, exc)
+                logger.debug(
+                    "KOOK guild role lookup failed for %s: %s",
+                    guild_id,
+                    safe_error("", exc),
+                )
 
         admin_role_ids: set[int] = set()
         for role in guild_roles:
@@ -319,8 +325,15 @@ class KookEvent(AstrMessageEvent):
         total: int | None = None
         page = 1
         page_size = 50
+        members_incomplete = False
         try:
             while True:
+                if group_member_lookup_over_cap(
+                    pages=page,
+                    members=len(member_items),
+                ):
+                    members_incomplete = True
+                    break
                 member_page = await self._client.get_guild_users(
                     guild_id,
                     channel_id=channel_id,
@@ -328,7 +341,17 @@ class KookEvent(AstrMessageEvent):
                     page_size=page_size,
                 )
                 items = member_page.get("items") or []
-                member_items.extend(item for item in items if isinstance(item, dict))
+                page_items = [item for item in items if isinstance(item, dict)]
+                if group_member_lookup_over_cap(
+                    pages=page,
+                    members=len(member_items) + len(page_items),
+                ):
+                    members_incomplete = True
+                    meta = member_page.get("meta") or {}
+                    if isinstance(meta, dict) and isinstance(meta.get("total"), int):
+                        total = meta["total"]
+                    break
+                member_items.extend(page_items)
                 meta = member_page.get("meta") or {}
                 if isinstance(meta, dict) and isinstance(meta.get("total"), int):
                     total = meta["total"]
@@ -342,7 +365,20 @@ class KookEvent(AstrMessageEvent):
                     break
                 page += 1
         except Exception as exc:
-            logger.debug("KOOK guild member lookup failed for %s: %s", guild_id, exc)
+            logger.debug(
+                "KOOK guild member lookup failed for %s: %s",
+                guild_id,
+                safe_error("", exc),
+            )
+            group.members = None
+            if total is not None:
+                group.member_count = total
+            return group
+
+        if members_incomplete:
+            group.members = None
+            if total is not None:
+                group.member_count = total
             return group
 
         unique_members: dict[str, dict] = {}

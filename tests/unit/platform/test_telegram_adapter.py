@@ -2004,6 +2004,7 @@ async def test_telegram_get_group_enriches_available_metadata():
     assert group.group_id == "-100123#42"
     assert group.group_name == "Engineering"
     assert group.group_avatar == "https://api.telegram.org/file/group.jpg"
+    assert group is not event.message_obj.group
     assert group.member_count == 24
     assert group.group_owner == "1"
     assert group.group_admins == ["2"]
@@ -2032,4 +2033,83 @@ async def test_telegram_get_group_keeps_basic_metadata_when_apis_fail():
 
     group = await event.get_group()
 
+    assert group is not event.message_obj.group
     assert group == Group(group_id="-100123#42", group_name="Cached title")
+
+
+@pytest.mark.asyncio
+async def test_telegram_get_group_joins_relative_avatar_with_file_base_url():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = SimpleNamespace(
+        base_file_url="https://api.telegram.org/file/botTESTTOKEN",
+        get_chat=AsyncMock(
+            return_value=SimpleNamespace(
+                title="Engineering",
+                photo=SimpleNamespace(big_file_id="photo-1"),
+            )
+        ),
+        get_file=AsyncMock(return_value=SimpleNamespace(file_path="photos/group.jpg")),
+        get_chat_member_count=AsyncMock(return_value=3),
+        get_chat_administrators=AsyncMock(return_value=[]),
+    )
+    event = TelegramPlatformEvent.__new__(TelegramPlatformEvent)
+    event.message_obj = SimpleNamespace(
+        group=Group(group_id="-100123", group_name="Cached title"),
+        group_id="-100123",
+    )
+    event._client = client
+
+    group = await event.get_group()
+
+    assert (
+        group.group_avatar
+        == "https://api.telegram.org/file/botTESTTOKEN/photos/group.jpg"
+    )
+
+
+@pytest.mark.asyncio
+async def test_telegram_get_group_leaves_avatar_none_when_file_path_unusable():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = SimpleNamespace(
+        get_chat=AsyncMock(
+            return_value=SimpleNamespace(
+                title="Engineering",
+                photo=SimpleNamespace(big_file_id="photo-1"),
+            )
+        ),
+        get_file=AsyncMock(return_value=SimpleNamespace(file_path="photos/group.jpg")),
+        get_chat_member_count=AsyncMock(return_value=3),
+        get_chat_administrators=AsyncMock(return_value=[]),
+    )
+    event = TelegramPlatformEvent.__new__(TelegramPlatformEvent)
+    event.message_obj = SimpleNamespace(
+        group=Group(group_id="-100123", group_name="Cached title"),
+        group_id="-100123",
+    )
+    event._client = client
+
+    group = await event.get_group()
+
+    assert group.group_avatar is None
+
+
+@pytest.mark.asyncio
+async def test_telegram_get_group_does_not_use_topic_name_for_other_group():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = SimpleNamespace(
+        get_chat=AsyncMock(return_value=SimpleNamespace(title="Other", photo=None)),
+        get_chat_member_count=AsyncMock(return_value=2),
+        get_chat_administrators=AsyncMock(return_value=[]),
+    )
+    event = TelegramPlatformEvent.__new__(TelegramPlatformEvent)
+    event.message_obj = SimpleNamespace(
+        group=Group(group_id="-100123#42", group_name="Engineering-Backend"),
+        group_id="-100123#42",
+        _telegram_topic_name="Backend",
+    )
+    event._client = client
+
+    group = await event.get_group(group_id="-100999")
+
+    assert group.group_id == "-100999"
+    assert group.group_name == "Other"

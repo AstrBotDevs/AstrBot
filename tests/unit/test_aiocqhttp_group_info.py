@@ -33,6 +33,8 @@ async def test_aiocqhttp_get_group_enriches_inbound_group():
 
     group = await event.get_group()
 
+    assert group is not event.message_obj.group
+    assert event.message_obj.group.group_name == "Inbound name"
     assert group.group_name == "Fetched name"
     assert group.group_owner == "1"
     assert group.group_admins == ["2"]
@@ -83,7 +85,9 @@ async def test_aiocqhttp_get_group_keeps_inbound_info_when_group_info_fails():
 
     group = await event.get_group()
 
-    assert group is event.message_obj.group
+    assert group is not event.message_obj.group
+    assert event.message_obj.group.group_name == "Inbound name"
+    assert event.message_obj.group.members is None
     assert group.group_name == "Inbound name"
     assert group.member_count == 0
     assert group.members == []

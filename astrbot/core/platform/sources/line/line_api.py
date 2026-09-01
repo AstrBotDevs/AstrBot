@@ -9,6 +9,7 @@ from urllib.parse import unquote
 import aiohttp
 
 from astrbot import logger
+from astrbot.core.utils.error_redaction import safe_error
 
 
 class LineAPIClient:
@@ -151,7 +152,7 @@ class LineAPIClient:
                 logger.debug("[LINE] %s returned a non-object response", op_name)
                 return None
         except Exception as e:
-            logger.debug("[LINE] %s request failed: %s", op_name, e)
+            logger.debug("[LINE] %s request failed: %s", op_name, safe_error("", e))
             return None
 
     async def get_group_summary(self, group_id: str) -> dict[str, Any] | None:

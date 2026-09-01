@@ -4,7 +4,14 @@ import time
 from unittest.mock import patch
 
 from astrbot.core.message.components import Image, Plain
-from astrbot.core.platform.astrbot_message import AstrBotMessage, Group, MessageMember
+from astrbot.core.platform.astrbot_message import (
+    GROUP_MEMBER_HARD_CAP,
+    GROUP_MEMBER_PAGE_LIMIT,
+    AstrBotMessage,
+    Group,
+    MessageMember,
+    group_member_lookup_over_cap,
+)
 from astrbot.core.platform.message_type import MessageType
 
 
@@ -113,6 +120,40 @@ class TestGroup:
         assert "Member Count: N/A" in result
         assert "Members Len: 0" in result
         assert "First Member: N/A" in result
+
+    def test_group_copy_does_not_share_mutable_collections(self):
+        members = [MessageMember(user_id="user1")]
+        group = Group(
+            group_id="group123",
+            group_admins=["admin1"],
+            members=members,
+            member_count=1,
+        )
+
+        copied = group.copy()
+
+        assert copied == group
+        assert copied is not group
+        copied.group_admins.append("admin2")
+        copied.members.append(MessageMember(user_id="user2"))
+        assert group.group_admins == ["admin1"]
+        assert group.members == members
+
+    def test_group_from_inbound_copies_matching_group(self):
+        inbound = Group(group_id="group123", group_name="Inbound")
+        copied = Group.from_inbound(inbound, "group123")
+        other = Group.from_inbound(inbound, "other")
+
+        assert copied is not inbound
+        assert copied.group_name == "Inbound"
+        assert other == Group(group_id="other")
+
+    def test_group_member_lookup_over_cap_uses_page_and_member_limits(self):
+        assert GROUP_MEMBER_PAGE_LIMIT == 10
+        assert GROUP_MEMBER_HARD_CAP == 2000
+        assert group_member_lookup_over_cap(pages=10, members=2000) is False
+        assert group_member_lookup_over_cap(pages=11, members=1) is True
+        assert group_member_lookup_over_cap(pages=1, members=2001) is True
 
 
 class TestAstrBotMessage:

@@ -951,9 +951,4 @@ class AstrMessageEvent(abc.ABC):
         if not resolved_group_id:
             return None
         resolved_group_id = str(resolved_group_id)
-        if (
-            self.message_obj.group
-            and self.message_obj.group.group_id == resolved_group_id
-        ):
-            return self.message_obj.group
-        return Group(group_id=resolved_group_id)
+        return Group.from_inbound(self.message_obj.group, resolved_group_id)

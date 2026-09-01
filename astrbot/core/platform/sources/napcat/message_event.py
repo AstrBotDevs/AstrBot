@@ -11,6 +11,7 @@ from astrbot.core.platform import Group, MessageMember
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.send_result import PlatformSendResult
+from astrbot.core.utils.error_redaction import safe_error
 
 if TYPE_CHECKING:
     from .napcat_platform_adapter import NapCatPlatformAdapter
@@ -832,12 +833,7 @@ class NapCatMessageEvent(AstrMessageEvent):
         if not resolved_group_id:
             return None
 
-        current_group = self.message_obj.group
-        group = (
-            current_group
-            if current_group and current_group.group_id == resolved_group_id
-            else Group(group_id=resolved_group_id)
-        )
+        group = Group.from_inbound(self.message_obj.group, resolved_group_id)
 
         def _value(item: object, field: str):
             if isinstance(item, Mapping):
@@ -854,7 +850,7 @@ class NapCatMessageEvent(AstrMessageEvent):
             logger.warning(
                 "[napcat] Failed to get group information for %s: %s",
                 resolved_group_id,
-                exc,
+                safe_error("", exc),
             )
             info = None
 
@@ -884,7 +880,7 @@ class NapCatMessageEvent(AstrMessageEvent):
             logger.warning(
                 "[napcat] Failed to get members for group %s: %s",
                 resolved_group_id,
-                exc,
+                safe_error("", exc),
             )
             return group
         if not isinstance(members, list):

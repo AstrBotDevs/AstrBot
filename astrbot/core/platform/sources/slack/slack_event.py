@@ -16,7 +16,9 @@ from astrbot.core.message.components import (
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import Group, MessageMember
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astrbot_message import group_member_lookup_over_cap
 from astrbot.core.platform.send_result import PlatformSendResult
+from astrbot.core.utils.error_redaction import safe_error
 
 
 class SlackMessageEvent(AstrMessageEvent):
@@ -201,15 +203,7 @@ class SlackMessageEvent(AstrMessageEvent):
         if not channel_id:
             return None
 
-        current_group = self.message_obj.group
-        group = Group(
-            group_id=channel_id,
-            group_name=(
-                current_group.group_name
-                if current_group and current_group.group_id == channel_id
-                else None
-            ),
-        )
+        group = Group.from_inbound(self.message_obj.group, channel_id)
 
         try:
             channel_info = await self.web_client.conversations_info(
@@ -220,25 +214,40 @@ class SlackMessageEvent(AstrMessageEvent):
             group.group_name = channel_data.get("name") or group.group_name
             group.member_count = channel_data.get("num_members")
         except Exception as exc:
-            logger.debug("Slack channel info lookup failed for %s: %s", channel_id, exc)
+            logger.debug(
+                "Slack channel info lookup failed for %s: %s",
+                channel_id,
+                safe_error("", exc),
+            )
             return group
 
         member_ids: list[str] = []
         cursor: str | None = None
+        page_count = 0
+        members_incomplete = False
         try:
             while True:
-                request: dict[str, str | int] = {
-                    "channel": channel_id,
-                    "limit": 200,
-                }
-                if cursor:
-                    request["cursor"] = cursor
+                if group_member_lookup_over_cap(
+                    pages=page_count + 1,
+                    members=len(member_ids),
+                ):
+                    members_incomplete = True
+                    break
                 members_response = await self.web_client.conversations_members(
-                    **request,
+                    channel=str(channel_id),
+                    cursor=cursor,
+                    limit=200,
                 )
-                member_ids.extend(
-                    str(member_id) for member_id in members_response["members"]
-                )
+                page_count += 1
+                raw_members = members_response.get("members") or []
+                page_ids = [str(member_id) for member_id in raw_members]
+                if group_member_lookup_over_cap(
+                    pages=page_count,
+                    members=len(member_ids) + len(page_ids),
+                ):
+                    members_incomplete = True
+                    break
+                member_ids.extend(page_ids)
                 response_metadata = members_response.get("response_metadata") or {}
                 cursor = str(response_metadata.get("next_cursor") or "")
                 if not cursor:
@@ -247,8 +256,13 @@ class SlackMessageEvent(AstrMessageEvent):
             logger.debug(
                 "Slack channel member lookup failed for %s: %s",
                 channel_id,
-                exc,
+                safe_error("", exc),
             )
+            group.members = None
+            return group
+
+        if members_incomplete:
+            group.members = None
             return group
 
         unique_member_ids = list(dict.fromkeys(member_ids))

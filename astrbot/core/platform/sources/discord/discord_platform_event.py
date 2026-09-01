@@ -27,6 +27,7 @@ from astrbot.core.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
     MediaResolver,
@@ -163,19 +164,11 @@ class DiscordPlatformEvent(AstrMessageEvent):
         if not requested_group_id:
             return None
 
-        current_group = self.message_obj.group
-        group = Group(
-            group_id=requested_group_id,
-            group_name=(
-                current_group.group_name
-                if current_group and current_group.group_id == requested_group_id
-                else None
-            ),
-        )
+        group = Group.from_inbound(self.message_obj.group, requested_group_id)
         try:
             channel_id = int(requested_group_id)
         except ValueError:
-            logger.warning(f"[Discord] Invalid group channel ID: {requested_group_id}")
+            logger.warning("[Discord] Invalid group channel ID: %s", requested_group_id)
             return group
 
         channel = self._client.get_channel(channel_id)
@@ -184,7 +177,9 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 channel = await self._client.fetch_channel(channel_id)
             except Exception as exc:
                 logger.warning(
-                    f"[Discord] Failed to get group channel {requested_group_id}: {exc}"
+                    "[Discord] Failed to get group channel %s: %s",
+                    requested_group_id,
+                    safe_error("", exc),
                 )
                 return group
 
@@ -201,21 +196,18 @@ class DiscordPlatformEvent(AstrMessageEvent):
             except TypeError, ValueError:
                 resolved_guild_id = None
             if resolved_guild_id is not None:
-                get_guild = getattr(self._client, "get_guild", None)
-                cached_guild = (
-                    get_guild(resolved_guild_id) if callable(get_guild) else None
-                )
+                cached_guild = self._client.get_guild(resolved_guild_id)
                 if cached_guild is not None:
                     guild = cached_guild
                 else:
-                    fetch_guild = getattr(self._client, "fetch_guild", None)
-                    if callable(fetch_guild):
-                        try:
-                            guild = await fetch_guild(resolved_guild_id)
-                        except Exception as exc:
-                            logger.warning(
-                                f"[Discord] Failed to get guild {resolved_guild_id}: {exc}"
-                            )
+                    try:
+                        guild = await self._client.fetch_guild(resolved_guild_id)
+                    except Exception as exc:
+                        logger.warning(
+                            "[Discord] Failed to get guild %s: %s",
+                            resolved_guild_id,
+                            safe_error("", exc),
+                        )
                 guild_name = getattr(guild, "name", None)
 
         if guild is None:
@@ -254,11 +246,15 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 )
             )
         )
-        if not cache_complete:
+        if not cache_complete or cached_members is None:
             return group
 
-        group.group_admins = []
-        group.members = None if isinstance(channel, discord.Thread) else []
+        group_admins: list[str] = []
+        group.group_admins = group_admins
+        visible_members: list[MessageMember] | None = (
+            None if isinstance(channel, discord.Thread) else []
+        )
+        group.members = visible_members
         for member in cached_members:
             member_id = getattr(member, "id", None)
             if member_id is None:
@@ -268,15 +264,17 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 getattr(guild_permissions, "administrator", False)
                 and str(member_id) != group.group_owner
             ):
-                group.group_admins.append(str(member_id))
-            if isinstance(channel, discord.Thread):
+                group_admins.append(str(member_id))
+            if visible_members is None:
+                continue
+            if not isinstance(channel, discord.abc.GuildChannel):
                 continue
             try:
                 if not channel.permissions_for(member).view_channel:
                     continue
             except Exception:
                 continue
-            group.members.append(
+            visible_members.append(
                 MessageMember(
                     user_id=str(member_id),
                     nickname=getattr(member, "display_name", None),

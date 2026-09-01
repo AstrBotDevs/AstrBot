@@ -16,7 +16,7 @@ from astrbot.core.message.components import (
     Video,
 )
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.platform import Group, MessageMember
+from astrbot.core.platform import Group
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -268,9 +268,8 @@ class LineMessageEvent(AstrMessageEvent):
         """Get LINE group or multi-person chat information.
 
         Group summaries provide a name and icon. LINE doesn't expose a room
-        summary endpoint, so room enrichment is limited to its member count and
-        accessible members. Member enumeration is unavailable to unverified
-        accounts; in that case the basic group object is still returned.
+        summary endpoint, so room enrichment is limited to member count.
+        Member IDs and profiles are not enumerated.
 
         Args:
             group_id: Group or room ID. Defaults to the current message chat.
@@ -284,19 +283,8 @@ class LineMessageEvent(AstrMessageEvent):
         if not resolved_group_id:
             return None
 
-        current_group = self.message_obj.group
-        if current_group and current_group.group_id == resolved_group_id:
-            result = Group(
-                group_id=resolved_group_id,
-                group_name=current_group.group_name,
-                group_avatar=current_group.group_avatar,
-                group_owner=current_group.group_owner,
-                group_admins=current_group.group_admins,
-                members=current_group.members,
-                member_count=current_group.member_count,
-            )
-        else:
-            result = Group(group_id=resolved_group_id)
+        result = Group.from_inbound(self.message_obj.group, resolved_group_id)
+        result.members = None
 
         chat_type = str(kwargs.get("chat_type", "")).strip().lower()
         raw = self.message_obj.raw_message
@@ -315,16 +303,11 @@ class LineMessageEvent(AstrMessageEvent):
         calls = []
         if chat_type == "group":
             calls.append(self.line_api.get_group_summary(resolved_group_id))
-        calls.extend(
-            [
-                self.line_api.get_chat_member_count(chat_type, resolved_group_id),
-                self.line_api.get_chat_member_ids(chat_type, resolved_group_id),
-            ]
-        )
+        calls.append(self.line_api.get_chat_member_count(chat_type, resolved_group_id))
         responses = await asyncio.gather(*calls, return_exceptions=True)
 
         if chat_type == "group":
-            summary, member_count, member_ids = responses
+            summary, member_count = responses
             if isinstance(summary, dict):
                 group_name = str(summary.get("groupName", "")).strip()
                 group_avatar = str(summary.get("pictureUrl", "")).strip()
@@ -333,34 +316,9 @@ class LineMessageEvent(AstrMessageEvent):
                 if group_avatar:
                     result.group_avatar = group_avatar
         else:
-            member_count, member_ids = responses
+            member_count = responses[0]
 
         if isinstance(member_count, int) and member_count >= 0:
             result.member_count = member_count
-
-        if isinstance(member_ids, list):
-            profile_responses = await asyncio.gather(
-                *(
-                    self.line_api.get_chat_member_profile(
-                        chat_type,
-                        resolved_group_id,
-                        member_id,
-                    )
-                    for member_id in member_ids
-                ),
-                return_exceptions=True,
-            )
-            result.members = []
-            for member_id, profile in zip(
-                member_ids,
-                profile_responses,
-                strict=True,
-            ):
-                nickname = None
-                if isinstance(profile, dict):
-                    nickname = str(profile.get("displayName", "")).strip() or None
-                result.members.append(
-                    MessageMember(user_id=member_id, nickname=nickname),
-                )
 
         return result

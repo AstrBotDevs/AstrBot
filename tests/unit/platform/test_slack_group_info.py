@@ -142,4 +142,43 @@ async def test_slack_get_group_returns_basic_group_when_lookup_fails():
 
     group = await event.get_group()
 
+    assert group is not event.message_obj.group
     assert group == Group(group_id="C123", group_name="cached-channel")
+
+
+@pytest.mark.asyncio
+async def test_slack_get_group_caps_member_pages_and_omits_truncated_list():
+    web_client = AsyncMock()
+    web_client.conversations_info.return_value = {
+        "channel": {
+            "id": "C123",
+            "name": "general",
+            "num_members": 2500,
+        },
+    }
+
+    async def endless_members(*, channel, cursor, limit):
+        del channel, limit
+        page = int(cursor or "1")
+        return {
+            "members": [f"U{page}"],
+            "response_metadata": {"next_cursor": str(page + 1)},
+        }
+
+    web_client.conversations_members.side_effect = endless_members
+    event = SlackMessageEvent(
+        "hello",
+        _build_message(),
+        platform_meta=_platform_metadata(),
+        session_id="C123",
+        web_client=web_client,
+    )
+
+    group = await event.get_group()
+
+    assert group is not event.message_obj.group
+    assert group.group_name == "general"
+    assert group.member_count == 2500
+    assert group.members is None
+    assert web_client.conversations_members.await_count == 10
+    web_client.users_info.assert_not_awaited()

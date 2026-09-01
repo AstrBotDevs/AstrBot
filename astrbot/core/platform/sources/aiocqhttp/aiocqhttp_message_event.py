@@ -21,6 +21,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import Group, MessageMember
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.send_result import PlatformSendResult
+from astrbot.core.utils.error_redaction import safe_error
 
 from .forward_node_splitter import split_long_text_node
 
@@ -333,12 +334,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             int(resolved_group_id) if resolved_group_id.isdigit() else resolved_group_id
         )
 
-        current_group = self.message_obj.group
-        group = (
-            current_group
-            if current_group and current_group.group_id == resolved_group_id
-            else Group(group_id=resolved_group_id)
-        )
+        group = Group.from_inbound(self.message_obj.group, resolved_group_id)
 
         routing_params = {}
         if getattr(self.message_obj, "self_id", None):
@@ -365,7 +361,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             logger.warning(
                 "[aiocqhttp] Failed to get group information for %s: %s",
                 resolved_group_id,
-                exc,
+                safe_error("", exc),
             )
 
         try:
@@ -378,7 +374,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             logger.warning(
                 "[aiocqhttp] Failed to get members for group %s: %s",
                 resolved_group_id,
-                exc,
+                safe_error("", exc),
             )
             return group
         if not isinstance(members, list):

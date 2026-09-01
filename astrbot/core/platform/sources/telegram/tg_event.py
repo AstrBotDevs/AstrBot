@@ -3,6 +3,7 @@ import os
 import re
 from collections.abc import Callable
 from typing import Any, cast
+from urllib.parse import urlsplit
 
 import telegramify_markdown
 from telegram import ReactionTypeCustomEmoji, ReactionTypeEmoji
@@ -23,6 +24,7 @@ from astrbot.core.message.components import (
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import AstrBotMessage, Group, MessageType, PlatformMetadata
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.utils.error_redaction import safe_error
 
 
 def _is_gif(path: str) -> bool:
@@ -352,14 +354,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             return None
 
         current_group = self.message_obj.group
-        group = Group(
-            group_id=requested_group_id,
-            group_name=(
-                current_group.group_name
-                if current_group and current_group.group_id == requested_group_id
-                else None
-            ),
-        )
+        group = Group.from_inbound(current_group, requested_group_id)
         topic_name = (
             getattr(self.message_obj, "_telegram_topic_name", None)
             if current_group and current_group.group_id == requested_group_id
@@ -385,16 +380,21 @@ class TelegramPlatformEvent(AstrMessageEvent):
             if file_id:
                 try:
                     photo_file = await self._client.get_file(file_id=file_id)
-                    file_path = getattr(photo_file, "file_path", None)
-                    if file_path:
-                        group.group_avatar = str(file_path)
+                    group.group_avatar = self._resolve_telegram_file_url(
+                        getattr(photo_file, "file_path", None),
+                    )
                 except Exception as exc:
                     logger.warning(
-                        f"[Telegram] Failed to get group photo for {chat_id}: {exc}"
+                        "[Telegram] Failed to get group photo for %s: %s",
+                        chat_id,
+                        safe_error("", exc),
                     )
+                    group.group_avatar = None
         except Exception as exc:
             logger.warning(
-                f"[Telegram] Failed to get group information for {chat_id}: {exc}"
+                "[Telegram] Failed to get group information for %s: %s",
+                chat_id,
+                safe_error("", exc),
             )
 
         try:
@@ -403,7 +403,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
             )
         except Exception as exc:
             logger.warning(
-                f"[Telegram] Failed to get group member count for {chat_id}: {exc}"
+                "[Telegram] Failed to get group member count for %s: %s",
+                chat_id,
+                safe_error("", exc),
             )
 
         try:
@@ -423,10 +425,31 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     group.group_admins.append(str(user_id))
         except Exception as exc:
             logger.warning(
-                f"[Telegram] Failed to get group administrators for {chat_id}: {exc}"
+                "[Telegram] Failed to get group administrators for %s: %s",
+                chat_id,
+                safe_error("", exc),
             )
 
         return group
+
+    def _resolve_telegram_file_url(self, file_path: object) -> str | None:
+        """Join a Bot API file path with the adapter file base URL.
+
+        Args:
+            file_path: Relative Bot API path or already-absolute file URL.
+
+        Returns:
+            A usable file URL, or ``None`` when the path cannot be resolved.
+        """
+        path = str(file_path or "").strip()
+        if not path:
+            return None
+        if urlsplit(path).scheme:
+            return path
+        base = str(getattr(self._client, "base_file_url", "") or "").rstrip("/")
+        if not base:
+            return None
+        return f"{base}/{path.lstrip('/')}"
 
     async def react(self, emoji: str | None, big: bool = False) -> None:
         """给原消息添加 Telegram 反应：

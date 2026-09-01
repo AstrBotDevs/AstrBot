@@ -30,7 +30,8 @@ class AstrBotMessage:
     self_id: str  # Bot's identification ID
     session_id: str  # Session ID. Depends on the unique_session setting.
     message_id: str  # Message ID
-    group_id: str = ""  # Group ID, empty if it's a private chat
+    group: Group | None  # Group metadata; None for private chats
+    group_id: str = ""  # Group ID derived from group.group_id; empty for private chats
     sender: MessageMember  # Sender
     message: List[
         BaseMessageComponent
@@ -41,6 +42,20 @@ class AstrBotMessage:
 ```
 
 Here, `raw_message` is the **raw message object** from the messaging platform adapter.
+
+`AstrBotMessage.group` is the inbound `Group`. Common fields:
+
+- `group_id`: group, channel, or room ID
+- `group_name`: display name
+- `group_avatar`: avatar URL
+- `group_owner`: owner ID
+- `group_admins`: admin ID list
+- `members`: member list; `None` when incomplete
+- `member_count`: platform-provided total, even when the member list is missing
+
+`member_count` is platform-defined. LINE excludes the bot; other platforms may include it.
+
+`await event.get_group()` may call platform APIs to enrich those fields. It returns a copy of the inbound `Group` and does not mutate the original. `members` may be `None` when the list is missing or incomplete; use `member_count` in that case.
 
 ### Message Chain
 

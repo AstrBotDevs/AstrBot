@@ -6,7 +6,9 @@ from astrbot import logger
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import Group, MessageMember
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astrbot_message import group_member_lookup_over_cap
 from astrbot.core.platform.send_result import PlatformSendResult
+from astrbot.core.utils.error_redaction import safe_error
 
 from .client import MattermostClient
 
@@ -58,14 +60,9 @@ class MattermostMessageEvent(AstrMessageEvent):
         if not channel_id:
             return None
 
-        current_group = getattr(self.message_obj, "group", None)
-        group = Group(
-            group_id=channel_id,
-            group_name=(
-                current_group.group_name
-                if current_group and current_group.group_id == channel_id
-                else None
-            ),
+        group = Group.from_inbound(
+            getattr(self.message_obj, "group", None),
+            channel_id,
         )
 
         try:
@@ -77,7 +74,7 @@ class MattermostMessageEvent(AstrMessageEvent):
             logger.debug(
                 "Mattermost channel lookup failed for %s: %s",
                 channel_id,
-                exc,
+                safe_error("", exc),
             )
             return group
 
@@ -88,20 +85,34 @@ class MattermostMessageEvent(AstrMessageEvent):
             logger.debug(
                 "Mattermost channel stats lookup failed for %s: %s",
                 channel_id,
-                exc,
+                safe_error("", exc),
             )
 
         memberships: list[dict] = []
         page = 0
         per_page = 200
+        members_incomplete = False
         try:
             while True:
+                if group_member_lookup_over_cap(
+                    pages=page + 1,
+                    members=len(memberships),
+                ):
+                    members_incomplete = True
+                    break
                 membership_page = await self._client.get_channel_members(
                     channel_id,
                     page=page,
                     per_page=per_page,
                 )
-                memberships.extend(membership_page)
+                page_items = list(membership_page)
+                if group_member_lookup_over_cap(
+                    pages=page + 1,
+                    members=len(memberships) + len(page_items),
+                ):
+                    members_incomplete = True
+                    break
+                memberships.extend(page_items)
                 if len(membership_page) < per_page:
                     break
                 if group.member_count and len(memberships) >= group.member_count:
@@ -111,8 +122,13 @@ class MattermostMessageEvent(AstrMessageEvent):
             logger.debug(
                 "Mattermost channel member lookup failed for %s: %s",
                 channel_id,
-                exc,
+                safe_error("", exc),
             )
+            group.members = None
+            return group
+
+        if members_incomplete:
+            group.members = None
             return group
 
         unique_memberships: dict[str, dict] = {}
@@ -131,7 +147,7 @@ class MattermostMessageEvent(AstrMessageEvent):
                 logger.debug(
                     "Mattermost user batch lookup failed for %s: %s",
                     channel_id,
-                    exc,
+                    safe_error("", exc),
                 )
                 continue
             for user in users:

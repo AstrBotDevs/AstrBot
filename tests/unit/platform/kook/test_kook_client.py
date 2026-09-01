@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 
@@ -311,3 +311,39 @@ async def test_kook_on_received_prefetches_guild_roles_before_message_convert():
     )
     adapter.convert_message.assert_awaited_once_with(event.data)
     adapter.handle_msg.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_kook_client_group_lookup_apis_pass_expected_params():
+    from astrbot.core.platform.sources.kook.kook_types import KookApiPaths
+
+    client = KookClient.__new__(KookClient)
+    client._get_api_data = AsyncMock(return_value={"id": "ok"})
+
+    await client.get_channel("channel-1")
+    await client.get_guild("guild-1")
+    await client.get_guild_users(
+        "guild-1",
+        channel_id="channel-1",
+        page=2,
+        page_size=50,
+    )
+    await client.get_guild_roles("guild-1", page=3, page_size=50)
+
+    assert client._get_api_data.await_args_list == [
+        call(KookApiPaths.CHANNEL_VIEW, {"target_id": "channel-1"}),
+        call(KookApiPaths.GUILD_VIEW, {"guild_id": "guild-1"}),
+        call(
+            KookApiPaths.GUILD_USER_LIST,
+            {
+                "guild_id": "guild-1",
+                "channel_id": "channel-1",
+                "page": 2,
+                "page_size": 50,
+            },
+        ),
+        call(
+            KookApiPaths.GUILD_ROLE_LIST,
+            {"guild_id": "guild-1", "page": 3, "page_size": 50},
+        ),
+    ]

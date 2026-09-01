@@ -1232,4 +1232,35 @@ async def test_dingtalk_group_message_includes_available_group_details():
         PlatformMetadata(name="dingtalk", description="DingTalk", id="dingtalk"),
         result.session_id,
     )
-    assert await event.get_group() is result.group
+    group = await event.get_group()
+    assert group is not result.group
+    assert group == result.group
+
+
+@pytest.mark.asyncio
+async def test_dingtalk_group_message_without_conversation_title_leaves_group_name_none():
+    adapter = _build_adapter()
+    adapter.download_ding_file = AsyncMock()
+    adapter._remember_sender_binding = AsyncMock()
+    message = SimpleNamespace(
+        create_at=1_700_000_000_123,
+        conversation_type="2",
+        sender_id="$:LWCP_v1:$user-1",
+        sender_nick="Alice",
+        chatbot_user_id="$:LWCP_v1:$bot-1",
+        message_id="msg-group",
+        at_users=[],
+        conversation_id="conversation",
+        message_type="text",
+        robot_code="robot-code",
+        extensions={"content": {}},
+        text=SimpleNamespace(content="hello"),
+        sender_staff_id="",
+        isAdmin=True,
+    )
+
+    result = await adapter.convert_msg(message)
+
+    assert result.group is not None
+    assert result.group.group_id == "conversation"
+    assert result.group.group_name is None

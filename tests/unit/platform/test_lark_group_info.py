@@ -141,7 +141,8 @@ async def test_lark_get_group_falls_back_to_incoming_group_on_api_failure():
 
     group = await event.get_group()
 
-    assert group is event.message_obj.group
+    assert group is not event.message_obj.group
+    assert group == event.message_obj.group
     assert group.group_id == "chat-1"
 
 
@@ -186,3 +187,48 @@ async def test_lark_get_group_does_not_publish_a_truncated_member_list():
     assert group is not None
     assert group.member_count == 10
     assert group.members is None
+
+
+@pytest.mark.asyncio
+async def test_lark_get_group_caps_member_pages_and_omits_truncated_list():
+    chat_api = SimpleNamespace(
+        aget=AsyncMock(
+            return_value=SimpleNamespace(
+                success=lambda: True,
+                data=SimpleNamespace(
+                    name="AstrBot Group",
+                    avatar=None,
+                    owner_id=None,
+                    user_manager_id_list=None,
+                    user_count="2500",
+                ),
+            ),
+        ),
+    )
+    calls = []
+
+    async def endless_members(request):
+        calls.append(request)
+        return SimpleNamespace(
+            success=lambda: True,
+            data=SimpleNamespace(
+                items=[
+                    SimpleNamespace(member_id=f"member-{len(calls)}", name="Member")
+                ],
+                member_total=2500,
+                page_token=f"page-{len(calls)}",
+                has_more=True,
+                trigger_security_conf_limit=False,
+            ),
+        )
+
+    members_api = SimpleNamespace(aget=endless_members)
+    bot = SimpleNamespace(
+        im=SimpleNamespace(v1=SimpleNamespace(chat=chat_api, chat_members=members_api)),
+    )
+
+    group = await _lark_event(bot).get_group()
+
+    assert group.member_count == 2500
+    assert group.members is None
+    assert len(calls) == 10

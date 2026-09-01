@@ -6,6 +6,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import AstrBotMessage, Group, MessageMember, PlatformMetadata
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.send_result import PlatformSendResult
+from astrbot.core.utils.error_redaction import safe_error
 
 from .misskey_utils import (
     add_at_mention_if_needed,
@@ -158,24 +159,15 @@ class MisskeyPlatformEvent(AstrMessageEvent):
         if not room_id:
             return None
 
-        current_group = self.message_obj.group
+        fallback_group = Group.from_inbound(self.message_obj.group, room_id)
         cached_room = getattr(self._client, "_user_cache", {}).get(
             f"room:{room_id}",
             {},
         )
-        fallback_group = Group(
-            group_id=room_id,
-            group_name=(
-                current_group.group_name
-                if current_group and current_group.group_id == room_id
-                else cached_room.get("room_name") or None
-            ),
-            group_owner=(
-                current_group.group_owner
-                if current_group and current_group.group_id == room_id
-                else str(cached_room.get("owner_id") or "") or None
-            ),
-        )
+        if not fallback_group.group_name:
+            fallback_group.group_name = cached_room.get("room_name") or None
+        if not fallback_group.group_owner:
+            fallback_group.group_owner = str(cached_room.get("owner_id") or "") or None
 
         api = getattr(self._client, "api", None)
         if api is None or not hasattr(api, "_make_request"):
@@ -211,7 +203,9 @@ class MisskeyPlatformEvent(AstrMessageEvent):
                 until_id = next_until_id
         except Exception as exc:
             logger.warning(
-                f"[MisskeyEvent] Failed to retrieve room information for {room_id}: {exc}",
+                "[MisskeyEvent] Failed to retrieve room information for %s: %s",
+                room_id,
+                safe_error("", exc),
             )
             return fallback_group
 

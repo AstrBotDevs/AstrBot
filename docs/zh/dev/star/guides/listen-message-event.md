@@ -30,7 +30,8 @@ class AstrBotMessage:
     self_id: str  # 机器人的识别id
     session_id: str  # 会话id。取决于 unique_session 的设置。
     message_id: str  # 消息id
-    group_id: str = ""  # 群组id，如果为私聊，则为空
+    group: Group | None  # 群组元数据；私聊为 None
+    group_id: str = ""  # 群组 id，由 group.group_id 派生；私聊为空字符串
     sender: MessageMember  # 发送者
     message: List[BaseMessageComponent]  # 消息链。比如 [Plain("Hello"), At(qq=123456)]
     message_str: (
@@ -41,6 +42,20 @@ class AstrBotMessage:
 ```
 
 其中，`raw_message` 是消息平台适配器的**原始消息对象**。
+
+`AstrBotMessage.group` 是入站时附带的 `Group`。常见字段：
+
+- `group_id`：群、频道或房间 id
+- `group_name`：显示名
+- `group_avatar`：头像 URL
+- `group_owner`：群主 id
+- `group_admins`：管理员 id 列表
+- `members`：成员列表；不完整时为 `None`
+- `member_count`：平台给出的成员总数，即使成员列表缺失也可以有值
+
+`member_count` 的含义由平台定义。例如 LINE 的计数不含机器人本身，其他平台可能包含。
+
+`await event.get_group()` 会在需要时调用平台 API 补全上述字段，并返回入站 `Group` 的拷贝，不会改写入站对象。成员列表过大或不完整时，`members` 可能为 `None`；此时仍应使用 `member_count`。
 
 ### 消息链
 
