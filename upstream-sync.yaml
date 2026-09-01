@@ -12,11 +12,13 @@ last_synced:
   note: >-
     Reviewed 34743f4adfe666e52422426e792b8ff7c88b92ec..385e4b6bfb87952d78d56ce21fc1caff1e68a85e
     (4 commits). Adapted #9887, #9885, #9851, and #9653. No cherry-picks and no
-    skips. Plugin list payloads use online_version; the TypeScript Dashboard
-    already matches plugins without persisted install sources by repo/name.
-    CodeQL is pinned to the peeled v4.37.9 SHA. Group metadata is enriched
-    across adapters, including NapCat; Slack inbound conversion still skips
-    conversations_info. Empty non-streaming chains skip Respond without logs,
-    receipts, or after-send hooks. Lark docs add contact:user.base:readonly.
-    No upstream version bump in this interval; absorbed user-visible changes
-    were added to the 4.27.5 changelog.
+    skips. Wrap-up: get_group copies inbound Group; LINE fills name/count only;
+    Slack/Lark/KOOK/Mattermost member pagination is hard-capped; Telegram
+    avatars use the file base URL; DingTalk uses getattr for conversation_title;
+    default-market plugin updates work without persisting implicit install
+    sources; plugin list payloads use online_version. CodeQL is pinned to the
+    peeled v4.37.9 SHA. Slack inbound conversion still skips conversations_info.
+    Empty non-streaming chains skip Respond without logs, receipts, or
+    after-send hooks. Lark docs add contact:user.base:readonly. No upstream
+    version bump in this interval; absorbed user-visible changes are in the
+    4.27.6 changelog.
