@@ -6,7 +6,8 @@
     "platform": "机器人 ID",
     "type": "类型",
     "search": "搜索关键词",
-    "reset": "重置"
+    "reset": "重置",
+    "includeWebchat": "显示 WebChat 对话"
   },
   "history": {
     "title": "对话历史",
@@ -117,6 +118,7 @@
       "types": "对话类型",
       "umo": "UMO",
       "umoPlaceholder": "输入完整或部分 UMO",
+      "includeWebchat": "显示 WebChat 对话",
       "sort": "排序",
       "reset": "清除筛选",
       "close": "关闭筛选",

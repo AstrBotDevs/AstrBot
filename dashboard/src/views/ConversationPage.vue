@@ -7,7 +7,7 @@
                     <span class="text-h4">{{ tm('history.title') }}</span>
                     <v-chip size="small" class="ml-2">{{ pagination.total || 0 }}</v-chip>
                     <v-row class="me-4 ms-4" dense>
-                        <v-col cols="12" sm="6" md="4">
+                        <v-col cols="12" sm="6" md="3">
                             <v-combobox v-model="platformFilter" :label="tm('filters.platform')"
                                 :items="availablePlatforms" chips multiple clearable variant="solo-filled" flat
                                 density="compact" hide-details>
@@ -19,7 +19,7 @@
                             </v-combobox>
                         </v-col>
 
-                        <v-col cols="12" sm="6" md="4">
+                        <v-col cols="12" sm="6" md="3">
                             <v-select v-model="messageTypeFilter" :label="tm('filters.type')" :items="messageTypeItems"
                                 chips multiple clearable variant="solo-filled" density="compact" hide-details flat>
                                 <template v-slot:selection="{ item }">
@@ -30,10 +30,15 @@
                             </v-select>
                         </v-col>
 
-                        <v-col cols="12" sm="12" md="4">
+                        <v-col cols="12" sm="12" md="3">
                             <v-text-field v-model="search" prepend-inner-icon="mdi-magnify"
                                 :label="tm('filters.search')" hide-details density="compact" variant="solo-filled" flat
                                 clearable></v-text-field>
+                        </v-col>
+
+                        <v-col cols="12" sm="12" md="3">
+                            <v-switch v-model="showWebchat" :label="tm('filters.includeWebchat')" color="primary"
+                                density="compact" inset hide-details></v-switch>
                         </v-col>
                     </v-row>
                     <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="fetchConversations"
@@ -454,6 +459,7 @@ export default {
             // 筛选条件
             platformFilter: [],
             messageTypeFilter: [],
+            showWebchat: false, // Whether to include WebChat platform conversations in the history list
             lastAppliedFilters: null, // 记录上次应用的筛选条件
 
             // 分页数据
@@ -513,6 +519,10 @@ export default {
             this.debouncedApplyFilters();
         },
         messageTypeFilter() {
+            this.invalidateConversationListRequest();
+            this.debouncedApplyFilters();
+        },
+        showWebchat() {
             this.invalidateConversationListRequest();
             this.debouncedApplyFilters();
         },
@@ -803,7 +813,9 @@ export default {
                 }
 
                 params.exclude_ids = 'astrbot';
-                params.exclude_platforms = 'webchat';
+                if (!this.showWebchat) {
+                    params.exclude_platforms = 'webchat';
+                }
                 params.include_history = false;
 
                 const response = await conversationApi.list(params, {

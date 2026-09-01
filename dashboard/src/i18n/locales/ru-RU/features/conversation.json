@@ -6,7 +6,8 @@
     "platform": "ID бота",
     "type": "Тип",
     "search": "Поиск по ключевым словам",
-    "reset": "Сбросить"
+    "reset": "Сбросить",
+    "includeWebchat": "Показывать WebChat-диалоги"
   },
   "history": {
     "title": "История",
@@ -117,6 +118,7 @@
       "types": "Тип диалога",
       "umo": "UMO",
       "umoPlaceholder": "Введите UMO полностью или частично",
+      "includeWebchat": "Показывать WebChat-диалоги",
       "sort": "Сортировка",
       "reset": "Сбросить фильтры",
       "close": "Закрыть фильтры",
