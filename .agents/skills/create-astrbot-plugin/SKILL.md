@@ -7,6 +7,32 @@ description: Create, extend, or repair an AstrBot plugin (Star) from a feature r
 
 Create a standalone plugin package that targets the current AstrBot checkout. Keep the plugin small, use only the public SDK, and leave AstrBot core files unchanged unless the user explicitly requests a core change.
 
+## Locked
+
+- Public SDK only (`astrbot.api`). No `astrbot.core`, Dashboard, or concrete adapter/provider imports.
+- Python floor from this checkout's `pyproject.toml`. No 3.10–3.13 branches.
+- In-app docs at `/help/`. Do not point READMEs at `docs.astrbot.app`.
+- Do not claim this fork publishes PyPI packages, images, or an official plugin market.
+- Agents may commit the plugin tree only when the user asked and the files are inside this checkout. They must not merge. See `.agents/shared/ai-contribution/REFERENCE.md` and `AI_POLICY.md`.
+
+## Open
+
+Plugin name, commands, platforms, secrets, and whether tests or a Dashboard Extension page are required — ask only when those decisions are missing.
+
+## Do not
+
+- Restore legacy `register` decorators, `event.bot`, `event.client`, or raw platform clients.
+- Overwrite an existing plugin directory unless the user passed `--force`.
+- Write disposable state into a developer's real `data/`.
+- Vendor a copy of this skill into a sibling plugin repo; call `scripts/check_plugin.py` from this checkout.
+
+## Handoff
+
+- Contract: `references/astrbot-plugin-contract.md`
+- Patterns: `references/feature-patterns.md` (load only the selected feature)
+- Checks: `references/verification.md`
+- Commit shape: `.agents/shared/conventional-commit/REFERENCE.md`
+
 ## Required preflight
 
 1. Read the repository `README.md` or `README_zh.md` and `pyproject.toml` before writing code.
@@ -125,7 +151,12 @@ Before handing off, report the generated files, the synchronized Python constrai
 
 ## Commits
 
-Commit plugin files only when the user explicitly asks. Follow `.agents/shared/conventional-commit/REFERENCE.md` for the message, including the `AI-Generated` and `Generated-At` footers.
+Commit plugin files only when the user explicitly asks and the plugin tree is
+inside this repository. Out-of-tree plugin packages are not AstrBot commits.
+Follow `.agents/shared/conventional-commit/REFERENCE.md`, including the
+`AI-Generated` and `Generated-At` footers. You may push a feature branch and
+open a PR as part of that request. Do not merge. End the PR with
+`## Agent note` (or ask the human author for `## Human note`).
 
 ## Bundled resources
 

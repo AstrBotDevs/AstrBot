@@ -41,6 +41,10 @@
 /upstream-sync.yaml         @BegoniaHe @YUZHEthefool
 /upstream-decisions.jsonl   @BegoniaHe @YUZHEthefool
 /AGENTS.md                  @BegoniaHe @YUZHEthefool
+/AI_POLICY.md               @BegoniaHe @YUZHEthefool
+/GOVERNANCE.md              @BegoniaHe @YUZHEthefool
+/CONTRIBUTING.md            @BegoniaHe @YUZHEthefool
+/.agents/                   @BegoniaHe @YUZHEthefool
 
 # Per-version changelog entries.
 /changelogs/                @BegoniaHe @YUZHEthefool

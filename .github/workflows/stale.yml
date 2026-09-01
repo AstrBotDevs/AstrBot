@@ -1,5 +1,6 @@
-# 本工作流用于标记并关闭长期不活跃的 Issue。
-# 目前仅针对带 `bug` 标签的 Issue 生效，不会处理 PR。
+# 本工作流用于标记并关闭长期不活跃的缺陷 Issue。
+# 仅针对带 `bug` 标签的 Issue；不处理 PR，也不自动关闭 enhancement / task Issue。
+# 带 `bug` 且需要长期跟进的 Issue 用 `no-stale` / `waiting-on-review` / `task` 豁免。
 #
 # 文档: https://github.com/actions/stale
 name: Mark stale bug issues
@@ -16,6 +17,10 @@ on:
         default: true
         type: boolean
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   stale:
     runs-on: ubuntu-latest
@@ -30,6 +35,7 @@ jobs:
 
           # 只处理带 bug 标签的 Issue
           any-of-labels: 'bug'
+          exempt-issue-labels: 'no-stale,waiting-on-review,task'
 
           # 不处理 PR
           days-before-pr-stale: -1

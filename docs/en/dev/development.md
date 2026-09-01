@@ -196,4 +196,4 @@ make check
 make quality
 ```
 
-For Dashboard, startup, cross-platform script, or release-artifact changes, also run `make pr-test-full`. Use English Conventional Commits for commit and pull-request titles. Types, description rules, and breaking-change markers are in [CONTRIBUTING.md](https://github.com/Xero-Team/AstrBot/blob/master/CONTRIBUTING.md) at the repository root. AI-assisted commit messages must also follow `.agents/shared/conventional-commit/REFERENCE.md`.
+For Dashboard, startup, cross-platform script, or release-artifact changes, also run `make pr-test-full`. Use English Conventional Commits for commit and pull-request titles. Types, description rules, and breaking-change markers are in [CONTRIBUTING.md](https://github.com/Xero-Team/AstrBot/blob/master/CONTRIBUTING.md) at the repository root. Pick a typed template under `.github/PULL_REQUEST_TEMPLATE/`. AI-assisted commit messages must also follow `.agents/shared/conventional-commit/REFERENCE.md`.

@@ -1,0 +1,85 @@
+name: Bug report
+description: Report a reproducible defect in this fork. Not a user-support ticket.
+title: '[bug] '
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for a defect in the current branch. This is not a helpdesk.
+        Search existing Issues and PRs first.
+
+        **Security vulnerabilities must go through [private reporting](https://github.com/Xero-Team/AstrBot/security/advisories/new), not here.**
+
+        Fill **exactly one** of Human note or Agent note. Agents must not fabricate a Human note. See AI_POLICY.md.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched open and closed Issues and PRs.
+          required: true
+        - label: I tested the current `master` branch or the exact commit.
+          required: true
+        - label: This report contains no secrets, tokens, or private data.
+          required: true
+        - label: This is not a security vulnerability (those use a private advisory).
+          required: true
+        - label: I filled exactly one of Human note or Agent note, matching who wrote this Issue.
+          required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Pipeline / EventBus
+        - Providers / agent runners
+        - Platform adapters
+        - Dashboard / OpenAPI
+        - Knowledge base
+        - Plugins / Stars
+        - Backup / restore
+        - Docs
+        - CI / toolchain
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: describe
+    attributes:
+      label: What happened
+      description: Expected vs actual. Include a minimal reproduction.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Commit or version
+      placeholder: master SHA or changelog version
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      placeholder: OS, Python 3.14.x, Node, Docker or source, adapter
+  - type: dropdown
+    id: author
+    attributes:
+      label: Author
+      options:
+        - Human
+        - Agent
+    validations:
+      required: true
+  - type: textarea
+    id: human_note
+    attributes:
+      label: Human note
+      description: Humans only. Mother tongue, own words. Leave empty if an agent is the author.
+  - type: textarea
+    id: agent_note
+    attributes:
+      label: Agent note
+      description: Agents only. Checks run and residual risk. Leave empty if a human is the author.

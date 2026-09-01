@@ -44,6 +44,7 @@ export default defineConfig({
             items: [
               { text: '源码部署', link: '/astrbot/cli' },
               { text: 'Docker 部署', link: '/astrbot/docker' },
+              { text: '备份与恢复', link: '/astrbot/backup' },
             ],
           },
           {
@@ -286,6 +287,7 @@ export default defineConfig({
             items: [
               { text: 'Source Deployment', link: '/astrbot/cli' },
               { text: 'Docker', link: '/astrbot/docker' },
+              { text: 'Backup and restore', link: '/astrbot/backup' },
             ],
           },
           {

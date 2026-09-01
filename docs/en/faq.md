@@ -73,7 +73,7 @@ Publishing container port `6185` also requires this bind override. See [Docker D
 
 The runtime root defaults to the process working directory, and runtime data lives at `<root>/data`. Running `uv run main.py` from the repository root normally uses `AstrBot/data`.
 
-With `ASTRBOT_ROOT` set, data lives at `$ASTRBOT_ROOT/data`. Configuration, the SQLite database, plugins, Skills, knowledge bases, temporary files, and backups can all live there, so back up the directory as a unit before an upgrade.
+With `ASTRBOT_ROOT` set, data lives at `$ASTRBOT_ROOT/data`. Configuration, the SQLite database, plugins, Skills, knowledge bases, temporary files, and backups can all live there, so back up the directory as a unit before an upgrade. See [Backup, restore, and upgrade drills](./deploy/astrbot/backup).
 
 This fork does not provide an independent Desktop or Launcher distribution. Directory layouts chosen by external launchers are outside this repository's guarantees.
 

@@ -1,21 +1,26 @@
-# This fork does not operate a public issue tracker.
+# Development Issues track defects, features, and maintenance.
+# This fork does not operate a user-support queue.
+# Labels used by the templates and stale workflow: bug, enhancement, task,
+# no-stale, waiting-on-review.
 # https://docs.github.com/communities/using-templates-to-encourage-useful-issues-and-pull-requests/configuring-issue-templates-for-your-repository
 
 blank_issues_enabled: false
 
 contact_links:
-  - name: 📖 Documentation / 文档
+  - name: Documentation / 文档
     url: https://github.com/Xero-Team/AstrBot/tree/master/docs
     about: |
       In-app docs are served at /help/ after starting the WebUI. Sources live
-      in this repository under docs/zh and docs/en. This fork does not operate
-      a public issue tracker.
-      启动 WebUI 后文档在 /help/。源文件在本仓库 docs/zh 与 docs/en。本 fork
-      不运营公开 Issue 跟踪器。
-
-  - name: 🔒 Report a Security Vulnerability / 报告安全漏洞
+      under docs/zh and docs/en. This is not a support queue.
+      启动 WebUI 后文档在 /help/。源文件在 docs/zh 与 docs/en。这里不是客服。
+  - name: Report a Security Vulnerability / 报告安全漏洞
     url: https://github.com/Xero-Team/AstrBot/security/advisories/new
     about: |
       Report security issues privately. Do NOT open a public issue.
       See SECURITY.md.
       安全漏洞请私密报告，切勿在公开 Issue 中提交，详见 SECURITY.md。
+  - name: AI contribution policy / AI 使用政策
+    url: https://github.com/Xero-Team/AstrBot/blob/master/AI_POLICY.md
+    about: |
+      Agents may open development Issues and PRs. They must not merge.
+      智能体可以开开发 Issue 与 PR，不得自行合并。

@@ -20,6 +20,13 @@ forward-looking instead of extending compatibility indefinitely.
   do not replace it with `soulter/astrbot` or another upstream prebuilt image.
   Documentation is served from the Dashboard at `/help/`; do not restore a
   separate docs container or `docs.astrbot.app` links.
+- Agents may maintain this repository. They may commit, push feature branches,
+  open development Issues, and open Pull Requests. They must not merge, push
+  `master`, force-push protected branches, tag, or publish releases. A human
+  maintainer does those actions; do not treat a verbal exception as
+  authorization. A PR lands only after a human maintainer review **and** a
+  separate AI-assisted review. Follow [AI_POLICY.md](AI_POLICY.md) and
+  `.agents/shared/ai-contribution/REFERENCE.md`.
 
 ## Toolchain and setup
 
@@ -447,6 +454,9 @@ diff with its runtime/test changes.
   `soulter`, and other upstream links are allowed only when deliberately citing
   provenance, the upstream sync source, or a service the fork still consumes;
   label that relationship instead of implying fork ownership.
+- **Skills:** load from `.agents/skills/`. Policy vs facts stay split
+  (`SKILL.md` vs `REFERENCE.md` / shared files). Catalog:
+  `.agents/skills/README.md`. Cite those files; do not paste them.
 - **Commits/PRs:** follow
   `.agents/shared/conventional-commit/REFERENCE.md` when generating,
   reviewing, or classifying commit messages. Use English Conventional
@@ -458,9 +468,15 @@ diff with its runtime/test changes.
   Put issue IDs in footers (`Fixes #123`), never as scopes. When an
   agent generates or finalizes the message, run
   `date -u '+%Y-%m-%dT%H:%M:%SZ'` and append `AI-Generated: true` plus
-  `Generated-At: <result>` as footers. Commit, amend, or push only when
-  the user explicitly asks. Preserve upstream subjects verbatim on
-  cherry-pick/adapt; see the sync-upstream skill.
+  `Generated-At: <result>` as footers. Agents may commit, push a feature
+  branch, and open a PR as maintenance. They must not merge, push `master`,
+  or tag. Agent-authored PRs end with `## Agent note`. Human-authored PRs
+  end with `## Human note`. Use the typed file under
+  `.github/PULL_REQUEST_TEMPLATE/` that matches the Conventional Commit
+  type (`feat.md`, `fix.md`, `docs.md`; group `perf`/`style` with
+  `refactor.md`; group `build`/`ops`/`test` with `chore.md`). Preserve
+  upstream subjects verbatim on cherry-pick/adapt; see the sync-upstream
+  skill.
 
 ## Upstream synchronization
 

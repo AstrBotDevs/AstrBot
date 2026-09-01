@@ -159,11 +159,11 @@ Provider templates come from the code registry and evolve over time. Treat **Pro
 
 ## ❤️ Contributing
 
-Pull Requests that match this fork's current branch are welcome. Keep documentation aligned with the current branch behavior rather than upstream historical behavior. This fork does not operate a public issue tracker.
+Pull Requests that match this fork's current branch are welcome. Keep documentation aligned with the current branch behavior rather than upstream historical behavior. This fork does not operate a user-support queue. Development Issues track defects and features; they are not a helpdesk. See [AI_POLICY.md](AI_POLICY.md).
 
 ### How to Contribute
 
-Open a Pull Request against `Xero-Team/AstrBot`. Do not file GitHub issues here; security reports go through [SECURITY.md](SECURITY.md).
+Open a development Issue and/or a Pull Request against `Xero-Team/AstrBot`. Do not file user-support tickets. Security reports go through [SECURITY.md](SECURITY.md). Agents may open Issues and PRs; they must not merge.
 
 ### Development Environment
 

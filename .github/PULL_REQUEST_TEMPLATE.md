@@ -1,35 +1,67 @@
-<!--Please describe the motivation for this change: What problem does it solve? (e.g., Fixes XX issue, adds YY feature)-->
-<!--请描述此项更改的动机：它解决了什么问题？（例如：修复了 XX issue，添加了 YY 功能）-->
+<!--
+Title: English Conventional Commits, e.g.
+  fix(dashboard): reject truncated backup zip without leaving partial files
 
-### Modifications / 改动点
+Types: feat, fix, refactor, perf, style, test, docs, build, ops, chore.
+Do not use ci; use ops. Breaking: feat(api)!: ... plus BREAKING CHANGE: footer.
 
-<!--Please summarize your changes: What core files were modified? What functionality was implemented?-->
-<!--请总结你的改动：哪些核心文件被修改了？实现了什么功能？-->
+Prefer a typed template via `template=<file>` on the compare URL or
+`gh pr create --template .github/PULL_REQUEST_TEMPLATE/<file>`:
 
-- [x] This is NOT a breaking change. / 这不是一个破坏性变更。
+  feat.md      feat
+  fix.md       fix
+  docs.md      docs
+  refactor.md  refactor, perf, style
+  chore.md     chore, build, ops, test
 
-<!-- If your changes is a breaking change, please uncheck the checkbox above -->
+This fallback is for mixed or untyped PRs. See CONTRIBUTING.md.
+-->
 
-### Screenshots or Test Results / 运行截图或测试结果
+## Summary
 
-<!--Please paste screenshots, GIFs, or test logs here as evidence of executing the "Verification Steps" to prove this change is effective.-->
-<!--请粘贴截图、GIF 或测试日志，作为执行“验证步骤”的证据，证明此改动有效。-->
+<!-- What problem does this solve, and what changed? Behavior and design, not a file list. -->
 
----
+## Related issue
 
-### Checklist / 检查清单
+<!-- `Fixes #123` or `Related: #123`. Development Issues track defects and features; they are not user support. -->
 
-<!--If merged, your code will serve tens of thousands of users! Please double-check the following items before submitting.-->
-<!--如果分支被合并，您的代码将服务于数万名用户！在提交前，请核查一下几点内容。-->
+Related: #
 
-- [ ] 😊 If there are new features added in the PR, I have discussed them with the authors first.
-      / 如果 PR 中有新加入的功能，已经先和作者讨论过。本 fork 不运营公开 Issue 跟踪器。
+## Implementation notes
 
-- [ ] 👀 My changes have been well-tested, **and "Verification Steps" and "Screenshots" have been provided above**.
-      / 我的更改经过了良好的测试，**并已在上方提供了“验证步骤”和“运行截图”**。
+<!-- Design decisions, compatibility, deliberate non-goals, OpenAPI/docs impact. -->
 
-- [ ] 🤓 I have ensured that no new dependencies are introduced, OR if new dependencies are introduced, they have been added to the appropriate locations in `requirements.txt` and `pyproject.toml`.
-      / 我确保没有引入新依赖库，或者引入了新依赖库的同时将其添加到 `requirements.txt` 和 `pyproject.toml` 文件相应位置。
+## Validation
 
-- [ ] 😮 My changes do not introduce malicious code.
-      / 我的更改没有引入恶意代码。
+<!-- Exact commands run. Do not claim a check passed unless you ran it or CI did. -->
+
+```text
+ruff format --check .
+ruff check .
+make check
+```
+
+## Compatibility and risk
+
+<!-- Public API, Dashboard protocol, security, performance, migration. Write "None" if not applicable. -->
+
+## Checklist
+
+- [ ] The change is focused and does not include unrelated refactoring.
+- [ ] I added or updated tests, or explained why tests are not practical.
+- [ ] I ran the relevant formatting, lint, build, and test commands.
+- [ ] User-visible behavior updates both `docs/zh/` and `docs/en/` when needed.
+- [ ] OpenAPI, generated client, `docs/public/openapi.json`, and tests change together when routes or schemas change.
+- [ ] No secrets committed. Runtime Python deps update `pyproject.toml`, `requirements.txt`, and `uv.lock` together.
+- [ ] I did not restore legacy shims, Python &lt;3.14 fallbacks, or upstream publish/docs URLs as fork artifacts.
+- [ ] Breaking API or behavior changes use `!` and a `BREAKING CHANGE:` footer.
+- [ ] I will not merge this PR myself. Merge needs a human maintainer review plus a separate AI-assisted review ([AI_POLICY.md](../AI_POLICY.md)).
+- [ ] AI use follows [AI_POLICY.md](../AI_POLICY.md). Keep exactly one author note below. Do not fabricate the other.
+
+## Human note
+
+<!-- Humans only. Mother tongue, own words: intent, why this approach, what you verified. Delete this section if an agent is the author. -->
+
+## Agent note
+
+<!-- Agents only. Goal, paths touched, checks run, residual risk, tools used. Delete this section if a human is the author. -->

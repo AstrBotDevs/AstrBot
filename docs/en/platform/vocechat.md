@@ -38,4 +38,4 @@ After configuration, click Save and test in VoceChat.
 
 ## Issue Reporting
 
-This adapter is provided by a community plugin. If needed, report issues to the plugin repo: <https://github.com/HikariFroya/astrbot_plugin_vocechat/issues>. This fork does not operate a public issue tracker.
+This adapter is provided by a community plugin. If needed, report issues to the plugin repo: <https://github.com/HikariFroya/astrbot_plugin_vocechat/issues>. This fork does not operate a user-support queue.

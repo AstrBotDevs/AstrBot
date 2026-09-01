@@ -2,7 +2,7 @@
 
 Use this reference when generating, reviewing, or classifying Git commit messages. The goal is to produce clear, machine-readable commit history that follows Conventional Commits while remaining practical for a project.
 
-This file is the commit-message source of truth for AI-assisted commits in this repository. Human contributors may omit the AI-generation footers; see `CONTRIBUTING.md`. Upstream cherry-pick and adapt subjects stay verbatim; see `.agents/skills/sync-upstream/SKILL.md`.
+This file is the commit-message source of truth for AI-assisted commits in this repository. Human contributors may omit the AI-generation footers; see `CONTRIBUTING.md`. Upstream cherry-pick and adapt subjects stay verbatim; see `.agents/skills/sync-upstream/SKILL.md`. Agents may open commits, Issues, and PRs; they must not merge. See `AI_POLICY.md` and `.agents/shared/ai-contribution/REFERENCE.md`.
 
 ## 1. Required Header Format
 
