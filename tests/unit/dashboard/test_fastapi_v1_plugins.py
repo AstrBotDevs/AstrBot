@@ -505,17 +505,78 @@ async def test_plugin_service_update_missing_source_requires_selection(
     async def fake_get_plugin_install_sources():
         return {}
 
+    async def fake_get_online_plugins(*, custom_registry, force_refresh):
+        del custom_registry, force_refresh
+        return {"$meta": {"schema_version": 1}}, None
+
     monkeypatch.setattr(plugin_service, "find_plugin_by_name", lambda name: plugin)
     monkeypatch.setattr(
         plugin_service,
         "get_plugin_install_sources",
         fake_get_plugin_install_sources,
     )
+    monkeypatch.setattr(plugin_service, "get_online_plugins", fake_get_online_plugins)
 
     with pytest.raises(PluginServiceError) as exc_info:
         await plugin_service.resolve_market_update_info("astrbot_plugin_demo")
 
     assert exc_info.value.public_message == PLUGIN_UPDATE_SOURCE_REQUIRED_MESSAGE
+
+
+@pytest.mark.asyncio
+async def test_plugin_service_default_market_update_does_not_persist_source(
+    asgi_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    plugin_service = asgi_app.state.services.plugins
+    plugin = SimpleNamespace(
+        name="astrbot_plugin_demo",
+        root_dir_name="astrbot_plugin_demo",
+        repo="https://github.com/AstrBotDevs/astrbot-plugin-demo",
+        reserved=False,
+    )
+    saved = []
+
+    async def fake_get_plugin_install_sources():
+        return {}
+
+    async def fake_get_online_plugins(*, custom_registry, force_refresh):
+        assert custom_registry is None
+        return {
+            "astrbot-plugin-demo": {
+                "author": "AstrBotDevs",
+                "repo": "https://github.com/AstrBotDevs/astrbot-plugin-demo",
+                "download_url": "https://cdn.example/plugin.zip",
+            }
+        }, None
+
+    async def fake_save_plugin_install_sources(records):
+        saved.append(records)
+
+    monkeypatch.setattr(plugin_service, "find_plugin_by_name", lambda name: plugin)
+    monkeypatch.setattr(
+        plugin_service,
+        "get_plugin_install_sources",
+        fake_get_plugin_install_sources,
+    )
+    monkeypatch.setattr(plugin_service, "get_online_plugins", fake_get_online_plugins)
+    monkeypatch.setattr(
+        plugin_service,
+        "save_plugin_install_sources",
+        fake_save_plugin_install_sources,
+    )
+
+    update_info = await plugin_service.resolve_market_update_info(
+        "astrbot_plugin_demo",
+    )
+    await plugin_service.refresh_plugin_install_source_after_update(
+        "astrbot_plugin_demo",
+        update_info,
+    )
+
+    assert update_info["record"] is None
+    assert update_info["download_url"] == "https://cdn.example/plugin.zip"
+    assert saved == []
 
 
 @pytest.mark.asyncio

@@ -576,7 +576,14 @@ class PluginService:
             if isinstance(install_source, dict)
             else ""
         )
-        updates_enabled = install_method in {"market", "github"} and not plugin.reserved
+        has_default_market_identity = bool(
+            str(getattr(plugin, "repo", "") or "").strip()
+            or str(getattr(plugin, "name", "") or "").strip()
+        )
+        updates_enabled = not plugin.reserved and (
+            install_method in {"market", "github"}
+            or (install_source is None and has_default_market_identity)
+        )
         return {
             "name": plugin.name,
             "marketplace_name": (plugin.name or "").replace("_", "-"),
@@ -1241,10 +1248,7 @@ class PluginService:
         records = await self.get_plugin_install_sources()
         record = self.resolve_plugin_install_source(plugin, records)
         if not isinstance(record, dict):
-            raise PluginServiceError(
-                PLUGIN_UPDATE_SOURCE_REQUIRED_MESSAGE,
-                public_message=PLUGIN_UPDATE_SOURCE_REQUIRED_MESSAGE,
-            )
+            return await self._resolve_default_market_update_info(plugin)
 
         install_method = str(record.get("install_method") or "").strip().lower()
         if install_method == "github":
@@ -1286,6 +1290,54 @@ class PluginService:
                 market_plugin.get("download_url") or record.get("download_url") or ""
             ).strip(),
             "repo": str(market_plugin.get("repo") or record.get("repo") or "").strip(),
+        }
+
+    async def _resolve_default_market_update_info(
+        self,
+        plugin: StarMetadata,
+    ) -> dict[str, Any]:
+        """Resolve update info from the default market without persisting a source.
+
+        Args:
+            plugin: Loaded plugin metadata.
+
+        Returns:
+            Update information for a default-market match.
+
+        Raises:
+            PluginServiceError: If the plugin cannot be matched on the default market.
+        """
+        if plugin.reserved:
+            raise PluginServiceError(
+                PLUGIN_UPDATE_DISABLED_MESSAGE,
+                public_message=PLUGIN_UPDATE_DISABLED_MESSAGE,
+            )
+
+        market_data, _ = await self.get_online_plugins(
+            custom_registry=None,
+            force_refresh=False,
+        )
+        repo = str(plugin.repo or "").strip()
+        if repo:
+            lookup = {"repo": repo}
+        else:
+            plugin_name = str(plugin.name or "").strip()
+            lookup = {
+                "name": plugin_name,
+                "marketplace_name": plugin_name.replace("_", "-"),
+            }
+        market_plugin = self.resolve_market_plugin_entry(market_data, lookup)
+        if not market_plugin:
+            raise PluginServiceError(
+                PLUGIN_UPDATE_SOURCE_REQUIRED_MESSAGE,
+                public_message=PLUGIN_UPDATE_SOURCE_REQUIRED_MESSAGE,
+            )
+
+        return {
+            "record": None,
+            "market_plugin": market_plugin,
+            "download_url": str(market_plugin.get("download_url") or "").strip(),
+            "repo": str(market_plugin.get("repo") or repo or "").strip(),
         }
 
     async def bind_plugin_market_source(self, data: object) -> tuple[dict, str]:
