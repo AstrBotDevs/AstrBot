@@ -1,3 +1,5 @@
+import asyncio
+from collections import OrderedDict
 from collections.abc import AsyncGenerator, Callable
 
 from astrbot import logger
@@ -10,9 +12,12 @@ from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
+from astrbot.core.umo_alias import get_event_auto_name
 
 from ..context import PipelineContext
 from ..stage import Stage, register_stage
+
+MAX_UMO_AUTO_NAME_CACHE_SIZE = 10_000
 
 UNIQUE_SESSION_ID_BUILDERS: dict[str, Callable[[AstrMessageEvent], str | None]] = {
     "aiocqhttp": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
@@ -73,6 +78,98 @@ class WakingCheckStage(Stage):
         )
         platform_settings = self.ctx.astrbot_config.get("platform_settings", {})
         self.unique_session = platform_settings.get("unique_session", False)
+        self.db_helper = ctx.db_helper
+        self._umo_auto_name_cache: OrderedDict[str, str] = OrderedDict()
+        self._pending_umo_auto_names: OrderedDict[str, tuple[str, str]] = OrderedDict()
+        self._umo_auto_name_writer_task: asyncio.Task[None] | None = None
+
+    def _schedule_umo_auto_name_recording(self, event: AstrMessageEvent) -> None:
+        """Queue a changed automatic UMO name for background persistence.
+
+        Args:
+            event: Awakened event containing the UMO and display metadata.
+        """
+        if self.db_helper is None:
+            return
+
+        umo = event.unified_msg_origin
+        auto_name = get_event_auto_name(event, fallback_to_id=False)
+        if not auto_name:
+            return
+        if self._umo_auto_name_cache.get(umo) == auto_name:
+            self._umo_auto_name_cache.move_to_end(umo)
+            return
+
+        self._umo_auto_name_cache[umo] = auto_name
+        self._umo_auto_name_cache.move_to_end(umo)
+        if len(self._umo_auto_name_cache) > MAX_UMO_AUTO_NAME_CACHE_SIZE:
+            self._umo_auto_name_cache.popitem(last=False)
+
+        self._pending_umo_auto_names[umo] = (
+            str(event.get_sender_id() or ""),
+            auto_name,
+        )
+        self._pending_umo_auto_names.move_to_end(umo)
+        if len(self._pending_umo_auto_names) > MAX_UMO_AUTO_NAME_CACHE_SIZE:
+            dropped_umo, (_, dropped_name) = self._pending_umo_auto_names.popitem(
+                last=False
+            )
+            if self._umo_auto_name_cache.get(dropped_umo) == dropped_name:
+                self._umo_auto_name_cache.pop(dropped_umo, None)
+
+        if (
+            self._umo_auto_name_writer_task is None
+            or self._umo_auto_name_writer_task.done()
+        ):
+            task = asyncio.create_task(
+                self._flush_umo_auto_names(),
+                name=f"umo_auto_name_writer:{self.ctx.astrbot_config_id}",
+            )
+            self._umo_auto_name_writer_task = task
+            task.add_done_callback(self._on_umo_auto_name_writer_done)
+
+    async def _flush_umo_auto_names(self) -> None:
+        """Persist queued UMO names sequentially, coalescing changes per UMO."""
+        if self.db_helper is None:
+            return
+
+        try:
+            while self._pending_umo_auto_names:
+                umo, (creator_sender_id, auto_name) = (
+                    self._pending_umo_auto_names.popitem(last=False)
+                )
+                try:
+                    await self.db_helper.upsert_umo_auto_name(
+                        umo=umo,
+                        creator_sender_id=creator_sender_id,
+                        auto_name=auto_name,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to persist automatic UMO name for %s: %s",
+                        umo,
+                        exc,
+                    )
+                    if (
+                        umo not in self._pending_umo_auto_names
+                        and self._umo_auto_name_cache.get(umo) == auto_name
+                    ):
+                        self._umo_auto_name_cache.pop(umo, None)
+        finally:
+            self._umo_auto_name_writer_task = None
+
+    @staticmethod
+    def _on_umo_auto_name_writer_done(task: asyncio.Task[None]) -> None:
+        """Expose unexpected automatic-name writer failures.
+
+        Args:
+            task: Completed writer task.
+        """
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error("UMO automatic-name writer failed.", exc_info=exc)
 
     async def process(
         self,
@@ -218,6 +315,8 @@ class WakingCheckStage(Stage):
                         f"{star_map[handler.handler_module_path].name}.",
                     )
                     event.stop_event()
+                    if event.is_wake:
+                        self._schedule_umo_auto_name_recording(event)
                     return
 
                 is_wake = True
@@ -244,5 +343,7 @@ class WakingCheckStage(Stage):
         event.set_extra("activated_handlers", activated_handlers)
         event.set_extra("handlers_parsed_params", handlers_parsed_params)
 
-        if not is_wake:
+        if is_wake:
+            self._schedule_umo_auto_name_recording(event)
+        else:
             event.stop_event()
