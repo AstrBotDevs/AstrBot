@@ -146,6 +146,7 @@
     },
     "knowledgebase": {
       "description": "Knowledge Base",
+      "hint": "AstrBot's \"external brain\".",
       "kb_names": {
         "description": "Knowledge Base List",
         "hint": "Supports multiple selections"
@@ -165,6 +166,7 @@
     },
     "websearch": {
       "description": "Web Search",
+      "hint": "Enables AstrBot to access the internet and stay up to date.",
       "provider_settings": {
         "web_search": {
           "description": "Enable Web Search"
