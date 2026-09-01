@@ -14,9 +14,17 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
-from astrbot.core.agent.message import ImageURLPart, Message, TextPart
+from astrbot.core.agent.message import (
+    ImageURLPart,
+    Message,
+    TextPart,
+    ToolCallMessageSegment,
+)
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
+from astrbot.core.agent.runners.tool_loop_agent_runner import (
+    ToolLoopAgentRunner,
+    _HandleFunctionToolsResult,
+)
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.exceptions import EmptyModelOutputError
@@ -422,6 +430,28 @@ class HallucinatingToolCallProvider(MockProvider):
         )
 
 
+class MultiCallProvider(MockProvider):
+    """Returns a single turn with two tool calls."""
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        func_tool = kwargs.get("func_tool")
+        if func_tool is None or self.call_count > 1:
+            return LLMResponse(
+                role="assistant",
+                completion_text="这是我的最终回答",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+        return LLMResponse(
+            role="assistant",
+            completion_text="",
+            tools_call_name=["test_tool", "test_tool"],
+            tools_call_args=[{"query": "a"}, {"query": "b"}],
+            tools_call_ids=["call_a", "call_b"],
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
 class MockHooks(BaseAgentRunHooks):
     """模拟钩子函数"""
 
@@ -696,6 +726,53 @@ async def test_tool_calls_without_results_get_placeholder_tool_blocks(
     assert len(tool_results) == 1, "missing tool results should be filled in"
     assert tool_results[0].tool_call_id == "call_123"
     assert "error" in tool_results[0].content.lower()
+
+
+@pytest.mark.asyncio
+async def test_duplicate_tool_result_ids_still_trigger_placeholder_fill(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    """The placeholder guard must check each tool_call_id independently:
+    equal block/id counts with duplicate ids (one call emitting several
+    result blocks while another emits none) must still fill the missing id."""
+    provider = MultiCallProvider()
+
+    async def fake_handle_function_tools(req, llm_resp):
+        # Two result blocks, both for "call_a": the count matches the two
+        # declared ids but "call_b" is still missing.
+        yield _HandleFunctionToolsResult.from_tool_call_result_blocks(
+            [
+                ToolCallMessageSegment(
+                    role="tool", tool_call_id="call_a", content="result A"
+                ),
+                ToolCallMessageSegment(
+                    role="tool", tool_call_id="call_a", content="result A2"
+                ),
+            ]
+        )
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+    runner._handle_function_tools = fake_handle_function_tools
+
+    async for _ in runner.step():
+        pass
+
+    messages = runner.run_context.messages
+    tool_results = [m for m in messages if m.role == "tool"]
+    result_ids = [m.tool_call_id for m in tool_results]
+
+    assert len(result_ids) == 3, "call_a x2 + placeholder for call_b"
+    assert result_ids.count("call_a") == 2
+    assert "call_b" in result_ids
+    placeholder = next(m for m in tool_results if m.tool_call_id == "call_b")
+    assert "error" in placeholder.content.lower()
 
 
 @pytest.mark.asyncio

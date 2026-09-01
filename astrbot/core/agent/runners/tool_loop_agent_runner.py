@@ -1010,24 +1010,26 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
             # Protocol safety net: every tool_call_id must have a matching tool
             # result, otherwise the context would contain a dangling
-            # assistant(tool_calls) message that providers reject.
-            if len(tool_call_result_blocks) < len(llm_resp.tools_call_ids):
-                for tool_call_id in llm_resp.tools_call_ids:
-                    if not any(
-                        block.tool_call_id == tool_call_id
-                        for block in tool_call_result_blocks
-                    ):
-                        tool_call_result_blocks.append(
-                            ToolCallMessageSegment(
-                                role="tool",
-                                tool_call_id=tool_call_id,
-                                content=(
-                                    "error: tool execution produced no result (tools may have been "
-                                    "removed or the call was interrupted); ignore this call and "
-                                    "answer based on the information gathered so far."
-                                ),
-                            )
+            # assistant(tool_calls) message that providers reject. Check each
+            # id independently: equal lengths do not guarantee matched ids
+            # (e.g. one call emitting multiple result blocks while another
+            # call produces none).
+            existing_result_ids = {
+                block.tool_call_id for block in tool_call_result_blocks
+            }
+            for tool_call_id in llm_resp.tools_call_ids:
+                if tool_call_id not in existing_result_ids:
+                    tool_call_result_blocks.append(
+                        ToolCallMessageSegment(
+                            role="tool",
+                            tool_call_id=tool_call_id,
+                            content=(
+                                "error: tool execution produced no result (tools may have been "
+                                "removed or the call was interrupted); ignore this call and "
+                                "answer based on the information gathered so far."
+                            ),
                         )
+                    )
 
             # 将结果添加到上下文中
             parts = []
