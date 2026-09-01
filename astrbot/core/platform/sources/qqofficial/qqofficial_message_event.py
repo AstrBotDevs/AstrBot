@@ -329,13 +329,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         for component in message.chain:
             is_media = isinstance(component, Image | Record | Video | File)
             if is_media and current_has_media:
-                chunks.append(
-                    MessageChain(
-                        chain=current_chain,
-                        use_t2i_=message.use_t2i_,
-                        type=message.type,
-                    )
-                )
+                chunks.append(message.derive(current_chain))
                 current_chain = []
                 current_has_media = False
 
@@ -343,13 +337,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             current_has_media = current_has_media or is_media
 
         if current_chain or not message.chain:
-            chunks.append(
-                MessageChain(
-                    chain=current_chain,
-                    use_t2i_=message.use_t2i_,
-                    type=message.type,
-                )
-            )
+            chunks.append(message.derive(current_chain))
 
         return chunks
 

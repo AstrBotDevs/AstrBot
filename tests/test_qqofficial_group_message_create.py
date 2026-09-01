@@ -751,3 +751,21 @@ async def test_guild_channel_send_by_session_drops_msg_type():
     assert kwargs["channel_id"] == "guild-channel-1"
     assert kwargs["markdown"]["content"] == "guild text"
     assert "msg_type" not in kwargs
+
+
+def test_split_message_chain_by_media_preserves_use_markdown():
+    # Splitting a mixed text/media chain must keep use_markdown_ on every chunk,
+    # otherwise _send_by_session_common would treat text chunks as Markdown even
+    # when markdown was explicitly disabled. Regression test for the sourcery review.
+    chain = MessageChain(
+        chain=[
+            Plain("text before"),
+            Image(file="https://example.com/1.png"),
+            Image(file="https://example.com/2.png"),
+        ],
+        use_markdown_=False,
+    )
+    chunks = QQOfficialMessageEvent._split_message_chain_by_media(chain)
+    assert len(chunks) == 2
+    assert chunks[0].chain[0].text == "text before"
+    assert all(chunk.use_markdown_ is False for chunk in chunks)
