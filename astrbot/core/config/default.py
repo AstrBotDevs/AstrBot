@@ -2249,25 +2249,6 @@ CONFIG_METADATA_2 = {
                         "default": [],
                         "condition": {"modalities": "image"},
                     },
-                    "animated_image_strategy": {
-                        "description": "动图处理策略",
-                        "type": "string",
-                        "options": ["first_frame", "multi_frame"],
-                        "labels": ["仅首帧", "多帧抽取"],
-                        "hint": "GIF 等动图发送给模型时的处理方式：仅取首帧（省 token），或按时长均匀抽帧后作为多张图片发送。",
-                        "default": "first_frame",
-                        "condition": {"modalities": "image"},
-                    },
-                    "animated_image_max_frames": {
-                        "description": "动图最大抽帧数",
-                        "type": "int",
-                        "hint": "多帧抽取策略下最多发送的帧数（1-16），默认 4。帧数越多 token 消耗越大。",
-                        "default": 4,
-                        "condition": {
-                            "modalities": "image",
-                            "animated_image_strategy": "multi_frame",
-                        },
-                    },
                     "custom_headers": {
                         "description": "自定义请求头",
                         "type": "dict",

@@ -33,8 +33,11 @@ class _UndeclaredProvider(_DummyProvider):
     supported_image_formats = None
 
 
-def _make_dummy(provider_config: dict | None = None) -> _DummyProvider:
-    return _DummyProvider(provider_config or {}, {})
+def _make_dummy(
+    provider_config: dict | None = None,
+    provider_settings: dict | None = None,
+) -> _DummyProvider:
+    return _DummyProvider(provider_config or {}, provider_settings or {})
 
 
 def test_config_override_wins_over_class_default():
@@ -93,22 +96,30 @@ def test_aggregators_do_not_inherit_openai_format_set():
     assert ProviderXAI.supported_image_formats == frozenset({"image/jpeg", "image/png"})
 
 
-def test_animated_strategy_defaults():
+def test_animated_montage_max_size_defaults_to_compress_default():
     provider = _make_dummy()
-    assert provider.get_animated_image_strategy() == ("first_frame", 4)
-
-
-def test_animated_strategy_from_config_and_clamped():
-    provider = _make_dummy(
-        {"animated_image_strategy": "multi_frame", "animated_image_max_frames": 100}
+    assert provider.get_animated_montage_max_size() == (
+        media_utils.IMAGE_COMPRESS_DEFAULT_MAX_SIZE
     )
-    assert provider.get_animated_image_strategy() == ("multi_frame", 16)
 
-    provider = _make_dummy({"animated_image_max_frames": 0})
-    assert provider.get_animated_image_strategy() == ("first_frame", 1)
 
-    provider = _make_dummy({"animated_image_strategy": "bogus"})
-    assert provider.get_animated_image_strategy() == ("first_frame", 4)
+def test_animated_montage_max_size_reuses_compress_options():
+    provider = _make_dummy(
+        provider_settings={"image_compress_options": {"max_size": 640}},
+    )
+    assert provider.get_animated_montage_max_size() == 640
+
+    # Invalid values fall back instead of breaking montage generation.
+    provider = _make_dummy(
+        provider_settings={"image_compress_options": {"max_size": "big"}},
+    )
+    assert provider.get_animated_montage_max_size() == (
+        media_utils.IMAGE_COMPRESS_DEFAULT_MAX_SIZE
+    )
+    provider = _make_dummy(
+        provider_settings={"image_compress_options": {"max_size": 0}},
+    )
+    assert provider.get_animated_montage_max_size() == 1
 
 
 def _animated_gif_data_uri(colors: list[tuple[int, int, int]]) -> str:
@@ -126,7 +137,7 @@ def _animated_gif_data_uri(colors: list[tuple[int, int, int]]) -> str:
 
 
 @pytest.mark.asyncio
-async def test_xai_animated_gif_reduced_to_still(tmp_path, monkeypatch):
+async def test_xai_animated_gif_becomes_montage(tmp_path, monkeypatch):
     monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
     provider = ProviderXAI(
         {
@@ -145,14 +156,14 @@ async def test_xai_animated_gif_reduced_to_still(tmp_path, monkeypatch):
         image_blocks = [block for block in content if block["type"] == "image_url"]
         assert len(image_blocks) == 1
         url = image_blocks[0]["image_url"]["url"]
-        # xAI only accepts JPEG/PNG; the animated GIF must become a still image.
-        assert url.startswith(("data:image/jpeg;base64,", "data:image/png;base64,"))
+        # xAI only accepts JPEG/PNG; the montage is flattened, so JPEG wins.
+        assert url.startswith("data:image/jpeg;base64,")
     finally:
         await provider.terminate()
 
 
 @pytest.mark.asyncio
-async def test_openai_multi_frame_strategy_expands_image_blocks(tmp_path, monkeypatch):
+async def test_openai_animated_gif_becomes_single_montage_block(tmp_path, monkeypatch):
     monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
     provider = ProviderOpenAIOfficial(
         {
@@ -160,6 +171,7 @@ async def test_openai_multi_frame_strategy_expands_image_blocks(tmp_path, monkey
             "type": "openai_chat_completion",
             "model": "gpt-4o-mini",
             "key": ["test-key"],
+            # Stale per-provider strategy keys from earlier builds stay inert.
             "animated_image_strategy": "multi_frame",
             "animated_image_max_frames": 3,
         },
@@ -174,9 +186,48 @@ async def test_openai_multi_frame_strategy_expands_image_blocks(tmp_path, monkey
         image_blocks = [
             block for block in message["content"] if block["type"] == "image_url"
         ]
-        assert len(image_blocks) == 3
-        for block in image_blocks:
-            assert block["image_url"]["url"].startswith("data:image/")
+        assert len(image_blocks) == 1
+        assert image_blocks[0]["image_url"]["url"].startswith("data:image/")
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_openai_montage_respects_compress_max_size(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    provider = ProviderOpenAIOfficial(
+        {
+            "id": "test-openai",
+            "type": "openai_chat_completion",
+            "model": "gpt-4o-mini",
+            "key": ["test-key"],
+            # PNG keeps pixels lossless for exact montage assertions.
+            "image_formats": ["png"],
+        },
+        {"image_compress_options": {"max_size": 24}},
+    )
+    try:
+        gif_ref = _animated_gif_data_uri(
+            [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0)]
+        )
+        message = await provider.assemble_context("look", image_urls=[gif_ref])
+
+        image_blocks = [
+            block for block in message["content"] if block["type"] == "image_url"
+        ]
+        assert len(image_blocks) == 1
+        url = image_blocks[0]["image_url"]["url"]
+        assert url.startswith("data:image/png;base64,")
+        _header, encoded = url.split(",", 1)
+        with PILImage.open(BytesIO(base64.b64decode(encoded))) as montage:
+            # 8px frames x 3 columns = 24px, already within the 24px cap.
+            assert montage.size == (24, 24)
+            rgb = montage.convert("RGB")
+            assert rgb.getpixel((4, 4)) == (255, 0, 0)
+            assert rgb.getpixel((12, 4)) == (0, 255, 0)
+            assert rgb.getpixel((20, 4)) == (0, 0, 255)
+            # The 4th frame fills cell 3; no blank cells for a 4-frame GIF.
+            assert rgb.getpixel((4, 12)) == (255, 255, 0)
     finally:
         await provider.terminate()
 

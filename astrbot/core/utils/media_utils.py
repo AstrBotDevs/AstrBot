@@ -143,14 +143,10 @@ VENDOR_IMAGE_FORMATS = {
 source templates). Absent brand = no vendor-level opinion; the adapter class
 declaration then governs."""
 
-ANIMATED_STRATEGY_FIRST_FRAME = "first_frame"
-"""Keep only the first frame of an animated image."""
+ANIMATED_MONTAGE_GRID = 3
+"""Animated images become a grid x grid frame montage (contact sheet)."""
 
-ANIMATED_STRATEGY_MULTI_FRAME = "multi_frame"
-"""Extract multiple evenly spaced frames from an animated image."""
-
-ANIMATED_DEFAULT_MAX_FRAMES = 4
-ANIMATED_MAX_FRAMES_LIMIT = 16
+ANIMATED_MONTAGE_FRAME_COUNT = ANIMATED_MONTAGE_GRID * ANIMATED_MONTAGE_GRID
 
 CONVERT_CACHE_DIR_NAME = "media_convert_cache"
 """Cache directory (under the AstrBot temp dir) for converted images and frames."""
@@ -1110,30 +1106,23 @@ def _save_image_frame_atomic(
 def _convert_image_bytes_sync(
     source_bytes: bytes,
     target_mime_type: str,
-    *,
-    frame_index: int | None = None,
 ) -> Path:
     """Convert image bytes to the target format, cached under the temp dir.
 
     Args:
         source_bytes: Encoded source image bytes.
         target_mime_type: Target MIME type; must be Pillow-savable.
-        frame_index: Frame to extract first, for animated sources.
 
     Returns:
         Path of the converted (or previously cached) image.
     """
-    cache_key = _image_convert_cache_key(
-        source_bytes, f"convert|{target_mime_type}|frame={frame_index}"
-    )
+    cache_key = _image_convert_cache_key(source_bytes, f"convert|{target_mime_type}")
     output_path = _image_convert_cache_dir() / (
         cache_key + _MIME_FILE_SUFFIX[target_mime_type]
     )
     if output_path.exists():
         return output_path
     with PILImage.open(io.BytesIO(source_bytes)) as image:
-        if frame_index is not None:
-            image.seek(frame_index)
         _save_image_frame_atomic(image, target_mime_type, output_path)
     return output_path
 
@@ -1146,57 +1135,71 @@ def _even_frame_indices(total_frames: int, max_frames: int) -> list[int]:
     return sorted({round(i * (total_frames - 1) / (count - 1)) for i in range(count)})
 
 
-def _extract_animation_frames_sync(
+def _extract_animation_montage_sync(
     source_bytes: bytes,
     target_mime_type: str,
-    max_frames: int,
-) -> tuple[list[Path], bool]:
-    """Extract evenly spaced frames from an animated image, with caching.
+    max_size: int,
+) -> tuple[Path, bool]:
+    """Tile evenly spaced frames of an animated image into one grid montage.
+
+    Frame sampling includes the first and last frames; grid cells beyond the
+    available frames stay blank (white). The montage is flattened onto a white
+    background and its longest edge is capped at ``max_size`` (never upscaled).
 
     Args:
         source_bytes: Encoded animated image bytes.
-        target_mime_type: MIME type each extracted frame is saved as.
-        max_frames: Maximum number of frames to extract.
+        target_mime_type: MIME type the montage is saved as.
+        max_size: Longest edge of the montage in pixels.
 
     Returns:
-        Tuple of frame paths in playback order and whether extraction actually
-        ran (``False`` when the cached frame set was served).
+        Tuple of the montage path and whether extraction actually ran
+        (``False`` when the cached montage was served).
     """
     suffix = _MIME_FILE_SUFFIX[target_mime_type]
     cache_key = _image_convert_cache_key(
-        source_bytes, f"frames|{target_mime_type}|n={max_frames}"
+        source_bytes, f"montage|{target_mime_type}|s={max_size}"
     )
-    cache_dir = _image_convert_cache_dir()
-    frames_dir = cache_dir / f"{cache_key}_frames"
-    if frames_dir.is_dir():
-        cached = sorted(frames_dir.glob(f"*{suffix}"))
-        if cached:
-            return cached, False
-    # Extract into a staging dir and publish it with one atomic rename, so a
-    # crash mid-extraction never leaves a partial frame set behind.
-    staging_dir = Path(tempfile.mkdtemp(dir=cache_dir, prefix=f".{cache_key}_"))
-    published = True
-    try:
-        with PILImage.open(io.BytesIO(source_bytes)) as image:
-            total_frames = getattr(image, "n_frames", 1)
-            for out_index, frame_index in enumerate(
-                _even_frame_indices(total_frames, max_frames)
-            ):
-                frame_path = staging_dir / f"f{out_index}{suffix}"
-                image.seek(frame_index)
-                _save_current_image_frame(image, target_mime_type, frame_path)
+    output_path = _image_convert_cache_dir() / (cache_key + suffix)
+    if output_path.exists():
+        return output_path, False
+    with PILImage.open(io.BytesIO(source_bytes)) as image:
+        total_frames = getattr(image, "n_frames", 1)
+        frame_indices = _even_frame_indices(total_frames, ANIMATED_MONTAGE_FRAME_COUNT)
+        # Floor the per-cell scale so the montage never exceeds max_size.
+        longest_edge = max(image.size) * ANIMATED_MONTAGE_GRID
+        scale = min(1.0, max(max_size, 1) / longest_edge)
+        cell_size = (
+            max(1, int(image.size[0] * scale)),
+            max(1, int(image.size[1] * scale)),
+        )
+        canvas = PILImage.new(
+            "RGB",
+            (
+                cell_size[0] * ANIMATED_MONTAGE_GRID,
+                cell_size[1] * ANIMATED_MONTAGE_GRID,
+            ),
+            (255, 255, 255),
+        )
         try:
-            os.replace(staging_dir, frames_dir)
-        except OSError:
-            # Lost a concurrent publish race; use the winner's complete set.
-            shutil.rmtree(staging_dir, ignore_errors=True)
-            if not frames_dir.is_dir():
-                raise
-            published = False
-    except BaseException:
-        shutil.rmtree(staging_dir, ignore_errors=True)
-        raise
-    return sorted(frames_dir.glob(f"*{suffix}")), published
+            for out_index, frame_index in enumerate(frame_indices):
+                image.seek(frame_index)
+                frame = image.convert("RGBA")
+                if frame.size != cell_size:
+                    frame = frame.resize(cell_size, PILImage.Resampling.LANCZOS)
+                # Paste with the alpha band as mask so transparency shows white.
+                canvas.paste(
+                    frame,
+                    (
+                        (out_index % ANIMATED_MONTAGE_GRID) * cell_size[0],
+                        (out_index // ANIMATED_MONTAGE_GRID) * cell_size[1],
+                    ),
+                    frame,
+                )
+                frame.close()
+            _save_image_frame_atomic(canvas, target_mime_type, output_path)
+        finally:
+            canvas.close()
+    return output_path, True
 
 
 async def _path_to_resolved_media_data(path: Path, mime_type: str) -> ResolvedMediaData:
@@ -1211,8 +1214,7 @@ async def resolve_image_ref_to_images(
     image_ref: MediaRefStr,
     *,
     allowed_mime_types: Collection[str] | None = None,
-    animated_strategy: str = ANIMATED_STRATEGY_FIRST_FRAME,
-    animated_max_frames: int = ANIMATED_DEFAULT_MAX_FRAMES,
+    montage_max_size: int = IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
     strict: bool = False,
     default_mime_type: str | None = "image/jpeg",
 ) -> list[ResolvedMediaData]:
@@ -1221,19 +1223,15 @@ async def resolve_image_ref_to_images(
     Applies per-provider format adaptation: still images whose detected MIME type
     is not in ``allowed_mime_types`` are converted via Pillow (cached under the
     AstrBot temp directory, so a source is only converted once until the cache is
-    cleaned), and animated images are reduced to still frames according to
-    ``animated_strategy``. Compatible images are returned untouched without any
-    conversion or cache write.
+    cleaned), and animated images are tiled into one frame-grid montage. Single
+    frame animated images fall through to the still-image path. Compatible
+    images are returned untouched without any conversion or cache write.
 
     Args:
         image_ref: Image reference in any form accepted by ``MediaResolver``.
         allowed_mime_types: MIME types accepted by the target provider. ``None``
             or a collection containing ``"*"`` disables adaptation.
-        animated_strategy: ``first_frame`` keeps only the first frame;
-            ``multi_frame`` extracts up to ``animated_max_frames`` evenly spaced
-            frames as separate images.
-        animated_max_frames: Maximum frames for ``multi_frame``, clamped to
-            ``[1, 16]``.
+        montage_max_size: Longest edge in pixels of the animated-image montage.
         strict: Raise on invalid or undecodable images instead of skipping them.
         default_mime_type: Fallback MIME type for legacy base64 payloads.
 
@@ -1277,40 +1275,27 @@ async def resolve_image_ref_to_images(
         )
         return []
 
-    if frame_count > 1 and (
-        not unrestricted or animated_strategy == ANIMATED_STRATEGY_MULTI_FRAME
-    ):
-        max_frames = min(max(int(animated_max_frames), 1), ANIMATED_MAX_FRAMES_LIMIT)
+    if frame_count > 1:
+        # Montage cells are flattened onto white, so alpha no longer matters
+        # when picking the target format.
         target_mime_type = _pick_target_image_mime_type(
-            has_alpha,
+            False,
             None if unrestricted else allowed_mime_types,
         )
-        if animated_strategy == ANIMATED_STRATEGY_MULTI_FRAME:
-            frame_paths, extracted = await asyncio.to_thread(
-                _extract_animation_frames_sync,
-                image_bytes,
-                target_mime_type,
-                max_frames,
+        montage_path, extracted = await asyncio.to_thread(
+            _extract_animation_montage_sync,
+            image_bytes,
+            target_mime_type,
+            max(int(montage_max_size), 1),
+        )
+        if extracted:
+            logger.info(
+                "Animated image %s tiled into a %dx%d frame montage for the provider.",
+                describe_media_ref(image_ref),
+                ANIMATED_MONTAGE_GRID,
+                ANIMATED_MONTAGE_GRID,
             )
-            if extracted:
-                logger.info(
-                    "Animated image %s extracted into %d frame(s) for the provider.",
-                    describe_media_ref(image_ref),
-                    len(frame_paths),
-                )
-        else:
-            frame_paths = [
-                await asyncio.to_thread(
-                    _convert_image_bytes_sync,
-                    image_bytes,
-                    target_mime_type,
-                    frame_index=0,
-                )
-            ]
-        return [
-            await _path_to_resolved_media_data(path, target_mime_type)
-            for path in frame_paths
-        ]
+        return [await _path_to_resolved_media_data(montage_path, target_mime_type)]
 
     if unrestricted or media_data.mime_type in allowed_mime_types:
         return [media_data]

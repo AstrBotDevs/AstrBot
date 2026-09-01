@@ -1001,12 +1001,11 @@ class ProviderGoogleGenAI(Provider):
         """组装上下文。"""
 
         async def resolve_image_part(image_url: str) -> list[dict]:
-            strategy, max_frames = self.get_animated_image_strategy()
+            montage_max_size = self.get_animated_montage_max_size()
             image_datas = await resolve_image_ref_to_images(
                 image_url,
                 allowed_mime_types=self.resolve_allowed_image_formats(),
-                animated_strategy=strategy,
-                animated_max_frames=max_frames,
+                montage_max_size=montage_max_size,
             )
             if not image_datas:
                 logger.warning("Image preprocessing returned no data; ignoring it.")
@@ -1100,12 +1099,11 @@ class ProviderGoogleGenAI(Provider):
 
     async def encode_image_bs64(self, image_url: str) -> str:
         """将图片转换为 base64"""
-        strategy, max_frames = self.get_animated_image_strategy()
+        montage_max_size = self.get_animated_montage_max_size()
         image_datas = await resolve_image_ref_to_images(
             image_url,
             allowed_mime_types=self.resolve_allowed_image_formats(),
-            animated_strategy=strategy,
-            animated_max_frames=max_frames,
+            montage_max_size=montage_max_size,
             strict=True,
         )
         if not image_datas:

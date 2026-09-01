@@ -189,12 +189,11 @@ class ProviderOpenAIOfficial(Provider):
         mode: Literal["safe", "strict"] = "safe",
     ) -> list[ResolvedMediaData]:
         """Resolve an image ref with this provider's format adaptation applied."""
-        strategy, max_frames = self.get_animated_image_strategy()
+        montage_max_size = self.get_animated_montage_max_size()
         return await resolve_image_ref_to_images(
             image_ref,
             allowed_mime_types=self.resolve_allowed_image_formats(),
-            animated_strategy=strategy,
-            animated_max_frames=max_frames,
+            montage_max_size=montage_max_size,
             strict=mode == "strict",
         )
 

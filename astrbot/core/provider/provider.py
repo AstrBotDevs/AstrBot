@@ -16,10 +16,7 @@ from astrbot.core.provider.entities import (
 from astrbot.core.provider.register import provider_cls_map
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.utils.media_utils import (
-    ANIMATED_DEFAULT_MAX_FRAMES,
-    ANIMATED_MAX_FRAMES_LIMIT,
-    ANIMATED_STRATEGY_FIRST_FRAME,
-    ANIMATED_STRATEGY_MULTI_FRAME,
+    IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
     IMAGE_SHORT_MIME_TYPES,
     VENDOR_IMAGE_FORMATS,
 )
@@ -135,33 +132,21 @@ class Provider(AbstractProvider):
             return self.supported_image_formats
         return DEFAULT_FALLBACK_IMAGE_FORMATS
 
-    def get_animated_image_strategy(self) -> tuple[str, int]:
-        """Read the animated image handling strategy from the provider config.
+    def get_animated_montage_max_size(self) -> int:
+        """Longest-edge cap for the animated-image montage, in pixels.
+
+        Reuses ``provider_settings.image_compress_options.max_size`` so still
+        images and montages share one size control.
 
         Returns:
-            Tuple of ``(strategy, max_frames)`` where strategy is
-            ``first_frame`` or ``multi_frame`` and max_frames is clamped to
-            ``[1, 16]``.
+            The configured cap, or the compress default when unset or invalid.
         """
-        strategy = str(
-            self.provider_config.get("animated_image_strategy")
-            or ANIMATED_STRATEGY_FIRST_FRAME
-        )
-        if strategy not in (
-            ANIMATED_STRATEGY_FIRST_FRAME,
-            ANIMATED_STRATEGY_MULTI_FRAME,
-        ):
-            strategy = ANIMATED_STRATEGY_FIRST_FRAME
-        raw_max_frames = self.provider_config.get("animated_image_max_frames")
+        options = self.provider_settings.get("image_compress_options")
+        raw = options.get("max_size") if isinstance(options, dict) else None
         try:
-            max_frames = (
-                ANIMATED_DEFAULT_MAX_FRAMES
-                if raw_max_frames is None
-                else int(raw_max_frames)
-            )
+            return max(int(raw), 1)
         except (TypeError, ValueError):
-            max_frames = ANIMATED_DEFAULT_MAX_FRAMES
-        return strategy, min(max(max_frames, 1), ANIMATED_MAX_FRAMES_LIMIT)
+            return IMAGE_COMPRESS_DEFAULT_MAX_SIZE
 
     @abc.abstractmethod
     def get_current_key(self) -> str:

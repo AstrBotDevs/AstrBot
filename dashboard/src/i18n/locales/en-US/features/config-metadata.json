@@ -1418,15 +1418,6 @@
           "Unrestricted"
         ]
       },
-      "animated_image_strategy": {
-        "description": "Animated image strategy",
-        "hint": "How animated images such as GIFs are sent to the model: keep only the first frame (saves tokens), or extract evenly spaced frames and send them as multiple images.",
-        "labels": ["First frame only", "Multi-frame extraction"]
-      },
-      "animated_image_max_frames": {
-        "description": "Max animation frames",
-        "hint": "Maximum number of frames sent under the multi-frame strategy (1-16), default 4. More frames consume more tokens."
-      },
       "custom_headers": {
         "description": "Custom request headers",
         "hint": "Key/value pairs added here are merged into the OpenAI SDK default_headers for custom HTTP headers. Values must be strings."

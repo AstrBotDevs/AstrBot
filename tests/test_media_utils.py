@@ -887,10 +887,13 @@ def _make_image_bytes(
     return buffer.getvalue()
 
 
-def _make_animated_gif_bytes(colors: list[tuple[int, int, int]]) -> bytes:
+def _make_animated_gif_bytes(
+    colors: list[tuple[int, int, int]],
+    size: tuple[int, int] = (8, 8),
+) -> bytes:
     from PIL import Image as PILImage
 
-    frames = [PILImage.new("RGB", (8, 8), color) for color in colors]
+    frames = [PILImage.new("RGB", size, color) for color in colors]
     buffer = BytesIO()
     frames[0].save(
         buffer,
@@ -967,92 +970,117 @@ async def test_resolve_images_alpha_source_prefers_png(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_resolve_images_animated_first_frame(tmp_path, monkeypatch):
-    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
-    gif_bytes = _make_animated_gif_bytes(
-        [(255, 0, 0), (0, 255, 0), (0, 0, 255)],
-    )
-
-    images = await media_utils.resolve_image_ref_to_images(
-        _image_data_uri("image/gif", gif_bytes),
-        allowed_mime_types={"image/jpeg", "image/png"},
-        animated_strategy=media_utils.ANIMATED_STRATEGY_FIRST_FRAME,
-    )
-
-    assert len(images) == 1
-    assert images[0].mime_type == "image/jpeg"
-
-
-@pytest.mark.asyncio
-async def test_resolve_images_multi_frame_evenly_spaced(tmp_path, monkeypatch):
+async def test_resolve_images_animated_gif_becomes_montage(tmp_path, monkeypatch):
     monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
     from PIL import Image as PILImage
 
-    colors = [
-        (255, 0, 0),
-        (0, 255, 0),
-        (0, 0, 255),
-        (255, 255, 0),
-        (0, 255, 255),
-        (255, 0, 255),
-    ]
+    colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
     gif_bytes = _make_animated_gif_bytes(colors)
 
     images = await media_utils.resolve_image_ref_to_images(
         _image_data_uri("image/gif", gif_bytes),
         allowed_mime_types={"image/png"},
-        animated_strategy=media_utils.ANIMATED_STRATEGY_MULTI_FRAME,
-        animated_max_frames=4,
     )
 
-    # 6 frames, 4 picks -> indices 0, 2, 3, 5 (evenly spaced).
-    expected_indices = [0, 2, 3, 5]
-    assert len(images) == len(expected_indices)
-    for image_data, frame_index in zip(images, expected_indices, strict=True):
-        assert image_data.mime_type == "image/png"
-        with PILImage.open(BytesIO(image_data.to_bytes())) as frame:
-            assert frame.convert("RGB").getpixel((0, 0)) == colors[frame_index]
+    assert len(images) == 1
+    assert images[0].mime_type == "image/png"
+    with PILImage.open(BytesIO(images[0].to_bytes())) as montage:
+        # 8px frames in a 3x3 grid: 3 colored cells, the rest padded white.
+        assert montage.size == (24, 24)
+        rgb = montage.convert("RGB")
+        assert rgb.getpixel((4, 4)) == colors[0]
+        assert rgb.getpixel((12, 4)) == colors[1]
+        assert rgb.getpixel((20, 4)) == colors[2]
+        for x, y in [(4, 12), (12, 12), (20, 12), (4, 20), (12, 20), (20, 20)]:
+            assert rgb.getpixel((x, y)) == (255, 255, 255)
 
 
 @pytest.mark.asyncio
-async def test_resolve_images_multi_frame_clamps_to_limit(tmp_path, monkeypatch):
+async def test_resolve_images_montage_keeps_first_and_last_frame(tmp_path, monkeypatch):
     monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    from PIL import Image as PILImage
+
     colors = [(i * 12 % 256, 0, 0) for i in range(20)]
     gif_bytes = _make_animated_gif_bytes(colors)
 
     images = await media_utils.resolve_image_ref_to_images(
         _image_data_uri("image/gif", gif_bytes),
         allowed_mime_types={"image/png"},
-        animated_strategy=media_utils.ANIMATED_STRATEGY_MULTI_FRAME,
-        animated_max_frames=100,
     )
 
-    assert len(images) == media_utils.ANIMATED_MAX_FRAMES_LIMIT
+    assert len(images) == 1
+    with PILImage.open(BytesIO(images[0].to_bytes())) as montage:
+        # 20 frames sampled to 9 cells; cell 0 and cell 8 are the endpoints.
+        rgb = montage.convert("RGB")
+        assert rgb.getpixel((4, 4)) == colors[0]
+        assert rgb.getpixel((20, 20)) == colors[-1]
 
 
 @pytest.mark.asyncio
-async def test_resolve_images_ignores_stale_staging_dir(tmp_path, monkeypatch):
+async def test_resolve_images_montage_respects_max_size(tmp_path, monkeypatch):
     monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
-    gif_bytes = _make_animated_gif_bytes([(255, 0, 0), (0, 255, 0), (0, 0, 255)])
+    from PIL import Image as PILImage
 
-    # Simulate a crash mid-extraction: a staging dir with a partial frame set.
-    cache_dir = tmp_path / media_utils.CONVERT_CACHE_DIR_NAME
-    cache_dir.mkdir(parents=True)
-    staging = cache_dir / ".stale_staging"
-    staging.mkdir()
-    (staging / "f0.png").write_bytes(b"partial")
+    gif_bytes = _make_animated_gif_bytes(
+        [(255, 0, 0), (0, 255, 0), (0, 0, 255)], size=(20, 20)
+    )
 
     images = await media_utils.resolve_image_ref_to_images(
         _image_data_uri("image/gif", gif_bytes),
         allowed_mime_types={"image/png"},
-        animated_strategy=media_utils.ANIMATED_STRATEGY_MULTI_FRAME,
-        animated_max_frames=3,
+        montage_max_size=30,
     )
 
-    assert len(images) == 3
-    # The published frame set lives in a dedicated dir, not the staging dir.
-    assert all(image_data.to_bytes() != b"partial" for image_data in images)
-    assert list(cache_dir.glob("*_frames"))
+    with PILImage.open(BytesIO(images[0].to_bytes())) as montage:
+        # Native 60x60 canvas scaled down to the 30px cap.
+        assert montage.size == (30, 30)
+
+
+@pytest.mark.asyncio
+async def test_resolve_images_montage_cache_hit_skips_reencode(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    gif_bytes = _make_animated_gif_bytes([(255, 0, 0), (0, 255, 0), (0, 0, 255)])
+    image_ref = _image_data_uri("image/gif", gif_bytes)
+
+    save_calls = 0
+    real_save = media_utils._save_current_image_frame
+
+    def counting_save(*args, **kwargs):
+        nonlocal save_calls
+        save_calls += 1
+        return real_save(*args, **kwargs)
+
+    monkeypatch.setattr(media_utils, "_save_current_image_frame", counting_save)
+
+    first = await media_utils.resolve_image_ref_to_images(
+        image_ref, allowed_mime_types={"image/png"}
+    )
+    assert save_calls == 1
+
+    second = await media_utils.resolve_image_ref_to_images(
+        image_ref, allowed_mime_types={"image/png"}
+    )
+    assert save_calls == 1  # cache hit: no re-encode
+    assert second[0].base64_data == first[0].base64_data
+
+
+@pytest.mark.asyncio
+async def test_resolve_images_single_frame_gif_treated_as_still(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    from PIL import Image as PILImage
+
+    gif_bytes = _make_animated_gif_bytes([(255, 0, 0)])
+
+    images = await media_utils.resolve_image_ref_to_images(
+        _image_data_uri("image/gif", gif_bytes),
+        allowed_mime_types={"image/jpeg", "image/png"},
+    )
+
+    # A one-frame GIF is a still image: plain conversion, no montage canvas.
+    assert len(images) == 1
+    assert images[0].mime_type == "image/jpeg"
+    with PILImage.open(BytesIO(images[0].to_bytes())) as still:
+        assert still.size == (8, 8)
 
 
 @pytest.mark.asyncio

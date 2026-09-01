@@ -722,8 +722,7 @@ async def test_prepare_chat_payload_materializes_context_http_image_urls(monkeyp
             image_ref: str,
             *,
             allowed_mime_types=None,
-            animated_strategy: str = "first_frame",
-            animated_max_frames: int = 4,
+            montage_max_size: int = 1280,
             strict: bool = False,
         ) -> list[ResolvedMediaData]:
             assert image_ref == "https://example.com/quoted.png"
