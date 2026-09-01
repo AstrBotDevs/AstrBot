@@ -5,17 +5,18 @@ upstream:
   branch: master
 
 last_synced:
-  commit: fe3d77568b88ea3be83b2190d515da0a039da399
-  synced_at_utc: 2026-08-30T21:09:36Z
-  sync_method: manual-adaptation
-  source_pr: '9821'
+  commit: 34743f4adfe666e52422426e792b8ff7c88b92ec
+  synced_at_utc: 2026-09-01T00:08:05Z
+  sync_method: cherry-pick-and-manual-adaptation
+  source_pr: '9883'
   note: >-
-    Reviewed and adapted fe3d77568b88ea3be83b2190d515da0a039da399 (#9821).
-    Embedded Agent Runner configuration in profiles as agent_runner
-    (config_version 3). Implemented the current-path migration in
-    astrbot/core/config/agent_runner_migration.py without restoring
-    migra_helper.py. Kept fork-only provider_settings
-    (tool_history_policy, computer_use_runtime, sandbox). Omitted ru-RU.
-    Kept the ConfigPage unsaved banner. Masked runner API keys as secret.
-    No upstream version bump occurred; absorbed user-visible changes were
-    added to the in-progress 4.27.5 changelog.
+    Reviewed fe3d77568b88ea3be83b2190d515da0a039da399..34743f4adfe666e52422426e792b8ff7c88b92ec
+    (8 commits). Adapted #9873, #9872, #9874, #9767, and #9883. Cherry-picked
+    #9841. Skipped #9856 (already equivalent via 4e909eca1) and #9879
+    (dashboard deferral already present; omitted migra_webchat_session.py;
+    kept fork 404 pointing at make run). AnySearch uses the fork HTTP session
+    and key rotator; empty keys issue one anonymous request. Omitted ru-RU
+    and the bundled plugin-guide formatting rewrite. Kept the ConfigPage
+    unsaved banner, step-up, and in-app /help docs. Regenerated the MDI
+    subset. No upstream version bump in this interval; absorbed user-visible
+    changes were added to the in-progress 4.27.5 changelog.
