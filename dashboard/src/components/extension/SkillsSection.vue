@@ -727,14 +727,11 @@
               })
             }}
           </p>
-          <v-list
-            class="batch-delete-targets mt-3"
-            density="compact"
-            variant="outlined"
-          >
+          <v-list class="batch-delete-targets mt-3" density="compact">
             <v-list-item
               v-for="name in batchDeleteTargets"
               :key="name"
+              class="batch-delete-target"
               :title="name"
               prepend-icon="mdi-puzzle-outline"
             />
@@ -2210,10 +2207,19 @@ export default {
 }
 
 .batch-delete-targets {
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.16);
-  border-radius: 10px;
+  background: transparent;
   max-height: 240px;
   overflow-y: auto;
+  padding: 0;
+}
+
+.batch-delete-target {
+  background: rgba(var(--v-theme-on-surface), 0.05);
+  border-radius: 8px;
+}
+
+.batch-delete-target + .batch-delete-target {
+  margin-top: 6px;
 }
 
 .skills-fab-stack {

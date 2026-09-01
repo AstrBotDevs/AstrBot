@@ -390,7 +390,7 @@
     "batchDeleteTitle": "Delete selected Skills",
     "batchDeleteMessage": "Are you sure you want to delete these {count} Skills? This action cannot be undone.",
     "batchDeleteConfirm": "Delete {count}",
-    "batchDeleteSuccess": "Deleted {count} Skill(s)",
+    "batchDeleteSuccess": "All {count} skill(s) deleted successfully.",
     "batchDeletePartial": "Deleted {succeeded}; failed to delete {failed}",
     "neoSkillKey": "Filter by skill_key",
     "neoStatus": "Candidate Status",

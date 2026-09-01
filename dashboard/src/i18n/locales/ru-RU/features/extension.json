@@ -385,7 +385,7 @@
         "batchDeleteTitle": "Массовое удаление навыков",
         "batchDeleteMessage": "Удалить выбранные навыки ({count})? Это действие нельзя отменить.",
         "batchDeleteConfirm": "Удалить ({count})",
-        "batchDeleteSuccess": "Удалено навыков: {count}",
+        "batchDeleteSuccess": "All {count} skill(s) deleted successfully.",
         "batchDeletePartial": "Удалено: {succeeded}; ошибок: {failed}",
         "neoSkillKey": "Фильтр по ключу",
         "neoStatus": "Статус кандидата",
