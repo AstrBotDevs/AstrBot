@@ -13,6 +13,7 @@ from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
 from ..context import PipelineContext
 from ..stage import Stage, register_stage
+from .umo_auto_name import UmoAutoNameRecorder
 
 UNIQUE_SESSION_ID_BUILDERS: dict[str, Callable[[AstrMessageEvent], str | None]] = {
     "aiocqhttp": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
@@ -73,6 +74,10 @@ class WakingCheckStage(Stage):
         )
         platform_settings = self.ctx.astrbot_config.get("platform_settings", {})
         self.unique_session = platform_settings.get("unique_session", False)
+        self._umo_auto_name_recorder = UmoAutoNameRecorder(
+            ctx.db_helper,
+            ctx.astrbot_config_id,
+        )
 
     async def process(
         self,
@@ -218,6 +223,8 @@ class WakingCheckStage(Stage):
                         f"{star_map[handler.handler_module_path].name}.",
                     )
                     event.stop_event()
+                    if event.is_wake:
+                        self._umo_auto_name_recorder.schedule(event)
                     return
 
                 is_wake = True
@@ -244,5 +251,7 @@ class WakingCheckStage(Stage):
         event.set_extra("activated_handlers", activated_handlers)
         event.set_extra("handlers_parsed_params", handlers_parsed_params)
 
-        if not is_wake:
+        if is_wake:
+            self._umo_auto_name_recorder.schedule(event)
+        else:
             event.stop_event()

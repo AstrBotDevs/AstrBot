@@ -83,14 +83,11 @@ class DiscordPlatformAdapter(Platform):
 
         if channel:
             message_obj.type = self._get_message_type(channel)
-            message_obj.group_id = self._get_channel_id(channel)
-            group_name = self._get_group_name(channel)
-            if (
-                message_obj.type == MessageType.GROUP_MESSAGE
-                and message_obj.group
-                and group_name
-            ):
-                message_obj.group.group_name = group_name
+            if message_obj.type == MessageType.GROUP_MESSAGE:
+                message_obj.group_id = self._get_channel_id(channel)
+                group_name = self._get_group_name(channel)
+                if message_obj.group and group_name:
+                    message_obj.group.group_name = group_name
         else:
             logger.warning(
                 f"[Discord] Can't get channel info for {channel_id_str}, will guess message type.",
@@ -253,10 +250,11 @@ class DiscordPlatformAdapter(Platform):
 
         abm = AstrBotMessage()
         abm.type = self._get_message_type(message.channel)
-        abm.group_id = self._get_channel_id(message.channel)
-        group_name = self._get_group_name(message.channel)
-        if abm.type == MessageType.GROUP_MESSAGE and abm.group and group_name:
-            abm.group.group_name = group_name
+        if abm.type == MessageType.GROUP_MESSAGE:
+            abm.group_id = self._get_channel_id(message.channel)
+            group_name = self._get_group_name(message.channel)
+            if abm.group and group_name:
+                abm.group.group_name = group_name
         abm.message_str = content
         abm.sender = MessageMember(
             user_id=str(message.author.id),
@@ -542,10 +540,11 @@ class DiscordPlatformAdapter(Platform):
             abm = AstrBotMessage()
             if channel is not None:
                 abm.type = self._get_message_type(channel, ctx.guild_id)
-                abm.group_id = self._get_channel_id(channel)
-                group_name = self._get_group_name(channel)
-                if abm.type == MessageType.GROUP_MESSAGE and abm.group and group_name:
-                    abm.group.group_name = group_name
+                if abm.type == MessageType.GROUP_MESSAGE:
+                    abm.group_id = self._get_channel_id(channel)
+                    group_name = self._get_group_name(channel)
+                    if abm.group and group_name:
+                        abm.group.group_name = group_name
             else:
                 # 防守式兜底：channel 取不到时，仍能根据 guild_id/channel_id 推断会话信息
                 abm.type = (
@@ -553,7 +552,8 @@ class DiscordPlatformAdapter(Platform):
                     if ctx.guild_id is not None
                     else MessageType.FRIEND_MESSAGE
                 )
-                abm.group_id = str(ctx.channel_id)
+                if abm.type == MessageType.GROUP_MESSAGE:
+                    abm.group_id = str(ctx.channel_id)
 
             abm.message_str = message_str_for_filter
             abm.sender = MessageMember(

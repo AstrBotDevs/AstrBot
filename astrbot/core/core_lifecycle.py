@@ -462,7 +462,7 @@ class AstrBotCoreLifecycle:
         mapping = {}
         for conf_id, ab_config in self.astrbot_config_mgr.confs.items():
             scheduler = PipelineScheduler(
-                PipelineContext(ab_config, self.plugin_manager, conf_id),
+                PipelineContext(ab_config, self.plugin_manager, conf_id, self.db),
             )
             await scheduler.initialize()
             mapping[conf_id] = scheduler
@@ -479,7 +479,7 @@ class AstrBotCoreLifecycle:
         if not ab_config:
             raise ValueError(f"配置文件 {conf_id} 不存在")
         scheduler = PipelineScheduler(
-            PipelineContext(ab_config, self.plugin_manager, conf_id),
+            PipelineContext(ab_config, self.plugin_manager, conf_id, self.db),
         )
         await scheduler.initialize()
         self.pipeline_scheduler_mapping[conf_id] = scheduler

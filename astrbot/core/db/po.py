@@ -346,7 +346,7 @@ class UmoAlias(TimestampMixin, SQLModel, table=True):
         sa_column_kwargs={"autoincrement": True},
         default=None,
     )
-    umo: str = Field(nullable=False, max_length=512, unique=True, index=True)
+    umo: str = Field(nullable=False, max_length=512)
     creator_sender_id: str = Field(nullable=False, max_length=255)
     auto_name: str | None = Field(default=None, max_length=255)
     user_alias: str | None = Field(default=None, max_length=255)
