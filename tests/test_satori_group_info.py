@@ -83,7 +83,7 @@ async def test_satori_get_group_enriches_metadata_and_paginates_members():
         ],
     )
 
-    group = await event.get_group(include_members=True)
+    group = await event.get_group()
 
     assert group is not None
     assert group.group_id == "guild-1"
@@ -138,15 +138,6 @@ async def test_satori_get_group_falls_back_when_apis_are_unavailable():
     assert group.group_avatar == "https://example.com/event.png"
     assert group.members is None
     assert group.member_count is None
-    assert adapter.send_http_request.await_args_list == [
-        call(
-            "POST",
-            "/guild.get",
-            {"guild_id": "guild-1"},
-            "discord",
-            "bot-1",
-        )
-    ]
 
 
 @pytest.mark.asyncio

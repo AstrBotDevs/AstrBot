@@ -56,15 +56,12 @@ class SatoriPlatformEvent(AstrMessageEvent):
     async def get_group(
         self,
         group_id: str | None = None,
-        *,
-        include_members: bool = False,
         **kwargs,
     ) -> Group | None:
-        """Get Satori guild information and optionally its available members.
+        """Get Satori guild information and all available members.
 
         Args:
             group_id: Guild ID to query. Defaults to the current message guild.
-            include_members: Whether to fetch every available guild member page.
             **kwargs: Reserved for compatibility with the common event interface.
 
         Returns:
@@ -119,9 +116,6 @@ class SatoriPlatformEvent(AstrMessageEvent):
             if guild:
                 group.group_name = guild.get("name") or group.group_name
                 group.group_avatar = guild.get("avatar") or group.group_avatar
-
-        if not include_members:
-            return group
 
         if features is not None and "guild.member.list" not in features:
             return group

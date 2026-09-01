@@ -209,18 +209,11 @@ class SlackMessageEvent(AstrMessageEvent):
             await self.send(MessageChain([Plain(buffer)]))
         return await super().send_streaming(generator, use_fallback)
 
-    async def get_group(
-        self,
-        group_id=None,
-        *,
-        include_members: bool = False,
-        **kwargs,
-    ):
-        """Get Slack channel information and optionally its visible members.
+    async def get_group(self, group_id=None, **kwargs):
+        """Gets Slack channel information and all visible members.
 
         Args:
             group_id: Optional Slack channel identifier.
-            include_members: Whether to fetch all visible channel members.
             **kwargs: Reserved compatibility arguments.
 
         Returns:
@@ -250,9 +243,6 @@ class SlackMessageEvent(AstrMessageEvent):
             group.member_count = channel_data.get("num_members")
         except Exception as exc:
             logger.debug("Slack channel info lookup failed for %s: %s", channel_id, exc)
-            return group
-
-        if not include_members:
             return group
 
         member_ids: list[str] = []

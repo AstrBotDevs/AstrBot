@@ -236,16 +236,7 @@ async def test_kook_get_group_enriches_channel_with_guild_members():
         client,
     )
 
-    metadata_group = await event.get_group()
-
-    assert metadata_group.group_name == "general"
-    assert metadata_group.group_avatar == "https://example.com/icon.png"
-    assert metadata_group.group_owner == "owner-1"
-    assert metadata_group.members is None
-    client.get_guild_roles.assert_not_awaited()
-    client.get_guild_users.assert_not_awaited()
-
-    group = await event.get_group(include_members=True)
+    group = await event.get_group()
 
     assert group.group_name == "general"
     assert group.group_avatar == "https://example.com/icon.png"

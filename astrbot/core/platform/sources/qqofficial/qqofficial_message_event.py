@@ -108,13 +108,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         self.bot = bot
         self.send_buffer = None
 
-    async def get_group(
-        self,
-        group_id: str | None = None,
-        *,
-        include_members: bool = False,
-        **kwargs,
-    ) -> Group | None:
+    async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
         """Get QQ group or guild-channel information for this event.
 
         QQ group metadata is restricted to allowlisted bots. When the API is
@@ -124,15 +118,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         Args:
             group_id: Optional QQ group OpenID or guild channel ID. Defaults to
                 the current message group identifier.
-            include_members: Reserved for API consistency; QQ does not expose the
-                complete member list here.
             **kwargs: Reserved for compatibility with the base event API.
 
         Returns:
             Available group information, or ``None`` for a private event without
             an explicit group identifier.
         """
-        del include_members, kwargs
+        del kwargs
         target_id = group_id or self.message_obj.group_id
         if not target_id:
             return None

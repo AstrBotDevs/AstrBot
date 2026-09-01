@@ -165,15 +165,12 @@ class MisskeyPlatformEvent(AstrMessageEvent):
     async def get_group(
         self,
         group_id: str | None = None,
-        *,
-        include_members: bool = False,
         **kwargs,
     ) -> Group | None:
-        """Retrieve Misskey chat room information and optionally its members.
+        """Retrieve Misskey chat room information and all room members.
 
         Args:
             group_id: Room ID to query. Defaults to the current room ID.
-            include_members: Whether to fetch all room membership records.
             **kwargs: Reserved for compatibility with the platform event interface.
 
         Returns:
@@ -216,14 +213,6 @@ class MisskeyPlatformEvent(AstrMessageEvent):
             )
             if not isinstance(room, dict):
                 raise TypeError("Misskey room response must be an object")
-
-            owner_id = str(room.get("ownerId") or fallback_group.group_owner or "")
-            if not include_members:
-                return Group(
-                    group_id=room_id,
-                    group_name=room.get("name") or fallback_group.group_name,
-                    group_owner=owner_id or None,
-                )
 
             memberships: list[dict] = []
             until_id = None

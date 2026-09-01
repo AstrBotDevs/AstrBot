@@ -234,18 +234,11 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             await self.send(MessageChain([Plain(buffer)]))
         return await super().send_streaming(generator, use_fallback)
 
-    async def get_group(
-        self,
-        group_id=None,
-        *,
-        include_members: bool = False,
-        **kwargs,
-    ):
+    async def get_group(self, group_id=None, **kwargs):
         """Get OneBot group details while preserving inbound data on failures.
 
         Args:
             group_id: Optional OneBot group identifier.
-            include_members: Whether to fetch the complete group member list.
             **kwargs: Reserved compatibility arguments.
 
         Returns:
@@ -293,9 +286,6 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 resolved_group_id,
                 exc,
             )
-
-        if not include_members:
-            return group
 
         try:
             members = await self.bot.call_action(

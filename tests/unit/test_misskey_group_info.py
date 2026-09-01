@@ -90,7 +90,7 @@ async def test_get_group_paginates_members_and_adds_owner() -> None:
         ],
     )
 
-    group = await adapter.create_event(message).get_group(include_members=True)
+    group = await adapter.create_event(message).get_group()
 
     assert group is not None
     assert group.group_name == "Current room"
@@ -107,40 +107,6 @@ async def test_get_group_paginates_members_and_adds_owner() -> None:
             "limit": 100,
             "untilId": "membership-99",
         },
-    )
-
-
-@pytest.mark.asyncio
-async def test_get_group_skips_misskey_members_by_default() -> None:
-    adapter = make_adapter()
-    message = await adapter.convert_room_message(
-        {
-            "id": "message-1",
-            "text": "hello",
-            "fromUserId": "sender-id",
-            "fromUser": {"id": "sender-id", "username": "sender"},
-            "toRoomId": "room-id",
-            "toRoom": {"name": "Cached room", "ownerId": "owner-id"},
-        },
-    )
-    adapter.api = AsyncMock()
-    adapter.api._make_request = AsyncMock(
-        return_value={
-            "id": "room-id",
-            "name": "Current room",
-            "ownerId": "owner-id",
-        }
-    )
-
-    group = await adapter.create_event(message).get_group()
-
-    assert group is not None
-    assert group.group_name == "Current room"
-    assert group.group_owner == "owner-id"
-    assert group.members is None
-    adapter.api._make_request.assert_awaited_once_with(
-        "chat/rooms/show",
-        {"roomId": "room-id"},
     )
 
 

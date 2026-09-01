@@ -29,38 +29,13 @@ async def test_aiocqhttp_get_group_enriches_inbound_group():
         )
     )
 
-    group = await event.get_group(include_members=True)
+    group = await event.get_group()
 
     assert group.group_name == "Fetched name"
     assert group.group_owner == "1"
     assert group.group_admins == ["2"]
     assert group.member_count == 2
     assert [member.user_id for member in group.members] == ["1", "2"]
-
-
-@pytest.mark.asyncio
-async def test_aiocqhttp_get_group_skips_member_lookup_by_default():
-    event = AiocqhttpMessageEvent.__new__(AiocqhttpMessageEvent)
-    event.message_obj = SimpleNamespace(
-        group=Group(group_id="123", group_name="Inbound name"),
-        group_id="123",
-        self_id="bot-1",
-    )
-    event.bot = SimpleNamespace(
-        call_action=AsyncMock(
-            return_value={"group_name": "Fetched name", "member_count": 2}
-        )
-    )
-
-    group = await event.get_group()
-
-    assert group.group_name == "Fetched name"
-    assert group.member_count == 2
-    assert group.group_admins is None
-    assert group.members is None
-    assert event.bot.call_action.await_args_list == [
-        call("get_group_info", group_id=123, self_id="bot-1")
-    ]
 
 
 @pytest.mark.asyncio
@@ -80,7 +55,7 @@ async def test_aiocqhttp_get_group_keeps_partial_info_when_members_fail():
         )
     )
 
-    group = await event.get_group(include_members=True)
+    group = await event.get_group()
 
     assert group.group_name == "Fetched name"
     assert group.member_count == 8
@@ -104,7 +79,7 @@ async def test_aiocqhttp_get_group_keeps_inbound_info_when_group_info_fails():
         )
     )
 
-    group = await event.get_group(include_members=True)
+    group = await event.get_group()
 
     assert group is event.message_obj.group
     assert group.group_name == "Inbound name"
@@ -139,7 +114,7 @@ async def test_aiocqhttp_get_group_honors_explicit_group_id(
         )
     )
 
-    group = await event.get_group(group_id=group_id, include_members=True)
+    group = await event.get_group(group_id=group_id)
 
     assert group.group_id == str(group_id)
     assert group.group_name == "Explicit group"
