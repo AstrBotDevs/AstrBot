@@ -2,6 +2,7 @@
 
 import asyncio
 from contextlib import suppress
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -100,6 +101,284 @@ class TestEventBusDispatch:
         mock_config_manager.get_conf_info.assert_called_once_with(
             "test-platform:group:123"
         )
+
+    @pytest.mark.asyncio
+    async def test_dispatch_coalesces_auto_name_changes(
+        self,
+        event_queue,
+        mock_pipeline_scheduler,
+        mock_config_manager,
+    ):
+        """Persist only the latest automatic name from a queued event burst."""
+        processed = asyncio.Event()
+        processed_count = 0
+
+        async def execute_and_count(event):  # noqa: ARG001
+            nonlocal processed_count
+            processed_count += 1
+            if processed_count == 3:
+                processed.set()
+
+        mock_pipeline_scheduler.execute.side_effect = execute_and_count
+        db_helper = MagicMock()
+        db_helper.upsert_umo_auto_name = AsyncMock()
+        bus = EventBus(
+            event_queue=event_queue,
+            pipeline_scheduler_mapping={"test-conf-id": mock_pipeline_scheduler},
+            astrbot_config_mgr=mock_config_manager,
+            db_helper=db_helper,
+        )
+
+        for group_name in ("Engineering Group", "Engineering Group", "Renamed"):
+            mock_event = MagicMock()
+            mock_event.unified_msg_origin = "test-platform:GroupMessage:group-1"
+            mock_event.message_obj = SimpleNamespace(
+                group=SimpleNamespace(group_name=group_name)
+            )
+            mock_event.get_group_id.return_value = "group-1"
+            mock_event.get_platform_id.return_value = "test-platform"
+            mock_event.get_platform_name.return_value = "Test Platform"
+            mock_event.get_sender_name.return_value = "Alice"
+            mock_event.get_sender_id.return_value = "sender-1"
+            mock_event.get_message_outline.return_value = "Hello"
+            await event_queue.put(mock_event)
+
+        task = asyncio.create_task(bus.dispatch())
+        try:
+            await asyncio.wait_for(processed.wait(), timeout=1.0)
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+        writer_task = bus._umo_auto_name_writer_task
+        if writer_task is not None:
+            await writer_task
+        assert db_helper.upsert_umo_auto_name.await_count == 1
+        assert [
+            call.kwargs["auto_name"]
+            for call in db_helper.upsert_umo_auto_name.await_args_list
+        ] == ["Renamed"]
+
+    @pytest.mark.asyncio
+    async def test_dispatch_does_not_wait_for_auto_name_database_write(
+        self,
+        event_queue,
+        mock_pipeline_scheduler,
+        mock_config_manager,
+    ):
+        """Start the pipeline while the background alias writer is blocked."""
+        database_started = asyncio.Event()
+        release_database = asyncio.Event()
+        pipeline_started = asyncio.Event()
+
+        async def block_database_write(**kwargs):  # noqa: ARG001
+            database_started.set()
+            await release_database.wait()
+
+        async def execute_and_signal(event):  # noqa: ARG001
+            pipeline_started.set()
+
+        db_helper = MagicMock()
+        db_helper.upsert_umo_auto_name = AsyncMock(side_effect=block_database_write)
+        mock_pipeline_scheduler.execute.side_effect = execute_and_signal
+        bus = EventBus(
+            event_queue=event_queue,
+            pipeline_scheduler_mapping={"test-conf-id": mock_pipeline_scheduler},
+            astrbot_config_mgr=mock_config_manager,
+            db_helper=db_helper,
+        )
+        mock_event = MagicMock()
+        mock_event.unified_msg_origin = "test-platform:GroupMessage:group-1"
+        mock_event.message_obj = SimpleNamespace(
+            group=SimpleNamespace(group_name="Engineering Group")
+        )
+        mock_event.get_group_id.return_value = "group-1"
+        mock_event.get_platform_id.return_value = "test-platform"
+        mock_event.get_platform_name.return_value = "Test Platform"
+        mock_event.get_sender_name.return_value = "Alice"
+        mock_event.get_sender_id.return_value = "sender-1"
+        mock_event.get_message_outline.return_value = "Hello"
+        await event_queue.put(mock_event)
+
+        task = asyncio.create_task(bus.dispatch())
+        try:
+            await asyncio.wait_for(database_started.wait(), timeout=1.0)
+            await asyncio.wait_for(pipeline_started.wait(), timeout=1.0)
+        finally:
+            release_database.set()
+            writer_task = bus._umo_auto_name_writer_task
+            if writer_task is not None:
+                await writer_task
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+    @pytest.mark.asyncio
+    async def test_dispatch_bounds_auto_name_cache(
+        self,
+        event_queue,
+        mock_pipeline_scheduler,
+        mock_config_manager,
+    ):
+        """Evict the least recently used UMO when the cache reaches its bound."""
+        processed = asyncio.Event()
+        processed_count = 0
+
+        async def execute_and_count(event):  # noqa: ARG001
+            nonlocal processed_count
+            processed_count += 1
+            if processed_count == 3:
+                processed.set()
+
+        mock_pipeline_scheduler.execute.side_effect = execute_and_count
+        db_helper = MagicMock()
+        db_helper.upsert_umo_auto_name = AsyncMock()
+        with patch("astrbot.core.event_bus.MAX_UMO_AUTO_NAME_CACHE_SIZE", 2):
+            bus = EventBus(
+                event_queue=event_queue,
+                pipeline_scheduler_mapping={"test-conf-id": mock_pipeline_scheduler},
+                astrbot_config_mgr=mock_config_manager,
+                db_helper=db_helper,
+            )
+
+            for index in range(3):
+                mock_event = MagicMock()
+                mock_event.unified_msg_origin = (
+                    f"test-platform:GroupMessage:group-{index}"
+                )
+                mock_event.message_obj = SimpleNamespace(
+                    group=SimpleNamespace(group_name=f"Group {index}")
+                )
+                mock_event.get_group_id.return_value = f"group-{index}"
+                mock_event.get_platform_id.return_value = "test-platform"
+                mock_event.get_platform_name.return_value = "Test Platform"
+                mock_event.get_sender_name.return_value = "Alice"
+                mock_event.get_sender_id.return_value = "sender-1"
+                mock_event.get_message_outline.return_value = "Hello"
+                await event_queue.put(mock_event)
+
+            task = asyncio.create_task(bus.dispatch())
+            try:
+                await asyncio.wait_for(processed.wait(), timeout=1.0)
+            finally:
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
+
+        assert list(bus._umo_auto_name_cache) == [
+            "test-platform:GroupMessage:group-1",
+            "test-platform:GroupMessage:group-2",
+        ]
+        assert not bus._pending_umo_auto_names
+        assert db_helper.upsert_umo_auto_name.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_auto_name_writer_retries_after_database_failure(
+        self,
+        event_queue,
+        mock_pipeline_scheduler,
+        mock_config_manager,
+    ):
+        """Evict a failed optimistic cache entry so the next event retries."""
+        db_helper = MagicMock()
+        db_helper.upsert_umo_auto_name = AsyncMock(
+            side_effect=[RuntimeError("database unavailable"), None]
+        )
+        bus = EventBus(
+            event_queue=event_queue,
+            pipeline_scheduler_mapping={"test-conf-id": mock_pipeline_scheduler},
+            astrbot_config_mgr=mock_config_manager,
+            db_helper=db_helper,
+        )
+        mock_event = MagicMock()
+        mock_event.unified_msg_origin = "test-platform:GroupMessage:group-1"
+        mock_event.message_obj = SimpleNamespace(
+            group=SimpleNamespace(group_name="Engineering Group")
+        )
+        mock_event.get_group_id.return_value = "group-1"
+        mock_event.get_sender_id.return_value = "sender-1"
+
+        with patch("astrbot.core.event_bus.logger"):
+            bus._schedule_umo_auto_name_recording(mock_event)
+            first_writer = bus._umo_auto_name_writer_task
+            assert first_writer is not None
+            await first_writer
+
+        assert mock_event.unified_msg_origin not in bus._umo_auto_name_cache
+
+        bus._schedule_umo_auto_name_recording(mock_event)
+        second_writer = bus._umo_auto_name_writer_task
+        assert second_writer is not None
+        await second_writer
+
+        assert db_helper.upsert_umo_auto_name.await_count == 2
+        assert (
+            bus._umo_auto_name_cache[mock_event.unified_msg_origin]
+            == "Engineering Group"
+        )
+
+    @pytest.mark.asyncio
+    async def test_dispatch_skips_missing_group_and_sender_names(
+        self,
+        event_queue,
+        mock_pipeline_scheduler,
+        mock_config_manager,
+    ):
+        """Do not persist ID fallbacks as automatic UMO names."""
+        processed = asyncio.Event()
+        processed_count = 0
+
+        async def execute_and_count(event):  # noqa: ARG001
+            nonlocal processed_count
+            processed_count += 1
+            if processed_count == 2:
+                processed.set()
+
+        mock_pipeline_scheduler.execute.side_effect = execute_and_count
+        db_helper = MagicMock()
+        db_helper.upsert_umo_auto_name = AsyncMock()
+        bus = EventBus(
+            event_queue=event_queue,
+            pipeline_scheduler_mapping={"test-conf-id": mock_pipeline_scheduler},
+            astrbot_config_mgr=mock_config_manager,
+            db_helper=db_helper,
+        )
+
+        group_event = MagicMock()
+        group_event.unified_msg_origin = "test-platform:GroupMessage:group-1"
+        group_event.message_obj = SimpleNamespace(
+            group=SimpleNamespace(group_name=None)
+        )
+        group_event.get_group_id.return_value = "group-1"
+        group_event.get_sender_name.return_value = "Alice"
+        group_event.get_sender_id.return_value = "sender-1"
+        group_event.get_platform_id.return_value = "test-platform"
+        group_event.get_platform_name.return_value = "Test Platform"
+        group_event.get_message_outline.return_value = "Hello"
+
+        friend_event = MagicMock()
+        friend_event.unified_msg_origin = "test-platform:FriendMessage:sender-2"
+        friend_event.message_obj = SimpleNamespace(group=None)
+        friend_event.get_group_id.return_value = ""
+        friend_event.get_sender_name.return_value = ""
+        friend_event.get_sender_id.return_value = "sender-2"
+        friend_event.get_platform_id.return_value = "test-platform"
+        friend_event.get_platform_name.return_value = "Test Platform"
+        friend_event.get_message_outline.return_value = "Hello"
+
+        await event_queue.put(group_event)
+        await event_queue.put(friend_event)
+        task = asyncio.create_task(bus.dispatch())
+        try:
+            await asyncio.wait_for(processed.wait(), timeout=1.0)
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+        db_helper.upsert_umo_auto_name.assert_not_awaited()
+        assert not bus._umo_auto_name_cache
 
     @pytest.mark.asyncio
     async def test_dispatch_handles_missing_scheduler(

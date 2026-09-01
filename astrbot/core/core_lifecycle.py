@@ -278,6 +278,7 @@ class AstrBotCoreLifecycle:
             self.event_queue,
             self.pipeline_scheduler_mapping,
             self.astrbot_config_mgr,
+            self.db,
         )
 
         # 记录启动时间
