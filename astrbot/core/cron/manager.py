@@ -458,10 +458,12 @@ class CronJobManager:
             cron_job=cron_job_str
         )
         req.prompt = (
-            "You are now responding to a scheduled task. "
-            "Proceed according to your system instructions. "
+            "You are now executing a scheduled task. "
+            "You MUST call `send_message_to_user` exactly once to deliver the "
+            "user-facing result, even when the task only requires a text reminder. "
+            "Do not return the reminder as a normal assistant response. "
+            "Do not summarize your actions or results. "
             "Output using same language as previous conversation. "
-            "After completing your task, summarize and output your actions and results."
         )
         if delivery_session_str:
             if not req.func_tool:
@@ -482,30 +484,45 @@ class CronJobManager:
             # agent will send message to user via using tools
             pass
         llm_resp = runner.get_final_llm_resp()
-        if (
-            delivery_session_str
-            and llm_resp
-            and llm_resp.role == "assistant"
-            and llm_resp.completion_text
-            and not cron_event._has_send_oper
-        ):
-            logger.warning(
-                "Cron job agent did not call send_message_to_user; "
-                "sending an error notice to %s.",
-                delivery_session_str,
+        delivery_error = None
+        if delivery_session_str and not cron_event._has_send_oper:
+            completion_text = (
+                llm_resp.completion_text.strip()
+                if llm_resp
+                and llm_resp.role == "assistant"
+                and isinstance(llm_resp.completion_text, str)
+                else ""
             )
-            await cron_event.send(
-                MessageChain().message(
-                    "Scheduled task failed: the model did not send the requested "
-                    "message. Please retry later or check the model configuration."
+            # ponytail: Keep fallback below common 4096-character platform limits;
+            # use platform-aware limits if richer fallback delivery is needed.
+            if completion_text and len(completion_text) <= 4000:
+                logger.warning(
+                    "Cron job agent skipped send_message_to_user; "
+                    "delivering its generated response to %s.",
+                    delivery_session_str,
                 )
-            )
+                await cron_event.send(MessageChain().message(completion_text))
+            else:
+                delivery_error = "Cron job agent did not send a usable response."
+                logger.warning(
+                    "%s Sending an error notice to %s.",
+                    delivery_error,
+                    delivery_session_str,
+                )
+                await cron_event.send(
+                    MessageChain().message(
+                        "Scheduled task failed: the model did not send the requested "
+                        "message. Please retry later or check the model configuration."
+                    )
+                )
         cron_meta = extras.get("cron_job", {}) if extras else {}
         summary_note = (
             f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
             f" triggered at {cron_meta.get('run_started_at', 'unknown time')}, "
         )
-        if llm_resp and llm_resp.role == "assistant":
+        if delivery_error:
+            summary_note += delivery_error
+        elif llm_resp and llm_resp.role == "assistant":
             summary_note += (
                 f"I finished this job, here is the result: {llm_resp.completion_text}"
             )
@@ -516,6 +533,8 @@ class CronJobManager:
             req=req,
             summary_note=summary_note,
         )
+        if delivery_error:
+            raise RuntimeError(delivery_error)
         if not llm_resp:
             logger.warning("Cron job agent got no response")
             return

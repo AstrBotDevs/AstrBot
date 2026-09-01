@@ -1,6 +1,7 @@
 """Tests for CronJobManager."""
 
 import json
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo
@@ -657,19 +658,33 @@ class TestRunActiveAgentJob:
         assert "old question" not in request.system_prompt
         assert "old answer" not in request.system_prompt
         assert request.contexts == history
+        assert "MUST call `send_message_to_user` exactly once" in request.prompt
+        assert "Do not summarize" in request.prompt
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        ("already_sent", "expected_calls"),
-        [(False, 1), (True, 0)],
+        ("completion_text", "already_sent", "expected_text", "should_fail"),
+        [
+            ("Scheduled reminder", False, "Scheduled reminder", False),
+            ("Scheduled reminder", True, None, False),
+            (
+                "x" * 4001,
+                False,
+                "Scheduled task failed: the model did not send the requested "
+                "message. Please retry later or check the model configuration.",
+                True,
+            ),
+        ],
     )
     async def test_woke_main_agent_fallback_delivery(
         self,
         cron_manager,
+        completion_text,
         already_sent,
-        expected_calls,
+        expected_text,
+        should_fail,
     ):
-        """Deliver only when the agent skips the message tool."""
+        """Deliver only safe fallback text when the agent skips the tool."""
         ctx = MagicMock()
         ctx.get_config.return_value = {
             "admins_id": [],
@@ -679,7 +694,7 @@ class TestRunActiveAgentJob:
 
         conv = MagicMock()
         conv.history = "[]"
-        response = MagicMock(role="assistant", completion_text="Scheduled reminder")
+        response = MagicMock(role="assistant", completion_text=completion_text)
 
         class FakeRunner:
             def step_until_done(self, max_step):
@@ -714,19 +729,22 @@ class TestRunActiveAgentJob:
                 AsyncMock(),
             ) as send,
         ):
-            await cron_manager._woke_main_agent(
-                message="run scheduled task",
-                session_str="test:FriendMessage:user123",
-                delivery_session_str="test:FriendMessage:user123",
-                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+            error_context = (
+                pytest.raises(RuntimeError, match="did not send a usable response")
+                if should_fail
+                else nullcontext()
             )
+            with error_context:
+                await cron_manager._woke_main_agent(
+                    message="run scheduled task",
+                    session_str="test:FriendMessage:user123",
+                    delivery_session_str="test:FriendMessage:user123",
+                    extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+                )
 
-        assert send.await_count == expected_calls
-        if expected_calls:
-            assert send.await_args.args[0].get_plain_text() == (
-                "Scheduled task failed: the model did not send the requested message. "
-                "Please retry later or check the model configuration."
-            )
+        assert send.await_count == (1 if expected_text else 0)
+        if expected_text:
+            assert send.await_args.args[0].get_plain_text() == expected_text
 
 
 class TestGetNextRunTime:
