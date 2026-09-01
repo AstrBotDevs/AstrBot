@@ -42,6 +42,73 @@
     "notification": "通知设置",
     "moreConfig": "更多配置"
   },
+  "aiSettings": {
+    "title": "AI",
+    "enable": "启用 AI",
+    "more": "更多操作",
+    "changeRunner": "更换执行方式",
+    "localSettingsTitle": "AstrBot 内置 AI",
+    "settingsSuffix": "设置",
+    "tabs": {
+      "model": "模型",
+      "persona": "人格",
+      "capabilities": "能力",
+      "advanced": "高级"
+    },
+    "groups": {
+      "model": "模型",
+      "modelHint": "选择内置 AI 使用的对话模型和失败重试策略。",
+      "execution": "执行设置",
+      "executionHint": "配置工具调用循环和执行过程。",
+      "media": "图像与语音",
+      "mediaHint": "配置图片理解、语音识别和语音合成。",
+      "behavior": "消息处理",
+      "behaviorHint": "这些设置适用于当前配置文件中的所有执行方式。"
+    },
+    "common": {
+      "title": "通用设置",
+      "subtitle": "这些设置不随执行方式切换。"
+    },
+    "disabled": {
+      "title": "AI 已停用",
+      "subtitle": "启用后才会处理需要模型参与的消息。"
+    },
+    "runnerDialog": {
+      "title": "更换执行方式",
+      "subtitle": "只有在接入外部 AI 应用时才需要更改。大多数用户使用内置 AI 即可。",
+      "warningPrefix": "切换后会使用新执行方式的默认配置，当前执行方式的配置",
+      "warningEmphasis": "不会保留",
+      "warningSuffix": "。",
+      "confirm": "使用此方式"
+    },
+    "runners": {
+      "local": {
+        "title": "内置 AI",
+        "summary": "配置 AstrBot 的 AI 能力，包括模型、人格、知识库和工具。",
+        "description": "使用 AstrBot 内置 AI，支持模型、人格、知识库和工具能力。"
+      },
+      "dify": {
+        "title": "Dify",
+        "summary": "当前由 Dify 应用处理 AI 对话。",
+        "description": "连接 Dify 应用并配置它的访问参数。"
+      },
+      "coze": {
+        "title": "Coze",
+        "summary": "当前由 Coze Bot 处理 AI 对话。",
+        "description": "连接 Coze Bot 并配置它的访问参数。"
+      },
+      "dashscope": {
+        "title": "阿里云百炼",
+        "summary": "当前由阿里云百炼应用处理 AI 对话。",
+        "description": "连接阿里云百炼应用并配置它的访问参数。"
+      },
+      "deerflow": {
+        "title": "DeerFlow",
+        "summary": "当前由 DeerFlow 处理 AI 对话。",
+        "description": "连接 DeerFlow 服务并配置它的运行参数。"
+      }
+    }
+  },
   "general": {
     "botName": "机器人名称",
     "language": "界面语言",
@@ -64,6 +131,9 @@
   },
   "configSelection": {
     "selectConfig": "选择配置文件",
+    "defaultConfig": "默认配置文件",
+    "search": "搜索配置文件",
+    "noResults": "没有匹配的配置文件",
     "normalConfig": "普通",
     "systemConfig": "系统"
   },
@@ -73,7 +143,7 @@
   },
   "configManagement": {
     "title": "配置文件管理",
-    "description": "AstrBot 支持针对不同机器人分别设置配置文件。默认会使用 `default` 配置。",
+    "description": "AstrBot 支持针对不同机器人分别设置配置文件。未指定时使用默认配置文件。",
     "newConfig": "新建配置文件",
     "copyConfig": "复制配置文件",
     "editConfig": "编辑配置文件",

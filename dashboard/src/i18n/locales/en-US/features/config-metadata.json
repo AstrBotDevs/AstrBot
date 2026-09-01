@@ -209,15 +209,15 @@
         "config": {
           "model": {
             "provider_id": {
-              "description": "Default Chat Model",
+              "description": "Chat Model",
               "hint": "Uses the first model when left empty"
             },
             "fallback_provider_ids": {
-              "description": "Fallback Chat Model IDs",
+              "description": "Fallback Chat Models",
               "hint": "Try these chat models in order when the primary model request fails."
             },
             "request_max_retries": {
-              "description": "Request Max Retries",
+              "description": "Retries on Error",
               "hint": "Maximum attempts for a single model request when retryable errors occur."
             }
           }
@@ -225,7 +225,7 @@
       },
       "provider_settings": {
         "default_image_caption_provider_id": {
-          "description": "Default Image Caption Model",
+          "description": "Image Caption Model",
           "hint": "Leave empty to disable; useful for non-multimodal models"
         },
         "image_caption_prompt": {
@@ -234,8 +234,8 @@
       },
       "provider_stt_settings": {
         "enable": {
-          "description": "Enable Speech-to-Text",
-          "hint": "Master switch for STT"
+          "description": "Speech Recognition",
+          "hint": "Use a speech-to-text model to transcribe user voice messages into text for the model to understand."
         },
         "provider_id": {
           "description": "Default Speech-to-Text Model",
@@ -244,8 +244,8 @@
       },
       "provider_tts_settings": {
         "enable": {
-          "description": "Enable Text-to-Speech",
-          "hint": "Master switch for TTS"
+          "description": "Voice Replies",
+          "hint": "Use a text-to-speech model to turn text into voice replies."
         },
         "provider_id": {
           "description": "Default Text-to-Speech Model"
@@ -467,11 +467,11 @@
           "hint": "When enabled, current time information will be appended to the system prompt."
         },
         "show_tool_use_status": {
-          "description": "Output Function Call Status"
+          "description": "Show Tool Call Information"
         },
         "show_tool_call_result": {
           "description": "Output Tool Call Results",
-          "hint": "Only takes effect when \"Output Function Call Status\" is enabled, and shows at most 70 characters."
+          "hint": "Only takes effect when \"Show Tool Call Information\" is enabled, and shows at most 70 characters."
         },
         "buffer_intermediate_messages": {
           "description": "Merge Agent Intermediate Messages",

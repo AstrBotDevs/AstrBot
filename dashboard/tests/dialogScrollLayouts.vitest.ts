@@ -144,8 +144,10 @@ describe('shared dialog scroll layouts', () => {
       data: {
         status: 'ok',
         data: {
-          content: Array.from({ length: 30 }, (_, index) => `Release note ${index}`)
-            .join('\n\n'),
+          content: Array.from(
+            { length: 30 },
+            (_, index) => `Release note ${index}`,
+          ).join('\n\n'),
         },
       },
     });
@@ -161,7 +163,9 @@ describe('shared dialog scroll layouts', () => {
     await wrapper.find('button').trigger('click');
     await flushPromises();
 
-    expect(document.body.querySelector('.selector-dialog__card')).not.toBeNull();
+    expect(
+      document.body.querySelector('.selector-dialog__card'),
+    ).not.toBeNull();
     expect(
       document.body.querySelector('.selector-dialog__content'),
     ).not.toBeNull();
@@ -180,12 +184,9 @@ describe('shared dialog scroll layouts', () => {
     await wrapper.find('button').trigger('click');
     await flushPromises();
 
-    expect(
-      document.body.querySelector('.provider-selector-dialog__card'),
-    ).not.toBeNull();
-    expect(
-      document.body.querySelector('.provider-selector-dialog__content'),
-    ).not.toBeNull();
+    expect(wrapper.find('.provider-select-menu').exists()).toBe(true);
+    expect(document.body.querySelector('.provider-menu-card')).not.toBeNull();
+    expect(document.body.querySelector('.provider-menu-body')).not.toBeNull();
 
     wrapper.unmount();
   });

@@ -203,15 +203,15 @@
         "config": {
           "model": {
             "provider_id": {
-              "description": "默认对话模型",
+              "description": "对话模型",
               "hint": "留空时使用第一个模型"
             },
             "fallback_provider_ids": {
-              "description": "回退对话模型列表",
+              "description": "回退对话模型",
               "hint": "主对话模型请求失败时，按顺序切换到这些对话模型。"
             },
             "request_max_retries": {
-              "description": "请求最大重试次数",
+              "description": "异常重试次数",
               "hint": "单次模型请求遇到可重试错误时的最大尝试次数。"
             }
           }
@@ -219,7 +219,7 @@
       },
       "provider_settings": {
         "default_image_caption_provider_id": {
-          "description": "默认图片转述模型",
+          "description": "图片转述模型",
           "hint": "留空代表不使用,可用于非多模态模型"
         },
         "image_caption_prompt": {
@@ -228,8 +228,8 @@
       },
       "provider_stt_settings": {
         "enable": {
-          "description": "启用语音转文本",
-          "hint": "STT 总开关"
+          "description": "语音识别",
+          "hint": "使用语音转文字模型将用户语音转述为文本，方便模型理解。"
         },
         "provider_id": {
           "description": "默认语音转文本模型",
@@ -238,8 +238,8 @@
       },
       "provider_tts_settings": {
         "enable": {
-          "description": "启用文本转语音",
-          "hint": "TTS 总开关"
+          "description": "语音回复",
+          "hint": "使用文字转语音模型将文字转为语音回复。"
         },
         "provider_id": {
           "description": "默认文本转语音模型"
@@ -461,11 +461,11 @@
           "hint": "启用后,会在系统提示词中附带当前时间信息。"
         },
         "show_tool_use_status": {
-          "description": "输出函数调用状态"
+          "description": "输出工具调用信息"
         },
         "show_tool_call_result": {
-          "description": "输出函数调用返回结果",
-          "hint": "仅在启用“输出函数调用状态”时生效，且最多展示 70 个字符。"
+          "description": "输出工具调用结果",
+          "hint": "仅在启用“输出工具调用信息”时生效，且最多展示 70 个字符。"
         },
         "buffer_intermediate_messages": {
           "description": "合并 Agent 中间消息",
@@ -1235,7 +1235,7 @@
         },
         "image_caption_provider_id": {
           "description": "群聊图片转述模型",
-          "hint": "用于群聊上下文感知的图片理解，与默认图片转述模型分开配置。"
+          "hint": "用于群聊上下文感知的图片理解，与图片转述模型分开配置。"
         },
         "image_caption_scope": {
           "description": "群聊图片转述范围",

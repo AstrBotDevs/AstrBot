@@ -14,6 +14,12 @@
     "chunkCount": "{count} 个块"
   },
   "pluginSetSelector": {
+    "title": "插件",
+    "subtitle": "选择当前配置文件可以使用的插件。",
+    "preset": "预置",
+    "searchPlaceholder": "搜索插件",
+    "selectAll": "全选",
+    "noSearchResults": "没有匹配的插件",
     "notSelected": "未启用任何插件",
     "allPlugins": "启用所有插件 (*)",
     "selectedCount": "已选择 {count} 个插件",
@@ -34,6 +40,9 @@
   },
   "providerSelector": {
     "notSelected": "未选择",
+    "defaultModel": "默认模型",
+    "model": "模型",
+    "searchPlaceholder": "搜索模型",
     "buttonText": "选择提供商...",
     "dialogTitle": "选择提供商",
     "loading": "加载中...",
@@ -46,6 +55,7 @@
     "createProvider": "创建提供商",
     "manageProviders": "提供商管理",
     "selectProviderPool": "选择提供商池...",
+    "selectedModelCount": "已选择 {count} 个模型",
     "selectedCount": "已选择 {count} 个提供商"
   },
   "personaSelector": {

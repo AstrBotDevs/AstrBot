@@ -38,8 +38,16 @@ withDefaults(
 .styled-menu-card {
   min-width: 100px;
   width: fit-content;
-  border: 1px solid rgb(var(--v-theme-outline-variant));
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.09);
   background: rgb(var(--v-theme-surface));
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.07);
+}
+
+.v-overlay.v-menu
+  .v-overlay__content
+  > .styled-menu-card:not(.styled-menu-card-borderless) {
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.09) !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.07) !important;
 }
 
 .styled-menu-card-borderless {

@@ -2,36 +2,54 @@
   <div class="config-page-root">
     <div class="config-page__content">
       <div v-if="selectedConfigID || isSystemConfig" class="mt-4 config-panel">
-        <div class="config-toolbar">
+        <div
+          class="config-toolbar"
+          :class="{ 'config-toolbar--searching': configSearchExpanded }"
+        >
           <div class="config-toolbar-controls">
-            <v-select
+            <ConfigProfileMenu
               v-if="!isSystemConfig"
-              class="config-select"
-              :model-value="selectedConfigID"
-              :items="configSelectItems"
-              item-title="name"
+              :model-value="selectedConfigID || ''"
+              :items="configInfoList"
               :disabled="initialConfigId !== null"
-              item-value="id"
-              :label="tm('configSelection.selectConfig')"
-              hide-details
-              density="compact"
-              rounded="md"
-              variant="outlined"
-              @update:model-value="onConfigSelect"
-            >
-            </v-select>
-            <v-text-field
-              class="config-search-input"
-              :model-value="configSearchKeyword"
-              prepend-inner-icon="mdi-magnify"
-              :label="tm('search.placeholder')"
-              clearable
-              hide-details
-              density="compact"
-              rounded="md"
-              variant="outlined"
-              @update:model-value="onConfigSearchInput"
+              @select="onConfigSelect"
+              @manage="configManageDialog = true"
             />
+          </div>
+          <div class="config-toolbar-actions">
+            <div
+              class="config-search-control"
+              :class="{
+                'config-search-control--expanded': configSearchExpanded,
+              }"
+            >
+              <v-text-field
+                v-show="configSearchExpanded"
+                ref="configSearchInput"
+                class="config-search-input"
+                :model-value="configSearchKeyword"
+                prepend-inner-icon="mdi-magnify"
+                append-inner-icon="mdi-close"
+                :placeholder="tm('search.placeholder')"
+                :aria-label="tm('search.placeholder')"
+                hide-details
+                density="compact"
+                rounded="md"
+                variant="outlined"
+                @update:model-value="onConfigSearchInput"
+                @keydown.esc.prevent="closeConfigSearch"
+                @click:append-inner="closeConfigSearch"
+              />
+              <v-btn
+                v-show="!configSearchExpanded"
+                icon="mdi-magnify"
+                size="small"
+                variant="text"
+                :aria-label="tm('search.placeholder')"
+                :title="tm('search.placeholder')"
+                @click="openConfigSearch"
+              />
+            </div>
           </div>
         </div>
         <v-slide-y-transition>
@@ -190,7 +208,7 @@
             <v-list-item
               v-for="config in configInfoList"
               :key="config.id"
-              :title="config.name"
+              :title="configDisplayName(config)"
             >
               <template #append>
                 <div class="inline-control-row">
@@ -295,7 +313,7 @@
               v-if="selectedConfigInfo.name"
               class="text-caption text-medium-emphasis"
             >
-              {{ selectedConfigInfo.name }} ({{ testConfigId }})
+              {{ configDisplayName(selectedConfigInfo) }} ({{ testConfigId }})
             </div>
           </div>
           <v-btn
@@ -339,6 +357,7 @@ import {
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import { configProfileApi, systemConfigApi, type OpenConfig } from '@/api/v1';
 import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
+import ConfigProfileMenu from '@/components/config/ConfigProfileMenu.vue';
 import StandaloneChat from '@/components/chat/StandaloneChat.vue';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import '@/utils/monacoLoader';
@@ -445,6 +464,8 @@ const configSavePendingPostData = ref<ConfigPostData | null>(null);
 const configSavePendingHeaders = ref<Record<string, string>>({});
 const configType = ref<ConfigType>('normal');
 const configSearchKeyword = ref('');
+const configSearchExpanded = ref(false);
+const configSearchInput = ref<{ focus?: () => void } | null>(null);
 const isSystemConfig = ref(false);
 const selectedConfigID = ref<string | null>(null);
 const currentConfigId = ref<string | null>(null);
@@ -487,17 +508,6 @@ const configFormTitle = computed(() => {
 const isConfigFormSaveDisabled = computed(() => {
   const isNameEmpty = !normalizeConfigName(configFormData.value.name);
   return isNameEmpty || (isCopyingConfig.value && !copySourceConfigId.value);
-});
-
-const configSelectItems = computed<ConfigInfoItem[]>(() => {
-  return [
-    ...configInfoList.value,
-    {
-      id: '_%manage%_',
-      name: tm('configManagement.manageConfigs'),
-      umop: [],
-    },
-  ];
 });
 
 const hasUnsavedChanges = computed(() => {
@@ -694,6 +704,27 @@ function handleLocaleChange() {
 
 function onConfigSearchInput(value: unknown) {
   configSearchKeyword.value = normalizeTextInput(value);
+}
+
+function openConfigSearch() {
+  configSearchExpanded.value = true;
+  void nextTick(() => {
+    configSearchInput.value?.focus?.();
+  });
+}
+
+function closeConfigSearch() {
+  configSearchKeyword.value = '';
+  configSearchExpanded.value = false;
+}
+
+function configDisplayName(
+  config: ConfigInfoItem | { id?: string; name?: string },
+) {
+  if (config?.id === 'default') {
+    return tm('configSelection.defaultConfig');
+  }
+  return config?.name || config?.id || '';
 }
 
 async function getConfigInfoList(targetConfigId?: string | null) {
@@ -1197,21 +1228,39 @@ function closeTestChat() {
   width: 100%;
   gap: var(--astrbot-space-3);
   margin-bottom: var(--astrbot-space-4);
-  padding-right: var(--astrbot-space-4);
 }
 
 .config-toolbar-controls {
   display: flex;
   align-items: center;
-  gap: var(--astrbot-space-3);
+  min-width: 0;
 }
 
-.config-select {
-  min-width: 130px;
+.config-toolbar-actions {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.config-search-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 36px;
+  min-width: 36px;
+  overflow: hidden;
+  transition: width 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.config-search-control--expanded {
+  width: min(320px, 42vw);
 }
 
 .config-search-input {
-  min-width: 280px;
+  width: 100%;
+  min-width: 0;
 }
 
 .config-content {
@@ -1274,11 +1323,14 @@ function closeTestChat() {
   }
 
   .config-toolbar-controls {
-    width: 100%;
-    flex-wrap: wrap;
+    flex: 1;
+    width: auto;
   }
 
-  .config-select,
+  .config-toolbar--searching .config-toolbar-controls {
+    display: none;
+  }
+
   .config-search-input {
     width: 100%;
     min-width: 0;
