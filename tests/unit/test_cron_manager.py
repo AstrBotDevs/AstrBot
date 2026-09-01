@@ -1,5 +1,6 @@
 """Tests for CronJobManager."""
 
+import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo
@@ -585,8 +586,10 @@ class TestRunActiveAgentJob:
     """Tests for active agent cron job execution."""
 
     @pytest.mark.asyncio
-    async def test_woke_main_agent_passes_provider_settings(self, cron_manager):
-        """Test active cron agent keeps fallback chat model settings."""
+    async def test_woke_main_agent_passes_history_and_provider_settings(
+        self, cron_manager
+    ):
+        """Test active cron agent keeps structured history and provider settings."""
         provider_settings = {
             "tool_call_timeout": 77,
             "fallback_chat_models": ["fallback-provider"],
@@ -598,8 +601,12 @@ class TestRunActiveAgentJob:
         }
         cron_manager.ctx = ctx
 
+        history = [
+            {"role": "user", "content": "old question"},
+            {"role": "assistant", "content": "old answer"},
+        ]
         conv = MagicMock()
-        conv.history = "[]"
+        conv.history = json.dumps(history)
 
         class FakeRunner:
             def step_until_done(self, max_step):
@@ -616,6 +623,7 @@ class TestRunActiveAgentJob:
 
         async def fake_build_main_agent(*, event, plugin_context, config, req):
             captured["config"] = config
+            captured["req"] = req
             return MagicMock(agent_runner=FakeRunner())
 
         async def fake_persist_agent_history(*args, **kwargs):
@@ -645,6 +653,10 @@ class TestRunActiveAgentJob:
         assert config.tool_call_timeout == 77
         assert config.provider_settings is provider_settings
         assert config.provider_settings["fallback_chat_models"] == ["fallback-provider"]
+        request = captured["req"]
+        assert "old question" not in request.system_prompt
+        assert "old answer" not in request.system_prompt
+        assert request.contexts == history
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -711,7 +723,10 @@ class TestRunActiveAgentJob:
 
         assert send.await_count == expected_calls
         if expected_calls:
-            assert send.await_args.args[0].get_plain_text() == "Scheduled reminder"
+            assert send.await_args.args[0].get_plain_text() == (
+                "Scheduled task failed: the model did not send the requested message. "
+                "Please retry later or check the model configuration."
+            )
 
 
 class TestGetNextRunTime:

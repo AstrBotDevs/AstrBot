@@ -452,18 +452,7 @@ class CronJobManager:
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
         req.conversation = conv
-        # finetine the messages
-        context = json.loads(conv.history)
-        if context:
-            req.contexts = context
-            context_dump = req._print_friendly_context()
-            req.contexts = []
-            req.system_prompt += (
-                "\n\nBellow is you and user previous conversation history:\n"
-                f"---\n"
-                f"{context_dump}\n"
-                f"---\n"
-            )
+        req.contexts = json.loads(conv.history)
         cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
         req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
             cron_job=cron_job_str
@@ -502,10 +491,15 @@ class CronJobManager:
         ):
             logger.warning(
                 "Cron job agent did not call send_message_to_user; "
-                "delivering its final response to %s as a fallback.",
+                "sending an error notice to %s.",
                 delivery_session_str,
             )
-            await cron_event.send(MessageChain().message(llm_resp.completion_text))
+            await cron_event.send(
+                MessageChain().message(
+                    "Scheduled task failed: the model did not send the requested "
+                    "message. Please retry later or check the model configuration."
+                )
+            )
         cron_meta = extras.get("cron_job", {}) if extras else {}
         summary_note = (
             f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
