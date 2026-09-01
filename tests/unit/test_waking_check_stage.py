@@ -106,8 +106,6 @@ async def make_stage(**settings):
     platform_settings.update(settings)
     if extra_llm:
         llm_access.update(extra_llm)
-    if platform_settings.pop("friend_message_needs_wake_prefix", False):
-        llm_access["private"] = "prefix"
     config = {
         "command_prefixes": ["/"],
         "plugin_set": ["*"],
@@ -240,12 +238,12 @@ def make_command_handler(name: str, handler, *extra_filters):
     [
         ({}, FakeEvent([Plain("hello")], private=True), True),
         (
-            {"friend_message_needs_wake_prefix": True},
+            {"llm_access": {"private": "prefix"}},
             FakeEvent([Plain("hello")], private=True),
             False,
         ),
         (
-            {"friend_message_needs_wake_prefix": True},
+            {"llm_access": {"private": "prefix"}},
             FakeEvent([Plain("/hello")], private=True, message_text="/hello"),
             True,
         ),

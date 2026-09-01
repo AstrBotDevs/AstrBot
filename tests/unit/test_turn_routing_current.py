@@ -55,11 +55,11 @@ def _chat_group_handlers() -> tuple[StarHandlerMetadata, StarHandlerMetadata]:
     ("settings", "text", "expected_wake"),
     [
         ({}, "今天天气", True),
-        ({"friend_message_needs_wake_prefix": True}, "今天天气", False),
-        ({"friend_message_needs_wake_prefix": True}, "/今天天气", True),
+        ({"llm_access": {"private": "prefix"}}, "今天天气", False),
+        ({"llm_access": {"private": "prefix"}}, "/今天天气", True),
     ],
 )
-async def test_private_wake_prefix_matrix(settings, text, expected_wake):
+async def test_private_llm_access_prefix_matrix(settings, text, expected_wake):
     stage = await make_stage(**settings)
     event = FakeEvent([Plain(text)], private=True, message_text=text)
 
@@ -91,7 +91,7 @@ async def test_private_extra_token_chat_leaves_slash_and_bare_forms():
 @pytest.mark.asyncio
 async def test_extra_token_chat_matches_slash_and_bare_after_first_gate(monkeypatch):
     stage = agent_request.AgentRequestSubStage()
-    ctx = agent_request_ctx(wake_prefix="chat")
+    ctx = agent_request_ctx()
     await stage.initialize(ctx)
     stage.agent_sub_stage.responses = ["done"]
     monkeypatch.setattr(

@@ -31,10 +31,15 @@ async def test_napcat_private_notice_events_do_not_auto_wake_pipeline(monkeypatc
     await stage.initialize(
         SimpleNamespace(
             astrbot_config={
-                "wake_prefix": ["/"],
+                "command_prefixes": ["/"],
+                "llm_access": {
+                    "prefixes": ["/"],
+                    "private": "open",
+                    "group": "prefix",
+                    "reply_to_bot": False,
+                },
                 "platform_settings": {
                     "no_permission_reply": True,
-                    "friend_message_needs_wake_prefix": False,
                     "ignore_bot_self_message": False,
                     "ignore_at_all": False,
                     "unique_session": False,
@@ -147,10 +152,15 @@ async def test_napcat_group_notice_keeps_group_session_when_unique_session_enabl
     await stage.initialize(
         SimpleNamespace(
             astrbot_config={
-                "wake_prefix": ["/"],
+                "command_prefixes": ["/"],
+                "llm_access": {
+                    "prefixes": ["/"],
+                    "private": "open",
+                    "group": "prefix",
+                    "reply_to_bot": False,
+                },
                 "platform_settings": {
                     "no_permission_reply": True,
-                    "friend_message_needs_wake_prefix": False,
                     "ignore_bot_self_message": False,
                     "ignore_at_all": False,
                     "unique_session": True,
@@ -192,10 +202,15 @@ async def test_napcat_group_message_route_identity_keeps_original_group_target_a
     await stage.initialize(
         SimpleNamespace(
             astrbot_config={
-                "wake_prefix": ["/"],
+                "command_prefixes": ["/"],
+                "llm_access": {
+                    "prefixes": ["/"],
+                    "private": "open",
+                    "group": "prefix",
+                    "reply_to_bot": False,
+                },
                 "platform_settings": {
                     "no_permission_reply": True,
-                    "friend_message_needs_wake_prefix": False,
                     "ignore_bot_self_message": False,
                     "ignore_at_all": False,
                     "unique_session": True,

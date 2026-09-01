@@ -142,7 +142,6 @@ def _ctx(
     *,
     agent_runner_type: str = "local",
     provider_enable: bool = True,
-    wake_prefix: str = "/bot ask",
 ):
     return SimpleNamespace(
         preferences=SimpleNamespace(
@@ -150,10 +149,15 @@ def _ctx(
             put_async=AsyncMock(),
         ),
         astrbot_config={
-            "wake_prefix": ["/bot ", "!"],
+            "command_prefixes": ["/"],
+            "llm_access": {
+                "prefixes": ["/"],
+                "private": "open",
+                "group": "prefix",
+                "reply_to_bot": False,
+            },
             "provider_settings": {
                 "enable": provider_enable,
-                "wake_prefix": wake_prefix,
                 "streaming_response": False,
                 "unsupported_streaming_strategy": "turn_off",
             },
@@ -166,9 +170,9 @@ def _ctx(
 
 
 @pytest.mark.asyncio
-async def test_initialize_uses_internal_stage_and_strips_overlapping_wake_prefix():
+async def test_initialize_uses_internal_stage_for_local_runner():
     stage = agent_request.AgentRequestSubStage()
-    ctx = _ctx(agent_runner_type="local", wake_prefix="/bot ask")
+    ctx = _ctx(agent_runner_type="local")
 
     await stage.initialize(ctx)
 
@@ -179,7 +183,7 @@ async def test_initialize_uses_internal_stage_and_strips_overlapping_wake_prefix
 @pytest.mark.asyncio
 async def test_initialize_uses_third_party_stage_for_non_local_runner():
     stage = agent_request.AgentRequestSubStage()
-    ctx = _ctx(agent_runner_type="dify", wake_prefix="!llm")
+    ctx = _ctx(agent_runner_type="dify")
 
     await stage.initialize(ctx)
 
@@ -243,7 +247,7 @@ async def test_process_forwards_event_to_selected_substage(
     monkeypatch,
 ):
     stage = agent_request.AgentRequestSubStage()
-    ctx = _ctx(wake_prefix="/bot ask")
+    ctx = _ctx()
     await stage.initialize(ctx)
     stage.agent_sub_stage.responses = ["umo-ok:ask", "done"]
 

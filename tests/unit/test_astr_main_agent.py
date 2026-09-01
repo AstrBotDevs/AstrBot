@@ -1692,10 +1692,10 @@ class TestBuildMainAgent:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_build_main_agent_with_wake_prefix(
+    async def test_build_main_agent_with_command_prefixed_message(
         self, mock_event, mock_context, mock_provider
     ):
-        """Test building main agent with wake prefix."""
+        """Building the main agent still succeeds for a command-prefixed message."""
         module = ama
         mock_event.message_str = "/command"
         mock_context.get_provider_by_id.return_value = None
@@ -1722,7 +1722,7 @@ class TestBuildMainAgent:
         assert result is not None
 
     @pytest.mark.asyncio
-    async def test_build_main_agent_no_wake_prefix(
+    async def test_build_main_agent_without_command_prefix(
         self, mock_event, mock_context, mock_provider
     ):
         """Routing owns LLM access; a missing extra prefix no longer blocks build."""
