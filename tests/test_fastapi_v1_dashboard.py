@@ -3005,6 +3005,76 @@ def test_astrbot_web_request_requires_plugin_context():
         _ = plugin_request.method
 
 
+@pytest.mark.asyncio
+async def test_v1_plugin_extension_rejects_disabled_plugin(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    from astrbot.api.web import json_response
+
+    async def plugin_owned_extension():
+        return json_response({"ok": True})
+
+    plugin_owned_extension.__module__ = "data.plugins.demo_plugin.main"
+
+    disabled_plugin = SimpleNamespace(
+        name="astrbot_plugin_demo",
+        root_dir_name="demo_plugin",
+        reserved=False,
+        activated=False,
+    )
+    fake_core_lifecycle.plugin_manager.context.get_all_stars = lambda: [disabled_plugin]
+    fake_core_lifecycle.star_context.registered_web_apis = [
+        ("/demo_plugin/status", plugin_owned_extension, ["GET"], "demo")
+    ]
+
+    response = await asgi_client.get(
+        "/api/v1/plugins/extensions/demo_plugin/status",
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "error",
+        "message": "插件未启用",
+        "data": {},
+    }
+
+
+@pytest.mark.asyncio
+async def test_v1_plugin_extension_allows_activated_plugin(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    from astrbot.api.web import json_response
+
+    async def plugin_owned_extension():
+        return json_response({"ok": True})
+
+    plugin_owned_extension.__module__ = "data.plugins.demo_plugin.main"
+
+    activated_plugin = SimpleNamespace(
+        name="astrbot_plugin_demo",
+        root_dir_name="demo_plugin",
+        reserved=False,
+        activated=True,
+    )
+    fake_core_lifecycle.plugin_manager.context.get_all_stars = lambda: [
+        activated_plugin
+    ]
+    fake_core_lifecycle.star_context.registered_web_apis = [
+        ("/demo_plugin/status", plugin_owned_extension, ["GET"], "demo")
+    ]
+
+    response = await asgi_client.get(
+        "/api/v1/plugins/extensions/demo_plugin/status",
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
+
+
 def test_astrbot_web_request_proxy_exposes_typed_methods():
     from typing import get_type_hints
 
