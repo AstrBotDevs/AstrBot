@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -73,6 +74,81 @@ async def test_umo_alias_upsert_updates_existing_record(temp_db):
     fetched = await temp_db.get_umo_alias("qq:GroupMessage:1000")
     assert fetched is not None
     assert serialize_umo_alias(fetched, fetched.umo)["display_name"] == "New Alias"
+
+
+@pytest.mark.asyncio
+async def test_auto_name_upsert_preserves_manual_alias_and_skips_unchanged_update(
+    temp_db,
+):
+    await temp_db.upsert_umo_alias(
+        umo="qq:GroupMessage:1000",
+        creator_sender_id="admin-1",
+        auto_name="Engineering Group",
+        user_alias="Backend Room",
+    )
+    before = await temp_db.get_umo_alias("qq:GroupMessage:1000")
+    assert before is not None
+
+    await temp_db.upsert_umo_auto_name(
+        umo="qq:GroupMessage:1000",
+        creator_sender_id="sender-2",
+        auto_name="Engineering Group",
+    )
+    unchanged = await temp_db.get_umo_alias("qq:GroupMessage:1000")
+    assert unchanged is not None
+    assert unchanged.updated_at == before.updated_at
+
+    await temp_db.upsert_umo_auto_name(
+        umo="qq:GroupMessage:1000",
+        creator_sender_id="sender-3",
+        auto_name="Renamed Group",
+    )
+    renamed = await temp_db.get_umo_alias("qq:GroupMessage:1000")
+    assert renamed is not None
+    assert renamed.auto_name == "Renamed Group"
+    assert renamed.user_alias == "Backend Room"
+    assert renamed.creator_sender_id == "admin-1"
+    assert renamed.updated_at != before.updated_at
+
+
+@pytest.mark.asyncio
+async def test_auto_name_upsert_creates_alias_without_manual_name(temp_db):
+    await temp_db.upsert_umo_auto_name(
+        umo="qq:FriendMessage:sender-1",
+        creator_sender_id="sender-1",
+        auto_name="Alice",
+    )
+
+    alias = await temp_db.get_umo_alias("qq:FriendMessage:sender-1")
+    assert alias is not None
+    assert alias.creator_sender_id == "sender-1"
+    assert alias.auto_name == "Alice"
+    assert alias.user_alias is None
+
+
+@pytest.mark.asyncio
+async def test_concurrent_manual_and_auto_name_upserts_preserve_manual_alias(temp_db):
+    assert await temp_db.get_umo_alias("qq:GroupMessage:1000") is None
+
+    await asyncio.gather(
+        temp_db.upsert_umo_alias(
+            umo="qq:GroupMessage:1000",
+            creator_sender_id="admin-1",
+            auto_name="Engineering Group",
+            user_alias="Backend Room",
+        ),
+        temp_db.upsert_umo_auto_name(
+            umo="qq:GroupMessage:1000",
+            creator_sender_id="sender-1",
+            auto_name="Engineering Group",
+        ),
+    )
+
+    alias = await temp_db.get_umo_alias("qq:GroupMessage:1000")
+    assert alias is not None
+    assert alias.creator_sender_id == "admin-1"
+    assert alias.auto_name == "Engineering Group"
+    assert alias.user_alias == "Backend Room"
 
 
 @pytest.mark.asyncio
@@ -163,6 +239,24 @@ def test_umo_name_helpers_accept_numeric_ids():
         )
         == "123456"
     )
+
+
+def test_event_auto_name_can_skip_group_and_sender_id_fallbacks():
+    group_event = SimpleNamespace(
+        message_obj=SimpleNamespace(group=SimpleNamespace(group_name=None)),
+        get_group_id=lambda: "group-1",
+        get_sender_id=lambda: "sender-1",
+        get_sender_name=lambda: "Alice",
+    )
+    friend_event = SimpleNamespace(
+        message_obj=SimpleNamespace(group=None),
+        get_group_id=lambda: "",
+        get_sender_id=lambda: "sender-1",
+        get_sender_name=lambda: "",
+    )
+
+    assert get_event_auto_name(group_event, fallback_to_id=False) == ""
+    assert get_event_auto_name(friend_event, fallback_to_id=False) == ""
 
 
 def test_parse_umo_handles_empty_values():

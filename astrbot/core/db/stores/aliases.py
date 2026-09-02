@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
@@ -39,6 +40,37 @@ class UmoAliasStoreMixin(DatabaseStoreMixin):
                 await session.flush()
                 await session.refresh(alias)
                 return alias
+
+    async def upsert_umo_auto_name(
+        self,
+        umo: str,
+        creator_sender_id: str,
+        auto_name: str,
+    ) -> None:
+        """Persist an automatic UMO name without changing its manual alias."""
+        now = datetime.now(UTC)
+        statement = sqlite_insert(UmoAlias).values(
+            umo=umo,
+            creator_sender_id=creator_sender_id,
+            auto_name=auto_name,
+            user_alias=None,
+            created_at=now,
+            updated_at=now,
+        )
+        statement = statement.on_conflict_do_update(
+            index_elements=[UmoAlias.umo],
+            set_={
+                "auto_name": statement.excluded.auto_name,
+                "updated_at": now,
+            },
+            where=col(UmoAlias.auto_name).is_distinct_from(
+                statement.excluded.auto_name
+            ),
+        )
+        async with store_session(self) as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(statement)
 
     async def get_umo_alias(self, umo: str) -> UmoAlias | None:
         """Get alias metadata for one UMO."""

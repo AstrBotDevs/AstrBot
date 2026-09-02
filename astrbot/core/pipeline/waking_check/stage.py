@@ -42,6 +42,7 @@ from ..turn_router import (
     route_turn,
     strip_inbound_flush_flags,
 )
+from .umo_auto_name import UmoAutoNameRecorder
 
 UNIQUE_SESSION_ID_BUILDERS: dict[str, Callable[[AstrMessageEvent], str | None]] = {
     "aiocqhttp": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
@@ -124,6 +125,14 @@ class WakingCheckStage(Stage):
         self.command_catalog = ctx.plugin_catalog.get_command_catalog(
             ctx.astrbot_config_id,
             plugin_names,
+        )
+        execution_context = getattr(ctx, "execution_context", None)
+        database = getattr(execution_context, "database", None)
+        background_tasks = getattr(execution_context, "background_tasks", None)
+        self._umo_auto_name_recorder = UmoAutoNameRecorder(
+            database,
+            ctx.astrbot_config_id,
+            background_tasks if isinstance(background_tasks, set) else None,
         )
 
     def _llm_access_for_event(self, event: AstrMessageEvent):
@@ -231,6 +240,8 @@ class WakingCheckStage(Stage):
                 wake_reasons = set(wake_reasons)
             wake_reasons.add(WakeReason.PLUGIN_HANDLER.value)
             event.set_extra("wake_reasons", wake_reasons)
+        if event.is_wake:
+            self._umo_auto_name_recorder.schedule(event)
 
     def _apply_unique_session(self, event: AstrMessageEvent) -> None:
         onebot_post_type = event.get_extra("onebot_post_type")

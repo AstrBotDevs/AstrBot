@@ -24,20 +24,34 @@ def parse_umo(umo: Any) -> dict[str, str]:
     }
 
 
-def get_event_auto_name(event: Any) -> str:
+def get_event_auto_name(event: Any, *, fallback_to_id: bool = True) -> str:
+    """Resolve an automatic display name from inbound event metadata.
+
+    Args:
+        event: Platform event containing group and sender metadata.
+        fallback_to_id: Whether to use the group or sender ID when no name exists.
+
+    Returns:
+        Normalized group or sender name, an optional ID fallback, or an empty string.
+    """
     group_id = event.get_group_id() if hasattr(event, "get_group_id") else ""
     message_obj = getattr(event, "message_obj", None)
     group = getattr(message_obj, "group", None)
 
     if group_id:
         group_name = normalize_umo_name(getattr(group, "group_name", None))
-        return group_name or normalize_umo_name(group_id)
+        if group_name:
+            return group_name
+        return normalize_umo_name(group_id) if fallback_to_id else ""
 
     sender_name = ""
     if hasattr(event, "get_sender_name"):
         sender_name = event.get_sender_name()
     sender_id = event.get_sender_id() if hasattr(event, "get_sender_id") else ""
-    return normalize_umo_name(sender_name) or normalize_umo_name(sender_id)
+    normalized_sender_name = normalize_umo_name(sender_name)
+    if normalized_sender_name:
+        return normalized_sender_name
+    return normalize_umo_name(sender_id) if fallback_to_id else ""
 
 
 def get_umo_display_name(
