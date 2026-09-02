@@ -61,6 +61,8 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 - `/session name`：显示当前自动名称和已保存别名，需要 `session.manage`。
 - `/session name <名称>`：设置当前 UMO 的展示别名，需要 `session.manage`。名称由 `GreedyStr` 接收，可以包含空格。
 
+唤醒阶段在 `is_wake` 确定后会把自动名写入存储；手动别名优先，自动 upsert 不覆盖 `user_alias`。
+
 使用 `/session info` 得到的用户 ID 可以通过 `/admin grant` 授予当前会话的 `session_admin`。这不是全局 operator。群聊开启 `unique_session` 时，该指令也会显示可用于白名单的群 ID。
 
 ### 对话
