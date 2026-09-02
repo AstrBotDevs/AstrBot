@@ -2,11 +2,11 @@
 
 LMStudio 允许在本地电脑上部署模型（需要电脑硬件配置符合要求）
 
-### 下载并安装 LMStudio
+## 下载并安装 LMStudio
 
 https://lmstudio.ai/download
 
-### 下载并运行模型
+## 下载并运行模型
 
 https://lmstudio.ai/models
 
@@ -16,11 +16,11 @@ https://lmstudio.ai/models
 lms get deepseek-r1-qwen-7b
 ```
 
-### 配置 AstrBot
+## 配置 AstrBot
 
 在 AstrBot 上：
 
-点击 配置->服务提供商配置->加号->openai
+进入 `模型提供商` 页面，点击 `新增提供商`，选择 `OpenAI`。
 
 API Base URL 填写 `http://localhost:1234/v1`
 

@@ -121,6 +121,7 @@ support_platforms:
 - `line`
 - `matrix`
 - `mattermost`
+- `webchat`
 
 ### 声明 AstrBot 版本范围（Optional）
 

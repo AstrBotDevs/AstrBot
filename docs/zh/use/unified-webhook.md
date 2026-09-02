@@ -17,7 +17,7 @@
 1. 拥有一个域名（如 example.com）和公网 IP 服务器
 2. 配置 DNS 解析（如 astrbot.example.com）
 3. 配置反向代理，将域名的 80 或 443 端口请求转发到 AstrBot 的 WebUI 端口（默认为 6185）
-4. 前往 AstrBot `配置文件` 页，点击 `系统`，将 `对外可达的回调接口地址` 填写为配置的 URL 地址。（如 https://astrbot.example.com），点击保存，等待重启。
+4. 进入左侧边栏底部的 `设置` → `常规` → `基础运行`，将 `对外可达的回调接口地址` 填写为配置的 URL 地址（如 https://astrbot.example.com），点击保存，等待重启。<span style="color: gray">~~前往 AstrBot `配置文件` 页，点击 `系统`，将 `对外可达的回调接口地址` 填写为配置的 URL 地址。~~（已归档：自 v4.26.0 起，系统配置迁移至 `设置` 页面）</span>
 
 
 在之后配置各个平台适配器时，选择开启 `统一 Webhook 模式 (unified_webhook_mode)`。

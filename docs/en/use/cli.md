@@ -36,11 +36,17 @@ astrbot run
 
 `astrbot init` creates the data directories and configuration files required by AstrBot. After initialization, use `astrbot run` for later starts.
 
+To skip the installation confirmation prompt in unattended environments (CI, scripted deployments), use:
+
+```bash
+astrbot init -y
+```
+
 ## Top-Level Commands
 
 | Command | Purpose |
 | --- | --- |
-| `astrbot init` | Initialize the current directory as an AstrBot working directory. |
+| `astrbot init` | Initialize the current directory as an AstrBot working directory. Supports `-y` / `--yes` to skip the installation confirmation prompt. |
 | `astrbot run` | Start AstrBot in the foreground. |
 | `astrbot conf` | Read or update common config values. |
 | `astrbot password` | Change the WebUI login password interactively. |
@@ -143,6 +149,18 @@ Creating a new plugin asks for the author, description, version, and repository 
 
 ```bash
 astrbot plug new my-plugin
+```
+
+### Installing Local Plugins
+
+You can install a plugin directly from a local directory (since v4.26.3):
+
+```bash
+# Install a plugin from the given directory
+astrbot plug install /path/to/my-plugin
+
+# Install as an editable symlink, which is handy for local development
+astrbot plug install my-plugin --local-path /path/to/my-plugin
 ```
 
 ## Help

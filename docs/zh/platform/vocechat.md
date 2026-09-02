@@ -27,7 +27,7 @@ VoceChat 是一个开源的支持多平台、搭建简单的即时通讯平台�
 
 - **`vocechat_server_url` (必填)**: 您的 VoceChat 服务器的完整 URL 地址。例如: `http://localhost:3009` 或 `https://your.vocechat.domain`。请确保末尾没有 `/`。
 - **`api_key` (必填)**: 您在 VoceChat 后台为该机器人账号生成的 API Key。
-- **`webhook_path` (建议保留默认或自定义)**: AstrBot 用于接收 VoceChat 推送消息的 Webhook 路径。例如: `/vocechat_webhook`。您需要在 VoceChat 机器人设置中填写的 Webhook URL 将是 `http://<你的AstrBot可访问地址>:<webhook_port><webhook_path>`。
+- **`webhook_path` (建议保留默认或自定义)**: AstrBot 用于接收 VoceChat 推送消息的 Webhook 路径。例如: `/vocechat_webhook`。在 VoceChat 机器人设置中填写的 Webhook URL 应为 `http://<AstrBot 公网可访问地址>:<webhook_port><webhook_path>`。
 - **`webhook_listen_host` (通常为 `0.0.0.0`)**: AstrBot Webhook 服务器监听的IP地址。`0.0.0.0` 表示监听所有可用的网络接口。
 - **`webhook_port` (必填)**: AstrBot Webhook 服务器监听的端口号。例如: `8080`。请确保此端口未被其他应用占用，并且如果您的 AstrBot 服务器在防火墙后，此端口需要被允许访问。
 - **`get_user_nickname_from_api` (布尔值, 默认: `true`)**: 是否尝试通过 VoceChat API 获取用户昵称。如果为 `false`，将使用 `VoceChatUser_UID` 作为默认昵称。

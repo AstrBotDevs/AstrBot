@@ -288,13 +288,14 @@ Whether to enable AstrBot's built-in web search capability. Default is `false`. 
 
 #### `provider_settings.websearch_provider`
 
-Web search provider type. Default is `tavily`. Currently supports `tavily`, `bocha`, `baidu_ai_search`, `brave`, and `firecrawl`.
+Web search provider type. Default is `tavily`. Currently supports `tavily`, `bocha`, `baidu_ai_search`, `brave`, `firecrawl`, and `exa`.
 
 - `tavily`: Uses the Tavily search engine.
 - `bocha`: Uses the BoCha search engine.
 - `baidu_ai_search`: Uses Baidu AI Search (MCP).
 - `brave`: Uses Brave Search API.
 - `firecrawl`: Uses the Firecrawl Search API.
+- `exa`: Uses the Exa Search API (added in v4.26.0), which supports keyword and semantic search.
 
 #### `provider_settings.websearch_tavily_key`
 
@@ -372,7 +373,7 @@ Limit on the maximum number of Agent steps. Default is `30`. Each tool call by t
 
 Added in `v4.3.5`
 
-Maximum timeout for tool calls (seconds), default is `60` seconds.
+Maximum timeout for tool calls (seconds), default is `120` seconds.
 
 #### `provider_stt_settings`
 
