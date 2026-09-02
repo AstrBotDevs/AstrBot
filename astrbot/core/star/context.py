@@ -726,6 +726,51 @@ class Context:
                 return
         self.registered_web_apis.append((route, view_handler, methods, desc))
 
+    @classmethod
+    def unregister_web_apis(cls, module_path: str) -> int:
+        """Unregister all web APIs registered by a plugin.
+
+        Args:
+            module_path: Plugin module path prefix, e.g. ``data.plugins.my_plugin``.
+            Handlers whose defining module equals this path or resides under it
+            are removed, so that unloading a plugin releases its handlers and
+            avoids ghost routes.
+
+        Returns:
+            The number of web API registrations removed.
+        """
+        if not module_path:
+            return 0
+        prefix = f"{module_path}."
+        remaining: list[RegisteredWebApi] = []
+        removed = 0
+        for api in cls.registered_web_apis:
+            handler = api[1]
+            handler_modules = set()
+            handler_module = getattr(handler, "__module__", None)
+            if isinstance(handler_module, str):
+                handler_modules.add(handler_module)
+            # Bound methods also expose the owner class module, which may
+            # differ from the function module in edge cases.
+            owner = getattr(handler, "__self__", None)
+            if owner is not None:
+                class_module = type(owner).__module__
+                if isinstance(class_module, str):
+                    handler_modules.add(class_module)
+            if any(
+                module == module_path or module.startswith(prefix)
+                for module in handler_modules
+            ):
+                removed += 1
+                logger.debug(
+                    f"Removed registered web API {api[0]} owned by {module_path}"
+                )
+                continue
+            remaining.append(api)
+        if removed:
+            cls.registered_web_apis[:] = remaining
+        return removed
+
     """
     以下的方法已经不推荐使用。请从 AstrBot 文档查看更好的注册方式。
     """

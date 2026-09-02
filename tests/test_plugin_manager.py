@@ -10,6 +10,7 @@ import pytest
 import yaml
 
 from astrbot.core.star import star_manager as star_manager_module
+from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
 from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginManager
 from astrbot.core.utils.pip_installer import PipInstallError
@@ -623,6 +624,90 @@ async def test_reload_all_unbinds_every_registered_plugin(
 
     assert terminated == plugin_names
     assert unbound == plugin_names
+
+
+def _make_bound_web_api_handler(module_name: str):
+    """Creates a bound method handler whose owner class lives in ``module_name``."""
+
+    class Owner:
+        pass
+
+    Owner.__module__ = module_name
+
+    async def handler(self):
+        return {}
+
+    Owner.handler = handler
+    return Owner().handler
+
+
+def _make_web_api_function(module_name: str):
+    async def handler():
+        return {}
+
+    handler.__module__ = module_name
+    return handler
+
+
+def test_unregister_web_apis_removes_only_owner_plugin_apis():
+    plugin_handler = _make_bound_web_api_handler("data.plugins.demo_plugin.main")
+    child_handler = _make_web_api_function("data.plugins.demo_plugin.tools.utils")
+    other_handler = _make_bound_web_api_handler("data.plugins.other_plugin.main")
+    core_handler = _make_web_api_function("astrbot.dashboard.api.plugins")
+
+    original_apis = list(Context.registered_web_apis)
+    try:
+        Context.registered_web_apis[:] = [
+            ("/demo/test", plugin_handler, ["GET"], "demo"),
+            ("/demo/tools", child_handler, ["POST"], "demo tools"),
+            ("/other/test", other_handler, ["GET"], "other"),
+            ("/core/test", core_handler, ["GET"], "core"),
+        ]
+
+        assert Context.unregister_web_apis("data.plugins.demo_plugin") == 2
+        assert [api[0] for api in Context.registered_web_apis] == [
+            "/other/test",
+            "/core/test",
+        ]
+        assert Context.unregister_web_apis("") == 0
+    finally:
+        Context.registered_web_apis[:] = original_apis
+
+
+@pytest.mark.asyncio
+async def test_unbind_plugin_removes_registered_web_apis(
+    plugin_manager_pm: PluginManager,
+):
+    _clear_star_runtime_state()
+    module_path = "data.plugins.demo_plugin.main"
+    metadata = star_manager_module.StarMetadata(
+        name="demo_plugin",
+        root_dir_name="demo_plugin",
+        module_path=module_path,
+    )
+    star_manager_module.star_map[module_path] = metadata
+    star_manager_module.star_registry.append(metadata)
+
+    plugin_handler = _make_bound_web_api_handler(module_path)
+    child_handler = _make_web_api_function("data.plugins.demo_plugin.tools")
+    other_handler = _make_bound_web_api_handler("data.plugins.other_plugin.main")
+
+    original_apis = list(Context.registered_web_apis)
+    try:
+        Context.registered_web_apis[:] = [
+            ("/demo/api", plugin_handler, ["GET"], "demo"),
+            ("/demo/tools/api", child_handler, ["POST"], "demo tools"),
+            ("/other/api", other_handler, ["GET"], "other"),
+        ]
+
+        await plugin_manager_pm._unbind_plugin("demo_plugin", module_path)
+
+        assert [(api[0], api[1]) for api in Context.registered_web_apis] == [
+            ("/other/api", other_handler)
+        ]
+    finally:
+        Context.registered_web_apis[:] = original_apis
+        _clear_star_runtime_state()
 
 
 @pytest.mark.asyncio

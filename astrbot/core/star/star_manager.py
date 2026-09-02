@@ -807,6 +807,13 @@ class PluginManager:
                 llm_tools.func_list.remove(tool)
                 logger.info(f"Removed tool: {tool.name}")
 
+        # 清理插件注册的 Web API
+        removed_web_apis = Context.unregister_web_apis(module_prefix)
+        if removed_web_apis:
+            logger.info(
+                f"Removed {removed_web_apis} registered web API(s) from plugin {dir_name}",
+            )
+
         for adapter_name in unregister_platform_adapters_by_module(module_prefix):
             logger.info(f"Removed platform adapter: {adapter_name}")
 
@@ -1046,6 +1053,9 @@ class PluginManager:
                 star_handlers_registry.clear()
                 star_map.clear()
                 star_registry.clear()
+                # Clear web APIs registered by plugins; every plugin has been
+                # unbound above and will be re-registered by load().
+                Context.registered_web_apis.clear()
             else:
                 # 只重载指定插件
                 smd = star_map.get(specified_module_path)
@@ -1925,6 +1935,15 @@ class PluginManager:
             for adapter_name in unregistered_adapters:
                 logger.info(
                     f"Removed platform adapter {adapter_name} from plugin {plugin_name}",
+                )
+
+            # Unregister web APIs registered by this plugin to avoid ghost
+            # routes and memory leaks after unloading.
+            removed_web_apis = Context.unregister_web_apis(module_prefix)
+            if removed_web_apis:
+                logger.info(
+                    f"Removed {removed_web_apis} registered web API(s) "
+                    f"from plugin {plugin_name}",
                 )
 
         if plugin is None:
