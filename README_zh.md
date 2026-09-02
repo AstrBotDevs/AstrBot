@@ -141,13 +141,13 @@ docker compose -f compose-with-napcat.yml up -d --build
 
 ## 支持的模型提供商
 
-| 服务类型           | 当前内置范围                                                                                                              |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| 对话模型           | OpenAI Chat Completions/Responses 与兼容接口、Anthropic、Gemini、智谱、小米、MiniMax、Kimi Code、xAI、Groq、OpenRouter 等 |
-| 本地模型           | 通过受支持接口接入 Ollama、LM Studio                                                                                      |
-| Agent 执行器       | 内置本地 Agent，以及 Dify、Coze、阿里云百炼应用、DeerFlow                                                                 |
-| 语音               | Whisper、SenseVoice、小米 MiMo、Xinference、OpenAI/Gemini/Edge/Azure/ElevenLabs TTS、GPT-SoVITS、FishAudio、DashScope 等  |
-| Embedding / Rerank | OpenAI、Gemini、NVIDIA、Ollama、vLLM、Xinference、阿里云百炼                                                              |
+| 服务类型           | 当前内置范围                                                                                                                          |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 对话模型           | OpenAI Chat Completions/Responses 与兼容接口、Anthropic、Gemini、智谱、小米、MiniMax、Kimi Code、xAI、Groq、OpenRouter、MiraRouter 等 |
+| 本地模型           | 通过受支持接口接入 Ollama、LM Studio                                                                                                  |
+| Agent 执行器       | 内置本地 Agent，以及 Dify、Coze、阿里云百炼应用、DeerFlow                                                                             |
+| 语音               | Whisper、SenseVoice、小米 MiMo、Xinference、OpenAI/Gemini/Edge/Azure/ElevenLabs TTS、GPT-SoVITS、FishAudio、DashScope 等              |
+| Embedding / Rerank | OpenAI、Gemini、NVIDIA、Ollama、vLLM、Xinference、阿里云百炼                                                                          |
 
 Provider 模板来自代码注册表，后续版本可能变化；请以运行中 WebUI 的 **提供商 → 新增 Provider 来源** 为准。详见[模型 Provider](docs/zh/providers/start.md)。
 
