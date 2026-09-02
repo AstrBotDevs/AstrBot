@@ -112,7 +112,7 @@ To avoid flooding group chats, ordinary messages require the configured `llm_acc
 
 ### An administrator command says permission denied
 
-Use `/session info` to inspect the current user ID, then grant current-session `session_admin` through the Dashboard [authorization page](/en/use/webui#accounts-and-authorization) or `/admin grant`. That is not a global operator. Profiles can be bound separately to platforms, groups, or direct messages, so editing the default profile may not affect the current session.
+Group chats still need a Dashboard [authorization page](/en/use/webui#accounts-and-authorization) binding or `/admin grant` for current-session `session_admin`. That is not a global operator. A private-chat peer already owns the current session and does not need a pre-bound `session_admin` to `/conversation reset`. Profiles can be bound separately to platforms, groups, or direct messages, so editing the default profile may not affect the current session. Use `/session info` to inspect the current user ID.
 
 ### Older commands such as `/plugin ls` or `/reset` do nothing
 

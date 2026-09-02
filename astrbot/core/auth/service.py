@@ -42,6 +42,7 @@ from astrbot.core.db.po import (
     DashboardAccount,
 )
 from astrbot.core.db.protocols import ApiKeyStore, DatabaseSessionStore
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.error_redaction import redact_sensitive_text
 
 _AUDIT_QUEUE_SIZE = 2048
@@ -136,6 +137,26 @@ def _webchat_step_up_cached(context: AuthContext, action: str) -> str | None:
         cached.pop(action, None)
         return None
     return credential_id
+
+
+def _is_private_im_origin(
+    subject: Subject,
+    context: AuthContext,
+    *,
+    origin_matches: bool,
+    session_scope: Resource | None,
+) -> bool:
+    """Return whether the authenticated IM peer owns this 1:1 origin session."""
+
+    return (
+        subject.kind == "im"
+        and subject.authenticated
+        and context.source == "im"
+        and context.authenticated
+        and origin_matches
+        and session_scope is not None
+        and context.message_type == MessageType.FRIEND_MESSAGE.value
+    )
 
 
 def _control_plane_bindings_apply(subject: Subject, context: AuthContext) -> bool:
@@ -1578,6 +1599,16 @@ class AuthorizationService:
             and session_scope is not None
         ):
             facts.append((Role.MEMBER, "default", session_scope))
+        if session_scope is not None and _is_private_im_origin(
+            subject,
+            context,
+            origin_matches=origin_matches,
+            session_scope=session_scope,
+        ):
+            facts.append((Role.SESSION_OWNER, "private_session", session_scope))
+        skip_platform_elevation = (
+            context.message_type == MessageType.FRIEND_MESSAGE.value
+        )
         now = utc_now()
         async with self._db.get_db() as session:
             bindings = await session.execute(
@@ -1635,7 +1666,12 @@ class AuthorizationService:
                     continue
                 if self._binding_matches_resource(binding, resource):
                     facts.append((binding_role, "binding", resource))
-            if origin_matches and session_scope is not None and session_scope.umo:
+            if (
+                origin_matches
+                and session_scope is not None
+                and session_scope.umo
+                and not skip_platform_elevation
+            ):
                 fact = (
                     await session.execute(
                         select(AuthPlatformMembershipFact).where(
@@ -1660,7 +1696,8 @@ class AuthorizationService:
                         )
                     )
         if (
-            origin_matches
+            not skip_platform_elevation
+            and origin_matches
             and session_scope is not None
             and context.platform_member_role in {"owner", "admin"}
             and context.platform_role_source in {"adapter", "api", "cache"}

@@ -83,6 +83,29 @@ def build_unique_session_id(event: AstrMessageEvent) -> str | None:
     return builder(event) if builder else None
 
 
+def _auth_message_type(event: AstrMessageEvent) -> str | None:
+    """Return MessageType.value for authorization, or None if unknown.
+
+    Prefers ``get_message_type()`` then ``message_obj.type``. A true private
+    chat falls back to FriendMessage. Does not default to ``"friend"`` and does
+    not parse ``unified_msg_origin``.
+    """
+
+    get_message_type = getattr(event, "get_message_type", None)
+    if callable(get_message_type):
+        message_type_obj = get_message_type()
+        if isinstance(message_type_obj, MessageType):
+            return message_type_obj.value
+    message_obj = getattr(event, "message_obj", None)
+    message_obj_type = getattr(message_obj, "type", None)
+    if isinstance(message_obj_type, MessageType):
+        return message_obj_type.value
+    is_private_chat = getattr(event, "is_private_chat", None)
+    if callable(is_private_chat) and is_private_chat() is True:
+        return MessageType.FRIEND_MESSAGE.value
+    return None
+
+
 class WakingCheckStage(Stage):
     """检查是否需要唤醒。唤醒机器人有如下几点条件：
 
@@ -376,11 +399,7 @@ class WakingCheckStage(Stage):
             # verified thread row and is never accepted from the client.
             umo = f"webchat:FriendMessage:webchat!{event.get_sender_id()}!{parent_session_id}"
         resource = Resource.session(config_id, umo)
-        get_message_type = getattr(event, "get_message_type", None)
-        message_type_obj = get_message_type() if callable(get_message_type) else None
-        message_type = getattr(message_type_obj, "value", "friend")
-        if not isinstance(message_type, str):
-            message_type = "friend"
+        message_type = _auth_message_type(event)
         context = AuthContext(
             subject=subject,
             source=source,
@@ -434,13 +453,7 @@ class WakingCheckStage(Stage):
                     )(),
                     platform_role=platform_member_role,
                     source=getattr(event, "platform_role_source", "none"),
-                    metadata={
-                        "message_type": (
-                            event.get_message_type().value
-                            if callable(getattr(event, "get_message_type", None))
-                            else "friend"
-                        )
-                    },
+                    metadata={"message_type": message_type},
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.warning(

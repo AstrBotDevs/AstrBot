@@ -133,7 +133,7 @@ IM 消息、插件和后台续跑不能复用该授权。
 
 WebUI 支持多个 Dashboard 账户。首次启动会创建 bootstrap `root` 账户（用户名通常为 `astrbot`）。控制面身份来自账户表和角色绑定，不能凭用户名推断 `root`。
 
-侧栏 **更多 → 权限** 打开 `/authorization`，用于查看和修改角色绑定。账户 CRUD、授予 `root`/`operator`、停用账户都要求当前 `root` 绑定加上一次性密码或 TOTP step-up，并保留最后一个 `root` 保护。当前会话的 IM owner 只能通过 `/admin grant` 或权限页管理本会话的 `session_admin` / `member`，不能把 IM 用户变成全局 operator。
+侧栏 **更多 → 权限** 打开 `/authorization`，用于查看和修改角色绑定。账户 CRUD、授予 `root`/`operator`、停用账户都要求当前 `root` 绑定加上一次性密码或 TOTP step-up，并保留最后一个 `root` 保护。已认证 IM 私聊对端是该一对一会话的运行时 owner（来源 `private_session`），不是 Dashboard 绑定。当前会话的 IM owner 只能通过 `/admin grant` 或权限页管理本会话的 `session_admin` / `member`，不能把 IM 用户变成全局 operator。
 
 固定角色：
 

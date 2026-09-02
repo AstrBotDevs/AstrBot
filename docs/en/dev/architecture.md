@@ -232,15 +232,15 @@ Session resources use the versioned canonical string `session:v1:<encoded-config
 
 A role names who the subject is; the scope decides where that authority applies. The live relation table interprets `session_owner`/`session_admin` as `owner`/`admin`. `viewer`, `editor`, `executor`, and `caller` remain reserved.
 
-| Role                | Scope                       | Meaning                                                       |
-| ------------------- | --------------------------- | ------------------------------------------------------------- |
-| `root`              | global                      | Highest Dashboard identity; account CRUD needs root + step-up |
-| `operator`          | global                      | Global Dashboard operations                                   |
-| `instance_operator` | `instance:<config-id>`      | One configuration profile                                     |
-| `session_owner`     | `session:<config-id>/<umo>` | Current-session owner; platform guild owners map only here    |
-| `session_admin`     | `session:<config-id>/<umo>` | Limited current-session management                            |
-| `member`            | `session:<config-id>/<umo>` | Identified user                                               |
-| `guest`             | session or none             | Unauthenticated or anonymous WebChat                          |
+| Role                | Scope                       | Meaning                                                                                                                                                               |
+| ------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `root`              | global                      | Highest Dashboard identity; account CRUD needs root + step-up                                                                                                         |
+| `operator`          | global                      | Global Dashboard operations                                                                                                                                           |
+| `instance_operator` | `instance:<config-id>`      | One configuration profile                                                                                                                                             |
+| `session_owner`     | `session:<config-id>/<umo>` | Current-session owner: a mapped group owner, or the authenticated IM private-chat peer (runtime fact `private_session`, origin session only, not a Dashboard binding) |
+| `session_admin`     | `session:<config-id>/<umo>` | Limited current-session management                                                                                                                                    |
+| `member`            | `session:<config-id>/<umo>` | Identified user                                                                                                                                                       |
+| `guest`             | session or none             | Unauthenticated or anonymous WebChat                                                                                                                                  |
 
 `root` and `operator` bind only to valid Dashboard accounts and never become IM group authority from a same-named message subject. A current-session owner may grant or revoke `session_admin` or `member` in that session only, and cannot delegate ownership. Platform owner/admin facts have a TTL, degrade after expiry, and never write global or instance bindings.
 

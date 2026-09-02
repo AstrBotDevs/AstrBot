@@ -382,8 +382,10 @@ async def test(self, event: AstrMessageEvent):
 `@filter.permission("session.manage")` is resolved by the pipeline through
 `AuthorizationService.authorize()`. It allows the current session's
 `session_admin` / `session_owner`, or a scoped `instance_operator` /
-Dashboard `operator` / `root`. A platform group owner or administrator only
-affects the current `(config_id, UMO)` and never becomes a global operator.
+Dashboard `operator` / `root`. An authenticated IM private-chat peer is
+`session_owner` of the origin session via the runtime fact `private_session`.
+A platform group owner or administrator only affects the current
+`(config_id, UMO)` and never becomes a global operator.
 
 Plugin-owned actions must use the plugin namespace and call the core
 authorization service:

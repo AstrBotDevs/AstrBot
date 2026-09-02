@@ -138,7 +138,7 @@ reuse this authorization.
 
 WebUI supports multiple Dashboard accounts. First startup creates a bootstrap `root` account (username is usually `astrbot`). Control-plane identity comes from the account table and role bindings; a username never implies `root`.
 
-**More → Authorization** opens `/authorization` for role bindings. Account CRUD, granting `root`/`operator`, and disabling accounts require a current `root` binding plus a one-time password or TOTP step-up, and the last `root` cannot be removed. An IM session owner may manage only that session's `session_admin` / `member` bindings through `/admin grant` or the authorization page; it cannot turn an IM user into a global operator.
+**More → Authorization** opens `/authorization` for role bindings. Account CRUD, granting `root`/`operator`, and disabling accounts require a current `root` binding plus a one-time password or TOTP step-up, and the last `root` cannot be removed. An authenticated IM private-chat peer is the runtime owner of that DM session (source `private_session`), not a Dashboard binding. An IM session owner may manage only that session's `session_admin` / `member` bindings through `/admin grant` or the authorization page; it cannot turn an IM user into a global operator.
 
 Fixed roles:
 
