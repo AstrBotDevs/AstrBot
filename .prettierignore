@@ -35,6 +35,10 @@ astrbot/core/utils/t2i/template/
 *.wav
 *.ico
 
+# Vendored Archify skill (keep upstream formatting)
+.agents/skills/archify/**
+!.agents/skills/archify/REFERENCE.md
+
 # Test data fixtures with intentionally non-standard formatting
 tests/test_kook/data/
 

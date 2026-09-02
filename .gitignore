@@ -65,6 +65,7 @@ venv/
 /.agent/
 /.codex/
 /.opencode/
+.agents/skills/archify/node_modules/
 /.kilocode/
 /.worktrees/
 /.tmp/

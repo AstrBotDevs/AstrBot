@@ -12,3 +12,6 @@
 *.woff2 binary
 *.wav   binary
 *.svg   binary
+
+# Vendored Archify renderer
+.agents/skills/archify/** linguist-vendored
