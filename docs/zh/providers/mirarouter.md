@@ -9,13 +9,15 @@
 
 ## 在 AstrBot 中配置
 
-打开 AstrBot 管理面板，进入 **提供商 → 新增 Provider 来源 → OpenAI**，填写以下信息：
+打开 AstrBot 管理面板，进入 **提供商 → 新增 Provider 来源 → MiraRouter**，填写以下信息：
 
 | 配置项       | 值                                 |
 | ------------ | ---------------------------------- |
 | 提供商名称   | `MiraRouter`                       |
 | API Base URL | `https://api.mirarouter.com/v1`    |
 | API Key      | 在 MiraRouter 控制台创建的 API Key |
+
+AstrBot 会自动为 MiraRouter 请求添加 `X-APP-CODE: astrbot` 标识。
 
 保存来源后，根据 [MiraRouter 模型与价格](https://mirarouter.com/models) 页面中的模型列表添加需要使用的模型。
 
