@@ -3,6 +3,7 @@
 协调稠密检索、稀疏检索和 Rerank,提供统一的检索接口
 """
 
+import re
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -32,6 +33,16 @@ class RetrievalResult:
     content: str
     score: float
     metadata: dict
+
+
+# Control (Cc, except tab/newline/CR) and format (Cf) characters are
+# invisible payloads that some embedding providers reject with HTTP 400
+# (e.g. SiliconFlow code 20015), typically originating from sticker /
+# image-caption pipelines. They are stripped before retrieval.
+_INVISIBLE_CHARS_PATTERN = re.compile(
+    "[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f"
+    "\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff\ufff9-\ufffb]"
+)
 
 
 class RetrievalManager:
@@ -87,6 +98,16 @@ class RetrievalManager:
             List[RetrievalResult]: 检索结果列表
 
         """
+        # Remove invisible characters and skip retrieval when nothing
+        # remains, so invalid queries never reach the embedding provider.
+        query = _INVISIBLE_CHARS_PATTERN.sub("", query).strip()
+        if not query:
+            logger.debug(
+                "Knowledge base retrieval skipped: query is empty after "
+                "removing invisible characters.",
+            )
+            return []
+
         if not kb_ids:
             return []
 
@@ -229,7 +250,8 @@ class RetrievalManager:
                 all_results.extend(vec_results)
             except Exception as e:
                 logger.error(
-                    f"知识库 {kb_id} 稠密检索失败: {type(e).__name__}: {e}",
+                    f"知识库 {kb_id} 稠密检索失败: {type(e).__name__}: {e} "
+                    f"(query={query!r}, query_length={len(query)})",
                     exc_info=True,
                 )
                 # skip the faulty KB and continue
