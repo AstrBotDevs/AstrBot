@@ -442,12 +442,20 @@ class CronJobManager:
             cron_event.role = "admin"
 
         provider_settings = cfg.get("provider_settings", {}) or {}
-        tool_call_timeout = provider_settings.get("tool_call_timeout", 120)
+        tool_call_timeout = (
+            cfg.get("agent_runner", {})
+            .get("config", {})
+            .get("misc", {})
+            .get("tool_call_timeout", 120)
+        )
         agent_max_step = coerce_int_config(
-            provider_settings.get("max_agent_step", 30),
+            cfg.get("agent_runner", {})
+            .get("config", {})
+            .get("misc", {})
+            .get("max_steps", 30),
             default=30,
             min_value=1,
-            field_name="provider_settings.max_agent_step",
+            field_name="agent_runner.config.misc.max_steps",
         )
         config = MainAgentBuildConfig(
             tool_call_timeout=tool_call_timeout,
@@ -458,18 +466,7 @@ class CronJobManager:
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
         req.conversation = conv
-        # finetine the messages
-        context = json.loads(conv.history)
-        if context:
-            req.contexts = context
-            context_dump = req._print_friendly_context()
-            req.contexts = []
-            req.system_prompt += (
-                "\n\nBellow is you and user previous conversation history:\n"
-                f"---\n"
-                f"{context_dump}\n"
-                f"---\n"
-            )
+        req.contexts = json.loads(conv.history)
         cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
         req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
             cron_job=cron_job_str

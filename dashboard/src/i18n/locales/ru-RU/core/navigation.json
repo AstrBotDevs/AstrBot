@@ -5,6 +5,13 @@
     "providers": "Провайдеры моделей",
     "commands": "Команды",
     "persona": "Персонажи",
+    "data": "Данные и логи",
+    "dataTabs": {
+        "statistics": "Статистика",
+        "conversations": "Данные диалогов",
+        "logs": "Логи",
+        "trace": "Трассировка"
+    },
     "subagent": "Субагенты",
     "toolUse": "Инструменты MCP",
     "extension": "Плагины",

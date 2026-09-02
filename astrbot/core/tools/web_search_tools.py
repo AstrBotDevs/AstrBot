@@ -23,6 +23,7 @@ WEB_SEARCH_TOOL_NAMES = [
     "firecrawl_extract_web_page",
     "web_search_exa",
     "exa_get_contents",
+    "web_search_anysearch",
 ]
 _TAVILY_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
@@ -47,6 +48,10 @@ _BAIDU_WEB_SEARCH_TOOL_CONFIG = {
 _EXA_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
     "provider_settings.websearch_provider": "exa",
+}
+_ANYSEARCH_WEB_SEARCH_TOOL_CONFIG = {
+    "provider_settings.web_search": True,
+    "provider_settings.websearch_provider": "anysearch",
 }
 
 
@@ -104,12 +109,14 @@ class _KeyRotator:
 # 429 - Rate limited.
 # 432 - Tavily quota exceeded.
 _RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 403, 429, 432})
+_ANYSEARCH_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 402, 403, 429})
 
 _TAVILY_KEY_ROTATOR = _KeyRotator("websearch_tavily_key", "Tavily")
 _BOCHA_KEY_ROTATOR = _KeyRotator("websearch_bocha_key", "BoCha")
 _BRAVE_KEY_ROTATOR = _KeyRotator("websearch_brave_key", "Brave")
 _FIRECRAWL_KEY_ROTATOR = _KeyRotator("websearch_firecrawl_key", "Firecrawl")
 _EXA_KEY_ROTATOR = _KeyRotator("websearch_exa_key", "Exa")
+_ANYSEARCH_KEY_ROTATOR = _KeyRotator("websearch_anysearch_key", "AnySearch")
 
 
 def normalize_legacy_web_search_config(cfg) -> None:
@@ -134,6 +141,7 @@ def normalize_legacy_web_search_config(cfg) -> None:
         "websearch_brave_key",
         "websearch_firecrawl_key",
         "websearch_exa_key",
+        "websearch_anysearch_key",
     ):
         value = provider_settings.get(setting_name)
         if isinstance(value, str):
@@ -1240,7 +1248,146 @@ class ExaGetContentsTool(FunctionTool[AstrAgentContext]):
         return ret or "Error: Exa get contents does not return any results."
 
 
+async def _anysearch_search(
+    provider_settings: dict,
+    payload: dict,
+) -> list[SearchResult]:
+    """Call the AnySearch /v1/search endpoint and return normalized results.
+
+    AnySearch also serves anonymous traffic with a daily free quota, so an empty
+    key list is valid and results in a single unauthenticated request.
+
+    Args:
+        provider_settings: Provider settings containing AnySearch API keys.
+        payload: Request payload for the AnySearch search endpoint.
+
+    Returns:
+        Normalized search results.
+
+    Raises:
+        Exception: If the request fails after all configured keys are exhausted,
+            or if a non-retryable HTTP error is returned.
+    """
+    keys = provider_settings.get("websearch_anysearch_key", [])
+    # `None` marks the anonymous attempt used when no key is configured.
+    attempts: list[str | None] = list(keys) if keys else [None]
+
+    last_error = None
+    for _ in range(len(attempts)):
+        headers = {"Content-Type": "application/json"}
+        if keys:
+            anysearch_key = await _ANYSEARCH_KEY_ROTATOR.get(provider_settings)
+            headers["Authorization"] = f"Bearer {anysearch_key}"
+
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.post(
+                "https://api.anysearch.com/v1/search",
+                json=payload,
+                headers=headers,
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    # Results live under `data.results`; fall back to the
+                    # top-level `results` field for forward compatibility.
+                    body = data.get("data") or data
+                    return [
+                        SearchResult(
+                            title=item.get("title", ""),
+                            url=item.get("url", ""),
+                            snippet=item.get("snippet") or item.get("content", ""),
+                        )
+                        for item in body.get("results", [])
+                        if item.get("url")
+                    ]
+                reason = await response.text()
+                if response.status in _ANYSEARCH_RETRYABLE_HTTP_STATUSES:
+                    last_error = Exception(
+                        f"AnySearch web search failed: {reason}, status: {response.status}",
+                    )
+                    continue
+                raise Exception(
+                    f"AnySearch web search failed: {reason}, status: {response.status}",
+                )
+
+    if last_error is not None:
+        raise last_error
+    raise Exception("AnySearch web search failed with all configured keys.")
+
+
+@builtin_tool(config=_ANYSEARCH_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class AnySearchWebSearchTool(FunctionTool[AstrAgentContext]):
+    """Web search tool powered by the AnySearch API."""
+
+    name: str = "web_search_anysearch"
+    description: str = (
+        "A web search tool powered by AnySearch. Supports general web search and "
+        "domain-specific search over academic, code, finance, legal and security sources."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Required. Search query."},
+                "max_results": {
+                    "type": "integer",
+                    "description": "Optional. The maximum number of results to return. Default is 10. Range is 1-20.",
+                },
+                "tag": {
+                    "type": "string",
+                    "description": (
+                        'Optional. Domain capability tag in "{domain}.{subdomain}" form, '
+                        'for example "academic.paper" or "finance.news". Omit it for general web search.'
+                    ),
+                },
+                "zone": {
+                    "type": "string",
+                    "description": 'Optional. Result region, must be one of "cn", "intl".',
+                },
+                "language": {
+                    "type": "string",
+                    "description": 'Optional. Preferred result language, for example "zh-CN" or "en".',
+                },
+            },
+            "required": ["query"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        _, provider_settings, _ = _get_runtime(context)
+
+        try:
+            max_results = int(kwargs.get("max_results", 10))
+        except (TypeError, ValueError):
+            max_results = 10
+        max_results = min(max(max_results, 1), 20)
+
+        payload: dict = {
+            "query": kwargs["query"],
+            "max_results": max_results,
+            "format": "json",
+        }
+
+        tag = str(kwargs.get("tag", "")).strip()
+        if tag:
+            payload["tag"] = tag
+
+        zone = kwargs.get("zone", "")
+        if zone in ("cn", "intl"):
+            payload["zone"] = zone
+
+        language = str(kwargs.get("language", "")).strip()
+        if language:
+            payload["language"] = language
+
+        results = await _anysearch_search(provider_settings, payload)
+        if not results:
+            return "Error: AnySearch web search does not return any results."
+        return _search_result_payload(results)
+
+
 __all__ = [
+    "AnySearchWebSearchTool",
     "BaiduWebSearchTool",
     "BochaWebSearchTool",
     "BraveWebSearchTool",

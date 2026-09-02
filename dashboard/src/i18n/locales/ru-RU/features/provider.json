@@ -11,7 +11,6 @@
         "tabs": {
             "all": "Все",
             "chatCompletion": "Диалоги",
-            "agentRunner": "Агенты",
             "speechToText": "STT (Речь -> Текст)",
             "textToSpeech": "TTS (Текст -> Речь)",
             "embedding": "Эмбеддинги",
@@ -49,7 +48,6 @@
             "title": "Новый провайдер",
             "tabs": {
                 "basic": "Диалоги",
-                "agentRunner": "Агенты",
                 "speechToText": "Преобразование текста в речь",
                 "textToSpeech": "Переранжирование",
                 "embedding": "Эмбеддинги",

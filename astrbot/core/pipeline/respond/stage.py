@@ -179,6 +179,12 @@ class RespondStage(Stage):
         if result.result_content_type == ResultContentType.STREAMING_FINISH:
             event.set_extra("_streaming_finished", True)
             return
+        if (
+            not result.chain
+            and result.result_content_type != ResultContentType.STREAMING_RESULT
+        ):
+            # 空消息链没有任何可发内容，直接返回，不打日志、也不触发 after_message_sent
+            return
         sent_plain_texts = event.get_extra(
             "_send_message_to_user_current_session_plain_texts",
             [],

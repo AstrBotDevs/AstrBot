@@ -527,7 +527,6 @@ class ProviderConfigRequest(OpenModel):
         if self.capability and "provider_type" not in config:
             capability_map = {
                 "chat": "chat_completion",
-                "agent": "agent_runner",
                 "stt": "speech_to_text",
                 "tts": "text_to_speech",
                 "embedding": "embedding",

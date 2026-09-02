@@ -8,6 +8,7 @@ from typing import Any, cast
 from uuid import uuid4
 
 import lark_oapi as lark
+from lark_oapi.api.contact.v3 import GetUserRequest
 from lark_oapi.api.im.v1 import (
     GetMessageRequest,
     GetMessageResourceRequest,
@@ -33,6 +34,11 @@ from ...register import register_platform_adapter
 from .bot_info import request_lark_bot_info
 from .lark_event import LarkMessageEvent
 from .server import LarkWebhookServer
+
+USER_NAME_CACHE_TTL_SECONDS = 1800
+USER_NAME_FAILURE_CACHE_TTL_SECONDS = 60
+USER_NAME_CACHE_MAX_SIZE = 1000
+USER_NAME_LOOKUP_TIMEOUT_SECONDS = 5
 
 
 @register_platform_adapter(
@@ -94,6 +100,7 @@ class LarkPlatformAdapter(Platform):
             self.webhook_server.set_callback(self.handle_webhook_event)
 
         self.event_id_timestamps: dict[str, float] = {}
+        self._user_name_cache: dict[str, tuple[str, float]] = {}
 
     async def _download_message_resource(
         self,
@@ -130,9 +137,40 @@ class LarkPlatformAdapter(Platform):
     @staticmethod
     def _build_message_str_from_components(
         components: list[Comp.BaseMessageComponent],
+        *,
+        bot_self_id: str | None = None,
+        bot_name: str | None = None,
     ) -> str:
+        """Build the text projection for parsed Lark message components.
+
+        A leading bot-self mention is omitted when identity information is provided;
+        the original component list is not modified.
+
+        Args:
+            components: Parsed Lark message components.
+            bot_self_id: Bot identifier used to recognize a leading self mention.
+            bot_name: Bot display name used when the mention has no identifier.
+
+        Returns:
+            Normalized text used by wake-prefix and command matching.
+        """
+        normalized_self_id = str(bot_self_id or "").strip()
+        normalized_bot_name = str(bot_name or "").strip()
         parts: list[str] = []
-        for comp in components:
+        for index, comp in enumerate(components):
+            if index == 0 and isinstance(comp, Comp.At):
+                mention_id = str(comp.qq or "").strip()
+                mention_name = str(comp.name or "").strip()
+                is_self_mention = bool(
+                    normalized_self_id
+                    and mention_id
+                    and mention_id == normalized_self_id
+                )
+                if not mention_id and normalized_bot_name:
+                    is_self_mention = mention_name == normalized_bot_name
+                if is_self_mention:
+                    continue
+
             if isinstance(comp, Comp.Plain):
                 text = comp.text.strip()
                 if text:
@@ -566,7 +604,11 @@ class LarkPlatformAdapter(Platform):
             at_map=at_list,
         )
         abm.message.extend(parsed_components)
-        abm.message_str = self._build_message_str_from_components(parsed_components)
+        abm.message_str = self._build_message_str_from_components(
+            parsed_components,
+            bot_self_id=self.bot_open_id,
+            bot_name=self.bot_name,
+        )
 
         if message.message_id is None:
             logger.error("[Lark] 消息缺少 message_id")
@@ -582,10 +624,57 @@ class LarkPlatformAdapter(Platform):
 
         abm.message_id = message.message_id
         abm.raw_message = message
-        abm.sender = MessageMember(
-            user_id=event.event.sender.sender_id.open_id,
-            nickname=event.event.sender.sender_id.open_id[:8],
-        )
+        sender_open_id = event.event.sender.sender_id.open_id
+        sender_name = sender_open_id[:8]
+        if (
+            abm.type == MessageType.FRIEND_MESSAGE
+            and getattr(event.event.sender, "sender_type", "user") == "user"
+        ):
+            cached_name = self._user_name_cache.get(sender_open_id)
+            if cached_name and time.time() <= cached_name[1]:
+                sender_name = cached_name[0]
+            else:
+                self._user_name_cache.pop(sender_open_id, None)
+                sender_name = ""
+            if not sender_name:
+                name_cache_ttl = USER_NAME_FAILURE_CACHE_TTL_SECONDS
+                try:
+                    request = (
+                        GetUserRequest.builder()
+                        .user_id(sender_open_id)
+                        .user_id_type("open_id")
+                        .build()
+                    )
+                    response = await asyncio.wait_for(
+                        self.lark_api.contact.v3.user.aget(request),
+                        timeout=USER_NAME_LOOKUP_TIMEOUT_SECONDS,
+                    )
+                    if response.success() and response.data and response.data.user:
+                        sender_name = str(response.data.user.name or "").strip()
+                        if sender_name:
+                            name_cache_ttl = USER_NAME_CACHE_TTL_SECONDS
+                    else:
+                        logger.debug(
+                            "[Lark] Sender name lookup failed for %s: code=%s, msg=%s",
+                            sender_open_id,
+                            getattr(response, "code", None),
+                            getattr(response, "msg", None),
+                        )
+                except Exception as exc:
+                    logger.debug(
+                        "[Lark] Sender name lookup failed for %s: %s",
+                        sender_open_id,
+                        exc,
+                    )
+                sender_name = sender_name or sender_open_id[:8]
+                self._user_name_cache[sender_open_id] = (
+                    sender_name,
+                    time.time() + name_cache_ttl,
+                )
+                if len(self._user_name_cache) > USER_NAME_CACHE_MAX_SIZE:
+                    self._user_name_cache.pop(next(iter(self._user_name_cache)))
+
+        abm.sender = MessageMember(user_id=sender_open_id, nickname=sender_name)
         if abm.type == MessageType.GROUP_MESSAGE:
             abm.session_id = abm.group_id
         else:

@@ -19,15 +19,16 @@ from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.pipeline.result_decorate.stage import ResultDecorateStage
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.sources.qqofficial.qqofficial_message_event import (
+    QQOfficialMessageEvent,
+)
 from astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter import (
+    PatchedMessage,
     QQOfficialPlatformAdapter,
     _ensure_group_message_create_parser,
 )
 from astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter import (
     botClient as QQOfficialBotClient,
-)
-from astrbot.core.platform.sources.qqofficial.qqofficial_message_event import (
-    QQOfficialMessageEvent,
 )
 from astrbot.core.platform.sources.qqofficial_webhook.qo_webhook_adapter import (
     QQOfficialWebhookPlatformAdapter,
@@ -44,6 +45,7 @@ def _make_group_payload(
     message_type: int | None = None,
     msg_elements: list[dict] | None = None,
     message_reference: dict | None = None,
+    group_name: str | None = None,
 ) -> dict:
     data = {
         "id": f"event-{message_id}",
@@ -62,6 +64,8 @@ def _make_group_payload(
         data["d"]["msg_elements"] = msg_elements
     if message_reference is not None:
         data["d"]["message_reference"] = message_reference
+    if group_name is not None:
+        data["d"]["group_name"] = group_name
     return data
 
 
@@ -103,7 +107,10 @@ async def test_group_message_create_parser_is_registered_and_dispatches_group_me
 @pytest.mark.asyncio
 async def test_parse_group_message_create_plain_message_has_no_at_component():
     _, message = _dispatch_group_message(
-        _make_group_payload(content="plain group message")
+        _make_group_payload(
+            content="plain group message",
+            group_name="Incoming Group",
+        )
     )
 
     abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
@@ -114,6 +121,8 @@ async def test_parse_group_message_create_plain_message_has_no_at_component():
     assert abm.type == MessageType.GROUP_MESSAGE
     assert abm.sender.user_id == "member-1"
     assert abm.group_id == "group-1"
+    assert abm.group is not None
+    assert abm.group.group_name == "Incoming Group"
     assert abm.message_str == "plain group message"
     assert not any(isinstance(component, At) for component in abm.message)
     assert [
@@ -245,6 +254,154 @@ async def test_group_message_create_handler_maps_group_session_and_scene():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("use_webhook", [False, True])
+async def test_get_group_uses_authenticated_client_for_ws_and_webhook(use_webhook):
+    _, message = _dispatch_group_message(
+        _make_group_payload(group_name="Incoming Group")
+    )
+    abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
+        message,
+        MessageType.GROUP_MESSAGE,
+    )
+    abm.session_id = abm.group_id
+
+    if use_webhook:
+        adapter = QQOfficialWebhookPlatformAdapter(
+            {
+                "id": "qq-official-webhook-test",
+                "appid": "123",
+                "secret": "secret",
+            },
+            {},
+            asyncio.Queue(),
+        )
+    else:
+        adapter = QQOfficialPlatformAdapter(
+            {
+                "id": "qq-official-test",
+                "appid": "123",
+                "secret": "secret",
+                "enable_group_c2c": True,
+                "enable_guild_direct_message": False,
+            },
+            {},
+            asyncio.Queue(),
+        )
+
+    request = AsyncMock(
+        return_value={
+            "group_openid": "group-1",
+            "group_name": "API Group",
+            "group_member_num": 42,
+        }
+    )
+    adapter.client.api = SimpleNamespace(_http=SimpleNamespace(request=request))
+    event = adapter.create_event(abm)
+
+    group = await event.get_group()
+
+    assert group is abm.group
+    assert group.group_id == "group-1"
+    assert group.group_name == "API Group"
+    assert group.member_count == 42
+    route = request.await_args.args[0]
+    assert route.method == "GET"
+    assert route.path == "/v2/groups/{group_openid}/info"
+    assert route.parameters == {"group_openid": "group-1"}
+
+
+@pytest.mark.asyncio
+async def test_get_group_keeps_incoming_metadata_when_group_info_api_fails():
+    _, message = _dispatch_group_message(
+        _make_group_payload(group_name="Incoming Group")
+    )
+    abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
+        message,
+        MessageType.GROUP_MESSAGE,
+    )
+    abm.session_id = abm.group_id
+    bot = SimpleNamespace(
+        api=SimpleNamespace(
+            _http=SimpleNamespace(request=AsyncMock(side_effect=PermissionError))
+        )
+    )
+    event = QQOfficialMessageEvent(
+        abm.message_str,
+        abm,
+        SimpleNamespace(name="qq_official", id="qq-official-test"),
+        abm.session_id,
+        cast(Any, bot),
+    )
+
+    group = await event.get_group()
+
+    assert group is abm.group
+    assert group.group_id == "group-1"
+    assert group.group_name == "Incoming Group"
+    assert group.member_count is None
+
+
+@pytest.mark.asyncio
+async def test_get_group_loads_channel_and_parent_guild_metadata():
+    message = PatchedMessage(
+        None,
+        "event-channel-1",
+        {
+            "id": "channel-message-1",
+            "content": "<@!bot-1> hello channel",
+            "author": {"id": "user-1", "username": "Alice"},
+            "channel_id": "channel-1",
+            "channel_name": "Incoming Channel",
+            "guild_id": "guild-1",
+            "mentions": [{"id": "bot-1", "is_you": True}],
+            "attachments": [],
+        },
+    )
+    abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
+        message,
+        MessageType.GROUP_MESSAGE,
+    )
+    abm.session_id = abm.group_id
+    api = SimpleNamespace(
+        get_channel=AsyncMock(
+            return_value={
+                "id": "channel-1",
+                "guild_id": "guild-1",
+                "name": "API Channel",
+            }
+        ),
+        get_guild=AsyncMock(
+            return_value={
+                "id": "guild-1",
+                "icon": "https://example.com/guild.png",
+                "owner_id": "owner-1",
+                "member_count": "128",
+            }
+        ),
+    )
+    event = QQOfficialMessageEvent(
+        abm.message_str,
+        abm,
+        SimpleNamespace(name="qq_official", id="qq-official-test"),
+        abm.session_id,
+        cast(Any, SimpleNamespace(api=api)),
+    )
+
+    assert abm.group is not None
+    assert abm.group.group_name == "Incoming Channel"
+
+    group = await event.get_group()
+
+    assert group.group_id == "channel-1"
+    assert group.group_name == "API Channel"
+    assert group.group_avatar == "https://example.com/guild.png"
+    assert group.group_owner == "owner-1"
+    assert group.member_count == 128
+    api.get_channel.assert_awaited_once_with("channel-1")
+    api.get_guild.assert_awaited_once_with("guild-1")
+
+
+@pytest.mark.asyncio
 async def test_ws_group_send_by_session_without_cached_msg_id_omits_msg_id():
     adapter = QQOfficialPlatformAdapter(
         {
@@ -317,9 +474,7 @@ async def test_media_upload_propagates_qq_api_error(monkeypatch):
         side_effect=botpy.errors.ServerError("413 Request Entity Too Large")
     )
     send_helper = SimpleNamespace(
-        bot=SimpleNamespace(
-            api=SimpleNamespace(_http=SimpleNamespace(request=request))
-        )
+        bot=SimpleNamespace(api=SimpleNamespace(_http=SimpleNamespace(request=request)))
     )
     monkeypatch.setattr(
         "astrbot.core.platform.sources.qqofficial.qqofficial_message_event._qqofficial_retry",
