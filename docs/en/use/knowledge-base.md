@@ -35,10 +35,12 @@ Fill in the name and other details. Select the embedding model under `Embedding 
 
 ## Uploading Files
 
-After creating a knowledge base, you can upload documents to it. Up to 10 files can be uploaded simultaneously, with a maximum size of 128 MB per file.
+After creating a knowledge base, you can upload documents to it in batch; the maximum size is 128 MB per file. <span style="color: gray">~~Up to 10 files can be uploaded simultaneously~~ (Archived: since v4.27.4, the limit of 10 files per upload has been removed)</span>
 
 ![Upload Files](https://files.astrbot.app/docs/en/use/image-4.png)
 
 ## Using the Knowledge Base
 
 Open `Config`, select the profile to edit, choose the knowledge bases under `AI → Capabilities → Knowledge Base`, and click `Save Configuration` at the bottom right. Each profile can use different knowledge bases.
+
+Knowledge base retrieval fuses dense and sparse retrieval scores with normalization and deduplicates source documents to improve retrieval quality (since v4.27.0).
