@@ -32,7 +32,6 @@
     "changelogs/**",
     ".venv*/**",
     "**/CHANGELOG.md",
-    ".agents/skills/archify/SKILL.md",
     ".agents/skills/archify/THIRD_PARTY_NOTICES.md",
     ".agents/skills/archify/brand-marks/**",
     ".agents/skills/archify/references/authoring-contract.md",

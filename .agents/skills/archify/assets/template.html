@@ -31,14 +31,8 @@
       } catch (_) {}
     })();
   </script>
-  <!-- Async font load: a blackholed network must not block first paint.
-       The body font stack falls back to system monospace until it lands. -->
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap"
-        rel="stylesheet" media="print" onload="this.media='all'">
-  <noscript>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  </noscript>
+  <!-- This checkout does not fetch Google Fonts. Viewer CSS falls back to
+       local JetBrains Mono and system monospace. -->
   <style>
     /* ==========================================================
        THEME VARIABLES — switch by toggling [data-theme] on <html>

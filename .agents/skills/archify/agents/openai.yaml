@@ -1,4 +1,4 @@
 interface:
   display_name: 'Archify'
   short_description: 'Render verified architecture, workflow, sequence, data-flow, and lifecycle diagrams'
-  default_prompt: 'Use $archify to map this AstrBot checkout into a validated standalone HTML diagram.'
+  default_prompt: 'Use archify to map this AstrBot checkout into a validated standalone HTML diagram under .tmp/archify/.'

@@ -15,3 +15,7 @@
 
 # Vendored Archify renderer
 .agents/skills/archify/** linguist-vendored
+.agents/skills/archify/SKILL.md linguist-vendored=false
+.agents/skills/archify/REFERENCE.md linguist-vendored=false
+.agents/skills/archify/VENDOR.json linguist-vendored=false
+.agents/skills/archify/scripts/check-checkout.mjs linguist-vendored=false

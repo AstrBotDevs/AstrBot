@@ -7,7 +7,7 @@
 	check-py check-py-all check-py-format check-py-lint \
 	check-web check-web-all check-web-build check-web-eslint check-web-smoke check-web-prettier check-web-i18n \
 	check-data check-md check-md-all check-md-prettier check-md-markdownlint check-toml check-toml-all check-toml-format check-toml-lint check-yaml check-yaml-all check-yaml-prettier check-yaml-lint \
-	check-shell check-shell-all check-shell-shfmt check-shell-shellcheck check-ps check-docker \
+	check-shell check-shell-all check-shell-shfmt check-shell-shellcheck check-ps check-docker check-archify \
 	format-py format-web format-data format-md format-toml format-yaml format-shell format-ps format-eol
 
 WORKTREE_DIR ?= ../astrbot_worktree
@@ -180,6 +180,10 @@ napcat-test:
 
 napcat-check: napcat-codegen napcat-test
 	git diff --exit-code -- astrbot/core/platform/sources/napcat/generated/ob11_events.py
+
+check-archify:
+	@echo "==> [archify] checkout-only doctor and example showcase"
+	node .agents/skills/archify/scripts/check-checkout.mjs
 
 quality:
 	@$(MAKE) $(PARALLEL_SUBMAKE_FLAGS) quality-all

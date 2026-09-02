@@ -3,6 +3,7 @@
 # github actions
 .git
 .github/
+.agents/
 .*ignore
 # User-specific stuff
 .idea/

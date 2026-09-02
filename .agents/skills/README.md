@@ -13,11 +13,11 @@ Shared locks live under `.agents/shared/`:
 
 ## Catalog
 
-| Skill                   | Load when                                                                 |
-| ----------------------- | ------------------------------------------------------------------------- |
-| `sync-upstream`         | Absorb `AstrBotDevs/AstrBot` `master`                                     |
-| `create-astrbot-plugin` | Create or repair a plugin (Star) package                                  |
-| `archify`               | Render architecture, workflow, sequence, data-flow, or lifecycle diagrams |
+| Skill                   | Load when                                                             |
+| ----------------------- | --------------------------------------------------------------------- |
+| `sync-upstream`         | Absorb `AstrBotDevs/AstrBot` `master`                                 |
+| `create-astrbot-plugin` | Create or repair a plugin (Star) package                              |
+| `archify`               | Checkout-only diagram renderer; not shipped in sdist, wheel, or image |
 
 Do not add a skill that only restates `AGENTS.md`. Split a skill when a
 second, independently loadable workflow appears.
@@ -40,6 +40,9 @@ Plugin sibling repositories should call this checkout's
 the skill.
 
 `archify` is a vendored MIT renderer from
-[tt-a1i/archify](https://github.com/tt-a1i/archify). Keep the overlay in
-`archify/REFERENCE.md` and the pin in `archify/VENDOR.json`. OpenCode loads it
-from `.agents/skills/archify/SKILL.md`.
+[tt-a1i/archify](https://github.com/tt-a1i/archify). It is a checkout-only
+maintainer tool: hatch sdist excludes `/.agents`, and `.dockerignore` drops
+`.agents/` from the image build context. Keep the overlay in
+`archify/REFERENCE.md` and the pin in `archify/VENDOR.json`. Agents load it
+from `.agents/skills/archify/SKILL.md`. Verify with `make check-archify`; that
+target is not part of `make check`.

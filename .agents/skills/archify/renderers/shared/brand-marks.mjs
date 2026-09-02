@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
-import http from 'node:http';
 import https from 'node:https';
 import net from 'node:net';
 import { BRAND_MARKS } from './generated-brand-marks.mjs';
@@ -44,7 +43,7 @@ for (const mark of BRAND_MARKS) {
 function asUrl(value) {
   try {
     const url = new URL(String(value));
-    return ['https:', 'http:'].includes(url.protocol) ? url : null;
+    return url.protocol === 'https:' ? url : null;
   } catch {
     return null;
   }
@@ -122,9 +121,9 @@ export function isPrivateBrandAddress(address) {
 }
 
 function validateUrlShape(url, allowPrivate = process.env.ARCHIFY_BRAND_ALLOW_PRIVATE === '1') {
-  if (!['https:', 'http:'].includes(url.protocol)) throw new Error('only HTTP(S) brand links are supported');
+  if (url.protocol !== 'https:') throw new Error('only HTTPS brand links are supported');
   if (url.username || url.password) throw new Error('brand links cannot contain credentials');
-  const expectedPort = url.protocol === 'https:' ? '443' : '80';
+  const expectedPort = '443';
   if (!allowPrivate && url.port && url.port !== expectedPort) {
     throw new Error('brand links must use a standard web port');
   }
@@ -177,8 +176,11 @@ function captureTimeoutMilliseconds() {
 
 function requestPinned(url, accept, target, deadline) {
   return new Promise((resolve, reject) => {
-    const transport = url.protocol === 'https:' ? https : http;
-    const request = transport.request(url, {
+    if (url.protocol !== 'https:') {
+      reject(new Error('only HTTPS brand links are supported'));
+      return;
+    }
+    const request = https.request(url, {
       method: 'GET',
       signal: timeoutSignal(Math.max(1, Math.min(4500, deadline - Date.now()))),
       headers: { accept, 'user-agent': USER_AGENT },

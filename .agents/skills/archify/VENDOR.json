@@ -5,5 +5,12 @@
   "version": "2.17.0-dev.1",
   "license": "MIT",
   "fetched_at_utc": "2026-09-02T08:31:59Z",
-  "excludes": ["test/", "examples/*.html"]
+  "purpose": "checkout-only maintainer tool; excluded from sdist, wheel, and runtime image",
+  "excludes": ["test/", "examples/*.html"],
+  "local_patches": [
+    "SKILL.md is the AstrBot overlay, not the upstream prompt",
+    "package.json scripts trimmed to files that exist in this tree",
+    "brand capture is HTTPS-only",
+    "assets/template.html does not load Google Fonts"
+  ]
 }

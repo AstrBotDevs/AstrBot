@@ -458,6 +458,8 @@ diff with its runtime/test changes.
 - **Skills:** load from `.agents/skills/`. Policy vs facts stay split
   (`SKILL.md` vs `REFERENCE.md` / shared files). Catalog:
   `.agents/skills/README.md`. Cite those files; do not paste them.
+  `archify` is a checkout-only maintainer renderer; hatch sdist excludes
+  `/.agents`, and the runtime image must not copy it.
 - **Commits/PRs:** follow
   `.agents/shared/conventional-commit/REFERENCE.md` when generating,
   reviewing, or classifying commit messages. Use English Conventional
