@@ -5,6 +5,7 @@ from astrbot import logger
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import AstrBotMessage, Group, MessageMember, PlatformMetadata
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astrbot_message import group_member_lookup_over_cap
 from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.utils.error_redaction import safe_error
 
@@ -173,6 +174,8 @@ class MisskeyPlatformEvent(AstrMessageEvent):
         if api is None or not hasattr(api, "_make_request"):
             return fallback_group
 
+        members_incomplete = False
+        memberships: list[dict] = []
         try:
             room = await api._make_request(
                 "chat/rooms/show",
@@ -181,18 +184,32 @@ class MisskeyPlatformEvent(AstrMessageEvent):
             if not isinstance(room, dict):
                 raise TypeError("Misskey room response must be an object")
 
-            memberships: list[dict] = []
             until_id = None
+            page_count = 0
             while True:
+                if group_member_lookup_over_cap(
+                    pages=page_count + 1,
+                    members=len(memberships),
+                ):
+                    members_incomplete = True
+                    break
                 payload = {"roomId": room_id, "limit": 100}
                 if until_id:
                     payload["untilId"] = until_id
                 page = await api._make_request("chat/rooms/members", payload)
                 if not isinstance(page, list):
                     raise TypeError("Misskey room members response must be a list")
-                memberships.extend(
+                page_count += 1
+                page_items = [
                     membership for membership in page if isinstance(membership, dict)
-                )
+                ]
+                if group_member_lookup_over_cap(
+                    pages=page_count,
+                    members=len(memberships) + len(page_items),
+                ):
+                    members_incomplete = True
+                    break
+                memberships.extend(page_items)
                 if len(page) < 100:
                     break
                 next_until_id = page[-1].get("id")
@@ -210,6 +227,15 @@ class MisskeyPlatformEvent(AstrMessageEvent):
             return fallback_group
 
         owner_id = str(room.get("ownerId") or fallback_group.group_owner or "")
+        if members_incomplete:
+            return Group(
+                group_id=room_id,
+                group_name=room.get("name") or fallback_group.group_name,
+                group_owner=owner_id or None,
+                group_admins=[],
+                members=None,
+            )
+
         members = []
         member_ids = set()
         for membership in memberships:

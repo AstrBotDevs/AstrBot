@@ -27,6 +27,7 @@ from astrbot.core.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astrbot_message import group_member_lookup_over_cap
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
@@ -247,6 +248,9 @@ class DiscordPlatformEvent(AstrMessageEvent):
             )
         )
         if not cache_complete or cached_members is None:
+            return group
+        if group_member_lookup_over_cap(pages=1, members=len(cached_members)):
+            group.members = None
             return group
 
         group_admins: list[str] = []

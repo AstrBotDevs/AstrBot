@@ -20,6 +20,7 @@ from astrbot.core.message.components import (
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import Group, MessageMember
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astrbot_message import group_member_lookup_over_cap
 from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.utils.error_redaction import safe_error
 
@@ -364,6 +365,13 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 safe_error("", exc),
             )
 
+        if group.member_count is not None and group_member_lookup_over_cap(
+            pages=1,
+            members=group.member_count,
+        ):
+            group.members = None
+            return group
+
         try:
             members = await self._bot.call_action(
                 "get_group_member_list",
@@ -382,6 +390,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
 
         owner_id = None
         admin_ids: list[str] = []
+        parsed_members: list[MessageMember] = []
         for member in members:
             if not isinstance(member, dict) or member.get("user_id") is None:
                 continue
@@ -389,17 +398,21 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 owner_id = str(member["user_id"])
             if member.get("role") == "admin":
                 admin_ids.append(str(member["user_id"]))
+            parsed_members.append(
+                MessageMember(
+                    user_id=str(member["user_id"]),
+                    nickname=member.get("nickname") or member.get("card"),
+                )
+            )
 
         group.group_admins = admin_ids
         group.group_owner = owner_id
-        group.members = [
-            MessageMember(
-                user_id=str(member["user_id"]),
-                nickname=member.get("nickname") or member.get("card"),
-            )
-            for member in members
-            if isinstance(member, dict) and member.get("user_id") is not None
-        ]
+        if group_member_lookup_over_cap(pages=1, members=len(parsed_members)):
+            group.members = None
+            if group.member_count is None:
+                group.member_count = len(parsed_members)
+            return group
+        group.members = parsed_members
         if group.member_count is None:
-            group.member_count = len(group.members)
+            group.member_count = len(parsed_members)
         return group

@@ -16,6 +16,7 @@ from astrbot.core.message.components import (
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import AstrBotMessage, Group, MessageMember, PlatformMetadata
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astrbot_message import group_member_lookup_over_cap
 from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.media_utils import resolve_media_ref_to_base64_data
@@ -115,7 +116,16 @@ class SatoriPlatformEvent(AstrMessageEvent):
         member_count = 0
         next_token = None
         seen_tokens: set[str] = set()
+        page_count = 0
+        members_incomplete = False
+        members_complete = False
         while True:
+            if group_member_lookup_over_cap(
+                pages=page_count + 1,
+                members=len(members),
+            ):
+                members_incomplete = True
+                break
             data = {"guild_id": target_id}
             if next_token:
                 data["next"] = next_token
@@ -137,13 +147,14 @@ class SatoriPlatformEvent(AstrMessageEvent):
             if not response or not isinstance(response.get("data"), list):
                 break
 
-            member_count += len(response["data"])
+            page_count += 1
+            page_items: list[MessageMember] = []
             for member in response["data"]:
                 user = member.get("user") or {}
                 user_id = user.get("id")
                 if not user_id:
                     continue
-                members.append(
+                page_items.append(
                     MessageMember(
                         user_id=str(user_id),
                         nickname=member.get("nick")
@@ -151,16 +162,28 @@ class SatoriPlatformEvent(AstrMessageEvent):
                         or user.get("name"),
                     ),
                 )
+            if group_member_lookup_over_cap(
+                pages=page_count,
+                members=len(members) + len(page_items),
+            ):
+                members_incomplete = True
+                break
+            members.extend(page_items)
+            member_count += len(response["data"])
 
             next_token = response.get("next")
             if not next_token:
-                group.members = members
-                group.member_count = member_count
+                members_complete = True
                 break
             if next_token in seen_tokens:
                 break
             seen_tokens.add(next_token)
 
+        if members_complete:
+            group.members = members
+            group.member_count = member_count
+        elif members_incomplete:
+            group.members = None
         return group
 
     @staticmethod

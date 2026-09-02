@@ -135,3 +135,59 @@ async def test_get_group_falls_back_when_room_api_is_unavailable() -> None:
     assert group.group_name == "Cached room"
     assert group.group_owner == "owner-id"
     assert group.members is None
+
+
+@pytest.mark.asyncio
+async def test_get_group_caps_member_pages_and_omits_truncated_list() -> None:
+    adapter = make_adapter()
+    message = await adapter.convert_room_message(
+        {
+            "id": "message-1",
+            "text": "hello",
+            "fromUserId": "sender-id",
+            "fromUser": {"id": "sender-id", "username": "sender"},
+            "toRoomId": "room-id",
+            "toRoom": {"name": "Cached room", "ownerId": "owner-id"},
+        },
+    )
+    member_calls = {"count": 0}
+
+    async def pages(endpoint, payload):
+        del payload
+        if endpoint == "chat/rooms/show":
+            return {
+                "id": "room-id",
+                "name": "Current room",
+                "ownerId": "owner-id",
+                "owner": {"id": "owner-id", "name": "Room owner"},
+            }
+        member_calls["count"] += 1
+        page = member_calls["count"]
+        return [
+            {
+                "id": f"membership-{page}-{index}",
+                "userId": f"user-{page}-{index}",
+                "user": {
+                    "id": f"user-{page}-{index}",
+                    "username": f"user{index}",
+                },
+            }
+            for index in range(100)
+        ]
+
+    adapter.api = AsyncMock()
+    adapter.api._make_request = AsyncMock(side_effect=pages)
+
+    group = await adapter.create_event(message).get_group()
+
+    assert group is not None
+    assert group.group_name == "Current room"
+    assert group.group_owner == "owner-id"
+    assert group.members is None
+    assert group.member_count is None
+    assert member_calls["count"] == 10
+    assert [
+        call_args.args[0]
+        for call_args in adapter.api._make_request.await_args_list
+        if call_args.args[0] == "chat/rooms/members"
+    ] == ["chat/rooms/members"] * 10

@@ -137,3 +137,87 @@ async def test_aiocqhttp_get_group_honors_explicit_group_id(
             self_id="bot-1",
         ),
     ]
+
+
+@pytest.mark.asyncio
+async def test_aiocqhttp_get_group_skips_member_list_when_count_is_over_cap():
+    event = AiocqhttpMessageEvent.__new__(AiocqhttpMessageEvent)
+    event.message_obj = SimpleNamespace(
+        group=Group(group_id="123", group_name="Inbound name", group_owner="9"),
+        group_id="123",
+        self_id="bot-1",
+    )
+    event._bot = SimpleNamespace(
+        call_action=AsyncMock(
+            return_value={"group_name": "Fetched name", "member_count": 2500},
+        )
+    )
+
+    group = await event.get_group()
+
+    assert event._bot.call_action.await_args_list == [
+        call("get_group_info", group_id=123, self_id="bot-1"),
+    ]
+    assert group.group_name == "Fetched name"
+    assert group.member_count == 2500
+    assert group.members is None
+    assert group.group_owner == "9"
+
+
+@pytest.mark.asyncio
+async def test_aiocqhttp_get_group_omits_members_when_list_is_over_cap():
+    members = [
+        {"user_id": index, "role": "member", "nickname": str(index)}
+        for index in range(2001)
+    ]
+    members[0]["role"] = "owner"
+    members[1]["role"] = "admin"
+    event = AiocqhttpMessageEvent.__new__(AiocqhttpMessageEvent)
+    event.message_obj = SimpleNamespace(
+        group=Group(group_id="123", group_name="Inbound name"),
+        group_id="123",
+        self_id="bot-1",
+    )
+    event._bot = SimpleNamespace(
+        call_action=AsyncMock(
+            side_effect=[
+                {"group_name": "Fetched name"},
+                members,
+            ],
+        )
+    )
+
+    group = await event.get_group()
+
+    assert event._bot.call_action.await_args_list == [
+        call("get_group_info", group_id=123, self_id="bot-1"),
+        call("get_group_member_list", group_id=123, self_id="bot-1"),
+    ]
+    assert group.members is None
+    assert group.member_count == 2001
+    assert group.group_owner == "0"
+    assert group.group_admins == ["1"]
+
+
+@pytest.mark.asyncio
+async def test_aiocqhttp_get_group_still_publishes_members_at_hard_cap():
+    event = AiocqhttpMessageEvent.__new__(AiocqhttpMessageEvent)
+    event.message_obj = SimpleNamespace(
+        group=Group(group_id="123", group_name="Inbound name"),
+        group_id="123",
+        self_id="bot-1",
+    )
+    event._bot = SimpleNamespace(
+        call_action=AsyncMock(
+            side_effect=[
+                {"group_name": "Fetched name"},
+                [{"user_id": index, "nickname": str(index)} for index in range(2000)],
+            ],
+        )
+    )
+
+    group = await event.get_group()
+
+    assert group.members is not None
+    assert len(group.members) == 2000
+    assert group.member_count == 2000

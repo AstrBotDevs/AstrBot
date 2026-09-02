@@ -1045,6 +1045,56 @@ async def test_discord_get_group_enriches_guild_metadata_from_complete_cache():
 
 
 @pytest.mark.asyncio
+async def test_discord_get_group_omits_members_when_complete_cache_is_over_cap():
+    members = [
+        SimpleNamespace(
+            id=index,
+            display_name=f"member-{index}",
+            guild_permissions=SimpleNamespace(administrator=index == 2),
+        )
+        for index in range(1, 2002)
+    ]
+    guild = SimpleNamespace(
+        name="AstrBot",
+        icon=SimpleNamespace(url="https://cdn.discordapp.com/guild.png"),
+        owner_id=1,
+        member_count=2001,
+        members=members,
+        chunked=True,
+    )
+    channel = _discord_guild_channel(
+        id=123,
+        name="general",
+        guild=guild,
+        permissions_for=lambda member: SimpleNamespace(view_channel=True),
+    )
+    client = SimpleNamespace(
+        get_channel=lambda channel_id: channel,
+        fetch_channel=AsyncMock(),
+        intents=SimpleNamespace(members=True),
+    )
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    inbound = Group(group_id="123", group_name="general")
+    event.message_obj = SimpleNamespace(
+        type=MessageType.GROUP_MESSAGE,
+        group=inbound,
+        group_id="123",
+    )
+    event._client = client
+
+    group = await event.get_group()
+
+    assert group is not inbound
+    assert group.group_name == "AstrBot-general"
+    assert group.group_avatar == "https://cdn.discordapp.com/guild.png"
+    assert group.group_owner == "1"
+    assert group.member_count == 2001
+    assert group.members is None
+    assert group.group_admins is None
+    client.fetch_channel.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_discord_get_group_returns_none_for_private_message():
     event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
     event.message_obj = SimpleNamespace(
