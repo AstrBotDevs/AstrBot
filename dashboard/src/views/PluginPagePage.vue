@@ -7,6 +7,7 @@ import { fetchWithAuth } from "@/api/http";
 import { useModuleI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
 import { useCustomizerStore } from "@/stores/customizer";
+import { pluginSidebarState } from "@/composables/usePluginSidebarItems";
 
 const BRIDGE_CHANNEL = "astrbot-plugin-page";
 
@@ -571,11 +572,19 @@ const loadPluginPage = async () => {
     const pluginData = detailResponse.data?.data || null;
     if (!pluginData) {
       errorMessage.value = tm("messages.pluginNotFound");
+      // 修正侧边栏共享状态中已卸载插件的陈旧入口
+      pluginSidebarState.plugins = pluginSidebarState.plugins.filter(
+        (p) => p.name !== pluginName.value,
+      );
       return;
     }
 
     if (!pluginData.activated) {
       errorMessage.value = tm("messages.pluginDisabled");
+      // 修正侧边栏共享状态中已禁用插件的陈旧入口
+      pluginSidebarState.plugins = pluginSidebarState.plugins.map((p) =>
+        p.name === pluginName.value ? { ...p, activated: false } : p,
+      );
       return;
     }
 
