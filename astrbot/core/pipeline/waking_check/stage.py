@@ -83,27 +83,30 @@ def build_unique_session_id(event: AstrMessageEvent) -> str | None:
     return builder(event) if builder else None
 
 
+def _raw_message_type_value(raw: object) -> str | None:
+    """Return MessageType.value only when ``raw`` is a real inbound type."""
+
+    if isinstance(raw, MessageType):
+        return raw.value
+    if raw is None:
+        return None
+    try:
+        return MessageType(str(raw)).value
+    except ValueError, TypeError, AttributeError:
+        return None
+
+
 def _auth_message_type(event: AstrMessageEvent) -> str | None:
     """Return MessageType.value for authorization, or None if unknown.
 
-    Prefers ``get_message_type()`` then ``message_obj.type``. A true private
-    chat falls back to FriendMessage. Does not default to ``"friend"`` and does
-    not parse ``unified_msg_origin``.
+    Reads only ``message_obj.type``. Does not call ``get_message_type()`` or
+    ``is_private_chat()``: both inherit AstrMessageEvent's FRIEND_MESSAGE
+    default for invalid or missing types. Does not parse unified_msg_origin
+    and does not treat ``"friend"`` as a DM.
     """
 
-    get_message_type = getattr(event, "get_message_type", None)
-    if callable(get_message_type):
-        message_type_obj = get_message_type()
-        if isinstance(message_type_obj, MessageType):
-            return message_type_obj.value
     message_obj = getattr(event, "message_obj", None)
-    message_obj_type = getattr(message_obj, "type", None)
-    if isinstance(message_obj_type, MessageType):
-        return message_obj_type.value
-    is_private_chat = getattr(event, "is_private_chat", None)
-    if callable(is_private_chat) and is_private_chat() is True:
-        return MessageType.FRIEND_MESSAGE.value
-    return None
+    return _raw_message_type_value(getattr(message_obj, "type", None))
 
 
 class WakingCheckStage(Stage):

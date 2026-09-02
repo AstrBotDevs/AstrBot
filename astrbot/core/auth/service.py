@@ -42,6 +42,7 @@ from astrbot.core.db.po import (
     DashboardAccount,
 )
 from astrbot.core.db.protocols import ApiKeyStore, DatabaseSessionStore
+from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.error_redaction import redact_sensitive_text
 
@@ -139,6 +140,23 @@ def _webchat_step_up_cached(context: AuthContext, action: str) -> str | None:
     return credential_id
 
 
+def _session_umo_is_friend(session_scope: Resource | None) -> bool:
+    """Return whether the origin UMO parses as FriendMessage.
+
+    A FriendMessage UMO is never sufficient on its own. GroupMessage and
+    OtherMessage origins are never private-session owned. An unparseable UMO
+    is not a DM.
+    """
+
+    umo = None if session_scope is None else session_scope.umo
+    if not isinstance(umo, str) or not umo:
+        return False
+    try:
+        return MessageSession.from_str(umo).message_type is MessageType.FRIEND_MESSAGE
+    except ValueError, TypeError, AttributeError:
+        return False
+
+
 def _is_private_im_origin(
     subject: Subject,
     context: AuthContext,
@@ -156,6 +174,7 @@ def _is_private_im_origin(
         and origin_matches
         and session_scope is not None
         and context.message_type == MessageType.FRIEND_MESSAGE.value
+        and _session_umo_is_friend(session_scope)
     )
 
 
@@ -1599,16 +1618,15 @@ class AuthorizationService:
             and session_scope is not None
         ):
             facts.append((Role.MEMBER, "default", session_scope))
-        if session_scope is not None and _is_private_im_origin(
+        private_im_origin = _is_private_im_origin(
             subject,
             context,
             origin_matches=origin_matches,
             session_scope=session_scope,
-        ):
-            facts.append((Role.SESSION_OWNER, "private_session", session_scope))
-        skip_platform_elevation = (
-            context.message_type == MessageType.FRIEND_MESSAGE.value
         )
+        if private_im_origin and session_scope is not None:
+            facts.append((Role.SESSION_OWNER, "private_session", session_scope))
+        skip_platform_elevation = private_im_origin
         now = utc_now()
         async with self._db.get_db() as session:
             bindings = await session.execute(

@@ -11,13 +11,39 @@ from astrbot.core.command import (
     build_command_catalog,
 )
 from astrbot.core.message.components import At, AtAll, Plain, Reply
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.runtime_catalogs import RuntimeCatalogs
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import ActionPermissionFilter
 from astrbot.core.star.star import StarMetadata
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
+
+
+class ConcreteEvent(AstrMessageEvent):
+    async def send(self, message):
+        _ = message
+
+
+def make_real_event(*, message_type, group_id="room-a", session_id="room-a"):
+    message = AstrBotMessage()
+    message.type = message_type
+    message.group_id = group_id
+    message.session_id = session_id
+    message.message_id = "msg-1"
+    message.self_id = "bot"
+    message.sender = MessageMember(user_id="user-1", nickname="User")
+    message.message = []
+    message.message_str = "hello"
+    return ConcreteEvent(
+        message_str="hello",
+        message_obj=message,
+        platform_meta=PlatformMetadata(name="napcat", description="test", id="napcat"),
+        session_id=session_id,
+    )
 
 
 class FakeEvent:
@@ -237,7 +263,7 @@ async def test_attach_authorization_keeps_group_type_when_umo_looks_private():
 
 
 @pytest.mark.asyncio
-async def test_auth_message_type_falls_back_to_private_chat():
+async def test_auth_message_type_is_none_when_type_missing_even_if_private():
     stage = await make_stage()
     event = FakeEvent([], private=True)
     event.get_message_type = None
@@ -245,8 +271,8 @@ async def test_auth_message_type_falls_back_to_private_chat():
 
     await stage._attach_authorization(event)
 
-    assert event.get_extra("auth_context").message_type == "FriendMessage"
-    assert waking._auth_message_type(event) == "FriendMessage"
+    assert event.get_extra("auth_context").message_type is None
+    assert waking._auth_message_type(event) is None
 
 
 @pytest.mark.asyncio
@@ -260,6 +286,29 @@ async def test_auth_message_type_is_none_when_type_missing_and_not_private():
 
     assert event.get_extra("auth_context").message_type is None
     assert waking._auth_message_type(event) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid_type", [None, "InvalidMessageType", "friend", 123])
+async def test_auth_message_type_ignores_event_friend_fallback(invalid_type):
+    stage = await make_stage()
+    event = make_real_event(message_type=invalid_type, group_id="room-a")
+
+    await stage._attach_authorization(event)
+
+    assert event.get_message_type() is MessageType.FRIEND_MESSAGE
+    assert event.is_private_chat() is True
+    assert waking._auth_message_type(event) is None
+    assert event.auth_context is not None
+    assert event.auth_context.message_type is None
+
+
+def test_auth_message_type_accepts_friendmessage_string():
+    event = FakeEvent([], private=True)
+    event.get_message_type = None
+    event.message_obj = SimpleNamespace(type="FriendMessage")
+
+    assert waking._auth_message_type(event) == "FriendMessage"
 
 
 def install_handlers(stage, monkeypatch, handlers) -> None:
