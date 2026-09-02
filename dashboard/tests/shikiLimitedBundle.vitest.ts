@@ -45,6 +45,9 @@ describe('limited shiki bundle', () => {
     expect(normalizeLimitedShikiLanguage('C#')).toBe('csharp');
     expect(normalizeLimitedShikiLanguage('toml')).toBe('toml');
     expect(normalizeLimitedShikiLanguage('scratch')).toBe('text');
+    expect(normalizeLimitedShikiLanguage('python:line-numbers')).toBe('python');
+    expect(normalizeLimitedShikiLanguage('c++:linenos')).toBe('cpp');
+    expect(normalizeLimitedShikiLanguage('h++')).toBe('cpp');
     expect(bundledLanguages.rust).toEqual(expect.any(Function));
     expect(bundledLanguages.shellscript).toEqual(expect.any(Function));
     expect(bundledLanguages.terraform).toEqual(expect.any(Function));
@@ -89,6 +92,13 @@ describe('limited shiki bundle', () => {
     ).toBe(true);
     expect(
       isFenceLanguageSettled({ language: 'python', code: '', loading: true }),
+    ).toBe(true);
+    expect(
+      isFenceLanguageSettled({
+        language: 'python:line-numbers',
+        code: '',
+        loading: true,
+      }),
     ).toBe(true);
   });
 });

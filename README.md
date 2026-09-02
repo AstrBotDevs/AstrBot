@@ -147,13 +147,13 @@ This table reflects the current built-in adapter discovery map. Plugins can add 
 
 ## Supported Model Services
 
-| Service type       | Current built-in range                                                                                                                         |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Chat models        | OpenAI Chat Completions/Responses and compatible APIs, Anthropic, Gemini, Zhipu, Xiaomi, MiniMax, Kimi Code, xAI, Groq, OpenRouter, and others |
-| Local models       | Ollama and LM Studio through their supported APIs                                                                                              |
-| Agent Runners      | Built-in local Agent plus Dify, Coze, Alibaba Cloud Bailian applications, and DeerFlow                                                         |
-| Speech             | Whisper, SenseVoice, Xiaomi MiMo, Xinference, OpenAI/Gemini/Edge/Azure/ElevenLabs TTS, GPT-SoVITS, FishAudio, DashScope, and others            |
-| Embedding / Rerank | OpenAI, Gemini, NVIDIA, Ollama, vLLM, Xinference, and Alibaba Cloud Bailian                                                                    |
+| Service type       | Current built-in range                                                                                                                                     |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chat models        | OpenAI Chat Completions/Responses and compatible APIs, Anthropic, Gemini, Zhipu, Xiaomi, MiniMax, Kimi Code, xAI, Groq, OpenRouter, MiraRouter, and others |
+| Local models       | Ollama and LM Studio through their supported APIs                                                                                                          |
+| Agent Runners      | Built-in local Agent plus Dify, Coze, Alibaba Cloud Bailian applications, and DeerFlow                                                                     |
+| Speech             | Whisper, SenseVoice, Xiaomi MiMo, Xinference, OpenAI/Gemini/Edge/Azure/ElevenLabs TTS, GPT-SoVITS, FishAudio, DashScope, and others                        |
+| Embedding / Rerank | OpenAI, Gemini, NVIDIA, Ollama, vLLM, Xinference, and Alibaba Cloud Bailian                                                                                |
 
 Provider templates come from the code registry and evolve over time. Treat **Providers → Add Provider Source** in the running WebUI as authoritative; see [Model Providers](docs/en/providers/start.md).
 

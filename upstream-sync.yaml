@@ -5,20 +5,22 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 385e4b6bfb87952d78d56ce21fc1caff1e68a85e
-  synced_at_utc: 2026-09-01T14:56:49Z
+  commit: 9115cc2945756eedebe2e861d73853661f52c2c7
+  synced_at_utc: 2026-09-02T19:14:40Z
   sync_method: cherry-pick-and-manual-adaptation
-  source_pr: '9653'
+  source_pr: '9892'
   note: >-
-    Reviewed 34743f4adfe666e52422426e792b8ff7c88b92ec..385e4b6bfb87952d78d56ce21fc1caff1e68a85e
-    (4 commits). Adapted #9887, #9885, #9851, and #9653. No cherry-picks and no
-    skips. Wrap-up: get_group copies inbound Group; LINE fills name/count only;
-    Slack/Lark/KOOK/Mattermost member pagination is hard-capped; Telegram
-    avatars use the file base URL; DingTalk uses getattr for conversation_title;
-    default-market plugin updates work without persisting implicit install
-    sources; plugin list payloads use online_version. CodeQL is pinned to the
-    peeled v4.37.9 SHA. Slack inbound conversion still skips conversations_info.
-    Empty non-streaming chains skip Respond without logs, receipts, or
-    after-send hooks. Lark docs add contact:user.base:readonly. No upstream
-    version bump in this interval; absorbed user-visible changes are in the
-    4.27.6 changelog.
+    Reviewed 385e4b6bfb87952d78d56ce21fc1caff1e68a85e..9115cc2945756eedebe2e861d73853661f52c2c7
+    (9 commits). Adapted all nine: #9909, #9906, #9881, #9880, MiraRouter docs,
+    MiraRouter source, #9911, #9896, and #9892. No cherry-picks and no skips.
+    UMO auto-names persist after WakingCheckStage finalizes is_wake via
+    execution_context.database and background_tasks; auto upserts never
+    overwrite user_alias. Discord inbound GROUP_MESSAGE writes group_id;
+    unresolved send fallbacks still guess GROUP_MESSAGE.
+    Skills batch delete stays on composition SkillsSection with zh-CN/en-US.
+    Anthropic folds cache_creation into input_other; Gemini subtracts cached
+    tokens and clamps at zero. MiraRouter inherits ProviderOpenAIChatCompletions
+    and registers in provider_modules.py. Version is 4.28.0-beta.1 with a
+    fork-only changelog. en-US syncProvider wording only. Shiki keeps the
+    TypeScript lazy bundle, splits fence languages on colon, and regenerates
+    the T2I IIFE with Vite oxc minify.

@@ -142,38 +142,38 @@
   },
   "syncProvider": {
     "title": "Sync MCP Servers",
-    "subtitle": "Sync MCP server configurations from providers to local",
+    "subtitle": "Sync MCP server configurations from a provider to local",
     "steps": {
-      "selectProvider": "Step 1: Select Provider",
-      "configureAuth": "Step 2: Configure Authentication",
-      "syncServers": "Step 3: Sync Servers"
+      "selectProvider": "Step 1: Select a provider",
+      "configureAuth": "Step 2: Configure authentication",
+      "syncServers": "Step 3: Sync servers"
     },
     "providers": {
       "modelscope": "ModelScope",
-      "description": "ModelScope is an open model community providing MCP servers for various machine learning and AI services"
+      "description": "ModelScope is an open-source model community offering MCP servers for various machine learning and AI services"
     },
     "fields": {
-      "provider": "Select Provider",
-      "accessToken": "Access Token",
-      "tokenRequired": "Access token is required",
-      "tokenHint": "Please enter your ModelScope access token"
+      "provider": "Select a provider",
+      "accessToken": "Access token",
+      "tokenHint": "Enter your ModelScope access token",
+      "tokenRequired": "Access token is required"
     },
     "buttons": {
       "cancel": "Cancel",
       "previous": "Previous",
       "next": "Next",
-      "sync": "Start Sync",
-      "getToken": "Get Token"
+      "getToken": "Get token",
+      "sync": "Start sync"
     },
     "status": {
-      "selectProvider": "Please select an MCP server provider",
-      "enterToken": "Please enter the access token to continue",
-      "readyToSync": "Ready to sync server configurations"
+      "selectProvider": "Select an MCP server provider to continue",
+      "enterToken": "Enter your access token to continue",
+      "readyToSync": "Ready to sync server configuration"
     },
     "messages": {
       "syncSuccess": "MCP servers synced successfully!",
       "syncError": "Sync failed: {error}",
-      "tokenHelp": "How to get a ModelScope access token? Click the button on the right for instructions"
+      "tokenHelp": "How do I get a ModelScope access token? Click the button on the right for instructions"
     }
   },
   "interaction": {

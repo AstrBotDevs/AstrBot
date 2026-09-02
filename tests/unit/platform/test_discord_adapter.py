@@ -218,6 +218,8 @@ async def test_discord_convert_message_maps_unknown_attachment_to_file_component
 
     abm = await adapter.convert_message({"message": message})
 
+    assert abm.type == MessageType.FRIEND_MESSAGE
+    assert abm.group_id == ""
     assert abm.message_str == "see file"
     assert abm.message[0].text == "see file"
     assert abm.message[1].name == "archive.zip"
@@ -464,7 +466,7 @@ async def test_discord_send_by_session_uses_friend_message_for_dm_channel():
 
     temp_event.send.assert_awaited_once()
     assert seen_messages[0].type == discord_platform_adapter.MessageType.FRIEND_MESSAGE
-    assert seen_messages[0].group_id == "321"
+    assert seen_messages[0].group_id == ""
     assert seen_messages[0].session_id == "321"
 
 

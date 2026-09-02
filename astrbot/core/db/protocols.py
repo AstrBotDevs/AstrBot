@@ -858,6 +858,13 @@ class UmoAliasStore(Protocol):
         user_alias: str | None,
     ) -> UmoAlias: ...
 
+    async def upsert_umo_auto_name(
+        self,
+        umo: str,
+        creator_sender_id: str,
+        auto_name: str,
+    ) -> None: ...
+
     async def get_umo_alias(self, umo: str) -> UmoAlias | None: ...
 
     async def get_umo_aliases(
