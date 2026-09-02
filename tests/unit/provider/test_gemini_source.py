@@ -174,6 +174,56 @@ def test_gemini_extract_usage_defaults_missing_counts_to_zero():
     assert usage.total == 0
 
 
+def test_gemini_extract_usage_excludes_cached_tokens_from_input_other():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    usage = provider._extract_usage(
+        SimpleNamespace(
+            prompt_token_count=100,
+            cached_content_token_count=30,
+            candidates_token_count=50,
+        )
+    )
+
+    assert usage.input_other == 70
+    assert usage.input_cached == 30
+    assert usage.input == 100
+    assert usage.output == 50
+
+
+def test_gemini_extract_usage_without_cache_keeps_full_prompt_tokens():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    usage = provider._extract_usage(
+        SimpleNamespace(
+            prompt_token_count=100,
+            cached_content_token_count=0,
+            candidates_token_count=20,
+        )
+    )
+
+    assert usage.input_other == 100
+    assert usage.input_cached == 0
+    assert usage.input == 100
+    assert usage.output == 20
+
+
+def test_gemini_extract_usage_clamps_when_cached_exceeds_prompt():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    usage = provider._extract_usage(
+        SimpleNamespace(
+            prompt_token_count=1,
+            cached_content_token_count=2,
+            candidates_token_count=3,
+        )
+    )
+
+    assert usage.input_other == 0
+    assert usage.input_cached == 2
+    assert usage.output == 3
+
+
 @pytest.mark.asyncio
 async def test_gemini_get_models_retries_transient_request_error(monkeypatch):
     monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MIN_S", 0)
@@ -542,7 +592,7 @@ async def test_gemini_query_stream_accumulates_text_and_reasoning(monkeypatch):
             text="lo",
             response_id="resp-2",
             usage_metadata=SimpleNamespace(
-                prompt_token_count=1,
+                prompt_token_count=5,
                 cached_content_token_count=2,
                 candidates_token_count=3,
             ),
@@ -582,7 +632,7 @@ async def test_gemini_query_stream_accumulates_text_and_reasoning(monkeypatch):
     assert responses[1].completion_text == "lo"
     assert responses[2].completion_text == "Hello"
     assert responses[2].reasoning_content == "ponder"
-    assert responses[2].usage.total == 6
+    assert responses[2].usage.total == 8
 
 
 @pytest.mark.asyncio
@@ -1252,7 +1302,7 @@ async def test_gemini_query_retries_capability_fallbacks_before_success(monkeypa
         ],
         response_id="resp-final",
         usage_metadata=SimpleNamespace(
-            prompt_token_count=1,
+            prompt_token_count=5,
             cached_content_token_count=2,
             candidates_token_count=3,
         ),
@@ -1297,7 +1347,7 @@ async def test_gemini_query_retries_capability_fallbacks_before_success(monkeypa
 
     assert response.id == "resp-final"
     assert response.completion_text == "final answer"
-    assert response.usage.total == 6
+    assert response.usage.total == 8
     assert provider._prepare_query_config.await_count == 4
     first_call, second_call, third_call, fourth_call = (
         provider._prepare_query_config.await_args_list
