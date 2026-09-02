@@ -14,6 +14,12 @@ const tabs = computed(() => [
     routeName: "Extensions",
   },
   {
+    value: "pluginPages",
+    label: t("core.navigation.extensionTabs.pluginPages"),
+    icon: "mdi-monitor-dashboard",
+    routeName: "ExtensionPluginPages",
+  },
+  {
     value: "skills",
     label: t("core.navigation.extensionTabs.skills"),
     icon: "mdi-lightning-bolt-outline",
@@ -39,7 +45,13 @@ const activeTab = computed(() =>
 </script>
 
 <template>
-  <div class="plugin-workspace">
+  <div
+    class="plugin-workspace"
+    :class="{
+      'plugin-workspace--fill':
+        activeTab === 'pluginPages' && Boolean(route.params.pageName),
+    }"
+  >
     <div class="plugin-tabs-scroll">
       <nav
         class="plugin-tabs"
@@ -85,6 +97,13 @@ const activeTab = computed(() =>
 .plugin-workspace {
   min-width: 0;
   width: 100%;
+}
+
+/* Only an opened plugin page needs a full-height shell for its iframe */
+.plugin-workspace--fill {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .plugin-tabs-scroll {

@@ -9,7 +9,8 @@
         "handlersOperation": "Управление поведением"
     },
     "titles": {
-        "installedAstrBotPlugins": "Установленные"
+        "installedAstrBotPlugins": "Установленные",
+        "pluginPages": "Страницы плагинов"
     },
     "failedPlugins": {
         "title": "Ошибка загрузки ({count})",
@@ -48,6 +49,8 @@
         "openPages": "Pages",
         "openPage": "Открыть",
         "openWebui": "Открыть UI плагина",
+"expand": "Развернуть",
+"collapse": "Свернуть",
         "close": "Закрыть",
         "save": "Сохранить",
         "saveAndClose": "Сохранить и закрыть",
@@ -103,7 +106,9 @@
     },
     "empty": {
         "noPlugins": "Плагины не найдены",
-        "noPluginsDesc": "Попробуйте установить новые плагины или изменить поиск."
+        "noPluginsDesc": "Попробуйте установить новые плагины или изменить поиск.",
+        "noPluginPages": "Страницы плагинов не найдены",
+        "noPluginPagesDesc": "Установите плагины с веб-страницами, и они появятся здесь."
     },
     "detail": {
         "contents": "Обработчики плагина",
@@ -303,6 +308,10 @@
         "invalidUrl": "Введите корректный URL",
         "invalidRepositoryUrl": "Введите корректный URL Git-репозитория",
         "enterJsonUrl": "Введите URL, возвращающий список плагинов в формате JSON",
+        "pluginNotFound": "Плагин не найден",
+        "pluginDisabled": "Этот плагин отключён. Включите его, прежде чем открывать страницу.",
+        "pluginPageNotFound": "Страница плагина не найдена",
+        "pluginPageLoadFailed": "Не удалось загрузить страницу плагина",
         "missingMarketPluginId": "Эта запись источника не содержит идентификаторов плагина, поэтому его нельзя установить из магазина",
         "sourceBindSuccess": "Источник плагина обновлен",
         "validatingPlugin": "Проверка плагина...",

@@ -4,6 +4,7 @@ import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
 import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
 import ProxySelector from "@/components/shared/ProxySelector.vue";
 import UninstallConfirmDialog from "@/components/shared/UninstallConfirmDialog.vue";
+import PluginPagesSwitcher from "@/components/extension/PluginPagesSwitcher.vue";
 import { useExtensionPage } from "./extension/useExtensionPage";
 import { computed, defineAsyncComponent } from "vue";
 import defaultPluginIcon from "/favicon.svg";
@@ -24,6 +25,12 @@ const MarketPluginsTab = defineAsyncComponent(
 );
 const PluginDetailPage = defineAsyncComponent(
   () => import("./extension/PluginDetailPage.vue"),
+);
+const PluginPagesTab = defineAsyncComponent(
+  () => import("./extension/PluginPagesTab.vue"),
+);
+const PluginPagePage = defineAsyncComponent(
+  () => import("./PluginPagePage.vue"),
 );
 
 const pageState = useExtensionPage(props.initialTab);
@@ -292,6 +299,17 @@ const updateDialogPluginLogo = computed(() => {
 </script>
 
 <template>
+  <!-- Page switcher below the workspace tabs, shown whenever the plugin pages
+       tab is in its grid view (a page is not opened yet). -->
+  <div
+    v-if="
+      route.meta.extensionTab === 'pluginPages' && !route.params.pageName
+    "
+    class="plugin-pages-switcher-host"
+  >
+    <PluginPagesSwitcher :plugins="filteredExtensions" />
+  </div>
+
   <PluginDetailPage
     v-if="selectedPluginId && selectedDetailPlugin"
     :plugin="selectedDetailPlugin"
@@ -334,13 +352,31 @@ const updateDialogPluginLogo = computed(() => {
     </v-alert>
   </div>
 
+  <!-- Plugin page opened inline: kept outside the 1200px wrapper so the
+       absolutely positioned page host can fill the workspace shell. -->
+  <div
+    v-else-if="route.meta.extensionTab === 'pluginPages' && route.params.pageName"
+    class="plugin-page-host"
+  >
+    <div class="plugin-pages-switcher-host">
+      <PluginPagesSwitcher :plugins="filteredExtensions" />
+    </div>
+    <div class="plugin-page-host__body">
+      <PluginPagePage />
+    </div>
+  </div>
+
   <v-row v-else class="extension-page">
     <v-col cols="12" md="12">
       <v-card variant="flat" style="background-color: transparent">
         <!-- 标签页 -->
         <v-card-text style="padding: 0px 12px">
+          <PluginPagesTab
+            v-if="route.meta.extensionTab === 'pluginPages'"
+            :state="pageState"
+          />
           <InstalledPluginsTab
-            v-if="activeTab === 'installed'"
+            v-else-if="activeTab === 'installed'"
             :state="pageState"
           />
           <MarketPluginsTab v-else :state="pageState" />
@@ -1271,6 +1307,25 @@ const updateDialogPluginLogo = computed(() => {
   margin: 0 auto;
   max-width: 1200px;
   width: 100%;
+}
+
+/* Containing block for the absolutely positioned inline plugin page */
+.plugin-page-host {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Horizontal inset for the switcher row so it lines up with the tabs */
+.plugin-pages-switcher-host {
+  padding: 0 12px;
+}
+
+.plugin-page-host__body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
 }
 
 .plugin-handler-item {

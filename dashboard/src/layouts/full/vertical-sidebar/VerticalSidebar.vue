@@ -2,36 +2,16 @@
 import { ref, shallowRef, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useCustomizerStore } from '../../../stores/customizer';
 import { useI18n } from '@/i18n/composables';
-import sidebarItems, { MORE_GROUP_KEY } from './sidebarItem';
+import sidebarItems from './sidebarItem';
 import NavItem from './NavItem.vue';
 import { applySidebarCustomization } from '@/utils/sidebarCustomization';
-import { usePluginSidebarItems } from '@/composables/usePluginSidebarItems';
 
 const { t } = useI18n();
 
 const customizer = useCustomizerStore();
-const { pluginItems } = usePluginSidebarItems();
 
 function buildSidebarMenu() {
-  const base = applySidebarCustomization(sidebarItems);
-  if (!pluginItems.value?.children?.length) return base;
-
-  const result = [];
-
-  for (const item of base) {
-    if (item.title === MORE_GROUP_KEY) {
-      result.push(pluginItems.value);
-      result.push(item);
-    } else {
-      result.push(item);
-    }
-  }
-
-  if (!base.some((item) => item.title === MORE_GROUP_KEY)) {
-    result.push(pluginItems.value);
-  }
-
-  return result;
+  return applySidebarCustomization(sidebarItems);
 }
 
 function collectGroupValues(items, values = new Set()) {
@@ -69,12 +49,6 @@ const openedItems = ref(getInitialOpenedItems(sidebarMenu.value));
 watch(openedItems, (val) => {
   localStorage.setItem('sidebar_openedItems', JSON.stringify(sanitizeOpenedItems(val, sidebarMenu.value)));
 }, { deep: true });
-
-// 当插件项变化时（如插件启用/停用），刷新菜单
-watch(pluginItems, () => {
-  sidebarMenu.value = buildSidebarMenu();
-  openedItems.value = sanitizeOpenedItems(openedItems.value, sidebarMenu.value);
-});
 
 function refreshSidebarMenu() {
   sidebarMenu.value = buildSidebarMenu();

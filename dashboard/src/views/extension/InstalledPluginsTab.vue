@@ -155,11 +155,13 @@ const openPluginDetail = (extension) => {
   });
 };
 
+// Open the plugin page inline within the plugin pages tab instead of the
+// standalone full-screen route, so the workspace chrome stays visible.
 const openPluginWebui = (extension) => {
   const pages = extension?.pages;
   if (!Array.isArray(pages) || pages.length === 0 || !extension?.name) return;
   router.push({
-    name: "PluginPage",
+    name: "ExtensionPluginPages",
     params: {
       pluginName: extension.name,
       pageName: pages[0],
