@@ -27,6 +27,7 @@ from astrbot.core.platform import (
 )
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.media_utils import MediaResolver
 from astrbot.core.utils.task_utils import create_tracked_task
 from astrbot.core.utils.webhook_utils import log_webhook_info
@@ -813,7 +814,7 @@ class LarkPlatformAdapter(Platform):
                     logger.debug(
                         "[Lark] Sender name lookup failed for %s: %s",
                         sender_open_id,
-                        exc,
+                        safe_error("", exc),
                     )
                 sender_name = sender_name or sender_open_id[:8]
                 self._user_name_cache[sender_open_id] = (

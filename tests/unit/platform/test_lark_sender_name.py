@@ -103,6 +103,24 @@ async def test_lark_private_sender_falls_back_when_contact_lookup_fails():
 
 
 @pytest.mark.asyncio
+async def test_lark_private_sender_redacts_contact_lookup_exceptions(caplog):
+    adapter = _adapter(SimpleNamespace(success=lambda: True, data=None))
+    adapter.lark_api.contact.v3.user.aget.side_effect = RuntimeError(
+        "lookup failed https://open.feishu.cn/open-apis/contact/v3/users?token=secret"
+    )
+
+    with caplog.at_level("DEBUG"):
+        await adapter.convert_msg(_private_message_event())
+
+    message = adapter.handle_msg.await_args.args[0]
+    assert message.sender.nickname == "ou_sende"
+    debug_text = "\n".join(record.getMessage() for record in caplog.records)
+    assert "https://open.feishu.cn" not in debug_text
+    assert "token=secret" not in debug_text
+    assert "Sender name lookup failed" in debug_text
+
+
+@pytest.mark.asyncio
 async def test_lark_private_sender_retries_after_failure_cache_expires():
     adapter = _adapter(
         SimpleNamespace(
