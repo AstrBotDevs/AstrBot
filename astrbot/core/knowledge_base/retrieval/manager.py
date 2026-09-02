@@ -3,8 +3,8 @@
 协调稠密检索、稀疏检索和 Rerank,提供统一的检索接口
 """
 
-import re
 import time
+import unicodedata
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -35,14 +35,26 @@ class RetrievalResult:
     metadata: dict
 
 
-# Control (Cc, except tab/newline/CR) and format (Cf) characters are
-# invisible payloads that some embedding providers reject with HTTP 400
-# (e.g. SiliconFlow code 20015), typically originating from sticker /
-# image-caption pipelines. They are stripped before retrieval.
-_INVISIBLE_CHARS_PATTERN = re.compile(
-    "[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f"
-    "\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff\ufff9-\ufffb]"
-)
+def _strip_invisible_chars(text: str) -> str:
+    """Remove control and format characters from a retrieval query.
+
+    Control (Cc, except tab/newline/CR) and format (Cf) characters are
+    invisible payloads that some embedding providers reject with HTTP 400
+    (e.g. SiliconFlow code 20015), typically originating from sticker /
+    image-caption pipelines.
+
+    Args:
+        text: Raw query text.
+
+    Returns:
+        The query with invisible characters removed.
+
+    """
+    return "".join(
+        ch
+        for ch in text
+        if ch not in "\t\n\r" and unicodedata.category(ch) not in ("Cc", "Cf")
+    )
 
 
 class RetrievalManager:
@@ -100,7 +112,7 @@ class RetrievalManager:
         """
         # Remove invisible characters and skip retrieval when nothing
         # remains, so invalid queries never reach the embedding provider.
-        query = _INVISIBLE_CHARS_PATTERN.sub("", query).strip()
+        query = _strip_invisible_chars(query).strip()
         if not query:
             logger.debug(
                 "Knowledge base retrieval skipped: query is empty after "
