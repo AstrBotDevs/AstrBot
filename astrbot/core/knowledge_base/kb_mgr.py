@@ -48,6 +48,7 @@ class KnowledgeBaseManager:
 
         self.kb_insts: dict[str, KBHelper] = {}
         self.backends: dict[str, BaseKnowledgeBaseBackend] = {}
+        self._backend_tasks: dict[str, set[asyncio.Task]] = {}
         self.register_backend(BuiltinKnowledgeBaseBackend(self))
 
     def register_backend(self, backend: BaseKnowledgeBaseBackend) -> None:
@@ -91,8 +92,28 @@ class KnowledgeBaseManager:
             display_name,
         )
 
-    def unregister_backend(self, backend_id: str) -> None:
+    def _track_backend_task(self, backend_id: str, coro) -> asyncio.Task:
+        """Schedule a backend operation tracked for unregister synchronization.
+
+        Args:
+            backend_id: Identifier of the backend owning the operation.
+            coro: Backend operation coroutine to schedule.
+
+        Returns:
+            The scheduled task tracked until it completes.
+        """
+        task_set = self._backend_tasks.setdefault(backend_id, set())
+        task = asyncio.ensure_future(coro)
+        task_set.add(task)
+        task.add_done_callback(task_set.discard)
+        return task
+
+    async def unregister_backend(self, backend_id: str) -> None:
         """Unregister a knowledge base backend.
+
+        Waits for the backend's tracked in-flight operations to complete before
+        returning, so plugins can safely release backend resources immediately
+        after unregistering.
 
         Unregistering an unknown external backend is safe so plugins can call
         this method unconditionally during termination.
@@ -107,8 +128,12 @@ class KnowledgeBaseManager:
             raise ValueError(
                 "The built-in knowledge base backend cannot be unregistered."
             )
-        if self.backends.pop(backend_id, None) is not None:
-            logger.info("Knowledge base backend unregistered: %s", backend_id)
+        if self.backends.pop(backend_id, None) is None:
+            return
+        pending = self._backend_tasks.pop(backend_id, None)
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        logger.info("Knowledge base backend unregistered: %s", backend_id)
 
     async def list_registered_knowledge_bases(
         self,
@@ -133,7 +158,10 @@ class KnowledgeBaseManager:
         responses = await asyncio.gather(
             *(
                 asyncio.wait_for(
-                    backend.list_knowledge_bases(umo=umo),
+                    self._track_backend_task(
+                        backend.backend_id,
+                        backend.list_knowledge_bases(umo=umo),
+                    ),
                     timeout=BACKEND_TIMEOUT_SECONDS,
                 )
                 for backend in backends
@@ -227,7 +255,10 @@ class KnowledgeBaseManager:
         responses = await asyncio.gather(
             *(
                 asyncio.wait_for(
-                    backend.retrieve(knowledge_base_ids, request),
+                    self._track_backend_task(
+                        backend.backend_id,
+                        backend.retrieve(knowledge_base_ids, request),
+                    ),
                     timeout=BACKEND_TIMEOUT_SECONDS,
                 )
                 for backend, knowledge_base_ids in selected_backends

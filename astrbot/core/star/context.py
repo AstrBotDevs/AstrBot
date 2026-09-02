@@ -805,15 +805,17 @@ class Context:
         """
         self.kb_manager.register_backend(backend)
 
-    def unregister_knowledge_base_backend(self, backend_id: str) -> None:
+    async def unregister_knowledge_base_backend(self, backend_id: str) -> None:
         """Unregister a plugin-provided knowledge base backend.
 
-        Calling this method for an already unregistered backend is safe.
+        Waits for the backend's in-flight operations to complete, so it is safe
+        to release backend resources right after this call. Calling this method
+        for an already unregistered backend is safe.
 
         Args:
             backend_id: Backend identifier to remove.
         """
-        self.kb_manager.unregister_backend(backend_id)
+        await self.kb_manager.unregister_backend(backend_id)
 
     @deprecated(reason="Use decorator-based tool registration instead.")
     def register_llm_tool(

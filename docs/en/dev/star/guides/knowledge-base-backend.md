@@ -154,11 +154,11 @@ class Main(Star):
 
     async def terminate(self) -> None:
         """Unregister the backend before releasing its resources."""
-        self.context.unregister_knowledge_base_backend(self.backend.backend_id)
+        await self.context.unregister_knowledge_base_backend(self.backend.backend_id)
         await self.client.aclose()
 ```
 
-The plugin owns the backend and all network connections, threads, and other resources it uses. AstrBot calls `terminate()` when the plugin is disabled or reloaded. The plugin must unregister its backend before closing those resources. Repeatedly unregistering the same `backend_id` is safe.
+The plugin owns the backend and all network connections, threads, and other resources it uses. AstrBot calls `terminate()` when the plugin is disabled or reloaded. The plugin must unregister its backend before closing those resources. Unregistration waits for the backend's in-flight listing and retrieval operations to finish before returning, so it is safe to release resources immediately after unregistering. Repeatedly unregistering the same `backend_id` is safe.
 
 ## Query semantics
 

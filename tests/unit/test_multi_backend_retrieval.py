@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -392,3 +393,49 @@ async def test_retrieve_filters_hits_with_mismatched_references(
 
     assert response.hits == []
     assert "invalid result" in response.warnings[0]
+
+
+@pytest.mark.asyncio
+async def test_unregister_backend_waits_for_inflight_operations(
+    manager: KnowledgeBaseManager,
+) -> None:
+    release = asyncio.Event()
+    started = asyncio.Event()
+    backend = MockBackend("slow")
+
+    async def slow_retrieve(knowledge_base_ids, request):
+        started.set()
+        await release.wait()
+        return KnowledgeBaseResponse(
+            hits=[
+                KnowledgeBaseHit(
+                    ref=KnowledgeBaseRef("slow", knowledge_base_ids[0]),
+                    content="done",
+                    source="slow",
+                    rank=1,
+                )
+            ]
+        )
+
+    backend.retrieve_mock = slow_retrieve
+    manager.register_backend(backend)
+
+    operation = asyncio.create_task(
+        manager.retrieve_from_backends(
+            [KnowledgeBaseRef("slow", "kb-1")],
+            KnowledgeBaseQuery(query="AstrBot"),
+        )
+    )
+    await started.wait()
+
+    unregistration = asyncio.create_task(manager.unregister_backend("slow"))
+    for _ in range(10):
+        await asyncio.sleep(0)
+    assert not unregistration.done()
+
+    release.set()
+    response = await operation
+    await asyncio.wait_for(unregistration, timeout=5)
+
+    assert [hit.content for hit in response.hits] == ["done"]
+    assert "slow" not in manager.backends

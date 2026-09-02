@@ -154,11 +154,11 @@ class Main(Star):
 
     async def terminate(self) -> None:
         """Unregister the backend before releasing its resources."""
-        self.context.unregister_knowledge_base_backend(self.backend.backend_id)
+        await self.context.unregister_knowledge_base_backend(self.backend.backend_id)
         await self.client.aclose()
 ```
 
-插件拥有 Backend 及其网络连接、线程和其他资源。插件停用或热重载时，AstrBot 会调用 `terminate()`，插件必须先注销 Backend，再关闭它使用的资源。对同一个 `backend_id` 重复注销是安全的。
+插件拥有 Backend 及其网络连接、线程和其他资源。插件停用或热重载时，AstrBot 会调用 `terminate()`，插件必须先注销 Backend，再关闭它使用的资源。注销会等待该 Backend 正在进行的列举和检索操作完成后再返回，因此注销后立即释放资源是安全的。对同一个 `backend_id` 重复注销是安全的。
 
 ## 查询语义
 
