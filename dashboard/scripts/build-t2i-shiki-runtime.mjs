@@ -1,81 +1,106 @@
-import { createRequire } from "node:module";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { createRequire } from 'node:module';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { build } from "vite";
+import { build } from 'vite';
 
 const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dashboardRoot = path.resolve(__dirname, "..");
+const dashboardRoot = path.resolve(__dirname, '..');
 const runtimeOutputFile = path.resolve(
   dashboardRoot,
-  "..",
-  "astrbot",
-  "core",
-  "utils",
-  "t2i",
-  "template",
-  "shiki_runtime.iife.js",
+  '..',
+  'astrbot',
+  'core',
+  'utils',
+  't2i',
+  'template',
+  'shiki_runtime.iife.js',
 );
-const shikiRequire = createRequire(require.resolve("shiki/package.json"));
+const shikiRequire = createRequire(require.resolve('shiki/package.json'));
 
 const languageSpecs = [
-  ["bash", "bash"],
-  ["css", "css"],
-  ["html", "html"],
-  ["javascript", "javascript"],
-  ["json", "json"],
-  ["jsx", "jsx"],
-  ["markdown", "markdown"],
-  ["powershell", "powershell"],
-  ["python", "python"],
-  ["sql", "sql"],
-  ["tsx", "tsx"],
-  ["typescript", "typescript"],
-  ["xml", "xml"],
-  ["yaml", "yaml"],
+  ['bash', 'bash'],
+  ['c', 'c'],
+  ['css', 'css'],
+  ['cpp', 'cpp'],
+  ['csharp', 'csharp'],
+  ['dart', 'dart'],
+  ['go', 'go'],
+  ['html', 'html'],
+  ['javascript', 'javascript'],
+  ['json', 'json'],
+  ['jsx', 'jsx'],
+  ['kotlin', 'kotlin'],
+  ['lua', 'lua'],
+  ['markdown', 'markdown'],
+  ['php', 'php'],
+  ['powershell', 'powershell'],
+  ['python', 'python'],
+  ['r', 'r'],
+  ['ruby', 'ruby'],
+  ['rust', 'rust'],
+  ['scala', 'scala'],
+  ['sql', 'sql'],
+  ['swift', 'swift'],
+  ['tsx', 'tsx'],
+  ['typescript', 'typescript'],
+  ['xml', 'xml'],
+  ['yaml', 'yaml'],
 ];
 
 const themeSpecs = [
-  ["github-light", "github-light"],
-  ["github-dark", "github-dark"],
+  ['github-light', 'github-light'],
+  ['github-dark', 'github-dark'],
 ];
 
 // Shiki exposes plain text as a built-in special language, so we keep it
 // in the supported language list without importing a package for it.
-const builtInLanguageSpecs = ["text"];
+const builtInLanguageSpecs = ['text'];
 
 const languageAliases = {
-  bat: "powershell",
-  cjs: "javascript",
-  console: "bash",
-  cts: "typescript",
-  dockerfile: "bash",
-  env: "bash",
-  htm: "html",
-  js: "javascript",
-  md: "markdown",
-  mjs: "javascript",
-  mts: "typescript",
-  plain: "text",
-  plaintext: "text",
-  ps1: "powershell",
-  pwsh: "powershell",
-  py: "python",
-  shell: "bash",
-  shellscript: "bash",
-  sh: "bash",
-  svg: "xml",
-  text: "text",
-  ts: "typescript",
-  txt: "text",
-  vue: "html",
-  xhtml: "html",
-  xml: "xml",
-  yml: "yaml",
-  zsh: "bash",
+  bat: 'powershell',
+  'c++': 'cpp',
+  cc: 'cpp',
+  cjs: 'javascript',
+  cxx: 'cpp',
+  console: 'bash',
+  cts: 'typescript',
+  cs: 'csharp',
+  dockerfile: 'bash',
+  golang: 'go',
+  h: 'c',
+  'h++': 'cpp',
+  hh: 'cpp',
+  hpp: 'cpp',
+  env: 'bash',
+  htm: 'html',
+  js: 'javascript',
+  kt: 'kotlin',
+  kts: 'kotlin',
+  md: 'markdown',
+  mjs: 'javascript',
+  mts: 'typescript',
+  plain: 'text',
+  plaintext: 'text',
+  ps1: 'powershell',
+  pwsh: 'powershell',
+  py: 'python',
+  rs: 'rust',
+  shell: 'bash',
+  shellscript: 'bash',
+  sh: 'bash',
+  svg: 'xml',
+  text: 'text',
+  ts: 'typescript',
+  txt: 'text',
+  vue: 'html',
+  xhtml: 'html',
+  xml: 'xml',
+  yml: 'yaml',
+  zsh: 'bash',
 };
 
 function resolveShikiModule(specifier) {
@@ -84,21 +109,21 @@ function resolveShikiModule(specifier) {
 
 function buildVirtualSource() {
   const shikiImport = JSON.stringify(
-    pathToFileURL(require.resolve("shiki")).href,
+    pathToFileURL(require.resolve('shiki')).href,
   );
   const languageImports = languageSpecs
     .map(
       ([, packageName], index) =>
         `import lang${index} from ${JSON.stringify(resolveShikiModule(`@shikijs/langs/${packageName}`))};`,
     )
-    .join("\n");
+    .join('\n');
 
   const themeImports = themeSpecs
     .map(
       ([, packageName], index) =>
         `import theme${index} from ${JSON.stringify(resolveShikiModule(`@shikijs/themes/${packageName}`))};`,
     )
-    .join("\n");
+    .join('\n');
 
   const supportedLanguages = [
     ...builtInLanguageSpecs,
@@ -111,8 +136,8 @@ ${themeImports}
 
 const highlighter = createHighlighterCoreSync({
   engine: createJavaScriptRegexEngine(),
-  langs: [${languageSpecs.map((_, index) => `...lang${index}`).join(", ")}],
-  themes: [${themeSpecs.map((_, index) => `theme${index}`).join(", ")}],
+  langs: [${languageSpecs.map((_, index) => `...lang${index}`).join(', ')}],
+  themes: [${themeSpecs.map((_, index) => `theme${index}`).join(', ')}],
 });
 
 const supportedLanguages = new Set(${JSON.stringify(supportedLanguages)});
@@ -120,7 +145,7 @@ const languageAliases = ${JSON.stringify(languageAliases)};
 const supportedThemes = new Set(${JSON.stringify(themeSpecs.map(([theme]) => theme))});
 
 function normalizeLanguage(language) {
-  const normalized = String(language || "").trim().toLowerCase();
+  const normalized = String(language || "").trim().split(/\\s+/, 1)[0].split(":", 1)[0].toLowerCase();
   if (!normalized) {
     return "text";
   }
@@ -188,15 +213,17 @@ window.AstrBotT2IShiki = Object.freeze({
 }
 
 async function main() {
-  const tempDir = mkdtempSync(path.join(tmpdir(), "astrbot-t2i-shiki-runtime-"));
-  const entryPath = path.join(tempDir, "entry.mjs");
+  const tempDir = mkdtempSync(
+    path.join(tmpdir(), 'astrbot-t2i-shiki-runtime-'),
+  );
+  const entryPath = path.join(tempDir, 'entry.mjs');
 
-  writeFileSync(entryPath, buildVirtualSource(), "utf-8");
+  writeFileSync(entryPath, buildVirtualSource(), 'utf-8');
 
   try {
     await build({
       configFile: false,
-      logLevel: "info",
+      logLevel: 'info',
       publicDir: false,
       build: {
         chunkSizeWarningLimit: 1500,
@@ -205,10 +232,10 @@ async function main() {
         lib: {
           entry: entryPath,
           fileName: () => path.basename(runtimeOutputFile),
-          formats: ["iife"],
-          name: "AstrBotT2IShikiRuntime",
+          formats: ['iife'],
+          name: 'AstrBotT2IShikiRuntime',
         },
-        minify: "esbuild",
+        minify: true,
         outDir: path.dirname(runtimeOutputFile),
         rollupOptions: {
           output: {
@@ -216,7 +243,7 @@ async function main() {
           },
         },
         sourcemap: false,
-        target: "es2018",
+        target: 'es2018',
       },
     });
   } finally {

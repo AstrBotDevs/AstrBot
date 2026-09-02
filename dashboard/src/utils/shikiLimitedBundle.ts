@@ -127,6 +127,7 @@ export const LIMITED_SHIKI_LANGUAGE_ALIASES: Record<string, string> = {
   golang: 'go',
   gql: 'graphql',
   h: 'c',
+  'h++': 'cpp',
   hh: 'cpp',
   hpp: 'cpp',
   hs: 'haskell',
@@ -211,6 +212,7 @@ export function isFenceLanguageSettled(
   const language = String(node.language || '')
     .trim()
     .split(/\s+/, 1)[0]
+    .split(':', 1)[0]
     .toLowerCase();
   if (!language) return true;
   if (String(node.code || '').length > 0) return true;
@@ -272,6 +274,7 @@ export function normalizeLimitedShikiLanguage(language: unknown): string {
   const normalized = String(language || 'text')
     .trim()
     .split(/\s+/, 1)[0]
+    .split(':', 1)[0]
     .toLowerCase();
 
   if (!normalized) return 'text';
