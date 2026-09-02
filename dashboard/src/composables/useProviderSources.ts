@@ -627,9 +627,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       modalities,
       custom_extra_body: {},
       max_context_tokens: max_context_tokens,
-      image_formats: [...(providerBrandImageFormats.value[selectedProviderSource.value.provider] ?? providerTypeImageFormats.value[selectedProviderSource.value.type] ?? ['jpeg', 'png'])],
-      animated_image_strategy: 'first_frame',
-      animated_image_max_frames: 4
+      image_formats: [...(providerBrandImageFormats.value[selectedProviderSource.value.provider] ?? providerTypeImageFormats.value[selectedProviderSource.value.type] ?? ['jpeg', 'png'])]
     }
   }
 
