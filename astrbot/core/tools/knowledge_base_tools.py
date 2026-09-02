@@ -77,6 +77,7 @@ async def retrieve_knowledge_base(
 
     top_k_fusion = config.get("kb_fusion_top_k", 20)
     formatted_parts = []
+    builtin_count = 0
 
     if kb_names:
         all_kbs = [await kb_mgr.get_kb_by_name(kb) for kb in kb_names]
@@ -95,15 +96,20 @@ async def retrieve_knowledge_base(
             if kb_context and (formatted := kb_context.get("context_text", "")):
                 formatted_parts.append(formatted)
                 results = kb_context.get("results", [])
+                builtin_count = len(results)
                 logger.debug(
                     f"[知识库] 为会话 {umo} 注入了 {len(results)} 条内置知识块"
                 )
 
+    # Enforce the documented global top_k: built-in knowledge bases (explicitly
+    # configured for this session) consume the budget first, and external
+    # backends only receive the remaining quota.
+    remaining_top_k = top_k - builtin_count
     external_response = None
     external_backend_ids = {
         backend_id for backend_id in kb_mgr.backends if backend_id != "builtin"
     }
-    if external_backend_ids:
+    if external_backend_ids and remaining_top_k > 0:
         enabled_kbs = await kb_mgr.list_registered_knowledge_bases(
             umo=umo,
             backend_ids=external_backend_ids,
@@ -113,7 +119,7 @@ async def retrieve_knowledge_base(
         ]
         external_response = await kb_mgr.retrieve_from_backends(
             external_refs,
-            KnowledgeBaseQuery(query=query, top_k=top_k, umo=umo),
+            KnowledgeBaseQuery(query=query, top_k=remaining_top_k, umo=umo),
         )
         for warning in external_response.warnings:
             logger.warning("[知识库] %s", warning)

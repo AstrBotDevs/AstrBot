@@ -145,6 +145,40 @@ async def test_builtin_and_external_results_are_combined(context: MagicMock) -> 
 
     assert result.startswith("built-in context")
     assert "external context" in result
+    _, request = context.kb_manager.retrieve_from_backends.await_args.args
+    assert request.top_k == 4
+
+
+@pytest.mark.asyncio
+async def test_external_backends_are_skipped_when_builtin_fills_top_k(
+    context: MagicMock,
+) -> None:
+    context.kb_manager.backends["external"] = MagicMock()
+    context.get_config.return_value = {
+        "kb_names": ["Docs"],
+        "kb_final_top_k": 2,
+        "kb_fusion_top_k": 20,
+    }
+    helper = MagicMock()
+    helper.kb.doc_count = 1
+    helper.kb.chunk_count = 2
+    context.kb_manager.get_kb_by_name = AsyncMock(return_value=helper)
+    context.kb_manager.retrieve = AsyncMock(
+        return_value={
+            "context_text": "built-in context",
+            "results": [{"content": "a"}, {"content": "b"}],
+        }
+    )
+
+    with patch(
+        "astrbot.core.tools.knowledge_base_tools.sp.session_get",
+        AsyncMock(return_value={}),
+    ):
+        result = await retrieve_knowledge_base("installation", "session-1", context)
+
+    assert result == "built-in context"
+    context.kb_manager.list_registered_knowledge_bases.assert_not_awaited()
+    context.kb_manager.retrieve_from_backends.assert_not_awaited()
 
 
 @pytest.mark.asyncio
