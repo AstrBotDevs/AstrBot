@@ -29,4 +29,13 @@ describe('SkillsSection builtin presets', () => {
     expect(skillsSection).toContain('overflow-y: auto;');
     expect(skillsSection).toContain('min-height: 40vh;');
   });
+
+  it('adds local skill batch deletion with confirmation and partial feedback', () => {
+    expect(skillsSection).toContain('startBatchSelection');
+    expect(skillsSection).toContain('deleteSelectedSkills');
+    expect(skillsSection).toContain('skillApi.delete(name)');
+    expect(skillsSection).toContain("tm('skills.batchDeletePartial'");
+    expect(skillsSection).toContain('mdi-select-multiple');
+    expect(skillsSection).toContain(':clickable="!batchSelectionEnabled"');
+  });
 });
