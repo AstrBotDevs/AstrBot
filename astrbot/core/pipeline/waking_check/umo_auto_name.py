@@ -55,6 +55,8 @@ class UmoAutoNameRecorder:
             return
         if self._cache.get(umo) == auto_name:
             self._cache.move_to_end(umo)
+            if self._pending:
+                self._ensure_writer()
             return
 
         self._cache[umo] = auto_name
@@ -69,6 +71,15 @@ class UmoAutoNameRecorder:
             if self._cache.get(dropped_umo) == dropped_name:
                 self._cache.pop(dropped_umo, None)
 
+        self._ensure_writer()
+
+    def _ensure_writer(self) -> None:
+        """Start a background writer when none is running."""
+        if self.store is None:
+            return
+        current = asyncio.current_task()
+        if current is not None and current.cancelling():
+            return
         if self._writer_task is None or self._writer_task.done():
             self._writer_task = create_tracked_task(
                 self._background_tasks,
@@ -91,6 +102,8 @@ class UmoAutoNameRecorder:
                         auto_name=auto_name,
                     )
                 except asyncio.CancelledError:
+                    if umo not in self._pending and self._cache.get(umo) == auto_name:
+                        self._cache.pop(umo, None)
                     raise
                 except Exception as exc:
                     logger.warning(
@@ -102,3 +115,5 @@ class UmoAutoNameRecorder:
                         self._cache.pop(umo, None)
         finally:
             self._writer_task = None
+            if self._pending:
+                self._ensure_writer()

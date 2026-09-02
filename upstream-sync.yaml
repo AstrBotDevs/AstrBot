@@ -15,7 +15,8 @@ last_synced:
     MiraRouter source, #9911, #9896, and #9892. No cherry-picks and no skips.
     UMO auto-names persist after WakingCheckStage finalizes is_wake via
     execution_context.database and background_tasks; auto upserts never
-    overwrite user_alias. Discord writes group_id only for GROUP_MESSAGE.
+    overwrite user_alias. Discord inbound GROUP_MESSAGE writes group_id;
+    unresolved send fallbacks still guess GROUP_MESSAGE.
     Skills batch delete stays on composition SkillsSection with zh-CN/en-US.
     Anthropic folds cache_creation into input_other; Gemini subtracts cached
     tokens and clamps at zero. MiraRouter inherits ProviderOpenAIChatCompletions

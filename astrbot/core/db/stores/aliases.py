@@ -17,29 +17,32 @@ class UmoAliasStoreMixin(DatabaseStoreMixin):
         user_alias: str | None,
     ) -> UmoAlias:
         """Create or update alias metadata for a UMO."""
+        now = datetime.now(UTC)
+        statement = sqlite_insert(UmoAlias).values(
+            umo=umo,
+            creator_sender_id=creator_sender_id,
+            auto_name=auto_name,
+            user_alias=user_alias,
+            created_at=now,
+            updated_at=now,
+        )
+        statement = statement.on_conflict_do_update(
+            index_elements=[UmoAlias.umo],
+            set_={
+                "creator_sender_id": statement.excluded.creator_sender_id,
+                "auto_name": statement.excluded.auto_name,
+                "user_alias": statement.excluded.user_alias,
+                "updated_at": now,
+            },
+        )
         async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
+                await session.execute(statement)
                 result = await session.execute(
                     select(UmoAlias).where(col(UmoAlias.umo) == umo)
                 )
-                alias = result.scalar_one_or_none()
-                if alias:
-                    alias.creator_sender_id = creator_sender_id
-                    alias.auto_name = auto_name
-                    alias.user_alias = user_alias
-                    alias.updated_at = datetime.now(UTC)
-                else:
-                    alias = UmoAlias(
-                        umo=umo,
-                        creator_sender_id=creator_sender_id,
-                        auto_name=auto_name,
-                        user_alias=user_alias,
-                    )
-                    session.add(alias)
-                await session.flush()
-                await session.refresh(alias)
-                return alias
+                return result.scalar_one()
 
     async def upsert_umo_auto_name(
         self,

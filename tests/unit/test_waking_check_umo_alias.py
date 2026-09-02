@@ -11,6 +11,7 @@ from astrbot.core.command import CommandCatalogStore
 from astrbot.core.pipeline.waking_check.umo_auto_name import UmoAutoNameRecorder
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.runtime_catalogs import RuntimeCatalogs
+from astrbot.core.utils.task_utils import cancel_tracked_tasks
 
 
 def make_group_event(group_id: str, group_name: str | None, message: str = "/hello"):
@@ -267,3 +268,158 @@ async def test_waking_stage_writer_does_not_block_processing():
     writer_task = recorder._writer_task
     if writer_task is not None:
         await writer_task
+
+
+@pytest.mark.asyncio
+async def test_writer_writes_name_queued_during_in_flight_flush():
+    """Keep flushing when schedule() queues another UMO mid-write."""
+    first_started = asyncio.Event()
+    release_first = asyncio.Event()
+
+    async def write_name(*, umo, creator_sender_id, auto_name):  # noqa: ARG001
+        if umo.endswith(":group-1"):
+            first_started.set()
+            await release_first.wait()
+
+    store = MagicMock()
+    store.upsert_umo_auto_name = AsyncMock(side_effect=write_name)
+    recorder = UmoAutoNameRecorder(store, "test-conf-id")
+
+    recorder.schedule(make_group_event("group-1", "Engineering"))
+    await asyncio.wait_for(first_started.wait(), timeout=1.0)
+    recorder.schedule(make_group_event("group-2", "Design"))
+    release_first.set()
+    writer_task = recorder._writer_task
+    assert writer_task is not None
+    await asyncio.wait_for(writer_task, timeout=1.0)
+
+    written = [
+        call.kwargs["umo"] for call in store.upsert_umo_auto_name.await_args_list
+    ]
+    assert written == [
+        "test-platform:GroupMessage:group-1",
+        "test-platform:GroupMessage:group-2",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_cancelled_writer_does_not_respawn_until_reschedule():
+    """Cancel leaves pending work; a later schedule() starts a new tracked writer."""
+    first_started = asyncio.Event()
+    block_first = asyncio.Event()
+    write_count = 0
+
+    async def write_name(*, umo, creator_sender_id, auto_name):  # noqa: ARG001
+        nonlocal write_count
+        write_count += 1
+        if write_count == 1:
+            first_started.set()
+            await block_first.wait()
+
+    store = MagicMock()
+    store.upsert_umo_auto_name = AsyncMock(side_effect=write_name)
+    background_tasks: set[asyncio.Task] = set()
+    recorder = UmoAutoNameRecorder(store, "test-conf-id", background_tasks)
+
+    recorder.schedule(make_group_event("group-1", "Engineering"))
+    await asyncio.wait_for(first_started.wait(), timeout=1.0)
+    first_writer = recorder._writer_task
+    assert first_writer is not None
+
+    recorder.schedule(make_group_event("group-2", "Design"))
+    first_writer.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await first_writer
+
+    leftover = [task for task in background_tasks if not task.done()]
+    assert leftover == []
+    written = [
+        call.kwargs["umo"] for call in store.upsert_umo_auto_name.await_args_list
+    ]
+    assert "test-platform:GroupMessage:group-2" not in written
+
+    recorder.schedule(make_group_event("group-2", "Design"))
+    second_writer = recorder._writer_task
+    assert second_writer is not None
+    assert second_writer is not first_writer
+    assert second_writer in background_tasks
+    await asyncio.wait_for(second_writer, timeout=1.0)
+
+    written = [
+        call.kwargs["umo"] for call in store.upsert_umo_auto_name.await_args_list
+    ]
+    assert "test-platform:GroupMessage:group-2" in written
+
+
+@pytest.mark.asyncio
+async def test_cancel_tracked_tasks_does_not_leave_running_writer():
+    """Shutdown must not respawn an untracked writer after cancelling the set."""
+    first_started = asyncio.Event()
+    block_first = asyncio.Event()
+
+    async def write_name(*, umo, creator_sender_id, auto_name):  # noqa: ARG001
+        if umo.endswith(":group-1"):
+            first_started.set()
+            await block_first.wait()
+
+    store = MagicMock()
+    store.upsert_umo_auto_name = AsyncMock(side_effect=write_name)
+    background_tasks: set[asyncio.Task] = set()
+    recorder = UmoAutoNameRecorder(store, "test-conf-id", background_tasks)
+
+    recorder.schedule(make_group_event("group-1", "Engineering"))
+    await asyncio.wait_for(first_started.wait(), timeout=1.0)
+    recorder.schedule(make_group_event("group-2", "Design"))
+
+    await cancel_tracked_tasks(background_tasks)
+
+    writer_tasks = [
+        task
+        for task in asyncio.all_tasks()
+        if task.get_name().startswith("umo_auto_name_writer:")
+    ]
+    assert all(task.done() for task in writer_tasks)
+    assert background_tasks == set()
+    assert recorder._writer_task is None or recorder._writer_task.done()
+    written = [
+        call.kwargs["umo"] for call in store.upsert_umo_auto_name.await_args_list
+    ]
+    assert "test-platform:GroupMessage:group-2" not in written
+
+
+@pytest.mark.asyncio
+async def test_cancelled_write_retries_same_name_on_reschedule():
+    """Clear the cache on cancel so the same automatic name can be written again."""
+    first_started = asyncio.Event()
+    block_first = asyncio.Event()
+    call_count = 0
+
+    async def write_name(**kwargs):  # noqa: ARG001
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            first_started.set()
+            await block_first.wait()
+
+    store = MagicMock()
+    store.upsert_umo_auto_name = AsyncMock(side_effect=write_name)
+    background_tasks: set[asyncio.Task] = set()
+    recorder = UmoAutoNameRecorder(store, "test-conf-id", background_tasks)
+    event = make_group_event("group-1", "Engineering")
+
+    recorder.schedule(event)
+    await asyncio.wait_for(first_started.wait(), timeout=1.0)
+    first_writer = recorder._writer_task
+    assert first_writer is not None
+    first_writer.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await first_writer
+
+    assert event.unified_msg_origin not in recorder._cache
+
+    recorder.schedule(event)
+    second_writer = recorder._writer_task
+    assert second_writer is not None
+    assert second_writer in background_tasks
+    await asyncio.wait_for(second_writer, timeout=1.0)
+    assert store.upsert_umo_auto_name.await_count == 2

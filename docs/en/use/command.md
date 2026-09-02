@@ -61,6 +61,8 @@ Both `enable` and `disable` are idempotent. They write the existing `session_ena
 - `/session name`: Show the current auto name and saved alias; requires `session.manage`.
 - `/session name <name>`: Set the current UMO display alias; requires `session.manage`. `GreedyStr` allows spaces.
 
+After the waking stage finalizes `is_wake`, the automatic name is written to storage. A manual alias takes priority; automatic upserts do not overwrite `user_alias`.
+
 The user ID from `/session info` can be granted current-session `session_admin` with `/admin grant`. That is not a global operator. With group `unique_session` enabled, the command also reports the group ID used for allowlists.
 
 ### Conversations
