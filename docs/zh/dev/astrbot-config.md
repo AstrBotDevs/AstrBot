@@ -288,13 +288,14 @@ ID 白名单。填写后，将只处理所填写的 ID 发来的消息事件。�
 
 #### `provider_settings.websearch_provider`
 
-网页搜索提供商类型。默认为 `tavily`。目前支持 `tavily`、`bocha`、`baidu_ai_search`、`brave`、`firecrawl`。
+网页搜索提供商类型。默认为 `tavily`。目前支持 `tavily`、`bocha`、`baidu_ai_search`、`brave`、`firecrawl`、`exa`。
 
 - `tavily`：使用 Tavily 搜索引擎。
 - `bocha`：使用 BoCha 搜索引擎。
 - `baidu_ai_search`：使用百度 AI Search（MCP）。
 - `brave`：使用 Brave Search API。
 - `firecrawl`：使用 Firecrawl Search API。
+- `exa`：使用 Exa Search API（v4.26.0 新增），支持关键词和语义搜索。
 
 #### `provider_settings.websearch_tavily_key`
 
@@ -372,7 +373,7 @@ Agent 最大步骤数限制。默认为 `30`。模型的每次工具调用算作
 
 Added in `v4.3.5`
 
-工具调用的最大超时时间（秒），默认为 `60` 秒。
+工具调用的最大超时时间（秒），默认为 `120` 秒。
 
 #### `provider_stt_settings`
 

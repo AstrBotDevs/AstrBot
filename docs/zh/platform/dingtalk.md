@@ -38,7 +38,7 @@
 
 ![image](https://files.astrbot.app/docs/source/images/dingtalk/image-5.png)
 
-点击机器人配置，填写填写机器人相关信息：
+点击机器人配置，填写机器人相关信息：
 
 ![image](https://files.astrbot.app/docs/source/images/dingtalk/image-7.png)
 

@@ -9,6 +9,11 @@ AstrBot v3.5.0 supports the MCP protocol, enabling you to add multiple MCP serve
 
 ![image](https://files.astrbot.app/docs/source/images/function-calling/image2.png)
 
+Open the `Plugins` page in the WebUI and switch to the `MCP` tab to add and manage MCP servers.
+
+- You can sync MCP servers from ModelScope (since v4.26.5). After syncing, only the synced servers are enabled; other servers stay disabled and can be toggled individually in the list.
+- MCP tool names sent to LLM APIs are automatically sanitized to satisfy model-specific naming restrictions (since v4.27.3).
+
 ## Initial Configuration
 
 MCP servers are typically launched using `uv` or `npm`, so you need to install these two tools.

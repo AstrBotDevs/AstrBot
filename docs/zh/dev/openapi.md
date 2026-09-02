@@ -50,7 +50,7 @@ X-API-Key: abk_xxx
 
 - `POST /api/v1/chat`：发送对话消息（SSE 流式返回，不传 `session_id` 会自动创建 UUID）
 - `GET /api/v1/chat/sessions`：分页获取指定 `username` 的会话
-- `GET /api/v1/configs`：获取可用配置文件列表
+- `GET /api/v1/config-profiles`：获取可用配置文件（配置档案）列表
 - `POST /api/v1/file`：上传附件，之后可在消息段中引用
 
 **机器人和模型提供商**
@@ -69,12 +69,12 @@ X-API-Key: abk_xxx
 
 **IM 消息发送**
 
-- `POST /api/v1/im/message`：按 UMO 主动发消息
+- `POST /api/v1/im/messages`：按 UMO 主动发消息
 - `GET /api/v1/im/bots`：获取 bot/platform ID 列表
 
 ## `message` 字段格式（重点）
 
-`POST /api/v1/chat` 和 `POST /api/v1/im/message` 的 `message` 字段支持两种格式：
+`POST /api/v1/chat` 和 `POST /api/v1/im/messages` 的 `message` 字段支持两种格式：
 
 1. 字符串：纯文本消息
 2. 数组：消息段（message chain）
@@ -109,7 +109,7 @@ X-API-Key: abk_xxx
 | `file` | `attachment_id` | - | 通用文件段 |
 | `video` | `attachment_id` | - | 视频附件段 |
 
-* reply 消息段目前仅适配 `/api/v1/chat`，不适用于 `POST /api/v1/im/message`。
+* reply 消息段目前仅适配 `/api/v1/chat`，不适用于 `POST /api/v1/im/messages`。
 
 
 说明：
@@ -138,7 +138,7 @@ X-API-Key: abk_xxx
 
 ### IM Message API 的 `message` 用法
 
-`POST /api/v1/im/message` 需要 `umo` + `message`。
+`POST /api/v1/im/messages` 需要 `umo` + `message`。
 
 ```json
 {

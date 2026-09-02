@@ -53,7 +53,7 @@ The local Shell tool also runs with this workspace as its current working direct
 
 `local` mode mainly provides:
 
-- `Shell`: executes host shell commands. Windows follows `cmd.exe` semantics; Linux/macOS follow Unix-like shell semantics.
+- `Shell`: executes host shell commands. Windows uses PowerShell (since v4.27.0, with PowerShell 7 / `pwsh.exe` support); Linux/macOS follow Unix-like shell semantics. <span style="color: gray">~~Windows follows `cmd.exe` semantics~~ (Archived: since v4.27.0, the Windows local shell uses PowerShell)</span>
 - `Python`: executes Python code in AstrBot's current Python environment.
 - `File read`: reads text, image, spreadsheet, and other supported files.
 - `File write`: writes UTF-8 text files; relative paths default to the current workspace.

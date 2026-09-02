@@ -7,7 +7,7 @@
 ![点击创建机器人，选择discord类型](https://files.astrbot.app/docs/source/images/discord/image.png)
 
 ![选项从上到下依次是 1.机器人名称 2. 启用 3. Bot token 4. Discord 代理地址 5. 是否自动将插件指令注册为 Discord 斜杠指令 6. discord_guild_id_for_debug 7.Discord 活动名称](https://files.astrbot.app/docs/source/images/discord/image-3.png)
-> 本次教程只用管1,2,3,5项
+> 本教程只需关注第 1、2、3、5 项。
 
 - 机器人名称：自定义，方便区分不同适配器
 - 启用：勾选后启用该适配器
@@ -67,8 +67,8 @@ Discord 支持预回应表情功能。启用后，机器人在处理消息时会
 - **启用预回应表情**：开启后，机器人收到消息时会自动添加表情反应
 - **表情列表**：填写 Unicode 表情符号，例如：👍、🤔、⏳。可填写多个，机器人会随机选择一个使用
 
-# 故障排除
+## 故障排除
 
-- 如果卡在最后的步骤，机器人不在线请确定自己的服务器可以直接连接discord
+- 如果卡在最后一步且机器人不在线，请确认你的服务器可以直连 Discord。
 
 如果有疑问，请[提交 Issue](https://github.com/AstrBotDevs/AstrBot/issues)。

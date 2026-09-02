@@ -24,6 +24,12 @@ AstrBot 的指令通过插件机制注册。为了保持主程序轻量，当前
 - `/set`：设置当前会话变量，常用于 Dify、Coze、DashScope 等 Agent 执行器的输入变量。
 - `/unset`：移除当前会话变量。
 
+以上指令位于：
+
+```text
+astrbot/builtin_stars/builtin_commands
+```
+
 ## 核心指令详解
 
 ### `/sid`

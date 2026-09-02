@@ -27,6 +27,7 @@ You can upload Skills with the following requirements:
 AstrBot can discover Skills from several places:
 
 - **Local Skills**: uploaded from the WebUI or placed under `data/skills/<skill_name>/SKILL.md`. These appear in the WebUI Skills management page.
+- **Built-in preset Skills**: AstrBot ships read-only preset Skills such as `skill-creator`, `documents`, `pdf`, and `spreadsheets` (since v4.27.0). They are discovered and injected automatically, and a local Skill with the same name overrides them.
 - **Plugin-provided Skills**: plugins can bundle Skills in their own `skills/` directory. They appear in the WebUI, but are managed by the plugin, so they cannot be deleted or edited from the Local Skills page.
 - **Sandbox preset Skills**: when the sandbox runtime is used, AstrBot reads Skills discovered inside the sandbox and provides them to the Agent.
 - **Workspace Skills**: Skills under the current session workspace, at `skills/<skill_name>/SKILL.md`. They are currently injected only in local runtime, where the path is usually `data/workspaces/{normalized_umo}/skills/<skill_name>/SKILL.md`.
@@ -40,7 +41,7 @@ When multiple sources contain a Skill with the same name, request-time priority 
 1. If the current persona is explicitly configured to use no Skills, no Skills are injected, including Workspace Skills.
 2. If the current persona selects a specific Skill list, that list does not filter Workspace Skills.
 3. The current session's Workspace Skill has the highest priority. If it has the same name as a local, plugin, or sandbox Skill, it overrides that Skill for the current request only.
-4. Local Skills take priority over plugin-provided Skills and sandbox-only Skills.
+4. Local Skills take priority over built-in preset Skills, plugin-provided Skills, and sandbox-only Skills.
 5. Plugin-provided Skills take priority over sandbox-only Skills.
 6. Sandbox-only Skills are injected only when there is no local, plugin, or workspace Skill with the same name.
 
@@ -53,7 +54,7 @@ Skills serve as operation manuals for Agents and often include executable Python
 Currently, AstrBot provides two execution environments:
 
 - Local — The Agent runs in your AstrBot runtime environment. **Use with caution: this allows the Agent to execute arbitrary code in your environment, which may pose security risks.**
-- Sandbox — The Agent runs inside an isolated sandbox environment. **You must enable AstrBot sandbox mode first.** See: /use/astrbot-agent-sandbox. If sandbox mode is not enabled, Skills will not be passed to the Agent.
+- Sandbox — The Agent runs inside an isolated sandbox environment. **You must enable AstrBot sandbox mode first.** See: [Agent Sandbox](/en/use/astrbot-agent-sandbox). If sandbox mode is not enabled, Skills will not be passed to the Agent.
 
 You can select the default execution environment on the `Config` page under "Computer Use".
 
