@@ -382,7 +382,8 @@ async def test(self, event: AstrMessageEvent):
 `@filter.permission("session.manage")` 会在管道里调用统一授权入口
 `AuthorizationService.authorize()`。只有当前会话的 `session_admin` /
 `session_owner`，或作用域匹配的 `instance_operator` / Dashboard
-`operator` / `root`，才能执行该指令。平台群主/群管理员只影响当前
+`operator` / `root`，才能执行该指令。已认证 IM 私聊对端通过运行时事实
+`private_session` 成为该发起会话的 `session_owner`。平台群主/群管理员只影响当前
 `(config_id, UMO)`，不会变成全局 operator。
 
 插件自定义动作必须使用自己的命名空间，并再次调用核心授权：

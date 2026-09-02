@@ -730,6 +730,334 @@ async def test_session_owner_can_manage_current_members_but_not_delegate_ownersh
 
 
 @pytest.mark.asyncio
+async def test_private_im_origin_is_session_owner_of_that_session_only(authorization):
+    subject = Subject.im(
+        platform_instance="napcat", bot_account_id="bot", sender_id="42"
+    )
+    current = Resource.session("default", "napcat:FriendMessage:user-42")
+    other = Resource.session("default", "napcat:FriendMessage:user-99")
+    context = _session_context(subject, current, message_type="FriendMessage")
+
+    allowed = await authorization.authorize(subject, "session.manage", current, context)
+    assert allowed.allowed
+    assert allowed.effective_role is Role.SESSION_OWNER
+    assert "private_session" in allowed.relation_sources
+
+    denied = await authorization.authorize(subject, "session.manage", other, context)
+    assert not denied.allowed
+    assert denied.reason == "cross_session_resource"
+
+
+@pytest.mark.asyncio
+async def test_group_origin_including_unique_session_stays_member(authorization):
+    subject = Subject.im(
+        platform_instance="napcat", bot_account_id="bot", sender_id="42"
+    )
+    group = Resource.session("default", "napcat:GroupMessage:room-a")
+    unique = Resource.session("default", "napcat:GroupMessage:42_room-a")
+    for resource in (group, unique):
+        decision = await authorization.authorize(
+            subject,
+            "session.manage",
+            resource,
+            _session_context(subject, resource, message_type="GroupMessage"),
+        )
+        assert not decision.allowed
+        assert decision.effective_role is Role.MEMBER
+        assert "private_session" not in decision.relation_sources
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("message_type", ["GroupMessage", None, "friend"])
+async def test_friendmessage_umo_does_not_promote_without_friend_type(
+    authorization, message_type
+):
+    subject = Subject.im(
+        platform_instance="napcat", bot_account_id="bot", sender_id="42"
+    )
+    resource = Resource.session("default", "napcat:FriendMessage:user-42")
+    kwargs = {} if message_type is None else {"message_type": message_type}
+    decision = await authorization.authorize(
+        subject,
+        "session.manage",
+        resource,
+        _session_context(subject, resource, **kwargs),
+    )
+    assert not decision.allowed
+    assert decision.effective_role is Role.MEMBER
+    assert "private_session" not in decision.relation_sources
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("platform_member_role", ["owner", "admin"])
+async def test_friendmessage_ignores_context_platform_elevation(
+    authorization, platform_member_role
+):
+    subject = Subject.im(
+        platform_instance="napcat", bot_account_id="bot", sender_id="42"
+    )
+    current = Resource.session("default", "napcat:FriendMessage:user-42")
+    decision = await authorization.authorize(
+        subject,
+        "session.manage",
+        current,
+        _session_context(
+            subject,
+            current,
+            message_type="FriendMessage",
+            platform_member_role=platform_member_role,
+            platform_role_source="adapter",
+        ),
+    )
+    assert decision.allowed
+    assert decision.effective_role is Role.SESSION_OWNER
+    assert "private_session" in decision.relation_sources
+    assert "adapter" not in decision.relation_sources
+    assert "platform" not in decision.relation_sources
+
+
+@pytest.mark.asyncio
+async def test_friendmessage_ignores_persisted_platform_owner_fact(authorization):
+    subject = Subject.im(
+        platform_instance="napcat", bot_account_id="bot", sender_id="42"
+    )
+    current = Resource.session("default", "napcat:FriendMessage:user-42")
+    await authorization.record_platform_membership(
+        subject=subject,
+        resource=current,
+        platform_instance="napcat",
+        platform_role="owner",
+        source="adapter",
+    )
+    decision = await authorization.authorize(
+        subject,
+        "session.manage",
+        current,
+        _session_context(
+            subject,
+            current,
+            message_type="FriendMessage",
+            platform_member_role="unknown",
+            platform_role_source="none",
+        ),
+    )
+    assert decision.allowed
+    assert decision.effective_role is Role.SESSION_OWNER
+    assert "private_session" in decision.relation_sources
+    assert "platform" not in decision.relation_sources
+    assert "adapter" not in decision.relation_sources
+
+
+@pytest.mark.asyncio
+async def test_guest_webchat_friendmessage_is_not_private_session_owner(authorization):
+    guest = Subject.guest("webchat-alice")
+    current = Resource.session(
+        "default", "webchat:FriendMessage:webchat!alice!session-1"
+    )
+    decision = await authorization.authorize(
+        guest, "session.manage", current, _webchat_context(guest, current)
+    )
+    assert not decision.allowed
+    assert "private_session" not in decision.relation_sources
+
+
+@pytest.mark.asyncio
+async def test_authenticated_webchat_is_not_private_session_owner(authorization):
+    subject = Subject.dashboard_account("webchat-alice", "alice")
+    current = Resource.session(
+        "default", "webchat:FriendMessage:webchat!alice!session-1"
+    )
+    decision = await authorization.authorize(
+        subject, "session.manage", current, _webchat_context(subject, current)
+    )
+    assert not decision.allowed
+    assert "private_session" not in decision.relation_sources
+
+
+@pytest.mark.asyncio
+async def test_dashboard_source_friendmessage_is_not_private_session_owner(
+    authorization,
+):
+    subject = Subject.im(
+        platform_instance="napcat", bot_account_id="bot", sender_id="42"
+    )
+    current = Resource.session("default", "napcat:FriendMessage:user-42")
+    context = AuthContext(
+        subject=subject,
+        source="dashboard",
+        config_id="default",
+        authenticated=True,
+        origin_session_resource_id=current.id,
+        message_type="FriendMessage",
+    )
+    decision = await authorization.authorize(
+        subject, "session.manage", current, context
+    )
+    assert "private_session" not in decision.relation_sources
+
+
+@pytest.mark.asyncio
+async def test_friendmessage_type_does_not_own_groupmessage_origin(authorization):
+    subject = Subject.im(
+        platform_instance="napcat", bot_account_id="bot", sender_id="42"
+    )
+    group = Resource.session("default", "napcat:GroupMessage:room-a")
+    decision = await authorization.authorize(
+        subject,
+        "session.manage",
+        group,
+        _session_context(subject, group, message_type="FriendMessage"),
+    )
+    assert not decision.allowed
+    assert decision.effective_role is Role.MEMBER
+    assert "private_session" not in decision.relation_sources
+
+
+@pytest.mark.asyncio
+async def test_friendmessage_type_does_not_own_othermessage_origin(authorization):
+    subject = Subject.im(
+        platform_instance="napcat", bot_account_id="bot", sender_id="42"
+    )
+    other = Resource.session("default", "napcat:OtherMessage:notice-1")
+    decision = await authorization.authorize(
+        subject,
+        "session.manage",
+        other,
+        _session_context(subject, other, message_type="FriendMessage"),
+    )
+    assert not decision.allowed
+    assert "private_session" not in decision.relation_sources
+
+
+@pytest.mark.asyncio
+async def test_friendmessage_type_on_group_umo_keeps_platform_owner_fact(
+    authorization,
+):
+    subject = Subject.im(
+        platform_instance="napcat", bot_account_id="bot", sender_id="42"
+    )
+    group = Resource.session("default", "napcat:GroupMessage:room-a")
+    decision = await authorization.authorize(
+        subject,
+        "session.manage",
+        group,
+        _session_context(
+            subject,
+            group,
+            message_type="FriendMessage",
+            platform_member_role="owner",
+            platform_role_source="adapter",
+        ),
+    )
+    assert decision.allowed
+    assert decision.effective_role is Role.SESSION_OWNER
+    assert "private_session" not in decision.relation_sources
+    assert "adapter" in decision.relation_sources
+
+
+@pytest.mark.asyncio
+async def test_friendmessage_type_on_group_umo_keeps_persisted_platform_owner(
+    authorization,
+):
+    subject = Subject.im(
+        platform_instance="napcat", bot_account_id="bot", sender_id="42"
+    )
+    group = Resource.session("default", "napcat:GroupMessage:room-a")
+    await authorization.record_platform_membership(
+        subject=subject,
+        resource=group,
+        platform_instance="napcat",
+        platform_role="owner",
+        source="adapter",
+    )
+    decision = await authorization.authorize(
+        subject,
+        "session.manage",
+        group,
+        _session_context(
+            subject,
+            group,
+            message_type="FriendMessage",
+            platform_member_role="unknown",
+            platform_role_source="none",
+        ),
+    )
+    assert decision.allowed
+    assert decision.effective_role is Role.SESSION_OWNER
+    assert "private_session" not in decision.relation_sources
+    assert "platform" in decision.relation_sources
+
+
+@pytest.mark.asyncio
+async def test_private_session_owner_can_manage_current_members_but_not_delegate(
+    authorization,
+):
+    owner = Subject.im(platform_instance="napcat", bot_account_id="bot", sender_id="42")
+    target = Subject.im(
+        platform_instance="napcat", bot_account_id="bot", sender_id="84"
+    )
+    current = Resource.session("default", "napcat:FriendMessage:user-42")
+    other = Resource.session("default", "napcat:FriendMessage:user-99")
+    context = _session_context(owner, current, message_type="FriendMessage")
+
+    manage = await authorization.authorize(owner, "identity.manage", current, context)
+    assert manage.allowed
+    assert manage.effective_role is Role.SESSION_OWNER
+    assert "private_session" in manage.relation_sources
+
+    await authorization.grant_binding(
+        actor=owner,
+        subject_id=target.id,
+        role=Role.SESSION_ADMIN,
+        scope_type="session",
+        scope_id=current.id,
+        config_id="default",
+        context=context,
+    )
+    assert (
+        await authorization.authorize(
+            target,
+            "session.manage",
+            current,
+            _session_context(target, current),
+        )
+    ).allowed
+    await authorization.grant_binding(
+        actor=owner,
+        subject_id=target.id,
+        role=Role.MEMBER,
+        scope_type="session",
+        scope_id=current.id,
+        config_id="default",
+        context=context,
+    )
+
+    with pytest.raises(PermissionError):
+        await authorization.grant_binding(
+            actor=owner,
+            subject_id=target.id,
+            role=Role.SESSION_OWNER,
+            scope_type="session",
+            scope_id=current.id,
+            config_id="default",
+            context=context,
+        )
+    with pytest.raises(PermissionError):
+        await authorization.grant_binding(
+            actor=owner,
+            subject_id=target.id,
+            role=Role.SESSION_ADMIN,
+            scope_type="session",
+            scope_id=other.id,
+            config_id="default",
+            context=context,
+        )
+    cross = await authorization.authorize(owner, "identity.manage", other, context)
+    assert not cross.allowed
+    assert cross.reason == "cross_session_resource"
+
+
+@pytest.mark.asyncio
 async def test_session_scoped_tool_role_cannot_cross_origin_session(authorization):
     subject = Subject.im(
         platform_instance="napcat", bot_account_id="bot", sender_id="42"

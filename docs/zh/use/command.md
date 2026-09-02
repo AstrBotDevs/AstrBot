@@ -77,7 +77,7 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 - `/conversation delete`：删除当前对话。
 - `/conversation create-for <会话 ID>`：为指定群会话创建新对话，需要 `session.assign` 和 `session.manage`。
 
-`reset` 和 `delete` 在未开启群聊会话隔离时可能要求 `session.manage`；Dashboard 中的指令权限配置优先于默认行为。
+`reset`、`delete`、`create`、`switch`、`rename` 始终声明 `session.manage`。私聊对端是当前会话的 `session_owner`，因此可以直接 `/conversation reset` 等管理指令；群聊仍需要 `session_admin` 及以上。Dashboard 中的指令权限配置优先于默认行为。
 
 ### 运行任务
 

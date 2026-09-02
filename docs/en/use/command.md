@@ -77,7 +77,7 @@ The user ID from `/session info` can be granted current-session `session_admin` 
 - `/conversation delete`: Delete the current conversation.
 - `/conversation create-for <session-id>`: Create a conversation for another group session; requires `session.assign` and `session.manage`.
 
-`reset` and `delete` may require `session.manage` in groups without session isolation. Dashboard command permissions take precedence over defaults.
+`reset`, `delete`, `create`, `switch`, and `rename` always declare `session.manage`. A private-chat peer is the current-session owner, so `/conversation reset` and other `session.manage` builtins work in that DM. Groups still need `session_admin` or above. Dashboard command permissions take precedence over defaults.
 
 ### Running Tasks
 

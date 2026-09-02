@@ -112,7 +112,7 @@ uv run python scripts/sync_dashboard_dist.py
 
 ### 管理员指令提示无权限
 
-使用 `/session info` 查看当前用户 ID，然后通过 Dashboard [权限页面](/use/webui#账户与权限)或 `/admin grant` 授予当前会话的 `session_admin`。这不是全局 operator。配置档可能按平台、群或私聊分别绑定，修改默认配置档不一定影响当前会话。
+群聊仍需要通过 Dashboard [权限页面](/use/webui#账户与权限)或 `/admin grant` 授予当前会话的 `session_admin`。这不是全局 operator。私聊对端已经是当前会话的 `session_owner`，无需预先绑定 `session_admin` 即可 `/conversation reset`。配置档可能按平台、群或私聊分别绑定，修改默认配置档不一定影响当前会话。使用 `/session info` 可查看当前用户 ID。
 
 ### 以前的 `/plugin ls`、`/reset` 等指令无效
 

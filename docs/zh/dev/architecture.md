@@ -232,15 +232,15 @@ guest:<id>
 
 角色只表达“主体是谁”，作用域决定“在哪些资源上有权”。当前关系表把 `session_owner`/`session_admin` 解释为 `owner`/`admin`；`viewer`、`editor`、`executor`、`caller` 仍是预留关系。
 
-| 角色                | 作用域                      | 语义                                                       |
-| ------------------- | --------------------------- | ---------------------------------------------------------- |
-| `root`              | 全局                        | Dashboard 控制面最高身份；账户 CRUD 受 root + step-up 保护 |
-| `operator`          | 全局                        | Dashboard 全局运维                                         |
-| `instance_operator` | `instance:<config-id>`      | 单个配置档运维                                             |
-| `session_owner`     | `session:<config-id>/<umo>` | 当前会话负责人；平台群主只映射到当前会话                   |
-| `session_admin`     | `session:<config-id>/<umo>` | 当前会话有限管理                                           |
-| `member`            | `session:<config-id>/<umo>` | 普通已识别用户                                             |
-| `guest`             | 会话或无资源                | 未认证或匿名 WebChat                                       |
+| 角色                | 作用域                      | 语义                                                                                                                  |
+| ------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `root`              | 全局                        | Dashboard 控制面最高身份；账户 CRUD 受 root + step-up 保护                                                            |
+| `operator`          | 全局                        | Dashboard 全局运维                                                                                                    |
+| `instance_operator` | `instance:<config-id>`      | 单个配置档运维                                                                                                        |
+| `session_owner`     | `session:<config-id>/<umo>` | 当前会话负责人：映射的群主，或已认证 IM 私聊对端（运行时事实 `private_session`，仅当前发起会话，不是 Dashboard 绑定） |
+| `session_admin`     | `session:<config-id>/<umo>` | 当前会话有限管理                                                                                                      |
+| `member`            | `session:<config-id>/<umo>` | 普通已识别用户                                                                                                        |
+| `guest`             | 会话或无资源                | 未认证或匿名 WebChat                                                                                                  |
 
 `root` 与 `operator` 只能绑定有效 Dashboard 账户，不能因同名主体出现在 IM 消息中成为群管理权限。当前会话 owner 只可授予/撤销本会话的 `session_admin` 或 `member`，不能委派 owner。平台 owner/admin 事实带 TTL，过期后降级，且从不写入 global/instance binding。
 
