@@ -11,7 +11,7 @@ authoritative release record for this branch.
 ## Where the notes live / 说明文件位置
 
 - Per-version entries: [`changelogs/`](./changelogs/) — spanning `v3.4.0`
-  through the current `v4.27.x` series.
+  through the current `v4.28.x` series.
 - New-entry skeleton: [`changelogs/TEMPLATE.md`](./changelogs/TEMPLATE.md).
   Copy it to `changelogs/vX.Y.Z.md`. Use `[WIP]` in place of the ISO date
   until the version is published.
@@ -33,6 +33,10 @@ fork behavior apart from upstream merges:
 > 每条记录在标准 Added/Changed/Fixed/Documentation 之外，额外包含 **Fork 适配**（在上游改动之上保留的 fork 行为）与 **Fork 差异**（有意不采纳的上游改动，附上游 PR/issue 编号与理由）两节，便于区分 fork 行为与上游合并内容。
 
 ## Recent releases / 近期版本
+
+### v4.28.x
+
+- [v4.28.0-beta.1](./changelogs/v4.28.0-beta.1.md)
 
 ### v4.27.x
 
