@@ -176,9 +176,12 @@ def test_append_system_reminders_includes_weekday(mock_event):
 
 
 def test_local_mode_prompt_uses_windows_powershell_51():
-    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"), patch(
-        "astrbot.core.astr_main_agent.resolve_windows_shell",
-        return_value="powershell.exe",
+    with (
+        patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"),
+        patch(
+            "astrbot.core.astr_main_agent.resolve_windows_shell",
+            return_value="powershell.exe",
+        ),
     ):
         prompt = ama._build_local_mode_prompt()
 
@@ -188,9 +191,12 @@ def test_local_mode_prompt_uses_windows_powershell_51():
 
 
 def test_local_mode_prompt_hints_pwsh_when_resolved():
-    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"), patch(
-        "astrbot.core.astr_main_agent.resolve_windows_shell",
-        return_value="pwsh.exe",
+    with (
+        patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"),
+        patch(
+            "astrbot.core.astr_main_agent.resolve_windows_shell",
+            return_value="pwsh.exe",
+        ),
     ):
         prompt = ama._build_local_mode_prompt()
 
@@ -200,9 +206,12 @@ def test_local_mode_prompt_hints_pwsh_when_resolved():
 
 
 def test_local_mode_prompt_ignores_pwsh_on_non_windows():
-    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Linux"), patch(
-        "astrbot.core.astr_main_agent.resolve_windows_shell",
-        return_value="pwsh.exe",
+    with (
+        patch("astrbot.core.astr_main_agent.platform.system", return_value="Linux"),
+        patch(
+            "astrbot.core.astr_main_agent.resolve_windows_shell",
+            return_value="pwsh.exe",
+        ),
     ):
         prompt = ama._build_local_mode_prompt()
 
@@ -1383,17 +1392,19 @@ class TestDecorateLlmRequest:
 class TestPluginToolFix:
     """Tests for _plugin_tool_fix function."""
 
-    def test_plugin_tool_fix_none_plugins(self, mock_event):
+    @pytest.mark.asyncio
+    async def test_plugin_tool_fix_none_plugins(self, mock_event):
         """Test plugin tool fix when no plugins specified."""
         module = ama
         req = ProviderRequest(func_tool=ToolSet())
         mock_event.plugins_name = None
 
-        module._plugin_tool_fix(mock_event, req)
+        await module._plugin_tool_fix(mock_event, req)
 
         assert req.func_tool is not None
 
-    def test_plugin_tool_fix_filters_by_plugin(self, mock_event):
+    @pytest.mark.asyncio
+    async def test_plugin_tool_fix_filters_by_plugin(self, mock_event):
         """Test plugin tool fix filters tools by enabled plugins."""
         module = ama
         mcp_tool = MagicMock(spec=MCPTool)
@@ -1417,12 +1428,13 @@ class TestPluginToolFix:
             mock_plugin.reserved = False
             mock_star_map.get.return_value = mock_plugin
 
-            module._plugin_tool_fix(mock_event, req)
+            await module._plugin_tool_fix(mock_event, req)
 
         assert "mcp_tool" in req.func_tool.names()
         assert "plugin_tool" in req.func_tool.names()
 
-    def test_plugin_tool_fix_mcp_preserved(self, mock_event):
+    @pytest.mark.asyncio
+    async def test_plugin_tool_fix_mcp_preserved(self, mock_event):
         """Test that MCP tools are always preserved."""
         module = ama
         mcp_tool = MagicMock(spec=MCPTool)
@@ -1436,11 +1448,14 @@ class TestPluginToolFix:
         mock_event.plugins_name = ["other_plugin"]
 
         with patch("astrbot.core.astr_main_agent.star_map"):
-            module._plugin_tool_fix(mock_event, req)
+            await module._plugin_tool_fix(mock_event, req)
 
         assert "mcp_tool" in req.func_tool.names()
 
-    def test_plugin_tool_fix_preserves_tools_without_plugin_origin(self, mock_event):
+    @pytest.mark.asyncio
+    async def test_plugin_tool_fix_preserves_tools_without_plugin_origin(
+        self, mock_event
+    ):
         """Tools without handler_module_path should not be filtered out."""
         module = ama
         handoff_tool = FunctionTool(
@@ -1458,9 +1473,66 @@ class TestPluginToolFix:
         mock_event.plugins_name = ["other_plugin"]
 
         with patch("astrbot.core.astr_main_agent.star_map"):
-            module._plugin_tool_fix(mock_event, req)
+            await module._plugin_tool_fix(mock_event, req)
 
         assert "transfer_to_demo_agent" in req.func_tool.names()
+
+    @pytest.mark.asyncio
+    async def test_plugin_tool_fix_filters_session_disabled_plugin(self, mock_event):
+        """Session-disabled plugin tools are removed even if globally enabled."""
+        module = ama
+        plugin_tool = MagicMock()
+        plugin_tool.name = "plugin_tool"
+        plugin_tool.handler_module_path = "test_plugin"
+        plugin_tool.active = True
+
+        tool_set = ToolSet()
+        tool_set.add_tool(plugin_tool)
+
+        req = ProviderRequest(func_tool=tool_set)
+        mock_event.plugins_name = None
+
+        with patch("astrbot.core.astr_main_agent.star_map") as mock_star_map:
+            mock_plugin = MagicMock()
+            mock_plugin.name = "test_plugin"
+            mock_plugin.reserved = False
+            mock_star_map.get.return_value = mock_plugin
+
+            await module._plugin_tool_fix(
+                mock_event, req, session_disabled_plugins={"test_plugin"}
+            )
+
+        assert req.func_tool is None or "plugin_tool" not in req.func_tool.names()
+
+    @pytest.mark.asyncio
+    async def test_plugin_tool_fix_preserves_reserved_when_session_disabled(
+        self,
+        mock_event,
+    ):
+        """Reserved (system) plugin tools are kept even when session-disabled."""
+        module = ama
+        plugin_tool = MagicMock()
+        plugin_tool.name = "plugin_tool"
+        plugin_tool.handler_module_path = "test_plugin"
+        plugin_tool.active = True
+
+        tool_set = ToolSet()
+        tool_set.add_tool(plugin_tool)
+
+        req = ProviderRequest(func_tool=tool_set)
+        mock_event.plugins_name = None
+
+        with patch("astrbot.core.astr_main_agent.star_map") as mock_star_map:
+            mock_plugin = MagicMock()
+            mock_plugin.name = "test_plugin"
+            mock_plugin.reserved = True
+            mock_star_map.get.return_value = mock_plugin
+
+            await module._plugin_tool_fix(
+                mock_event, req, session_disabled_plugins={"test_plugin"}
+            )
+
+        assert "plugin_tool" in req.func_tool.names()
 
 
 class TestBuildMainAgent:

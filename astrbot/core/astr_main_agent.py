@@ -48,6 +48,7 @@ from astrbot.core.skills.skill_manager import (
     build_skills_prompt,
 )
 from astrbot.core.star.context import Context
+from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_map
 from astrbot.core.tools.computer_tools import (
@@ -494,6 +495,7 @@ def _build_local_mode_prompt() -> str:
 def _filter_skills_for_current_config(
     skills: list[SkillInfo],
     cfg: dict,
+    session_disabled_plugins: set[str] | None = None,
 ) -> list[SkillInfo]:
     plugin_set = cfg.get("plugin_set", ["*"])
     allowed_plugins = (
@@ -501,6 +503,7 @@ def _filter_skills_for_current_config(
         if not isinstance(plugin_set, list) or "*" in plugin_set
         else {str(name) for name in plugin_set}
     )
+    session_disabled_plugins = session_disabled_plugins or set()
     plugin_by_root_dir = {
         metadata.root_dir_name: metadata
         for metadata in star_registry
@@ -515,7 +518,12 @@ def _filter_skills_for_current_config(
         plugin = plugin_by_root_dir.get(skill.plugin_name)
         if not plugin or not plugin.activated:
             continue
-        if plugin.reserved or allowed_plugins is None:
+        if plugin.reserved:
+            filtered.append(skill)
+            continue
+        if plugin.name is not None and plugin.name in session_disabled_plugins:
+            continue
+        if allowed_plugins is None:
             filtered.append(skill)
             continue
         if plugin.name is not None and plugin.name in allowed_plugins:
@@ -571,7 +579,11 @@ async def _ensure_persona_and_skills(
     runtime = cfg.get("computer_use_runtime", "local")
     skill_manager = SkillManager()
     skills = skill_manager.list_skills(active_only=True, runtime=runtime)
-    skills = _filter_skills_for_current_config(skills, cfg)
+    skills = _filter_skills_for_current_config(
+        skills,
+        cfg,
+        await SessionPluginManager.get_disabled_plugins(event),
+    )
     workspace_skills: list[SkillInfo] = []
     if runtime == "local":
         workspace_root = await _get_workspace_path_for_umo(
@@ -1068,33 +1080,52 @@ async def _decorate_llm_request(
     await _apply_workspace_extra_prompt(event, req, plugin_context)
 
 
-def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
-    """根据事件中的插件设置，过滤请求中的工具列表。
+async def _plugin_tool_fix(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    session_disabled_plugins: set[str] | None = None,
+) -> None:
+    """根据事件中的插件设置与当前会话的禁用插件，过滤请求中的工具列表。
 
     注意：没有 handler_module_path 的工具（如 MCP 工具）会被保留，
     因为它们不属于任何插件，不应被插件过滤逻辑影响。
+
+    当 event.plugins_name 为 None 时（全局所有插件启用），仍然会过滤掉
+    当前会话中通过会话级规则禁用的插件所注册的工具。
     """
-    if event.plugins_name is not None and req.func_tool:
-        new_tool_set = ToolSet()
-        for tool in req.func_tool.tools:
-            if isinstance(tool, MCPTool):
-                # 保留 MCP 工具
-                new_tool_set.add_tool(tool)
-                continue
-            mp = tool.handler_module_path
-            if not mp:
-                # 没有 plugin 归属信息的工具（如 subagent transfer_to_*）
-                # 不应受到会话插件过滤影响。
-                new_tool_set.add_tool(tool)
-                continue
-            plugin = star_map.get(mp)
-            if not plugin:
-                # 无法解析插件归属时，保守保留工具，避免误过滤。
-                new_tool_set.add_tool(tool)
-                continue
-            if plugin.name in event.plugins_name or plugin.reserved:
-                new_tool_set.add_tool(tool)
-        req.func_tool = new_tool_set
+    if not req.func_tool:
+        return
+    session_disabled_plugins = session_disabled_plugins or set()
+
+    new_tool_set = ToolSet()
+    for tool in req.func_tool.tools:
+        if isinstance(tool, MCPTool):
+            # 保留 MCP 工具
+            new_tool_set.add_tool(tool)
+            continue
+        mp = tool.handler_module_path
+        if not mp:
+            # 没有 plugin 归属信息的工具（如 subagent transfer_to_*）
+            # 不应受到会话插件过滤影响。
+            new_tool_set.add_tool(tool)
+            continue
+        plugin = star_map.get(mp)
+        if not plugin:
+            # 无法解析插件归属时，保守保留工具，避免误过滤。
+            new_tool_set.add_tool(tool)
+            continue
+        if plugin.reserved:
+            # 保留插件（系统插件）不参与会话级禁用。
+            new_tool_set.add_tool(tool)
+            continue
+        if plugin.name in session_disabled_plugins:
+            continue
+        if event.plugins_name is not None and (
+            plugin.name is None or plugin.name not in event.plugins_name
+        ):
+            continue
+        new_tool_set.add_tool(tool)
+    req.func_tool = new_tool_set
 
 
 async def _handle_webchat(
@@ -1617,7 +1648,11 @@ async def build_main_agent(
     if not req.session_id:
         req.session_id = event.unified_msg_origin
 
-    _plugin_tool_fix(event, req)
+    await _plugin_tool_fix(
+        event,
+        req,
+        await SessionPluginManager.get_disabled_plugins(event),
+    )
     await _apply_web_search_tools(event, req, plugin_context)
 
     if config.llm_safety_mode:
