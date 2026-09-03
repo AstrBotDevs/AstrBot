@@ -24,7 +24,7 @@ def test_ssycloud_template_uses_expected_defaults():
     templates = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"][
         "config_template"
     ]
-    template = templates["SSYCloud(胜算云)"]
+    template = templates["SSYCloud"]
     assert template["type"] == "ssycloud_chat_completion"
     assert template["api_base"] == "https://router.shengsuanyun.com/api/v1"
     assert template["custom_headers"] == {"X-Title": "AstrBot"}

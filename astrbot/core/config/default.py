@@ -1476,7 +1476,7 @@ CONFIG_METADATA_2 = {
                         "proxy_url": "",
                         "custom_headers": {},
                     },
-                    "SSYCloud(胜算云)": {
+                    "SSYCloud": {
                         "id": "ssycloud",
                         "provider": "ssycloud",
                         "type": "ssycloud_chat_completion",
@@ -1541,7 +1541,7 @@ CONFIG_METADATA_2 = {
                         "proxy_url": "",
                         "custom_headers": {},
                     },
-                    "Gemini_OpenAI_API": {
+                    "Google Gemini OpenAI": {
                         "id": "google_gemini_openai",
                         "provider": "google",
                         "type": "openai_chat_completions",

@@ -9,7 +9,7 @@
 
 ## Configure AstrBot
 
-Open the AstrBot Dashboard, go to **Providers → Add Provider Source**, and choose **SSYCloud(胜算云)**. Enter your API key. The default API Base is:
+Open the AstrBot Dashboard, go to **Providers → Add Provider Source**, and choose **SSYCloud**. Enter your API key. The default API Base is:
 
 ```text
 https://router.shengsuanyun.com/api/v1

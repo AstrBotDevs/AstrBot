@@ -9,7 +9,7 @@
 
 ## 在 AstrBot 中配置
 
-打开 AstrBot 管理面板，进入 **提供商 → 新增 Provider 来源**，选择 **SSYCloud(胜算云)**，填写 API Key。默认 API Base 为：
+打开 AstrBot 管理面板，进入 **提供商 → 新增 Provider 来源**，选择 **SSYCloud**，填写 API Key。默认 API Base 为：
 
 ```text
 https://router.shengsuanyun.com/api/v1
