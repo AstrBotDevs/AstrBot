@@ -1667,7 +1667,32 @@ class PluginManager:
                 ):
                     raise Exception(f"安装失败：目录 {metadata_dir_name} 已存在。")
                 if target_plugin_path != plugin_path:
-                    os.rename(plugin_path, target_plugin_path)
+                    # On case-insensitive filesystems (Windows, macOS), paths that
+                    # differ only in case are treated as the same directory, so a
+                    # direct rename fails. Use a temporary intermediate path to
+                    # work around this limitation.
+                    if os.path.normcase(plugin_path) == os.path.normcase(
+                        target_plugin_path
+                    ):
+                        temp_path = os.path.join(
+                            self.plugin_store_path,
+                            f".rename-{os.path.basename(plugin_path)}-{os.getpid()}",
+                        )
+                        try:
+                            os.rename(plugin_path, temp_path)
+                            os.rename(temp_path, target_plugin_path)
+                        except Exception:
+                            # If the second rename fails, try to restore the original path
+                            if os.path.exists(temp_path) and not os.path.exists(
+                                plugin_path
+                            ):
+                                try:
+                                    os.rename(temp_path, plugin_path)
+                                except Exception:
+                                    pass
+                            raise
+                    else:
+                        os.rename(plugin_path, target_plugin_path)
                     plugin_path = target_plugin_path
                     dir_name = metadata_dir_name
                 await self._ensure_plugin_requirements(
