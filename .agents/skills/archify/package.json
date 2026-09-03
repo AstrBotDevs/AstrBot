@@ -19,12 +19,12 @@
     "check:checkout": "node scripts/check-checkout.mjs"
   },
   "devDependencies": {
-    "ajv": "^8.17.1",
-    "parse5": "7.3.0",
+    "ajv": "^8.20.0",
+    "parse5": "8.0.1",
     "saxes": "6.0.0",
-    "simple-icons": "16.28.0"
+    "simple-icons": "16.29.0"
   },
   "overrides": {
-    "fast-uri": "3.1.5"
+    "fast-uri": "3.1.6"
   }
 }

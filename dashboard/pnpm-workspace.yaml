@@ -3,19 +3,19 @@ allowBuilds:
   esbuild: true
   vue-demi: true
 minimumReleaseAgeExclude:
-  - prettier@3.9.5
+  - prettier@3.9.6
   - '@vue/language-core@3.3.11'
   - vite@8.2.2
   - vue-tsc@3.3.11
   - linkify-it@5.0.2
   - markdown-it@15.0.1
-  - vuetify@4.1.12
-  - apexcharts@7.0.0
-  - markstream-vue@2.0.5
+  - vuetify@4.2.0
+  - apexcharts@7.1.0
+  - markstream-vue@2.0.7
   - pinyin-pro@3.29.3
   - stream-diffs@0.0.2
-  - stream-markdown-parser@1.2.12
-  - '@types/node@26.4.0'
+  - stream-markdown-parser@1.2.13
+  - '@types/node@26.4.1'
   - '@vue/compiler-core@3.5.42'
   - '@vue/compiler-dom@3.5.42'
   - '@vue/compiler-sfc@3.5.42'
@@ -26,7 +26,7 @@ minimumReleaseAgeExclude:
   - '@vue/server-renderer@3.5.42'
   - '@vue/shared@3.5.42'
   - '@vue/test-utils@2.5.0'
-  - vue-router@5.3.0
+  - vue-router@5.3.1
   - vue@3.5.42
 overrides:
   brace-expansion@^5.0.5: 5.0.9
