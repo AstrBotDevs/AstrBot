@@ -273,9 +273,10 @@ class RespondStage(Stage):
                         f"actual_chain: {result.chain}",
                     )
                     return
-                for comp in result.chain:
-                    i = await self._calc_comp_interval(comp)
-                    await asyncio.sleep(i)
+                for index, comp in enumerate(result.chain):
+                    if index > 0:
+                        i = await self._calc_comp_interval(comp)
+                        await asyncio.sleep(i)
                     try:
                         if comp.type in need_separately:
                             await event.send(result.derive([comp]))
