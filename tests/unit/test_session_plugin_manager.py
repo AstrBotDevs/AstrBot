@@ -112,6 +112,29 @@ async def test_filter_handlers_by_session_skips_disabled_plugin(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_get_disabled_plugins_tolerates_event_without_set_extra(monkeypatch):
+    """Lightweight events without set_extra (used in some pipeline tests) must not raise."""
+    from types import SimpleNamespace
+
+    event = SimpleNamespace(
+        unified_msg_origin=UMO,
+        get_extra=lambda *_args, **_kwargs: None,
+    )
+    mock_sp = MagicMock()
+    mock_sp.get_async = AsyncMock(
+        return_value={UMO: {"disabled_plugins": ["astrbot_meme_plugin"]}}
+    )
+    monkeypatch.setattr(
+        "astrbot.core.star.session_plugin_manager.sp",
+        mock_sp,
+    )
+
+    assert await SessionPluginManager.get_disabled_plugins(event) == {
+        "astrbot_meme_plugin"
+    }
+
+
+@pytest.mark.asyncio
 async def test_call_event_hook_skips_disabled_plugin_hook(monkeypatch):
     """call_event_hook does not invoke hooks of session-disabled plugins."""
     event = make_event()
