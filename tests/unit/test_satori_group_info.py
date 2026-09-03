@@ -178,3 +178,90 @@ async def test_satori_get_group_respects_declared_unsupported_features():
     assert group is not None
     assert group.group_name == "Event Name"
     adapter.send_http_request.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_satori_get_group_caps_member_pages_and_omits_truncated_list():
+    adapter, _, event = await _make_group_event(
+        {"id": "guild-1", "name": "Event Name"},
+    )
+    adapter.logins = [
+        {
+            "platform": "discord",
+            "user": {"id": "bot-1"},
+            "features": ["guild.get", "guild.member.list"],
+        },
+    ]
+    list_calls = {"count": 0}
+
+    async def pages(method, path, data, platform, user_id):
+        del method, data, platform, user_id
+        if path == "/guild.get":
+            return {"id": "guild-1", "name": "Fetched Name"}
+        list_calls["count"] += 1
+        return {
+            "data": [
+                {
+                    "user": {
+                        "id": f"user-{list_calls['count']}",
+                        "name": f"User {list_calls['count']}",
+                    },
+                },
+            ],
+            "next": f"page-{list_calls['count'] + 1}",
+        }
+
+    adapter.send_http_request = AsyncMock(side_effect=pages)
+
+    group = await event.get_group()
+
+    assert group is not None
+    assert group.group_name == "Fetched Name"
+    assert group.members is None
+    assert group.member_count is None
+    assert list_calls["count"] == 10
+    assert [
+        call_args.args[1]
+        for call_args in adapter.send_http_request.await_args_list
+        if call_args.args[1] == "/guild.member.list"
+    ] == ["/guild.member.list"] * 10
+
+
+@pytest.mark.asyncio
+async def test_satori_get_group_omits_members_when_first_page_is_over_cap():
+    adapter, _, event = await _make_group_event(
+        {"id": "guild-1", "name": "Event Name"},
+    )
+    adapter.logins = [
+        {
+            "platform": "discord",
+            "user": {"id": "bot-1"},
+            "features": ["guild.get", "guild.member.list"],
+        },
+    ]
+
+    async def pages(method, path, data, platform, user_id):
+        del method, data, platform, user_id
+        if path == "/guild.get":
+            return {"id": "guild-1", "name": "Fetched Name"}
+        return {
+            "data": [
+                {"user": {"id": f"user-{index}", "name": f"User {index}"}}
+                for index in range(2001)
+            ],
+            "next": "page-2",
+        }
+
+    adapter.send_http_request = AsyncMock(side_effect=pages)
+
+    group = await event.get_group()
+
+    assert group is not None
+    assert group.group_name == "Fetched Name"
+    assert group.members is None
+    assert group.member_count is None
+    assert [
+        call_args.args[1]
+        for call_args in adapter.send_http_request.await_args_list
+        if call_args.args[1] == "/guild.member.list"
+    ] == ["/guild.member.list"]

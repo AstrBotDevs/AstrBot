@@ -454,6 +454,79 @@ async def test_napcat_get_group_supports_explicit_group_id_no_cache_and_mapping_
 
 
 @pytest.mark.asyncio
+async def test_napcat_get_group_skips_member_list_when_count_is_over_cap():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    adapter.client.get_group_info = AsyncMock(
+        return_value={
+            "group_id": "777888",
+            "group_name": "Huge Group",
+            "member_count": 2500,
+        }
+    )
+    adapter.client.get_group_member_list = AsyncMock()
+    event = _make_manual_event(adapter, sender_id="445566")
+
+    group = await event.get_group(group_id="777888")
+
+    adapter.client.get_group_info.assert_awaited_once_with(group_id="777888")
+    adapter.client.get_group_member_list.assert_not_awaited()
+    assert group is not None
+    assert group.group_name == "Huge Group"
+    assert group.member_count == 2500
+    assert group.members is None
+
+
+@pytest.mark.asyncio
+async def test_napcat_get_group_omits_members_when_list_is_over_cap():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    adapter.client.get_group_info = AsyncMock(
+        return_value={"group_id": "777888", "group_name": "Huge Group"}
+    )
+    adapter.client.get_group_member_list = AsyncMock(
+        return_value=[
+            {"user_id": index, "nickname": f"user-{index}", "role": "member"}
+            for index in range(2001)
+        ]
+    )
+    event = _make_manual_event(adapter, sender_id="445566")
+
+    group = await event.get_group(group_id="777888")
+
+    adapter.client.get_group_member_list.assert_awaited_once_with(
+        "777888",
+        no_cache=None,
+    )
+    assert group is not None
+    assert group.members is None
+    assert group.member_count == 2001
+
+
+@pytest.mark.asyncio
+async def test_napcat_get_group_still_publishes_members_at_hard_cap():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    adapter.client.get_group_info = AsyncMock(
+        return_value={"group_id": "777888", "group_name": "Huge Group"}
+    )
+    adapter.client.get_group_member_list = AsyncMock(
+        return_value=[
+            {"user_id": index, "nickname": f"user-{index}", "role": "member"}
+            for index in range(2000)
+        ]
+    )
+    event = _make_manual_event(adapter, sender_id="445566")
+
+    group = await event.get_group(group_id="777888")
+
+    assert group is not None
+    assert group.members is not None
+    assert len(group.members) == 2000
+    assert group.member_count == 2000
+
+
+@pytest.mark.asyncio
 async def test_napcat_event_get_forward_msg_resolves_component_or_returns_none():
     queue: asyncio.Queue = asyncio.Queue()
     adapter = _make_adapter(queue)

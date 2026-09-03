@@ -9,6 +9,7 @@ from astrbot.core.message.components import Forward, OnlineFile
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import Group, MessageMember
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astrbot_message import group_member_lookup_over_cap
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.utils.error_redaction import safe_error
@@ -871,6 +872,13 @@ class NapCatMessageEvent(AstrMessageEvent):
                         resolved_group_id,
                     )
 
+        if group.member_count is not None and group_member_lookup_over_cap(
+            pages=1,
+            members=group.member_count,
+        ):
+            group.members = None
+            return group
+
         try:
             members = await self._adapter.client.get_group_member_list(
                 resolved_group_id,
@@ -888,30 +896,36 @@ class NapCatMessageEvent(AstrMessageEvent):
 
         owner_id = None
         admin_ids: list[str] = []
-        group_members: list[MessageMember] = []
+        parsed_members: list[tuple[str, str | None]] = []
         for member in members:
             user_id = _value(member, "user_id")
             if user_id is None:
                 continue
+            user_id_str = str(int(user_id))
             role = _value(member, "role")
             if role == "owner":
-                owner_id = str(int(user_id))
+                owner_id = user_id_str
             elif role == "admin":
-                admin_ids.append(str(int(user_id)))
-
+                admin_ids.append(user_id_str)
             nickname = _value(member, "card") or _value(member, "nickname")
-            group_members.append(
-                MessageMember(
-                    user_id=str(int(user_id)),
-                    nickname=str(nickname) if nickname is not None else None,
-                )
+            parsed_members.append(
+                (user_id_str, str(nickname) if nickname is not None else None)
             )
 
         group.group_owner = owner_id
         group.group_admins = admin_ids
-        group.members = group_members
+        member_count = len(parsed_members)
+        if group_member_lookup_over_cap(pages=1, members=member_count):
+            group.members = None
+            if group.member_count is None:
+                group.member_count = member_count
+            return group
+        group.members = [
+            MessageMember(user_id=user_id, nickname=nickname)
+            for user_id, nickname in parsed_members
+        ]
         if group.member_count is None:
-            group.member_count = len(group_members)
+            group.member_count = member_count
         return group
 
     async def send_streaming(self, generator, use_fallback: bool = False):
