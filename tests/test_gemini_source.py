@@ -1,3 +1,4 @@
+import base64
 from types import SimpleNamespace
 
 import httpx
@@ -105,6 +106,152 @@ async def test_gemini_prepare_conversation_resolves_local_history_image(tmp_path
     assert image_part.inline_data is not None
     assert image_part.inline_data.mime_type == "image/webp"
     assert image_part.inline_data.data == image_bytes
+
+
+@pytest.mark.asyncio
+async def test_gemini3_prepare_conversation_adds_signature_to_cross_provider_tool_calls():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    contents = await provider._prepare_conversation(
+        {
+            "model": "gemini-3.1-pro-preview",
+            "messages": [
+                {"role": "user", "content": "find the latest result"},
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "function": {
+                                "name": "search",
+                                "arguments": '{"query": "result"}',
+                            },
+                            "extra_content": {"openai": {"item_id": "item_1"}},
+                        },
+                        {
+                            "function": {
+                                "name": "read_page",
+                                "arguments": '{"id": "page"}',
+                            }
+                        },
+                    ],
+                },
+            ],
+        }
+    )
+
+    assert contents[-1].parts is not None
+    assert (
+        contents[-1].parts[0].thought_signature == b"skip_thought_signature_validator"
+    )
+    assert contents[-1].parts[1].thought_signature is None
+
+
+@pytest.mark.asyncio
+async def test_gemini3_prepare_conversation_drops_foreign_tool_step_signature():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    foreign_signature = base64.b64encode(b"foreign-provider-signature").decode("utf-8")
+
+    contents = await provider._prepare_conversation(
+        {
+            "model": "gemini-3.1-pro-preview",
+            "messages": [
+                {"role": "user", "content": "find the latest result"},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "think",
+                            "text": "provider-specific reasoning",
+                            "encrypted": foreign_signature,
+                        },
+                        {"type": "text", "text": "I will check."},
+                    ],
+                    "tool_calls": [
+                        {
+                            "function": {
+                                "name": "search",
+                                "arguments": '{"query": "result"}',
+                            }
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+
+    assert contents[-1].parts is not None
+    assert contents[-1].parts[0].text == "I will check."
+    assert contents[-1].parts[0].thought_signature is None
+    assert (
+        contents[-1].parts[1].thought_signature == b"skip_thought_signature_validator"
+    )
+
+
+@pytest.mark.asyncio
+async def test_gemini3_prepare_conversation_preserves_real_tool_signature():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    signature = b"real-gemini-signature"
+
+    contents = await provider._prepare_conversation(
+        {
+            "model": "gemini-3-flash-preview",
+            "messages": [
+                {"role": "user", "content": "find the latest result"},
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "function": {
+                                "name": "search",
+                                "arguments": '{"query": "result"}',
+                            },
+                            "extra_content": {
+                                "google": {
+                                    "thought_signature": base64.b64encode(
+                                        signature
+                                    ).decode("utf-8")
+                                }
+                            },
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+
+    assert contents[-1].parts is not None
+    assert contents[-1].parts[0].thought_signature == signature
+
+
+@pytest.mark.asyncio
+async def test_gemini25_prepare_conversation_keeps_unsigned_tool_calls_unchanged():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    contents = await provider._prepare_conversation(
+        {
+            "model": "gemini-2.5-pro",
+            "messages": [
+                {"role": "user", "content": "find the latest result"},
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "function": {
+                                "name": "search",
+                                "arguments": '{"query": "result"}',
+                            }
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+
+    assert contents[-1].parts is not None
+    assert contents[-1].parts[0].thought_signature is None
 
 
 def test_gemini_empty_output_raises_empty_model_output_error():
