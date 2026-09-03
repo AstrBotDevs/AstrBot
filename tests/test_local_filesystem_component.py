@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -229,42 +228,32 @@ def test_local_file_system_component_runs_restricted_search_in_read_only_sandbox
     tmp_path,
 ):
     sandbox_calls = []
-    run_calls = []
 
-    def fake_sandbox_command(
-        argv,
-        *,
-        workspace,
-        env=None,
-        workspace_writable=True,
-    ):
-        sandbox_calls.append(
-            {
-                "argv": argv,
-                "workspace": workspace,
-                "env": env,
-                "workspace_writable": workspace_writable,
-            }
-        )
-        return ["/sandbox", *argv]
-
-    def fake_run(command, **kwargs):
-        run_calls.append((command, kwargs))
-        return subprocess.CompletedProcess(
-            command,
-            0,
-            stdout=b"target.txt:1:needle\n",
-            stderr=b"",
-        )
+    class FakeSandbox:
+        def run(self, argv, spec, *, env=None, **kwargs):
+            sandbox_calls.append(
+                {
+                    "argv": argv,
+                    "workspace": spec.workspace,
+                    "env": env,
+                    "workspace_writable": spec.workspace_writable,
+                    "kwargs": kwargs,
+                }
+            )
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                stdout=b"target.txt:1:needle\n",
+                stderr=b"",
+            )
 
     monkeypatch.setattr(local_booter.sys, "version_info", (3, 13))
     monkeypatch.setattr(local_booter.shutil, "which", lambda _name: "/usr/bin/rg")
     monkeypatch.setattr(
         local_booter,
-        "_build_local_sandbox_command",
-        fake_sandbox_command,
+        "create_process_sandbox",
+        lambda: FakeSandbox(),
     )
-    monkeypatch.setattr(local_booter.subprocess, "run", fake_run)
     monkeypatch.setattr(
         local_booter,
         "search",
@@ -305,18 +294,8 @@ def test_local_file_system_component_runs_restricted_search_in_read_only_sandbox
             "workspace": tmp_path,
             "env": None,
             "workspace_writable": False,
+            "kwargs": {"capture_output": True, "timeout": 30},
         }
-    ]
-    assert run_calls == [
-        (
-            ["/sandbox", *expected_search_command],
-            {
-                "capture_output": True,
-                "timeout": 30,
-                "cwd": str(tmp_path.resolve()),
-                "env": {"PATH": os.defpath},
-            },
-        )
     ]
 
 

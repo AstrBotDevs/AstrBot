@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from astrbot.core.computer import process_sandbox
 from astrbot.core.computer.booters import local as local_booter
 from astrbot.core.computer.booters.local import (
     LocalFileSystemComponent,
@@ -41,6 +42,40 @@ def _python_command(code: str) -> str:
     """Build a shell-safe Python command for the current operating system."""
     args = [sys.executable, "-u", "-c", code]
     return subprocess.list2cmdline(args) if os.name == "nt" else shlex.join(args)
+
+
+def _build_sandbox_command(
+    argv: list[str],
+    *,
+    workspace: Path,
+    env: dict[str, str] | None = None,
+    workspace_writable: bool = True,
+    allow_network: bool = False,
+    filesystem_scope: str = "workspace",
+) -> list[str]:
+    """Build the current platform sandbox command for tests.
+
+    Args:
+        argv: Command and arguments to run inside the sandbox.
+        workspace: Directory exposed to the sandbox.
+        env: Extra environment variables exposed to the process.
+        workspace_writable: Whether the workspace may be modified.
+        allow_network: Whether the host network is exposed.
+        filesystem_scope: Filesystem scope exposed to the process.
+
+    Returns:
+        Platform sandbox command and arguments.
+    """
+    return process_sandbox.create_process_sandbox().build_command(
+        argv,
+        process_sandbox.SandboxSpec(
+            workspace=workspace,
+            workspace_writable=workspace_writable,
+            allow_network=allow_network,
+            filesystem_scope=filesystem_scope,
+        ),
+        env=env,
+    )
 
 
 def test_local_shell_component_decodes_utf8_output(monkeypatch):
@@ -218,6 +253,32 @@ async def test_managed_shell_uses_windows_powershell(monkeypatch, tmp_path):
     assert "creationflags" in calls[0][1]
 
 
+@pytest.mark.parametrize(
+    ("platform_name", "implementation_name"),
+    [
+        ("linux", "BubblewrapProcessSandbox"),
+        ("darwin", "SeatbeltProcessSandbox"),
+    ],
+)
+def test_process_sandbox_selects_system_implementation(
+    monkeypatch,
+    platform_name,
+    implementation_name,
+):
+    monkeypatch.setattr(process_sandbox.sys, "platform", platform_name)
+
+    sandbox = process_sandbox.create_process_sandbox()
+
+    assert type(sandbox).__name__ == implementation_name
+
+
+def test_process_sandbox_fails_closed_on_unsupported_system(monkeypatch):
+    monkeypatch.setattr(process_sandbox.sys, "platform", "win32")
+
+    with pytest.raises(RuntimeError, match="only available on Linux and macOS"):
+        process_sandbox.create_process_sandbox()
+
+
 def test_linux_bwrap_command_is_workspace_only_and_clears_environment(
     monkeypatch,
     tmp_path,
@@ -225,7 +286,7 @@ def test_linux_bwrap_command_is_workspace_only_and_clears_environment(
     monkeypatch.setattr(local_booter.sys, "platform", "linux")
     monkeypatch.setattr(local_booter.shutil, "which", lambda name: f"/usr/bin/{name}")
 
-    command = local_booter._build_local_sandbox_command(
+    command = _build_sandbox_command(
         ["/bin/sh", "-c", "pwd"],
         workspace=tmp_path,
         env={"CUSTOM_VALUE": "visible"},
@@ -252,7 +313,7 @@ def test_linux_bwrap_command_is_workspace_only_and_clears_environment(
     ]
     assert str(Path.home()) not in bind_sources
 
-    read_only_command = local_booter._build_local_sandbox_command(
+    read_only_command = _build_sandbox_command(
         ["/usr/bin/rg", "needle", "."],
         workspace=tmp_path,
         workspace_writable=False,
@@ -269,13 +330,13 @@ def test_linux_bwrap_command_applies_network_and_filesystem_permissions(
     monkeypatch.setattr(local_booter.sys, "platform", "linux")
     monkeypatch.setattr(local_booter.shutil, "which", lambda name: f"/usr/bin/{name}")
 
-    networked_workspace = local_booter._build_local_sandbox_command(
+    networked_workspace = _build_sandbox_command(
         ["/bin/sh", "-c", "pwd"],
         workspace=tmp_path,
         allow_network=True,
         filesystem_scope="workspace",
     )
-    host_without_network = local_booter._build_local_sandbox_command(
+    host_without_network = _build_sandbox_command(
         ["/bin/sh", "-c", "pwd"],
         workspace=tmp_path,
         allow_network=False,
@@ -301,7 +362,7 @@ def test_linux_bwrap_command_fails_closed_when_bwrap_is_missing(
     monkeypatch.setattr(local_booter.shutil, "which", lambda _name: None)
 
     with pytest.raises(RuntimeError, match="bubblewrap"):
-        local_booter._build_local_sandbox_command(
+        _build_sandbox_command(
             ["/bin/sh", "-c", "pwd"],
             workspace=tmp_path,
         )
@@ -318,7 +379,7 @@ def test_macos_seatbelt_command_restricts_profile_and_environment(
         lambda name, **_kwargs: f"/usr/bin/{name}",
     )
 
-    command = local_booter._build_local_sandbox_command(
+    command = _build_sandbox_command(
         ["/bin/sh", "-c", "pwd"],
         workspace=tmp_path,
         env={"CUSTOM_VALUE": "visible", "PATH": "untrusted"},
@@ -355,7 +416,7 @@ def test_macos_seatbelt_command_restricts_profile_and_environment(
     ]
     assert command[-3:] == ["/bin/sh", "-c", "pwd"]
 
-    read_only_command = local_booter._build_local_sandbox_command(
+    read_only_command = _build_sandbox_command(
         ["/usr/bin/rg", "needle", "."],
         workspace=tmp_path,
         workspace_writable=False,
@@ -376,13 +437,13 @@ def test_macos_seatbelt_profile_applies_network_and_filesystem_permissions(
         lambda name, **_kwargs: f"/usr/bin/{name}",
     )
 
-    networked_workspace = local_booter._build_local_sandbox_command(
+    networked_workspace = _build_sandbox_command(
         ["/bin/sh", "-c", "pwd"],
         workspace=tmp_path,
         allow_network=True,
         filesystem_scope="workspace",
     )
-    host_without_network = local_booter._build_local_sandbox_command(
+    host_without_network = _build_sandbox_command(
         ["/bin/sh", "-c", "pwd"],
         workspace=tmp_path,
         allow_network=False,
@@ -407,7 +468,7 @@ def test_macos_seatbelt_enforces_independent_network_and_filesystem_permissions(
     outside_file = tmp_path / "outside.txt"
     outside_file.write_text("host-visible", encoding="utf-8")
 
-    host_without_network = local_booter._build_local_sandbox_command(
+    host_without_network = _build_sandbox_command(
         [
             sys.executable,
             "-c",
@@ -433,7 +494,7 @@ def test_macos_seatbelt_enforces_independent_network_and_filesystem_permissions(
         timeout=10,
     )
 
-    workspace_with_network = local_booter._build_local_sandbox_command(
+    workspace_with_network = _build_sandbox_command(
         [
             sys.executable,
             "-c",
@@ -480,7 +541,7 @@ def test_macos_seatbelt_preserves_process_limit_and_allows_shell_fork(tmp_path):
             "import resource; print(resource.getrlimit(resource.RLIMIT_NPROC)[0])",
         ]
     )
-    command = local_booter._build_local_sandbox_command(
+    command = _build_sandbox_command(
         ["/bin/sh", "-c", f"{print_process_limit}; /bin/date >/dev/null"],
         workspace=tmp_path,
     )
@@ -510,7 +571,7 @@ def test_macos_seatbelt_command_fails_closed_when_tool_is_missing(
     )
 
     with pytest.raises(RuntimeError, match="Seatbelt"):
-        local_booter._build_local_sandbox_command(
+        _build_sandbox_command(
             ["/bin/sh", "-c", "pwd"],
             workspace=tmp_path,
         )
@@ -562,7 +623,7 @@ if connected:
     raise SystemExit("network unexpectedly available")
 assert os.environ.get("HOST_SECRET") is None
 """
-    command = local_booter._build_local_sandbox_command(
+    command = _build_sandbox_command(
         [sys.executable, "-c", code],
         workspace=tmp_path,
         env={"HOST_PID": str(os.getpid())},
@@ -598,7 +659,7 @@ def test_macos_read_only_seatbelt_grep_cannot_follow_outside_ancestor_symlink(
     outside_file.write_text("host-secret-needle\n", encoding="utf-8")
     (workspace / "redirect").symlink_to(outside_dir, target_is_directory=True)
 
-    positive_command = local_booter._build_local_sandbox_command(
+    positive_command = _build_sandbox_command(
         [str(Path(rg_path).resolve()), "visible-needle", "--", str(inside_file)],
         workspace=workspace,
         workspace_writable=False,
@@ -614,7 +675,7 @@ def test_macos_read_only_seatbelt_grep_cannot_follow_outside_ancestor_symlink(
     assert b"visible-needle" in positive.stdout
 
     escaped_path = workspace / "redirect" / "secret.txt"
-    escaped_command = local_booter._build_local_sandbox_command(
+    escaped_command = _build_sandbox_command(
         [str(Path(rg_path).resolve()), "host-secret-needle", "--", str(escaped_path)],
         workspace=workspace,
         workspace_writable=False,

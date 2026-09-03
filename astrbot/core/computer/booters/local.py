@@ -24,6 +24,11 @@ from astrbot.core.computer.file_read_utils import (
     detect_text_encoding,
     read_local_text_range_sync,
 )
+from astrbot.core.computer.process_sandbox import (
+    SandboxProcess,
+    SandboxSpec,
+    create_process_sandbox,
+)
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_root,
     get_astrbot_system_tmp_path,
@@ -48,13 +53,7 @@ _BLOCKED_COMMAND_PATTERNS = [
     " kill -9 ",
     " killall ",
 ]
-_LOCAL_SANDBOX_MAX_CPU_SECONDS = 300
-_LOCAL_SANDBOX_MAX_FILE_BYTES = 100 * 1024 * 1024
-_LOCAL_SANDBOX_MAX_MEMORY_BYTES = 1024 * 1024 * 1024
-_LOCAL_SANDBOX_MAX_OPEN_FILES = 256
-_LOCAL_SANDBOX_MAX_PROCESSES = 256
 _LOCAL_SANDBOX_MAX_OUTPUT_BYTES = 10 * 1024 * 1024
-_LINUX_SANDBOX_TMP_BYTES = 256 * 1024 * 1024
 _SANDBOXED_PYTHON_RIPGREP = """
 import sys
 
@@ -73,400 +72,11 @@ results = search(
 )
 sys.stdout.write("".join(results))
 """
-_LOCAL_SANDBOX_LIMIT_LAUNCHER = f"""
-import os
-import resource
-import sys
-
-limits = [
-    (resource.RLIMIT_CPU, {_LOCAL_SANDBOX_MAX_CPU_SECONDS}),
-    (resource.RLIMIT_FSIZE, {_LOCAL_SANDBOX_MAX_FILE_BYTES}),
-    (resource.RLIMIT_NOFILE, {_LOCAL_SANDBOX_MAX_OPEN_FILES}),
-    (resource.RLIMIT_CORE, 0),
-]
-if sys.platform.startswith("linux"):
-    # macOS RLIMIT_NPROC counts every process owned by the host user, and its
-    # Python process starts above this virtual-address limit.
-    limits.extend(
-        (
-            (resource.RLIMIT_NPROC, {_LOCAL_SANDBOX_MAX_PROCESSES}),
-            (resource.RLIMIT_AS, {_LOCAL_SANDBOX_MAX_MEMORY_BYTES}),
-        )
-    )
-for kind, requested in limits:
-    _, hard = resource.getrlimit(kind)
-    value = requested if hard == resource.RLIM_INFINITY else min(requested, hard)
-    resource.setrlimit(kind, (value, value))
-os.execvpe(sys.argv[1], sys.argv[1:], os.environ)
-"""
-_MACOS_SEATBELT_PROFILE = """
-(version 1)
-(deny default)
-(deny mach-priv-host-port)
-(import "system.sb")
-
-(allow process-fork)
-(allow process-exec)
-(allow process-info* (target self))
-(deny process-exec
-    (literal "/usr/bin/open")
-    (literal "/usr/bin/osascript"))
-(deny appleevent-send)
-(deny mach-lookup
-    (global-name "com.apple.coreservices.launchservicesd")
-    (global-name "com.apple.lsd.mapdb")
-    (global-name "com.apple.lsd.modifydb")
-    (global-name "com.apple.lsd.open")
-    (global-name "com.apple.lsd.xpc"))
-
-(allow file-read-metadata file-test-existence)
-(allow file-read* file-test-existence
-    (subpath "/bin")
-    (subpath "/usr/bin")
-    (subpath "/usr/libexec")
-    (literal (param "EXECUTABLE"))
-    (subpath (param "WORKSPACE"))
-    (subpath (param "PYTHON_PREFIX"))
-    (subpath (param "PYTHON_BASE_PREFIX")))
-(allow file-map-executable
-    (subpath "/bin")
-    (subpath "/usr/bin")
-    (subpath "/usr/libexec")
-    (literal (param "EXECUTABLE"))
-    (subpath (param "WORKSPACE"))
-    (subpath (param "PYTHON_PREFIX"))
-    (subpath (param "PYTHON_BASE_PREFIX")))
-(allow file-write*
-    (subpath (param "WORKSPACE")))
-
-(deny file-read*
-    (literal "/private/etc/master.passwd")
-    (literal "/private/etc/passwd"))
-(deny network*)
-"""
-_MACOS_SEATBELT_READ_ONLY_PROFILE = _MACOS_SEATBELT_PROFILE.replace(
-    '(allow file-write*\n    (subpath (param "WORKSPACE")))',
-    "(deny file-write*)",
-)
 
 
 def _is_safe_command(command: str) -> bool:
     cmd = f" {command.strip().lower()} "
     return not any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS)
-
-
-def _macos_executable_read_paths(executable_path: Path) -> tuple[Path, ...]:
-    """Collect concrete executable and dynamic-library paths for Seatbelt.
-
-    Args:
-        executable_path: Executable launched inside Seatbelt.
-
-    Returns:
-        Existing absolute files that the dynamic loader may need to read.
-    """
-    read_paths = {executable_path, executable_path.resolve()}
-    resolved_executable = executable_path.resolve()
-    if any(
-        resolved_executable.is_relative_to(root)
-        for root in (
-            Path("/bin"),
-            Path("/usr"),
-            Path(sys.prefix).resolve(),
-            Path(sys.base_prefix).resolve(),
-        )
-    ):
-        return tuple(sorted(read_paths, key=str))
-    pending = [resolved_executable]
-    inspected: set[Path] = set()
-    while pending and len(inspected) < 64:
-        current = pending.pop()
-        if current in inspected:
-            continue
-        inspected.add(current)
-        try:
-            result = subprocess.run(
-                ["/usr/bin/otool", "-L", str(current)],
-                capture_output=True,
-                check=False,
-                timeout=5,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            continue
-        if result.returncode != 0:
-            continue
-        for line in _decode_bytes_with_fallback(
-            result.stdout,
-            preferred_encoding="utf-8",
-        ).splitlines()[1:]:
-            dependency_text = line.strip().split(" (", 1)[0]
-            if not dependency_text.startswith("/"):
-                continue
-            dependency = Path(dependency_text)
-            if not dependency.exists():
-                continue
-            resolved_dependency = dependency.resolve()
-            read_paths.update((dependency, resolved_dependency))
-            if not (
-                resolved_dependency.is_relative_to("/usr")
-                or resolved_dependency.is_relative_to("/System")
-            ):
-                pending.append(resolved_dependency)
-    return tuple(sorted(read_paths, key=str))
-
-
-def _build_local_sandbox_command(
-    argv: list[str],
-    *,
-    workspace: Path,
-    env: dict[str, str] | None = None,
-    workspace_writable: bool = True,
-    allow_network: bool = False,
-    filesystem_scope: str = "workspace",
-) -> list[str]:
-    """Build a fail-closed OS sandbox command for restricted Local execution.
-
-    Args:
-        argv: Command and arguments to execute inside the sandbox.
-        workspace: Working directory exposed to the process.
-        env: Additional environment variables exposed inside the sandbox.
-        workspace_writable: Whether the exposed directory may be modified.
-        allow_network: Whether the process may use the host network namespace.
-        filesystem_scope: Either workspace-only access or host filesystem access.
-
-    Returns:
-        Bubblewrap or Seatbelt arguments with filesystem and resource restrictions.
-
-    Raises:
-        RuntimeError: If the platform sandbox or workspace is unavailable.
-        ValueError: If the command or an environment variable is invalid.
-    """
-    if not argv:
-        raise ValueError("A sandbox command is required.")
-    if filesystem_scope not in {"workspace", "host"}:
-        raise ValueError(f"Invalid Local filesystem scope: {filesystem_scope}.")
-
-    sandbox_argv = list(argv)
-    if Path(sandbox_argv[0]) == Path(sys.executable):
-        sandbox_argv[0] = str(Path(sys.executable).resolve())
-    resolved_workspace = workspace.resolve()
-    if not resolved_workspace.is_dir():
-        raise RuntimeError(f"Sandbox workspace does not exist: {resolved_workspace}")
-    executable_path = (
-        Path(sandbox_argv[0]).resolve()
-        if Path(sandbox_argv[0]).is_absolute() and Path(sandbox_argv[0]).exists()
-        else Path(sys.executable).resolve()
-    )
-    sandbox_python = str(Path(sys.executable).resolve())
-
-    normalized_env: dict[str, str] = {}
-    for raw_key, raw_value in (env or {}).items():
-        key = str(raw_key)
-        value = str(raw_value)
-        if not key or "=" in key or "\x00" in key or "\x00" in value:
-            raise ValueError(f"Invalid sandbox environment variable name: {key!r}.")
-        normalized_env[key] = value
-
-    if sys.platform == "darwin":
-        seatbelt_path = shutil.which("sandbox-exec", path="/usr/bin")
-        if seatbelt_path != "/usr/bin/sandbox-exec":
-            raise RuntimeError(
-                "Seatbelt (`/usr/bin/sandbox-exec`) is required for restricted "
-                "Local execution on macOS."
-            )
-        python_prefix = str(Path(sys.prefix).resolve())
-        python_base_prefix = str(Path(sys.base_prefix).resolve())
-        sandbox_path = f"{Path(sys.executable).resolve().parent}:/usr/bin:/bin"
-        profile = (
-            _MACOS_SEATBELT_PROFILE
-            if workspace_writable
-            else _MACOS_SEATBELT_READ_ONLY_PROFILE
-        )
-        if filesystem_scope == "host":
-            profile = profile.replace(
-                '(import "system.sb")',
-                '(import "system.sb")\n\n'
-                "(allow file-read* file-write* file-test-existence "
-                "file-read-metadata file-map-executable)",
-            ).replace(
-                "(deny file-read*\n"
-                '    (literal "/private/etc/master.passwd")\n'
-                '    (literal "/private/etc/passwd"))\n',
-                "",
-            )
-        if allow_network:
-            profile = profile.replace("(deny network*)", "(allow network*)")
-        executable_definitions: list[str] = []
-        executable_rules: list[str] = []
-        for index, read_path in enumerate(
-            _macos_executable_read_paths(executable_path)
-        ):
-            parameter = f"EXECUTABLE_{index}"
-            executable_definitions.extend(("-D", f"{parameter}={read_path}"))
-            executable_rules.append(f'(literal (param "{parameter}"))')
-        profile = profile.replace(
-            '(literal (param "EXECUTABLE"))',
-            "\n    ".join(executable_rules),
-        )
-        environment = [
-            *(f"{key}={value}" for key, value in sorted(normalized_env.items())),
-            f"PATH={sandbox_path}",
-            f"HOME={resolved_workspace}",
-            f"TMPDIR={resolved_workspace}",
-            "LANG=C.UTF-8",
-        ]
-        return [
-            seatbelt_path,
-            "-D",
-            f"WORKSPACE={resolved_workspace}",
-            *executable_definitions,
-            "-D",
-            f"PYTHON_PREFIX={python_prefix}",
-            "-D",
-            f"PYTHON_BASE_PREFIX={python_base_prefix}",
-            "-p",
-            profile,
-            "/usr/bin/env",
-            "-i",
-            *environment,
-            sandbox_python,
-            "-I",
-            "-S",
-            "-c",
-            _LOCAL_SANDBOX_LIMIT_LAUNCHER,
-            *sandbox_argv,
-        ]
-
-    if not sys.platform.startswith("linux"):
-        raise RuntimeError(
-            "The Local execution sandbox is only available on Linux and macOS."
-        )
-    bwrap_path = shutil.which("bwrap")
-    if not bwrap_path:
-        raise RuntimeError(
-            "bubblewrap (`bwrap`) is required for restricted Local execution."
-        )
-
-    if not Path("/bin/sh").exists():
-        raise RuntimeError("The Local bubblewrap sandbox requires /bin/sh.")
-
-    command = [
-        bwrap_path,
-        "--unshare-all",
-        "--new-session",
-        "--die-with-parent",
-        "--clearenv",
-    ]
-    if allow_network:
-        command.append("--share-net")
-
-    if filesystem_scope == "host":
-        command.extend(
-            (
-                "--bind",
-                "/",
-                "/",
-                "--proc",
-                "/proc",
-                "--dev",
-                "/dev",
-                "--chdir",
-                str(resolved_workspace),
-            )
-        )
-    else:
-        command.extend(
-            (
-                "--dir",
-                "/tmp",
-                "--size",
-                str(_LINUX_SANDBOX_TMP_BYTES),
-                "--tmpfs",
-                "/tmp",
-            )
-        )
-
-    readonly_paths = {
-        Path("/usr"),
-        Path("/bin"),
-        Path("/sbin"),
-        Path("/lib"),
-        Path("/lib64"),
-        Path("/etc/alternatives"),
-        Path("/etc/ld.so.cache"),
-        Path("/etc/ld.so.conf"),
-        Path("/etc/ld.so.conf.d"),
-        Path("/etc/localtime"),
-        Path("/etc/nsswitch.conf"),
-        Path("/etc/passwd"),
-        Path("/etc/group"),
-        Path(sys.prefix).resolve(),
-        Path(sys.base_prefix).resolve(),
-    }
-    if filesystem_scope == "workspace":
-        if not any(
-            executable_path == path or executable_path.is_relative_to(path)
-            for path in readonly_paths
-        ):
-            readonly_paths.add(executable_path)
-        readonly_paths = {path for path in readonly_paths if path.exists()}
-
-        required_directories = {Path("/tmp"), Path("/tmp/home")}
-        for path in (*readonly_paths, resolved_workspace):
-            required_directories.update(
-                parent
-                for parent in path.parents
-                if parent != Path("/") and parent not in readonly_paths
-            )
-        for directory in sorted(
-            required_directories,
-            key=lambda path: len(path.parts),
-        ):
-            if directory == Path("/tmp"):
-                continue
-            command.extend(("--dir", str(directory)))
-        command.extend(("--proc", "/proc", "--dev", "/dev"))
-
-        for path in sorted(readonly_paths, key=lambda item: len(item.parts)):
-            if path.is_symlink():
-                command.extend(("--symlink", os.readlink(path), str(path)))
-            else:
-                command.extend(("--ro-bind", str(path), str(path)))
-
-        command.extend(
-            (
-                "--bind" if workspace_writable else "--ro-bind",
-                str(resolved_workspace),
-                str(resolved_workspace),
-                "--chdir",
-                str(resolved_workspace),
-            )
-        )
-    for key, value in sorted(normalized_env.items()):
-        command.extend(("--setenv", key, value))
-    command.extend(
-        (
-            "--setenv",
-            "PATH",
-            "/usr/local/bin:/usr/bin:/bin",
-            "--setenv",
-            "HOME",
-            str(resolved_workspace) if filesystem_scope == "host" else "/tmp/home",
-            "--setenv",
-            "TMPDIR",
-            "/tmp",
-            "--setenv",
-            "LANG",
-            "C.UTF-8",
-            "--",
-            sandbox_python,
-            "-I",
-            "-S",
-            "-c",
-            _LOCAL_SANDBOX_LIMIT_LAUNCHER,
-            *sandbox_argv,
-        )
-    )
-    return command
 
 
 def resolve_windows_shell() -> str:
@@ -522,7 +132,7 @@ class _LocalShellSession:
     creator_id: str
     creator_is_admin: bool
     sandboxed: bool
-    process: asyncio.subprocess.Process
+    process: SandboxProcess
     output_path: Path
     started_at: float
     output_event: asyncio.Event
@@ -685,22 +295,6 @@ class LocalShellComponent(ShellComponent):
             raise ValueError("`max_output_chars` must be greater than 0.")
 
         working_dir = Path(cwd).resolve() if cwd else Path(get_astrbot_root()).resolve()
-        if sandboxed:
-            process_args = tuple(
-                _build_local_sandbox_command(
-                    ["/bin/sh", "-c", command],
-                    workspace=working_dir,
-                    env={str(k): str(v) for k, v in (env or {}).items()},
-                    allow_network=allow_network,
-                    filesystem_scope=filesystem_scope,
-                )
-            )
-            process_factory = asyncio.create_subprocess_exec
-            run_env = {"PATH": os.defpath}
-        else:
-            run_env = os.environ.copy()
-            if env:
-                run_env.update({str(k): str(v) for k, v in env.items()})
         session_id = f"sh_{uuid.uuid4().hex[:16]}"
         owner_digest = hashlib.sha256(owner_id.encode("utf-8")).hexdigest()[:16]
         output_dir = Path(get_astrbot_system_tmp_path()) / "shell" / owner_digest
@@ -708,18 +302,25 @@ class LocalShellComponent(ShellComponent):
         output_path = output_dir / f"{session_id}.log"
         output_path.touch()
 
-        process_kwargs: dict[str, Any] = {}
-        if sys.platform == "win32":
-            process_kwargs["creationflags"] = getattr(
-                subprocess,
-                "CREATE_NEW_PROCESS_GROUP",
-                0,
-            )
-        else:
-            process_kwargs["start_new_session"] = True
-
         try:
-            if not sandboxed:
+            if sandboxed:
+                process = await create_process_sandbox().spawn(
+                    ["/bin/sh", "-c", command],
+                    SandboxSpec(
+                        workspace=working_dir,
+                        allow_network=allow_network,
+                        filesystem_scope=filesystem_scope,
+                    ),
+                    env={str(k): str(v) for k, v in (env or {}).items()},
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.STDOUT,
+                )
+            else:
+                run_env = os.environ.copy()
+                if env:
+                    run_env.update({str(k): str(v) for k, v in env.items()})
+                process_kwargs: dict[str, Any] = {}
                 if sys.platform == "win32":
                     process_factory = asyncio.create_subprocess_exec
                     shell_executable = resolve_windows_shell()
@@ -731,18 +332,24 @@ class LocalShellComponent(ShellComponent):
                         "-Command",
                         command,
                     )
+                    process_kwargs["creationflags"] = getattr(
+                        subprocess,
+                        "CREATE_NEW_PROCESS_GROUP",
+                        0,
+                    )
                 else:
                     process_factory = asyncio.create_subprocess_shell
                     process_args = (command,)
-            process = await process_factory(
-                *process_args,
-                cwd=working_dir,
-                env=run_env,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
-                **process_kwargs,
-            )
+                    process_kwargs["start_new_session"] = True
+                process = await process_factory(
+                    *process_args,
+                    cwd=working_dir,
+                    env=run_env,
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.STDOUT,
+                    **process_kwargs,
+                )
         except Exception:
             output_path.unlink(missing_ok=True)
             raise
@@ -1332,24 +939,22 @@ class LocalPythonComponent(PythonComponent):
                     Path(cwd).resolve() if cwd else Path(get_astrbot_root()).resolve()
                 )
                 if sandboxed:
-                    run_command = _build_local_sandbox_command(
-                        [sys.executable, "-c", code],
+                    sandbox = create_process_sandbox()
+                    sandbox_spec = SandboxSpec(
                         workspace=working_dir,
                         allow_network=allow_network,
                         filesystem_scope=filesystem_scope,
                     )
-                    run_env = {"PATH": os.defpath}
                     with (
                         tempfile.TemporaryFile() as stdout_file,
                         tempfile.TemporaryFile() as stderr_file,
                     ):
-                        result = subprocess.run(
-                            run_command,
+                        result = sandbox.run(
+                            [sys.executable, "-c", code],
+                            sandbox_spec,
                             timeout=timeout,
                             stdout=subprocess.DEVNULL if silent else stdout_file,
                             stderr=stderr_file,
-                            cwd=working_dir,
-                            env=run_env,
                         )
                         if silent:
                             stdout = ""
@@ -1381,13 +986,11 @@ class LocalPythonComponent(PythonComponent):
                         "-c",
                         code,
                     ]
-                    run_env = None
                     result = subprocess.run(
                         run_command,
                         timeout=timeout,
                         capture_output=True,
                         cwd=working_dir,
-                        env=run_env,
                     )
                     stdout = "" if silent else _decode_shell_output(result.stdout)
                     stderr = _decode_shell_output(result.stderr)
@@ -1531,7 +1134,6 @@ class LocalFileSystemComponent(FileSystemComponent):
                 if before_context is not None:
                     command.extend(["-B", str(before_context)])
                 command.extend(["--", path or "."])
-            run_command = command
             run_kwargs: dict[str, Any] = {
                 "capture_output": True,
                 "timeout": 30,
@@ -1543,20 +1145,19 @@ class LocalFileSystemComponent(FileSystemComponent):
                         "content": "",
                         "error": "A sandbox root is required for restricted Local search.",
                     }
-                run_command = _build_local_sandbox_command(
-                    command,
-                    workspace=Path(sandbox_root),
-                    workspace_writable=False,
-                )
-                run_kwargs.update(
-                    {
-                        "cwd": str(Path(sandbox_root).resolve()),
-                        "env": {"PATH": os.defpath},
-                    }
-                )
 
             try:
-                result = subprocess.run(run_command, **run_kwargs)
+                if sandboxed:
+                    result = create_process_sandbox().run(
+                        command,
+                        SandboxSpec(
+                            workspace=Path(sandbox_root),
+                            workspace_writable=False,
+                        ),
+                        **run_kwargs,
+                    )
+                else:
+                    result = subprocess.run(command, **run_kwargs)
             except subprocess.TimeoutExpired:
                 return {
                     "success": False,
