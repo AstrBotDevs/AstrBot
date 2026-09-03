@@ -12,6 +12,51 @@ from ..entities import ProviderType
 from ..provider import TTSProvider
 from ..register import register_provider_adapter
 
+# Streamed WAV containers cannot know their total length up front, so the
+# producing encoder writes 0xFFFFFFFF placeholders into the RIFF size and the
+# ``data`` chunk size fields (see issue #9860).
+WAV_SIZE_PLACEHOLDER = 0xFFFFFFFF
+
+
+def _patch_streamed_wav_header(audio: bytes) -> bytes:
+    """Repair placeholder RIFF/data chunk sizes in a streamed WAV file.
+
+    MiniMax streams WAV produced by server-side ffmpeg with placeholder
+    chunk sizes. Browsers tolerate such headers, but strict decoders
+    (e.g. Android WebView) reject the file. Once the whole stream has been
+    assembled, the real sizes are known and can be written back. Files
+    whose sizes are already valid are returned unchanged.
+    """
+    if len(audio) < 12 or audio[0:4] != b"RIFF" or audio[8:12] != b"WAVE":
+        return audio
+
+    patched = bytearray(audio)
+    riff_size = int.from_bytes(patched[4:8], "little")
+    data_found = False
+
+    # Walk the chunk list to locate the ``data`` chunk. Chunk payloads are
+    # padded to even lengths, which the walk accounts for.
+    pos = 12
+    while pos + 8 <= len(patched):
+        chunk_id = bytes(patched[pos : pos + 4])
+        declared = int.from_bytes(patched[pos + 4 : pos + 8], "little")
+        payload_start = pos + 8
+        if chunk_id == b"data":
+            data_found = True
+            if declared == WAV_SIZE_PLACEHOLDER:
+                actual = len(patched) - payload_start
+                patched[pos + 4 : pos + 8] = actual.to_bytes(4, "little")
+            break
+        if declared == WAV_SIZE_PLACEHOLDER:
+            # A placeholder size before ``data`` makes the walk unsafe;
+            # leave the file untouched rather than guess.
+            return audio
+        pos = payload_start + declared + (declared & 1)
+
+    if data_found and riff_size == WAV_SIZE_PLACEHOLDER:
+        patched[4:8] = (len(patched) - 8).to_bytes(4, "little")
+    return bytes(patched)
+
 
 @register_provider_adapter(
     "minimax_tts_api",
@@ -170,6 +215,9 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
                     "Please verify your configuration, especially the 'group_id' parameter. "
                     "You can find your group_id in Account Management -> Basic Information on the MiniMax platform."
                 )
+
+            # 流式 WAV 的头部长度是占位值，落盘前按实际长度修复
+            audio = _patch_streamed_wav_header(audio)
 
             # 结果保存至文件
             with open(path, "wb") as file:
