@@ -143,6 +143,7 @@
     "market": {
         "recommended": "🥳 Рекомендуем",
         "allPlugins": "📦 Все плагины",
+        "category": "Категория",
         "categories": {
             "all": "Все",
             "ai_tools": "AI Tools",
@@ -303,6 +304,10 @@
         "invalidUrl": "Введите корректный URL",
         "invalidRepositoryUrl": "Введите корректный URL Git-репозитория",
         "enterJsonUrl": "Введите URL, возвращающий список плагинов в формате JSON",
+        "pluginNotFound": "Плагин не найден",
+        "pluginDisabled": "Этот плагин сейчас отключён. Включите его, чтобы открыть страницу.",
+        "pluginPageNotFound": "Страница плагина не найдена",
+        "pluginPageLoadFailed": "Не удалось загрузить страницу плагина",
         "missingMarketPluginId": "Эта запись источника не содержит идентификаторов плагина, поэтому его нельзя установить из магазина",
         "sourceBindSuccess": "Источник плагина обновлен",
         "validatingPlugin": "Проверка плагина...",
