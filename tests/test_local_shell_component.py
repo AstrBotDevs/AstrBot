@@ -1069,7 +1069,7 @@ async def test_managed_shell_allows_creator_and_conversation_admin():
         owner_id="owner-a",
         creator_id="user-a",
         creator_is_admin=False,
-        sandboxed=True,
+        sandboxed=False,
         yield_time_ms=200,
     )
 
@@ -1092,7 +1092,7 @@ async def test_managed_shell_allows_creator_and_conversation_admin():
             )
         )["sessions"]
         assert [item["session_id"] for item in sessions] == [session_id]
-        assert sessions[0]["sandboxed"] is True
+        assert sessions[0]["sandboxed"] is False
 
         admin_sessions = (
             await shell.list_sessions(
@@ -1218,7 +1218,7 @@ async def test_managed_shell_accepts_stdin_and_polls_incremental_output():
         owner_id="owner-a",
         creator_id="user-a",
         creator_is_admin=False,
-        sandboxed=True,
+        sandboxed=False,
         yield_time_ms=100,
     )
 

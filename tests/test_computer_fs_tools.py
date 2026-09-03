@@ -951,7 +951,15 @@ async def test_grep_tool_applies_result_limit(
     )
 
     result = await fs_tools.GrepTool().call(
-        _make_context(),
+        _make_context(
+            local_permissions={
+                "admin": {
+                    "allow_execution": True,
+                    "allow_network": True,
+                    "filesystem_scope": "host",
+                }
+            }
+        ),
         pattern="match",
         path="grep.txt",
         result_limit=2,

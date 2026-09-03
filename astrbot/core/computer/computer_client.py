@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import shutil
+import sys
 import time
 import uuid
 from dataclasses import dataclass
@@ -16,7 +17,7 @@ from astrbot.core.utils.astrbot_path import (
 )
 
 from .booters.base import ComputerBooter
-from .booters.local import LocalBooter
+from .booters.local import LocalBooter, resolve_windows_shell
 
 session_booter: dict[str, ComputerBooter] = {}
 local_booter: ComputerBooter | None = None
@@ -513,7 +514,8 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
             for skill_name, skill_dir in sync_skill_dirs:
                 shutil.copytree(skill_dir, bundle_root / skill_name)
             shutil.make_archive(str(zip_base), "zip", str(bundle_root))
-            remote_zip = Path(SANDBOX_SKILLS_ROOT) / "skills.zip"
+            # Force forward slashes for sandbox compatibility.
+            remote_zip = (Path(SANDBOX_SKILLS_ROOT) / "skills.zip").as_posix()
             logger.info("Uploading skills bundle to sandbox...")
             await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
             upload_result = await booter.upload_file(str(zip_path), str(remote_zip))
@@ -688,6 +690,11 @@ def get_local_booter() -> ComputerBooter:
     global local_booter
     if local_booter is None:
         local_booter = LocalBooter()
+        if sys.platform == "win32":
+            logger.info(
+                "[Computer] Windows local runtime shell: %s",
+                resolve_windows_shell(),
+            )
     return local_booter
 
 

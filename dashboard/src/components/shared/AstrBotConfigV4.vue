@@ -284,7 +284,7 @@ function getSpecialSubtype(value) {
             <v-list-item density="compact">
               <v-list-item-title class="property-name">
                 {{ getItemDescription(itemKey, itemMeta) }}
-                <span class="property-key">({{ itemKey }})</span>
+                <span v-if="itemMeta?.show_key" class="property-key">({{ itemKey }})</span>
               </v-list-item-title>
 
               <v-list-item-subtitle class="property-hint">
@@ -336,7 +336,7 @@ function getSpecialSubtype(value) {
         </v-row>
 
         <v-row
-          v-if="!itemMeta?.invisible && itemMeta?._special === 'select_persona' && itemKey === 'provider_settings.default_personality'"
+          v-if="!itemMeta?.invisible && itemMeta?._special === 'select_persona'"
           class="persona-preview-row"
         >
           <v-col cols="12" class="persona-preview-display">
@@ -371,7 +371,7 @@ function getSpecialSubtype(value) {
                   <v-list-item density="compact">
                     <v-list-item-title class="property-name">
                       {{ getItemDescription(itemKey, itemMeta) }}
-                      <span class="property-key">({{ itemKey }})</span>
+                      <span v-if="itemMeta?.show_key" class="property-key">({{ itemKey }})</span>
                     </v-list-item-title>
 
                     <v-list-item-subtitle class="property-hint">
@@ -423,7 +423,7 @@ function getSpecialSubtype(value) {
               </v-row>
 
               <v-row
-                v-if="!itemMeta?.invisible && itemMeta?._special === 'select_persona' && itemKey === 'provider_settings.default_personality'"
+                v-if="!itemMeta?.invisible && itemMeta?._special === 'select_persona'"
                 class="persona-preview-row"
               >
                 <v-col cols="12" class="persona-preview-display">
@@ -489,10 +489,10 @@ function getSpecialSubtype(value) {
 
 .metadata-key,
 .property-key {
-  font-size: 0.85em;
-  opacity: 0.7;
+  color: rgba(var(--v-theme-on-surface), 0.45);
+  font-size: 0.82em;
   font-weight: normal;
-  display: none;
+  margin-left: 4px;
 }
 
 .important-hint {

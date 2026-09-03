@@ -13,7 +13,7 @@ from pathlib import Path
 
 import aiohttp
 import psutil
-from sqlmodel import col, select
+from sqlmodel import col, func, select
 
 from astrbot.core import DEMO_MODE, logger
 from astrbot.core.config import VERSION
@@ -23,12 +23,13 @@ from astrbot.core.dashboard_assets import (
     get_dashboard_version,
 )
 from astrbot.core.db import BaseDatabase
-from astrbot.core.db.po import ProviderStat
+from astrbot.core.db.po import PlatformStat, ProviderStat
 from astrbot.core.desktop_runtime import (
     DESKTOP_MANAGED_RESTART_MESSAGE,
     is_desktop_managed_backend,
     is_desktop_session_auth_enabled,
 )
+from astrbot.core.umo_alias import build_umo_alias_map, serialize_umo_alias
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.utils.auth_password import (
     is_default_dashboard_password,
@@ -210,23 +211,49 @@ class StatService:
 
     async def get_stat(self, offset_sec: int) -> dict:
         try:
-            stat = self.db_helper.get_base_stats(offset_sec)
             now = int(time.time())
             start_time = now - offset_sec
-            message_time_based_stats = []
 
+            async with self.db_helper.get_db() as session:
+                window_start = datetime.now() - timedelta(seconds=offset_sec)
+                result = await session.execute(
+                    select(PlatformStat)
+                    .where(PlatformStat.timestamp >= window_start)
+                    .order_by(col(PlatformStat.timestamp)),
+                )
+                # Convert to (epoch_seconds, count, platform_id) tuples once.
+                rows = [
+                    (int(r.timestamp.timestamp()), r.count, r.platform_id)
+                    for r in result.scalars().all()
+                ]
+                total_messages = (
+                    await session.execute(
+                        select(func.coalesce(func.sum(PlatformStat.count), 0)),
+                    )
+                ).scalar_one()
+
+            # Bucket message counts into hourly slots for the time series chart.
+            message_time_based_stats = []
             idx = 0
             for bucket_end in range(start_time, now, 3600):
                 cnt = 0
-                while (
-                    idx < len(stat.platform)
-                    and stat.platform[idx].timestamp < bucket_end
-                ):
-                    cnt += stat.platform[idx].count
+                while idx < len(rows) and rows[idx][0] < bucket_end:
+                    cnt += rows[idx][1]
                     idx += 1
                 message_time_based_stats.append([bucket_end, cnt])
 
-            stat_dict = stat.__dict__
+            # Aggregate per-platform message counts within the window.
+            per_platform: dict[str, int] = defaultdict(int)
+            for _, count, platform_id in rows:
+                per_platform[platform_id] += count
+            platform_stats = [
+                {
+                    "name": platform_id,
+                    "count": count,
+                    "timestamp": int(window_start.timestamp()),
+                }
+                for platform_id, count in per_platform.items()
+            ]
 
             process_cpu = await asyncio.to_thread(psutil.Process().cpu_percent, 0.5)
             cpu_percent = process_cpu / (psutil.cpu_count() or 1)
@@ -246,29 +273,24 @@ class StatService:
                 int(time.time()) - self.core_lifecycle.start_time,
             )
 
-            stat_dict.update(
-                {
-                    "platform": self.db_helper.get_grouped_base_stats(
-                        offset_sec,
-                    ).platform,
-                    "message_count": self.db_helper.get_total_message_count() or 0,
-                    "platform_count": len(
-                        self.core_lifecycle.platform_manager.get_insts(),
-                    ),
-                    "plugin_count": len(plugins),
-                    "plugins": plugin_info,
-                    "message_time_series": message_time_based_stats,
-                    "running": running_time,
-                    "memory": {
-                        "process": psutil.Process().memory_info().rss >> 20,
-                        "system": psutil.virtual_memory().total >> 20,
-                    },
-                    "cpu_percent": round(cpu_percent, 1),
-                    "thread_count": thread_count,
-                    "start_time": self.core_lifecycle.start_time,
+            return {
+                "platform": platform_stats,
+                "message_count": total_messages,
+                "platform_count": len(
+                    self.core_lifecycle.platform_manager.get_insts(),
+                ),
+                "plugin_count": len(plugins),
+                "plugins": plugin_info,
+                "message_time_series": message_time_based_stats,
+                "running": running_time,
+                "memory": {
+                    "process": psutil.Process().memory_info().rss >> 20,
+                    "system": psutil.virtual_memory().total >> 20,
                 },
-            )
-            return stat_dict
+                "cpu_percent": round(cpu_percent, 1),
+                "thread_count": thread_count,
+                "start_time": self.core_lifecycle.start_time,
+            }
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise StatServiceError(str(exc)) from exc
@@ -418,14 +440,33 @@ class StatService:
                     reverse=True,
                 )
             ]
-            range_by_umo_data = [
-                {"umo": umo, "tokens": tokens}
-                for umo, tokens in sorted(
-                    total_by_umo.items(),
-                    key=lambda item: item[1],
-                    reverse=True,
+            platform_type_by_id = {"webchat": "webchat"}
+            for platform_config in self.config.get("platform", []):
+                platform_id = platform_config.get("id")
+                platform_type = platform_config.get("type")
+                if platform_id and platform_type:
+                    platform_type_by_id[str(platform_id)] = str(platform_type)
+            alias_map = build_umo_alias_map(
+                await self.db_helper.get_umo_aliases(list(total_by_umo))
+            )
+            range_by_umo_data = []
+            for umo, tokens in sorted(
+                total_by_umo.items(),
+                key=lambda item: item[1],
+                reverse=True,
+            ):
+                alias_info = serialize_umo_alias(alias_map.get(umo), umo)
+                range_by_umo_data.append(
+                    {
+                        "umo": umo,
+                        "display_name": alias_info["display_name"],
+                        "platform_type": platform_type_by_id.get(
+                            umo.split(":", 1)[0],
+                            umo.split(":", 1)[0],
+                        ),
+                        "tokens": tokens,
+                    }
                 )
-            ]
 
             return {
                 "days": days,

@@ -41,6 +41,10 @@ const props = defineProps({
   enableDefaultReset: {
     type: Boolean,
     default: false
+  },
+  fieldLinks: {
+    type: Object,
+    default: () => ({})
   }
 })
 
@@ -184,7 +188,8 @@ function hasVisibleItemsAfter(items, currentIndex) {
 <template>
   <div class="config-section" v-if="iterable && metadata[metadataKey]?.type === 'object'">
     <v-list-item-title class="config-title">
-      {{ resolveConfigText(currentConfigPath, 'description', metadata[metadataKey]?.description) }} <span class="metadata-key">({{ metadataKey }})</span>
+      {{ resolveConfigText(currentConfigPath, 'description', metadata[metadataKey]?.description) }}
+      <span v-if="metadata[metadataKey]?.show_key" class="metadata-key">({{ metadataKey }})</span>
     </v-list-item-title>
     <v-list-item-subtitle class="config-hint">
       <span v-if="metadata[metadataKey]?.obvious_hint && metadata[metadataKey]?.hint" class="important-hint">‼️</span>
@@ -233,7 +238,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
               <v-list-item-title class="config-title">
                 <span v-if="metadata[metadataKey].items[key]?.description">
                   {{ resolveConfigText(getItemPath(key), 'description', metadata[metadataKey].items[key]?.description) }}
-                  <span class="property-key">({{ key }})</span>
+                  <span v-if="metadata[metadataKey].items[key]?.show_key" class="property-key">({{ key }})</span>
                 </span>
                 <span v-else>{{ key }}</span>
               </v-list-item-title>
@@ -268,15 +273,25 @@ function hasVisibleItemsAfter(items, currentIndex) {
                 <v-list-item-title class="property-name">
                   <span v-if="metadata[metadataKey].items[key]?.description">
                     {{ resolveConfigText(getItemPath(key), 'description', metadata[metadataKey].items[key]?.description) }}
-                    <span class="property-key">({{ key }})</span>
+                    <span v-if="metadata[metadataKey].items[key]?.show_key" class="property-key">({{ key }})</span>
                   </span>
                   <span v-else>{{ key }}</span>
                 </v-list-item-title>
 
                 <v-list-item-subtitle class="property-hint">
-                  <span v-if="metadata[metadataKey].items[key]?.obvious_hint && getItemHint(key, metadata[metadataKey].items[key])"
-                        class="important-hint">‼️</span>
-                  {{ resolveConfigText(getItemPath(key), 'hint', getItemHint(key, metadata[metadataKey].items[key])) }}
+                  <span :class="{ 'property-hint__content--linked': fieldLinks[key] }">
+                    <span v-if="metadata[metadataKey].items[key]?.obvious_hint && getItemHint(key, metadata[metadataKey].items[key])"
+                          class="important-hint">‼️</span>
+                    <span>{{ resolveConfigText(getItemPath(key), 'hint', getItemHint(key, metadata[metadataKey].items[key])) }}</span>
+                    <a
+                      v-if="fieldLinks[key]"
+                      class="property-link"
+                      :href="fieldLinks[key].href"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      @click.stop
+                    >{{ fieldLinks[key].label }}</a>
+                  </span>
                 </v-list-item-subtitle>
               </v-list-item>
             </v-col>
@@ -318,7 +333,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
           <v-list-item density="compact">
             <v-list-item-title class="property-name">
               {{ resolveConfigText(getItemPath(metadataKey), 'description', metadata[metadataKey]?.description) }}
-              <span class="property-key">({{ metadataKey }})</span>
+              <span v-if="metadata[metadataKey]?.show_key" class="property-key">({{ metadataKey }})</span>
             </v-list-item-title>
 
             <v-list-item-subtitle class="property-hint">
@@ -406,10 +421,10 @@ function hasVisibleItemsAfter(items, currentIndex) {
 }
 
 .metadata-key, .property-key {
-  font-size: 0.85em;
-  opacity: 0.7;
+  color: rgba(var(--v-theme-on-surface), 0.45);
+  font-size: 0.82em;
   font-weight: normal;
-  display: none;
+  margin-left: 4px;
 }
 
 .important-hint {
@@ -459,10 +474,29 @@ function hasVisibleItemsAfter(items, currentIndex) {
   color: var(--v-theme-primaryText);
 }
 
+.property-link {
+  color: rgb(var(--v-theme-primary));
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.property-link:hover {
+  text-decoration: underline;
+}
+
 .property-hint {
   font-size: 0.75rem;
   color: var(--v-theme-secondaryText);
   margin-top: 2px;
+}
+
+.property-hint__content--linked {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
 }
 
 .type-indicator {
