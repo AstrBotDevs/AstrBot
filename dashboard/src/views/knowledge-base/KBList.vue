@@ -93,7 +93,7 @@
         v-if="total > pageSize"
         v-model="page"
         :length="Math.ceil(total / pageSize)"
-        :total-visible="7"
+        :total-visible="xs ? 3 : 7"
         class="mt-4"
         @update:model-value="loadKnowledgeBases()"
       />
@@ -277,12 +277,14 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useDisplay } from 'vuetify'
 import { knowledgeApi, providerApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue'
 
 const { tm: t } = useModuleI18n('features/knowledge-base/index')
 const router = useRouter()
+const { xs } = useDisplay()
 
 // 状态
 const loading = ref(false)
@@ -530,6 +532,7 @@ onMounted(() => {
 
 <style scoped>
 .kb-list-page {
+  padding-bottom: 144px;
   width: 100%;
 }
 
@@ -685,6 +688,16 @@ onMounted(() => {
 
 /* 响应式设计 */
 @media (max-width: 768px) {
+  .kb-list-page {
+    padding-bottom: 132px;
+  }
+
+  .kb-fab-stack {
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    gap: 12px;
+    right: 20px;
+  }
+
   .emoji-grid {
     grid-template-columns: repeat(6, 1fr);
   }

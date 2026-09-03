@@ -11,7 +11,7 @@
 
     <!-- 文档列表 -->
     <v-card variant="outlined">
-      <v-data-table-server :headers="headers" :items="documents" :loading="loading"
+      <v-data-table-server class="documents-table" :headers="headers" :items="documents" :loading="loading"
         :items-per-page="pageSize" :page="page" :items-length="total"
         @update:page="onPageChange" @update:items-per-page="onItemsPerPageChange">
         <template #item.doc_name="{ item }">
@@ -890,6 +890,26 @@ onUnmounted(() => {
 
   .action-bar>* {
     width: 100%;
+  }
+
+  .documents-table :deep(.v-data-table-footer) {
+    justify-content: center;
+    padding: 12px 8px;
+    row-gap: 8px;
+  }
+
+  .documents-table :deep(.v-data-table-footer__items-per-page) {
+    flex: 1 1 100%;
+    justify-content: space-between;
+  }
+
+  .documents-table :deep(.v-data-table-footer__info) {
+    min-width: 0;
+    padding: 0 8px;
+  }
+
+  .documents-table :deep(.v-data-table-footer__pagination) {
+    margin-inline-start: 0;
   }
 }
 </style>
