@@ -390,7 +390,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
 
         owner_id = None
         admin_ids: list[str] = []
-        parsed_members: list[MessageMember] = []
+        valid_members: list[dict] = []
         for member in members:
             if not isinstance(member, dict) or member.get("user_id") is None:
                 continue
@@ -398,21 +398,23 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 owner_id = str(member["user_id"])
             if member.get("role") == "admin":
                 admin_ids.append(str(member["user_id"]))
-            parsed_members.append(
-                MessageMember(
-                    user_id=str(member["user_id"]),
-                    nickname=member.get("nickname") or member.get("card"),
-                )
-            )
+            valid_members.append(member)
 
         group.group_admins = admin_ids
         group.group_owner = owner_id
-        if group_member_lookup_over_cap(pages=1, members=len(parsed_members)):
+        member_count = len(valid_members)
+        if group_member_lookup_over_cap(pages=1, members=member_count):
             group.members = None
             if group.member_count is None:
-                group.member_count = len(parsed_members)
+                group.member_count = member_count
             return group
-        group.members = parsed_members
+        group.members = [
+            MessageMember(
+                user_id=str(member["user_id"]),
+                nickname=member.get("nickname") or member.get("card"),
+            )
+            for member in valid_members
+        ]
         if group.member_count is None:
-            group.member_count = len(parsed_members)
+            group.member_count = member_count
         return group

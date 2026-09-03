@@ -227,9 +227,9 @@ class MisskeyPlatformEvent(AstrMessageEvent):
             return fallback_group
 
         owner_id = str(room.get("ownerId") or fallback_group.group_owner or "")
+        fallback_group.group_name = room.get("name") or fallback_group.group_name
+        fallback_group.group_owner = owner_id or None
         if members_incomplete:
-            fallback_group.group_name = room.get("name") or fallback_group.group_name
-            fallback_group.group_owner = owner_id or None
             fallback_group.members = None
             return fallback_group
 
@@ -260,12 +260,14 @@ class MisskeyPlatformEvent(AstrMessageEvent):
                 ),
             )
 
-        group = Group(
-            group_id=room_id,
-            group_name=room.get("name") or fallback_group.group_name,
-            group_owner=owner_id or None,
-            group_admins=[],
-            members=members,
-            member_count=len(members),
-        )
-        return group
+        fallback_group.group_admins = []
+        member_count = len(members)
+        if group_member_lookup_over_cap(pages=page_count, members=member_count):
+            fallback_group.members = None
+            if fallback_group.member_count is None:
+                fallback_group.member_count = member_count
+            return fallback_group
+
+        fallback_group.members = members
+        fallback_group.member_count = member_count
+        return fallback_group

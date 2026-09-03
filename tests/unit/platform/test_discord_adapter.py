@@ -1062,11 +1062,17 @@ async def test_discord_get_group_omits_members_when_complete_cache_is_over_cap()
         members=members,
         chunked=True,
     )
+    permission_checks = {"count": 0}
+
+    def permissions_for(member):
+        permission_checks["count"] += 1
+        return SimpleNamespace(view_channel=True)
+
     channel = _discord_guild_channel(
         id=123,
         name="general",
         guild=guild,
-        permissions_for=lambda member: SimpleNamespace(view_channel=True),
+        permissions_for=permissions_for,
     )
     client = SimpleNamespace(
         get_channel=lambda channel_id: channel,
@@ -1091,6 +1097,60 @@ async def test_discord_get_group_omits_members_when_complete_cache_is_over_cap()
     assert group.member_count == 2001
     assert group.members is None
     assert group.group_admins == ["2"]
+    assert permission_checks["count"] == 0
+    client.fetch_channel.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_discord_get_group_still_publishes_members_at_hard_cap():
+    members = [
+        SimpleNamespace(
+            id=index,
+            display_name=f"member-{index}",
+            guild_permissions=SimpleNamespace(administrator=False),
+        )
+        for index in range(1, 2001)
+    ]
+    guild = SimpleNamespace(
+        name="AstrBot",
+        icon=SimpleNamespace(url="https://cdn.discordapp.com/guild.png"),
+        owner_id=1,
+        member_count=2000,
+        members=members,
+        chunked=True,
+    )
+    permission_checks = {"count": 0}
+
+    def permissions_for(member):
+        permission_checks["count"] += 1
+        return SimpleNamespace(view_channel=True)
+
+    channel = _discord_guild_channel(
+        id=123,
+        name="general",
+        guild=guild,
+        permissions_for=permissions_for,
+    )
+    client = SimpleNamespace(
+        get_channel=lambda channel_id: channel,
+        fetch_channel=AsyncMock(),
+        intents=SimpleNamespace(members=True),
+    )
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    inbound = Group(group_id="123", group_name="general")
+    event.message_obj = SimpleNamespace(
+        type=MessageType.GROUP_MESSAGE,
+        group=inbound,
+        group_id="123",
+    )
+    event._client = client
+
+    group = await event.get_group()
+
+    assert group.members is not None
+    assert len(group.members) == 2000
+    assert group.member_count == 2000
+    assert permission_checks["count"] == 2000
     client.fetch_channel.assert_not_awaited()
 
 
