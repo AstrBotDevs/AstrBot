@@ -3151,9 +3151,17 @@ export type ListConversationsData = {
          */
         exclude_platforms?: string;
         /**
+         * Paginate by UMO and return all conversation summaries for each selected session.
+         */
+        group_by_session?: boolean;
+        /**
          * Include full message history in each conversation.
          */
         include_history?: boolean;
+        /**
+         * Match conversation titles or message content.
+         */
+        keyword?: string;
         /**
          * Comma-separated message types.
          */
@@ -3166,6 +3174,12 @@ export type ListConversationsData = {
          */
         platforms?: string;
         search?: string;
+        sort_by?: 'created_at' | 'updated_at';
+        sort_order?: 'asc' | 'desc';
+        /**
+         * Match the unified message origin.
+         */
+        umo?: string;
         user_id?: string;
     };
 };
@@ -3173,6 +3187,10 @@ export type ListConversationsData = {
 export type ListConversationsResponse = (SuccessEnvelope);
 
 export type ListConversationsError = unknown;
+
+export type GetConversationFilterOptionsResponse = (SuccessEnvelope);
+
+export type GetConversationFilterOptionsError = unknown;
 
 export type BatchDeleteConversationsData = {
     body: ConversationBatchDeleteRequest;

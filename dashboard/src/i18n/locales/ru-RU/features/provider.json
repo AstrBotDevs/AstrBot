@@ -5,11 +5,12 @@
         "title": "Сервис-провайдеры",
         "settings": "Настройки",
         "addProvider": "Добавить провайдера",
+        "deleteProvider": "Удалить провайдера",
+        "selectHint": "Выберите провайдера",
         "providerType": "Тип провайдера",
         "tabs": {
             "all": "Все",
             "chatCompletion": "Диалоги",
-            "agentRunner": "Агенты",
             "speechToText": "STT (Речь -> Текст)",
             "textToSpeech": "TTS (Текст -> Речь)",
             "embedding": "Эмбеддинги",
@@ -47,7 +48,6 @@
             "title": "Новый провайдер",
             "tabs": {
                 "basic": "Диалоги",
-                "agentRunner": "Агенты",
                 "speechToText": "Преобразование текста в речь",
                 "textToSpeech": "Переранжирование",
                 "embedding": "Эмбеддинги",

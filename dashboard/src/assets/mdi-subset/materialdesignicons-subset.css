@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 268 icons */
+/* Auto-generated MDI subset – 273 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -94,6 +94,10 @@
 
 .mdi-arrow-up-thin::before {
   content: "\F19B2";
+}
+
+.mdi-auto-fix::before {
+  content: "\F0068";
 }
 
 .mdi-backup-restore::before {
@@ -272,10 +276,6 @@
   content: "\F08BB";
 }
 
-.mdi-cogs::before {
-  content: "\F08D6";
-}
-
 .mdi-comment-question::before {
   content: "\F0817";
 }
@@ -286,10 +286,6 @@
 
 .mdi-connection::before {
   content: "\F1616";
-}
-
-.mdi-console::before {
-  content: "\F018D";
 }
 
 .mdi-console-line::before {
@@ -394,6 +390,14 @@
 
 .mdi-eye-off::before {
   content: "\F0209";
+}
+
+.mdi-eye-off-outline::before {
+  content: "\F06D1";
+}
+
+.mdi-eye-outline::before {
+  content: "\F06D0";
 }
 
 .mdi-eyedropper::before {
@@ -544,10 +548,6 @@
   content: "\F02D1";
 }
 
-.mdi-help-circle::before {
-  content: "\F02D7";
-}
-
 .mdi-help-circle-outline::before {
   content: "\F0625";
 }
@@ -640,6 +640,10 @@
   content: "\F0339";
 }
 
+.mdi-link-variant-plus::before {
+  content: "\F1100";
+}
+
 .mdi-loading::before {
   content: "\F0772";
 }
@@ -668,8 +672,16 @@
   content: "\F16B2";
 }
 
+.mdi-logout::before {
+  content: "\F0343";
+}
+
 .mdi-magnify::before {
   content: "\F0349";
+}
+
+.mdi-magnify-close::before {
+  content: "\F0980";
 }
 
 .mdi-memory::before {
@@ -880,8 +892,20 @@
   content: "\F16A7";
 }
 
+.mdi-robot-off-outline::before {
+  content: "\F167B";
+}
+
 .mdi-robot-outline::before {
   content: "\F167A";
+}
+
+.mdi-routes::before {
+  content: "\F046A";
+}
+
+.mdi-select-multiple::before {
+  content: "\F1281";
 }
 
 .mdi-send-outline::before {
@@ -972,6 +996,10 @@
   content: "\F0721";
 }
 
+.mdi-swap-horizontal::before {
+  content: "\F04E1";
+}
+
 .mdi-sync::before {
   content: "\F04E6";
 }
@@ -1002,10 +1030,6 @@
 
 .mdi-theme-light-dark::before {
   content: "\F050E";
-}
-
-.mdi-timeline-text-outline::before {
-  content: "\F0BD4";
 }
 
 .mdi-timer-outline::before {
@@ -1054,10 +1078,6 @@
 
 .mdi-vector-point::before {
   content: "\F01C4";
-}
-
-.mdi-view-dashboard::before {
-  content: "\F056E";
 }
 
 .mdi-volume-high::before {
