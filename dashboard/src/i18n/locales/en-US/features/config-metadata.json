@@ -1812,6 +1812,14 @@
         "description": "Inference device",
         "hint": "Whisper inference device. Apple Silicon can use mps; other environments should use cpu. If mps is selected but unavailable, AstrBot will fall back to cpu."
       },
+      "language": {
+        "description": "Recognition language",
+        "hint": "Optional ISO language code (e.g., de, en, zh) passed to Whisper to pin the transcription language. Leave empty to let Whisper auto-detect."
+      },
+      "prompt": {
+        "description": "Transcription prompt",
+        "hint": "Optional free-text hint passed to Whisper to improve recognition of proper nouns, acronyms, and domain terms. Leave empty to omit."
+      },
       "id": {
         "description": "ID"
       },
