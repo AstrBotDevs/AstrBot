@@ -150,6 +150,9 @@ async def test_get_group_caps_member_pages_and_omits_truncated_list() -> None:
             "toRoom": {"name": "Cached room", "ownerId": "owner-id"},
         },
     )
+    assert message.group is not None
+    message.group.group_avatar = "https://example.com/room.png"
+    message.group.member_count = 42
     member_calls = {"count": 0}
 
     async def pages(endpoint, payload):
@@ -183,8 +186,9 @@ async def test_get_group_caps_member_pages_and_omits_truncated_list() -> None:
     assert group is not None
     assert group.group_name == "Current room"
     assert group.group_owner == "owner-id"
+    assert group.group_avatar == "https://example.com/room.png"
     assert group.members is None
-    assert group.member_count is None
+    assert group.member_count == 42
     assert member_calls["count"] == 10
     assert [
         call_args.args[0]

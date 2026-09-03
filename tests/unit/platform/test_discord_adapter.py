@@ -1090,7 +1090,7 @@ async def test_discord_get_group_omits_members_when_complete_cache_is_over_cap()
     assert group.group_owner == "1"
     assert group.member_count == 2001
     assert group.members is None
-    assert group.group_admins is None
+    assert group.group_admins == ["2"]
     client.fetch_channel.assert_not_awaited()
 
 

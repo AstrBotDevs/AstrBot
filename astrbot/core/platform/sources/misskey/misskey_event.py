@@ -228,13 +228,10 @@ class MisskeyPlatformEvent(AstrMessageEvent):
 
         owner_id = str(room.get("ownerId") or fallback_group.group_owner or "")
         if members_incomplete:
-            return Group(
-                group_id=room_id,
-                group_name=room.get("name") or fallback_group.group_name,
-                group_owner=owner_id or None,
-                group_admins=[],
-                members=None,
-            )
+            fallback_group.group_name = room.get("name") or fallback_group.group_name
+            fallback_group.group_owner = owner_id or None
+            fallback_group.members = None
+            return fallback_group
 
         members = []
         member_ids = set()
