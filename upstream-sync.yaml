@@ -5,22 +5,13 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 9115cc2945756eedebe2e861d73853661f52c2c7
-  synced_at_utc: 2026-09-02T19:14:40Z
-  sync_method: cherry-pick-and-manual-adaptation
-  source_pr: '9892'
+  commit: 077d54baaf15cc0561f84bd9ceb943c2bb62e58d
+  synced_at_utc: 2026-09-03T14:31:24Z
+  sync_method: review-and-skip
+  source_pr: '9932, 8182'
   note: >-
-    Reviewed 385e4b6bfb87952d78d56ce21fc1caff1e68a85e..9115cc2945756eedebe2e861d73853661f52c2c7
-    (9 commits). Adapted all nine: #9909, #9906, #9881, #9880, MiraRouter docs,
-    MiraRouter source, #9911, #9896, and #9892. No cherry-picks and no skips.
-    UMO auto-names persist after WakingCheckStage finalizes is_wake via
-    execution_context.database and background_tasks; auto upserts never
-    overwrite user_alias. Discord inbound GROUP_MESSAGE writes group_id;
-    unresolved send fallbacks still guess GROUP_MESSAGE.
-    Skills batch delete stays on composition SkillsSection with zh-CN/en-US.
-    Anthropic folds cache_creation into input_other; Gemini subtracts cached
-    tokens and clamps at zero. MiraRouter inherits ProviderOpenAIChatCompletions
-    and registers in provider_modules.py. Version is 4.28.0-beta.1 with a
-    fork-only changelog. en-US syncProvider wording only. Shiki keeps the
-    TypeScript lazy bundle, splits fence languages on colon, and regenerates
-    the T2I IIFE with Vite oxc minify.
+    Reviewed 9115cc2945756eedebe2e861d73853661f52c2c7..077d54baaf15cc0561f84bd9ceb943c2bb62e58d
+    (2 commits). Skipped #9932 because the zh-CN syncProvider relocation is
+    already present and ru-RU is intentionally removed and unsupported by this
+    fork. Skipped #8182 because computer_client.py already uses PurePosixPath
+    for the remote sandbox archive path. No implementation commits created.
