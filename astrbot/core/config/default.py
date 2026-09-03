@@ -1692,6 +1692,8 @@ CONFIG_METADATA_2 = {
                         "api_key": "",
                         "api_base": "",
                         "model": "whisper-1",
+                        "language": "",
+                        "prompt": "",
                         "proxy": "",
                     },
                     "MiMo STT(API)": {
@@ -2841,6 +2843,16 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "Whisper 推理设备。Apple Silicon 可选 mps；其他环境建议使用 cpu。若指定 mps 但当前环境不可用，将自动回退到 cpu。",
                         "options": ["cpu", "mps"],
+                    },
+                    "language": {
+                        "description": "识别语言",
+                        "type": "string",
+                        "hint": "可选的 ISO 语言代码（如 de、en、zh），传给 Whisper 以固定识别语言。留空则由 Whisper 自动检测。",
+                    },
+                    "prompt": {
+                        "description": "转写提示词",
+                        "type": "string",
+                        "hint": "可选的自由文本提示，传给 Whisper 以提升专有名词、缩写和专业术语的识别准确率。留空则不传。",
                     },
                     "id": {
                         "description": "ID",
