@@ -297,3 +297,237 @@ async def test_resolve_market_update_info_without_source_or_market_match_errors(
         await service.resolve_market_update_info("astrbot_plugin_demo")
 
     assert exc_info.value.public_message == PLUGIN_UPDATE_SOURCE_REQUIRED_MESSAGE
+
+
+_DEFAULT_MARKET_REPO = "https://github.com/example/plugin"
+
+
+def _repo_only_market_plugin() -> SimpleNamespace:
+    return SimpleNamespace(
+        name="astrbot_plugin_demo",
+        root_dir_name="astrbot_plugin_demo",
+        repo="",
+        reserved=False,
+    )
+
+
+def _repo_only_update_info() -> dict[str, object]:
+    return {
+        "record": None,
+        "market_plugin": {
+            "name": "astrbot_plugin_demo",
+            "repo": _DEFAULT_MARKET_REPO,
+        },
+        "download_url": "",
+        "repo": _DEFAULT_MARKET_REPO,
+    }
+
+
+@pytest.mark.asyncio
+async def test_resolve_default_market_update_matches_name_with_repo_only_entry(
+    monkeypatch,
+) -> None:
+    service = PluginService.__new__(PluginService)
+    plugin = _repo_only_market_plugin()
+    saved: list[object] = []
+
+    async def fake_get_plugin_install_sources():
+        return {}
+
+    async def fake_get_online_plugins(*, custom_registry, force_refresh):
+        assert custom_registry is None
+        assert force_refresh is False
+        return {
+            "astrbot-plugin-demo": {
+                "name": "astrbot_plugin_demo",
+                "repo": _DEFAULT_MARKET_REPO,
+            }
+        }, None
+
+    async def fake_save_plugin_install_sources(records):
+        saved.append(records)
+
+    monkeypatch.setattr(service, "find_plugin_by_name", lambda _name: plugin)
+    monkeypatch.setattr(
+        service,
+        "get_plugin_install_sources",
+        fake_get_plugin_install_sources,
+    )
+    monkeypatch.setattr(service, "get_online_plugins", fake_get_online_plugins)
+    monkeypatch.setattr(
+        service,
+        "save_plugin_install_sources",
+        fake_save_plugin_install_sources,
+    )
+
+    update_info = await service.resolve_market_update_info(plugin.name)
+
+    assert update_info["record"] is None
+    assert update_info["download_url"] == ""
+    assert update_info["repo"] == _DEFAULT_MARKET_REPO
+    assert saved == []
+
+
+@pytest.mark.asyncio
+async def test_update_plugin_passes_default_market_repo_to_lifecycle(
+    monkeypatch,
+) -> None:
+    service = PluginService.__new__(PluginService)
+    plugin = _repo_only_market_plugin()
+    update_calls: list[dict[str, str]] = []
+    reload_calls: list[str] = []
+    refresh_calls: list[tuple[str, dict[str, object]]] = []
+    sync_calls: list[bool] = []
+    update_info = _repo_only_update_info()
+
+    async def fake_update_plugin(
+        plugin_name: str,
+        proxy: str = "",
+        download_url: str = "",
+        repo_url: str = "",
+    ) -> None:
+        update_calls.append(
+            {
+                "plugin_name": plugin_name,
+                "proxy": proxy,
+                "download_url": download_url,
+                "repo_url": repo_url,
+            }
+        )
+
+    async def fake_reload(plugin_name: str) -> None:
+        reload_calls.append(plugin_name)
+
+    async def fake_refresh(plugin_name: str, info: dict[str, object]) -> None:
+        refresh_calls.append((plugin_name, info))
+
+    async def fake_sync() -> None:
+        sync_calls.append(True)
+
+    async def fake_resolve(_plugin_name: str):
+        return update_info
+
+    monkeypatch.setattr(service, "_ensure_not_demo", lambda: None)
+    monkeypatch.setattr(service, "resolve_market_update_info", fake_resolve)
+    service.plugin_lifecycle = SimpleNamespace(
+        update_plugin=fake_update_plugin,
+        reload=fake_reload,
+    )
+    monkeypatch.setattr(
+        service,
+        "refresh_plugin_install_source_after_update",
+        fake_refresh,
+    )
+    monkeypatch.setattr(service, "sync_skills_after_plugin_change", fake_sync)
+
+    await service.update_plugin({"name": plugin.name})
+
+    assert update_calls == [
+        {
+            "plugin_name": plugin.name,
+            "proxy": "",
+            "download_url": "",
+            "repo_url": _DEFAULT_MARKET_REPO,
+        }
+    ]
+    assert reload_calls == [plugin.name]
+    assert refresh_calls == [(plugin.name, update_info)]
+    assert sync_calls == [True]
+
+
+@pytest.mark.asyncio
+async def test_update_all_plugins_passes_default_market_repo_to_lifecycle(
+    monkeypatch,
+) -> None:
+    service = PluginService.__new__(PluginService)
+    plugin = _repo_only_market_plugin()
+    update_calls: list[dict[str, str]] = []
+
+    async def fake_update_plugin(
+        plugin_name: str,
+        proxy: str = "",
+        download_url: str = "",
+        repo_url: str = "",
+    ) -> None:
+        update_calls.append(
+            {
+                "plugin_name": plugin_name,
+                "proxy": proxy,
+                "download_url": download_url,
+                "repo_url": repo_url,
+            }
+        )
+
+    async def fake_reload(_plugin_name: str) -> None:
+        raise AssertionError("update_all_plugins should not reload here")
+
+    async def fake_refresh(_plugin_name: str, _info: dict[str, object]) -> None:
+        return None
+
+    async def fake_sync() -> None:
+        return None
+
+    async def fake_resolve(_plugin_name: str):
+        return _repo_only_update_info()
+
+    monkeypatch.setattr(service, "_ensure_not_demo", lambda: None)
+    monkeypatch.setattr(service, "resolve_market_update_info", fake_resolve)
+    service.plugin_lifecycle = SimpleNamespace(
+        update_plugin=fake_update_plugin,
+        reload=fake_reload,
+    )
+    monkeypatch.setattr(
+        service,
+        "refresh_plugin_install_source_after_update",
+        fake_refresh,
+    )
+    monkeypatch.setattr(service, "sync_skills_after_plugin_change", fake_sync)
+
+    payload, message = await service.update_all_plugins({"names": [plugin.name]})
+
+    assert message == "批量更新完成，全部成功。"
+    assert payload["results"] == [
+        {"name": plugin.name, "status": "ok", "message": "更新成功"}
+    ]
+    assert update_calls == [
+        {
+            "plugin_name": plugin.name,
+            "proxy": "",
+            "download_url": "",
+            "repo_url": _DEFAULT_MARKET_REPO,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_default_market_update_refresh_does_not_persist_when_record_is_none(
+    monkeypatch,
+) -> None:
+    service = PluginService.__new__(PluginService)
+    plugin = _repo_only_market_plugin()
+    saved: list[object] = []
+
+    async def fake_get_plugin_install_sources():
+        return {}
+
+    async def fake_save_plugin_install_sources(records):
+        saved.append(records)
+
+    monkeypatch.setattr(service, "find_plugin_by_name", lambda _name: plugin)
+    monkeypatch.setattr(
+        service,
+        "get_plugin_install_sources",
+        fake_get_plugin_install_sources,
+    )
+    monkeypatch.setattr(
+        service,
+        "save_plugin_install_sources",
+        fake_save_plugin_install_sources,
+    )
+
+    await service.refresh_plugin_install_source_after_update(
+        plugin.name,
+        _repo_only_update_info(),
+    )
+
+    assert saved == []

@@ -1672,6 +1672,7 @@ class PluginService:
         proxy: str | None = payload.get("proxy", None)
         update_info = await self.resolve_market_update_info(plugin_name)
         download_url = str(update_info.get("download_url") or "").strip()
+        repo_url = str(update_info.get("repo") or "").strip()
         try:
             reject_unsafe_plugin_fetch(download_url=download_url, proxy=proxy or "")
         except OutboundRequestError as exc:
@@ -1681,7 +1682,10 @@ class PluginService:
             ) from exc
         logger.info(f"正在更新插件 {plugin_name}")
         await self.plugin_lifecycle.update_plugin(
-            plugin_name, proxy or "", download_url=download_url
+            plugin_name,
+            proxy or "",
+            download_url=download_url,
+            repo_url=repo_url,
         )
         await self.refresh_plugin_install_source_after_update(plugin_name, update_info)
         await self.plugin_lifecycle.reload(plugin_name)
@@ -1707,6 +1711,7 @@ class PluginService:
                     logger.info(f"批量更新插件 {name}")
                     update_info = await self.resolve_market_update_info(name)
                     download_url = str(update_info.get("download_url") or "").strip()
+                    repo_url = str(update_info.get("repo") or "").strip()
                     try:
                         reject_unsafe_plugin_fetch(
                             download_url=download_url,
@@ -1718,7 +1723,10 @@ class PluginService:
                             public_message="插件下载地址不安全",
                         ) from exc
                     await self.plugin_lifecycle.update_plugin(
-                        name, proxy, download_url=download_url
+                        name,
+                        proxy,
+                        download_url=download_url,
+                        repo_url=repo_url,
                     )
                     await self.refresh_plugin_install_source_after_update(
                         name,
