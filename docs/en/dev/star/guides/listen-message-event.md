@@ -50,12 +50,12 @@ Here, `raw_message` is the **raw message object** from the messaging platform ad
 - `group_avatar`: avatar URL
 - `group_owner`: owner ID
 - `group_admins`: admin ID list
-- `members`: member list; `None` when incomplete
+- `members`: member list; `None` when incomplete or over the lookup cap
 - `member_count`: platform-provided total, even when the member list is missing
 
 `member_count` is platform-defined. LINE excludes the bot; other platforms may include it.
 
-`await event.get_group()` may call platform APIs to enrich those fields. It returns a copy of the inbound `Group` and does not mutate the original. `members` may be `None` when the list is missing or incomplete; use `member_count` in that case.
+`await event.get_group()` may call platform APIs to enrich those fields. It returns a copy of the inbound `Group` and does not mutate the original. When member pagination exceeds 10 pages or 2000 members, `members` is omitted and a known `member_count` is kept. LINE `get_group` fills name and member count only and does not enumerate members. Use `member_count` when `members` is `None`.
 
 ### Message Chain
 
