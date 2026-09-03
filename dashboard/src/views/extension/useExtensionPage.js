@@ -432,11 +432,13 @@ export const useExtensionPage = (initialTab = "installed") => {
     const allPlugins = pluginMarketData.value;
     if (allPlugins.length === 0) return [];
 
-    const pluginsByName = new Map(
-      allPlugins.map((plugin) => [plugin.name, plugin]),
+    // Key by the unique market plugin key: metadata `name` is not unique and
+    // would collapse same-named plugins into one entry.
+    const pluginsByKey = new Map(
+      allPlugins.map((plugin) => [getMarketPluginKey(plugin), plugin]),
     );
     const selected = randomPluginNames.value
-      .map((name) => pluginsByName.get(name))
+      .map((key) => pluginsByKey.get(key))
       .filter(Boolean);
 
     if (selected.length > 0) {
@@ -462,7 +464,7 @@ export const useExtensionPage = (initialTab = "installed") => {
     const shuffled = shufflePlugins(pluginMarketData.value);
     randomPluginNames.value = shuffled
       .slice(0, Math.min(RANDOM_PLUGINS_COUNT, shuffled.length))
-      .map((plugin) => plugin.name);
+      .map((plugin) => getMarketPluginKey(plugin));
   };
 
   // 分页计算属性
@@ -684,6 +686,17 @@ export const useExtensionPage = (initialTab = "installed") => {
 
   const getMarketPluginId = (plugin) => {
     return String(plugin?.market_plugin_id || "").trim();
+  };
+
+  // Unique identity for a market entry. Metadata `name` alone is not unique —
+  // different authors can publish plugins with the same name — so fall back to
+  // repo and finally name for legacy registry entries without an explicit id.
+  const getMarketPluginKey = (plugin) => {
+    return (
+      getMarketPluginId(plugin) ||
+      String(plugin?.repo || "").trim() ||
+      String(plugin?.name || "").trim()
+    );
   };
 
   const getMarketInstallSourcePayload = () => {
@@ -2574,6 +2587,8 @@ export const useExtensionPage = (initialTab = "installed") => {
     randomPluginNames,
     normalizeStr,
     toPinyinText,
+    getMarketPluginId,
+    getMarketPluginKey,
     toInitials,
     filteredExtensions,
     filteredPlugins,
