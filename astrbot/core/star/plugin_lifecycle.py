@@ -796,6 +796,7 @@ class PluginLifecycle:
         plugin_name: str,
         proxy: str = "",
         download_url: str = "",
+        repo_url: str = "",
     ) -> None:
         """Update one non-bundled plugin under the lifecycle lock."""
         async with self._lock:
@@ -803,6 +804,7 @@ class PluginLifecycle:
                 plugin_name,
                 proxy=proxy,
                 download_url=download_url,
+                repo_url=repo_url,
                 loader=self._loader,
                 reload_plugin=self._reload_unlocked,
             )

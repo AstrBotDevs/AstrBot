@@ -41,9 +41,13 @@ class PluginUpdator(RepoZipUpdator):
         return plugin_path
 
     async def update(
-        self, plugin: StarMetadata, proxy="", download_url: str = ""
+        self,
+        plugin: StarMetadata,
+        proxy="",
+        download_url: str = "",
+        repo_url: str = "",
     ) -> str:
-        repo_url = plugin.repo
+        repo_url = str(repo_url or "").strip() or str(plugin.repo or "").strip()
 
         if not repo_url and not download_url:
             raise Exception(

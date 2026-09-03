@@ -645,9 +645,14 @@ def create_mock_updater_update(
         Callable: 异步函数，可用于 monkeypatch.setattr
     """
 
-    async def mock_update(plugin, proxy: str = "", download_url: str = "") -> None:
+    async def mock_update(
+        plugin,
+        proxy: str = "",
+        download_url: str = "",
+        repo_url: str = "",
+    ) -> None:
         """Mock updater.update 方法。"""
-        del proxy, download_url
+        del proxy, download_url, repo_url
         plugin_dir = plugin_builder.get_plugin_path(plugin.name)
 
         # 创建更新标记文件

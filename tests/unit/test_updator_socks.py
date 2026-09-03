@@ -376,6 +376,208 @@ async def test_plugin_updator_install_prefers_download_url(
     assert calls["unzip"] == (str(expected_path) + ".zip", str(expected_path))
 
 
+def _plugin_updator_for_update(tmp_path: Path) -> PluginUpdator:
+    updater = PluginUpdator.__new__(PluginUpdator)
+    updater.plugin_store_path = str(tmp_path)
+    return updater
+
+
+def _stub_plugin_update_fs(
+    monkeypatch: pytest.MonkeyPatch, updater: PluginUpdator
+) -> None:
+    monkeypatch.setattr(updater, "validate_plugin_archive", lambda _path: None)
+    monkeypatch.setattr("astrbot.core.star.updator.remove_dir", lambda _path: None)
+    monkeypatch.setattr(updater, "unzip_file", lambda *_args: None)
+
+
+@pytest.mark.asyncio
+async def test_plugin_updator_update_uses_explicit_repo_when_plugin_metadata_is_empty(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: dict[str, tuple[str, str, str]] = {}
+    updater = _plugin_updator_for_update(tmp_path)
+    plugin = SimpleNamespace(
+        name="demo_plugin",
+        repo="",
+        root_dir_name="demo_plugin",
+    )
+
+    async def fake_download_from_repo_url(
+        plugin_path: str,
+        repo_url: str,
+        proxy: str = "",
+    ) -> None:
+        calls["download"] = (plugin_path, repo_url, proxy)
+
+    monkeypatch.setattr(updater, "download_from_repo_url", fake_download_from_repo_url)
+    _stub_plugin_update_fs(monkeypatch, updater)
+
+    await updater.update(
+        plugin,
+        proxy="https://mirror.example",
+        repo_url="https://github.com/example/plugin",
+    )
+
+    assert plugin.repo == ""
+    assert calls["download"] == (
+        str(tmp_path / "demo_plugin"),
+        "https://github.com/example/plugin",
+        "https://mirror.example",
+    )
+
+
+@pytest.mark.asyncio
+async def test_plugin_updator_update_prefers_explicit_repo_over_plugin_repo(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: dict[str, tuple[str, str, str]] = {}
+    updater = _plugin_updator_for_update(tmp_path)
+    plugin = SimpleNamespace(
+        name="demo_plugin",
+        repo="https://github.com/local/stale",
+        root_dir_name="demo_plugin",
+    )
+
+    async def fake_download_from_repo_url(
+        plugin_path: str,
+        repo_url: str,
+        proxy: str = "",
+    ) -> None:
+        calls["download"] = (plugin_path, repo_url, proxy)
+
+    monkeypatch.setattr(updater, "download_from_repo_url", fake_download_from_repo_url)
+    _stub_plugin_update_fs(monkeypatch, updater)
+
+    await updater.update(
+        plugin,
+        proxy="https://mirror.example",
+        repo_url="https://github.com/example/plugin",
+    )
+
+    assert plugin.repo == "https://github.com/local/stale"
+    assert calls["download"] == (
+        str(tmp_path / "demo_plugin"),
+        "https://github.com/example/plugin",
+        "https://mirror.example",
+    )
+
+
+@pytest.mark.asyncio
+async def test_plugin_updator_update_prefers_download_url_over_repo_url(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: dict[str, tuple[str, str]] = {}
+    updater = _plugin_updator_for_update(tmp_path)
+    plugin = SimpleNamespace(
+        name="demo_plugin",
+        repo="https://github.com/local/stale",
+        root_dir_name="demo_plugin",
+    )
+
+    async def fake_download_file(
+        url: str,
+        path: str,
+        timeout_seconds: float = 1800.0,
+        **kwargs,
+    ) -> None:
+        del timeout_seconds, kwargs
+        calls["download"] = (url, path)
+
+    async def fail_download_from_repo_url(*args, **kwargs):
+        del args, kwargs
+        raise AssertionError("update should use download_url instead of GitHub")
+
+    monkeypatch.setattr(updater, "_download_file", fake_download_file)
+    monkeypatch.setattr(updater, "download_from_repo_url", fail_download_from_repo_url)
+    _stub_plugin_update_fs(monkeypatch, updater)
+
+    await updater.update(
+        plugin,
+        download_url="https://cdn.example/plugin.zip",
+        repo_url="https://github.com/example/plugin",
+    )
+
+    assert plugin.repo == "https://github.com/local/stale"
+    assert calls["download"] == (
+        "https://cdn.example/plugin.zip",
+        str(tmp_path / "demo_plugin") + ".zip",
+    )
+
+
+@pytest.mark.asyncio
+async def test_plugin_updator_update_uses_download_url_without_repo(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: dict[str, tuple[str, str]] = {}
+    updater = _plugin_updator_for_update(tmp_path)
+    plugin = SimpleNamespace(
+        name="demo_plugin",
+        repo="",
+        root_dir_name="demo_plugin",
+    )
+
+    async def fake_download_file(
+        url: str,
+        path: str,
+        timeout_seconds: float = 1800.0,
+        **kwargs,
+    ) -> None:
+        del timeout_seconds, kwargs
+        calls["download"] = (url, path)
+
+    async def fail_download_from_repo_url(*args, **kwargs):
+        del args, kwargs
+        raise AssertionError("update should use download_url instead of GitHub")
+
+    monkeypatch.setattr(updater, "_download_file", fake_download_file)
+    monkeypatch.setattr(updater, "download_from_repo_url", fail_download_from_repo_url)
+    _stub_plugin_update_fs(monkeypatch, updater)
+
+    await updater.update(plugin, download_url="https://cdn.example/plugin.zip")
+
+    assert calls["download"] == (
+        "https://cdn.example/plugin.zip",
+        str(tmp_path / "demo_plugin") + ".zip",
+    )
+
+
+@pytest.mark.asyncio
+async def test_plugin_updator_update_uses_plugin_repo_when_repo_url_omitted(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: dict[str, tuple[str, str, str]] = {}
+    updater = _plugin_updator_for_update(tmp_path)
+    plugin = SimpleNamespace(
+        name="demo_plugin",
+        repo="https://github.com/local/installed",
+        root_dir_name="demo_plugin",
+    )
+
+    async def fake_download_from_repo_url(
+        plugin_path: str,
+        repo_url: str,
+        proxy: str = "",
+    ) -> None:
+        calls["download"] = (plugin_path, repo_url, proxy)
+
+    monkeypatch.setattr(updater, "download_from_repo_url", fake_download_from_repo_url)
+    _stub_plugin_update_fs(monkeypatch, updater)
+
+    await updater.update(plugin, proxy="https://mirror.example")
+
+    assert plugin.repo == "https://github.com/local/installed"
+    assert calls["download"] == (
+        str(tmp_path / "demo_plugin"),
+        "https://github.com/local/installed",
+        "https://mirror.example",
+    )
+
+
 def test_plugin_unzip_file_rejects_metadata_yml(tmp_path: Path) -> None:
     zip_path = tmp_path / "plugin.zip"
     target_dir = tmp_path / "plugin"
