@@ -1,5 +1,5 @@
 import { createVuetify } from 'vuetify';
-import '@mdi/font/css/materialdesignicons.css';
+import '@/assets/mdi-subset/materialdesignicons-subset.css';
 import * as components from 'vuetify/components';
 import * as directives from 'vuetify/directives';
 import { PurpleTheme } from '@/theme/LightTheme';
@@ -19,6 +19,10 @@ export default createVuetify({
   defaults: {
     VBtn: {},
     VCard: {
+      rounded: 'lg'
+    },
+    VSnackbar: {
+      elevation: 6,
       rounded: 'lg'
     },
     VTextField: {

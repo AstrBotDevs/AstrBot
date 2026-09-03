@@ -70,7 +70,7 @@
   },
   "upload": {
     "title": "Upload Files to Knowledge Base",
-    "subtitle": "Supports txt, pdf, word, excel and other formats",
+    "subtitle": "Supports txt, pdf, epub, word, excel and other formats",
     "dropzone": "Drag and drop files here or click to upload",
     "chunkSettings": {
       "title": "Chunk Settings",

@@ -5,14 +5,21 @@
   "providers": "模型提供商",
   "commands": "指令管理",
   "persona": "人格设定",
-  "subagent": "SubAgent 编排",
+  "data": "数据与日志",
+  "dataTabs": {
+    "statistics": "统计",
+    "conversations": "对话",
+    "logs": "日志",
+    "trace": "追踪"
+  },
+  "subagent": "子代理编排",
   "toolUse": "MCP",
   "extension": "插件",
   "extensionTabs": {
-    "installed": "AstrBot 插件",
+    "installed": "插件",
     "market": "插件市场",
     "mcp": "MCP",
-    "skills": "Skills",
+    "skills": "技能",
     "components": "管理行为"
   },
   "config": "配置文件",
@@ -45,5 +52,6 @@
   "configTabs": {
     "normal": "普通配置",
     "system": "系统配置"
-  }
+  },
+  "pluginWebui": "插件页面"
 }

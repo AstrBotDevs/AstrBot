@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-import base64
 import enum
 import json
 from dataclasses import dataclass, field
 from typing import Any
 
 from anthropic.types import Message as AnthropicMessage
+from deprecated import deprecated
 from google.genai.types import GenerateContentResponse
 from openai.types.chat.chat_completion import ChatCompletion
+from openai.types.responses import Response
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
@@ -17,11 +18,12 @@ from astrbot.core.agent.message import (
     ContentPart,
     ToolCall,
     ToolCallMessageSegment,
+    is_checkpoint_message,
 )
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.utils.io import download_image_by_url
+from astrbot.core.utils.media_utils import MediaResolver
 
 
 class ProviderType(enum.Enum):
@@ -93,6 +95,8 @@ class ProviderRequest:
     """会话 ID"""
     image_urls: list[str] = field(default_factory=list)
     """图片 URL 列表"""
+    audio_urls: list[str] = field(default_factory=list)
+    """音频 URL 列表，也支持本地路径"""
     extra_user_content_parts: list[ContentPart] = field(default_factory=list)
     """额外的用户消息内容部分列表，用于在用户消息后添加额外的内容块（如系统提醒、指令等）。支持 dict 或 ContentPart 对象"""
     func_tool: ToolSet | None = None
@@ -115,6 +119,7 @@ class ProviderRequest:
         return (
             f"ProviderRequest(prompt={self.prompt}, session_id={self.session_id}, "
             f"image_count={len(self.image_urls or [])}, "
+            f"audio_count={len(self.audio_urls or [])}, "
             f"func_tool={self.func_tool}, "
             f"contexts={self._print_friendly_context()}, "
             f"system_prompt={self.system_prompt}, "
@@ -133,13 +138,18 @@ class ProviderRequest:
         self.tool_calls_result.append(tool_calls_result)
 
     def _print_friendly_context(self):
-        """打印友好的消息上下文。将 image_url 的值替换为 <Image>"""
+        """打印友好的消息上下文。将多模态内容折叠为简短标记。"""
         if not self.contexts:
-            return f"prompt: {self.prompt}, image_count: {len(self.image_urls or [])}"
+            return (
+                f"prompt: {self.prompt}, image_count: {len(self.image_urls or [])}, "
+                f"audio_count: {len(self.audio_urls or [])}"
+            )
 
         result_parts = []
 
         for ctx in self.contexts:
+            if is_checkpoint_message(ctx):
+                continue
             role = ctx.get("role", "unknown")
             content = ctx.get("content", "")
 
@@ -148,6 +158,7 @@ class ProviderRequest:
             elif isinstance(content, list):
                 msg_parts = []
                 image_count = 0
+                audio_count = 0
 
                 for item in content:
                     item_type = item.get("type", "")
@@ -156,19 +167,26 @@ class ProviderRequest:
                         msg_parts.append(item.get("text", ""))
                     elif item_type == "image_url":
                         image_count += 1
+                    elif item_type == "audio_url":
+                        audio_count += 1
 
                 if image_count > 0:
                     if msg_parts:
                         msg_parts.append(f"[+{image_count} images]")
                     else:
                         msg_parts.append(f"[{image_count} images]")
+                if audio_count > 0:
+                    if msg_parts:
+                        msg_parts.append(f"[+{audio_count} audios]")
+                    else:
+                        msg_parts.append(f"[{audio_count} audios]")
 
                 result_parts.append(f"{role}: {''.join(msg_parts)}")
 
         return "\n".join(result_parts)
 
     async def assemble_context(self) -> dict:
-        """将请求(prompt 和 image_urls)包装成 OpenAI 的消息格式。"""
+        """将请求(prompt、image_urls 和 audio_urls)包装成统一消息格式。"""
         # 构建内容块列表
         content_blocks = []
 
@@ -178,28 +196,55 @@ class ProviderRequest:
         elif self.image_urls:
             # 如果没有文本但有图片，添加占位文本
             content_blocks.append({"type": "text", "text": "[图片]"})
+        elif self.audio_urls:
+            # 如果没有文本但有音频，添加占位文本
+            content_blocks.append({"type": "text", "text": "[音频]"})
 
         # 2. 额外的内容块（系统提醒、指令等）
         if self.extra_user_content_parts:
             for part in self.extra_user_content_parts:
-                content_blocks.append(part.model_dump())
+                content_blocks.append(part.model_dump_for_context())
 
         # 3. 图片内容
         if self.image_urls:
             for image_url in self.image_urls:
-                if image_url.startswith("http"):
-                    image_path = await download_image_by_url(image_url)
-                    image_data = await self._encode_image_bs64(image_path)
-                elif image_url.startswith("file:///"):
-                    image_path = image_url.replace("file:///", "")
-                    image_data = await self._encode_image_bs64(image_path)
-                else:
-                    image_data = await self._encode_image_bs64(image_url)
+                image_data = await MediaResolver(
+                    image_url,
+                    media_type="image",
+                ).to_base64_data()
                 if not image_data:
-                    logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                    logger.warning("图片预处理结果为空，将忽略。")
                     continue
                 content_blocks.append(
-                    {"type": "image_url", "image_url": {"url": image_data}},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": image_data.to_data_url()},
+                    },
+                )
+
+        # 4. 音频内容
+        if self.audio_urls:
+            for audio_url in self.audio_urls:
+                try:
+                    audio_data = await MediaResolver(
+                        audio_url,
+                        media_type="audio",
+                        default_suffix=".wav",
+                    ).to_base64_data(
+                        strict=True,
+                        target_format="wav",
+                    )
+                except Exception as exc:
+                    logger.warning("音频预处理失败，将忽略。错误: %s", exc)
+                    continue
+                if not audio_data:
+                    logger.warning("音频预处理结果为空，将忽略。")
+                    continue
+                content_blocks.append(
+                    {
+                        "type": "audio_url",
+                        "audio_url": {"url": audio_data.to_data_url()},
+                    },
                 )
 
         # 只有当只有一个来自 prompt 的文本块且没有额外内容块时，才降级为简单格式以保持向后兼容
@@ -208,20 +253,12 @@ class ProviderRequest:
             and content_blocks[0]["type"] == "text"
             and not self.extra_user_content_parts
             and not self.image_urls
+            and not self.audio_urls
         ):
             return {"role": "user", "content": content_blocks[0]["text"]}
 
         # 否则返回多模态格式
         return {"role": "user", "content": content_blocks}
-
-    async def _encode_image_bs64(self, image_url: str) -> str:
-        """将图片转换为 base64"""
-        if image_url.startswith("base64://"):
-            return image_url.replace("base64://", "data:image/jpeg;base64,")
-        with open(image_url, "rb") as f:
-            image_bs64 = base64.b64encode(f.read()).decode("utf-8")
-            return "data:image/jpeg;base64," + image_bs64
-        return ""
 
 
 @dataclass
@@ -270,13 +307,13 @@ class LLMResponse:
     """Tool call IDs."""
     tools_call_extra_content: dict[str, dict[str, Any]] = field(default_factory=dict)
     """Tool call extra content. tool_call_id -> extra_content dict"""
-    reasoning_content: str = ""
+    reasoning_content: str | None = None
     """The reasoning content extracted from the LLM, if any."""
     reasoning_signature: str | None = None
     """The signature of the reasoning content, if any."""
 
     raw_completion: (
-        ChatCompletion | GenerateContentResponse | AnthropicMessage | None
+        ChatCompletion | Response | GenerateContentResponse | AnthropicMessage | None
     ) = None
     """The raw completion response from the LLM provider."""
 
@@ -303,6 +340,7 @@ class LLMResponse:
         reasoning_content: str | None = None,
         reasoning_signature: str | None = None,
         raw_completion: ChatCompletion
+        | Response
         | GenerateContentResponse
         | AnthropicMessage
         | None = None,
@@ -321,8 +359,6 @@ class LLMResponse:
             raw_completion (ChatCompletion, optional): 原始响应, OpenAI 格式. Defaults to None.
 
         """
-        if reasoning_content is None:
-            reasoning_content = ""
         if tools_call_args is None:
             tools_call_args = []
         if tools_call_name is None:
@@ -367,8 +403,9 @@ class LLMResponse:
         else:
             self._completion_text = value
 
+    @deprecated(reason="Use to_openai_tool_calls_model instead.")
     def to_openai_tool_calls(self) -> list[dict]:
-        """Convert to OpenAI tool calls format. Deprecated, use to_openai_to_calls_model instead."""
+        """Convert to OpenAI tool calls format. Deprecated, use to_openai_tool_calls_model instead."""
         ret = []
         for idx, tool_call_arg in enumerate(self.tools_call_args):
             payload = {
@@ -386,7 +423,7 @@ class LLMResponse:
             ret.append(payload)
         return ret
 
-    def to_openai_to_calls_model(self) -> list[ToolCall]:
+    def to_openai_tool_calls_model(self) -> list[ToolCall]:
         """The same as to_openai_tool_calls but return pydantic model."""
         ret = []
         for idx, tool_call_arg in enumerate(self.tools_call_args):
@@ -404,6 +441,11 @@ class LLMResponse:
                 ),
             )
         return ret
+
+    @deprecated(reason="Use to_openai_tool_calls_model instead.")
+    def to_openai_to_calls_model(self) -> list[ToolCall]:
+        """Deprecated alias of to_openai_tool_calls_model (legacy misspelled name)."""
+        return self.to_openai_tool_calls_model()
 
 
 @dataclass

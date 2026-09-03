@@ -2,8 +2,11 @@
 
 from typing import Any
 
+from deprecated import deprecated
+
 import astrbot.api.message_components as Comp
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
+from astrbot.core.utils.media_utils import MediaResolver
 
 
 class FileIDExtractor:
@@ -173,6 +176,7 @@ def resolve_message_visibility(
 
 
 # 保留旧函数名作为向后兼容的别名
+@deprecated(reason="Use resolve_message_visibility instead.")
 def resolve_visibility_from_raw_message(
     raw_message: dict[str, Any],
     self_id: str | None = None,
@@ -266,7 +270,7 @@ def add_at_mention_if_needed(
     return text
 
 
-def create_file_component(file_info: dict[str, Any]) -> tuple[Any, str]:
+async def create_file_component(file_info: dict[str, Any]) -> tuple[Any, str]:
     """创建文件组件和描述文本"""
     file_url = file_info.get("url", "")
     file_name = file_info.get("name", "未知文件")
@@ -275,13 +279,18 @@ def create_file_component(file_info: dict[str, Any]) -> tuple[Any, str]:
     if file_type.startswith("image/"):
         return Comp.Image(url=file_url, file=file_name), f"图片[{file_name}]"
     if file_type.startswith("audio/"):
-        return Comp.Record(url=file_url, file=file_name), f"音频[{file_name}]"
+        path_wav = await MediaResolver(
+            file_url,
+            media_type="audio",
+            default_suffix=".wav",
+        ).to_path(target_format="wav")
+        return Comp.Record(url=path_wav, file=path_wav), f"音频[{file_name}]"
     if file_type.startswith("video/"):
         return Comp.Video(url=file_url, file=file_name), f"视频[{file_name}]"
     return Comp.File(name=file_name, url=file_url), f"文件[{file_name}]"
 
 
-def process_files(
+async def process_files(
     message: AstrBotMessage,
     files: list,
     include_text_parts: bool = True,
@@ -289,7 +298,7 @@ def process_files(
     """处理文件列表，添加到消息组件中并返回文本描述"""
     file_parts = []
     for file_info in files:
-        component, part_text = create_file_component(file_info)
+        component, part_text = await create_file_component(file_info)
         message.message.append(component)
         if include_text_parts:
             file_parts.append(part_text)
@@ -335,7 +344,7 @@ def extract_sender_info(
 def create_base_message(
     raw_data: dict[str, Any],
     sender_info: dict[str, Any],
-    client_self_id: str,
+    bot_self_id: str,
     is_chat: bool = False,
     room_id: str | None = None,
 ) -> AstrBotMessage:
@@ -367,7 +376,7 @@ def create_base_message(
         session_id if sender_info["sender_id"] else f"{session_prefix}%unknown"
     )
     message.message_id = str(raw_data.get("id", ""))
-    message.self_id = client_self_id
+    message.self_id = bot_self_id
 
     return message
 
@@ -376,7 +385,7 @@ def process_at_mention(
     message: AstrBotMessage,
     raw_text: str,
     bot_username: str,
-    client_self_id: str,
+    bot_self_id: str,
 ) -> tuple[list[str], str]:
     """处理@提及逻辑，返回消息部分列表和处理后的文本"""
     message_parts = []
@@ -386,7 +395,7 @@ def process_at_mention(
 
     if bot_username and raw_text.startswith(f"@{bot_username}"):
         at_mention = f"@{bot_username}"
-        message.message.append(Comp.At(qq=client_self_id))
+        message.message.append(Comp.At(qq=bot_self_id))
         remaining_text = raw_text[len(at_mention) :].strip()
         if remaining_text:
             message.message.append(Comp.Plain(remaining_text))
@@ -401,7 +410,7 @@ def cache_user_info(
     user_cache: dict[str, Any],
     sender_info: dict[str, Any],
     raw_data: dict[str, Any],
-    client_self_id: str,
+    bot_self_id: str,
     is_chat: bool = False,
 ) -> None:
     """缓存用户信息"""
@@ -410,7 +419,7 @@ def cache_user_info(
             "username": sender_info["username"],
             "nickname": sender_info["nickname"],
             "visibility": "specified",
-            "visible_user_ids": [client_self_id, sender_info["sender_id"]],
+            "visible_user_ids": [bot_self_id, sender_info["sender_id"]],
         }
     else:
         user_cache_data = {
@@ -428,7 +437,7 @@ def cache_user_info(
 def cache_room_info(
     user_cache: dict[str, Any],
     raw_data: dict[str, Any],
-    client_self_id: str,
+    bot_self_id: str,
 ) -> None:
     """缓存房间信息"""
     room_data = raw_data.get("toRoom")
@@ -442,7 +451,7 @@ def cache_room_info(
             "room_description": room_data.get("description", ""),
             "owner_id": room_data.get("ownerId", ""),
             "visibility": "specified",
-            "visible_user_ids": [client_self_id],
+            "visible_user_ids": [bot_self_id],
         }
 
 

@@ -47,7 +47,7 @@ def register_provider_adapter(
         )
         provider_registry.append(pm)
         provider_cls_map[provider_type_name] = pm
-        logger.debug(f"服务提供商 Provider {provider_type_name} 已注册")
+        logger.debug("Model provider registered: %s", provider_type_name)
         return cls
 
     return decorator

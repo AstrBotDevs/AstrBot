@@ -1,26 +1,16 @@
 <template>
   <div class="kb-detail-page">
-    <!-- 页面头部 -->
-    <div class="page-header">
-      <v-btn
-        icon="mdi-arrow-left"
-        variant="text"
-        @click="$router.push({ name: 'NativeKBList' })"
-      />
-      <div class="header-content">
-        <div class="kb-title">
-          <span class="kb-emoji">{{ kb.emoji || '📚' }}</span>
-          <h1 class="text-h4">{{ kb.kb_name }}</h1>
-        </div>
-        <p v-if="kb.description" class="text-subtitle-1 text-medium-emphasis mt-2">
-          {{ kb.description }}
-        </p>
-      </div>
-    </div>
-
     <!-- 加载状态 -->
     <div v-if="loading" class="loading-container">
       <v-progress-circular indeterminate color="primary" size="64" />
+    </div>
+
+    <div v-else-if="loadError" class="loading-container">
+      <v-icon size="72" color="error">mdi-alert-circle-outline</v-icon>
+      <p class="mt-4 text-medium-emphasis">{{ t('states.loadError') }}</p>
+      <v-btn class="mt-4" prepend-icon="mdi-refresh" color="primary" variant="tonal" @click="loadKB">
+        {{ t('states.retry') }}
+      </v-btn>
     </div>
 
     <!-- 主内容 -->
@@ -52,9 +42,8 @@
         <v-window-item value="overview">
           <v-row>
             <v-col cols="12" md="6">
-              <v-card elevation="2">
+              <v-card variant="outlined">
                 <v-card-title>{{ t('overview.title') }}</v-card-title>
-                <v-divider />
                 <v-card-text>
                   <v-list density="comfortable">
                     <v-list-item>
@@ -102,9 +91,8 @@
             </v-col>
 
             <v-col cols="12" md="6">
-              <v-card elevation="2" class="mb-4">
+              <v-card variant="outlined" class="mb-4">
                 <v-card-title>{{ t('overview.stats') }}</v-card-title>
-                <v-divider />
                 <v-card-text>
                   <v-row>
                     <v-col cols="6">
@@ -125,9 +113,8 @@
                 </v-card-text>
               </v-card>
 
-              <v-card elevation="2">
+              <v-card variant="outlined">
                 <v-card-title>{{ t('overview.embeddingModel') }}</v-card-title>
-                <v-divider />
                 <v-card-text>
                   <v-list density="comfortable">
                     <v-list-item>
@@ -177,9 +164,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import axios from 'axios'
+import { knowledgeApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 import DocumentsTab from './components/DocumentsTab.vue'
 import RetrievalTab from './components/RetrievalTab.vue'
@@ -188,8 +175,13 @@ import SettingsTab from './components/SettingsTab.vue'
 const { tm: t } = useModuleI18n('features/knowledge-base/detail')
 const route = useRoute()
 
+const emit = defineEmits<{
+  (event: 'title-change', title: string): void
+}>()
+
 const kbId = ref(route.params.kbId as string)
 const loading = ref(true)
+const loadError = ref(false)
 const activeTab = ref('overview')
 const kb = ref<any>({})
 
@@ -208,18 +200,21 @@ const showSnackbar = (text: string, color: string = 'success') => {
 // 加载知识库详情
 const loadKB = async () => {
   loading.value = true
+  loadError.value = false
   try {
-    const response = await axios.get('/api/kb/get', {
-      params: { kb_id: kbId.value }
-    })
+    const response = await knowledgeApi.get(kbId.value)
     if (response.data.status === 'ok') {
       kb.value = response.data.data
+      loadError.value = false
+      emit('title-change', kb.value.kb_name || '')
     } else {
-      showSnackbar(response.data.message || '加载失败', 'error')
+      loadError.value = true
+      showSnackbar(response.data.message || t('states.loadError'), 'error')
     }
   } catch (error) {
     console.error('Failed to load knowledge base:', error)
-    showSnackbar('加载知识库详情失败', 'error')
+    loadError.value = true
+    showSnackbar(t('states.loadError'), 'error')
   } finally {
     loading.value = false
   }
@@ -241,51 +236,22 @@ const formatDate = (dateStr: string) => {
 onMounted(() => {
   loadKB()
 })
+
+watch(
+  () => kb.value?.kb_name,
+  (name) => {
+    emit('title-change', name || '')
+  },
+)
 </script>
 
 <style scoped>
 .kb-detail-page {
-  max-width: 1400px;
-  margin: 0 auto;
-  animation: fadeIn 0.3s ease;
+  width: 100%;
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.page-header {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 32px;
-}
-
-.header-content {
-  flex: 1;
-}
-
-.kb-title {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.kb-emoji {
-  font-size: 48px;
-  animation: float 3s ease-in-out infinite;
-}
-
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
+.kb-detail-page :deep(.v-card--variant-outlined) {
+  background: rgb(var(--v-theme-surface));
 }
 
 .loading-container {
@@ -294,21 +260,6 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   min-height: 400px;
-}
-
-.kb-content {
-  animation: slideUp 0.4s ease;
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .stat-box {
@@ -340,12 +291,7 @@ onMounted(() => {
 /* 响应式设计 */
 @media (max-width: 768px) {
   .kb-title {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .kb-emoji {
-    font-size: 36px;
+    font-size: 1.25rem;
   }
 }
 </style>

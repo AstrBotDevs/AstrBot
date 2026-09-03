@@ -8,6 +8,7 @@ from typing import Any, cast
 from uuid import uuid4
 
 import lark_oapi as lark
+from lark_oapi.api.contact.v3 import GetUserRequest
 from lark_oapi.api.im.v1 import (
     GetMessageRequest,
     GetMessageResourceRequest,
@@ -26,11 +27,18 @@ from astrbot.api.platform import (
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.media_utils import MediaResolver
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
+from .bot_info import request_lark_bot_info
 from .lark_event import LarkMessageEvent
 from .server import LarkWebhookServer
+
+USER_NAME_CACHE_TTL_SECONDS = 1800
+USER_NAME_FAILURE_CACHE_TTL_SECONDS = 60
+USER_NAME_CACHE_MAX_SIZE = 1000
+USER_NAME_LOOKUP_TIMEOUT_SECONDS = 5
 
 
 @register_platform_adapter(
@@ -48,13 +56,11 @@ class LarkPlatformAdapter(Platform):
         self.appid = platform_config["app_id"]
         self.appsecret = platform_config["app_secret"]
         self.domain = platform_config.get("domain", lark.FEISHU_DOMAIN)
-        self.bot_name = platform_config.get("lark_bot_name", "astrbot")
+        self.bot_name = "astrbot"
+        self.bot_open_id = ""
 
         # socket or webhook
         self.connection_mode = platform_config.get("lark_connection_mode", "socket")
-
-        if not self.bot_name:
-            logger.warning("未设置飞书机器人名称，@ 机器人可能得不到回复。")
 
         # 初始化 WebSocket 长连接相关配置
         async def on_msg_event_recv(event: lark.im.v1.P2ImMessageReceiveV1) -> None:
@@ -94,6 +100,7 @@ class LarkPlatformAdapter(Platform):
             self.webhook_server.set_callback(self.handle_webhook_event)
 
         self.event_id_timestamps: dict[str, float] = {}
+        self._user_name_cache: dict[str, tuple[str, float]] = {}
 
     async def _download_message_resource(
         self,
@@ -130,9 +137,40 @@ class LarkPlatformAdapter(Platform):
     @staticmethod
     def _build_message_str_from_components(
         components: list[Comp.BaseMessageComponent],
+        *,
+        bot_self_id: str | None = None,
+        bot_name: str | None = None,
     ) -> str:
+        """Build the text projection for parsed Lark message components.
+
+        A leading bot-self mention is omitted when identity information is provided;
+        the original component list is not modified.
+
+        Args:
+            components: Parsed Lark message components.
+            bot_self_id: Bot identifier used to recognize a leading self mention.
+            bot_name: Bot display name used when the mention has no identifier.
+
+        Returns:
+            Normalized text used by wake-prefix and command matching.
+        """
+        normalized_self_id = str(bot_self_id or "").strip()
+        normalized_bot_name = str(bot_name or "").strip()
         parts: list[str] = []
-        for comp in components:
+        for index, comp in enumerate(components):
+            if index == 0 and isinstance(comp, Comp.At):
+                mention_id = str(comp.qq or "").strip()
+                mention_name = str(comp.name or "").strip()
+                is_self_mention = bool(
+                    normalized_self_id
+                    and mention_id
+                    and mention_id == normalized_self_id
+                )
+                if not mention_id and normalized_bot_name:
+                    is_self_mention = mention_name == normalized_bot_name
+                if is_self_mention:
+                    continue
+
             if isinstance(comp, Comp.Plain):
                 text = comp.text.strip()
                 if text:
@@ -312,7 +350,12 @@ class LarkPlatformAdapter(Platform):
                 default_suffix=".opus",
             )
             if file_path:
-                components.append(Comp.Record(file=file_path, url=file_path))
+                path_wav = await MediaResolver(
+                    file_path,
+                    media_type="audio",
+                    default_suffix=".wav",
+                ).to_path(target_format="wav")
+                components.append(Comp.Record(file=path_wav, url=path_wav))
             return components
 
         if message_type == "media":
@@ -517,7 +560,7 @@ class LarkPlatformAdapter(Platform):
         )
         if message.chat_type == "group":
             abm.group_id = message.chat_id
-        abm.self_id = self.bot_name
+        abm.self_id = self.bot_open_id or self.bot_name
         abm.message_str = ""
 
         at_list = {}
@@ -534,9 +577,10 @@ class LarkPlatformAdapter(Platform):
                 open_id = m.id.open_id if m.id.open_id else ""
                 at_list[m.key] = Comp.At(qq=open_id, name=m.name)
 
-                if m.name == self.bot_name:
-                    if m.id.open_id is not None:
-                        abm.self_id = m.id.open_id
+                if (self.bot_open_id and open_id == self.bot_open_id) or (
+                    m.name == self.bot_name
+                ):
+                    abm.self_id = open_id or self.bot_open_id or self.bot_name
 
         if message.content is None:
             logger.warning("[Lark] 消息内容为空")
@@ -560,7 +604,11 @@ class LarkPlatformAdapter(Platform):
             at_map=at_list,
         )
         abm.message.extend(parsed_components)
-        abm.message_str = self._build_message_str_from_components(parsed_components)
+        abm.message_str = self._build_message_str_from_components(
+            parsed_components,
+            bot_self_id=self.bot_open_id,
+            bot_name=self.bot_name,
+        )
 
         if message.message_id is None:
             logger.error("[Lark] 消息缺少 message_id")
@@ -576,10 +624,57 @@ class LarkPlatformAdapter(Platform):
 
         abm.message_id = message.message_id
         abm.raw_message = message
-        abm.sender = MessageMember(
-            user_id=event.event.sender.sender_id.open_id,
-            nickname=event.event.sender.sender_id.open_id[:8],
-        )
+        sender_open_id = event.event.sender.sender_id.open_id
+        sender_name = sender_open_id[:8]
+        if (
+            abm.type == MessageType.FRIEND_MESSAGE
+            and getattr(event.event.sender, "sender_type", "user") == "user"
+        ):
+            cached_name = self._user_name_cache.get(sender_open_id)
+            if cached_name and time.time() <= cached_name[1]:
+                sender_name = cached_name[0]
+            else:
+                self._user_name_cache.pop(sender_open_id, None)
+                sender_name = ""
+            if not sender_name:
+                name_cache_ttl = USER_NAME_FAILURE_CACHE_TTL_SECONDS
+                try:
+                    request = (
+                        GetUserRequest.builder()
+                        .user_id(sender_open_id)
+                        .user_id_type("open_id")
+                        .build()
+                    )
+                    response = await asyncio.wait_for(
+                        self.lark_api.contact.v3.user.aget(request),
+                        timeout=USER_NAME_LOOKUP_TIMEOUT_SECONDS,
+                    )
+                    if response.success() and response.data and response.data.user:
+                        sender_name = str(response.data.user.name or "").strip()
+                        if sender_name:
+                            name_cache_ttl = USER_NAME_CACHE_TTL_SECONDS
+                    else:
+                        logger.debug(
+                            "[Lark] Sender name lookup failed for %s: code=%s, msg=%s",
+                            sender_open_id,
+                            getattr(response, "code", None),
+                            getattr(response, "msg", None),
+                        )
+                except Exception as exc:
+                    logger.debug(
+                        "[Lark] Sender name lookup failed for %s: %s",
+                        sender_open_id,
+                        exc,
+                    )
+                sender_name = sender_name or sender_open_id[:8]
+                self._user_name_cache[sender_open_id] = (
+                    sender_name,
+                    time.time() + name_cache_ttl,
+                )
+                if len(self._user_name_cache) > USER_NAME_CACHE_MAX_SIZE:
+                    self._user_name_cache.pop(next(iter(self._user_name_cache)))
+
+        abm.sender = MessageMember(user_id=sender_open_id, nickname=sender_name)
         if abm.type == MessageType.GROUP_MESSAGE:
             abm.session_id = abm.group_id
         else:
@@ -587,16 +682,25 @@ class LarkPlatformAdapter(Platform):
 
         await self.handle_msg(abm)
 
-    async def handle_msg(self, abm: AstrBotMessage) -> None:
-        event = LarkMessageEvent(
-            message_str=abm.message_str,
-            message_obj=abm,
+    def create_event(self, message: AstrBotMessage) -> LarkMessageEvent:
+        """Creates a Lark message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created Lark message event.
+        """
+        return LarkMessageEvent(
+            message_str=message.message_str,
+            message_obj=message,
             platform_meta=self.meta(),
-            session_id=abm.session_id,
+            session_id=message.session_id,
             bot=self.lark_api,
         )
 
-        self._event_queue.put_nowait(event)
+    async def handle_msg(self, abm: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(abm))
 
     async def handle_webhook_event(self, event_data: dict) -> None:
         """处理 Webhook 事件
@@ -621,6 +725,11 @@ class LarkPlatformAdapter(Platform):
             logger.error(f"[Lark Webhook] 处理事件失败: {e}", exc_info=True)
 
     async def run(self) -> None:
+        try:
+            await self._refresh_bot_info()
+        except Exception as e:
+            logger.error(f"[Lark] 启动时获取机器人信息失败: {e}", exc_info=True)
+
         if self.connection_mode == "webhook":
             # Webhook 模式
             if self.webhook_server is None:
@@ -642,6 +751,17 @@ class LarkPlatformAdapter(Platform):
             return {"error": "Webhook server not initialized"}, 500
 
         return await self.webhook_server.handle_callback(request)
+
+    async def _refresh_bot_info(self) -> None:
+        bot_info = await request_lark_bot_info(
+            domain=self.domain,
+            app_id=self.appid,
+            app_secret=self.appsecret,
+        )
+        if bot_info.app_name:
+            self.bot_name = bot_info.app_name
+        if bot_info.open_id:
+            self.bot_open_id = bot_info.open_id
 
     async def terminate(self) -> None:
         if self.connection_mode == "socket":

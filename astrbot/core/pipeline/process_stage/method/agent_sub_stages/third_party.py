@@ -3,21 +3,18 @@ import inspect
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING
 
-from astrbot.core import astrbot_config, logger
+from astrbot.core import logger
 from astrbot.core.agent.runners.coze.coze_agent_runner import CozeAgentRunner
 from astrbot.core.agent.runners.dashscope.dashscope_agent_runner import (
     DashscopeAgentRunner,
 )
-from astrbot.core.agent.runners.deerflow.constants import (
-    DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
-    DEERFLOW_PROVIDER_TYPE,
-)
+from astrbot.core.agent.runners.deerflow.constants import DEERFLOW_PROVIDER_TYPE
 from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
     DeerFlowAgentRunner,
 )
 from astrbot.core.agent.runners.dify.dify_agent_runner import DifyAgentRunner
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
-from astrbot.core.message.components import Image
+from astrbot.core.message.components import Image, Record
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -44,12 +41,6 @@ from astrbot.core.utils.metrics import Metric
 from .....astr_agent_context import AgentContextWrapper, AstrAgentContext
 from ....context import PipelineContext, call_event_hook
 
-AGENT_RUNNER_TYPE_KEY = {
-    "dify": "dify_agent_runner_provider_id",
-    "coze": "coze_agent_runner_provider_id",
-    "dashscope": "dashscope_agent_runner_provider_id",
-    DEERFLOW_PROVIDER_TYPE: DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
-}
 THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY = "_third_party_runner_error"
 STREAM_CONSUMPTION_CLOSE_TIMEOUT_SEC = 30
 RUNNER_NO_RESULT_FALLBACK_MESSAGE = "Agent Runner did not return any result."
@@ -165,11 +156,9 @@ class ThirdPartyAgentSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         self.conf = ctx.astrbot_config
-        self.runner_type = self.conf["provider_settings"]["agent_runner_type"]
-        self.prov_id = self.conf["provider_settings"].get(
-            AGENT_RUNNER_TYPE_KEY.get(self.runner_type, ""),
-            "",
-        )
+        agent_runner = self.conf["agent_runner"]
+        self.runner_type = agent_runner["runner_type"]
+        self.runner_config = agent_runner["config"]
         settings = ctx.astrbot_config["provider_settings"]
         self.streaming_response: bool = settings["streaming_response"]
         self.unsupported_streaming_strategy: str = settings[
@@ -197,7 +186,7 @@ class ThirdPartyAgentSubStage(Stage):
             return await resolve_persona_custom_error_message(
                 event=event,
                 persona_manager=self.ctx.plugin_manager.context.persona_manager,
-                provider_settings=self.conf["provider_settings"],
+                provider_settings={"default_personality": "default"},
                 conversation_persona_id=conversation_persona_id,
             )
         except Exception as e:
@@ -296,19 +285,6 @@ class ThirdPartyAgentSubStage(Stage):
         ):
             return
 
-        self.prov_cfg: dict = next(
-            (p for p in astrbot_config["provider"] if p["id"] == self.prov_id),
-            {},
-        )
-        if not self.prov_id:
-            logger.error("没有填写 Agent Runner 提供商 ID，请前往配置页面配置。")
-            return
-        if not self.prov_cfg:
-            logger.error(
-                f"Agent Runner 提供商 {self.prov_id} 配置不存在，请前往配置页面修改配置。"
-            )
-            return
-
         # make provider request
         req = ProviderRequest()
         req.session_id = event.unified_msg_origin
@@ -317,8 +293,11 @@ class ThirdPartyAgentSubStage(Stage):
             if isinstance(comp, Image):
                 image_path = await comp.convert_to_base64()
                 req.image_urls.append(image_path)
+            elif isinstance(comp, Record):
+                audio_path = await comp.convert_to_file_path()
+                req.audio_urls.append(audio_path)
 
-        if not req.prompt and not req.image_urls:
+        if not req.prompt and not req.image_urls and not req.audio_urls:
             return
 
         custom_error_message = await self._resolve_persona_custom_error_message(event)
@@ -378,10 +357,10 @@ class ThirdPartyAgentSubStage(Stage):
                 request=req,
                 run_context=AgentContextWrapper(
                     context=astr_agent_ctx,
-                    tool_call_timeout=60,
+                    tool_call_timeout=120,
                 ),
                 agent_hooks=MAIN_AGENT_HOOKS,
-                provider_config=self.prov_cfg,
+                provider_config=self.runner_config,
                 streaming=streaming_response,
             )
 

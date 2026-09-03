@@ -58,8 +58,10 @@ The default AstrBot configuration is as follows:
         "provider_pool": ["*"],  # "*" means use all available providers
         "wake_prefix": "",
         "web_search": False,
-        "websearch_provider": "default",
+        "websearch_provider": "tavily",
         "websearch_tavily_key": [],
+        "websearch_bocha_key": [],
+        "websearch_brave_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -74,7 +76,7 @@ The default AstrBot configuration is as follows:
         "show_tool_use_status": False,
         "streaming_segmented": False,
         "max_agent_step": 30,
-        "tool_call_timeout": 60,
+        "tool_call_timeout": 120,
     },
     "provider_stt_settings": {
         "enable": False,
@@ -88,7 +90,7 @@ The default AstrBot configuration is as follows:
     },
     "provider_ltm_settings": {
         "group_icl_enable": False,
-        "group_message_max_cnt": 300,
+        "group_message_max_cnt": 1000,
         "image_caption": False,
         "active_reply": {
             "enable": False,
@@ -114,7 +116,7 @@ The default AstrBot configuration is as follows:
     "dashboard": {
         "enable": True,
         "username": "astrbot",
-        "password": "77b90590a8945a7d36c963981a307dc9",
+        "password": "<your_password_md5>",
         "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,
@@ -286,15 +288,29 @@ Whether to enable AstrBot's built-in web search capability. Default is `false`. 
 
 #### `provider_settings.websearch_provider`
 
-Web search provider type. Default is `default`. Currently supports `default` and `tavily`.
-
-- `default`: Works best when Google is accessible. If Google fails, it tries Bing and Sogou in order.
+Web search provider type. Default is `tavily`. Currently supports `tavily`, `bocha`, `baidu_ai_search`, `brave`, and `firecrawl`.
 
 - `tavily`: Uses the Tavily search engine.
+- `bocha`: Uses the BoCha search engine.
+- `baidu_ai_search`: Uses Baidu AI Search (MCP).
+- `brave`: Uses Brave Search API.
+- `firecrawl`: Uses the Firecrawl Search API.
 
 #### `provider_settings.websearch_tavily_key`
 
 API Key list for the Tavily search engine. Required when using `tavily` as the web search provider.
+
+#### `provider_settings.websearch_bocha_key`
+
+API Key list for the BoCha search engine. Required when using `bocha` as the web search provider.
+
+#### `provider_settings.websearch_brave_key`
+
+API Key list for the Brave search engine. Required when using `brave` as the web search provider.
+
+#### `provider_settings.websearch_firecrawl_key`
+
+API Key list for the Firecrawl search engine. Required when using `firecrawl` as the web search provider.
 
 #### `provider_settings.web_search_link`
 
@@ -396,17 +412,17 @@ General settings for group chat context awareness providers.
 
 #### `provider_ltm_settings.group_icl_enable`
 
-Whether to enable group chat context awareness. Default is `false`. When enabled, the bot records group chat conversations to better understand context.
+Whether to inject group chat records into the model context. Default is `false`. When enabled, the bot temporarily records group chat messages and injects them into the context for the next response.
 
 The context content is placed in the conversation's system prompt.
 
 #### `provider_ltm_settings.group_message_max_cnt`
 
-Maximum number of group chat messages to record. Default is `100`. Messages exceeding this count are discarded.
+Maximum number of group chat messages retained for context injection. Default is `1000`. Messages exceeding this count are discarded. This only applies when group chat record injection is enabled.
 
 #### `provider_ltm_settings.image_caption`
 
-Whether to record images in group chats and automatically generate text descriptions using an image captioning model. Default is `false`. This depends on the `provider_settings.default_image_caption_provider_id` configuration. Use with caution as it can significantly increase API calls and token usage.
+Whether to automatically describe group chat images and inject the descriptions into context. Default is `false`. This only applies when group chat record injection is enabled. Use with caution as it can significantly increase API calls and token usage.
 
 #### `provider_ltm_settings.active_reply`
 
@@ -481,11 +497,11 @@ List of addresses that bypass the proxy. E.g., `["localhost", "127.0.0.1"]`.
 
 AstrBot WebUI configuration.
 
-Please do not change the `password` value arbitrarily. It is an `md5` encoded password. Change the password in the control panel.
+Please do not change the `password` value arbitrarily. It is an `md5` encoded password generated from the random initial password. Check the startup logs for that initial password on first run, then change it in the control panel.
 
 - `enable`: Whether to enable the AstrBot WebUI. Default is `true`.
-- `username`: Username for the AstrBot WebUI. Default is `astrbot`.
-- `password`: Password for the AstrBot WebUI. Default is the `md5` encoded value of `astrbot`. Do not modify directly unless you know what you are doing.
+- `username`: Username for the AstrBot WebUI.
+- `password`: Password for the AstrBot WebUI. It is initialized from a random password generated on first startup (logged at startup). Do not modify directly unless you know what you are doing.
 - `jwt_secret`: JWT secret key. AstrBot generates this randomly at initialization. Do not modify unless you know what you are doing.
 - `host`: Address the AstrBot WebUI listens on. Default is `0.0.0.0`.
 - `port`: Port the AstrBot WebUI listens on. Default is `6185`.
@@ -532,7 +548,7 @@ Log level. Default is `INFO`. Can be set to `DEBUG`, `INFO`, `WARNING`, `ERROR`,
 
 ### `trace_enable`
 
-Whether to enable trace recording. Default is `false`. When enabled, AstrBot records execution traces, which can be viewed on the Trace page of the admin panel.
+Whether to enable trace recording. Default is `false`. When enabled, AstrBot records execution traces, which can be viewed under `Data` -> `Trace` in the admin panel.
 
 ### `pip_install_arg`
 

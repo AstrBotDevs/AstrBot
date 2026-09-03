@@ -4,12 +4,13 @@ import re
 import time
 import uuid
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import aiofiles
 
 from astrbot.core import logger
 from astrbot.core.db.vec_db.base import BaseVecDB
-from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
+from astrbot.core.exceptions import KnowledgeBaseUploadError
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.provider.provider import (
     EmbeddingProvider,
@@ -20,12 +21,16 @@ from astrbot.core.provider.provider import (
 )
 
 from .chunking.base import BaseChunker
+from .chunking.markdown import MarkdownChunker
 from .chunking.recursive import RecursiveCharacterChunker
 from .kb_db_sqlite import KBSQLiteDatabase
 from .models import KBDocument, KBMedia, KnowledgeBase
 from .parsers.url_parser import extract_text_from_url
 from .parsers.util import select_parser
 from .prompts import TEXT_REPAIR_SYSTEM_PROMPT
+
+if TYPE_CHECKING:
+    from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
 
 
 class RateLimiter:
@@ -105,9 +110,14 @@ Text chunk to process:
     return [chunk]
 
 
+def _compact_chunks(chunks: list[str]) -> list[str]:
+    return [chunk.strip() for chunk in chunks if chunk and chunk.strip()]
+
+
 class KBHelper:
     vec_db: BaseVecDB
     kb: KnowledgeBase
+    init_error: str | None
 
     def __init__(
         self,
@@ -122,6 +132,7 @@ class KBHelper:
         self.prov_mgr = provider_manager
         self.kb_root_dir = kb_root_dir
         self.chunker = chunker
+        self.init_error = None
 
         self.kb_dir = Path(self.kb_root_dir) / self.kb.kb_id
         self.kb_medias_dir = Path(self.kb_dir) / "medias" / self.kb.kb_id
@@ -148,21 +159,30 @@ class KBHelper:
     async def get_rp(self) -> RerankProvider | None:
         if not self.kb.rerank_provider_id:
             return None
-        rp: RerankProvider = await self.prov_mgr.get_provider_by_id(
+        rp: RerankProvider | None = await self.prov_mgr.get_provider_by_id(
             self.kb.rerank_provider_id,
         )  # type: ignore
         if not rp:
-            raise ValueError(
-                f"无法找到 ID 为 {self.kb.rerank_provider_id} 的 Rerank Provider",
+            logger.warning(
+                f"知识库 {self.kb.kb_name}({self.kb.kb_id}) 的 Rerank Provider({self.kb.rerank_provider_id}) 不可用，将跳过重排序。",
             )
+            return None
         return rp
 
-    async def _ensure_vec_db(self) -> FaissVecDB:
+    async def _ensure_vec_db(self) -> "FaissVecDB":
         if not self.kb.embedding_provider_id:
             raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
 
         ep = await self.get_ep()
-        rp = await self.get_rp()
+        rp: RerankProvider | None = None
+        try:
+            rp = await self.get_rp()
+        except Exception as e:
+            logger.warning(
+                f"知识库 {self.kb.kb_name}({self.kb.kb_id}) 初始化重排序能力失败，将跳过重排序: {e}",
+            )
+
+        from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
 
         vec_db = FaissVecDB(
             doc_store_path=str(self.kb_dir / "doc.db"),
@@ -172,6 +192,8 @@ class KBHelper:
         )
         await vec_db.initialize()
         self.vec_db = vec_db
+        # Clear stale init_error once initialization succeeds.
+        self.init_error = None
         return vec_db
 
     async def delete_vec_db(self) -> None:
@@ -183,7 +205,7 @@ class KBHelper:
             shutil.rmtree(self.kb_dir)
 
     async def terminate(self) -> None:
-        if self.vec_db:
+        if hasattr(self, "vec_db") and self.vec_db:
             await self.vec_db.close()
 
     async def upload_document(
@@ -199,28 +221,35 @@ class KBHelper:
         progress_callback=None,
         pre_chunked_text: list[str] | None = None,
     ) -> KBDocument:
-        """上传并处理文档（带原子性保证和失败清理）
+        """Upload and process a document with compensating cleanup on failure.
 
-        流程:
-        1. 保存原始文件
-        2. 解析文档内容
-        3. 提取多媒体资源
-        4. 分块处理
-        5. 生成向量并存储
-        6. 保存元数据（事务）
-        7. 更新统计
+        Flow:
+        1. Parse document content
+        2. Extract media resources
+        3. Chunk text
+        4. Generate embeddings and store them (chunk text DB + FAISS)
+        5. Persist document metadata (KBDocument / KBMedia)
+        6. Refresh stats
+
+        Multi-store writes cannot share a transaction. Failures before metadata
+        commit best-effort roll back written chunks/vectors/media. After
+        metadata is committed, only report stats-refresh errors and keep the
+        document.
 
         Args:
-            progress_callback: 进度回调函数，接收参数 (stage, current, total)
-                - stage: 当前阶段 ('parsing', 'chunking', 'embedding')
-                - current: 当前进度
-                - total: 总数
-
+            progress_callback: Progress callback ``(stage, current, total)``.
+                - stage: Current stage (``parsing``, ``chunking``, ``embedding``)
+                - current: Current progress
+                - total: Total units
         """
         await self._ensure_vec_db()
         doc_id = str(uuid.uuid4())
         media_paths: list[Path] = []
         file_size = 0
+        # Only roll back chunks/vectors/media when metadata has not been
+        # committed yet. After commit (e.g. stats refresh failure) the document
+        # is already user-visible and must not be fully undone.
+        metadata_committed = False
 
         # file_path = self.kb_files_dir / f"{doc_id}.{file_type}"
         # async with aiofiles.open(file_path, "wb") as f:
@@ -232,7 +261,7 @@ class KBHelper:
 
             if pre_chunked_text is not None:
                 # 如果提供了预分块文本，直接使用
-                chunks_text = pre_chunked_text
+                chunks_text = _compact_chunks(pre_chunked_text)
                 file_size = sum(len(chunk) for chunk in chunks_text)
                 logger.info(f"使用预分块文本进行上传，共 {len(chunks_text)} 个块。")
             else:
@@ -248,10 +277,31 @@ class KBHelper:
                 if progress_callback:
                     await progress_callback("parsing", 0, 100)
 
-                parser = await select_parser(f".{file_type}")
-                parse_result = await parser.parse(file_content, file_name)
+                try:
+                    parser = await select_parser(f".{file_type}")
+                    parse_result = await parser.parse(file_content, file_name)
+                except KnowledgeBaseUploadError:
+                    raise
+                except Exception as exc:
+                    raise KnowledgeBaseUploadError(
+                        stage="parsing",
+                        user_message=(
+                            "文档解析失败：无法读取或解析上传文件。"
+                            "请确认文件格式受支持且文件内容未损坏。"
+                        ),
+                        details={"file_name": file_name},
+                    ) from exc
                 text_content = parse_result.text
                 media_items = parse_result.media
+                if not text_content or not text_content.strip():
+                    raise KnowledgeBaseUploadError(
+                        stage="parsing",
+                        user_message=(
+                            "文档解析失败：未能从文件中提取可索引文本。"
+                            "该文件可能是扫描件、纯图片 PDF，或格式暂不受支持。"
+                        ),
+                        details={"file_name": file_name},
+                    )
 
                 if progress_callback:
                     await progress_callback("parsing", 100, 100)
@@ -272,11 +322,65 @@ class KBHelper:
                 if progress_callback:
                     await progress_callback("chunking", 0, 100)
 
-                chunks_text = await self.chunker.chunk(
-                    text_content,
-                    chunk_size=chunk_size,
-                    chunk_overlap=chunk_overlap,
-                )
+                try:
+                    # These parsers return Markdown, so retain their heading hierarchy.
+                    effective_chunker = self.chunker
+                    file_ext = Path(file_name).suffix.lower() if file_name else ""
+                    if file_ext in {
+                        ".adoc",
+                        ".docx",
+                        ".epub",
+                        ".markdown",
+                        ".md",
+                        ".mdx",
+                        ".mkd",
+                        ".rst",
+                        ".xls",
+                        ".xlsx",
+                    }:
+                        effective_chunker = MarkdownChunker(
+                            chunk_size=chunk_size,
+                            chunk_overlap=chunk_overlap,
+                        )
+                        logger.info(
+                            f"Using MarkdownChunker for structured document "
+                            f"'{file_name}'."
+                        )
+
+                    chunks_text = await effective_chunker.chunk(
+                        text_content,
+                        chunk_size=chunk_size,
+                        chunk_overlap=chunk_overlap,
+                    )
+                    chunks_text = _compact_chunks(chunks_text)
+                except KnowledgeBaseUploadError:
+                    raise
+                except Exception as exc:
+                    raise KnowledgeBaseUploadError(
+                        stage="chunking",
+                        user_message=(
+                            "分块失败：文档内容在切分文本块时发生错误。"
+                            "请稍后重试，或调整分块参数后再次上传。"
+                        ),
+                        details={"file_name": file_name},
+                    ) from exc
+
+            if not chunks_text or not any(chunk.strip() for chunk in chunks_text):
+                if pre_chunked_text is not None:
+                    raise KnowledgeBaseUploadError(
+                        stage="validation",
+                        user_message=("预分块文本为空，未提供任何可索引文本块。"),
+                        details={"file_name": file_name},
+                    )
+                else:
+                    raise KnowledgeBaseUploadError(
+                        stage="chunking",
+                        user_message=(
+                            "分块失败：文档内容为空，未生成任何可索引文本块。"
+                        ),
+                        details={"file_name": file_name},
+                    )
+
             contents = []
             metadatas = []
             for idx, chunk_text in enumerate(chunks_text):
@@ -288,6 +392,12 @@ class KBHelper:
                         "chunk_index": idx,
                     },
                 )
+            document_title = Path(file_name).stem.strip()
+            embedding_contents = (
+                [f"{document_title}\n\n{chunk_text}" for chunk_text in chunks_text]
+                if document_title
+                else contents
+            )
 
             if progress_callback:
                 await progress_callback("chunking", 100, 100)
@@ -297,14 +407,28 @@ class KBHelper:
                 if progress_callback:
                     await progress_callback("embedding", current, total)
 
-            await self.vec_db.insert_batch(
-                contents=contents,
-                metadatas=metadatas,
-                batch_size=batch_size,
-                tasks_limit=tasks_limit,
-                max_retries=max_retries,
-                progress_callback=embedding_progress_callback,
-            )
+            try:
+                await self.vec_db.insert_batch(
+                    contents=contents,
+                    metadatas=metadatas,
+                    batch_size=batch_size,
+                    tasks_limit=tasks_limit,
+                    max_retries=max_retries,
+                    progress_callback=embedding_progress_callback,
+                    embedding_contents=embedding_contents,
+                )
+            except KnowledgeBaseUploadError:
+                raise
+            except Exception as exc:
+                raise KnowledgeBaseUploadError(
+                    stage="storage",
+                    user_message=("存储失败：文本块已生成，但写入知识库索引时出错。"),
+                    details={
+                        "file_name": file_name,
+                        "doc_id": doc_id,
+                        "cause": str(exc),
+                    },
+                ) from exc
 
             # 保存文档的元数据
             doc = KBDocument(
@@ -318,42 +442,169 @@ class KBHelper:
                 chunk_count=len(chunks_text),
                 media_count=0,
             )
-            async with self.kb_db.get_db() as session:
-                async with session.begin():
-                    session.add(doc)
-                    for media in saved_media:
-                        session.add(media)
-                    await session.commit()
-
-                await session.refresh(doc)
+            try:
+                async with self.kb_db.get_db() as session:
+                    async with session.begin():
+                        session.add(doc)
+                        for media in saved_media:
+                            session.add(media)
+                        await session.commit()
+                    # Mark committed immediately after commit succeeds. A later
+                    # refresh failure must not trigger full upload rollback.
+                    metadata_committed = True
+                    await session.refresh(doc)
+            except KnowledgeBaseUploadError:
+                raise
+            except Exception as exc:
+                if metadata_committed:
+                    raise KnowledgeBaseUploadError(
+                        stage="metadata",
+                        user_message=(
+                            "元数据更新失败：文档已上传，但文档记录刷新失败。"
+                        ),
+                        details={"file_name": file_name, "doc_id": doc_id},
+                    ) from exc
+                raise KnowledgeBaseUploadError(
+                    stage="metadata",
+                    user_message=(
+                        "元数据保存失败：文本块已写入知识库，但文档记录保存失败。"
+                    ),
+                    details={"file_name": file_name, "doc_id": doc_id},
+                ) from exc
 
             vec_db: FaissVecDB = self.vec_db  # type: ignore
-            await self.kb_db.update_kb_stats(kb_id=self.kb.kb_id, vec_db=vec_db)
-            await self.refresh_kb()
-            await self.refresh_document(doc_id)
+            try:
+                await self.kb_db.update_kb_stats(kb_id=self.kb.kb_id, vec_db=vec_db)
+                await self.refresh_kb()
+                await self.refresh_document(doc_id)
+            except KnowledgeBaseUploadError:
+                raise
+            except Exception as exc:
+                raise KnowledgeBaseUploadError(
+                    stage="metadata",
+                    user_message=(
+                        "元数据更新失败：文档已上传，但知识库统计信息刷新失败。"
+                    ),
+                    details={"file_name": file_name, "doc_id": doc_id},
+                ) from exc
             return doc
         except Exception as e:
-            logger.error(f"上传文档失败: {e}")
-            # if file_path.exists():
-            #     file_path.unlink()
+            if isinstance(e, KnowledgeBaseUploadError):
+                logger.warning(f"上传文档失败: {e}", extra={"details": e.details})
+            else:
+                logger.error(f"上传文档失败: {e}", exc_info=True)
 
-            for media_path in media_paths:
-                try:
-                    if media_path.exists():
-                        media_path.unlink()
-                except Exception as me:
-                    logger.warning(f"清理多媒体文件失败 {media_path}: {me}")
+            if not metadata_committed:
+                await self._cleanup_failed_upload(
+                    doc_id=doc_id, media_paths=media_paths
+                )
 
-            raise e
+            raise
+
+    async def _cleanup_failed_upload(
+        self,
+        doc_id: str,
+        media_paths: list[Path],
+    ) -> None:
+        """Best-effort compensating cleanup after a failed upload.
+
+        Multi-store writes (media files, chunk/FTS rows, FAISS vectors, KB
+        metadata) cannot share a single transaction. On failure before the KB
+        document row is committed, remove any partial state keyed by ``doc_id``.
+
+        Cleanup order intentionally differs from user-facing document deletion:
+        chunk/vector data is removed first, then residual KB metadata rows.
+        This avoids the "metadata gone, orphans remain" window that
+        ``delete_document_by_id`` can leave when vector deletion fails.
+
+        Args:
+            doc_id: Pre-generated document id used for this upload attempt.
+            media_paths: Media files written to disk during this attempt.
+        """
+        from sqlalchemy import delete
+        from sqlmodel import col
+
+        # 1) chunks + vectors first (most common orphan after partial insert)
+        vec_db = getattr(self, "vec_db", None)
+        if vec_db is not None:
+            try:
+                await vec_db.delete_documents(
+                    metadata_filters={"kb_doc_id": doc_id},
+                )
+            except Exception as ve:
+                logger.warning(
+                    f"Failed to roll back chunks/vectors for failed upload "
+                    f"(doc_id={doc_id}): {ve}",
+                )
+
+        # 2) residual KBDocument / KBMedia rows only (normally none yet)
+        try:
+            async with self.kb_db.get_db() as session, session.begin():
+                await session.execute(
+                    delete(KBMedia).where(col(KBMedia.doc_id) == doc_id),
+                )
+                await session.execute(
+                    delete(KBDocument).where(col(KBDocument.doc_id) == doc_id),
+                )
+        except Exception as exc:
+            logger.warning(
+                f"Failed to roll back document metadata for failed upload "
+                f"(doc_id={doc_id}): {exc}",
+            )
+
+        # 3) media files on disk
+        for media_path in media_paths:
+            try:
+                if media_path.exists():
+                    media_path.unlink()
+            except Exception as me:
+                logger.warning(f"Failed to clean up media file {media_path}: {me}")
+
+        # 4) empty media directory for this doc
+        try:
+            media_dir = self.kb_medias_dir / doc_id
+            if media_dir.exists() and media_dir.is_dir():
+                media_dir.rmdir()
+        except Exception as de:
+            logger.warning(
+                f"Failed to remove media directory after failed upload "
+                f"(doc_id={doc_id}): {de}",
+            )
 
     async def list_documents(
         self,
         offset: int = 0,
         limit: int = 100,
+        search: str | None = None,
     ) -> list[KBDocument]:
-        """列出知识库的所有文档"""
-        docs = await self.kb_db.list_documents_by_kb(self.kb.kb_id, offset, limit)
+        """List documents in the knowledge base.
+
+        Args:
+            offset: Number of documents to skip.
+            limit: Maximum number of documents to return.
+            search: Optional partial match on document name; disabled when None or empty.
+
+        Returns:
+            List of matching KBDocument rows.
+        """
+        docs = await self.kb_db.list_documents_by_kb(
+            self.kb.kb_id,
+            offset,
+            limit,
+            search=search,
+        )
         return docs
+
+    async def count_documents(self, search: str | None = None) -> int:
+        """Count documents in the knowledge base.
+
+        Args:
+            search: Optional partial match on document name; disabled when None or empty.
+
+        Returns:
+            Total number of matching documents.
+        """
+        return await self.kb_db.count_documents_by_kb(self.kb.kb_id, search=search)
 
     async def get_document(self, doc_id: str) -> KBDocument | None:
         """获取单个文档"""
@@ -626,6 +877,8 @@ class KBHelper:
                     final_chunks.append(initial_chunks[i])
                 elif isinstance(result, list):
                     final_chunks.extend(result)
+
+            final_chunks = _compact_chunks(final_chunks)
 
             logger.info(
                 f"文本修复完成: {len(initial_chunks)} 个原始块 -> {len(final_chunks)} 个最终块。"

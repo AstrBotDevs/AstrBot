@@ -2,7 +2,8 @@
   "title": "Let's Chat!",
   "subtitle": "Chat with AI Assistant",
   "input": {
-    "placeholder": "Start typing...",
+    "placeholder": "Ask anything...",
+    "projectPlaceholder": "What should we work on next?",
     "send": "Send",
     "clear": "Clear",
     "upload": "Upload File",
@@ -31,7 +32,7 @@
     "liveMode": "Live Mode"
   },
   "welcome": {
-    "title": "Welcome to AstrBot",
+    "title": "Anything on your mind today?",
     "subtitle": "Your Intelligent Chat Assistant",
     "quickActions": "Quick Actions",
     "examples": "Example Questions"
@@ -39,6 +40,9 @@
   "actions": {
     "copy": "Copy",
     "regenerate": "Regenerate",
+    "retry": "Retry",
+    "retryWithModel": "Use another model",
+    "noAvailableModels": "No available models",
     "like": "Like",
     "dislike": "Dislike",
     "share": "Share",
@@ -48,7 +52,7 @@
     "fullscreen": "Fullscreen Mode",
     "exitFullscreen": "Exit Fullscreen",
     "reply": "Reply",
-    "providerConfig": "AI Configuration",
+    "providerConfig": "Model Configuration",
     "toolsUsed": "Tool Used",
     "toolCallUsed": "Used {name} tool",
     "pythonCodeAnalysis": "Python Code Analysis Used"
@@ -56,7 +60,21 @@
   "ipython": {
     "output": "Output"
   },
+  "toolStatus": {
+    "done": "Done",
+    "running": "Running"
+  },
+  "thread": {
+    "title": "Thread",
+    "askInThread": "Ask in thread",
+    "count": "{count} threads",
+    "createFailed": "Failed to create thread",
+    "delete": "Delete thread",
+    "confirmDelete": "Delete this thread? This action cannot be undone.",
+    "placeholder": "Ask about this excerpt..."
+  },
   "conversation": {
+    "title": "Conversations",
     "newConversation": "New Conversation",
     "noHistory": "No conversation history",
     "systemStatus": "System Status",
@@ -97,7 +115,12 @@
     "title": "Config"
   },
   "reasoning": {
-    "thinking": "Thinking Process"
+    "thinking": "Thinking Process",
+    "summarySeparator": ", ",
+    "thinkSummary": "Thought {count} times",
+    "toolSummary": "used {count} tools",
+    "think": "Thinking",
+    "toolUsed": "Using Tool"
   },
   "reply": {
     "replyTo": "Reply to",
@@ -110,8 +133,35 @@
     "name": "Project Name",
     "emoji": "Icon (Emoji)",
     "description": "Description (Optional)",
+    "workspace": {
+      "type": "Workspace",
+      "session": "Per-session workspace",
+      "project": "Shared project workspace",
+      "custom": "Custom path",
+      "path": "Workspace path"
+    },
+    "loadingSessions": "Loading conversations...",
     "noSessions": "No conversations in this project",
+    "noProjects": "No projects",
     "confirmDelete": "Are you sure you want to delete project \"{title}\"? Conversations in this project will not be deleted."
+  },
+  "workspaceFiles": {
+    "title": "Workspace Files",
+    "open": "Open workspace files",
+    "close": "Close workspace files",
+    "refresh": "Refresh file tree",
+    "filter": "Filter files...",
+    "clearFilter": "Clear file filter",
+    "empty": "This workspace is empty",
+    "noMatches": "No matching files",
+    "loadFailed": "Failed to load workspace files",
+    "previewFailed": "Failed to read this file",
+    "tooLarge": "This file is too large to preview",
+    "download": "Download file",
+    "downloadFailed": "Failed to download this file",
+    "dialogPreview": "Open larger preview",
+    "closePreview": "Close file preview",
+    "closeDialogPreview": "Close larger preview"
   },
   "time": {
     "today": "Today",
@@ -119,11 +169,14 @@
   },
   "stats": {
     "tokens": "Tokens",
-    "inputTokens": "Input Tokens",
+    "inputTokens": "Input (other)",
     "outputTokens": "Output Tokens",
-    "cachedTokens": "Cached Tokens",
+    "cachedTokens": "Input (cached)",
     "duration": "Duration",
     "ttft": "Time to First Token"
+  },
+  "tokenUsage": {
+    "tooltip": "{used} / {limit} tokens ({percent}%)"
   },
   "refs": {
     "title": "References",
@@ -144,6 +197,11 @@
       "failed": "Connection failed, please refresh the page"
     }
   },
+  "commandSuggestion": {
+    "navigate": "Navigate",
+    "select": "Select",
+    "close": "Close"
+  },
   "errors": {
     "sendMessageFailed": "Failed to send message, please try again",
     "createSessionFailed": "Failed to create session, please refresh the page"
@@ -158,4 +216,4 @@
     "partialFailure": "{failed} of {total} conversations failed to delete",
     "requestFailed": "Failed to delete conversations. Please try again."
   }
-} 
+}

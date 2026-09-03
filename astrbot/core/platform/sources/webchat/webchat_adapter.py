@@ -1,7 +1,6 @@
 import asyncio
 import os
 import time
-import uuid
 from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any
@@ -25,6 +24,7 @@ from .message_parts_helper import (
     message_chain_to_storage_message_parts,
     parse_webchat_message_parts,
 )
+from .request_flags import resolve_webchat_request_flags
 from .webchat_event import WebChatMessageEvent
 from .webchat_queue_mgr import WebChatQueueMgr, webchat_queue_mgr
 
@@ -92,32 +92,37 @@ class WebChatAdapter(Platform):
         active_request_ids = self._webchat_queue_mgr.list_back_request_ids(
             conversation_id
         )
-        subscription_request_ids = [
-            req_id for req_id in active_request_ids if req_id.startswith("ws_sub_")
+        stream_request_ids = [
+            req_id for req_id in active_request_ids if not req_id.startswith("ws_sub_")
         ]
-        target_request_ids = subscription_request_ids or active_request_ids
+        target_request_ids = stream_request_ids or active_request_ids
 
-        if target_request_ids:
-            for request_id in target_request_ids:
-                await WebChatMessageEvent._send(
-                    request_id,
-                    message_chain,
-                    session.session_id,
+        if not target_request_ids:
+            # No active streams to consume this proactive message.
+            # Persist directly and return to avoid creating an unused queue.
+            try:
+                await self._save_proactive_message(conversation_id, message_chain)
+            except Exception as e:
+                logger.error(
+                    f"[WebChatAdapter] Failed to save proactive message: {e}",
+                    exc_info=True,
                 )
-        else:
-            message_id = f"active_{uuid.uuid4()!s}"
+            await super().send_by_session(session, message_chain)
+            return
+
+        for request_id in target_request_ids:
             await WebChatMessageEvent._send(
-                message_id,
+                request_id,
                 message_chain,
                 session.session_id,
+                streaming=True,
+                emit_complete=True,
             )
 
-        should_persist = (
-            bool(subscription_request_ids)
-            or not active_request_ids
-            or all(req_id.startswith("active_") for req_id in active_request_ids)
-        )
-        if should_persist:
+        # If only passive subscription queues exist for this conversation,
+        # keep a proactive save as a fallback since they are not tied to
+        # the normal streaming persistence path.
+        if not stream_request_ids:
             try:
                 await self._save_proactive_message(conversation_id, message_chain)
             except Exception as e:
@@ -231,7 +236,15 @@ class WebChatAdapter(Platform):
     def meta(self) -> PlatformMetadata:
         return self.metadata
 
-    async def handle_msg(self, message: AstrBotMessage) -> None:
+    def create_event(self, message: AstrBotMessage) -> WebChatMessageEvent:
+        """Creates a WebChat message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created WebChat message event.
+        """
         message_event = WebChatMessageEvent(
             message_str=message.message_str,
             message_obj=message,
@@ -239,15 +252,36 @@ class WebChatAdapter(Platform):
             session_id=message.session_id,
         )
 
-        _, _, payload = message.raw_message  # type: ignore
-        message_event.set_extra("selected_provider", payload.get("selected_provider"))
-        message_event.set_extra("selected_model", payload.get("selected_model"))
-        message_event.set_extra(
-            "enable_streaming", payload.get("enable_streaming", True)
-        )
-        message_event.set_extra("action_type", payload.get("action_type"))
+        raw_message = getattr(message, "raw_message", None)
+        if isinstance(raw_message, tuple) and len(raw_message) >= 3:
+            payload = raw_message[2]
+            if isinstance(payload, dict):
+                flags = resolve_webchat_request_flags(payload)
+                message_event.set_extra("flags", flags)
+                for key, value in flags.items():
+                    message_event.set_extra(key, value)
+                message_event.set_extra(
+                    "selected_provider", payload.get("selected_provider")
+                )
+                message_event.set_extra("selected_model", payload.get("selected_model"))
+                message_event.set_extra("action_type", payload.get("action_type"))
+                message_event.set_extra(
+                    "llm_checkpoint_id", payload.get("llm_checkpoint_id")
+                )
+                message_event.set_extra(
+                    "thread_selected_text", payload.get("thread_selected_text")
+                )
+                api_key_allow_admin_role = payload.get("_api_key_allow_admin_role")
+                if isinstance(api_key_allow_admin_role, bool):
+                    message_event.set_extra(
+                        "_api_key_allow_admin_role",
+                        api_key_allow_admin_role,
+                    )
 
-        self.commit_event(message_event)
+        return message_event
+
+    async def handle_msg(self, message: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(message))
 
     async def terminate(self) -> None:
         self._shutdown_event.set()

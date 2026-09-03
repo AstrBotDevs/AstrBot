@@ -1,6 +1,9 @@
 import asyncio
+import json
+import ntpath
 import threading
-from unittest.mock import AsyncMock
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -8,6 +11,15 @@ from astrbot.core.utils import core_constraints as core_constraints_module
 from astrbot.core.utils import pip_installer as pip_installer_module
 from astrbot.core.utils import requirements_utils
 from astrbot.core.utils.pip_installer import PipInstaller
+
+WINDOWS_RUNTIME_ROOT = ntpath.join(r"C:\astrbot-test", "backend", "python")
+WINDOWS_RUNTIME_EXECUTABLE = ntpath.join(WINDOWS_RUNTIME_ROOT, "python.exe")
+WINDOWS_PACKAGED_RUNTIME_EXECUTABLE = f"\\\\?\\{WINDOWS_RUNTIME_EXECUTABLE}"
+WINDOWS_RUNTIME_INCLUDE_DIR = ntpath.join(WINDOWS_RUNTIME_ROOT, "include")
+WINDOWS_RUNTIME_LIBS_DIR = ntpath.join(WINDOWS_RUNTIME_ROOT, "libs")
+EXISTING_WINDOWS_INCLUDE_DIR = ntpath.join(r"C:\toolchain", "include")
+EXISTING_WINDOWS_LIB_DIR = ntpath.join(r"C:\toolchain", "lib")
+_ENV_MISSING = object()
 
 
 def _make_run_pip_mock(
@@ -22,6 +34,64 @@ def _make_run_pip_mock(
         return code
 
     return AsyncMock(side_effect=run_pip)
+
+
+def _configure_run_pip_in_process_capture(
+    monkeypatch,
+    *,
+    platform: str,
+    packaged_runtime: bool,
+    runtime_executable: str = WINDOWS_PACKAGED_RUNTIME_EXECUTABLE,
+    include_value: str | object = _ENV_MISSING,
+    lib_value: str | object = _ENV_MISSING,
+    existing_runtime_dirs: set[str] | None = None,
+) -> dict[str, str | None]:
+    observed_env: dict[str, str | None] = {}
+
+    def fake_pip_main(args):
+        del args
+        observed_env["INCLUDE"] = pip_installer_module.os.environ.get("INCLUDE")
+        observed_env["LIB"] = pip_installer_module.os.environ.get("LIB")
+        return 0
+
+    if packaged_runtime:
+        monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
+    else:
+        monkeypatch.delenv("ASTRBOT_DESKTOP_CLIENT", raising=False)
+
+    if include_value is _ENV_MISSING:
+        monkeypatch.delenv("INCLUDE", raising=False)
+    else:
+        monkeypatch.setenv("INCLUDE", include_value)
+
+    if lib_value is _ENV_MISSING:
+        monkeypatch.delenv("LIB", raising=False)
+    else:
+        monkeypatch.setenv("LIB", lib_value)
+
+    monkeypatch.setattr(pip_installer_module.sys, "platform", platform)
+    monkeypatch.setattr(pip_installer_module.sys, "executable", runtime_executable)
+
+    if existing_runtime_dirs is not None:
+        monkeypatch.setattr(
+            pip_installer_module.os.path,
+            "isdir",
+            lambda path: path in existing_runtime_dirs,
+        )
+
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer._get_pip_main",
+        lambda: fake_pip_main,
+    )
+    return observed_env
+
+
+@pytest.fixture
+def configure_run_pip_in_process_capture(monkeypatch):
+    def _configure(**kwargs):
+        return _configure_run_pip_in_process_capture(monkeypatch, **kwargs)
+
+    return _configure
 
 
 @pytest.mark.asyncio
@@ -58,6 +128,58 @@ async def test_install_targets_site_packages_for_desktop_client(monkeypatch, tmp
     assert str(site_packages_path) in recorded_args
     assert prepend_sys_path_calls == [str(site_packages_path), str(site_packages_path)]
     assert ensure_preferred_calls == [(str(site_packages_path), {"demo-package"})]
+
+
+@pytest.mark.asyncio
+async def test_install_keeps_target_upgrade_enabled_by_default_for_desktop_client(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
+    monkeypatch.delattr("sys.frozen", raising=False)
+
+    site_packages_path = tmp_path / "site-packages"
+    run_pip = _make_run_pip_mock()
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer.get_astrbot_site_packages_path",
+        lambda: str(site_packages_path),
+    )
+
+    installer = PipInstaller("")
+    await installer.install(package_name="demo-package")
+
+    recorded_args = run_pip.await_args_list[0].args[0]
+
+    assert "--target" in recorded_args
+    assert "--upgrade" in recorded_args
+    assert "--upgrade-strategy" in recorded_args
+
+
+@pytest.mark.asyncio
+async def test_install_skips_target_upgrade_when_disabled_for_desktop_client(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
+    monkeypatch.delattr("sys.frozen", raising=False)
+
+    site_packages_path = tmp_path / "site-packages"
+    run_pip = _make_run_pip_mock()
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer.get_astrbot_site_packages_path",
+        lambda: str(site_packages_path),
+    )
+
+    installer = PipInstaller("")
+    await installer.install(package_name="demo-package", allow_target_upgrade=False)
+
+    recorded_args = run_pip.await_args_list[0].args[0]
+
+    assert "--target" in recorded_args
+    assert "--upgrade" not in recorded_args
+    assert "--upgrade-strategy" not in recorded_args
 
 
 @pytest.mark.asyncio
@@ -226,6 +348,316 @@ async def test_run_pip_in_process_normalizes_crlf_without_extra_blank_lines(
     ]
 
 
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        (
+            WINDOWS_RUNTIME_EXECUTABLE,
+            WINDOWS_RUNTIME_EXECUTABLE,
+        ),
+        (
+            WINDOWS_PACKAGED_RUNTIME_EXECUTABLE,
+            WINDOWS_RUNTIME_EXECUTABLE,
+        ),
+        (
+            f"\\??\\{WINDOWS_RUNTIME_EXECUTABLE}",
+            WINDOWS_RUNTIME_EXECUTABLE,
+        ),
+        (
+            r"\\?\UNC\server\share\include",
+            r"\\server\share\include",
+        ),
+        (
+            r"\??\UNC\server\share\libs",
+            r"\\server\share\libs",
+        ),
+        (
+            r"\\server\share\include",
+            r"\\server\share\include",
+        ),
+        (
+            "C:/astrbot-test/backend/python/libs",
+            WINDOWS_RUNTIME_LIBS_DIR,
+        ),
+    ],
+)
+def test_normalize_windows_native_build_path_variants(path, expected):
+    assert pip_installer_module._normalize_windows_native_build_path(path) == expected
+
+
+def test_temporary_environ_restores_previous_values(monkeypatch):
+    monkeypatch.setenv("INCLUDE", EXISTING_WINDOWS_INCLUDE_DIR)
+    monkeypatch.delenv("LIB", raising=False)
+
+    with pip_installer_module._temporary_environ(
+        {
+            "INCLUDE": WINDOWS_RUNTIME_INCLUDE_DIR,
+            "LIB": WINDOWS_RUNTIME_LIBS_DIR,
+        }
+    ):
+        assert pip_installer_module.os.environ["INCLUDE"] == WINDOWS_RUNTIME_INCLUDE_DIR
+        assert pip_installer_module.os.environ["LIB"] == WINDOWS_RUNTIME_LIBS_DIR
+
+    assert pip_installer_module.os.environ["INCLUDE"] == EXISTING_WINDOWS_INCLUDE_DIR
+    assert "LIB" not in pip_installer_module.os.environ
+
+
+def test_build_packaged_windows_runtime_build_env_uses_base_env_snapshot(
+    monkeypatch,
+):
+    snapshot_include = ntpath.join(r"C:\snapshot-toolchain", "include")
+    snapshot_lib = ntpath.join(r"C:\snapshot-toolchain", "lib")
+    process_include = ntpath.join(r"C:\process-toolchain", "include")
+    process_lib = ntpath.join(r"C:\process-toolchain", "lib")
+
+    monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
+    monkeypatch.setenv("INCLUDE", process_include)
+    monkeypatch.setenv("LIB", process_lib)
+    monkeypatch.setattr(pip_installer_module.sys, "platform", "win32")
+    monkeypatch.setattr(
+        pip_installer_module.sys,
+        "executable",
+        WINDOWS_PACKAGED_RUNTIME_EXECUTABLE,
+    )
+    monkeypatch.setattr(
+        pip_installer_module.os.path,
+        "isdir",
+        lambda path: path in {WINDOWS_RUNTIME_INCLUDE_DIR, WINDOWS_RUNTIME_LIBS_DIR},
+    )
+
+    env_updates = pip_installer_module._build_packaged_windows_runtime_build_env(
+        base_env={
+            "INCLUDE": snapshot_include,
+            "LIB": snapshot_lib,
+        }
+    )
+
+    assert env_updates == {
+        "INCLUDE": f"{WINDOWS_RUNTIME_INCLUDE_DIR};{snapshot_include}",
+        "LIB": f"{WINDOWS_RUNTIME_LIBS_DIR};{snapshot_lib}",
+    }
+
+
+def test_build_packaged_windows_runtime_build_env_matches_snapshot_keys_case_insensitively(
+    monkeypatch,
+):
+    snapshot_include = ntpath.join(r"C:\snapshot-toolchain", "include")
+    snapshot_lib = ntpath.join(r"C:\snapshot-toolchain", "lib")
+
+    monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
+    monkeypatch.setattr(pip_installer_module.sys, "platform", "win32")
+    monkeypatch.setattr(
+        pip_installer_module.sys,
+        "executable",
+        WINDOWS_PACKAGED_RUNTIME_EXECUTABLE,
+    )
+    monkeypatch.setattr(
+        pip_installer_module.os.path,
+        "isdir",
+        lambda path: path in {WINDOWS_RUNTIME_INCLUDE_DIR, WINDOWS_RUNTIME_LIBS_DIR},
+    )
+
+    env_updates = pip_installer_module._build_packaged_windows_runtime_build_env(
+        base_env={
+            "include": snapshot_include,
+            "lib": snapshot_lib,
+        }
+    )
+
+    assert env_updates == {
+        "INCLUDE": f"{WINDOWS_RUNTIME_INCLUDE_DIR};{snapshot_include}",
+        "LIB": f"{WINDOWS_RUNTIME_LIBS_DIR};{snapshot_lib}",
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("include_exists", "libs_exists"),
+    [
+        (True, True),
+        (True, False),
+        (False, True),
+    ],
+)
+async def test_run_pip_in_process_injects_windows_runtime_build_env(
+    configure_run_pip_in_process_capture, include_exists, libs_exists
+):
+    existing_runtime_dirs = set()
+    if include_exists:
+        existing_runtime_dirs.add(WINDOWS_RUNTIME_INCLUDE_DIR)
+    if libs_exists:
+        existing_runtime_dirs.add(WINDOWS_RUNTIME_LIBS_DIR)
+
+    observed_env = configure_run_pip_in_process_capture(
+        platform="win32",
+        packaged_runtime=True,
+        include_value=EXISTING_WINDOWS_INCLUDE_DIR,
+        lib_value=EXISTING_WINDOWS_LIB_DIR,
+        existing_runtime_dirs=existing_runtime_dirs,
+    )
+
+    installer = PipInstaller("")
+    result = await installer._run_pip_in_process(["install", "demo-package"])
+
+    assert result == 0
+    expected_include = EXISTING_WINDOWS_INCLUDE_DIR
+    expected_lib = EXISTING_WINDOWS_LIB_DIR
+    if include_exists:
+        expected_include = (
+            f"{WINDOWS_RUNTIME_INCLUDE_DIR};{EXISTING_WINDOWS_INCLUDE_DIR}"
+        )
+    if libs_exists:
+        expected_lib = f"{WINDOWS_RUNTIME_LIBS_DIR};{EXISTING_WINDOWS_LIB_DIR}"
+    assert observed_env == {"INCLUDE": expected_include, "LIB": expected_lib}
+    assert pip_installer_module.os.environ["INCLUDE"] == EXISTING_WINDOWS_INCLUDE_DIR
+    assert pip_installer_module.os.environ["LIB"] == EXISTING_WINDOWS_LIB_DIR
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("include_exists", "libs_exists"),
+    [
+        (True, True),
+        (True, False),
+        (False, True),
+    ],
+)
+async def test_run_pip_in_process_injects_windows_runtime_build_env_without_existing_paths(
+    configure_run_pip_in_process_capture, include_exists, libs_exists
+):
+    existing_runtime_dirs = set()
+    if include_exists:
+        existing_runtime_dirs.add(WINDOWS_RUNTIME_INCLUDE_DIR)
+    if libs_exists:
+        existing_runtime_dirs.add(WINDOWS_RUNTIME_LIBS_DIR)
+
+    observed_env = configure_run_pip_in_process_capture(
+        platform="win32",
+        packaged_runtime=True,
+        existing_runtime_dirs=existing_runtime_dirs,
+    )
+
+    installer = PipInstaller("")
+    result = await installer._run_pip_in_process(["install", "demo-package"])
+
+    assert result == 0
+    assert observed_env == {
+        "INCLUDE": WINDOWS_RUNTIME_INCLUDE_DIR if include_exists else None,
+        "LIB": WINDOWS_RUNTIME_LIBS_DIR if libs_exists else None,
+    }
+    if include_exists:
+        assert ";" not in observed_env["INCLUDE"]
+    if libs_exists:
+        assert ";" not in observed_env["LIB"]
+    assert "INCLUDE" not in pip_installer_module.os.environ
+    assert "LIB" not in pip_installer_module.os.environ
+
+
+@pytest.mark.asyncio
+async def test_run_pip_in_process_does_not_inject_when_runtime_dirs_missing(
+    configure_run_pip_in_process_capture,
+):
+    observed_env = configure_run_pip_in_process_capture(
+        platform="win32",
+        packaged_runtime=True,
+        include_value=EXISTING_WINDOWS_INCLUDE_DIR,
+        lib_value=EXISTING_WINDOWS_LIB_DIR,
+        existing_runtime_dirs=set(),
+    )
+
+    installer = PipInstaller("")
+    result = await installer._run_pip_in_process(["install", "demo-package"])
+
+    assert result == 0
+    assert observed_env == {
+        "INCLUDE": EXISTING_WINDOWS_INCLUDE_DIR,
+        "LIB": EXISTING_WINDOWS_LIB_DIR,
+    }
+    assert pip_installer_module.os.environ["INCLUDE"] == EXISTING_WINDOWS_INCLUDE_DIR
+    assert pip_installer_module.os.environ["LIB"] == EXISTING_WINDOWS_LIB_DIR
+
+
+@pytest.mark.asyncio
+async def test_run_pip_in_process_uses_latest_env_when_building_runtime_paths(
+    monkeypatch,
+    configure_run_pip_in_process_capture,
+):
+    updated_include = ntpath.join(r"C:\new-toolchain", "include")
+    updated_lib = ntpath.join(r"C:\new-toolchain", "lib")
+    observed_env = configure_run_pip_in_process_capture(
+        platform="win32",
+        packaged_runtime=True,
+        include_value=EXISTING_WINDOWS_INCLUDE_DIR,
+        lib_value=EXISTING_WINDOWS_LIB_DIR,
+        existing_runtime_dirs={
+            WINDOWS_RUNTIME_INCLUDE_DIR,
+            WINDOWS_RUNTIME_LIBS_DIR,
+        },
+    )
+
+    async def fake_to_thread(func, *args):
+        pip_installer_module.os.environ["INCLUDE"] = updated_include
+        pip_installer_module.os.environ["LIB"] = updated_lib
+        return func(*args)
+
+    monkeypatch.setattr(pip_installer_module.asyncio, "to_thread", fake_to_thread)
+
+    installer = PipInstaller("")
+    result = await installer._run_pip_in_process(["install", "demo-package"])
+
+    assert result == 0
+    assert observed_env == {
+        "INCLUDE": f"{WINDOWS_RUNTIME_INCLUDE_DIR};{updated_include}",
+        "LIB": f"{WINDOWS_RUNTIME_LIBS_DIR};{updated_lib}",
+    }
+    assert pip_installer_module.os.environ["INCLUDE"] == updated_include
+    assert pip_installer_module.os.environ["LIB"] == updated_lib
+
+
+@pytest.mark.asyncio
+async def test_run_pip_in_process_does_not_modify_env_on_non_windows(
+    configure_run_pip_in_process_capture,
+):
+    existing_include = "/toolchain/include"
+    existing_lib = "/toolchain/lib"
+    observed_env = configure_run_pip_in_process_capture(
+        platform="linux",
+        packaged_runtime=True,
+        include_value=existing_include,
+        lib_value=existing_lib,
+    )
+
+    installer = PipInstaller("")
+    result = await installer._run_pip_in_process(["install", "demo-package"])
+
+    assert result == 0
+    assert observed_env == {"INCLUDE": existing_include, "LIB": existing_lib}
+    assert pip_installer_module.os.environ["INCLUDE"] == existing_include
+    assert pip_installer_module.os.environ["LIB"] == existing_lib
+
+
+@pytest.mark.asyncio
+async def test_run_pip_in_process_does_not_inject_env_when_not_packaged(
+    configure_run_pip_in_process_capture,
+):
+    observed_env = configure_run_pip_in_process_capture(
+        platform="win32",
+        packaged_runtime=False,
+        existing_runtime_dirs={
+            WINDOWS_RUNTIME_INCLUDE_DIR,
+            WINDOWS_RUNTIME_LIBS_DIR,
+        },
+    )
+
+    installer = PipInstaller("")
+    result = await installer._run_pip_in_process(["install", "demo-package"])
+
+    assert result == 0
+    assert observed_env == {"INCLUDE": None, "LIB": None}
+    assert "INCLUDE" not in pip_installer_module.os.environ
+    assert "LIB" not in pip_installer_module.os.environ
+
+
 @pytest.mark.asyncio
 async def test_run_pip_in_process_classifies_nonstandard_conflict_output(monkeypatch):
     def fake_pip_main(args):
@@ -267,7 +699,10 @@ async def test_install_raises_dedicated_pip_install_error_on_non_conflict_failur
 
     installer = PipInstaller("")
 
-    with pytest.raises(pip_installer_module.PipInstallError, match="错误码：2"):
+    with pytest.raises(
+        pip_installer_module.PipInstallError,
+        match="error code 2",
+    ):
         await installer.install(package_name="demo-package")
 
 
@@ -283,7 +718,10 @@ async def test_run_pip_with_classification_raises_install_error_on_non_conflict_
 
     installer = PipInstaller("")
 
-    with pytest.raises(pip_installer_module.PipInstallError, match="错误码：3"):
+    with pytest.raises(
+        pip_installer_module.PipInstallError,
+        match="error code 3",
+    ):
         await installer._run_pip_with_classification(["install", "demo-package"])
 
 
@@ -629,6 +1067,100 @@ def test_core_constraints_file_propagates_inner_conflict_without_fake_warning(
             raise conflict
 
     assert warning_logs == []
+
+
+@pytest.mark.asyncio
+async def test_install_adds_desktop_core_lock_constraints_for_packaged_runtime(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
+    monkeypatch.delattr("sys.frozen", raising=False)
+
+    lock_path = tmp_path / "runtime-core-lock.json"
+    lock_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "distributions": [
+                    {
+                        "name": "desktop-only-core",
+                        "version": "9.9.9",
+                        "top_level_modules": ["desktop_only_core"],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ASTRBOT_DESKTOP_CORE_LOCK_PATH", str(lock_path))
+
+    site_packages_path = tmp_path / "site-packages"
+    captured_constraints = []
+
+    async def capture_pip_args(self, args):
+        del self
+        constraints_path = args[args.index("-c") + 1]
+        captured_constraints.append(Path(constraints_path).read_text(encoding="utf-8"))
+        return 0
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", capture_pip_args)
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer.get_astrbot_site_packages_path",
+        lambda: str(site_packages_path),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer._ensure_plugin_dependencies_preferred",
+        lambda path, requirements: None,
+    )
+
+    installer = PipInstaller("")
+    await installer.install(package_name="Cua")
+
+    assert captured_constraints
+    assert "desktop-only-core==9.9.9" in captured_constraints[0]
+
+
+def test_ensure_plugin_dependencies_preferred_skips_desktop_core_lock_modules(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
+    lock_path = tmp_path / "runtime-core-lock.json"
+    lock_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "distributions": [
+                    {
+                        "name": "openai",
+                        "version": "2.32.0",
+                        "top_level_modules": ["openai"],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ASTRBOT_DESKTOP_CORE_LOCK_PATH", str(lock_path))
+
+    preferred_calls = []
+
+    monkeypatch.setattr(
+        pip_installer_module,
+        "_collect_candidate_modules",
+        lambda requirements, site_packages_path: {"openai", "cua_agent"},
+    )
+    monkeypatch.setattr(
+        pip_installer_module,
+        "_ensure_preferred_modules",
+        lambda modules, site_packages_path: preferred_calls.append(modules),
+    )
+
+    pip_installer_module._ensure_plugin_dependencies_preferred(
+        str(tmp_path / "site-packages"),
+        {"Cua"},
+    )
+
+    assert preferred_calls == [{"cua_agent"}]
 
 
 def test_iter_requirement_lines_expands_nested_requirement_files(tmp_path):
@@ -1301,7 +1833,9 @@ async def test_install_logs_redacted_pip_argv_when_credentials_present(monkeypat
         package_name="--index-url https://user:secret@example.com/simple demo-package"
     )
 
-    argv_logs = [line for line in logged_lines if line.startswith("Pip 包管理器 argv:")]
+    argv_logs = [
+        line for line in logged_lines if line.startswith("Pip package manager argv:")
+    ]
 
     assert len(argv_logs) == 1
     assert "secret" not in argv_logs[0]
@@ -1342,3 +1876,100 @@ async def test_install_adds_aliyun_trusted_host_only_for_aliyun_index(monkeypatc
     assert "https://mirrors.aliyun.com/simple" in recorded_args
     trusted_host_index = recorded_args.index("--trusted-host")
     assert recorded_args[trusted_host_index + 1] == "mirrors.aliyun.com"
+
+
+# ---------------------------------------------------------------------------
+# _has_loaded_c_extension 回归测试
+# ---------------------------------------------------------------------------
+
+
+def _make_fake_module(filepath):
+    """构造一个具有 __file__ 属性的假模块对象。"""
+    mod = MagicMock()
+    mod.__file__ = filepath
+    return mod
+
+
+def _set_modules(monkeypatch, modules: dict):
+    """用 dict 替换 pip_installer 所见到的 sys.modules。"""
+    monkeypatch.setattr(pip_installer_module, "sys", MagicMock(modules=dict(modules)))
+
+
+class TestHasLoadedCExtension:
+    """覆盖 _has_loaded_c_extension 的核心场景。"""
+
+    # ── C 扩展检测 ──
+
+    def test_detects_pyd_extension(self, monkeypatch):
+        """已加载子模块的 __file__ 为 .pyd 时应返回 True。"""
+        _set_modules(monkeypatch, {
+            "pikepdf": _make_fake_module("/site-packages/pikepdf/__init__.py"),
+            "pikepdf._core": _make_fake_module("/site-packages/pikepdf/_core.pyd"),
+        })
+        assert pip_installer_module._has_loaded_c_extension("pikepdf") is True
+
+    def test_detects_so_extension(self, monkeypatch):
+        """已加载子模块的 __file__ 为 .so 时应返回 True。"""
+        _set_modules(monkeypatch, {
+            "pikepdf": _make_fake_module("/site-packages/pikepdf/__init__.py"),
+            "pikepdf._core": _make_fake_module("/site-packages/pikepdf/_core.cpython-311-x86_64-linux-gnu.so"),
+        })
+        assert pip_installer_module._has_loaded_c_extension("pikepdf") is True
+
+    def test_detects_extension_case_insensitive(self, monkeypatch):
+        """后缀比较应忽略大小写（.PYD / .SO 也视为 C 扩展）。"""
+        _set_modules(monkeypatch, {
+            "pikepdf": _make_fake_module("/site-packages/pikepdf/__init__.py"),
+            "pikepdf._core": _make_fake_module("/site-packages/pikepdf/_core.PYD"),
+        })
+        assert pip_installer_module._has_loaded_c_extension("pikepdf") is True
+
+    # ── 纯 Python 不受影响 ──
+
+    def test_returns_false_for_pure_python(self, monkeypatch):
+        """不含任何 C 扩展时应返回 False，保留原重载路径。"""
+        _set_modules(monkeypatch, {
+            "img2pdf": _make_fake_module("/site-packages/img2pdf/__init__.py"),
+            "img2pdf.core": _make_fake_module("/site-packages/img2pdf/core.py"),
+        })
+        assert pip_installer_module._has_loaded_c_extension("img2pdf") is False
+
+    def test_module_not_in_sys_modules(self, monkeypatch):
+        """目标模块未加载时返回 False。"""
+        _set_modules(monkeypatch, {"unrelated": _make_fake_module("/.../something.py")})
+        assert pip_installer_module._has_loaded_c_extension("not_loaded") is False
+
+    # ── 边界情况 ──
+
+    def test_file_is_none(self, monkeypatch):
+        """__file__ 为 None 时应安全返回 False。"""
+        mod = MagicMock()
+        mod.__file__ = None
+        _set_modules(monkeypatch, {"foo": mod})
+        assert pip_installer_module._has_loaded_c_extension("foo") is False
+
+    def test_file_attribute_missing(self, monkeypatch):
+        """模块没有 __file__ 属性时应安全返回 False。"""
+        mod = MagicMock(spec=[])
+        _set_modules(monkeypatch, {"foo": mod})
+        assert pip_installer_module._has_loaded_c_extension("foo") is False
+
+    def test_no_matching_keys(self, monkeypatch):
+        """sys.modules 键名完全不匹配时返回 False。"""
+        _set_modules(monkeypatch, {
+            "other": _make_fake_module("/.../other.pyd"),
+        })
+        assert pip_installer_module._has_loaded_c_extension("target") is False
+
+    def test_extension_in_parent_not_submodule(self, monkeypatch):
+        """C 扩展不在 target 的子树下时不触发。"""
+        _set_modules(monkeypatch, {
+            "other.core": _make_fake_module("/.../core.pyd"),
+            "target": _make_fake_module("/.../target/__init__.py"),
+        })
+        assert pip_installer_module._has_loaded_c_extension("target") is False
+
+    def test_empty_sys_modules(self, monkeypatch):
+        """sys.modules 为空时安全返回 False。"""
+        _set_modules(monkeypatch, {})
+        assert pip_installer_module._has_loaded_c_extension("anything") is False

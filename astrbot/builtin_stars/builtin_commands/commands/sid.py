@@ -18,19 +18,19 @@ class SIDCommand:
         umo_msg_type = event.session.message_type.value
         umo_session_id = event.session.session_id
         ret = (
-            f"UMO: 「{sid}」 此值可用于设置白名单。\n"
-            f"UID: 「{user_id}」 此值可用于设置管理员。\n"
-            f"消息会话来源信息:\n"
-            f"  机器人 ID: 「{umo_platform}」\n"
-            f"  消息类型: 「{umo_msg_type}」\n"
-            f"  会话 ID: 「{umo_session_id}」\n"
-            f"消息来源可用于配置机器人的配置文件路由。"
+            f"UMO: 「{sid}」\n"
+            f"UID: 「{user_id}」\n"
+            "*Use UMO to set whitelist and configure routing, use UID to set admin list(UMO 可用于设置白名单和配置文件路由，UID 可用于设置管理员列表)\n\n"
+            f"Your session information:\n"
+            f"Bot ID: 「{umo_platform}」\n"
+            f"Message Type: 「{umo_msg_type}」\n"
+            f"Session ID: 「{umo_session_id}」\n\n"
         )
 
         if (
             self.context.get_config()["platform_settings"]["unique_session"]
             and event.get_group_id()
         ):
-            ret += f"\n\n当前处于独立会话模式, 此群 ID: 「{event.get_group_id()}」, 也可将此 ID 加入白名单来放行整个群聊。"
+            ret += f"\n\nThe group's ID: 「{event.get_group_id()}」. Set this ID to whitelist to allow the entire group."
 
         event.set_result(MessageEventResult().message(ret).use_t2i(False))

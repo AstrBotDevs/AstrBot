@@ -23,8 +23,13 @@ class PersonaManager:
     def __init__(self, db_helper: BaseDatabase, acm: AstrBotConfigManager) -> None:
         self.db = db_helper
         self.acm = acm
-        default_ps = acm.default_conf.get("provider_settings", {})
-        self.default_persona: str = default_ps.get("default_personality", "default")
+        default_runner = acm.default_conf.get("agent_runner", {})
+        default_runner_config = default_runner.get("config", {})
+        self.default_persona: str = (
+            default_runner_config.get("persona", {}).get("persona_id", "default")
+            if default_runner.get("runner_type") == "local"
+            else default_runner_config.get("persona_id", "default")
+        )
         self.personas: list[Persona] = []
         self.selected_default_persona: Persona | None = None
 
@@ -35,7 +40,7 @@ class PersonaManager:
     async def initialize(self) -> None:
         self.personas = await self.get_all_personas()
         self.get_v3_persona_data()
-        logger.info(f"已加载 {len(self.personas)} 个人格。")
+        logger.info("Loaded %s personas.", len(self.personas))
 
     async def get_persona(self, persona_id: str):
         """获取指定 persona 的信息"""
@@ -66,9 +71,12 @@ class PersonaManager:
     ) -> Personality:
         """获取默认 persona"""
         cfg = self.acm.get_conf(umo)
-        default_persona_id = cfg.get("provider_settings", {}).get(
-            "default_personality",
-            "default",
+        agent_runner = cfg.get("agent_runner", {})
+        runner_config = agent_runner.get("config", {})
+        default_persona_id = (
+            runner_config.get("persona", {}).get("persona_id", "default")
+            if agent_runner.get("runner_type") == "local"
+            else runner_config.get("persona_id", "default")
         )
         return self.get_persona_v3_by_id(default_persona_id) or DEFAULT_PERSONALITY
 
@@ -107,7 +115,14 @@ class PersonaManager:
             if persona_id == "[%None]":
                 pass
             elif persona_id is None:
-                persona_id = (provider_settings or {}).get("default_personality")
+                cfg = self.acm.get_conf(umo)
+                agent_runner = cfg.get("agent_runner", {})
+                runner_config = agent_runner.get("config", {})
+                persona_id = (
+                    runner_config.get("persona", {}).get("persona_id", "default")
+                    if agent_runner.get("runner_type") == "local"
+                    else runner_config.get("persona_id", "default")
+                )
 
         persona = next(
             (item for item in self.personas_v3 if item["name"] == persona_id),
@@ -239,8 +254,8 @@ class PersonaManager:
         self,
         folder_id: str,
         name: str | None = None,
-        parent_id: str | None = None,
-        description: str | None = None,
+        parent_id: str | None | object = NOT_GIVEN,
+        description: str | None | object = NOT_GIVEN,
         sort_order: int | None = None,
     ) -> PersonaFolder | None:
         """更新文件夹信息"""

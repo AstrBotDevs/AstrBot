@@ -1,4 +1,81 @@
 {
+  "page": {
+    "title": "Settings"
+  },
+  "sections": {
+    "general": {
+      "title": "General"
+    },
+    "appearance": {
+      "title": "Appearance"
+    },
+    "network": {
+      "title": "Network"
+    },
+    "security": {
+      "title": "Security"
+    },
+    "maintenance": {
+      "title": "Maintenance"
+    },
+    "openapi": {
+      "title": "OpenAPI"
+    },
+    "resources": {
+      "title": "About"
+    }
+  },
+  "resources": {
+    "changelog": {
+      "subtitle": "Review changes in the current and previous versions."
+    },
+    "documentation": {
+      "subtitle": "Open the official AstrBot documentation."
+    },
+    "faq": {
+      "subtitle": "Read common questions and troubleshooting notes."
+    },
+    "github": {
+      "subtitle": "Visit the AstrBot GitHub repository."
+    }
+  },
+  "systemConfig": {
+    "restartRequired": "System config saved. Some changes only take effect after restarting AstrBot.",
+    "groups": {
+      "runtime": {
+        "title": "Runtime Basics",
+        "subtitle": "Timezone and externally reachable callback URL."
+      },
+      "network": {
+        "title": "Proxy & Dependency Sources",
+        "subtitle": "Runtime proxy, Python dependency install options, and PyPI source."
+      },
+      "webuiSecurity": {
+        "title": "WebUI Security",
+        "subtitle": "HTTPS, trusted proxy headers, login rate limits, and TOTP."
+      },
+      "logs": {
+        "title": "Logs",
+        "subtitle": "Console logs, file logs, and Trace file logging."
+      },
+      "tempStorage": {
+        "title": "Cache",
+        "subtitle": "Automatic cleanup threshold for the temporary directory."
+      },
+      "t2iRendering": {
+        "title": "Text-to-Image",
+        "subtitle": "Rendering strategy, endpoint, and custom templates for text-to-image."
+      }
+    },
+    "timePreview": {
+      "label": "AstrBot current time"
+    },
+    "messages": {
+      "loadFailed": "Failed to load system config",
+      "saveSuccess": "System config saved",
+      "saveFailed": "Failed to save system config"
+    }
+  },
   "network": {
     "title": "Network",
     "githubProxy": {
@@ -31,17 +108,48 @@
     "restart": {
       "title": "Restart",
       "subtitle": "Restart AstrBot",
+      "confirm": "Restart AstrBot now? The WebUI may be temporarily unavailable during restart.",
       "button": "Restart"
-    },
-    "migration": {
-      "title": "Data Migration to v4.0.0",
-      "subtitle": "If you encounter data compatibility issues, you can manually start the database migration assistant",
-      "button": "Start Migration Assistant"
     },
     "backup": {
       "title": "Backup & Restore",
       "subtitle": "Export or import all AstrBot data for easy migration to a new server",
       "button": "Backup Manager"
+    },
+    "cleanup": {
+      "title": "Log & Cache Cleanup",
+      "subtitle": "Review disk usage for logs and caches, then clean them from the UI without shell commands.",
+      "refresh": "Refresh Usage",
+      "clean": "Clean",
+      "cleanAll": "Clean All",
+      "panel": {
+        "title": "Cleanup Details",
+        "subtitle": "Current usage: {size}"
+      },
+      "fileCount": "{count} files",
+      "confirm": "Clean {target} now?",
+      "targetNames": {
+        "cache": "cache",
+        "logs": "logs",
+        "all": "logs and cache"
+      },
+      "targets": {
+        "cache": {
+          "title": "Cache",
+          "subtitle": "Remove temporary files, plugin market cache, and skill cache.",
+          "button": "Clean Cache"
+        },
+        "logs": {
+          "title": "Logs",
+          "subtitle": "Remove rotated logs and truncate the current active log files.",
+          "button": "Clean Logs"
+        }
+      },
+      "messages": {
+        "statusFailed": "Failed to load storage usage",
+        "cleanupSuccess": "Cleared {count} files and freed {size}",
+        "cleanupFailed": "Cleanup failed"
+      }
     }
   },
   "sidebar": {
@@ -65,8 +173,8 @@
     },
     "export": {
       "title": "Create Backup",
-      "description": "Export all data as a ZIP backup file, including database, knowledge base, config and attachments.",
-      "includes": "Backup includes: Main database, Knowledge bases (metadata + vector index + documents), Config files, Attachment files",
+      "description": "Export all data as a ZIP backup file, including database, knowledge base, config, attachments and skills.",
+      "includes": "Backup includes: Main database, Knowledge bases (metadata + vector index + documents), Config files, Attachment files, Skills",
       "button": "Start Export",
       "processing": "Exporting...",
       "wait": "Please wait, packaging data...",
@@ -106,9 +214,9 @@
         "currentVersion": "Current Version",
         "backupTime": "Backup Time",
         "matchTitle": "✅ Version Match",
-        "matchMessage": "Import will clear and overwrite all existing data, including:\n• Main database (conversations, settings, etc.)\n• Knowledge bases\n• Plugins and plugin data\n• Configuration files\n\nThis action cannot be undone! Do you want to continue?",
+        "matchMessage": "Import will clear and overwrite all existing data, including:\n• Main database (conversations, settings, etc.)\n• Knowledge bases\n• Plugins and plugin data\n• Configuration files\n• Skills\n\nThis action cannot be undone! Do you want to continue?",
         "minorDiffTitle": "⚠️ Version Difference Warning",
-        "minorDiffMessage": "Minor version differences are usually compatible, but there may be some data structure changes.\nImport will clear and overwrite all existing data!\n\nDo you want to continue?",
+        "minorDiffMessage": "Minor version differences can usually be imported, but there may be some data structure changes.\nImport will clear and overwrite all existing data!\n\nDo you want to continue?",
         "majorDiffTitle": "⛔ Cannot Import",
         "majorDiffMessage": "Major version numbers are different. Cross-major-version import may cause data corruption.\nPlease use the same major version of AstrBot for import."
       }
@@ -144,6 +252,25 @@
     },
     "permanentWarning": "Permanent API keys are high risk. Store them securely and use only when necessary.",
     "scopes": "Scopes",
+    "sensitiveSubscope": "Sensitive sub-scope",
+    "chatAdminWarning": "chat:admin lets this API key use configured administrator IDs and perform administrator actions. Grant it only to fully trusted callers.",
+    "createConfirm": "Create an API key with the following scopes?\n\n{scopes}",
+    "sensitiveCreateConfirm": "You are about to create an API key with these high-risk scopes:\n\n{scopes}\n\nThe holder may gain administrator capabilities. Continue?",
+    "scopeDescriptions": {
+      "bot": "Read and manage bot and platform configurations.",
+      "provider": "Read and manage model providers.",
+      "persona": "Read and manage personas.",
+      "im": "Access instant messaging APIs.",
+      "config": "Read and manage system and profile configuration; includes bot and provider.",
+      "editAdmin": "Allow admins_id changes, which may grant administrator privileges.",
+      "chat": "Create sessions, send messages, and manage ChatUI projects.",
+      "chatAdmin": "Allow username to use configured administrator IDs and receive their administrator privileges.",
+      "data": "Access statistics and runtime data.",
+      "file": "Upload and access API files.",
+      "plugin": "Read and manage plugins.",
+      "mcp": "Read and manage MCP servers.",
+      "skill": "Read and manage skills."
+    },
     "create": "Create API Key",
     "revoke": "Revoke",
     "delete": "Delete",

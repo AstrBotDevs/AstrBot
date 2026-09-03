@@ -21,6 +21,9 @@ export function getProviderIcon(type) {
     'nvidia': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/nvidia-color.svg',
     'siliconflow': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/siliconcloud.svg',
     'moonshot': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/kimi.svg',
+    'kimi': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/kimi.svg',
+    'kimi-code': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/kimi.svg',
+    'longcat': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/longcat-color.svg',
     'ppio': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/ppio.svg',
     'dify': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/dify-color.svg',
     "coze": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.66.0/icons/coze.svg",
@@ -30,16 +33,59 @@ export function getProviderIcon(type) {
     'lm_studio': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/lmstudio.svg',
     'fishaudio': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/fishaudio.svg',
     'minimax': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/minimax.svg',
+    'minimax-token-plan': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/minimax.svg',
+    'mimo': 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/xiaomi.svg',
+    'xiaomi': 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/xiaomi.svg',
+    'xiaomi-token-plan': 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/xiaomi.svg',
     '302ai': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.53.0/icons/ai302-color.svg',
     'microsoft': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/microsoft.svg',
     'vllm': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/vllm.svg',
     'groq': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/groq.svg',
     'aihubmix': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/aihubmix-color.svg',
     'openrouter': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openrouter.svg',
+    'ssycloud': 'https://admin.shengsuanyun.com/assets/logo-BoujJhP-.png',
     "tokenpony": "https://tokenpony.cn/tokenpony-web/logo.png",
-    "compshare": "https://compshare.cn/favicon.ico"
+    "compshare": "https://compshare.cn/favicon.ico",
+    "xinference": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/xinference-color.svg",
+    "bailian": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/bailian-color.svg",
+    "volcengine": 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/volcengine-color.svg',
+    'huggingface': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/huggingface.svg',
   };
   return icons[type] || '';
+}
+
+/**
+ * Determine whether a provider icon is a monochrome SVG.
+ *
+ * These icons need to be inverted in the dark theme because they are loaded as
+ * external images and cannot inherit the page text color.
+ *
+ * @param {string} type - Provider type
+ * @returns {boolean} Whether the icon should be theme-inverted
+ */
+export function isMonochromeProviderIcon(type) {
+  return [
+    'openai',
+    'azure',
+    'xai',
+    'anthropic',
+    'ollama',
+    'deepseek',
+    'modelscope',
+    'zhipu',
+    'siliconflow',
+    'moonshot',
+    'kimi',
+    'kimi-code',
+    'ppio',
+    'lm_studio',
+    'minimax',
+    'minimax-token-plan',
+    'mimo',
+    'xiaomi',
+    'xiaomi-token-plan',
+    'openrouter'
+  ].includes(type);
 }
 
 /**
@@ -50,9 +96,11 @@ export function getProviderIcon(type) {
  * @returns {string} 提供商描述
  */
 export function getProviderDescription(template, name, tm) {
-  if (name == 'OpenAI') {
+  if (name === 'OpenAI') {
     return tm('providers.description.openai', { type: template.type });
-  } else if (name == 'vLLM Rerank') {
+  } else if (template.provider === 'kimi-code') {
+    return tm('providers.description.kimi_code');
+  } else if (name === 'vLLM Rerank') {
     return tm('providers.description.vllm_rerank', { type: template.type });
   }
   return tm('providers.description.default', { type: template.type });

@@ -73,7 +73,7 @@ kubectl apply -f k8s/astrbot_with_napcat/02-deployment.yaml
 Since AstrBot and NapCat are in the same Pod, they can communicate directly via `localhost`.
 
 1.  **Add a message platform in AstrBot:**
-    *   Go to the AstrBot WebUI, select `Settings` -> `Message Platform` -> `Add`.
+    *   Go to the AstrBot WebUI, select  `Platform` -> `Add`.
     *   **Select Message Platform Category**: `aiocqhttp`
     *   **Bot Name**: `napcat` (or custom)
     *   **Reverse Websocket Host**: `0.0.0.0`
@@ -194,4 +194,4 @@ Edit the `02-deployment.yaml` file and add `volumes` and `volumeMounts` under `s
 
 After deploying and exposing the service, you can access the AstrBot admin panel through the corresponding IP and port.
 
-> The default username and password are `astrbot` and `astrbot`.
+> New users must use the random password printed in the startup logs for the first login. Use the username shown in the logs (usually `astrbot`) and change it after logging in.

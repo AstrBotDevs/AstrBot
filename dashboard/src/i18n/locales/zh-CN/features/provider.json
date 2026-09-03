@@ -5,15 +5,16 @@
     "title": "模型提供商",
     "settings": "设置",
     "addProvider": "新增模型提供商",
+    "deleteProvider": "删除模型提供商",
+    "selectHint": "请选择一个模型提供商",
     "providerType": "提供商类型",
     "tabs": {
       "all": "全部",
       "chatCompletion": "对话",
-      "agentRunner": "Agent 执行器",
       "speechToText": "语音转文字",
       "textToSpeech": "文字转语音",
-      "embedding": "嵌入(Embedding)",
-      "rerank": "重排序(Rerank)"
+      "embedding": "嵌入",
+      "rerank": "重排序"
     },
     "empty": {
       "all": "暂无模型提供商，点击 新增模型提供商 添加",
@@ -21,6 +22,7 @@
     },
     "description": {
       "openai": "也支持所有兼容 OpenAI API 的模型提供商。",
+      "kimi_code": "Kimi 的 CodingPlan / Kimi Code 专用接入，使用特殊的 Anthropic API 兼容适配。",
       "vllm_rerank": "也支持 Jina AI, Cohere, PPIO 等提供商。",
       "default": ""
     }
@@ -46,11 +48,10 @@
       "title": "模型提供商",
       "tabs": {
         "basic": "对话",
-        "agentRunner": "Agent 执行器",
         "speechToText": "语音转文字",
         "textToSpeech": "文字转语音",
-        "embedding": "嵌入(Embedding)",
-        "rerank": "重排序(Rerank)"
+        "embedding": "嵌入",
+        "rerank": "重排序"
       },
       "noTemplates": "暂无该类型的提供商模板"
     },
@@ -93,12 +94,14 @@
   "providerSources": {
     "title": "提供商源",
     "add": "新增",
+    "delete": "删除提供商源",
     "empty": "暂无提供商源",
     "selectHint": "请选择一个提供商源",
     "selectCreated": "选择已创建的提供商源",
     "save": "保存配置",
     "saveAndFetchModels": "保存并获取模型",
     "fetchModels": "获取模型列表",
+    "getApiKey": "获取 API Key",
     "saveSuccess": "提供商源保存成功",
     "saveError": "提供商源保存失败",
     "deleteConfirm": "确定要删除提供商源 {id} 吗？这将同时删除关联的所有模型配置。",
@@ -123,6 +126,7 @@
     }
   },
   "models": {
+    "title": "模型",
     "available": "可用模型",
     "configured": "已配置的模型",
     "empty": "暂无已配置的模型，点击上方的\"获取模型列表\"添加",
@@ -144,6 +148,17 @@
     "manualModelRequired": "请输入模型 ID",
     "manualModelExists": "该模型已存在",
     "configure": "配置",
+    "testButton": "测试模型",
+    "metadata": {
+      "image": "图像输入",
+      "audio": "音频输入",
+      "toolUse": "工具使用",
+      "reasoning": "推理",
+      "context": "{tokens} 上下文窗口",
+      "available": "模型 metadata 支持{capability}",
+      "enabled": "已启用{capability}",
+      "supportedDisabled": "模型 metadata 支持{capability}，但当前提供商的模型能力未启用。"
+    },
     "tooltips": {
       "providerId": "提供商 ID",
       "modelId": "模型 ID"

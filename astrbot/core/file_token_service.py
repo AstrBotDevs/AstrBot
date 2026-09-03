@@ -1,9 +1,7 @@
 import asyncio
 import os
-import platform
 import time
 import uuid
-from urllib.parse import unquote, urlparse
 
 
 class FileTokenService:
@@ -42,18 +40,14 @@ class FileTokenService:
             FileNotFoundError: 当路径不存在时抛出
 
         """
-        # 处理 file:///
         try:
-            parsed_uri = urlparse(file_path)
-            if parsed_uri.scheme == "file":
-                local_path = unquote(parsed_uri.path)
-                if platform.system() == "Windows" and local_path.startswith("/"):
-                    local_path = local_path[1:]
-            else:
-                # 如果没有 file:/// 前缀，则认为是普通路径
-                local_path = file_path
+            from astrbot.core.utils.media_utils import file_uri_to_path, is_file_uri
+
+            local_path = (
+                file_uri_to_path(file_path) if is_file_uri(file_path) else file_path
+            )
         except Exception:
-            # 解析失败时，按原路径处理
+            # Fall back to the original path if URL parsing fails.
             local_path = file_path
 
         async with self.lock:
@@ -61,7 +55,7 @@ class FileTokenService:
 
             if not os.path.exists(local_path):
                 raise FileNotFoundError(
-                    f"文件不存在: {local_path} (原始输入: {file_path})",
+                    f"File does not exist: {local_path} (original input: {file_path})",
                 )
 
             file_token = str(uuid.uuid4())
@@ -90,9 +84,9 @@ class FileTokenService:
             await self._cleanup_expired_tokens()
 
             if file_token not in self.staged_files:
-                raise KeyError(f"无效或过期的文件 token: {file_token}")
+                raise KeyError(f"Invalid or expired file token: {file_token}")
 
             file_path, _ = self.staged_files.pop(file_token)
             if not os.path.exists(file_path):
-                raise FileNotFoundError(f"文件不存在: {file_path}")
+                raise FileNotFoundError(f"File does not exist: {file_path}")
             return file_path

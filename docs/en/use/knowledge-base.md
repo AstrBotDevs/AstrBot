@@ -44,16 +44,3 @@ After creating a knowledge base, you can upload documents to it. Up to 10 files 
 ## Using the Knowledge Base
 
 In the configuration file, you can specify different knowledge bases for different configuration profiles.
-
-## Appendix 2: Applying for Free Embedding Models
-
-### PPIO Cloud
-
-1. Open the [PPIO Cloud website](https://ppio.cn/user/register?invited_by=AIOONE) and register an account (accounts registered through this link will receive a 15 RMB voucher).
-2. Go to the [Model Marketplace](https://ppio.cn/model-api/console) and click on Embedding Models.
-3. Click on BAAI:BGE-M3 (as of 2025-06-02, this model is free on this platform).
-4. Find the API integration guide and apply for a Key.
-5. Fill in the AstrBot OpenAI Embedding model provider configuration:
-   1. API Key is the PPIO API Key you just applied for
-   2. embedding api base: enter `https://api.ppinfra.com/v3/openai`
-   3. model: enter the model you selected, in this example `baai/bge-m3`.

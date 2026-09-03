@@ -1,56 +1,102 @@
 <template>
   <div class="kb-list-page">
-    <!-- 页面标题 -->
-    <div class="page-header">
-      <div>
-        <h1 class="text-h4 mb-2">{{ t('list.title') }}</h1>
-        <p class="text-subtitle-1 text-medium-emphasis">{{ t('list.subtitle') }}</p>
-      </div>
-      <v-btn icon="mdi-information-outline" variant="text" size="small" color="grey"
-        href="https://astrbot.app/use/knowledge-base.html" target="_blank" />
-    </div>
-
-    <!-- 操作按钮栏 -->
-    <div class="action-bar mb-6">
-      <v-btn prepend-icon="mdi-plus" color="primary" variant="elevated" @click="showCreateDialog = true">
-        {{ t('list.create') }}
-      </v-btn>
-      <v-btn prepend-icon="mdi-refresh" variant="tonal" @click="loadKnowledgeBases" :loading="loading">
-        {{ t('list.refresh') }}
-      </v-btn>
-    </div>
-
-    <!-- 知识库网格 -->
     <div v-if="loading && kbList.length === 0" class="loading-container">
       <v-progress-circular indeterminate color="primary" size="64" />
       <p class="mt-4 text-medium-emphasis">{{ t('list.loading') }}</p>
     </div>
 
-    <div v-else-if="kbList.length > 0" class="kb-grid">
-      <v-card v-for="kb in kbList" :key="kb.kb_id" class="kb-card" elevation="2" hover
-        @click="navigateToDetail(kb.kb_id)">
-        <div class="kb-card-content">
-          <div class="kb-emoji">{{ kb.emoji || '📚' }}</div>
-          <h3 class="kb-name">{{ kb.kb_name }}</h3>
-          <p class="kb-description text-medium-emphasis">{{ kb.description || '暂无描述' }}</p>
+    <div v-else-if="loadError && kbList.length === 0" class="empty-state">
+      <v-icon size="72" color="error">mdi-alert-circle-outline</v-icon>
+      <h2 class="mt-4">{{ t('messages.loadError') }}</h2>
+      <v-btn class="mt-6" prepend-icon="mdi-refresh" color="primary" variant="tonal"
+        @click="loadKnowledgeBases()">
+        {{ t('list.retry') }}
+      </v-btn>
+    </div>
 
-          <div class="kb-stats mt-4">
+    <div v-else-if="kbList.length > 0" class="kb-list">
+      <OutlinedActionListItem
+        v-for="kb in kbList"
+        :key="kb.kb_id"
+        :title="kb.kb_name"
+        :clickable="!kb.init_error"
+        @click="navigateToDetail(kb.kb_id)"
+      >
+        <template #title-prepend>
+          <span class="kb-list-emoji">{{ kb.emoji || '📚' }}</span>
+        </template>
+
+        <template #title-extra>
+          <v-chip
+            v-if="kb.init_error"
+            color="error"
+            size="x-small"
+            variant="tonal"
+          >
+            {{ t('list.initError') }}
+          </v-chip>
+        </template>
+
+        <div v-if="!kb.init_error" class="kb-description text-body-2 text-medium-emphasis">
+          {{ kb.description || '暂无描述' }}
+        </div>
+
+        <div v-if="kb.init_error" class="kb-error-panel">
+            <div class="kb-error-title">
+              <v-icon size="16" color="error">mdi-close-circle</v-icon>
+              <span>{{ t('list.initError') }}</span>
+            </div>
+            <div class="kb-error-detail" :title="kb.init_error">{{ kb.init_error }}</div>
+        </div>
+
+        <div class="kb-stats" v-if="!kb.init_error">
             <div class="stat-item">
-              <v-icon size="small" color="primary">mdi-file-document</v-icon>
+              <v-icon size="small">mdi-file-document</v-icon>
               <span>{{ kb.doc_count || 0 }} {{ t('list.documents') }}</span>
             </div>
             <div class="stat-item">
-              <v-icon size="small" color="secondary">mdi-text-box</v-icon>
+              <v-icon size="small">mdi-text-box</v-icon>
               <span>{{ kb.chunk_count || 0 }} {{ t('list.chunks') }}</span>
             </div>
-          </div>
-
-          <div class="kb-actions">
-            <v-btn icon="mdi-pencil" size="small" variant="text" color="info" @click.stop="editKB(kb)" />
-            <v-btn icon="mdi-delete" size="small" variant="text" color="error" @click.stop="confirmDelete(kb)" />
-          </div>
         </div>
-      </v-card>
+
+        <template #actions>
+          <v-tooltip v-if="!kb.init_error" :text="t('card.edit')" location="top">
+            <template #activator="{ props }">
+              <v-btn
+                v-bind="props"
+                icon="mdi-pencil-outline"
+                variant="text"
+                size="small"
+                class="list-action-icon-btn"
+                @click.stop="editKB(kb)"
+              />
+            </template>
+          </v-tooltip>
+
+          <v-tooltip :text="t('card.delete')" location="top">
+            <template #activator="{ props }">
+              <v-btn
+                v-bind="props"
+                icon="mdi-delete-outline"
+                variant="text"
+                size="small"
+                class="list-action-icon-btn"
+                @click.stop="confirmDelete(kb)"
+              />
+            </template>
+          </v-tooltip>
+        </template>
+      </OutlinedActionListItem>
+
+      <v-pagination
+        v-if="total > pageSize"
+        v-model="page"
+        :length="Math.ceil(total / pageSize)"
+        :total-visible="7"
+        class="mt-4"
+        @update:model-value="loadKnowledgeBases()"
+      />
     </div>
 
     <!-- 空状态 -->
@@ -63,11 +109,41 @@
       </v-btn>
     </div>
 
+    <div class="kb-fab-stack">
+      <v-tooltip :text="t('list.refresh')" location="left">
+        <template #activator="{ props }">
+          <v-btn
+            v-bind="props"
+            color="darkprimary"
+            icon="mdi-refresh"
+            size="x-large"
+            variant="elevated"
+            class="kb-fab"
+            :loading="loading"
+            @click="loadKnowledgeBases()"
+          />
+        </template>
+      </v-tooltip>
+      <v-tooltip :text="t('list.create')" location="left">
+        <template #activator="{ props }">
+          <v-btn
+            v-bind="props"
+            color="darkprimary"
+            icon="mdi-plus"
+            size="x-large"
+            variant="elevated"
+            class="kb-fab"
+            @click="showCreateDialog = true"
+          />
+        </template>
+      </v-tooltip>
+    </div>
+
     <!-- 创建/编辑对话框 -->
     <v-dialog v-model="showCreateDialog" max-width="600px" persistent>
       <v-card>
-        <v-card-title class="d-flex align-center">
-          <span class="text-h5">{{ editingKB ? t('edit.title') : t('create.title') }}</span>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
+          <span>{{ editingKB ? t('edit.title') : t('create.title') }}</span>
           <v-spacer />
           <v-btn icon="mdi-close" variant="text" @click="closeCreateDialog" />
         </v-card-title>
@@ -94,7 +170,9 @@
 
             <v-select v-model="formData.embedding_provider_id" :items="embeddingProviders"
               :item-title="item => item.embedding_model || item.id" :item-value="'id'"
-              :label="t('create.embeddingModelLabel')" variant="outlined" class="mb-4" :disabled="editingKB !== null" hint="嵌入模型选择后无法修改，如需更换请创建新的知识库。" persistent-hint>
+              :label="t('create.embeddingModelLabel')" variant="outlined" class="mb-4" :disabled="editingKB !== null"
+              :rules="[v => editingKB !== null || !!v || t('create.embeddingModelRequired')]" required
+              hint="嵌入模型选择后无法修改，如需更换请创建新的知识库。" persistent-hint>
               <template #item="{ props, item }">
                 <v-list-item v-bind="props">
                   <template #subtitle>
@@ -128,7 +206,7 @@
           <v-btn variant="text" @click="closeCreateDialog">
             {{ t('create.cancel') }}
           </v-btn>
-          <v-btn color="primary" variant="elevated" @click="submitForm" :loading="saving">
+          <v-btn color="primary" variant="tonal" @click="submitForm" :loading="saving">
             {{ editingKB ? t('edit.submit') : t('create.submit') }}
           </v-btn>
         </v-card-actions>
@@ -138,7 +216,7 @@
     <!-- Emoji 选择器对话框 -->
     <v-dialog v-model="showEmojiPicker" max-width="500px">
       <v-card>
-        <v-card-title class="pa-4">{{ t('emoji.title') }}</v-card-title>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ t('emoji.title') }}</v-card-title>
         <v-divider />
         <v-card-text class="pa-4">
           <div v-for="category in emojiCategories" :key="category.key" class="mb-4">
@@ -163,7 +241,7 @@
     <!-- 删除确认对话框 -->
     <v-dialog v-model="showDeleteDialog" max-width="450px" persistent>
       <v-card>
-        <v-card-title class="pa-4 text-h6">{{ t('delete.title') }}</v-card-title>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ t('delete.title') }}</v-card-title>
         <v-divider />
         <v-card-text class="pa-6">
           <p>{{ t('delete.confirmText', { name: deleteTarget?.kb_name || '' }) }}</p>
@@ -177,7 +255,7 @@
           <v-btn variant="text" @click="cancelDelete">
             {{ t('delete.cancel') }}
           </v-btn>
-          <v-btn color="error" variant="elevated" @click="deleteKB" :loading="deleting">
+          <v-btn color="error" variant="tonal" @click="deleteKB" :loading="deleting">
             {{ t('delete.confirm') }}
           </v-btn>
         </v-card-actions>
@@ -199,17 +277,22 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import axios from 'axios'
+import { knowledgeApi, providerApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
+import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue'
 
 const { tm: t } = useModuleI18n('features/knowledge-base/index')
 const router = useRouter()
 
 // 状态
 const loading = ref(false)
+const loadError = ref(false)
 const saving = ref(false)
 const deleting = ref(false)
 const kbList = ref<any[]>([])
+const page = ref(1)
+const pageSize = ref(20)
+const total = ref(0)
 const embeddingProviders = ref<any[]>([])
 const rerankProviders = ref<any[]>([])
 const originalEmbeddingProvider = ref<string | null>(null)
@@ -264,20 +347,28 @@ const emojiCategories = [
 // 加载知识库列表
 const loadKnowledgeBases = async (refreshStats = false) => {
   loading.value = true
+  loadError.value = false
   try {
-    const params: any = {}
     if (refreshStats) {
-      params.refresh_stats = 'true'
+      page.value = 1
     }
-
-    const response = await axios.get('/api/kb/list', { params })
+    const response = await knowledgeApi.list({
+      page: page.value,
+      page_size: pageSize.value,
+      refresh_stats: refreshStats
+    })
     if (response.data.status === 'ok') {
-      kbList.value = response.data.data.items || []
+      const data = response.data.data
+      kbList.value = data.items || []
+      total.value = data.total || 0
+      loadError.value = false
     } else {
+      loadError.value = true
       showSnackbar(response.data.message || t('messages.loadError'), 'error')
     }
   } catch (error) {
     console.error('Failed to load knowledge bases:', error)
+    loadError.value = true
     showSnackbar(t('messages.loadError'), 'error')
   } finally {
     loading.value = false
@@ -287,9 +378,7 @@ const loadKnowledgeBases = async (refreshStats = false) => {
 // 加载提供商配置
 const loadProviders = async () => {
   try {
-    const response = await axios.get('/api/config/provider/list', {
-      params: { provider_type: 'embedding,rerank' }
-    })
+    const response = await providerApi.listByProviderType('embedding,rerank')
     if (response.data.status === 'ok') {
       embeddingProviders.value = response.data.data.filter(
         (p: any) => p.provider_type === 'embedding'
@@ -340,15 +429,15 @@ const deleteKB = async () => {
 
   deleting.value = true
   try {
-    const response = await axios.post('/api/kb/delete', {
-      kb_id: deleteTarget.value.kb_id
-    })
+    const response = await knowledgeApi.delete(deleteTarget.value.kb_id)
 
     console.log('Delete response:', response.data) // 调试日志
 
     if (response.data.status === 'ok') {
       showSnackbar(t('messages.deleteSuccess'))
-      // 先刷新列表，再关闭对话框
+      if (kbList.value.length === 1 && page.value > 1) {
+        page.value -= 1
+      }
       await loadKnowledgeBases()
       showDeleteDialog.value = false
       deleteTarget.value = null
@@ -380,12 +469,12 @@ const submitForm = async () => {
 
     let response
     if (editingKB.value) {
-      response = await axios.post('/api/kb/update', {
-        kb_id: editingKB.value.kb_id,
-        ...payload
-      })
+      response = await knowledgeApi.update(editingKB.value.kb_id, payload)
     } else {
-      response = await axios.post('/api/kb/create', payload)
+      response = await knowledgeApi.create({
+        ...payload,
+        embedding_provider_id: formData.value.embedding_provider_id!
+      })
     }
 
     if (response.data.status === 'ok') {
@@ -441,81 +530,61 @@ onMounted(() => {
 
 <style scoped>
 .kb-list-page {
-  padding: 24px;
-  max-width: 1400px;
-  margin: 0 auto;
+  width: 100%;
 }
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 32px;
-}
-
-.action-bar {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-/* 知识库网格 */
-.kb-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 24px;
-}
-
-.kb-card {
-  position: relative;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
-}
-
-.kb-card:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15) !important;
-}
-
-.kb-card-content {
-  padding: 24px;
+.kb-list {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  min-height: 260px;
-  position: relative;
+  gap: 12px;
 }
 
-.kb-emoji {
-  font-size: 56px;
-  margin-bottom: 8px;
-}
-
-.kb-name {
+.kb-list-emoji {
   font-size: 1.25rem;
-  font-weight: 600;
-  margin-bottom: 8px;
-  color: rgb(var(--v-theme-on-surface));
+  line-height: 1;
 }
 
 .kb-description {
-  font-size: 0.875rem;
-  line-height: 1.5;
-  max-height: 3em;
-  overflow: hidden;
-  text-overflow: ellipsis;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
 }
 
 .kb-stats {
   display: flex;
   gap: 16px;
+  margin-top: 6px;
+}
+
+.kb-error-panel {
   width: 100%;
-  justify-content: center;
+  text-align: left;
+  background: rgba(var(--v-theme-error), 0.08);
+  border: 1px solid rgba(var(--v-theme-error), 0.18);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.kb-error-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgb(var(--v-theme-error));
+  margin-bottom: 4px;
+}
+
+.kb-error-detail {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: rgba(var(--v-theme-on-surface), 0.82);
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .stat-item {
@@ -523,22 +592,38 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   font-size: 0.875rem;
+  color: rgba(var(--v-theme-on-surface), 0.62);
+}
+
+.list-action-icon-btn {
+  color: rgba(var(--v-theme-on-surface), 0.78);
+}
+
+.list-action-icon-btn:hover {
+  background: rgba(var(--v-theme-on-surface), 0.08);
   color: rgb(var(--v-theme-on-surface));
-  font-weight: 500;
 }
 
-.kb-actions {
-  position: absolute;
-  bottom: 16px;
-  right: 16px;
+.kb-fab-stack {
+  align-items: center;
+  bottom: 52px;
   display: flex;
-  gap: 8px;
-  opacity: 0;
-  transition: opacity 0.2s ease;
+  flex-direction: column;
+  gap: 16px;
+  position: fixed;
+  right: 52px;
+  z-index: 10000;
 }
 
-.kb-card:hover .kb-actions {
-  opacity: 1;
+.kb-fab {
+  border-radius: 16px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.kb-fab:hover {
+  box-shadow: 0 12px 20px rgba(var(--v-theme-primary), 0.4);
+  transform: translateY(-4px) scale(1.05);
 }
 
 /* 空状态 */
@@ -600,14 +685,6 @@ onMounted(() => {
 
 /* 响应式设计 */
 @media (max-width: 768px) {
-  .kb-list-page {
-    padding: 16px;
-  }
-
-  .kb-grid {
-    grid-template-columns: 1fr;
-  }
-
   .emoji-grid {
     grid-template-columns: repeat(6, 1fr);
   }

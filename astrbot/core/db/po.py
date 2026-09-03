@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TypedDict
 
+from deprecated import deprecated
+from sqlalchemy import Index, desc
 from sqlmodel import JSON, Field, SQLModel, Text, UniqueConstraint
 
 
@@ -38,6 +40,30 @@ class PlatformStat(SQLModel, table=True):
     )
 
 
+class ProviderStat(TimestampMixin, SQLModel, table=True):
+    """Per-response provider stats for internal agent runs."""
+
+    __tablename__: str = "provider_stats"
+
+    id: int | None = Field(
+        default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+    )
+    agent_type: str = Field(default="internal", nullable=False, index=True)
+    status: str = Field(default="completed", nullable=False, index=True)
+    umo: str = Field(nullable=False, index=True)
+    conversation_id: str | None = Field(default=None, index=True)
+    provider_id: str = Field(nullable=False, index=True)
+    provider_model: str | None = Field(default=None, index=True)
+    token_input_other: int = Field(default=0, nullable=False)
+    token_input_cached: int = Field(default=0, nullable=False)
+    token_output: int = Field(default=0, nullable=False)
+    start_time: float = Field(default=0.0, nullable=False)
+    end_time: float = Field(default=0.0, nullable=False)
+    time_to_first_token: float = Field(default=0.0, nullable=False)
+
+
 class ConversationV2(TimestampMixin, SQLModel, table=True):
     __tablename__: str = "conversations"
 
@@ -65,6 +91,17 @@ class ConversationV2(TimestampMixin, SQLModel, table=True):
     """
 
     __table_args__ = (
+        Index(
+            "ix_conversations_created_at_inner_id",
+            desc("created_at"),
+            desc("inner_conversation_id"),
+        ),
+        Index(
+            "ix_conversations_platform_created_at_inner_id",
+            "platform_id",
+            desc("created_at"),
+            desc("inner_conversation_id"),
+        ),
         UniqueConstraint(
             "conversation_id",
             name="uix_conversation_id",
@@ -202,8 +239,8 @@ class Preference(TimestampMixin, SQLModel, table=True):
 class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
     """This class represents the message history for a specific platform.
 
-    It is used to store messages that are not LLM-generated, such as user messages
-    or platform-specific messages.
+    It stores user, bot, and platform-specific messages independently from LLM
+    conversation checkpoints.
     """
 
     __tablename__: str = "platform_message_history"
@@ -220,6 +257,46 @@ class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
         default=None,
     )  # Name of the sender in the platform
     content: dict = Field(sa_type=JSON, nullable=False)  # a message chain list
+    llm_checkpoint_id: str | None = Field(default=None, index=True)
+
+    __table_args__ = (
+        Index(
+            "ix_platform_message_history_platform_user_id",
+            "platform_id",
+            "user_id",
+            "id",
+        ),
+    )
+
+
+class WebChatThread(TimestampMixin, SQLModel, table=True):
+    """A side thread created from a selected WebChat assistant response."""
+
+    __tablename__: str = "webchat_threads"
+
+    id: int | None = Field(
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
+    )
+    thread_id: str = Field(
+        max_length=36,
+        nullable=False,
+        unique=True,
+        default_factory=lambda: str(uuid.uuid4()),
+    )
+    creator: str = Field(nullable=False, index=True)
+    parent_session_id: str = Field(nullable=False, index=True)
+    parent_message_id: int = Field(nullable=False, index=True)
+    base_checkpoint_id: str = Field(nullable=False, index=True)
+    selected_text: str = Field(sa_type=Text, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "thread_id",
+            name="uix_webchat_thread_id",
+        ),
+    )
 
 
 class PlatformSession(TimestampMixin, SQLModel, table=True):
@@ -255,6 +332,29 @@ class PlatformSession(TimestampMixin, SQLModel, table=True):
         UniqueConstraint(
             "session_id",
             name="uix_platform_session_id",
+        ),
+    )
+
+
+class UmoAlias(TimestampMixin, SQLModel, table=True):
+    """User-facing names for unified message origins."""
+
+    __tablename__: str = "umo_aliases"
+
+    id: int | None = Field(
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
+    )
+    umo: str = Field(nullable=False, max_length=512)
+    creator_sender_id: str = Field(nullable=False, max_length=255)
+    auto_name: str | None = Field(default=None, max_length=255)
+    user_alias: str | None = Field(default=None, max_length=255)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "umo",
+            name="uix_umo_alias_umo",
         ),
     )
 
@@ -327,6 +427,21 @@ class ApiKey(TimestampMixin, SQLModel, table=True):
     )
 
 
+class DashboardTrustedDevice(TimestampMixin, SQLModel, table=True):
+    """Trusted dashboard device token used to skip TOTP for a limited time."""
+
+    __tablename__: str = "dashboard_trusted_devices"
+
+    id: int | None = Field(
+        default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+    )
+    token_hash: str = Field(max_length=64, nullable=False, unique=True, index=True)
+    totp_secret_hash: str = Field(max_length=64, nullable=False, index=True)
+    expires_at: datetime = Field(nullable=False, index=True)
+
+
 class ChatUIProject(TimestampMixin, SQLModel, table=True):
     """This class represents projects for organizing ChatUI conversations.
 
@@ -354,6 +469,10 @@ class ChatUIProject(TimestampMixin, SQLModel, table=True):
     """Title of the project"""
     description: str | None = Field(default=None, max_length=1000)
     """Description of the project"""
+    workspace_type: str = Field(default="session", nullable=False, max_length=32)
+    """Workspace mode: session, project, or custom"""
+    workspace_path: str | None = Field(default=None, max_length=1024)
+    """Custom workspace path"""
 
     __table_args__ = (
         UniqueConstraint(
@@ -487,6 +606,7 @@ class Personality(TypedDict):
 # ====
 
 
+@deprecated(version="4.0.0", reason="Use PlatformStat instead.")
 @dataclass
 class Platform:
     """平台使用统计数据"""
@@ -496,6 +616,7 @@ class Platform:
     timestamp: int
 
 
+@deprecated(version="4.0.0", reason="Use get_platform_stats() instead.")
 @dataclass
 class Stats:
     platform: list[Platform] = field(default_factory=list)

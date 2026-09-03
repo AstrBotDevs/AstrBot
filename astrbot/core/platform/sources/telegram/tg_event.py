@@ -21,7 +21,7 @@ from astrbot.api.message_components import (
     Reply,
     Video,
 )
-from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata
+from astrbot.api.platform import AstrBotMessage, Group, MessageType, PlatformMetadata
 from astrbot.core.utils.metrics import Metric
 
 
@@ -104,6 +104,30 @@ class TelegramPlatformEvent(AstrMessageEvent):
             text = text[split_point:].lstrip()
 
         return chunks
+
+    @classmethod
+    async def _send_text_chunks(
+        cls,
+        client: ExtBot,
+        text: str,
+        payload: dict[str, Any],
+    ) -> None:
+        """按 Telegram 限制切分文本后逐段发送。"""
+        for chunk in cls._split_message(text):
+            try:
+                markdown_text = telegramify_markdown.markdownify(
+                    chunk,
+                )
+                await client.send_message(
+                    text=markdown_text,
+                    parse_mode="MarkdownV2",
+                    **cast(Any, payload),
+                )
+            except (ValueError, BadRequest) as e:
+                logger.warning(
+                    f"Failed to convert message to Markdown，using normal text: {e!s}"
+                )
+                await client.send_message(text=chunk, **cast(Any, payload))
 
     @classmethod
     async def _send_chat_action(
@@ -283,22 +307,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 if at_user_id and not at_flag:
                     i.text = f"@{at_user_id} {i.text}"
                     at_flag = True
-                chunks = cls._split_message(i.text)
-                for chunk in chunks:
-                    try:
-                        md_text = telegramify_markdown.markdownify(
-                            chunk,
-                        )
-                        await client.send_message(
-                            text=md_text,
-                            parse_mode="MarkdownV2",
-                            **cast(Any, payload),
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            f"MarkdownV2 send failed: {e}. Using plain text instead.",
-                        )
-                        await client.send_message(text=chunk, **cast(Any, payload))
+                await cls._send_text_chunks(client, i.text, payload)
             elif isinstance(i, Image):
                 image_path = await i.convert_to_file_path()
                 if _is_gif(image_path):
@@ -337,6 +346,102 @@ class TelegramPlatformEvent(AstrMessageEvent):
         else:
             await self.send_with_client(self.client, message, self.get_sender_id())
         await super().send(message)
+
+    async def get_group(
+        self, group_id: str | None = None, **kwargs: Any
+    ) -> Group | None:
+        """Get Telegram group metadata available to the bot.
+
+        Telegram topics use ``<chat_id>#<thread_id>`` inside AstrBot. The Bot API
+        calls target the parent chat while the returned group keeps the topic-aware ID.
+
+        Args:
+            group_id: AstrBot group ID to query. Defaults to the current group.
+            **kwargs: Reserved for compatibility with the platform event interface.
+
+        Returns:
+            Enriched group metadata, or ``None`` when no group ID is available.
+        """
+        requested_group_id = str(group_id or self.get_group_id())
+        if not requested_group_id:
+            return None
+
+        current_group = self.message_obj.group
+        group = Group(
+            group_id=requested_group_id,
+            group_name=(
+                current_group.group_name
+                if current_group and current_group.group_id == requested_group_id
+                else None
+            ),
+        )
+        topic_name = (
+            getattr(self.message_obj, "_telegram_topic_name", None)
+            if current_group and current_group.group_id == requested_group_id
+            else None
+        )
+        chat_id = requested_group_id.split("#", 1)[0]
+        api_chat_id: str | int = (
+            int(chat_id) if chat_id.lstrip("-").isdigit() else chat_id
+        )
+
+        try:
+            chat = await self.client.get_chat(chat_id=api_chat_id)
+            title = getattr(chat, "title", None)
+            if isinstance(title, str):
+                group.group_name = (
+                    f"{title}-{topic_name}"
+                    if isinstance(topic_name, str) and topic_name
+                    else title
+                )
+
+            photo = getattr(chat, "photo", None)
+            file_id = getattr(photo, "big_file_id", None) if photo else None
+            if file_id:
+                try:
+                    photo_file = await self.client.get_file(file_id=file_id)
+                    file_path = getattr(photo_file, "file_path", None)
+                    if file_path:
+                        group.group_avatar = str(file_path)
+                except Exception as exc:
+                    logger.warning(
+                        f"[Telegram] Failed to get group photo for {chat_id}: {exc}"
+                    )
+        except Exception as exc:
+            logger.warning(
+                f"[Telegram] Failed to get group information for {chat_id}: {exc}"
+            )
+
+        try:
+            group.member_count = await self.client.get_chat_member_count(
+                chat_id=api_chat_id
+            )
+        except Exception as exc:
+            logger.warning(
+                f"[Telegram] Failed to get group member count for {chat_id}: {exc}"
+            )
+
+        try:
+            administrators = await self.client.get_chat_administrators(
+                chat_id=api_chat_id
+            )
+            group.group_admins = []
+            for administrator in administrators:
+                status = getattr(administrator, "status", None)
+                user = getattr(administrator, "user", None)
+                user_id = getattr(user, "id", None)
+                if user_id is None:
+                    continue
+                if status == "creator":
+                    group.group_owner = str(user_id)
+                elif status == "administrator":
+                    group.group_admins.append(str(user_id))
+        except Exception as exc:
+            logger.warning(
+                f"[Telegram] Failed to get group administrators for {chat_id}: {exc}"
+            )
+
+        return group
 
     async def react(self, emoji: str | None, big: bool = False) -> None:
         """给原消息添加 Telegram 反应：
@@ -389,6 +494,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
             message_thread_id: 可选，目标消息线程 ID
             parse_mode: 可选，消息文本的解析模式
         """
+        if not text or not text.strip():
+            return
+
         kwargs: dict[str, Any] = {}
         if message_thread_id:
             kwargs["message_thread_id"] = int(message_thread_id)
@@ -476,18 +584,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
     async def _send_final_segment(self, delta: str, payload: dict[str, Any]) -> None:
         """将累积文本作为 MarkdownV2 真实消息发送，失败时回退到纯文本。"""
-        try:
-            markdown_text = telegramify_markdown.markdownify(
-                delta,
-            )
-            await self.client.send_message(
-                text=markdown_text,
-                parse_mode="MarkdownV2",
-                **cast(Any, payload),
-            )
-        except Exception as e:
-            logger.warning(f"Markdown转换失败，使用普通文本: {e!s}")
-            await self.client.send_message(text=delta, **cast(Any, payload))
+        await self._send_text_chunks(self.client, delta, payload)
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         message_thread_id = None

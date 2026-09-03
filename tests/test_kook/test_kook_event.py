@@ -1,55 +1,33 @@
-from unittest.mock import AsyncMock, MagicMock
+import json
+from unittest.mock import AsyncMock
 
 import pytest
-from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata, Unknown
-from astrbot.api.event import MessageChain
+
+from astrbot.api.platform import (
+    AstrBotMessage,
+    Group,
+    MessageType,
+    PlatformMetadata,
+    Unknown,
+)
 from astrbot.core.message.components import (
-    File,
-    Image,
-    Plain,
-    Video,
     At,
     AtAll,
     BaseMessageComponent,
+    Image,
     Json,
-    Record,
+    Plain,
     Reply,
+    Video,
 )
-
-
 from astrbot.core.platform.sources.kook.kook_event import KookEvent
 from astrbot.core.platform.sources.kook.kook_types import KookMessageType, OrderMessage
-
-
-async def mock_kook_client(upload_asset_return: str, send_text_return: str):
-    # 1. Mock 掉整个 KookClient 类
-    client = MagicMock()
-
-    client.upload_asset = AsyncMock(return_value=upload_asset_return)
-    client.send_text = AsyncMock(return_value=send_text_return)
-    return client
-
-
-def mock_file_message(input: str):
-    message = MagicMock(spec=File)
-    message.get_file = AsyncMock(return_value=input)
-    return message
-
-
-def mock_record_message(input: str):
-    message = MagicMock(spec=Record)
-    message.text = input
-    message.convert_to_file_path = AsyncMock(return_value=input)
-    return message
-
-
-def mock_astrbot_message():
-    message = AstrBotMessage()
-    message.type = MessageType.OTHER_MESSAGE
-    message.group_id = "test"
-    message.session_id = "test"
-    message.message_id = "test"
-    return message
+from tests.test_kook.shared import (
+    mock_astrbot_message,
+    mock_file_message,
+    mock_kook_client,
+    mock_record_message,
+)
 
 
 @pytest.mark.asyncio
@@ -161,7 +139,7 @@ async def test_kook_event_warp_message(
     expected_output: OrderMessage,
     expected_error: type[BaseException] | None,
 ):
-    client = await mock_kook_client(
+    client = mock_kook_client(
         upload_asset_return,
         "",
     )
@@ -184,5 +162,126 @@ async def test_kook_event_warp_message(
         return
 
     result = await event._wrap_message(1, input_message)
-    assert result == expected_output
-    
+
+    expected_output_text: str | list | dict = expected_output.text
+    is_json_text = False
+    try:
+        expected_output_text = json.loads(expected_output_text)
+        is_json_text = True
+    except (TypeError, json.JSONDecodeError):
+        pass
+
+    if is_json_text:
+        assert json.loads(result.text) == expected_output_text
+    else:
+        assert result.text == expected_output_text
+
+    assert result.index == expected_output.index
+    assert result.type == expected_output.type
+    assert result.reply_id == expected_output.reply_id
+
+
+@pytest.mark.asyncio
+async def test_kook_get_group_enriches_channel_with_guild_members():
+    client = mock_kook_client("", "")
+    client.get_channel = AsyncMock(
+        return_value={"id": "channel-1", "name": "general", "guild_id": "guild-1"},
+    )
+    client.get_guild = AsyncMock(
+        return_value={
+            "id": "guild-1",
+            "icon": "https://example.com/icon.png",
+            "user_id": "owner-1",
+        },
+    )
+    client.get_guild_roles = AsyncMock(
+        return_value={
+            "items": [
+                {"role_id": 1, "permissions": 1},
+                {"role_id": 2, "permissions": 0},
+            ],
+            "meta": {"page_total": 1, "total": 2},
+        },
+    )
+    client.get_guild_users = AsyncMock(
+        side_effect=[
+            {
+                "items": [
+                    {"id": "owner-1", "nickname": "Owner", "roles": [1]},
+                    {"id": "user-1", "username": "Alice", "roles": [2]},
+                ],
+                "meta": {"page_total": 2, "total": 3},
+                "user_count": 99,
+            },
+            {
+                "items": [{"id": "user-2", "username": "Bob", "roles": [1]}],
+                "meta": {"page_total": 2, "total": 3},
+                "user_count": 99,
+            },
+        ],
+    )
+    message = AstrBotMessage()
+    message.type = MessageType.GROUP_MESSAGE
+    message.group = Group(group_id="channel-1", group_name="cached-channel")
+    message.session_id = "channel-1"
+    message.message_id = "message-1"
+    message.message = []
+    message.message_str = "hello"
+    message.raw_message = {"extra": {"guild_id": "guild-1"}}
+    event = KookEvent(
+        "hello",
+        message,
+        PlatformMetadata(name="kook", id="kook", description="KOOK"),
+        "channel-1",
+        client,
+    )
+
+    group = await event.get_group()
+
+    assert group.group_name == "general"
+    assert group.group_avatar == "https://example.com/icon.png"
+    assert group.group_owner == "owner-1"
+    assert group.member_count == 3
+    assert [member.user_id for member in group.members] == [
+        "owner-1",
+        "user-1",
+        "user-2",
+    ]
+    assert group.group_admins == ["owner-1", "user-2"]
+    assert client.get_guild_users.await_count == 2
+    client.get_guild_users.assert_any_await(
+        "guild-1",
+        channel_id="channel-1",
+        page=1,
+        page_size=50,
+    )
+    client.get_guild_roles.assert_awaited_once_with(
+        "guild-1",
+        page=1,
+        page_size=50,
+    )
+
+
+@pytest.mark.asyncio
+async def test_kook_get_group_returns_basic_group_when_lookup_fails():
+    client = mock_kook_client("", "")
+    client.get_channel = AsyncMock(side_effect=RuntimeError("forbidden"))
+    message = AstrBotMessage()
+    message.type = MessageType.GROUP_MESSAGE
+    message.group = Group(group_id="channel-1", group_name="cached-channel")
+    message.session_id = "channel-1"
+    message.message_id = "message-1"
+    message.message = []
+    message.message_str = "hello"
+    message.raw_message = {}
+    event = KookEvent(
+        "hello",
+        message,
+        PlatformMetadata(name="kook", id="kook", description="KOOK"),
+        "channel-1",
+        client,
+    )
+
+    group = await event.get_group()
+
+    assert group == Group(group_id="channel-1", group_name="cached-channel")

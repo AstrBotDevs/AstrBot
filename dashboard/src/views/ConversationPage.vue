@@ -37,7 +37,7 @@
                         </v-col>
                     </v-row>
                     <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="fetchConversations"
-                        :loading="loading" size="small" class="mr-2">
+                        :loading="listLoading" size="small" class="mr-2">
                         {{ tm('history.refresh') }}
                     </v-btn>
                     <v-btn 
@@ -46,7 +46,7 @@
                         prepend-icon="mdi-download"
                         variant="tonal" 
                         @click="exportConversations" 
-                        :disabled="loading"
+                        :disabled="actionLoading"
                         size="small"
                         class="mr-2">
                         {{ tm('batch.exportSelected', { count: selectedItems.length }) }}
@@ -57,7 +57,7 @@
                         prepend-icon="mdi-delete"
                         variant="tonal" 
                         @click="confirmBatchDelete" 
-                        :disabled="loading"
+                        :disabled="actionLoading"
                         size="small">
                         {{ tm('batch.deleteSelected', { count: selectedItems.length }) }}
                     </v-btn>
@@ -67,34 +67,96 @@
 
                 <v-card-text class="pa-0">
                     <v-data-table v-model="selectedItems" :headers="tableHeaders" :items="conversations"
-                        :loading="loading" style="font-size: 12px;" density="comfortable" hide-default-footer
+                        :loading="listLoading" style="font-size: 12px;" density="comfortable" hide-default-footer
                         class="elevation-0" :items-per-page="pagination.page_size"
                         :items-per-page-options="pageSizeOptions" show-select return-object
-                        :disabled="loading" @update:options="handleTableOptions">
-                        <template v-slot:item.title="{ item }">
-                            <div class="d-flex align-center">
-                                <span>{{ item.title || tm('status.noTitle') }}</span>
+                        @update:options="handleTableOptions">
+                        <template v-slot:top v-if="listLoadState === 'error' && conversations.length">
+                            <v-alert type="error" variant="tonal" density="compact" class="ma-3" closable>
+                                {{ tm('messages.fetchError') }}
+                                <template v-slot:append>
+                                    <v-btn size="small" variant="text" @click="fetchConversations">
+                                        {{ tm('history.refresh') }}
+                                    </v-btn>
+                                </template>
+                            </v-alert>
+                        </template>
+                        <template v-slot:header.umo_source>
+                            <div class="umo-header-cell">
+                                <span>{{ tm('table.headers.umo') }}</span>
+                                <v-btn-toggle
+                                    v-model="umoDisplayMode"
+                                    mandatory
+                                    density="compact"
+                                    divided
+                                    variant="outlined"
+                                    class="umo-header-toggle"
+                                >
+                                    <v-btn value="parsed" size="x-small">
+                                        {{ tm('table.umoDisplay.parsed') }}
+                                    </v-btn>
+                                    <v-btn value="raw" size="x-small">
+                                        {{ tm('table.umoDisplay.raw') }}
+                                    </v-btn>
+                                </v-btn-toggle>
                             </div>
                         </template>
 
-                        <template v-slot:item.platform="{ item }">
-                            <v-chip size="small" label>
-                                {{ item.sessionInfo.platform || tm('status.unknown') }}
-                            </v-chip>
+                        <template v-slot:item.title="{ item }">
+                            <div class="conversation-title-cell">
+                                <div class="conversation-title-row">
+                                    <span class="conversation-title-text">{{ item.title || tm('status.noTitle') }}</span>
+                                    <v-btn
+                                        icon
+                                        variant="plain"
+                                        size="x-small"
+                                        density="compact"
+                                        :ripple="false"
+                                        class="conversation-inline-edit"
+                                        @click.stop="editConversation(item)"
+                                        :disabled="actionLoading"
+                                    >
+                                        <v-icon size="14">mdi-pencil</v-icon>
+                                    </v-btn>
+                                </div>
+                                <span class="conversation-title-meta">{{ item.cid || tm('status.unknown') }}</span>
+                            </div>
                         </template>
 
-                        <template v-slot:item.messageType="{ item }">
-                            <v-chip size="small" label>
-                                {{ getMessageTypeDisplay(item.sessionInfo.messageType) }}
-                            </v-chip>
-                        </template>
-
-                        <template v-slot:item.cid="{ item }">
-                            <span class="text-truncate">{{ item.cid || tm('status.unknown') }}</span>
-                        </template>
-
-                        <template v-slot:item.sessionId="{ item }">
-                            <span>{{ item.sessionInfo.sessionId || tm('status.unknown') }}</span>
+                        <template v-slot:item.umo_source="{ item }">
+                            <div class="umo-source-cell">
+                                <div class="umo-source-content">
+                                    <template v-if="umoDisplayMode === 'parsed'">
+                                        <div class="conversation-umo-stack">
+                                            <UmoDisplay v-if="hasConversationUmoReadableName(item)"
+                                                v-bind="getConversationUmoDisplayProps(item)" compact
+                                                :show-info="false" :show-platform="false" :show-meta="false"
+                                                class="conversation-umo-display" />
+                                            <div class="conversation-umo-parsed">
+                                                <v-chip size="x-small" label>
+                                                    {{ getConversationUmoInfo(item).platform || tm('status.unknown') }}
+                                                </v-chip>
+                                                <span class="umo-separator">:</span>
+                                                <v-chip size="x-small" label>
+                                                    {{ getMessageTypeDisplay(getConversationUmoInfo(item).message_type) }}
+                                                </v-chip>
+                                                <span class="umo-separator">:</span>
+                                                <span class="umo-session-id">{{ getConversationUmoInfo(item).session_id || tm('status.unknown') }}</span>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <span v-else class="umo-raw-text">{{ item.user_id || tm('status.unknown') }}</span>
+                                </div>
+                                <v-btn
+                                    icon
+                                    variant="plain"
+                                    size="x-small"
+                                    class="umo-copy-button"
+                                    @click.stop="copyUmoSource(item)"
+                                >
+                                    <v-icon size="16">mdi-content-copy</v-icon>
+                                </v-btn>
+                            </div>
                         </template>
 
                         <template v-slot:item.created_at="{ item }">
@@ -108,15 +170,11 @@
                         <template v-slot:item.actions="{ item }">
                             <div class="actions-wrapper">
                                 <v-btn icon variant="plain" size="x-small" class="action-button"
-                                    @click="viewConversation(item)" :disabled="loading">
+                                    @click="viewConversation(item)" :disabled="actionLoading">
                                     <v-icon>mdi-eye</v-icon>
                                 </v-btn>
-                                <v-btn icon variant="plain" size="x-small" class="action-button"
-                                    @click="editConversation(item)" :disabled="loading">
-                                    <v-icon>mdi-pencil</v-icon>
-                                </v-btn>
                                 <v-btn icon color="error" variant="plain" size="x-small" class="action-button"
-                                    @click="confirmDeleteConversation(item)" :disabled="loading">
+                                    @click="confirmDeleteConversation(item)" :disabled="actionLoading">
                                     <v-icon>mdi-delete</v-icon>
                                 </v-btn>
                             </div>
@@ -124,8 +182,20 @@
 
                         <template v-slot:no-data>
                             <div class="d-flex flex-column align-center py-6">
-                                <v-icon size="64" color="grey lighten-1">mdi-chat-remove</v-icon>
-                                <span class="text-subtitle-1 text-disabled mt-3">{{ tm('status.noData') }}</span>
+                                <template v-if="listLoadState === 'loading'">
+                                    <v-progress-circular indeterminate color="primary" />
+                                </template>
+                                <template v-else-if="listLoadState === 'empty'">
+                                    <v-icon size="64" color="grey lighten-1">mdi-chat-remove</v-icon>
+                                    <span class="text-subtitle-1 text-disabled mt-3">{{ tm('status.noData') }}</span>
+                                </template>
+                                <template v-else-if="listLoadState === 'error'">
+                                    <v-icon size="64" color="error">mdi-alert-circle-outline</v-icon>
+                                    <span class="text-subtitle-1 text-disabled mt-3">{{ tm('messages.fetchError') }}</span>
+                                    <v-btn class="mt-3" size="small" variant="tonal" @click="fetchConversations">
+                                        {{ tm('history.refresh') }}
+                                    </v-btn>
+                                </template>
                             </div>
                         </template>
                     </v-data-table>
@@ -138,7 +208,7 @@
                                 <span class="text-caption mr-2">{{ tm('pagination.itemsPerPage') }}:</span>
                                 <v-select v-model="pagination.page_size" :items="pageSizeOptions" variant="outlined"
                                     density="compact" hide-details style="max-width: 100px;"
-                                    :disabled="loading" @update:model-value="onPageSizeChange"></v-select>
+                                    @update:model-value="onPageSizeChange"></v-select>
                             </div>
                             <div class="text-caption ml-4">
                                 {{ tm('pagination.showingItems', {
@@ -148,7 +218,7 @@
                                 }) }}
                             </div>
                         </div>
-                        <v-pagination v-model="pagination.page" :length="pagination.total_pages" :disabled="loading"
+                        <v-pagination v-model="pagination.page" :length="pagination.total_pages"
                             @update:model-value="fetchConversations" rounded="circle" :total-visible="7"></v-pagination>
                     </div>
                 </v-card-text>
@@ -157,34 +227,42 @@
 
         <!-- 对话详情对话框 -->
         <v-dialog v-model="dialogView" max-width="900px" scrollable>
-            <v-card class="conversation-detail-card">
-                <v-card-title class="ml-2 mt-2 d-flex align-center">
-                    <span class="text-truncate">{{ selectedConversation?.title || tm('status.noTitle') }}</span>
-                    <v-spacer></v-spacer>
-                    <div class="d-flex align-center" v-if="selectedConversation?.sessionInfo">
-                        <v-chip text-color="primary" size="small" class="mr-2" rounded="md">
-                            {{ selectedConversation.sessionInfo.platform }}
-                        </v-chip>
-                        <v-chip text-color="secondary" size="small" rounded="md">
-                            {{ getMessageTypeDisplay(selectedConversation.sessionInfo.messageType) }}
-                        </v-chip>
+            <v-card class="conversation-detail-card" :class="{ 'conversation-detail-card--edit': isEditingHistory }">
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6 conversation-detail-title">
+                    <div class="conversation-detail-heading">
+                        <span class="text-truncate">{{ selectedConversation?.title || tm('status.noTitle') }}</span>
+                        <UmoDisplay v-if="selectedConversation?.user_id && hasConversationUmoReadableName(selectedConversation)"
+                            v-bind="getConversationUmoDisplayProps(selectedConversation)" compact :show-info="false"
+                            :show-platform="false" :show-meta="false" class="conversation-umo-display" />
+                        <div v-if="selectedConversation?.user_id"
+                            class="conversation-umo-parsed conversation-detail-umo-parsed">
+                            <v-chip size="x-small" label>
+                                {{ getConversationUmoInfo(selectedConversation).platform || tm('status.unknown') }}
+                            </v-chip>
+                            <span class="umo-separator">:</span>
+                            <v-chip size="x-small" label>
+                                {{ getMessageTypeDisplay(getConversationUmoInfo(selectedConversation).message_type) }}
+                            </v-chip>
+                            <span class="umo-separator">:</span>
+                            <span class="umo-session-id">{{ getConversationUmoInfo(selectedConversation).session_id || tm('status.unknown') }}</span>
+                        </div>
                     </div>
                 </v-card-title>
 
-                <v-card-text>
-                    <div class="mb-4 d-flex align-center">
-                        <v-btn color="secondary" variant="tonal" size="small" class="mr-2"
-                            @click="isEditingHistory = !isEditingHistory">
-                            <v-icon class="mr-1">{{ isEditingHistory ? 'mdi-eye' : 'mdi-pencil' }}</v-icon>
-                            {{ isEditingHistory ? tm('dialogs.view.previewMode') : tm('dialogs.view.editMode') }}
-                        </v-btn>
-                        <v-btn v-if="isEditingHistory" color="success" variant="tonal" size="small"
-                            :loading="savingHistory" @click="saveHistoryChanges">
-                            <v-icon class="mr-1">mdi-content-save</v-icon>
-                            {{ tm('dialogs.view.saveChanges') }}
-                        </v-btn>
-                    </div>
+                <div class="pl-6 pr-4 pt-4 pb-2 d-flex align-center">
+                    <v-btn color="secondary" variant="tonal" size="small" class="mr-2"
+                        @click="isEditingHistory = !isEditingHistory">
+                        <v-icon class="mr-1">{{ isEditingHistory ? 'mdi-eye' : 'mdi-pencil' }}</v-icon>
+                        {{ isEditingHistory ? tm('dialogs.view.previewMode') : tm('dialogs.view.editMode') }}
+                    </v-btn>
+                    <v-btn v-if="isEditingHistory" color="success" variant="tonal" size="small"
+                        :loading="savingHistory" @click="saveHistoryChanges">
+                        <v-icon class="mr-1">mdi-content-save</v-icon>
+                        {{ tm('dialogs.view.saveChanges') }}
+                    </v-btn>
+                </div>
 
+                <v-card-text>
                     <!-- 编辑模式 - Monaco编辑器 -->
                     <div v-if="isEditingHistory" class="monaco-editor-container">
                         <VueMonacoEditor v-model:value="editedHistory" theme="vs-dark" language="json" :options="{
@@ -212,7 +290,7 @@
 
                 <v-card-actions class="pa-4">
                     <v-spacer></v-spacer>
-                    <v-btn variant="text" @click="closeHistoryDialog">
+                    <v-btn variant="text" @click="closeHistoryDialog" :disabled="actionLoading">
                         {{ tm('dialogs.view.close') }}
                     </v-btn>
                 </v-card-actions>
@@ -222,8 +300,8 @@
         <!-- 编辑对话框 -->
         <v-dialog v-model="dialogEdit" max-width="500px">
             <v-card>
-                <v-card-title class="bg-primary text-white py-3">
-                    <v-icon color="white" class="me-2">mdi-pencil</v-icon>
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+                    <v-icon color="primary" class="me-2">mdi-pencil</v-icon>
                     <span>{{ tm('dialogs.edit.title') }}</span>
                 </v-card-title>
 
@@ -239,10 +317,10 @@
 
                 <v-card-actions class="pa-4">
                     <v-spacer></v-spacer>
-                    <v-btn variant="text" @click="dialogEdit = false" :disabled="loading">
+                    <v-btn variant="text" @click="dialogEdit = false" :disabled="actionLoading">
                         {{ tm('dialogs.edit.cancel') }}
                     </v-btn>
-                    <v-btn color="primary" @click="saveConversation" :loading="loading">
+                    <v-btn color="primary" variant="tonal" @click="saveConversation" :loading="actionLoading">
                         {{ tm('dialogs.edit.save') }}
                     </v-btn>
                 </v-card-actions>
@@ -252,8 +330,8 @@
         <!-- 删除确认对话框 -->
         <v-dialog v-model="dialogDelete" max-width="500px">
             <v-card>
-                <v-card-title class="bg-error text-white py-3">
-                    <v-icon color="white" class="me-2">mdi-alert</v-icon>
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+                    <v-icon color="error" class="me-2">mdi-alert</v-icon>
                     <span>{{ tm('dialogs.delete.title') }}</span>
                 </v-card-title>
 
@@ -266,10 +344,10 @@
 
                 <v-card-actions class="pa-4">
                     <v-spacer></v-spacer>
-                    <v-btn variant="text" @click="dialogDelete = false" :disabled="loading">
+                    <v-btn variant="text" @click="dialogDelete = false" :disabled="actionLoading">
                         {{ tm('dialogs.delete.cancel') }}
                     </v-btn>
-                    <v-btn color="error" @click="deleteConversation" :loading="loading">
+                    <v-btn color="error" variant="tonal" @click="deleteConversation" :loading="actionLoading">
                         {{ tm('dialogs.delete.confirm') }}
                     </v-btn>
                 </v-card-actions>
@@ -279,8 +357,8 @@
         <!-- 批量删除确认对话框 -->
         <v-dialog v-model="dialogBatchDelete" max-width="600px">
             <v-card>
-                <v-card-title class="bg-error text-white py-3">
-                    <v-icon color="white" class="me-2">mdi-delete</v-icon>
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+                    <v-icon color="error" class="me-2">mdi-delete</v-icon>
                     <span>{{ tm('dialogs.batchDelete.title') }}</span>
                 </v-card-title>
 
@@ -291,7 +369,7 @@
                     <div v-if="selectedItems.length > 0" class="mb-3">
                         <v-chip v-for="(item, index) in selectedItems.slice(0, 5)" :key="`${item.user_id}-${item.cid}`"
                             size="small" class="mr-1 mb-1" closable @click:close="removeFromSelection(item)"
-                            :disabled="loading">
+                            :disabled="actionLoading">
                             {{ item.title || tm('status.noTitle') }}
                         </v-chip>
                         <v-chip v-if="selectedItems.length > 5" size="small" class="mr-1 mb-1">
@@ -308,10 +386,10 @@
 
                 <v-card-actions class="pa-4">
                     <v-spacer></v-spacer>
-                    <v-btn variant="text" @click="dialogBatchDelete = false" :disabled="loading">
+                    <v-btn variant="text" @click="dialogBatchDelete = false" :disabled="actionLoading">
                         {{ tm('dialogs.batchDelete.cancel') }}
                     </v-btn>
-                    <v-btn color="error" @click="batchDeleteConversations" :loading="loading">
+                    <v-btn color="error" variant="tonal" @click="batchDeleteConversations" :loading="actionLoading">
                         {{ tm('dialogs.batchDelete.confirm') }}
                     </v-btn>
                 </v-card-actions>
@@ -319,30 +397,35 @@
         </v-dialog>
 
         <!-- 消息提示 -->
-        <v-snackbar :timeout="3000" elevation="24" :color="messageType" v-model="showMessage" location="top">
+        <v-snackbar :timeout="3000" elevation="6" :color="messageType" v-model="showMessage" location="top">
             {{ message }}
         </v-snackbar>
     </div>
 </template>
 
 <script>
-import axios from 'axios';
+import { isCancel } from 'axios';
 import { debounce } from 'lodash';
+import { markRaw } from 'vue';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
+import { conversationApi } from '@/api/v1';
 import { useCommonStore } from '@/stores/common';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import MessageList from '@/components/chat/MessageList.vue';
+import UmoDisplay from '@/components/shared/UmoDisplay.vue';
 import {
     askForConfirmation as askForConfirmationDialog,
     useConfirmDialog
 } from '@/utils/confirmDialog';
+import { copyToClipboard } from '@/utils/clipboard';
 
 export default {
     name: 'ConversationPage',
     components: {
         VueMonacoEditor,
-        MessageList
+        MessageList,
+        UmoDisplay
     },
 
     setup() {
@@ -403,7 +486,11 @@ export default {
             valid: true,
 
             // 状态控制
-            loading: false,
+            listLoading: false,
+            listLoadState: 'idle',
+            listAbortController: null,
+            listRequestId: 0,
+            actionLoading: false,
             showMessage: false,
             message: '',
             messageType: 'success',
@@ -413,6 +500,7 @@ export default {
             editedHistory: '',
             savingHistory: false,
             monacoEditor: null,
+            umoDisplayMode: 'parsed',
 
             commonStore: useCommonStore()
         }
@@ -421,12 +509,15 @@ export default {
     watch: {
         // 监听筛选条件变化，使用防抖处理
         platformFilter() {
+            this.invalidateConversationListRequest();
             this.debouncedApplyFilters();
         },
         messageTypeFilter() {
+            this.invalidateConversationListRequest();
             this.debouncedApplyFilters();
         },
         search() {
+            this.invalidateConversationListRequest();
             this.debouncedApplyFilters();
         }
     },
@@ -439,21 +530,18 @@ export default {
         }, 300);
     },
 
+    beforeUnmount() {
+        this.debouncedApplyFilters?.cancel();
+        this.listRequestId += 1;
+        this.listAbortController?.abort();
+    },
+
     computed: {
         // 动态表头
         tableHeaders() {
             return [
-                { title: this.tm('table.headers.title'), key: 'title', sortable: true },
-                { title: this.tm('table.headers.cid'), key: 'cid', sortable: true, width: '100px' },
-                {
-                    title: this.tm('table.headers.umo'),
-                    align: 'center',
-                    children: [
-                        { title: this.tm('table.headers.platform'), key: 'platform', sortable: true, width: '120px' },
-                        { title: this.tm('table.headers.type'), key: 'messageType', sortable: true, width: '100px' },
-                        { title: this.tm('table.headers.sessionId'), key: 'sessionId', sortable: true, width: '100px' },
-                    ],
-                },
+                { title: this.tm('table.headers.title'), key: 'title', sortable: true, minWidth: '80px', width: '200px' },
+                { title: this.tm('table.headers.umo'), key: 'umo_source', sortable: false, minWidth: '280px', width: '360px' },
                 { title: this.tm('table.headers.createdAt'), key: 'created_at', sortable: true, width: '180px' },
                 { title: this.tm('table.headers.updatedAt'), key: 'updated_at', sortable: true, width: '180px' },
                 { title: this.tm('table.headers.actions'), key: 'actions', sortable: false, align: 'center' }
@@ -504,28 +592,54 @@ export default {
 
         // 将对话历史转换为 MessageList 组件期望的格式
         formattedMessages() {
-            return this.conversationHistory.map(msg => {
-                console.log('处理消息:', msg.role, msg.content);
-                
-                // 将消息内容转换为 MessagePart[] 格式
-                const messageParts = this.convertContentToMessageParts(msg.content);
-                
-                if (msg.role === 'user') {
-                    return {
-                        content: {
-                            type: 'user',
-                            message: messageParts
-                        }
-                    };
-                } else {
-                    return {
-                        content: {
-                            type: 'bot',
-                            message: messageParts
-                        }
-                    };
+            // 按 tool_call_id 索引 tool 角色消息的执行结果
+            const toolResultsById = {};
+            for (const msg of this.conversationHistory) {
+                if (msg.role === 'tool' && msg.tool_call_id) {
+                    toolResultsById[msg.tool_call_id] = msg.content;
                 }
-            });
+            }
+
+            return this.conversationHistory
+                // tool / system 等非聊天角色不直接渲染为气泡，避免大文本走 markdown 路径卡死页面
+                .filter(msg => msg.role === 'user' || msg.role === 'assistant')
+                .map(msg => {
+                    console.log('处理消息:', msg.role, msg.content);
+
+                    const messageParts = this.convertContentToMessageParts(msg.content)
+                        // 丢弃 convertContentToMessageParts 兜底插入的空 plain，避免 assistant 仅有工具调用时渲染空气泡
+                        .filter(part => part.type !== 'plain' || (part.text && part.text.trim()));
+
+                    // 把 OpenAI 风格的 assistant.tool_calls 转成 MessageList 已支持的 tool_call part
+                    if (msg.role === 'assistant' && Array.isArray(msg.tool_calls) && msg.tool_calls.length) {
+                        const toolCalls = msg.tool_calls.map(tc => {
+                            const fn = tc.function || {};
+                            return {
+                                id: tc.id,
+                                name: fn.name || tc.name,
+                                args: fn.arguments ?? tc.arguments,
+                                result: toolResultsById[tc.id],
+                                // 历史回放无真实耗时数据：
+                                // ts: 0  → ToolCallCard.toolCallDuration 在 startTime<=0 时早退，跳过时长显示
+                                // finished_ts: 1 → MessageList.toolCallStatusText 视为已完成（避免误显示"运行中"）
+                                ts: 0,
+                                finished_ts: 1,
+                            };
+                        });
+                        messageParts.push({ type: 'tool_call', tool_calls: toolCalls });
+                    }
+
+                    const finalParts = messageParts.length
+                        ? messageParts
+                        : [{ type: 'plain', text: '' }];
+
+                    return {
+                        content: {
+                            type: msg.role === 'user' ? 'user' : 'bot',
+                            message: finalParts,
+                        }
+                    };
+                });
         }
     },
 
@@ -559,6 +673,14 @@ export default {
             }
         },
 
+        invalidateConversationListRequest() {
+            this.listRequestId += 1;
+            this.listAbortController?.abort();
+            this.listAbortController = null;
+            this.listLoading = true;
+            this.listLoadState = 'loading';
+        },
+
         // 从会话ID解析平台和消息类型信息
         parseSessionId(userId) {
             if (!userId) return { platform: 'default', messageType: 'default', sessionId: '' };
@@ -581,118 +703,186 @@ export default {
         getMessageTypeDisplay(messageType) {
             const typeMap = {
                 'GroupMessage': this.tm('messageTypes.group'),
+                'group': this.tm('messageTypes.group'),
                 'FriendMessage': this.tm('messageTypes.friend'),
+                'friend': this.tm('messageTypes.friend'),
+                'private': this.tm('messageTypes.friend'),
                 'default': this.tm('messageTypes.unknown')
             };
 
             return typeMap[messageType] || typeMap.default;
         },
 
+        getConversationUmoInfo(item) {
+            const umo = item?.user_id || item?.umo_info?.umo || '';
+            const parsed = this.parseSessionId(umo);
+            const info = item?.umo_info || {};
+            return {
+                umo,
+                platform: info.platform || parsed.platform,
+                message_type: info.message_type || parsed.messageType,
+                session_id: info.session_id || parsed.sessionId,
+                auto_name: info.auto_name || '',
+                user_alias: info.user_alias || '',
+                display_name: info.display_name || umo
+            };
+        },
+
+        getConversationUmoDisplayProps(item) {
+            const info = this.getConversationUmoInfo(item);
+            return {
+                umo: info.umo || this.tm('status.unknown'),
+                platform: info.platform,
+                messageType: info.message_type,
+                sessionId: info.session_id,
+                autoName: info.auto_name,
+                userAlias: info.user_alias
+            };
+        },
+
+        hasConversationUmoReadableName(item) {
+            const info = this.getConversationUmoInfo(item);
+            return Boolean(info.user_alias || info.auto_name);
+        },
+
+        formatUmoSource(item) {
+            if (this.umoDisplayMode === 'raw') {
+                return item?.user_id || this.tm('status.unknown');
+            }
+
+            const info = this.getConversationUmoInfo(item);
+            const platform = info.platform || this.tm('status.unknown');
+            const messageType = this.getMessageTypeDisplay(info.message_type);
+            const sessionId = info.session_id || this.tm('status.unknown');
+            return `${platform}:${messageType}:${sessionId}`;
+        },
+
+        async copyUmoSource(item) {
+            const ok = await copyToClipboard(this.formatUmoSource(item));
+            if (ok) {
+                this.showSuccessMessage(this.tm('messages.copySuccess'));
+            } else {
+                this.showErrorMessage(this.tm('messages.copyError'));
+            }
+        },
+
         // 获取对话列表
-        fetchConversations: (() => {
-            let controller = new AbortController();
+        async fetchConversations() {
+            this.debouncedApplyFilters?.cancel();
+            this.listAbortController?.abort();
+            const controller = new AbortController();
+            const requestId = ++this.listRequestId;
+            const filtersSnapshot = {
+                platforms: this.platformFilter.map(item =>
+                    typeof item === 'object' ? item.value : item
+                ),
+                messageTypes: [...this.messageTypeFilter],
+                search: this.search
+            };
+            this.listAbortController = markRaw(controller);
+            this.listLoading = true;
+            this.listLoadState = 'loading';
 
-            return async function () {
-                // 新请求前停止之前的请求
-                controller?.abort()
-                controller = new AbortController();
+            try {
+                const params = {
+                    page: this.pagination.page,
+                    page_size: this.pagination.page_size
+                };
 
-                this.loading = true;
-                try {
-                    // 准备请求参数，包含分页和筛选条件
-                    const params = {
-                        page: this.pagination.page,
-                        page_size: this.pagination.page_size
+                if (filtersSnapshot.platforms.length > 0) {
+                    params.platforms = filtersSnapshot.platforms.join(',');
+                }
+
+                if (filtersSnapshot.messageTypes.length > 0) {
+                    params.message_types = filtersSnapshot.messageTypes.join(',');
+                }
+
+                const search = filtersSnapshot.search.trim();
+                if (search) {
+                    params.search = search;
+                }
+
+                params.exclude_ids = 'astrbot';
+                params.exclude_platforms = 'webchat';
+                params.include_history = false;
+
+                const response = await conversationApi.list(params, {
+                    signal: controller.signal,
+                });
+
+                if (requestId !== this.listRequestId) return;
+                if (response.data.status !== "ok") {
+                    throw new Error(response.data.message || this.tm('messages.fetchError'));
+                }
+
+                const data = response.data.data;
+                if (!data || !Array.isArray(data.conversations)) {
+                    throw new Error(this.tm('messages.fetchError'));
+                }
+
+                this.conversations = data.conversations.map(conv => {
+                    const umoInfo = this.getConversationUmoInfo(conv);
+                    conv.sessionInfo = {
+                        platform: umoInfo.platform,
+                        messageType: umoInfo.message_type,
+                        sessionId: umoInfo.session_id
                     };
+                    return conv;
+                });
 
-                    // 添加筛选条件 - 处理combobox的混合数据格式
-                    if (this.platformFilter.length > 0) {
-                        const platforms = this.platformFilter.map(item =>
-                            typeof item === 'object' ? item.value : item
-                        );
-                        params.platforms = platforms.join(',');
+                if (data.pagination) {
+                    this.pagination = {
+                        page: data.pagination.page || 1,
+                        page_size: data.pagination.page_size || 20,
+                        total: data.pagination.total || 0,
+                        total_pages: data.pagination.total_pages || 1
+                    };
+                }
+                this.lastAppliedFilters = filtersSnapshot;
+                this.listLoadState = this.conversations.length ? 'success' : 'empty';
+            } catch (error) {
+                if (
+                    requestId !== this.listRequestId ||
+                    isCancel(error) ||
+                    controller.signal.aborted
+                ) return;
+
+                console.error('获取对话列表出错:', error);
+                this.listLoadState = 'error';
+                this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.fetchError'));
+            } finally {
+                if (requestId === this.listRequestId) {
+                    this.listLoading = false;
+                    if (this.listAbortController === controller) {
+                        this.listAbortController = null;
                     }
-
-                    if (this.messageTypeFilter.length > 0) {
-                        params.message_types = this.messageTypeFilter.join(',');
-                    }
-
-                    if (this.search) {
-                        params.search = this.search.trim();
-                    }
-
-                    // 添加排除条件
-                    params.exclude_ids = 'astrbot';
-                    params.exclude_platforms = 'webchat';
-
-                    const response = await axios.get('/api/conversation/list', {
-                        signal: controller.signal,
-                        params
-                    });
-
-                    this.lastAppliedFilters = { ...this.currentFilters }; // 记录已应用的筛选条件
-
-                    if (response.data.status === "ok") {
-                        const data = response.data.data;
-
-                        if (!data || !data.conversations) {
-                            console.error('API 返回数据格式不符合预期:', data);
-                            this.showErrorMessage(this.tm('messages.fetchError'));
-                            return;
-                        }
-
-                        // 处理会话数据，解析sessionId
-                        this.conversations = (data.conversations || []).map(conv => {
-                            // 为每个会话添加会话信息
-                            conv.sessionInfo = this.parseSessionId(conv.user_id);
-                            return conv;
-                        });
-
-                        // 更新分页信息
-                        if (data.pagination) {
-                            this.pagination = {
-                                page: data.pagination.page || 1,
-                                page_size: data.pagination.page_size || 20,
-                                total: data.pagination.total || 0,
-                                total_pages: data.pagination.total_pages || 1
-                            };
-                        } else {
-                            console.warn('API 响应中没有分页信息');
-                        }
-                    } else {
-                        this.showErrorMessage(response.data.message || this.tm('messages.fetchError'));
-                    }
-                } catch (error) {
-                    if (axios.isCancel(error)) return;
-                    
-                    console.error('获取对话列表出错:', error);
-                    if (error.response) {
-                        console.error('错误响应数据:', error.response.data);
-                        console.error('错误状态码:', error.response.status);
-                    }
-                    this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.fetchError'));
-                } finally {
-                    this.loading = false;
                 }
             }
-        })(),
+        },
 
         // 查看对话详情
         async viewConversation(item) {
             this.selectedConversation = item;
-            this.loading = true;
+            this.actionLoading = true;
             this.isEditingHistory = false;
 
             try {
                 console.log(`正在请求对话详情，user_id=${item.user_id}, cid=${item.cid}`);
-                const response = await axios.post('/api/conversation/detail', {
-                    user_id: item.user_id,
-                    cid: item.cid
-                });
+                const response = await conversationApi.get(item.user_id, item.cid);
 
                 if (response.data.status === "ok") {
                     try {
-                        const historyData = response.data.data.history || '[]';
+                        const detailData = response.data.data || {};
+                        const mergedConversation = { ...this.selectedConversation, ...detailData };
+                        const umoInfo = this.getConversationUmoInfo(mergedConversation);
+                        mergedConversation.sessionInfo = {
+                            platform: umoInfo.platform,
+                            messageType: umoInfo.message_type,
+                            sessionId: umoInfo.session_id
+                        };
+                        this.selectedConversation = mergedConversation;
+
+                        const historyData = detailData.history || '[]';
                         this.conversationHistory = JSON.parse(historyData);
                         this.editedHistory = JSON.stringify(this.conversationHistory, null, 2);
                     } catch (e) {
@@ -708,7 +898,7 @@ export default {
                 console.error('获取对话详情出错:', error);
                 this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.historyError'));
             } finally {
-                this.loading = false;
+                this.actionLoading = false;
             }
         },
 
@@ -728,11 +918,13 @@ export default {
                     return;
                 }
 
-                const response = await axios.post('/api/conversation/update_history', {
-                    user_id: this.selectedConversation.user_id,
-                    cid: this.selectedConversation.cid,
+                const response = await conversationApi.replaceMessages(
+                    this.selectedConversation.user_id,
+                    this.selectedConversation.cid,
+                    {
                     history: historyJson
-                });
+                    }
+                );
 
                 if (response.data.status === "ok") {
                     this.conversationHistory = historyJson;
@@ -771,13 +963,15 @@ export default {
         async saveConversation() {
             if (!this.$refs.form.validate()) return;
 
-            this.loading = true;
+            this.actionLoading = true;
             try {
-                const response = await axios.post('/api/conversation/update', {
-                    user_id: this.editedItem.user_id,
-                    cid: this.editedItem.cid,
+                const response = await conversationApi.update(
+                    this.editedItem.user_id,
+                    this.editedItem.cid,
+                    {
                     title: this.editedItem.title
-                });
+                    }
+                );
 
                 if (response.data.status === "ok") {
                     // 更新本地数据
@@ -799,7 +993,7 @@ export default {
             } catch (error) {
                 this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.saveError'));
             } finally {
-                this.loading = false;
+                this.actionLoading = false;
             }
         },
 
@@ -811,12 +1005,12 @@ export default {
 
         // 删除对话
         async deleteConversation() {
-            this.loading = true;
+            this.actionLoading = true;
             try {
-                const response = await axios.post('/api/conversation/delete', {
-                    user_id: this.selectedConversation.user_id,
-                    cid: this.selectedConversation.cid
-                });
+                const response = await conversationApi.delete(
+                    this.selectedConversation.user_id,
+                    this.selectedConversation.cid
+                );
 
                 if (response.data.status === "ok") {
                     const index = this.conversations.findIndex(item => item.user_id === this.selectedConversation.user_id && item.cid === this.selectedConversation.cid
@@ -828,13 +1022,14 @@ export default {
 
                     this.dialogDelete = false;
                     this.showSuccessMessage(this.tm('messages.deleteSuccess'));
+                    this.fetchConversations();
                 } else {
                     this.showErrorMessage(response.data.message || this.tm('messages.deleteError'));
                 }
             } catch (error) {
                 this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.deleteError'));
             } finally {
-                this.loading = false;
+                this.actionLoading = false;
                 this.selectedItems = this.selectedItems.filter(item =>
                     !(item.user_id === this.selectedConversation.user_id && item.cid === this.selectedConversation.cid)
                 );
@@ -874,7 +1069,7 @@ export default {
                 return;
             }
 
-            this.loading = true;
+            this.actionLoading = true;
             try {
                 // 准备批量删除的数据
                 const conversations = this.selectedItems.map(item => ({
@@ -882,7 +1077,7 @@ export default {
                     cid: item.cid
                 }));
 
-                const response = await axios.post('/api/conversation/delete', {
+                const response = await conversationApi.batchDelete({
                     conversations: conversations
                 });
 
@@ -916,7 +1111,7 @@ export default {
                 console.error('批量删除对话出错:', error);
                 this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.batchDeleteError'));
             } finally {
-                this.loading = false;
+                this.actionLoading = false;
             }
         },
 
@@ -927,7 +1122,7 @@ export default {
                 return;
             }
 
-            this.loading = true;
+            this.actionLoading = true;
             try {
                 // 准备导出的数据
                 const conversations = this.selectedItems.map(item => ({
@@ -935,10 +1130,8 @@ export default {
                     cid: item.cid
                 }));
 
-                const response = await axios.post('/api/conversation/export', {
+                const response = await conversationApi.export({
                     conversations: conversations
-                }, {
-                    responseType: 'blob' // 重要：告诉 axios 响应是一个 blob
                 });
 
                 // 创建一个下载链接
@@ -963,7 +1156,7 @@ export default {
                 console.error(this.tm('messages.exportError'), error);
                 this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.exportError'));
             } finally {
-                this.loading = false;
+                this.actionLoading = false;
             }
         },
 
@@ -1091,8 +1284,17 @@ export default {
     font-weight: 500;
 }
 
+/* 编辑模式：编辑器填满剩余高度，避免与外层滚动条叠加 */
+.conversation-detail-card--edit > .v-card-text {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
 .monaco-editor-container {
-    height: 500px;
+    flex: 1;
+    min-height: 0;
     border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
@@ -1100,11 +1302,21 @@ export default {
 
 /* 聊天消息容器样式 */
 .conversation-messages-container {
-    max-height: 500px;
-    overflow-y: auto;
     padding: 8px;
     border-radius: 8px;
     background-color: #f9f9f9;
+}
+
+/* 让 ToolCallCard 内部的 args/result 自然展开，由外层容器统一滚动，避免双滚动条 */
+.conversation-messages-container .detail-json,
+.conversation-messages-container .detail-result {
+    max-height: none;
+    overflow: visible;
+}
+
+/* 历史回放无真实状态数据，隐藏 IPython 工具的"已完成"标签，与其它工具卡片保持一致 */
+.conversation-messages-container .tool-call-inline-status {
+    display: none;
 }
 
 /* 暗色模式下的聊天消息容器 */
@@ -1119,12 +1331,137 @@ export default {
     flex-direction: column;
 }
 
+/* 编辑模式：卡片固定高度，让 flex 链完整，Monaco 填满剩余空间 */
+.v-dialog > .v-overlay__content > .conversation-detail-card--edit {
+    flex: 0 0 90vh;
+}
+
+.conversation-detail-title {
+    display: flex;
+    align-items: center;
+}
+
+.conversation-detail-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    width: 100%;
+}
+
 .text-truncate {
     display: inline-block;
     /* max-width: 100px; */
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.conversation-title-cell {
+    padding: 6px 0px;
+    min-width: 100px;
+    max-width: 145px;
+}
+
+.conversation-title-row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+}
+
+.conversation-title-text {
+    display: inline-block;
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.conversation-inline-edit {
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    flex-shrink: 0;
+}
+
+.conversation-title-meta {
+    display: block;
+    color: rgba(var(--v-theme-on-surface), 0.58);
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.umo-header-cell {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+}
+
+.umo-header-toggle {
+    flex-shrink: 0;
+}
+
+.umo-source-cell {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+}
+
+.umo-source-content {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.conversation-umo-display {
+    min-width: 0;
+}
+
+.conversation-umo-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    width: 100%;
+}
+
+.conversation-umo-parsed {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    color: rgba(var(--v-theme-on-surface), 0.62);
+    font-size: 12px;
+}
+
+.conversation-detail-umo-parsed {
+    max-width: 100%;
+}
+
+.umo-separator {
+    color: rgba(var(--v-theme-on-surface), 0.5);
+    flex-shrink: 0;
+}
+
+.umo-session-id,
+.umo-raw-text {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.umo-copy-button {
+    flex-shrink: 0;
 }
 
 /* 动画 */

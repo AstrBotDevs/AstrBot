@@ -1,4 +1,3 @@
-import base64
 import json
 import sys
 import typing as T
@@ -11,8 +10,10 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
+from astrbot.core.utils.media_utils import MediaResolver, describe_media_ref
 
 from ...hooks import BaseAgentRunHooks
+from ...message import is_checkpoint_message
 from ...response import AgentResponseData
 from ...run_context import ContextWrapper, TContext
 from ..base import AgentResponse, AgentState, BaseAgentRunner
@@ -148,6 +149,8 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
         # 处理历史上下文
         if not self.auto_save_history and contexts:
             for ctx in contexts:
+                if is_checkpoint_message(ctx):
+                    continue
                 if isinstance(ctx, dict) and "role" in ctx and "content" in ctx:
                     # 处理上下文中的图片
                     content = ctx["content"]
@@ -207,10 +210,11 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                     object_string_content.append({"type": "text", "text": prompt})
 
                 for url in image_urls:
-                    # the url is a base64 string
                     try:
-                        image_data = base64.b64decode(url)
-                        file_id = await self.api_client.upload_file(image_data)
+                        file_id = await self._download_and_upload_image(
+                            url,
+                            session_id,
+                        )
                         object_string_content.append(
                             {
                                 "type": "image",
@@ -218,7 +222,11 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                             }
                         )
                     except Exception as e:
-                        logger.warning(f"处理图片失败 {url}: {e}")
+                        logger.warning(
+                            "处理图片失败 %s: %s",
+                            describe_media_ref(url),
+                            e,
+                        )
                         continue
 
                 if object_string_content:
@@ -344,8 +352,11 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                 return file_id
 
         try:
-            image_data = await self.api_client.download_image(image_url)
-            file_id = await self.api_client.upload_file(image_data)
+            image_bytes = await MediaResolver(
+                image_url,
+                media_type="image",
+            ).to_bytes()
+            file_id = await self.api_client.upload_file(image_bytes)
 
             if session_id:
                 self.file_id_cache[session_id][cache_key] = file_id
@@ -354,8 +365,8 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
             return file_id
 
         except Exception as e:
-            logger.error(f"处理图片失败 {image_url}: {e!s}")
-            raise Exception(f"处理图片失败: {e!s}")
+            logger.error("处理图片失败 %s: %s", describe_media_ref(image_url), e)
+            raise Exception(f"处理图片失败: {e!s}") from e
 
     @override
     def done(self) -> bool:

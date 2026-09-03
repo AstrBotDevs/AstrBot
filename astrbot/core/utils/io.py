@@ -1,4 +1,5 @@
 import base64
+import inspect
 import logging
 import os
 import shutil
@@ -6,17 +7,36 @@ import socket
 import ssl
 import time
 import uuid
-import zipfile
 from pathlib import Path
+from typing import cast
+from urllib.parse import unquote, urlparse
 
 import aiohttp
 import certifi
 import psutil
 from PIL import Image
 
-from .astrbot_path import get_astrbot_data_path, get_astrbot_path, get_astrbot_temp_path
+from .astrbot_path import get_astrbot_temp_path
 
 logger = logging.getLogger("astrbot")
+
+
+def _safe_url_for_log(url: str) -> str:
+    """Return a URL summary that omits query strings and fragments.
+
+    Args:
+        url: URL that may contain signed query parameters.
+
+    Returns:
+        A short description suitable for logs.
+    """
+
+    parsed = urlparse(url)
+    if parsed.scheme in {"http", "https"}:
+        filename = Path(unquote(parsed.path or "")).name
+        suffix = f" file={filename!r}" if filename else ""
+        return f"{parsed.scheme} URL host={parsed.netloc!r}{suffix} len={len(url)}"
+    return f"URL len={len(url)}"
 
 
 def on_error(func, path, exc_info) -> None:
@@ -31,10 +51,37 @@ def on_error(func, path, exc_info) -> None:
 
 
 def remove_dir(file_path: str) -> bool:
-    if not os.path.exists(file_path):
+    if not os.path.lexists(file_path):
         return True
-    shutil.rmtree(file_path, onerror=on_error)
+    if os.path.isfile(file_path) or os.path.islink(file_path):
+        os.remove(file_path)
+    else:
+        shutil.rmtree(file_path, onerror=on_error)
     return True
+
+
+def ensure_dir(dir_path: str | Path) -> None:
+    """确保目录存在。如果路径处存在非目录的文件或损坏的符号链接，则先将其删除。"""
+    p = Path(dir_path)
+    if (p.exists() or p.is_symlink()) and not p.is_dir():
+        logger.warning(
+            f"Path {p} exists but is not a directory; removing it before creating "
+            "the directory."
+        )
+        try:
+            if p.is_dir():
+                shutil.rmtree(p, onerror=on_error)
+            else:
+                p.unlink()
+        except Exception as e:
+            logger.error(f"Failed to remove conflicting path {p}: {e!s}")
+            raise RuntimeError(f"Could not remove conflicting path {p}: {e!s}") from e
+
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        logger.error(f"Failed to create directory {p}: {e!s}")
+        raise RuntimeError(f"Could not create directory {p}: {e!s}") from e
 
 
 def port_checker(port: int, host: str = "localhost") -> bool:
@@ -56,7 +103,7 @@ def save_temp_img(img: Image.Image | bytes) -> str:
     p = os.path.join(temp_dir, f"io_temp_img_{timestamp}.jpg")
 
     if isinstance(img, Image.Image):
-        img.save(p)
+        cast(Image.Image, img).save(p)
     else:
         with open(p, "wb") as f:
             f.write(img)
@@ -96,7 +143,7 @@ async def download_image_by_url(
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
         # 关闭SSL验证（仅在证书验证失败时作为fallback）
         logger.warning(
-            f"SSL certificate verification failed for {url}. "
+            f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
             "Disabling SSL verification (CERT_NONE) as a fallback. "
             "This is insecure and exposes the application to man-in-the-middle attacks. "
             "Please investigate and resolve certificate issues."
@@ -123,8 +170,130 @@ async def download_image_by_url(
         raise e
 
 
-async def download_file(url: str, path: str, show_progress: bool = False) -> None:
-    """从指定 url 下载文件到指定路径 path"""
+async def _emit_download_progress(progress_callback, payload: dict) -> None:
+    if not progress_callback:
+        return
+    result = progress_callback(payload)
+    if inspect.isawaitable(result):
+        await result
+
+
+class DownloadFileHTTPError(RuntimeError):
+    """Raised when a file download returns an unsuccessful HTTP status."""
+
+
+def _raise_for_download_status(resp, url: str) -> None:
+    if resp.status == 200:
+        return
+    logger.error(
+        "Failed to download file from %s. HTTP status code: %s",
+        _safe_url_for_log(url),
+        resp.status,
+    )
+    raise DownloadFileHTTPError(
+        "Failed to download file from "
+        f"{_safe_url_for_log(url)}. HTTP status code: {resp.status}"
+    )
+
+
+async def _download_response_to_file(
+    resp,
+    file_obj,
+    url: str,
+    show_progress: bool,
+    progress_callback,
+    show_downloading_label: bool = True,
+) -> None:
+    """Write a successful download response to a local file.
+
+    Args:
+        resp: aiohttp response object to read from.
+        file_obj: Open writable binary file object.
+        url: Source URL used for progress events and sanitized errors.
+        show_progress: Whether to print progress to stdout.
+        progress_callback: Optional callback for progress payloads.
+        show_downloading_label: Whether to use the standard download heading.
+
+    """
+
+    total_size = int(resp.headers.get("content-length", 0))
+    downloaded_size = 0
+    start_time = time.time()
+    if show_progress:
+        if show_downloading_label:
+            print(
+                f"Downloading: {_safe_url_for_log(url)} | "
+                f"Size: {total_size / 1024:.2f} KB"
+            )
+        else:
+            print(f"Size: {total_size / 1024:.2f} KB | URL: {_safe_url_for_log(url)}")
+    await _emit_download_progress(
+        progress_callback,
+        {
+            "url": url,
+            "downloaded": 0,
+            "total": total_size,
+            "percent": 0,
+            "speed": 0,
+        },
+    )
+    while True:
+        chunk = await resp.content.read(8192)
+        if not chunk:
+            break
+        file_obj.write(chunk)
+        downloaded_size += len(chunk)
+        elapsed_time = time.time() - start_time if time.time() - start_time > 0 else 1
+        speed = downloaded_size / 1024 / elapsed_time  # KB/s
+        percent = downloaded_size / total_size if total_size > 0 else 0
+        await _emit_download_progress(
+            progress_callback,
+            {
+                "url": url,
+                "downloaded": downloaded_size,
+                "total": total_size,
+                "percent": percent,
+                "speed": speed,
+            },
+        )
+        if show_progress:
+            print(
+                f"\rProgress: {percent:.2%} Speed: {speed:.2f} KB/s",
+                end="",
+            )
+    await _emit_download_progress(
+        progress_callback,
+        {
+            "url": url,
+            "downloaded": downloaded_size,
+            "total": total_size,
+            "percent": 1,
+            "speed": 0,
+        },
+    )
+
+
+async def download_file(
+    url: str,
+    path: str,
+    show_progress: bool = False,
+    progress_callback=None,
+    allow_insecure_ssl_fallback: bool = True,
+) -> None:
+    """Download a remote file to a local path.
+
+    Args:
+        url: Remote URL to download.
+        path: Local destination path.
+        show_progress: Whether to print progress to stdout.
+        progress_callback: Optional callback for progress payloads.
+        allow_insecure_ssl_fallback: Whether certificate failures may retry with
+            TLS certificate verification disabled.
+
+    Returns:
+        None.
+    """
+
     try:
         ssl_context = ssl.create_default_context(
             cafile=certifi.where(),
@@ -135,38 +304,25 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
             connector=connector,
         ) as session:
             async with session.get(url, timeout=1800) as resp:
-                if resp.status != 200:
-                    raise Exception(f"下载文件失败: {resp.status}")
-                total_size = int(resp.headers.get("content-length", 0))
-                downloaded_size = 0
-                start_time = time.time()
-                if show_progress:
-                    print(f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}")
+                _raise_for_download_status(resp, url)
                 with open(path, "wb") as f:
-                    while True:
-                        chunk = await resp.content.read(8192)
-                        if not chunk:
-                            break
-                        f.write(chunk)
-                        downloaded_size += len(chunk)
-                        if show_progress:
-                            elapsed_time = (
-                                time.time() - start_time
-                                if time.time() - start_time > 0
-                                else 1
-                            )
-                            speed = downloaded_size / 1024 / elapsed_time  # KB/s
-                            print(
-                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",
-                                end="",
-                            )
+                    await _download_response_to_file(
+                        resp,
+                        f,
+                        url,
+                        show_progress,
+                        progress_callback,
+                    )
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
+        if not allow_insecure_ssl_fallback:
+            raise
         # 关闭SSL验证（仅在证书验证失败时作为fallback）
         logger.warning(
-            "SSL 证书验证失败，已关闭 SSL 验证（不安全，仅用于临时下载）。请检查目标服务器的证书配置。"
+            f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
+            "Falling back to unverified connection (CERT_NONE). "
         )
         logger.warning(
-            f"SSL certificate verification failed for {url}. "
+            f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
             "Falling back to unverified connection (CERT_NONE). "
             "This is insecure and exposes the application to man-in-the-middle attacks. "
             "Please investigate certificate issues with the remote server."
@@ -176,25 +332,16 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
         ssl_context.verify_mode = ssl.CERT_NONE
         async with aiohttp.ClientSession() as session:
             async with session.get(url, ssl=ssl_context, timeout=120) as resp:
-                total_size = int(resp.headers.get("content-length", 0))
-                downloaded_size = 0
-                start_time = time.time()
-                if show_progress:
-                    print(f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}")
+                _raise_for_download_status(resp, url)
                 with open(path, "wb") as f:
-                    while True:
-                        chunk = await resp.content.read(8192)
-                        if not chunk:
-                            break
-                        f.write(chunk)
-                        downloaded_size += len(chunk)
-                        if show_progress:
-                            elapsed_time = time.time() - start_time
-                            speed = downloaded_size / 1024 / elapsed_time  # KB/s
-                            print(
-                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",
-                                end="",
-                            )
+                    await _download_response_to_file(
+                        resp,
+                        f,
+                        url,
+                        show_progress,
+                        progress_callback,
+                        show_downloading_label=False,
+                    )
     if show_progress:
         print()
 
@@ -216,67 +363,3 @@ def get_local_ip_addresses():
                 network_ips.append(addr.address)
 
     return network_ips
-
-
-async def get_dashboard_version():
-    # First check user data directory (manually updated / downloaded dashboard).
-    dist_dir = os.path.join(get_astrbot_data_path(), "dist")
-    if not os.path.exists(dist_dir):
-        # Fall back to the dist bundled inside the installed wheel.
-        _bundled = Path(get_astrbot_path()) / "astrbot" / "dashboard" / "dist"
-        if _bundled.exists():
-            dist_dir = str(_bundled)
-    if os.path.exists(dist_dir):
-        version_file = os.path.join(dist_dir, "assets", "version")
-        if os.path.exists(version_file):
-            with open(version_file, encoding="utf-8") as f:
-                v = f.read().strip()
-                return v
-    return None
-
-
-async def download_dashboard(
-    path: str | None = None,
-    extract_path: str = "data",
-    latest: bool = True,
-    version: str | None = None,
-    proxy: str | None = None,
-) -> None:
-    """下载管理面板文件"""
-    if path is None:
-        zip_path = Path(get_astrbot_data_path()).absolute() / "dashboard.zip"
-    else:
-        zip_path = Path(path).absolute()
-
-    if latest or len(str(version)) != 40:
-        ver_name = "latest" if latest else version
-        dashboard_release_url = f"https://astrbot-registry.soulter.top/download/astrbot-dashboard/{ver_name}/dist.zip"
-        logger.info(
-            f"准备下载指定发行版本的 AstrBot WebUI 文件: {dashboard_release_url}",
-        )
-        try:
-            await download_file(
-                dashboard_release_url,
-                str(zip_path),
-                show_progress=True,
-            )
-        except BaseException as _:
-            if latest:
-                dashboard_release_url = "https://github.com/AstrBotDevs/AstrBot/releases/latest/download/dist.zip"
-            else:
-                dashboard_release_url = f"https://github.com/AstrBotDevs/AstrBot/releases/download/{version}/dist.zip"
-            if proxy:
-                dashboard_release_url = f"{proxy}/{dashboard_release_url}"
-            await download_file(
-                dashboard_release_url,
-                str(zip_path),
-                show_progress=True,
-            )
-    else:
-        url = f"https://github.com/AstrBotDevs/astrbot-release-harbour/releases/download/release-{version}/dist.zip"
-        logger.info(f"准备下载指定版本的 AstrBot WebUI: {url}")
-        if proxy:
-            url = f"{proxy}/{url}"
-        await download_file(url, str(zip_path), show_progress=True)
-    with zipfile.ZipFile(zip_path, "r") as z:
-        z.extractall(extract_path)

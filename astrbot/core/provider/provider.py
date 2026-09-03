@@ -2,9 +2,9 @@ import abc
 import asyncio
 import os
 from collections.abc import AsyncGenerator
-from typing import TypeAlias, Union
+from typing import Literal, TypeAlias, Union
 
-from astrbot.core.agent.message import ContentPart, Message
+from astrbot.core.agent.message import ContentPart, Message, is_checkpoint_message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.provider.entities import (
     LLMResponse,
@@ -98,12 +98,15 @@ class Provider(AbstractProvider):
         prompt: str | None = None,
         session_id: str | None = None,
         image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
         func_tool: ToolSet | None = None,
         contexts: list[Message] | list[dict] | None = None,
         system_prompt: str | None = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
+        tool_choice: Literal["auto", "required"] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
         """获得 LLM 的文本对话结果。会使用当前的模型进行对话。
@@ -112,14 +115,18 @@ class Provider(AbstractProvider):
             prompt: 提示词，和 contexts 二选一使用，如果都指定，则会将 prompt（以及可能的 image_urls） 作为最新的一条记录添加到 contexts 中
             session_id: 会话 ID(此属性已经被废弃)
             image_urls: 图片 URL 列表
+            audio_urls: 音频 URL 列表，也支持本地路径
             tools: tool set
+            tool_choice: 工具调用策略，`auto` 表示由模型自行决定，`required` 表示要求模型必须调用工具
             contexts: 上下文，和 prompt 二选一使用
             tool_calls_result: 回传给 LLM 的工具调用结果。参考: https://platform.openai.com/docs/guides/function-calling
             extra_user_content_parts: 额外的内容块列表，用于在用户消息后添加额外的文本块（如系统提醒、指令等）
+            request_max_retries: 可重试请求错误的最大尝试次数，包含首次请求。
             kwargs: 其他参数
 
         Notes:
             - 如果传入了 image_urls，将会在对话时附上图片。如果模型不支持图片输入，将会抛出错误。
+            - 如果传入了 audio_urls，将会在对话时附上音频。如果模型不支持音频输入，将会抛出错误或降级处理。
             - 如果传入了 tools，将会使用 tools 进行 Function-calling。如果模型不支持 Function-calling，将会抛出错误。
 
         """
@@ -130,11 +137,14 @@ class Provider(AbstractProvider):
         prompt: str | None = None,
         session_id: str | None = None,
         image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
         func_tool: ToolSet | None = None,
         contexts: list[Message] | list[dict] | None = None,
         system_prompt: str | None = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
+        tool_choice: Literal["auto", "required"] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """获得 LLM 的流式文本对话结果。会使用当前的模型进行对话。在生成的最后会返回一次完整的结果。
@@ -143,13 +153,17 @@ class Provider(AbstractProvider):
             prompt: 提示词，和 contexts 二选一使用，如果都指定，则会将 prompt（以及可能的 image_urls） 作为最新的一条记录添加到 contexts 中
             session_id: 会话 ID(此属性已经被废弃)
             image_urls: 图片 URL 列表
+            audio_urls: 音频 URL 列表，也支持本地路径
             tools: tool set
+            tool_choice: 工具调用策略，`auto` 表示由模型自行决定，`required` 表示要求模型必须调用工具
             contexts: 上下文，和 prompt 二选一使用
             tool_calls_result: 回传给 LLM 的工具调用结果。参考: https://platform.openai.com/docs/guides/function-calling
+            request_max_retries: 可重试请求错误的最大尝试次数，包含首次请求。
             kwargs: 其他参数
 
         Notes:
             - 如果传入了 image_urls，将会在对话时附上图片。如果模型不支持图片输入，将会抛出错误。
+            - 如果传入了 audio_urls，将会在对话时附上音频。如果模型不支持音频输入，将会抛出错误或降级处理。
             - 如果传入了 tools，将会使用 tools 进行 Function-calling。如果模型不支持 Function-calling，将会抛出错误。
 
         """
@@ -181,6 +195,8 @@ class Provider(AbstractProvider):
             return []
         dicts: list[dict] = []
         for message in messages:
+            if is_checkpoint_message(message):
+                continue
             if isinstance(message, Message):
                 dicts.append(message.model_dump())
             else:
@@ -347,7 +363,7 @@ class EmbeddingProvider(AbstractProvider):
 
         """
         semaphore = asyncio.Semaphore(tasks_limit)
-        all_embeddings: list[list[float]] = []
+        batch_results: dict[int, list[list[float]]] = {}
         failed_batches: list[tuple[int, list[str]]] = []
         completed_count = 0
         total_count = len(texts)
@@ -358,7 +374,7 @@ class EmbeddingProvider(AbstractProvider):
                 for attempt in range(max_retries):
                     try:
                         batch_embeddings = await self.get_embeddings(batch_texts)
-                        all_embeddings.extend(batch_embeddings)
+                        batch_results[batch_idx] = batch_embeddings
                         completed_count += len(batch_texts)
                         if progress_callback:
                             await progress_callback(completed_count, total_count)
@@ -390,6 +406,9 @@ class EmbeddingProvider(AbstractProvider):
             )
             raise Exception(error_msg)
 
+        all_embeddings: list[list[float]] = []
+        for batch_idx in range(len(tasks)):
+            all_embeddings.extend(batch_results[batch_idx])
         return all_embeddings
 
 

@@ -18,6 +18,7 @@ from astrbot.api.platform import (
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.media_utils import MediaResolver
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
@@ -29,11 +30,15 @@ LINE_CONFIG_METADATA = {
         "description": "LINE Channel Access Token",
         "type": "string",
         "hint": "LINE Messaging API 的 channel access token。",
+        "secret": True,
+        "show_key": True,
     },
     "channel_secret": {
         "description": "LINE Channel Secret",
         "type": "string",
         "hint": "用于校验 LINE Webhook 签名。",
+        "secret": True,
+        "show_key": True,
     },
 }
 
@@ -132,7 +137,7 @@ class LinePlatformAdapter(Platform):
             return "invalid signature", 400
 
         try:
-            payload = await request.get_json(force=True, silent=False)
+            payload = await request.get_json(silent=False)
         except Exception as e:
             logger.warning("[LINE] invalid webhook body: %s", e)
             return "bad request", 400
@@ -209,7 +214,21 @@ class LinePlatformAdapter(Platform):
         if source_type in {"group", "room"}:
             abm.type = MessageType.GROUP_MESSAGE
             container_id = group_id or room_id
-            abm.group = Group(group_id=container_id, group_name=container_id)
+            group_name = str(
+                source.get("groupName")
+                or source.get("roomName")
+                or event.get("groupName")
+                or event.get("roomName")
+                or ""
+            ).strip()
+            group_avatar = str(
+                source.get("pictureUrl") or event.get("pictureUrl") or ""
+            ).strip()
+            abm.group = Group(
+                group_id=container_id,
+                group_name=group_name or None,
+                group_avatar=group_avatar or None,
+            )
             abm.session_id = container_id
             sender_id = user_id or container_id
         elif source_type == "user":
@@ -343,7 +362,12 @@ class LinePlatformAdapter(Platform):
     ) -> Record | None:
         external_url = self._get_external_content_url(message)
         if external_url:
-            return Record.fromURL(external_url)
+            path_wav = await MediaResolver(
+                external_url,
+                media_type="audio",
+                default_suffix=".wav",
+            ).to_path(target_format="wav")
+            return Record(file=path_wav, url=path_wav)
 
         content = await self.line_api.get_message_content(message_id)
         if not content:
@@ -351,7 +375,12 @@ class LinePlatformAdapter(Platform):
         content_bytes, content_type, _ = content
         suffix = self._guess_suffix(content_type, ".m4a")
         file_path = self._store_temp_content("audio", message_id, content_bytes, suffix)
-        return Record(file=file_path, url=file_path)
+        path_wav = await MediaResolver(
+            file_path,
+            media_type="audio",
+            default_suffix=".wav",
+        ).to_path(target_format="wav")
+        return Record(file=path_wav, url=path_wav)
 
     async def _build_file_component(
         self,
@@ -454,12 +483,22 @@ class LinePlatformAdapter(Platform):
         self._event_id_timestamps[event_id] = time.time()
         return False
 
-    async def handle_msg(self, abm: AstrBotMessage) -> None:
-        event = LineMessageEvent(
-            message_str=abm.message_str,
-            message_obj=abm,
+    def create_event(self, message: AstrBotMessage) -> LineMessageEvent:
+        """Creates a LINE message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created LINE message event.
+        """
+        return LineMessageEvent(
+            message_str=message.message_str,
+            message_obj=message,
             platform_meta=self.meta(),
-            session_id=abm.session_id,
+            session_id=message.session_id,
             line_api=self.line_api,
         )
-        self._event_queue.put_nowait(event)
+
+    async def handle_msg(self, abm: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(abm))

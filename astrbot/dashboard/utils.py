@@ -1,11 +1,14 @@
 import base64
 import traceback
 from io import BytesIO
+from typing import TYPE_CHECKING
 
 from astrbot.api import logger
-from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+
+if TYPE_CHECKING:
+    from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 
 
 async def generate_tsne_visualization(
@@ -26,12 +29,12 @@ async def generate_tsne_visualization(
     """
     try:
         import faiss
-        import matplotlib
+        import matplotlib  # type: ignore[reportMissingImports]
         import numpy as np
 
         matplotlib.use("Agg")  # 使用非交互式后端
-        import matplotlib.pyplot as plt
-        from sklearn.manifold import TSNE
+        import matplotlib.pyplot as plt  # type: ignore[reportMissingImports]
+        from sklearn.manifold import TSNE  # type: ignore[reportMissingImports]
     except ImportError as e:
         raise Exception(
             "缺少必要的库以生成 t-SNE 可视化。请安装 matplotlib 和 scikit-learn: {e}",

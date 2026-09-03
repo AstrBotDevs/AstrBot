@@ -12,9 +12,12 @@
   },
   "mcpServers": {
     "title": "MCP 服务器",
+    "description": "管理 MCP 服务器",
     "buttons": {
       "refresh": "刷新",
       "add": "新增服务器",
+      "connect": "连接",
+      "disconnect": "断开连接",
       "useTemplateStdio": "Stdio 模板",
       "useTemplateStreamableHttp": "Streamable HTTP 模板",
       "useTemplateSse": "SSE 模板",
@@ -24,6 +27,8 @@
     "status": {
       "noTools": "无可用工具",
       "availableTools": "可用工具",
+      "connected": "已连接",
+      "disconnected": "未连接",
       "configSummary": "配置: {keys}",
       "noConfig": "未设置配置"
     }
@@ -38,6 +43,9 @@
     "description": "功能描述",
     "parameters": "参数列表",
     "noParameters": "此工具没有参数",
+    "filter": {
+      "showBuiltin": "显示内置工具"
+    },
     "table": {
       "paramName": "参数名",
       "type": "类型",
@@ -45,7 +53,27 @@
       "required": "必填",
       "origin": "来源",
       "originName": "来源名称",
+      "readonly": "只读",
+      "permission": "权限",
+      "permissionAdmin": "管理员",
+      "permissionMember": "全部用户",
+      "permissionEveryone": "全部用户",
+      "permissionBuiltin": "系统内置",
       "actions": "操作"
+    },
+    "configTags": {
+      "tooltipTitle": "该工具在配置文件 {config} 中启用，因为：",
+      "conditions": {
+        "truthy": "启用了 {key}",
+        "equals": "{key} = {expected}",
+        "in": "{key} 命中了 {expected}",
+        "fallback": "{key} 当前值为 {actual}"
+      }
+    },
+    "summary": {
+      "total": "总数",
+      "active": "已启用",
+      "inactive": "未启用"
     }
   },
   "marketplace": {
@@ -70,7 +98,7 @@
       "fields": {
         "name": "服务器名称",
         "nameRequired": "名称是必填项",
-        "enable": "启用服务器",
+        "enable": "保存后连接服务器",
         "config": "服务器配置"
       },
       "errors": {
@@ -85,7 +113,8 @@
         "sync": "同步"
       },
       "tips": {
-        "timeoutConfig": "工具调用的超时时间请前往配置页面单独配置"
+        "timeoutConfig": "工具调用的超时时间请前往配置页面单独配置",
+        "transportRecommendation": "建议优先使用 Streamable HTTP 或 SSE 模式。stdio 模式会在 AstrBot 主机上启动本地进程，仅适合可信 MCP 服务器。"
       }
     },
     "serverDetail": {
@@ -97,43 +126,7 @@
         "importConfig": "导入配置"
       }
     },
-    "confirmDelete": "确定要删除服务器 {name} 吗?",
-    "syncProvider": {
-      "title": "同步 MCP 服务器",
-      "subtitle": "从提供商同步 MCP 服务器配置到本地",
-      "steps": {
-        "selectProvider": "步骤 1: 选择提供商",
-        "configureAuth": "步骤 2: 配置认证",
-        "syncServers": "步骤 3: 同步服务器"
-      },
-      "providers": {
-        "modelscope": "ModelScope",
-        "description": "ModelScope 是一个开源的模型社区，提供各种机器学习和AI服务的MCP服务器"
-      },
-      "fields": {
-        "provider": "选择提供商",
-        "accessToken": "访问令牌",
-        "tokenRequired": "访问令牌是必填项",
-        "tokenHint": "请输入您的 ModelScope 访问令牌"
-      },
-      "buttons": {
-        "cancel": "取消",
-        "previous": "上一步",
-        "next": "下一步",
-        "sync": "开始同步",
-        "getToken": "获取令牌"
-      },
-      "status": {
-        "selectProvider": "请选择一个 MCP 服务器提供商",
-        "enterToken": "请输入访问令牌以继续",
-        "readyToSync": "准备同步服务器配置"
-      },
-      "messages": {
-        "syncSuccess": "MCP 服务器同步成功!",
-        "syncError": "同步失败: {error}",
-        "tokenHelp": "如何获取 ModelScope 访问令牌？点击右侧按钮查看说明"
-      }
-    }
+    "confirmDelete": "确定要删除服务器 {name} 吗?"
   },
   "messages": {
     "getServersError": "获取 MCP 服务器列表失败: {error}",
@@ -153,7 +146,47 @@
     "configParseError": "配置解析错误: {error}",
     "noAvailableConfig": "无可用配置",
     "toggleToolSuccess": "工具状态切换成功!",
+    "toggleToolReadonly": "内置工具为只读，无法进行启用或停用操作。",
     "toggleToolError": "工具状态切换失败: {error}",
+    "updateToolPermissionSuccess": "工具 {name} 权限已更新",
+    "updateToolPermissionFailed": "工具权限更新失败",
+    "updateToolPermissionBuiltin": "内置工具不支持单独配置权限",
     "testError": "测试连接失败: {error}"
+  },
+  "syncProvider": {
+    "title": "同步 MCP 服务器",
+    "subtitle": "从提供商同步 MCP 服务器配置到本地",
+    "steps": {
+      "selectProvider": "步骤 1: 选择提供商",
+      "configureAuth": "步骤 2: 配置认证",
+      "syncServers": "步骤 3: 同步服务器"
+    },
+    "providers": {
+      "modelscope": "ModelScope",
+      "description": "ModelScope 是一个开源的模型社区，提供各种机器学习和AI服务的MCP服务器"
+    },
+    "fields": {
+      "provider": "选择提供商",
+      "accessToken": "访问令牌",
+      "tokenRequired": "访问令牌是必填项",
+      "tokenHint": "请输入您的 ModelScope 访问令牌"
+    },
+    "buttons": {
+      "cancel": "取消",
+      "previous": "上一步",
+      "next": "下一步",
+      "sync": "开始同步",
+      "getToken": "获取令牌"
+    },
+    "status": {
+      "selectProvider": "请选择一个 MCP 服务器提供商",
+      "enterToken": "请输入访问令牌以继续",
+      "readyToSync": "准备同步服务器配置"
+    },
+    "messages": {
+      "syncSuccess": "MCP 服务器同步成功!",
+      "syncError": "同步失败: {error}",
+      "tokenHelp": "如何获取 ModelScope 访问令牌？点击右侧按钮查看说明"
+    }
   }
 }

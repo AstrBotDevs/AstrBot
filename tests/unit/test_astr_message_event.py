@@ -16,7 +16,7 @@ from astrbot.core.message.components import (
 )
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+from astrbot.core.platform.astrbot_message import AstrBotMessage, Group, MessageMember
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 
@@ -651,6 +651,15 @@ class TestSendTyping:
         await astr_message_event.send_typing()
 
 
+class TestStopTyping:
+    """Tests for stop_typing method."""
+
+    @pytest.mark.asyncio
+    async def test_stop_typing_default_empty(self, astr_message_event):
+        """Test stop_typing default implementation is empty."""
+        await astr_message_event.stop_typing()
+
+
 class TestReact:
     """Tests for react method."""
 
@@ -682,9 +691,20 @@ class TestGetGroup:
     @pytest.mark.asyncio
     async def test_get_group_with_group_id_param(self, astr_message_event):
         """Test get_group with group_id parameter."""
-        # Default implementation returns None
         result = await astr_message_event.get_group(group_id="group123")
-        assert result is None
+        assert result == Group(group_id="group123")
+
+    @pytest.mark.asyncio
+    async def test_get_group_returns_message_group(self, astr_message_event):
+        """Test get_group returns group data already attached to the message."""
+        astr_message_event.message_obj.group = Group(
+            group_id="group123",
+            group_name="Test Group",
+        )
+
+        result = await astr_message_event.get_group()
+
+        assert result is astr_message_event.message_obj.group
 
 
 class TestMessageTypeHandling:
@@ -772,10 +792,12 @@ class TestDefensiveGetattr:
 
     def test_get_message_type_with_non_enum_type(self, astr_message_event):
         """get_message_type should handle message_obj.type that is not a MessageType."""
+
         class DummyMessage:
             def __init__(self):
                 self.type = "not_an_enum"
                 self.message = []
+
         astr_message_event.message_obj = DummyMessage()
         message_type = astr_message_event.get_message_type()
         assert isinstance(message_type, MessageType)

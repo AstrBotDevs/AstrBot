@@ -1,4 +1,5 @@
-![AstrBot-Logo-Simplified](https://github.com/user-attachments/assets/ffd99b6b-3272-4682-beaa-6fe74250f7d9)
+![AstrBot-Logo-Simplified](https://github.com/user-attachments/assets/36fb04e4-cc75-4454-bd8b-049d11aa86f9)
+
 
 <div align="center">
 
@@ -6,12 +7,13 @@
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_zh-TW.md">繁體中文</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ja.md">日本語</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_fr.md">Français</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ru.md">Русский</a>
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_es.md">Español</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ru.md">Русский</a> 
 
 <br>
 
 <div>
-<a href="https://trendshift.io/repositories/12875" target="_blank"><img src="https://trendshift.io/api/badge/repositories/12875" alt="Soulter%2FAstrBot | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+<a href="https://trendshift.io/repositories/21369" target="_blank"><img src="https://trendshift.io/api/badge/repositories/21369" alt="AstrBotDevs%2FAstrBot | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 <a href="https://hellogithub.com/repository/AstrBotDevs/AstrBot" target="_blank"><img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=d127d50cd5e54c5382328acc3bb25483&claim_uid=ZO9by7qCXgSd6Lp&t=2" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
 </div>
 
@@ -19,7 +21,7 @@
 
 <div>
 <img src="https://img.shields.io/github/v/release/AstrBotDevs/AstrBot?color=76bad9" href="https://github.com/AstrBotDevs/AstrBot/releases/latest">
-<img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="python">
+<img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="python">
 <img src="https://deepwiki.com/badge.svg" href="https://deepwiki.com/AstrBotDevs/AstrBot">
 <a href="https://zread.ai/AstrBotDevs/AstrBot" target="_blank"><img src="https://img.shields.io/badge/Ask_Zread-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff" alt="zread"/></a>
 <a href="https://hub.docker.com/r/soulter/astrbot"><img alt="Docker pull" src="https://img.shields.io/docker/pulls/soulter/astrbot.svg?color=76bad9"/></a>
@@ -32,7 +34,7 @@
 <a href="https://astrbot.app/">Documentation</a> ｜
 <a href="https://blog.astrbot.app/">Blog</a> ｜
 <a href="https://astrbot.featurebase.app/roadmap">Roadmap</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/issues">Issue Tracker</a>
+<a href="https://github.com/AstrBotDevs/AstrBot/issues">Issue Tracker</a> ｜
 <a href="mailto:community@astrbot.app">Email Support</a>
 </div>
 
@@ -52,57 +54,39 @@ AstrBot is an open-source all-in-one Agent chatbot platform that integrates with
 8. 🌈 Web ChatUI Support with built-in agent sandbox and web search.
 9. 🌐 Internationalization (i18n) Support.
 
-<br>
-
-<table align="center">
-  <tr align="center">
-    <th>💙 Role-playing & Emotional Companionship</th>
-    <th>✨ Proactive Agent</th>
-    <th>🚀 General Agentic Capabilities</th>
-    <th>🧩 1000+ Community Plugins</th>
-  </tr>
-  <tr>
-    <td align="center"><p align="center"><img width="984" height="1746" alt="99b587c5d35eea09d84f33e6cf6cfd4f" src="https://github.com/user-attachments/assets/89196061-3290-458d-b51f-afa178049f84" /></p></td>
-    <td align="center"><p align="center"><img width="976" height="1612" alt="c449acd838c41d0915cc08a3824025b1" src="https://github.com/user-attachments/assets/f75368b4-e022-41dc-a9e0-131c3e73e32e" /></p></td>
-    <td align="center"><p align="center"><img width="974" height="1732" alt="image" src="https://github.com/user-attachments/assets/e22a3968-87d7-4708-a7cd-e7f198c7c32e" /></p></td>
-    <td align="center"><p align="center"><img width="976" height="1734" alt="image" src="https://github.com/user-attachments/assets/0952b395-6b4a-432a-8a50-c294b7f89750" /></p></td>
-  </tr>
-</table>
-
 ## Quick Start
 
+### One-Click Cloud Deployment (RainYun)
+
+For users who want one-click 24-hour-online deployment and do not want to manage servers themselves, we recommend RainYun's one-click cloud deployment service ☁️:
+
+[![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
+
 ### One-Click Deployment
+
+> [!NOTE]
+> Requires [uv](https://docs.astral.sh/uv/) to be installed.
+> For macOS users: due to macOS security checks, the first run of the `astrbot` command may take longer (about 10-20s).
 
 For users who want to quickly experience AstrBot, are familiar with command-line usage, and can install a `uv` environment on their own, we recommend the `uv` one-click deployment method ⚡️:
 
 ```bash
-uv tool install astrbot
+uv tool install astrbot --python 3.12
 astrbot init # Only execute this command for the first time to initialize the environment
 astrbot run
 ```
 
-> Requires [uv](https://docs.astral.sh/uv/) to be installed.
-
-> [!NOTE]
-> For macOS user: due to macOS security checks, the first run of the `astrbot` command may take longer (about 10-20s).
-
 Update `astrbot`:
 
 ```bash
-uv tool upgrade astrbot
+uv tool upgrade astrbot --python 3.12
 ```
 
 ### Docker Deployment
 
 For users familiar with containers and looking for a more stable, production-ready deployment method, we recommend deploying AstrBot with Docker / Docker Compose.
 
-Please refer to the official documentation: [Deploy AstrBot with Docker](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot).
-
-### Deploy on RainYun
-
-For users who want one-click deployment and do not want to manage servers themselves, we recommend RainYun's one-click cloud deployment service ☁️:
-
-[![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
+Please refer to the official documentation: [Deploy AstrBot with Docker](https://docs.astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot).
 
 ### Desktop Application Deployment
 
@@ -116,25 +100,21 @@ For desktop users who also want fast deployment and isolated multi-instance usag
 
 Visit [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) to download and install.
 
-### Deploy on Replit
-
-Replit deployment is maintained by the community and is suitable for online demos and lightweight trials.
-
-[![Run on Repl.it](https://repl.it/badge/github/AstrBotDevs/AstrBot)](https://repl.it/github/AstrBotDevs/AstrBot)
-
-### AUR
-
-AUR deployment targets Arch Linux users who prefer installing AstrBot through the system package workflow.
-
-Run the command below to install `astrbot-git`, then start AstrBot in your local environment.
-
-```bash
-yay -S astrbot-git
-```
-
 **More deployment methods**
 
-If you need panel-based management or deeper customization, see [BT-Panel Deployment](https://astrbot.app/deploy/astrbot/btpanel.html) for BT Panel app-store setup, [1Panel Deployment](https://astrbot.app/deploy/astrbot/1panel.html) for 1Panel app-market deployment, [CasaOS Deployment](https://astrbot.app/deploy/astrbot/casaos.html) for NAS/home-server visual deployment, and [Manual Deployment](https://astrbot.app/deploy/astrbot/cli.html) for fully custom source-based installation with `uv`.
+If you need panel-based management or deeper customization, see [BT-Panel Deployment](https://docs.astrbot.app/deploy/astrbot/btpanel.html) for BT Panel app-store setup, [1Panel Deployment](https://docs.astrbot.app/deploy/astrbot/1panel.html) for 1Panel app-market deployment, [CasaOS Deployment](https://docs.astrbot.app/deploy/astrbot/casaos.html) for NAS/home-server visual deployment, and [Manual Deployment](https://docs.astrbot.app/deploy/astrbot/cli.html) for fully custom source-based installation with `uv`.
+
+
+## ❤️ Sponsors
+
+Welcome to sponsor us via [Afdian](https://afdian.com/a/astrbot_team) or [contact us](mailto:community@astrbot.app).
+
+<p align="center">
+  <a target="_blank" href="https://astrbot.app/#/sponsors">
+    <img alt="sponsors" src="https://sponsors.astrbot.app/?v=1">
+  </a>
+</p>
+
 
 ## Supported Messaging Platforms
 
@@ -153,10 +133,12 @@ Connect AstrBot to your favorite chat platform.
 | Discord | Official |
 | LINE | Official |
 | Satori | Official |
+| KOOK | Official |
 | Misskey | Official |
+| Mattermost | Official |
 | WhatsApp (Coming Soon) | Official |
 | [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | Community |
-| [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter) | Community |
+| [Rocket.Chat](https://github.com/NET-Homeless/astrbot_plugin_rocket_chat_adapter) | Community |
 | [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat) | Community |
 
 ## Supported Model Services
@@ -171,6 +153,7 @@ Connect AstrBot to your favorite chat platform.
 | DeepSeek | LLM Services |
 | Ollama (Self-hosted) | LLM Services |
 | LM Studio (Self-hosted) | LLM Services |
+| [MiraRouter](https://mirarouter.com/) | LLM Services (API Gateway, supports all models) |
 | [AIHubMix](https://aihubmix.com/?aff=4bfH) | LLM Services (API Gateway, supports all models) |
 | [CompShare](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | LLM Services |
 | [302.AI](https://share.302.ai/rr1M3l) | LLM Services |
@@ -184,6 +167,7 @@ Connect AstrBot to your favorite chat platform.
 | Coze | LLMOps Platforms |
 | OpenAI Whisper | Speech-to-Text Services |
 | SenseVoice | Speech-to-Text Services |
+| Xiaomi MiMo Omni | Speech-to-Text Services |
 | OpenAI TTS | Text-to-Speech Services |
 | Gemini TTS | Text-to-Speech Services |
 | GPT-Sovits-Inference | Text-to-Speech Services |
@@ -193,14 +177,8 @@ Connect AstrBot to your favorite chat platform.
 | Alibaba Cloud Bailian TTS | Text-to-Speech Services |
 | Azure TTS | Text-to-Speech Services |
 | Minimax TTS | Text-to-Speech Services |
+| Xiaomi MiMo TTS | Text-to-Speech Services |
 | Volcano Engine TTS | Text-to-Speech Services |
-
-## ❤️ Sponsors
-
-<p align="center">
-  <img alt="sponsors" src="https://sponsors.astrbot.app/?v=1">
-</p>
-
 
 ## ❤️ Contributing
 
@@ -225,17 +203,7 @@ pre-commit install
 
 ### QQ Groups
 
-- Group 9: 1076659624 (New)
-- Group 10: 1078079676 (New)
-- Group 1: 322154837
-- Group 3: 630166526
-- Group 5: 822130018
-- Group 6: 753075035
-- Group 7: 743746109
-- Group 8: 1030353265
-
-- Developer Group(Chit-chat): 975206796
-- Developer Group(Formal): 1039761811
+We have 15+ chat groups, please see: [Community](https://docs.astrbot.app/community.html) for details.
 
 ### Discord Server
 
@@ -246,12 +214,13 @@ pre-commit install
 Special thanks to all Contributors and plugin developers for their contributions to AstrBot ❤️
 
 <a href="https://github.com/AstrBotDevs/AstrBot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=200&columns=14" />
+  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=300&columns=15" />
 </a>
 
-Additionally, the birth of this project would not have been possible without the help of the following open-source projects:
+Open Source Friends ❤️
 
 - [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ) - The amazing cat framework
+- [Mai-with-u/MaiBot](https://github.com/Mai-with-u/MaiBot) - The powerful "digital life" in your QQ! 
 
 ## ⭐ Star History
 

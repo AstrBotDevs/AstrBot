@@ -1,12 +1,21 @@
 from datetime import datetime
+from datetime import timezone as dt_timezone
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
+from astrbot import logger
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.cron.manager import CronJobSchedulingError
+from astrbot.core.tools.registry import builtin_tool
+
+_CRON_TOOL_CONFIG = {
+    "provider_settings.proactive_capability.add_cron_tools": True,
+}
 
 
 def _extract_job_session(job: Any) -> str | None:
@@ -17,39 +26,75 @@ def _extract_job_session(job: Any) -> str | None:
     return str(session) if session is not None else None
 
 
+def _extract_job_sender(job: Any) -> str | None:
+    payload = getattr(job, "payload", None)
+    if not isinstance(payload, dict):
+        return None
+    sender_id = payload.get("sender_id")
+    return str(sender_id) if sender_id is not None else None
+
+
+def _job_belongs_to_current_sender(
+    job: Any, current_umo: str, current_sender_id: str
+) -> bool:
+    return (
+        _extract_job_session(job) == current_umo
+        and _extract_job_sender(job) == current_sender_id
+    )
+
+
+def _parse_run_at(run_at: Any) -> datetime | None:
+    if run_at in (None, ""):
+        return None
+    return datetime.fromisoformat(str(run_at))
+
+
+@builtin_tool(config=_CRON_TOOL_CONFIG)
 @dataclass
-class CreateActiveCronTool(FunctionTool[AstrAgentContext]):
-    name: str = "create_future_task"
+class FutureTaskTool(FunctionTool[AstrAgentContext]):
+    name: str = "future_task"
     description: str = (
-        "Create a future task for your future. Supports recurring cron expressions or one-time run_at datetime. "
-        "Use this when you or the user want scheduled follow-up or proactive actions."
+        "Manage your future tasks. "
+        "Use action='create' to schedule a recurring cron task or one-time run_at task. "
+        "Use action='edit' to update an existing task. "
+        "Use action='list' to inspect existing tasks. "
+        "Use action='delete' to remove a task by job_id."
     )
     parameters: dict = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["create", "edit", "delete", "list"],
+                    "description": "Action to perform. 'list' takes no parameters. 'delete' requires only 'job_id'. 'edit' requires 'job_id' plus the fields to change.",
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Optional task label.",
+                },
                 "cron_expression": {
                     "type": "string",
-                    "description": "Cron expression defining recurring schedule (e.g., '0 8 * * *' or '0 23 * * mon-fri'). Prefer named weekdays like 'mon-fri' or 'sat,sun' instead of numeric day-of-week ranges such as '1-5' to avoid ambiguity across cron implementations.",
-                },
-                "run_at": {
-                    "type": "string",
-                    "description": "ISO datetime for one-time execution, e.g., 2026-02-02T08:00:00+08:00. Use with run_once=true.",
+                    "description": "Cron expression for a recurring schedule, e.g. '0 8 * * *' or '0 23 * * mon-fri'. Prefer named weekdays like 'mon-fri' or 'sat,sun' over numeric ranges like '1-5'.",
                 },
                 "note": {
                     "type": "string",
                     "description": "Detailed instructions for your future agent to execute when it wakes.",
                 },
-                "name": {
-                    "type": "string",
-                    "description": "Optional label to recognize this future task.",
-                },
                 "run_once": {
                     "type": "boolean",
-                    "description": "If true, the task will run only once and then be deleted. Use run_at to specify the time.",
+                    "description": "Run only once and delete after execution. Use with run_at.",
+                },
+                "run_at": {
+                    "type": "string",
+                    "description": "ISO datetime for one-time execution, e.g. 2026-02-02T08:00:00+08:00.",
+                },
+                "job_id": {
+                    "type": "string",
+                    "description": "Task ID. Required for 'delete' and 'edit'.",
                 },
             },
-            "required": ["note"],
+            "required": ["action"],
         }
     )
 
@@ -60,135 +105,222 @@ class CreateActiveCronTool(FunctionTool[AstrAgentContext]):
         if cron_mgr is None:
             return "error: cron manager is not available."
 
-        cron_expression = kwargs.get("cron_expression")
-        run_at = kwargs.get("run_at")
-        run_once = bool(kwargs.get("run_once", False))
-        note = str(kwargs.get("note", "")).strip()
-        name = str(kwargs.get("name") or "").strip() or "active_agent_task"
+        action = str(kwargs.get("action") or "").strip().lower()
+        if action == "create":
+            cron_expression = kwargs.get("cron_expression")
+            run_at = kwargs.get("run_at")
+            run_once = bool(kwargs.get("run_once", False))
+            note = str(kwargs.get("note", "")).strip()
+            name = str(kwargs.get("name") or "").strip() or "active_agent_task"
 
-        if not note:
-            return "error: note is required."
-        if run_once and not run_at:
-            return "error: run_at is required when run_once=true."
-        if (not run_once) and not cron_expression:
-            return "error: cron_expression is required when run_once=false."
-        if run_once and cron_expression:
-            cron_expression = None
-        run_at_dt = None
-        if run_at:
+            if not note:
+                return "error: note is required when action=create."
+            if run_once and not run_at:
+                return "error: run_at is required when run_once=true."
+            if (not run_once) and not cron_expression:
+                return "error: cron_expression is required when run_once=false."
+            if run_once and cron_expression:
+                cron_expression = None
             try:
-                run_at_dt = datetime.fromisoformat(str(run_at))
+                run_at_dt = _parse_run_at(run_at)
             except Exception:
                 return "error: run_at must be ISO datetime, e.g., 2026-02-02T08:00:00+08:00"
 
-        payload = {
-            "session": context.context.event.unified_msg_origin,
-            "sender_id": context.context.event.get_sender_id(),
-            "note": note,
-            "origin": "tool",
-        }
+            payload = {
+                "session": context.context.event.unified_msg_origin,
+                "sender_id": context.context.event.get_sender_id(),
+                "note": note,
+                "origin": "tool",
+            }
 
-        job = await cron_mgr.add_active_job(
-            name=name,
-            cron_expression=str(cron_expression) if cron_expression else None,
-            payload=payload,
-            description=note,
-            run_once=run_once,
-            run_at=run_at_dt,
-        )
-        next_run = job.next_run_time or run_at_dt
-        suffix = (
-            f"one-time at {next_run}"
-            if run_once
-            else f"expression '{cron_expression}' (next {next_run})"
-        )
-        return f"Scheduled future task {job.job_id} ({job.name}) {suffix}."
+            tz_name = str(
+                context.context.context.get_config(
+                    umo=context.context.event.unified_msg_origin
+                ).get("timezone")
+                or ""
+            ).strip()
+            tzinfo = None
+            if tz_name:
+                try:
+                    tzinfo = ZoneInfo(tz_name)
+                except ZoneInfoNotFoundError:
+                    logger.warning(
+                        "Invalid timezone %r in config, falling back to system timezone.",
+                        tz_name,
+                    )
 
-
-@dataclass
-class DeleteCronJobTool(FunctionTool[AstrAgentContext]):
-    name: str = "delete_future_task"
-    description: str = "Delete a future task (cron job) by its job_id."
-    parameters: dict = Field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {
-                "job_id": {
-                    "type": "string",
-                    "description": "The job_id returned when the job was created.",
-                }
-            },
-            "required": ["job_id"],
-        }
-    )
-
-    async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs
-    ) -> ToolExecResult:
-        cron_mgr = context.context.context.cron_manager
-        if cron_mgr is None:
-            return "error: cron manager is not available."
-        current_umo = context.context.event.unified_msg_origin
-        job_id = kwargs.get("job_id")
-        if not job_id:
-            return "error: job_id is required."
-        job = await cron_mgr.db.get_cron_job(str(job_id))
-        if not job:
-            return f"error: cron job {job_id} not found."
-        if _extract_job_session(job) != current_umo:
-            return "error: you can only delete future tasks in the current umo."
-        await cron_mgr.delete_job(str(job_id))
-        return f"Deleted cron job {job_id}."
-
-
-@dataclass
-class ListCronJobsTool(FunctionTool[AstrAgentContext]):
-    name: str = "list_future_tasks"
-    description: str = "List existing future tasks (cron jobs) for inspection."
-    parameters: dict = Field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {
-                "job_type": {
-                    "type": "string",
-                    "description": "Optional filter: basic or active_agent.",
-                }
-            },
-        }
-    )
-
-    async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs
-    ) -> ToolExecResult:
-        cron_mgr = context.context.context.cron_manager
-        if cron_mgr is None:
-            return "error: cron manager is not available."
-        current_umo = context.context.event.unified_msg_origin
-        job_type = kwargs.get("job_type")
-        jobs = [
-            job
-            for job in await cron_mgr.list_jobs(job_type)
-            if _extract_job_session(job) == current_umo
-        ]
-        if not jobs:
-            return "No cron jobs found."
-        lines = []
-        for j in jobs:
-            lines.append(
-                f"{j.job_id} | {j.name} | {j.job_type} | run_once={getattr(j, 'run_once', False)} | enabled={j.enabled} | next={j.next_run_time}"
+            try:
+                job = await cron_mgr.add_active_job(
+                    name=name,
+                    cron_expression=str(cron_expression) if cron_expression else None,
+                    payload=payload,
+                    description=note,
+                    timezone=tz_name or None,
+                    run_once=run_once,
+                    run_at=run_at_dt,
+                )
+            except CronJobSchedulingError:
+                return "error: failed to schedule task due to invalid configuration."
+            # add_active_job writes next_run_time to the DB via a fire-and-forget
+            # task, so job.next_run_time can still be None here; read the live
+            # value straight from the scheduler instead.
+            next_run = cron_mgr.get_next_run_time(job.job_id) or job.next_run_time
+            if next_run is not None:
+                # Scheduler/DB values are always UTC, even when naive (SQLite
+                # has no tz-aware column type), so restore the UTC label
+                # before converting to the display timezone.
+                if next_run.tzinfo is None:
+                    next_run = next_run.replace(tzinfo=dt_timezone.utc)
+                next_run = (
+                    next_run.astimezone(tzinfo) if tzinfo else next_run.astimezone()
+                )
+            elif run_at_dt is not None:
+                # No scheduler/DB value yet; fall back to the user-supplied
+                # run_at, treating a naive value as already being in the
+                # display timezone.
+                next_run = (
+                    run_at_dt.astimezone(tzinfo)
+                    if run_at_dt.tzinfo
+                    else (run_at_dt.replace(tzinfo=tzinfo) if tzinfo else run_at_dt)
+                )
+            suffix = (
+                f"one-time at {next_run}"
+                if run_once
+                else f"expression '{cron_expression}' (next {next_run})"
             )
-        return "\n".join(lines)
+            return f"Scheduled future task {job.job_id} ({job.name}) {suffix}."
 
+        current_umo = context.context.event.unified_msg_origin
+        current_sender_id = str(context.context.event.get_sender_id())
+        if action == "edit":
+            job_id = kwargs.get("job_id")
+            if not job_id:
+                return "error: job_id is required when action=edit."
+            if not any(
+                key in kwargs
+                for key in ("name", "note", "run_once", "cron_expression", "run_at")
+            ):
+                return "error: no editable fields were provided."
 
-CREATE_CRON_JOB_TOOL = CreateActiveCronTool()
-DELETE_CRON_JOB_TOOL = DeleteCronJobTool()
-LIST_CRON_JOBS_TOOL = ListCronJobsTool()
+            job = await cron_mgr.db.get_cron_job(str(job_id))
+            if not job:
+                return f"error: cron job {job_id} not found."
+            if not _job_belongs_to_current_sender(job, current_umo, current_sender_id):
+                return "error: you can only edit your own future tasks."
+
+            payload = dict(job.payload) if isinstance(job.payload, dict) else {}
+
+            updates: dict[str, Any] = {}
+            if "name" in kwargs:
+                name = str(kwargs.get("name") or "").strip()
+                if not name:
+                    return "error: name cannot be empty when action=edit."
+                updates["name"] = name
+
+            if "note" in kwargs:
+                note = str(kwargs.get("note") or "").strip()
+                if not note:
+                    return "error: note cannot be empty when action=edit."
+                payload["note"] = note
+                updates["description"] = note
+
+            current_run_at = payload.get("run_at")
+            run_once = (
+                bool(kwargs["run_once"]) if "run_once" in kwargs else bool(job.run_once)
+            )
+            cron_expression = (
+                str(kwargs.get("cron_expression") or "").strip()
+                if "cron_expression" in kwargs
+                else job.cron_expression
+            )
+            cron_expression = cron_expression or None
+
+            try:
+                run_at_dt = (
+                    _parse_run_at(kwargs.get("run_at"))
+                    if "run_at" in kwargs
+                    else _parse_run_at(current_run_at)
+                )
+            except Exception:
+                return "error: run_at must be ISO datetime, e.g., 2026-02-02T08:00:00+08:00"
+
+            if run_once:
+                if run_at_dt is None:
+                    return "error: run_at is required when run_once=true."
+                cron_expression = None
+                payload["run_at"] = run_at_dt.isoformat()
+            else:
+                if not cron_expression:
+                    return "error: cron_expression is required when run_once=false."
+                payload.pop("run_at", None)
+
+            updates["run_once"] = run_once
+            updates["cron_expression"] = cron_expression
+            updates["payload"] = payload
+
+            try:
+                job = await cron_mgr.update_job(str(job_id), **updates)
+            except CronJobSchedulingError:
+                return "error: failed to update task due to invalid configuration."
+            if not job:
+                return f"error: cron job {job_id} not found."
+            return f"Updated future task {job.job_id} ({job.name})."
+
+        if action == "delete":
+            job_id = kwargs.get("job_id")
+            if not job_id:
+                return "error: job_id is required when action=delete."
+            job = await cron_mgr.db.get_cron_job(str(job_id))
+            if not job:
+                return f"error: cron job {job_id} not found."
+            if not _job_belongs_to_current_sender(job, current_umo, current_sender_id):
+                return "error: you can only delete your own future tasks."
+            await cron_mgr.delete_job(str(job_id))
+            return f"Deleted cron job {job_id}."
+
+        if action == "list":
+            jobs = [
+                job
+                for job in await cron_mgr.list_jobs()
+                if _job_belongs_to_current_sender(job, current_umo, current_sender_id)
+            ]
+            if not jobs:
+                return "No cron jobs found."
+            tz_name = str(
+                context.context.context.get_config(
+                    umo=context.context.event.unified_msg_origin
+                ).get("timezone")
+                or ""
+            ).strip()
+            tzinfo = None
+            if tz_name:
+                try:
+                    tzinfo = ZoneInfo(tz_name)
+                except ZoneInfoNotFoundError:
+                    logger.warning(
+                        "Invalid timezone %r in config, falling back to system timezone.",
+                        tz_name,
+                    )
+            lines = []
+            for j in jobs:
+                next_run = j.next_run_time
+                if next_run is not None:
+                    # DB values are always UTC, even when naive (SQLite has
+                    # no tz-aware column type), so restore the UTC label
+                    # before converting to the display timezone.
+                    if next_run.tzinfo is None:
+                        next_run = next_run.replace(tzinfo=dt_timezone.utc)
+                    next_run = (
+                        next_run.astimezone(tzinfo) if tzinfo else next_run.astimezone()
+                    )
+                lines.append(
+                    f"{j.job_id} | {j.name} | {j.job_type} | run_once={getattr(j, 'run_once', False)} | enabled={j.enabled} | next={next_run}"
+                )
+            return "\n".join(lines)
+
+        return "error: action must be one of create, edit, delete, or list."
+
 
 __all__ = [
-    "CREATE_CRON_JOB_TOOL",
-    "DELETE_CRON_JOB_TOOL",
-    "LIST_CRON_JOBS_TOOL",
-    "CreateActiveCronTool",
-    "DeleteCronJobTool",
-    "ListCronJobsTool",
+    "FutureTaskTool",
 ]

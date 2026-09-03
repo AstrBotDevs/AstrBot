@@ -9,22 +9,40 @@ import runtime_bootstrap
 
 runtime_bootstrap.initialize_runtime_bootstrap()
 
+DASHBOARD_RESET_PASSWORD_ENV = "ASTRBOT_RESET_DASHBOARD_PASSWORD"
+
+
+def _apply_startup_env_flags(argv: list[str]) -> None:
+    """Apply startup flags that must take effect before core imports.
+
+    Args:
+        argv: Command-line arguments excluding the executable name.
+    """
+
+    if "-h" in argv or "--help" in argv:
+        return
+
+    startup_parser = argparse.ArgumentParser(add_help=False)
+    startup_parser.add_argument("--reset-password", action="store_true")
+    startup_args, _ = startup_parser.parse_known_args(argv)
+    if startup_args.reset_password:
+        os.environ[DASHBOARD_RESET_PASSWORD_ENV] = "1"
+
+
+_apply_startup_env_flags(sys.argv[1:])
+
 from astrbot.core import LogBroker, LogManager, db_helper, logger  # noqa: E402
-from astrbot.core.config.default import VERSION  # noqa: E402
 from astrbot.core.initial_loader import InitialLoader  # noqa: E402
+from astrbot.core.updater import AstrBotUpdater  # noqa: E402
 from astrbot.core.utils.astrbot_path import (  # noqa: E402
     get_astrbot_config_path,
-    get_astrbot_data_path,
     get_astrbot_knowledge_base_path,
     get_astrbot_plugin_path,
     get_astrbot_root,
     get_astrbot_site_packages_path,
     get_astrbot_temp_path,
 )
-from astrbot.core.utils.io import (  # noqa: E402
-    download_dashboard,
-    get_dashboard_version,
-)
+from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime  # noqa: E402
 
 # 将父目录添加到 sys.path
 sys.path.append(Path(__file__).parent.as_posix())
@@ -42,7 +60,7 @@ logo_tmpl = r"""
 
 def check_env() -> None:
     if not (sys.version_info.major == 3 and sys.version_info.minor >= 10):
-        logger.error("请使用 Python3.10+ 运行本项目。")
+        logger.error("Please run this project with Python 3.10 or later.")
         exit()
 
     astrbot_root = get_astrbot_root()
@@ -50,8 +68,8 @@ def check_env() -> None:
         sys.path.insert(0, astrbot_root)
 
     site_packages_path = get_astrbot_site_packages_path()
-    if site_packages_path not in sys.path:
-        sys.path.insert(0, site_packages_path)
+    if not is_packaged_desktop_runtime() and site_packages_path not in sys.path:
+        sys.path.append(site_packages_path)
 
     os.makedirs(get_astrbot_config_path(), exist_ok=True)
     os.makedirs(get_astrbot_plugin_path(), exist_ok=True)
@@ -66,39 +84,27 @@ def check_env() -> None:
 
 
 async def check_dashboard_files(webui_dir: str | None = None):
-    """下载管理面板文件"""
+    """Resolve and repair dashboard static files for startup.
+
+    Args:
+        webui_dir: Optional explicit WebUI directory path from CLI.
+
+    Returns:
+        The directory path to serve, or None when no usable WebUI can be prepared.
+    """
+
     # 指定webui目录
     if webui_dir:
         if os.path.exists(webui_dir):
-            logger.info(f"使用指定的 WebUI 目录: {webui_dir}")
+            logger.info("Using WebUI directory: %s", webui_dir)
             return webui_dir
-        logger.warning(f"指定的 WebUI 目录 {webui_dir} 不存在，将使用默认逻辑。")
-
-    data_dist_path = os.path.join(get_astrbot_data_path(), "dist")
-    if os.path.exists(data_dist_path):
-        v = await get_dashboard_version()
-        if v is not None:
-            # 存在文件
-            if v == f"v{VERSION}":
-                logger.info("WebUI 版本已是最新。")
-            else:
-                logger.warning(
-                    f"检测到 WebUI 版本 ({v}) 与当前 AstrBot 版本 (v{VERSION}) 不符。",
-                )
-        return data_dist_path
-
-    logger.info(
-        "开始下载管理面板文件...高峰期（晚上）可能导致较慢的速度。如多次下载失败，请前往 https://github.com/AstrBotDevs/AstrBot/releases/latest 下载 dist.zip，并将其中的 dist 文件夹解压至 data 目录下。",
-    )
+        logger.warning("WebUI directory not found: %s. Using default.", webui_dir)
 
     try:
-        await download_dashboard(version=f"v{VERSION}", latest=False)
+        return str(await AstrBotUpdater().ensure_dashboard())
     except Exception as e:
-        logger.critical(f"下载管理面板文件失败: {e}。")
+        logger.critical(f"Failed to download dashboard files: {e}.")
         return None
-
-    logger.info("管理面板下载完成。")
-    return data_dist_path
 
 
 async def main_async(webui_dir_arg: str | None) -> None:
@@ -107,8 +113,8 @@ async def main_async(webui_dir_arg: str | None) -> None:
     webui_dir = await check_dashboard_files(webui_dir_arg)
     if webui_dir is None:
         logger.warning(
-            "管理面板文件检查失败，WebUI 功能将不可用。"
-            "请检查网络连接或手动指定 --webui-dir 参数。"
+            "Dashboard file validation failed, so WebUI features will be unavailable. "
+            "Check the network connection or specify the --webui-dir argument manually."
         )
 
     db = db_helper
@@ -126,8 +132,16 @@ if __name__ == "__main__":
     parser.add_argument(
         "--webui-dir",
         type=str,
-        help="指定 WebUI 静态文件目录路径",
+        help="Specify the directory path for WebUI static files",
         default=None,
+    )
+    parser.add_argument(
+        "--reset-password",
+        action="store_true",
+        help=(
+            "Reset the dashboard initial password on startup and print it in "
+            "startup logs"
+        ),
     )
     args = parser.parse_args()
 

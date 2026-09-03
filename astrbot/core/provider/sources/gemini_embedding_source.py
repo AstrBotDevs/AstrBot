@@ -1,5 +1,3 @@
-from typing import cast
-
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
@@ -61,9 +59,12 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
     async def get_embeddings(self, text: list[str]) -> list[list[float]]:
         """批量获取文本的嵌入"""
         try:
+            contents = [
+                types.Content(parts=[types.Part.from_text(text=s)]) for s in text
+            ]
             result = await self.client.models.embed_content(
                 model=self.model,
-                contents=cast(types.ContentListUnion, text),
+                contents=contents,
                 config=types.EmbedContentConfig(
                     output_dimensionality=self.get_dim(),
                 ),

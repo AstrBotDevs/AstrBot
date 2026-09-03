@@ -5,15 +5,21 @@ import base64
 from collections.abc import AsyncGenerator
 from dataclasses import replace
 
-from astrbot.core import logger
-from astrbot.core.agent.message import Message
+from astrbot.core import db_helper, logger
+from astrbot.core.agent.message import (
+    CheckpointData,
+    CheckpointMessageSegment,
+    Message,
+    dump_messages_with_checkpoints,
+)
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.astr_main_agent import (
+    LLM_ERROR_MESSAGE_EXTRA_KEY,
     MainAgentBuildConfig,
     MainAgentBuildResult,
     build_main_agent,
 )
-from astrbot.core.message.components import File, Image
+from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -49,13 +55,18 @@ class InternalAgentSubStage(Stage):
         self.ctx = ctx
         conf = ctx.astrbot_config
         settings = conf["provider_settings"]
+        runner_config = conf["agent_runner"]["config"]
+        model_config = runner_config["model"]
+        persona_config = runner_config["persona"]
+        compression_config = runner_config["compression"]
+        misc_config = runner_config["misc"]
         self.streaming_response: bool = settings["streaming_response"]
         self.unsupported_streaming_strategy: str = settings[
             "unsupported_streaming_strategy"
         ]
-        self.max_step: int = settings.get("max_agent_step", 30)
-        self.tool_call_timeout: int = settings.get("tool_call_timeout", 60)
-        self.tool_schema_mode: str = settings.get("tool_schema_mode", "full")
+        self.max_step: int = misc_config.get("max_steps", 30)
+        self.tool_call_timeout: int = misc_config.get("tool_call_timeout", 120)
+        self.tool_schema_mode: str = misc_config.get("tool_schema_mode", "full")
         if self.tool_schema_mode not in ("skills_like", "full"):
             logger.warning(
                 "Unsupported tool_schema_mode: %s, fallback to skills_like",
@@ -66,8 +77,12 @@ class InternalAgentSubStage(Stage):
             self.max_step = 30
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
         self.show_tool_call_result: bool = settings.get("show_tool_call_result", False)
+        self.buffer_intermediate_messages: bool = settings.get(
+            "buffer_intermediate_messages",
+            False,
+        )
         self.show_reasoning = settings.get("display_reasoning_text", False)
-        self.sanitize_context_by_modalities: bool = settings.get(
+        self.sanitize_context_by_modalities: bool = misc_config.get(
             "sanitize_context_by_modalities",
             False,
         )
@@ -81,26 +96,29 @@ class InternalAgentSubStage(Stage):
         )
 
         # 上下文管理相关
-        self.context_limit_reached_strategy: str = settings.get(
-            "context_limit_reached_strategy", "truncate_by_turns"
+        self.context_limit_reached_strategy: str = compression_config.get(
+            "overflow_strategy", "truncate_by_turns"
         )
-        self.llm_compress_instruction: str = settings.get(
-            "llm_compress_instruction", ""
+        self.llm_compress_instruction: str = compression_config.get("instruction", "")
+        self.llm_compress_keep_recent_ratio: float = compression_config.get(
+            "keep_recent_ratio", 0.15
         )
-        self.llm_compress_keep_recent: int = settings.get("llm_compress_keep_recent", 4)
-        self.llm_compress_provider_id: str = settings.get(
-            "llm_compress_provider_id", ""
-        )
-        self.max_context_length = settings["max_context_length"]  # int
+        self.llm_compress_provider_id: str = compression_config.get("provider_id", "")
+        self.max_context_length = compression_config.get("max_turns", -1)
         self.dequeue_context_length: int = min(
-            max(1, settings["dequeue_context_length"]),
-            self.max_context_length - 1,
+            max(1, compression_config.get("trim_turns", 1)),
+            self.max_context_length - 1
+            if self.max_context_length > 0
+            else compression_config.get("trim_turns", 1),
         )
         if self.dequeue_context_length <= 0:
             self.dequeue_context_length = 1
+        self.fallback_max_context_tokens: int = compression_config.get(
+            "fallback_max_tokens", 128000
+        )
 
-        self.llm_safety_mode = settings.get("llm_safety_mode", True)
-        self.safety_mode_strategy = settings.get(
+        self.llm_safety_mode = persona_config.get("safety_mode", True)
+        self.safety_mode_strategy = persona_config.get(
             "safety_mode_strategy", "system_prompt"
         )
 
@@ -123,20 +141,31 @@ class InternalAgentSubStage(Stage):
             file_extract_msh_api_key=self.file_extract_msh_api_key,
             context_limit_reached_strategy=self.context_limit_reached_strategy,
             llm_compress_instruction=self.llm_compress_instruction,
-            llm_compress_keep_recent=self.llm_compress_keep_recent,
+            llm_compress_keep_recent_ratio=self.llm_compress_keep_recent_ratio,
             llm_compress_provider_id=self.llm_compress_provider_id,
             max_context_length=self.max_context_length,
             dequeue_context_length=self.dequeue_context_length,
+            fallback_max_context_tokens=self.fallback_max_context_tokens,
             llm_safety_mode=self.llm_safety_mode,
             safety_mode_strategy=self.safety_mode_strategy,
             computer_use_runtime=self.computer_use_runtime,
             sandbox_cfg=self.sandbox_cfg,
             add_cron_tools=self.add_cron_tools,
-            provider_settings=settings,
+            provider_settings={
+                **settings,
+                "default_personality": persona_config.get("persona_id", "default"),
+            },
+            fallback_provider_ids=model_config.get("fallback_provider_ids", []),
+            request_max_retries=model_config.get("request_max_retries", 5),
             subagent_orchestrator=conf.get("subagent_orchestrator", {}),
             timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
             max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
         )
+
+    async def _send_llm_error_message(
+        self, event: AstrMessageEvent, message: object
+    ) -> None:
+        await event.send(MessageChain().message(str(message)))
 
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
@@ -144,6 +173,7 @@ class InternalAgentSubStage(Stage):
         follow_up_capture: FollowUpCapture | None = None
         follow_up_consumed_marked = False
         follow_up_activated = False
+        typing_requested = False
         try:
             streaming_response = self.streaming_response
             if (enable_streaming := event.get_extra("enable_streaming")) is not None:
@@ -152,13 +182,18 @@ class InternalAgentSubStage(Stage):
             has_provider_request = event.get_extra("provider_request") is not None
             has_valid_message = bool(event.message_str and event.message_str.strip())
             has_media_content = any(
-                isinstance(comp, Image | File) for comp in event.message_obj.message
+                isinstance(comp, (Image, File, Record, Video))
+                for comp in event.message_obj.message
+            )
+            has_reply = any(
+                isinstance(comp, Reply) for comp in event.message_obj.message
             )
 
             if (
                 not has_provider_request
                 and not has_valid_message
                 and not has_media_content
+                and not has_reply
             ):
                 logger.debug("skip llm request: empty message and no provider_request")
                 return
@@ -171,6 +206,10 @@ class InternalAgentSubStage(Stage):
                     follow_up_activated,
                 ) = await prepare_follow_up_capture(follow_up_capture)
                 if follow_up_consumed_marked:
+                    event.set_extra(
+                        "_follow_up_captured",
+                        {"target_run_id": follow_up_capture.target_run_id},
+                    )
                     logger.info(
                         "Follow-up ticket already consumed, stopping processing. umo=%s, seq=%s",
                         event.unified_msg_origin,
@@ -178,8 +217,13 @@ class InternalAgentSubStage(Stage):
                     )
                     return
 
-            await event.send_typing()
-            await call_event_hook(event, EventType.OnWaitingLLMRequestEvent)
+            try:
+                typing_requested = True
+                await event.send_typing()
+            except Exception:
+                logger.warning("send_typing failed", exc_info=True)
+            if await call_event_hook(event, EventType.OnWaitingLLMRequestEvent):
+                return
 
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
                 logger.debug("acquired session lock for llm request")
@@ -200,6 +244,13 @@ class InternalAgentSubStage(Stage):
                     )
 
                     if build_result is None:
+                        if llm_error_message := event.get_extra(
+                            LLM_ERROR_MESSAGE_EXTRA_KEY
+                        ):
+                            await self._send_llm_error_message(
+                                event,
+                                llm_error_message,
+                            )
                         return
 
                     agent_runner = build_result.agent_runner
@@ -210,10 +261,12 @@ class InternalAgentSubStage(Stage):
                     api_base = provider.provider_config.get("api_base", "")
                     for host in decoded_blocked:
                         if host in api_base:
-                            logger.error(
-                                "Provider API base %s is blocked due to security reasons. Please use another ai provider.",
-                                api_base,
+                            error_message = (
+                                f"LLM 请求失败：Provider API base `{api_base}` "
+                                "因安全原因被拦截，请更换可用的 AI 提供商。"
                             )
+                            logger.error(error_message)
+                            await self._send_llm_error_message(event, error_message)
                             return
 
                     stream_to_general = (
@@ -248,18 +301,19 @@ class InternalAgentSubStage(Stage):
                     # 检测 Live Mode
                     if action_type == "live":
                         # Live Mode: 使用 run_live_agent
-                        logger.info("[Internal Agent] 检测到 Live Mode，启用 TTS 处理")
+                        logger.info(
+                            "[Internal Agent] Live Mode detected; enabling TTS processing."
+                        )
 
                         # 获取 TTS Provider
-                        tts_provider = (
-                            self.ctx.plugin_manager.context.get_using_tts_provider(
-                                event.unified_msg_origin
-                            )
+                        tts_provider = await self.ctx.plugin_manager.context.get_using_tts_provider_async(
+                            event.unified_msg_origin
                         )
 
                         if not tts_provider:
                             logger.warning(
-                                "[Live Mode] TTS Provider 未配置，将使用普通流式模式"
+                                "[Live Mode] No TTS provider is configured; using "
+                                "standard streaming mode."
                             )
 
                         # 使用 run_live_agent，总是使用流式响应
@@ -274,6 +328,7 @@ class InternalAgentSubStage(Stage):
                                     self.show_tool_use,
                                     self.show_tool_call_result,
                                     show_reasoning=self.show_reasoning,
+                                    buffer_intermediate_messages=self.buffer_intermediate_messages,
                                 ),
                             ),
                         )
@@ -304,6 +359,7 @@ class InternalAgentSubStage(Stage):
                                     self.show_tool_use,
                                     self.show_tool_call_result,
                                     show_reasoning=self.show_reasoning,
+                                    buffer_intermediate_messages=self.buffer_intermediate_messages,
                                 ),
                             ),
                         )
@@ -334,6 +390,7 @@ class InternalAgentSubStage(Stage):
                             self.show_tool_call_result,
                             stream_to_general,
                             show_reasoning=self.show_reasoning,
+                            buffer_intermediate_messages=self.buffer_intermediate_messages,
                         ):
                             yield
 
@@ -343,6 +400,15 @@ class InternalAgentSubStage(Stage):
                         "astr_agent_complete",
                         stats=agent_runner.stats.to_dict(),
                         resp=final_resp.completion_text if final_resp else None,
+                    )
+
+                    asyncio.create_task(
+                        _record_internal_agent_stats(
+                            event,
+                            req,
+                            agent_runner,
+                            final_resp,
+                        )
                     )
 
                     # 检查事件是否被停止，如果被停止则不保存历史记录
@@ -377,6 +443,11 @@ class InternalAgentSubStage(Stage):
             )
             await event.send(MessageChain().message(error_text))
         finally:
+            if typing_requested:
+                try:
+                    await event.stop_typing()
+                except Exception:
+                    logger.warning("stop_typing failed", exc_info=True)
             if follow_up_capture:
                 await finalize_follow_up_capture(
                     follow_up_capture,
@@ -396,7 +467,36 @@ class InternalAgentSubStage(Stage):
         if not req or not req.conversation:
             return
 
-        if not llm_response and not user_aborted:
+        messages_to_save: list[Message] = []
+        skipped_initial_system = False
+        for message in all_messages:
+            if message.role == "system" and not skipped_initial_system:
+                skipped_initial_system = True
+                continue
+            if message.role in ["assistant", "user"] and message._no_save:
+                continue
+            messages_to_save.append(message)
+
+        checkpoint_id = event.get_extra("llm_checkpoint_id")
+        has_checkpoint = isinstance(checkpoint_id, str) and bool(checkpoint_id)
+        message_to_save = dump_messages_with_checkpoints(messages_to_save)
+        if not user_aborted and (
+            llm_response is None or llm_response.role != "assistant"
+        ):
+            if has_checkpoint:
+                message_to_save.append(
+                    CheckpointMessageSegment(
+                        content=CheckpointData(id=checkpoint_id),
+                    ).model_dump()
+                )
+            if has_checkpoint or (llm_response is None and req.tool_calls_result):
+                token_usage = None if has_checkpoint else req.conversation.token_usage
+                await self.conv_manager.update_conversation(
+                    event.unified_msg_origin,
+                    req.conversation.cid,
+                    history=message_to_save,
+                    token_usage=token_usage,
+                )
             return
 
         if llm_response and llm_response.role != "assistant":
@@ -414,18 +514,15 @@ class InternalAgentSubStage(Stage):
             and not req.tool_calls_result
             and not user_aborted
         ):
-            logger.debug("LLM 响应为空，不保存记录。")
+            logger.debug("The LLM response is empty; not saving a record.")
             return
 
-        message_to_save = []
-        skipped_initial_system = False
-        for message in all_messages:
-            if message.role == "system" and not skipped_initial_system:
-                skipped_initial_system = True
-                continue
-            if message.role in ["assistant", "user"] and message._no_save:
-                continue
-            message_to_save.append(message.model_dump())
+        if isinstance(checkpoint_id, str) and checkpoint_id:
+            message_to_save.append(
+                CheckpointMessageSegment(
+                    content=CheckpointData(id=checkpoint_id),
+                ).model_dump()
+            )
 
         # if user_aborted:
         #     message_to_save.append(
@@ -452,3 +549,46 @@ class InternalAgentSubStage(Stage):
 # these hosts are base64 encoded
 BLOCKED = {"dGZid2h2d3IuY2xvdWQuc2VhbG9zLmlv", "a291cmljaGF0"}
 decoded_blocked = [base64.b64decode(b).decode("utf-8") for b in BLOCKED]
+
+
+async def _record_internal_agent_stats(
+    event: AstrMessageEvent,
+    req: ProviderRequest | None,
+    agent_runner: AgentRunner | None,
+    final_resp: LLMResponse | None,
+) -> None:
+    """Persist internal agent stats without affecting the user response flow."""
+    if agent_runner is None:
+        return
+
+    provider = agent_runner.provider
+    stats = agent_runner.stats
+    if provider is None or stats is None:
+        return
+
+    try:
+        provider_config = getattr(provider, "provider_config", {}) or {}
+        conversation_id = (
+            req.conversation.cid
+            if req is not None and req.conversation is not None
+            else None
+        )
+
+        if agent_runner.was_aborted():
+            status = "aborted"
+        elif final_resp is not None and final_resp.role == "err":
+            status = "error"
+        else:
+            status = "completed"
+
+        await db_helper.insert_provider_stat(
+            umo=event.unified_msg_origin,
+            conversation_id=conversation_id,
+            provider_id=provider_config.get("id", "") or provider.meta().id,
+            provider_model=provider.get_model(),
+            status=status,
+            stats=stats.to_dict(),
+            agent_type="internal",
+        )
+    except Exception as e:
+        logger.warning("Persist provider stats failed: %s", e, exc_info=True)

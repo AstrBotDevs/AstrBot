@@ -18,12 +18,13 @@ on:
 
 jobs:
   stale:
+    if: github.repository == 'AstrBotDevs/AstrBot'
     runs-on: ubuntu-latest
     permissions:
       issues: write
 
     steps:
-      - uses: actions/stale@v10
+      - uses: actions/stale@v11
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           operations-per-run: 200

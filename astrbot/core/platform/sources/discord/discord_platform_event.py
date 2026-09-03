@@ -1,6 +1,4 @@
 import asyncio
-import base64
-import binascii
 from collections.abc import AsyncGenerator
 from io import BytesIO
 from pathlib import Path
@@ -16,9 +14,22 @@ from astrbot.api.message_components import (
     File,
     Image,
     Plain,
+    Record,
     Reply,
 )
-from astrbot.api.platform import AstrBotMessage, At, PlatformMetadata
+from astrbot.api.platform import (
+    AstrBotMessage,
+    At,
+    Group,
+    MessageMember,
+    MessageType,
+    PlatformMetadata,
+)
+from astrbot.core.utils.media_utils import (
+    MEDIA_MIME_EXTENSIONS,
+    MediaResolver,
+    describe_media_ref,
+)
 
 from .client import DiscordBotClient
 from .components import DiscordEmbed, DiscordView
@@ -125,6 +136,151 @@ class DiscordPlatformEvent(AstrMessageEvent):
             logger.error(f"[Discord] 无法获取频道 {self.session_id}")
             return None
 
+    async def get_group(
+        self, group_id: str | None = None, **kwargs: object
+    ) -> Group | None:
+        """Get Discord channel and guild metadata without fetching all members.
+
+        AstrBot treats a Discord channel or thread as the group. Guild metadata is
+        attached for context, while members are exposed only when the local cache is
+        known to be complete.
+
+        Args:
+            group_id: Discord channel or thread ID. Defaults to the current group.
+            **kwargs: Reserved for compatibility with the platform event interface.
+
+        Returns:
+            Enriched group metadata, or ``None`` when no group ID is available.
+        """
+        if group_id is None and self.message_obj.type != MessageType.GROUP_MESSAGE:
+            return None
+
+        requested_group_id = str(group_id or self.get_group_id())
+        if not requested_group_id:
+            return None
+
+        current_group = self.message_obj.group
+        group = Group(
+            group_id=requested_group_id,
+            group_name=(
+                current_group.group_name
+                if current_group and current_group.group_id == requested_group_id
+                else None
+            ),
+        )
+        try:
+            channel_id = int(requested_group_id)
+        except ValueError:
+            logger.warning(f"[Discord] Invalid group channel ID: {requested_group_id}")
+            return group
+
+        channel = self.client.get_channel(channel_id)
+        if channel is None:
+            try:
+                channel = await self.client.fetch_channel(channel_id)
+            except Exception as exc:
+                logger.warning(
+                    f"[Discord] Failed to get group channel {requested_group_id}: {exc}"
+                )
+                return group
+
+        channel_name = getattr(channel, "name", None)
+        if isinstance(channel_name, str):
+            group.group_name = channel_name
+
+        guild = getattr(channel, "guild", None)
+        guild_name = getattr(guild, "name", None)
+        if not isinstance(guild_name, str):
+            guild_id = getattr(channel, "guild_id", None) or getattr(guild, "id", None)
+            try:
+                resolved_guild_id = int(guild_id) if guild_id is not None else None
+            except (TypeError, ValueError):
+                resolved_guild_id = None
+            if resolved_guild_id is not None:
+                get_guild = getattr(self.client, "get_guild", None)
+                cached_guild = (
+                    get_guild(resolved_guild_id) if callable(get_guild) else None
+                )
+                if cached_guild is not None:
+                    guild = cached_guild
+                else:
+                    fetch_guild = getattr(self.client, "fetch_guild", None)
+                    if callable(fetch_guild):
+                        try:
+                            guild = await fetch_guild(resolved_guild_id)
+                        except Exception as exc:
+                            logger.warning(
+                                f"[Discord] Failed to get guild {resolved_guild_id}: {exc}"
+                            )
+                guild_name = getattr(guild, "name", None)
+
+        if guild is None:
+            return group
+
+        if isinstance(guild_name, str) and isinstance(channel_name, str):
+            group.group_name = f"{guild_name}-{channel_name}"
+        elif isinstance(guild_name, str):
+            group.group_name = guild_name
+
+        icon = getattr(guild, "icon", None)
+        icon_url = getattr(icon, "url", None) if icon else None
+        if icon_url:
+            group.group_avatar = str(icon_url)
+
+        owner_id = getattr(guild, "owner_id", None)
+        if owner_id is not None:
+            group.group_owner = str(owner_id)
+
+        member_count = getattr(guild, "member_count", None)
+        if isinstance(member_count, int):
+            group.member_count = member_count
+
+        cached_members = getattr(guild, "members", None)
+        members_intent = bool(
+            getattr(getattr(self.client, "intents", None), "members", False)
+        )
+        cache_complete = bool(
+            members_intent
+            and cached_members is not None
+            and (
+                getattr(guild, "chunked", False)
+                or (
+                    group.member_count is not None
+                    and len(cached_members) >= group.member_count
+                )
+            )
+        )
+        if not cache_complete:
+            return group
+
+        group.group_admins = []
+        group.members = None if isinstance(channel, discord.Thread) else []
+        for member in cached_members:
+            member_id = getattr(member, "id", None)
+            if member_id is None:
+                continue
+            guild_permissions = getattr(member, "guild_permissions", None)
+            if (
+                getattr(guild_permissions, "administrator", False)
+                and str(member_id) != group.group_owner
+            ):
+                group.group_admins.append(str(member_id))
+            if isinstance(channel, discord.Thread):
+                continue
+            try:
+                if not channel.permissions_for(member).view_channel:
+                    continue
+            except Exception:
+                continue
+            group.members.append(
+                MessageMember(
+                    user_id=str(member_id),
+                    nickname=getattr(member, "display_name", None),
+                )
+            )
+
+        return group
+
     async def _parse_to_discord(
         self,
         message: MessageChain,
@@ -158,76 +314,76 @@ class DiscordPlatformEvent(AstrMessageEvent):
                         logger.warning(f"[Discord] Image 组件没有 file 属性: {i}")
                         continue
 
-                    discord_file = None
-
-                    # 1. URL
                     if file_content.startswith("http"):
-                        logger.debug(f"[Discord] 处理 URL 图片: {file_content}")
+                        logger.debug(
+                            "[Discord] 处理 URL 图片: %s",
+                            describe_media_ref(file_content),
+                        )
                         embed = discord.Embed().set_image(url=file_content)
                         embeds.append(embed)
                         continue
 
-                    # 2. File URI
-                    if file_content.startswith("file:///"):
-                        logger.debug(f"[Discord] 处理 File URI: {file_content}")
-                        path = Path(file_content[8:])
-                        if await asyncio.to_thread(path.exists):
-                            file_bytes = await asyncio.to_thread(path.read_bytes)
-                            discord_file = discord.File(
-                                BytesIO(file_bytes),
-                                filename=filename or path.name,
-                            )
-                        else:
-                            logger.warning(f"[Discord] 图片文件不存在: {path}")
-
-                    # 3. Base64 URI
-                    elif file_content.startswith("base64://"):
-                        logger.debug("[Discord] 处理 Base64 URI")
-                        b64_data = file_content.split("base64://", 1)[1]
-                        missing_padding = len(b64_data) % 4
-                        if missing_padding:
-                            b64_data += "=" * (4 - missing_padding)
-                        img_bytes = base64.b64decode(b64_data)
-                        discord_file = discord.File(
-                            BytesIO(img_bytes),
-                            filename=filename or "image.png",
+                    image_data = await MediaResolver(
+                        file_content,
+                        media_type="image",
+                    ).to_base64_data(strict=True)
+                    if not image_data:
+                        logger.warning(
+                            "[Discord] 图片解析失败: %s",
+                            describe_media_ref(file_content),
                         )
+                        continue
 
-                    # 4. 裸 Base64 或本地路径
-                    else:
-                        try:
-                            logger.debug("[Discord] 尝试作为裸 Base64 处理")
-                            b64_data = file_content
-                            missing_padding = len(b64_data) % 4
-                            if missing_padding:
-                                b64_data += "=" * (4 - missing_padding)
-                            img_bytes = base64.b64decode(b64_data)
-                            discord_file = discord.File(
-                                BytesIO(img_bytes),
-                                filename=filename or "image.png",
-                            )
-                        except (ValueError, TypeError, binascii.Error):
-                            logger.debug(
-                                f"[Discord] 裸 Base64 解码失败，作为本地路径处理: {file_content}",
-                            )
-                            path = Path(file_content)
-                            if await asyncio.to_thread(path.exists):
-                                file_bytes = await asyncio.to_thread(path.read_bytes)
-                                discord_file = discord.File(
-                                    BytesIO(file_bytes),
-                                    filename=filename or path.name,
-                                )
-                            else:
-                                logger.warning(f"[Discord] 图片文件不存在: {path}")
-
-                    if discord_file:
-                        files.append(discord_file)
+                    suffix = MEDIA_MIME_EXTENSIONS.get(image_data.mime_type, ".png")
+                    files.append(
+                        discord.File(
+                            BytesIO(image_data.to_bytes()),
+                            filename=filename or f"image{suffix}",
+                        )
+                    )
 
                 except Exception:
                     # 使用 getattr 来安全地访问 i.file，以防 i 本身就是问题
                     file_info = getattr(i, "file", "未知")
                     logger.error(
-                        f"[Discord] 处理图片时发生未知严重错误: {file_info}",
+                        "[Discord] 处理图片时发生未知严重错误: %s",
+                        describe_media_ref(file_info),
+                        exc_info=True,
+                    )
+            elif isinstance(i, Record):
+                logger.debug(f"[Discord] 开始处理 Record 组件: {i}")
+                try:
+                    audio_ref = getattr(i, "file", None) or getattr(i, "url", None)
+                    if not audio_ref:
+                        logger.warning(f"[Discord] Record 组件没有 file/url 属性: {i}")
+                        continue
+
+                    audio_data = await MediaResolver(
+                        audio_ref,
+                        media_type="audio",
+                        default_suffix=".wav",
+                    ).to_base64_data(
+                        strict=True,
+                        target_format="wav",
+                    )
+                    if not audio_data:
+                        logger.warning(
+                            "[Discord] 语音解析失败: %s",
+                            describe_media_ref(audio_ref),
+                        )
+                        continue
+
+                    files.append(
+                        discord.File(
+                            BytesIO(audio_data.to_bytes()),
+                            filename="audio.wav",
+                        )
+                    )
+                except Exception:
+                    audio_ref = getattr(i, "file", "未知")
+                    logger.error(
+                        "[Discord] 处理语音时发生未知严重错误: %s",
+                        describe_media_ref(audio_ref),
                         exc_info=True,
                     )
             elif isinstance(i, File):

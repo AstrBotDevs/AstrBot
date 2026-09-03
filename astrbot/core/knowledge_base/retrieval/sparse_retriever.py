@@ -6,12 +6,16 @@
 import json
 import os
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-import jieba
-from rank_bm25 import BM25Okapi
-
-from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
+from astrbot.core.knowledge_base.retrieval.tokenizer import (
+    load_stopwords,
+    tokenize_text,
+)
+
+if TYPE_CHECKING:
+    from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 
 
 @dataclass
@@ -24,6 +28,7 @@ class SparseResult:
     kb_id: str
     content: str
     score: float
+    rank: int | None = None
 
 
 class SparseRetriever:
@@ -44,13 +49,9 @@ class SparseRetriever:
         self.kb_db = kb_db
         self._index_cache = {}  # 缓存 BM25 索引
 
-        with open(
+        self.hit_stopwords = load_stopwords(
             os.path.join(os.path.dirname(__file__), "hit_stopwords.txt"),
-            encoding="utf-8",
-        ) as f:
-            self.hit_stopwords = {
-                word.strip() for word in set(f.read().splitlines()) if word.strip()
-            }
+        )
 
     async def retrieve(
         self,
@@ -69,11 +70,59 @@ class SparseRetriever:
             List[SparseResult]: 检索结果列表
 
         """
-        # 1. 获取所有相关块
+        fts_results = []
+        fallback_kb_ids = []
+        query_tokens = tokenize_text(query, self.hit_stopwords)
+        for kb_id in kb_ids:
+            vec_db: FaissVecDB | None = kb_options.get(kb_id, {}).get("vec_db")
+            if not vec_db:
+                continue
+            top_k_sparse = kb_options.get(kb_id, {}).get("top_k_sparse", 50)
+            result = await vec_db.document_storage.search_sparse(
+                query_tokens=query_tokens,
+                limit=top_k_sparse,
+            )
+            if result is None:
+                fallback_kb_ids.append(kb_id)
+                continue
+
+            # BM25 scores from independent FTS5 indexes are not comparable.
+            # Preserve each index's local rank for the later RRF stage.
+            for rank, doc in enumerate(result, start=1):
+                chunk_md = json.loads(doc["metadata"])
+                fts_results.append(
+                    SparseResult(
+                        chunk_id=doc["doc_id"],
+                        chunk_index=chunk_md["chunk_index"],
+                        doc_id=chunk_md["kb_doc_id"],
+                        kb_id=kb_id,
+                        content=doc["text"],
+                        score=-float(doc["score"]),
+                        rank=rank,
+                    ),
+                )
+
+        fallback_results = []
+        if fallback_kb_ids:
+            fallback_results = await self._retrieve_with_bm25(
+                query=query,
+                kb_ids=fallback_kb_ids,
+                kb_options=kb_options,
+            )
+        results = fts_results + fallback_results
+        results.sort(key=lambda x: x.score, reverse=True)
+        return results
+
+    async def _retrieve_with_bm25(
+        self,
+        query: str,
+        kb_ids: list[str],
+        kb_options: dict,
+    ) -> list[SparseResult]:
         top_k_sparse = 0
         chunks = []
         for kb_id in kb_ids:
-            vec_db: FaissVecDB = kb_options.get(kb_id, {}).get("vec_db")
+            vec_db: FaissVecDB | None = kb_options.get(kb_id, {}).get("vec_db")
             if not vec_db:
                 continue
             result = await vec_db.document_storage.get_documents(
@@ -100,20 +149,15 @@ class SparseRetriever:
 
         # 2. 准备文档和索引
         corpus = [chunk["text"] for chunk in chunks]
-        tokenized_corpus = [list(jieba.cut(doc)) for doc in corpus]
-        tokenized_corpus = [
-            [word for word in doc if word not in self.hit_stopwords]
-            for doc in tokenized_corpus
-        ]
+        tokenized_corpus = [tokenize_text(doc, self.hit_stopwords) for doc in corpus]
 
         # 3. 构建 BM25 索引
+        from rank_bm25 import BM25Okapi
+
         bm25 = BM25Okapi(tokenized_corpus)
 
         # 4. 执行检索
-        tokenized_query = list(jieba.cut(query))
-        tokenized_query = [
-            word for word in tokenized_query if word not in self.hit_stopwords
-        ]
+        tokenized_query = tokenize_text(query, self.hit_stopwords)
         scores = bm25.get_scores(tokenized_query)
 
         # 5. 排序并返回 Top-K
@@ -132,5 +176,7 @@ class SparseRetriever:
             )
 
         results.sort(key=lambda x: x.score, reverse=True)
+        for rank, result in enumerate(results, start=1):
+            result.rank = rank
         # return results[: len(results) // len(kb_ids)]
         return results[:top_k_sparse]

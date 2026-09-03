@@ -13,15 +13,17 @@ from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
 from ..context import PipelineContext
 from ..stage import Stage, register_stage
+from .umo_auto_name import UmoAutoNameRecorder
 
 UNIQUE_SESSION_ID_BUILDERS: dict[str, Callable[[AstrMessageEvent], str | None]] = {
     "aiocqhttp": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
     "slack": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
     "dingtalk": lambda e: e.get_sender_id(),
-    "qq_official": lambda e: e.get_sender_id(),
-    "qq_official_webhook": lambda e: e.get_sender_id(),
+    "qq_official": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
+    "qq_official_webhook": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
     "lark": lambda e: f"{e.get_sender_id()}%{e.get_group_id()}",
     "misskey": lambda e: f"{e.get_session_id()}_{e.get_sender_id()}",
+    "matrix": lambda e: f"{e.get_sender_id()}_{e.get_group_id() or e.get_session_id()}",
 }
 
 
@@ -72,6 +74,10 @@ class WakingCheckStage(Stage):
         )
         platform_settings = self.ctx.astrbot_config.get("platform_settings", {})
         self.unique_session = platform_settings.get("unique_session", False)
+        self._umo_auto_name_recorder = UmoAutoNameRecorder(
+            ctx.db_helper,
+            ctx.astrbot_config_id,
+        )
 
     async def process(
         self,
@@ -93,8 +99,12 @@ class WakingCheckStage(Stage):
 
         # 设置 sender 身份
         event.message_str = event.message_str.strip()
+        api_key_allow_admin_role = event.get_extra("_api_key_allow_admin_role")
         for admin_id in self.ctx.astrbot_config["admins_id"]:
-            if str(event.get_sender_id()) == admin_id:
+            if (
+                api_key_allow_admin_role is not False
+                and str(event.get_sender_id()) == admin_id
+            ):
                 event.role = "admin"
                 break
 
@@ -137,7 +147,10 @@ class WakingCheckStage(Stage):
                     event.is_at_or_wake_command = True
                     break
             # 检查是否是私聊
-            if event.is_private_chat() and not self.friend_message_needs_wake_prefix:
+            if event.is_private_chat() and (
+                not self.friend_message_needs_wake_prefix
+                or event.get_platform_name() == "webchat"
+            ):
                 is_wake = True
                 event.is_wake = True
                 event.is_at_or_wake_command = True
@@ -185,9 +198,11 @@ class WakingCheckStage(Stage):
                         break
                 except Exception as e:
                     await event.send(
-                        MessageEventResult().message(
+                        MessageEventResult()
+                        .message(
                             f"插件 {star_map[handler.handler_module_path].name}: {e}",
-                        ),
+                        )
+                        .use_markdown(False),
                     )
                     event.stop_event()
                     passed = False
@@ -204,9 +219,12 @@ class WakingCheckStage(Stage):
                             ),
                         )
                     logger.info(
-                        f"触发 {star_map[handler.handler_module_path].name} 时, 用户(ID={event.get_sender_id()}) 权限不足。",
+                        f"User ID {event.get_sender_id()} lacks permission to trigger "
+                        f"{star_map[handler.handler_module_path].name}.",
                     )
                     event.stop_event()
+                    if event.is_wake:
+                        self._umo_auto_name_recorder.schedule(event)
                     return
 
                 is_wake = True
@@ -233,5 +251,7 @@ class WakingCheckStage(Stage):
         event.set_extra("activated_handlers", activated_handlers)
         event.set_extra("handlers_parsed_params", handlers_parsed_params)
 
-        if not is_wake:
+        if is_wake:
+            self._umo_auto_name_recorder.schedule(event)
+        else:
             event.stop_event()

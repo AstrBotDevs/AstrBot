@@ -3,6 +3,10 @@
     <div v-if="isSingleItemMode" class="flex-grow-1 d-flex align-center ga-2">
       <v-text-field
         v-model="singleItemValue"
+        :type="secretInputType"
+        :append-inner-icon="secretToggleIcon"
+        :autocomplete="secret ? 'new-password' : undefined"
+        @click:append-inner="secretVisible = !secretVisible"
         hide-details
         variant="outlined"
         density="compact"
@@ -15,7 +19,7 @@
       </span>
       <div v-else class="d-flex flex-wrap ga-2">
         <v-chip v-for="item in displayItems" :key="item" size="x-small" label color="primary">
-          {{ item.length > 20 ? item.slice(0, 20) + '...' : item }}
+          {{ secret && !secretVisible ? '••••••••' : (item.length > 20 ? item.slice(0, 20) + '...' : item) }}
         </v-chip>
         <v-chip v-if="modelValue.length > maxDisplayItems" size="x-small" label color="grey-lighten-1">
           +{{ modelValue.length - maxDisplayItems }}
@@ -30,7 +34,7 @@
   <!-- List Management Dialog -->
   <v-dialog v-model="dialog" max-width="600px">
     <v-card>
-      <v-card-title class="text-h3 py-4" style="font-weight: normal;">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ dialogTitle || t('core.common.list.editTitle') }}
       </v-card-title>
       
@@ -39,6 +43,10 @@
         <div class="d-flex align-center ga-2">
           <v-text-field 
             v-model="newItem" 
+            :type="secretInputType"
+            :append-inner-icon="secretToggleIcon"
+            :autocomplete="secret ? 'new-password' : undefined"
+            @click:append-inner="secretVisible = !secretVisible"
             :label="t('core.common.list.addItemPlaceholder')" 
             @keyup.enter="addItem" 
             clearable 
@@ -76,11 +84,15 @@
             class="ma-1 list-item-clickable"
             @click="startEdit(index, item)">
             <v-list-item-title v-if="editIndex !== index" class="item-text">
-              {{ item }}
+              {{ secret && !secretVisible ? '••••••••' : item }}
             </v-list-item-title>
             <v-text-field 
               v-else
               v-model="editItem" 
+              :type="secretInputType"
+              :append-inner-icon="secretToggleIcon"
+              :autocomplete="secret ? 'new-password' : undefined"
+              @click:append-inner="secretVisible = !secretVisible"
               hide-details 
               variant="outlined" 
               density="compact"
@@ -92,18 +104,18 @@
             
             <template v-slot:append>
               <div class="d-flex">
-                <v-btn 
+                <v-btn
                   v-if="editIndex === index"
                   @click.stop="saveEdit" 
-                  variant="plain" 
+                  variant="text"
                   color="success" 
                   icon 
                   size="small">
                   <v-icon>mdi-check</v-icon>
                 </v-btn>
-                <v-btn 
+                <v-btn
                   @click.stop="editIndex === index ? cancelEdit() : removeItem(index)" 
-                  variant="plain" 
+                  variant="text"
                   :color="editIndex === index ? 'error' : 'default'"
                   icon 
                   size="small">
@@ -123,7 +135,7 @@
       <v-card-actions class="pa-4">
         <v-spacer></v-spacer>
         <v-btn variant="text" @click="cancelDialog">{{ t('core.common.cancel') }}</v-btn>
-        <v-btn color="primary" @click="confirmDialog">{{ t('core.common.confirm') }}</v-btn>
+        <v-btn color="primary" variant="tonal" @click="confirmDialog">{{ t('core.common.confirm') }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -131,13 +143,17 @@
   <!-- Batch Import Dialog -->
   <v-dialog v-model="showBatchImport" max-width="600px">
     <v-card>
-      <v-card-title class="text-h3 py-4" style="font-weight: normal;">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ t('core.common.list.batchImportTitle') }}
       </v-card-title>
       
       <v-card-text>
         <v-textarea
           v-model="batchImportText"
+          :class="{ 'secret-textarea': secret && !secretVisible }"
+          :append-inner-icon="secretToggleIcon"
+          :autocomplete="secret ? 'new-password' : undefined"
+          @click:append-inner="secretVisible = !secretVisible"
           :label="t('core.common.list.batchImportLabel')"
           :placeholder="t('core.common.list.batchImportPlaceholder')"
           rows="10"
@@ -150,7 +166,7 @@
       <v-card-actions class="pa-4">
         <v-spacer></v-spacer>
         <v-btn variant="text" @click="cancelBatchImport">{{ t('core.common.cancel') }}</v-btn>
-        <v-btn color="primary" @click="confirmBatchImport">
+        <v-btn color="primary" variant="tonal" @click="confirmBatchImport">
           {{ t('core.common.list.batchImportButton', { count: batchImportPreviewCount }) }}
         </v-btn>
       </v-card-actions>
@@ -188,6 +204,10 @@ const props = defineProps({
   preferSingleItem: {
     type: Boolean,
     default: true
+  },
+  secret: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -201,12 +221,19 @@ const editIndex = ref(-1)
 const editItem = ref('')
 const showBatchImport = ref(false)
 const batchImportText = ref('')
+const secretVisible = ref(false)
 const isSingleItemMode = computed(() => (props.modelValue?.length ?? 0) <= 1 && props.preferSingleItem)
+const secretInputType = computed(() => props.secret && !secretVisible.value ? 'password' : 'text')
+const secretToggleIcon = computed(() => {
+  if (!props.secret) return undefined
+  return secretVisible.value ? 'mdi-eye-off-outline' : 'mdi-eye-outline'
+})
 const singleItemValue = computed({
   get: () => props.modelValue?.[0] ?? '',
   set: (value) => {
-    // 如果值为空或只有空白字符，emit 空数组
-    if (value.trim() === '') {
+    // 仅当值为完全空字符串（未输入任何字符）时清空数组，
+    // 允许包含空格（如 "hello world"）以及纯空格（如 " "）通过
+    if (value === '') {
       emit('update:modelValue', [])
       return
     }
@@ -241,7 +268,7 @@ const batchImportPreviewCount = computed(() => {
 watch(() => props.modelValue, (newValue) => {
   localItems.value = [...(newValue || [])]
   
-  // 自动清理只包含空字符串的数组
+  // 自动清理只包含空字符串或纯空格的条目（纯空格在配置中无意义，此过滤为预期兜底行为）
   if (newValue && newValue.length > 0) {
     const filtered = newValue.filter(item => typeof item === 'string' ? item.trim() !== '' : true)
     if (filtered.length !== newValue.length) {
@@ -343,5 +370,9 @@ function cancelBatchImport() {
 
 .v-chip {
   margin: 2px;
+}
+
+.secret-textarea :deep(textarea) {
+  -webkit-text-security: disc;
 }
 </style>

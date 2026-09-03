@@ -1,5 +1,3 @@
-import base64
-import os
 import sys
 import typing as T
 
@@ -10,8 +8,7 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_file
+from astrbot.core.utils.media_utils import MediaResolver
 
 from ...hooks import BaseAgentRunHooks
 from ...response import AgentResponseData
@@ -106,6 +103,42 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
             async for resp in self.step():
                 yield resp
 
+    async def _upload_image_for_dify(
+        self,
+        image_url: str,
+        session_id: str,
+    ) -> dict[str, str] | None:
+        image_data = await MediaResolver(
+            image_url,
+            media_type="image",
+        ).to_base64_data(strict=True)
+        if image_data is None:
+            logger.warning("Dify 图片预处理结果为空，将忽略。")
+            return None
+
+        image_extension = image_data.mime_type.split("/", 1)[-1] or "png"
+        if image_extension == "jpeg":
+            image_extension = "jpg"
+
+        file_response = await self.api_client.file_upload(
+            file_data=image_data.to_bytes(),
+            user=session_id,
+            mime_type=image_data.mime_type,
+            file_name=f"image.{image_extension}",
+        )
+        logger.debug(f"Dify 上传图片响应：{file_response}")
+        if "id" not in file_response:
+            logger.warning(
+                f"上传图片后得到未知的 Dify 响应：{file_response}，图片将忽略。"
+            )
+            return None
+
+        return {
+            "type": "image",
+            "transfer_method": "local_file",
+            "upload_file_id": file_response["id"],
+        }
+
     async def _execute_dify_request(self):
         """执行 Dify 请求的核心逻辑"""
         prompt = self.req.prompt or ""
@@ -124,31 +157,13 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         # 处理图片上传
         files_payload = []
         for image_url in image_urls:
-            # image_url is a base64 string
             try:
-                image_data = base64.b64decode(image_url)
-                file_response = await self.api_client.file_upload(
-                    file_data=image_data,
-                    user=session_id,
-                    mime_type="image/png",
-                    file_name="image.png",
-                )
-                logger.debug(f"Dify 上传图片响应：{file_response}")
-                if "id" not in file_response:
-                    logger.warning(
-                        f"上传图片后得到未知的 Dify 响应：{file_response}，图片将忽略。"
-                    )
-                    continue
-                files_payload.append(
-                    {
-                        "type": "image",
-                        "transfer_method": "local_file",
-                        "upload_file_id": file_response["id"],
-                    }
-                )
+                image_payload = await self._upload_image_for_dify(image_url, session_id)
             except Exception as e:
                 logger.warning(f"上传图片失败：{e}")
                 continue
+            if image_payload:
+                files_payload.append(image_payload)
 
         # 获得会话变量
         payload_vars = self.variables.copy()
@@ -290,11 +305,12 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                 case "image":
                     return Comp.Image(file=item["url"], url=item["url"])
                 case "audio":
-                    # 仅支持 wav
-                    temp_dir = get_astrbot_temp_path()
-                    path = os.path.join(temp_dir, f"dify_{item['filename']}.wav")
-                    await download_file(item["url"], path)
-                    return Comp.Image(file=item["url"], url=item["url"])
+                    audio_path = await MediaResolver(
+                        item["url"],
+                        media_type="audio",
+                        default_suffix=".wav",
+                    ).to_path(target_format="wav")
+                    return Comp.Record(file=audio_path, url=audio_path)
                 case "video":
                     return Comp.Video(file=item["url"])
                 case _:

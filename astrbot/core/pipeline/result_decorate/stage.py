@@ -5,7 +5,7 @@ import traceback
 from collections.abc import AsyncGenerator
 
 from astrbot.core import file_token_service, html_renderer, logger
-from astrbot.core.message.components import At, Image, Node, Plain, Record, Reply
+from astrbot.core.message.components import At, Image, Json, Node, Plain, Record, Reply
 from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.pipeline.content_safety_check.stage import ContentSafetyCheckStage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -167,26 +167,29 @@ class ResultDecorateStage(Stage):
                 )
                 if is_stream:
                     logger.warning(
-                        "启用流式输出时，依赖发送消息前事件钩子的插件可能无法正常工作",
+                        "Plugins that depend on the pre-send event hook may not work "
+                        "correctly when streaming output is enabled.",
                     )
                 await handler.handler(event)
 
                 if (result := event.get_result()) is None or not result.chain:
                     logger.debug(
-                        f"hook(on_decorating_result) -> {star_map[handler.handler_module_path].name} - {handler.handler_name} 将消息结果清空。",
+                        "hook(on_decorating_result) -> "
+                        f"{star_map[handler.handler_module_path].name} - "
+                        f"{handler.handler_name} cleared the message result.",
                     )
             except BaseException:
                 logger.error(traceback.format_exc())
 
             if event.is_stopped():
                 logger.info(
-                    f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。",
+                    f"{star_map[handler.handler_module_path].name} - "
+                    f"{handler.handler_name} stopped event propagation.",
                 )
                 return
 
         # 流式输出不执行下面的逻辑
         if is_stream:
-            logger.info("流式输出已启用，跳过结果装饰阶段")
             return
 
         # 需要再获取一次。插件可能直接对 chain 进行了替换。
@@ -204,7 +207,7 @@ class ResultDecorateStage(Stage):
 
             # 分段回复
             if self.enable_segmented_reply and event.get_platform_name() not in [
-                "qq_official",
+                "qq_official_webhook",
                 "weixin_official_account",
                 "dingtalk",
             ]:
@@ -231,7 +234,9 @@ class ResultDecorateStage(Stage):
                                     )
                                 except re.error:
                                     logger.error(
-                                        f"分段回复正则表达式错误，使用默认分段方式: {traceback.format_exc()}",
+                                        "Invalid segmented-reply regular expression; "
+                                        "using the default segmentation method: "
+                                        f"{traceback.format_exc()}",
                                     )
                                     split_response = re.findall(
                                         r".*?[。？！~…]+|.+$",
@@ -244,8 +249,17 @@ class ResultDecorateStage(Stage):
                                 continue
                             for seg in split_response:
                                 if self.content_cleanup_rule:
-                                    seg = re.sub(self.content_cleanup_rule, "", seg)
-                                if seg.strip():
+                                    try:
+                                        seg = re.sub(self.content_cleanup_rule, "", seg)
+                                    except re.error:
+                                        logger.error(
+                                            "The segmented-reply filter expression "
+                                            "failed, so the text could not be filtered: "
+                                            f"{traceback.format_exc()}"
+                                        )
+                                        self.content_cleanup_rule = None
+                                seg = seg.strip()
+                                if seg:
                                     new_chain.append(Plain(seg))
                         else:
                             # 非 Plain 类型的消息段不分段
@@ -253,8 +267,10 @@ class ResultDecorateStage(Stage):
                     result.chain = new_chain
 
             # TTS
-            tts_provider = self.ctx.plugin_manager.context.get_using_tts_provider(
-                event.unified_msg_origin,
+            tts_provider = (
+                await self.ctx.plugin_manager.context.get_using_tts_provider_async(
+                    event.unified_msg_origin,
+                )
             )
 
             should_tts = (
@@ -266,7 +282,8 @@ class ResultDecorateStage(Stage):
             )
             if should_tts and not tts_provider:
                 logger.warning(
-                    f"会话 {event.unified_msg_origin} 未配置文本转语音模型。",
+                    f"Session {event.unified_msg_origin} has no text-to-speech "
+                    "provider configured.",
                 )
 
             if (
@@ -275,20 +292,36 @@ class ResultDecorateStage(Stage):
                 and event.get_extra("_llm_reasoning_content")
             ):
                 # inject reasoning content to chain
-                reasoning_content = event.get_extra("_llm_reasoning_content")
-                result.chain.insert(0, Plain(f"🤔 思考: {reasoning_content}\n"))
+                reasoning_content = str(event.get_extra("_llm_reasoning_content"))
+                if event.get_platform_name() == "lark":
+                    result.chain.insert(
+                        0,
+                        Json(
+                            data={
+                                "type": "lark_collapsible_panel_reasoning",
+                                "title": "💭 Thinking",
+                                "expanded": False,
+                                "content": reasoning_content,
+                            },
+                        ),
+                    )
+                else:
+                    result.chain.insert(
+                        0, Plain(f"🤔 思考: {reasoning_content}\n\n────\n")
+                    )
 
             if should_tts and tts_provider:
                 new_chain = []
                 for comp in result.chain:
                     if isinstance(comp, Plain) and len(comp.text) > 1:
                         try:
-                            logger.info(f"TTS 请求: {comp.text}")
+                            logger.info(f"TTS request: {comp.text}")
                             audio_path = await tts_provider.get_audio(comp.text)
-                            logger.info(f"TTS 结果: {audio_path}")
+                            logger.info(f"TTS result: {audio_path}")
                             if not audio_path:
                                 logger.error(
-                                    f"由于 TTS 音频文件未找到，消息段转语音失败: {comp.text}",
+                                    "Failed to convert the message segment to speech "
+                                    f"because no TTS audio file was found: {comp.text}",
                                 )
                                 new_chain.append(comp)
                                 continue
@@ -309,7 +342,7 @@ class ResultDecorateStage(Stage):
                                     audio_path,
                                 )
                                 url = f"{callback_api_base}/api/file/{token}"
-                                logger.debug(f"已注册：{url}")
+                                logger.debug(f"Registered: {url}")
 
                             new_chain.append(
                                 Record(
@@ -322,7 +355,7 @@ class ResultDecorateStage(Stage):
                                 new_chain.append(comp)
                         except Exception:
                             logger.error(traceback.format_exc())
-                            logger.error("TTS 失败，使用文本发送。")
+                            logger.error("TTS failed; sending text instead.")
                             new_chain.append(comp)
                     else:
                         new_chain.append(comp)
@@ -349,11 +382,14 @@ class ResultDecorateStage(Stage):
                             template_name=self.t2i_active_template,
                         )
                     except BaseException:
-                        logger.error("文本转图片失败，使用文本发送。")
+                        logger.error(
+                            "Text-to-image rendering failed; sending text instead."
+                        )
                         return
                     if time.time() - render_start > 3:
                         logger.warning(
-                            "文本转图片耗时超过了 3 秒，如果觉得很慢可以使用 /t2i 关闭文本转图片模式。",
+                            "Text-to-image rendering took more than 3 seconds. Disable "
+                            "text-to-image mode in the WebUI if it is too slow.",
                         )
                     if url:
                         if url.startswith("http"):
@@ -364,7 +400,7 @@ class ResultDecorateStage(Stage):
                         ):
                             token = await file_token_service.register_file(url)
                             url = f"{self.ctx.astrbot_config['callback_api_base']}/api/file/{token}"
-                            logger.debug(f"已注册：{url}")
+                            logger.debug(f"Registered: {url}")
                             result.chain = [Image.fromURL(url)]
                         else:
                             result.chain = [Image.fromFileSystem(url)]

@@ -1,4 +1,7 @@
 {
+  "header": {
+    "eyebrow": "Orchestration"
+  },
   "page": {
     "title": "SubAgent Orchestration",
     "beta": "Experimental",
@@ -8,8 +11,19 @@
     "refresh": "Refresh",
     "save": "Save",
     "add": "Add SubAgent",
+    "expand": "Expand",
+    "collapse": "Collapse",
     "delete": "Delete",
     "close": "Close"
+  },
+  "overview": {
+    "totalAgents": "Total SubAgents",
+    "totalAgentsNote": "Configured delegate agents",
+    "enabledAgents": "Enabled Agents",
+    "enabledAgentsNote": "Agents available for handoff",
+    "mainOrchestration": "Main Orchestration",
+    "boundPersonas": "Bound Personas",
+    "boundPersonasNote": "Agents with an attached persona"
   },
   "switches": {
     "enable": "Enable SubAgent orchestration",
@@ -23,7 +37,9 @@
   },
   "section": {
     "title": "SubAgents",
-    "globalSettings": "Global Settings"
+    "subtitle": "Configure delegate agents, personas, and descriptions for the main LLM",
+    "globalSettings": "Global Settings",
+    "agentSetup": "Agent Setup"
   },
   "cards": {
     "statusEnabled": "Enabled",
@@ -33,7 +49,9 @@
     "switchLabel": "Enable",
     "previewTitle": "Preview: handoff tool shown to the main LLM",
     "personaChip": "Persona: {id}",
-    "personaPreview": "PERSONA PREVIEW"
+    "personaPreview": "Persona Preview",
+    "noDescription": "No description yet",
+    "previewHint": "Review the currently selected persona to verify the handoff target."
   },
   "form": {
     "nameLabel": "Agent name (used for transfer_to_{name})",
@@ -48,6 +66,9 @@
   "messages": {
     "loadConfigFailed": "Failed to load config",
     "loadPersonaFailed": "Failed to load persona list",
+    "unsavedChangesNotice": "You have unsaved changes on this page. Save before leaving.",
+    "unsavedChangesLeaveConfirm": "You have unsaved changes. Leaving will discard them. Continue?",
+    "unsavedChangesReloadConfirm": "You have unsaved changes. Reloading will discard them. Continue?",
     "nameMissing": "A SubAgent is missing a name",
     "nameInvalid": "Invalid SubAgent name: only lowercase letters/numbers/underscores, starting with a letter",
     "nameDuplicate": "Duplicate SubAgent name: {name}",
