@@ -55,7 +55,7 @@ Skills 提供了 Agent 操作说明书，并且内容通常包含 Python 代码�
 - Local（Agent 将在你的 AstrBot 运行环境中运行。**请谨慎使用，因为这会允许 Agent 在你的环境执行任意代码，可能带来安全风险**）
 - Sandbox (Agent 在隔离化的沙盒环境中运行。**需要先启动 AstrBot 沙盒模式**，请参考：[沙盒模式](/use/astrbot-agent-sandbox)，如果这个模式下不启动沙盒模式，将不会将 Skills 传给 Agent)
 
-你可以在 `配置` 页面 - 使用电脑能力 中选择默认的执行环境。
+你可以在 `配置文件` 页面 - 使用电脑能力 中选择默认的执行环境。
 
 > [!NOTE]
 > 需要说明的是，如果您使用 Local 作为执行环境，AstrBot 目前仅允许 **AstrBot 管理员**请求时才真正让 Agent 操作你的本地环境，普通用户将会被禁止，Agent 将无法通过 Shell、Python 等 Tool 在本地环境执行代码，会收到相应的权限限制提示，如 `Sorry, I cannot execute code on your local environment due to permission restrictions.`。

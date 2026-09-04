@@ -18,7 +18,7 @@ After creation, copy the generated API key.
 
 ### 2. Configure NewAPI in AstrBot
 
-Open AstrBot WebUI, go to `Service Providers`, and click `Add Provider`.
+Open AstrBot WebUI, go to `Providers`, and click `Add Provider`.
 
 NewAPI fully supports OpenAI Chat Completion and Responses APIs, so select `OpenAI` and open its provider configuration.
 
@@ -33,7 +33,7 @@ Then paste your API key into `API Key` and click `Save`.
 
 ### 3. Apply the Provider
 
-Go to `Configuration`, find the model section, set `Default Chat Model` to the NewAPI-based provider you just created, and click `Save`.
+Go to `Config`, find the model section, set `Default Chat Model` to the NewAPI-based provider you just created, and click `Save`.
 
 ![apply](https://files.astrbot.app/docs/source/images/newapi/image-3.png)
 

@@ -17,7 +17,7 @@ AstrBot 当前支持 7 种网页搜索源接入方式：`Tavily`、`BoCha`、`�
 
 ![image](https://files.astrbot.app/docs/source/images/websearch/image.png)
 
-进入 `配置`，下拉找到网页搜索，您可选择 `Tavily`、`BoCha`、`百度 AI 搜索`、`Brave`、`Firecrawl` 、`Exa` 或`AnySearch`。
+进入 `配置文件`，下拉找到网页搜索，您可选择 `Tavily`、`BoCha`、`百度 AI 搜索`、`Brave`、`Firecrawl` 或 `Exa`。
 
 ### Tavily
 

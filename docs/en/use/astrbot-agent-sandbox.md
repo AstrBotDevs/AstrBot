@@ -14,7 +14,7 @@ AstrBot currently supports the following sandbox drivers:
 - `Shipyard Neo` (recommended)
 - `Shipyard` (legacy option, still supported)
 
-In the current AstrBot console, go to **AI Settings** -> **Agent Computer Use** and select:
+In the current AstrBot console, go to the **Config → AI → Agent Computer Use** section and select:
 
 - `Computer Use Runtime` = `sandbox`
 - `Sandbox Driver` = `Shipyard Neo` or `Shipyard`

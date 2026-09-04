@@ -18,8 +18,8 @@ Please refer to each implementation project's deployment documentation.
 ## 1. Configure OneBot v11
 
 1. Open AstrBot's WebUI
-2. Click `Bots` in the left sidebar
-3. In the right panel, click `+ Create Bot`
+2. Click `Platforms` in the left sidebar
+3. In the right panel, click `+ Add Adapter`
 4. Select `OneBot v11`
 
 Fill in the form:

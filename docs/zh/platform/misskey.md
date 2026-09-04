@@ -6,7 +6,7 @@
 
 ## 创建 AstrBot Misskey 平台适配器
 
-进入消息平台，点击新增适配器，找到 Misskey 并单击进入 Misskey 配置页。
+点击左边栏 `机器人`，然后点击 `+ 创建机器人`，找到 Misskey 并单击进入 Misskey 配置页。
 
 ![创建 Misskey 平台适配器](https://files.astrbot.app/docs/source/images/misskey/create.png)
 

@@ -26,7 +26,7 @@ Lark supports two setup methods: one-click QR creation in AstrBot, or manually c
 
 AstrBot version requirement: >= 4.25.0.
 
-Open the AstrBot management panel, click `Bots` in the left sidebar, click `+ Create Bot`, and select `lark`.
+Open the AstrBot management panel, click `Platforms` in the left sidebar, click `+ Add Adapter`, and select `lark`.
 
 Under `Creation Method`, select `One-click QR Creation`, choose the China or international edition as needed, then scan the QR code with the Lark mobile app and confirm. After creation succeeds, AstrBot automatically fills in the app's `app_id`, `app_secret`, and domain configuration.
 
@@ -35,7 +35,7 @@ Under `Creation Method`, select `One-click QR Creation`, choose the China or int
 >
 > Replace `<APP_ID>` in the URL below with your Lark app ID, then open it to jump to the permission enablement page:
 >
-> To find the App ID, go back to AstrBot's `Bots` page, find the Lark bot you just created, click `Edit`, and check the dialog that opens.
+> To find the App ID, go back to AstrBot's `Platforms` page, find the Lark bot you just created, click `Edit`, and check the dialog that opens.
 >
 > ```text
 > https://open.feishu.cn/app/<APP_ID>/auth?q=contact:contact.base:readonly,contact:user.base:readonly,im:message.p2p_msg:readonly,im:message.group_at_msg:readonly,im:message:send,im:message,im:message:send_as_bot,im:resource:upload,im:resource,cardkit:card:write,im:message.group_at_msg:readonly,im:message.group_msg&op_from=openapi&token_type=tenant

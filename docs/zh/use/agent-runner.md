@@ -49,4 +49,4 @@ Dify、Coze、百炼应用、DeerFlow 等平台已经内置了这个循环，如
 
 ![image](https://files.astrbot.app/docs/source/images/use/agent-runner/image.png)
 
-在 WebUI 中，点击「配置」->「Agent 执行方式」，将执行器类型更换为你刚刚创建的 Agent 执行器类型，然后选择 `XX Agent 执行器提供商 ID` 为你刚刚创建的 Agent 执行器提供商的 ID，点击保存即可。
+在 WebUI 中，点击「配置文件」->「Agent 执行方式」，将执行器类型更换为你刚刚创建的 Agent 执行器类型，然后选择 `XX Agent 执行器提供商 ID` 为你刚刚创建的 Agent 执行器提供商的 ID，点击保存即可。
