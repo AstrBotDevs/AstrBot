@@ -27,7 +27,7 @@ from tenacity import (
 from astrbot import logger
 from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.agent.tool_image_cache import tool_image_cache
+from astrbot.core.agent.tool_image_cache import CachedImage, tool_image_cache
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
@@ -101,6 +101,24 @@ class FollowUpTicket:
 
 class _ToolExecutionInterrupted(Exception):
     """Raised when a running tool call is interrupted by a stop request."""
+
+
+def _get_image_caption_config(
+    run_context: ContextWrapper[TContext],
+) -> tuple[str, dict]:
+    """Resolve the configured image caption provider id and provider settings."""
+    plugin_context = getattr(run_context.context, "context", None)
+    event = getattr(run_context.context, "event", None)
+    if plugin_context is None:
+        return "", {}
+    try:
+        cfg = plugin_context.get_config(
+            umo=getattr(event, "unified_msg_origin", None)
+        ).get("provider_settings", {})
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Failed to read provider settings: %s", exc)
+        return "", {}
+    return cfg.get("default_image_caption_provider_id") or "", cfg
 
 
 ToolExecutorResultT = T.TypeVar("ToolExecutorResultT")
@@ -1065,8 +1083,87 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         logger.debug(
                             f"Appended {len(cached_images)} cached image(s) to context for LLM review"
                         )
+                else:
+                    # The main model cannot view images: fall back to the configured
+                    # image caption provider so the image content is not silently
+                    # dropped. Mirrors astr_main_agent._ensure_img_caption().
+                    caption_parts = await self._caption_cached_tool_images(
+                        cached_images
+                    )
+                    self.run_context.messages.append(
+                        Message(role="user", content=caption_parts)
+                    )
+                    logger.debug(
+                        f"Appended captions for {len(cached_images)} cached image(s) to context for LLM review"
+                    )
 
             self.req.append_tool_calls_result(tool_calls_result)
+
+    async def _caption_cached_tool_images(
+        self, cached_images: list[CachedImage]
+    ) -> list[TextPart]:
+        """主模型不支持图片时，用默认图片转述模型为缓存图片生成一段文字描述，失败或未配置则退化为占位文本。"""
+        img_cap_prov_id, cfg = _get_image_caption_config(self.run_context)
+
+        parts: list[TextPart] = [
+            TextPart(
+                text=(
+                    f"[Image from tool '{cached_img.tool_name}', "
+                    f"path='{cached_img.file_path}']"
+                )
+            )
+            for cached_img in cached_images
+        ]
+
+        # 与 astr_main_agent._ensure_img_caption() 一致：一次调用处理全部图片，
+        # 避免按图逐个调用导致长对话中工具循环被多次串行转述拖慢。
+        caption = await self._request_tool_image_captions(
+            img_cap_prov_id, cfg, cached_images
+        )
+        if caption:
+            parts.append(TextPart(text=f"<image_caption>{caption}</image_caption>"))
+        else:
+            parts.append(
+                TextPart(
+                    text=(
+                        "[Image not visible to the current model]"
+                        if not img_cap_prov_id
+                        else "[Image Captioning Failed]"
+                    )
+                )
+            )
+        return parts
+
+    async def _request_tool_image_captions(
+        self,
+        img_cap_prov_id: str,
+        cfg: dict,
+        cached_images: list[CachedImage],
+    ) -> str | None:
+        if not img_cap_prov_id:
+            return None
+        caption_paths = [
+            cached_img.file_path
+            for cached_img in cached_images
+            if Path(cached_img.file_path).exists()
+        ]
+        if not caption_paths:
+            return None
+        plugin_context = getattr(self.run_context.context, "context", None)
+        if plugin_context is None:
+            return None
+        try:
+            from astrbot.core.astr_main_agent import _request_img_caption
+
+            return await _request_img_caption(
+                img_cap_prov_id,
+                cfg,
+                caption_paths,
+                plugin_context,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Failed to caption tool images: %s", exc)
+            return None
 
     async def step_until_done(
         self, max_step: int
