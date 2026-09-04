@@ -14,9 +14,17 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
-from astrbot.core.agent.message import ImageURLPart, Message, TextPart
+from astrbot.core.agent.message import (
+    ImageURLPart,
+    Message,
+    TextPart,
+    ToolCallMessageSegment,
+)
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
+from astrbot.core.agent.runners.tool_loop_agent_runner import (
+    ToolLoopAgentRunner,
+    _HandleFunctionToolsResult,
+)
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.exceptions import EmptyModelOutputError
@@ -390,6 +398,60 @@ class MockHandoffProvider(MockToolCallProvider):
         super().__init__(handoff_tool_name, {"input": "delegate this task"})
 
 
+class HallucinatingToolCallProvider(MockProvider):
+    """Simulates a model that keeps emitting tool calls even without tools.
+
+    This is the hallucination scenario hit during the forced finalization step
+    after ``max_step``: tools were removed (``req.func_tool = None``) but the
+    model still returns a tool-call payload.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.call_count = 0
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        func_tool = kwargs.get("func_tool")
+        if func_tool is None:
+            # Hallucinated tool call: no tools were provided to the model.
+            return LLMResponse(
+                role="assistant",
+                completion_text="我会使用工具来完成这个任务",
+                tools_call_name=["non_existent_tool"],
+                tools_call_args=[{"query": "test"}],
+                tools_call_ids=["call_hallucinated"],
+                usage=TokenUsage(input_other=10, output=5),
+            )
+        return LLMResponse(
+            role="assistant",
+            completion_text="这是我的最终回答",
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
+class MultiCallProvider(MockProvider):
+    """Returns a single turn with two tool calls."""
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        func_tool = kwargs.get("func_tool")
+        if func_tool is None or self.call_count > 1:
+            return LLMResponse(
+                role="assistant",
+                completion_text="这是我的最终回答",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+        return LLMResponse(
+            role="assistant",
+            completion_text="",
+            tools_call_name=["test_tool", "test_tool"],
+            tools_call_args=[{"query": "a"}, {"query": "b"}],
+            tools_call_ids=["call_a", "call_b"],
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
 class MockHooks(BaseAgentRunHooks):
     """模拟钩子函数"""
 
@@ -583,6 +645,140 @@ async def test_max_step_final_request_includes_limit_prompt(
     final_contexts = provider.received_contexts[-1]
     assert final_contexts[-1].role == "user"
     assert final_contexts[-1].content == runner.MAX_STEPS_REACHED_PROMPT
+
+
+@pytest.mark.asyncio
+async def test_hallucinated_tool_call_when_tools_removed_finalizes_with_plain_response(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    """When tools are removed (forced max-step finalization), a hallucinated
+    tool call from the model must be stripped and finalized as a plain
+    assistant reply: the run completes, the user gets a response, and no
+    dangling assistant(tool_calls) message is appended to the context.
+    """
+    provider = HallucinatingToolCallProvider()
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    # Simulate run_agent's forced finalization step: tools removed.
+    runner.req.func_tool = None
+
+    responses = []
+    async for response in runner.step():
+        responses.append(response)
+
+    assert runner.done(), "the run should finalize instead of staying RUNNING"
+    assert runner.req.func_tool is None
+
+    # The user must receive a final llm_result.
+    final_responses = [r for r in responses if r.type == "llm_result"]
+    assert len(final_responses) > 0, "a final reply should be produced"
+
+    # No dangling assistant(tool_calls) message may enter the context.
+    dangling = [
+        m
+        for m in runner.run_context.messages
+        if getattr(m, "tool_calls", None) is not None
+    ]
+    assert dangling == [], "context must not contain dangling tool_calls messages"
+
+    last_message = runner.run_context.messages[-1]
+    assert last_message.role == "assistant"
+    assert getattr(last_message, "tool_calls", None) is None
+
+
+@pytest.mark.asyncio
+async def test_tool_calls_without_results_get_placeholder_tool_blocks(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    """If a tool call produces no result block, a placeholder tool message must
+    be appended so the context never contains an assistant(tool_calls) message
+    without a matching tool result (protocol safety net)."""
+    mock_provider.should_call_tools = True
+    mock_provider.max_calls_before_normal_response = 100
+
+    async def fake_handle_function_tools(req, llm_resp):
+        # Simulates an execution path that yields no tool result blocks.
+        if False:
+            yield  # pragma: no cover - keep this an async generator
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+    runner._handle_function_tools = fake_handle_function_tools
+
+    async for _ in runner.step():
+        pass
+
+    messages = runner.run_context.messages
+    assistant_tool_calls = [
+        m for m in messages if getattr(m, "tool_calls", None) is not None
+    ]
+    tool_results = [m for m in messages if m.role == "tool"]
+
+    assert len(assistant_tool_calls) == 1
+    assert len(tool_results) == 1, "missing tool results should be filled in"
+    assert tool_results[0].tool_call_id == "call_123"
+    assert "error" in tool_results[0].content.lower()
+
+
+@pytest.mark.asyncio
+async def test_duplicate_tool_result_ids_still_trigger_placeholder_fill(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    """The placeholder guard must check each tool_call_id independently:
+    equal block/id counts with duplicate ids (one call emitting several
+    result blocks while another emits none) must still fill the missing id."""
+    provider = MultiCallProvider()
+
+    async def fake_handle_function_tools(req, llm_resp):
+        # Two result blocks, both for "call_a": the count matches the two
+        # declared ids but "call_b" is still missing.
+        yield _HandleFunctionToolsResult.from_tool_call_result_blocks(
+            [
+                ToolCallMessageSegment(
+                    role="tool", tool_call_id="call_a", content="result A"
+                ),
+                ToolCallMessageSegment(
+                    role="tool", tool_call_id="call_a", content="result A2"
+                ),
+            ]
+        )
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+    runner._handle_function_tools = fake_handle_function_tools
+
+    async for _ in runner.step():
+        pass
+
+    messages = runner.run_context.messages
+    tool_results = [m for m in messages if m.role == "tool"]
+    result_ids = [m.tool_call_id for m in tool_results]
+
+    assert len(result_ids) == 3, "call_a x2 + placeholder for call_b"
+    assert result_ids.count("call_a") == 2
+    assert "call_b" in result_ids
+    placeholder = next(m for m in tool_results if m.tool_call_id == "call_b")
+    assert "error" in placeholder.content.lower()
 
 
 @pytest.mark.asyncio
