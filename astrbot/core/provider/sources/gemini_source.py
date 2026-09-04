@@ -251,17 +251,22 @@ class ProviderGoogleGenAI(Provider):
             )
             if thinking_level and isinstance(thinking_level, str):
                 thinking_level = thinking_level.upper()
-                if thinking_level not in ["MINIMAL", "LOW", "MEDIUM", "HIGH"]:
+                allowed_levels = {"MINIMAL", "LOW", "MEDIUM", "HIGH"}
+                fallback_level = "HIGH"
+                if model_name.startswith("gemini-3.7"):
+                    allowed_levels = {"LOW", "MEDIUM", "HIGH"}
+                    fallback_level = "MEDIUM"
+                if thinking_level not in allowed_levels:
                     logger.warning(
-                        f"Invalid thinking level: {thinking_level}, using HIGH"
+                        "Invalid thinking level %s for %s, using %s",
+                        thinking_level,
+                        model_name,
+                        fallback_level,
                     )
-                    thinking_level = "HIGH"
-                level = types.ThinkingLevel(thinking_level)
-                thinking_config = types.ThinkingConfig()
-                if not hasattr(types.ThinkingConfig, "thinking_level"):
-                    setattr(types.ThinkingConfig, "thinking_level", level)
-                else:
-                    thinking_config.thinking_level = level
+                    thinking_level = fallback_level
+                thinking_config = types.ThinkingConfig(
+                    thinking_level=types.ThinkingLevel(thinking_level)
+                )
 
         return types.GenerateContentConfig(
             system_instruction=system_instruction,
