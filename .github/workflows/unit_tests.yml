@@ -21,10 +21,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
 
-    # Windows/macOS lanes stay best-effort for now: the suite still has
-    # pre-existing platform-specific failures there. Promote to blocking
+    # The Windows lane stays best-effort for now: the suite still has
+    # pre-existing Windows-specific failures there. Promote to blocking
     # once those tests are fixed.
-    continue-on-error: ${{ matrix.os != 'ubuntu-latest' }}
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
 
     defaults:
       run:
