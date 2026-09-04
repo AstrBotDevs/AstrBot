@@ -404,6 +404,23 @@
             <v-progress-circular indeterminate size="32" width="3" />
           </div>
 
+          <div
+            v-else-if="!activeMessages.length && activeSessionPagination?.error"
+            class="welcome-state chat-load-error"
+          >
+            <div class="chat-load-error-message">
+              {{ activeSessionPagination.error }}
+            </div>
+            <v-btn
+              size="small"
+              variant="text"
+              :loading="activeSessionPagination.loading"
+              @click="retryCurrentSessionLoad"
+            >
+              {{ tm("actions.retry") }}
+            </v-btn>
+          </div>
+
           <div v-else-if="!activeMessages.length" class="welcome-state">
             <div class="welcome-title">{{ tm("welcome.title") }}</div>
           </div>
@@ -412,6 +429,20 @@
             v-if="!loadingMessages && activeMessages.length"
             class="messages-list-shell"
           >
+            <div
+              v-if="activeSessionPagination?.error"
+              class="load-earlier-bar load-earlier-error"
+            >
+              <span>{{ activeSessionPagination.error }}</span>
+              <v-btn
+                size="small"
+                variant="text"
+                :loading="activeSessionPagination.loading"
+                @click="retryCurrentSessionLoad"
+              >
+                {{ tm("actions.retry") }}
+              </v-btn>
+            </div>
             <ChatMessageList
               v-model:edit-draft="messageEditDraft"
               :messages="activeMessages"
@@ -435,6 +466,7 @@
               @select-bot-text="handleBotTextSelection"
               @open-thread="openThreadPanel"
               @open-reasoning="openReasoningPanel"
+              @load-reasoning="loadReasoningForMessage"
               @open-refs="openRefsSidebar"
             />
           </div>
@@ -602,6 +634,7 @@ import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import { useSessions, type Session } from "@/composables/useSessions";
 import {
   messageBlocks as buildMessageBlocks,
+  thinkingParts,
   useMessages,
   type ChatRecord,
   type ChatThread,
@@ -718,6 +751,8 @@ const messagesContainer = ref<HTMLElement | null>(null);
 const composerShell = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const shouldStickToBottom = ref(true);
+const suppressAutoScroll = ref(false);
+const LOAD_EARLIER_SCROLL_THRESHOLD = 120;
 const replyTarget = ref<ChatRecord | null>(null);
 const threadPanelOpen = ref(false);
 const activeThread = ref<ChatThread | null>(null);
@@ -775,10 +810,24 @@ function toggleChatSidebar() {
 
 const activeReasoningParts = computed<MessagePart[]>(() => {
   if (!activeReasoningTarget.value) return [];
-  const blocks = buildMessageBlocks(
-    activeReasoningTarget.value.message.content || { type: "bot", message: [] },
-  );
-  const block = blocks[activeReasoningTarget.value.blockIndex];
+  const target = activeReasoningTarget.value;
+  const targetContent = target.message.content || {
+    type: "bot",
+    message: [],
+  };
+  const blocks = buildMessageBlocks(targetContent);
+  if (target.blockIndex < 0) {
+    return blocks
+      .filter((block) => block.kind === "thinking")
+      .flatMap((block) => block.parts);
+  }
+  if (
+    target.message.hasReasoning &&
+    target.message.reasoningStatus !== "loaded"
+  ) {
+    return thinkingParts(targetContent);
+  }
+  const block = blocks[target.blockIndex];
   return block?.kind === "thinking" ? block.parts : [];
 });
 
@@ -794,10 +843,13 @@ const {
   loadedSessions,
   sessionProjects,
   activeMessages,
+  paginationBySession,
   isSessionRunning,
   isUserMessage,
   messageParts,
   loadSessionMessages,
+  loadEarlierMessages,
+  loadMessageReasoning,
   createLocalExchange,
   sendMessageStream,
   editMessage,
@@ -813,6 +865,10 @@ const {
     }
   },
 });
+
+const activeSessionPagination = computed(() =>
+  currSessionId.value ? paginationBySession[currSessionId.value] : undefined,
+);
 
 const transportMode = ref<TransportMode>(
   (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket"
@@ -1057,7 +1113,7 @@ watch(
 );
 
 watch(activeMessages, () => {
-  if (shouldStickToBottom.value) {
+  if (!suppressAutoScroll.value && shouldStickToBottom.value) {
     scrollToBottom();
   }
 });
@@ -1343,9 +1399,11 @@ async function selectSession(sessionId: string, pushRoute = true) {
   replyTarget.value = null;
   if (pushRoute && route.path !== `${basePath()}/${sessionId}`) {
     await router.push(`${basePath()}/${sessionId}`);
+    if (currSessionId.value !== sessionId) return;
   }
   if (!loadedSessions[sessionId]) {
     await loadSessionMessages(sessionId);
+    if (currSessionId.value !== sessionId) return;
   }
   scrollToBottom();
   closeMobileSidebar();
@@ -1505,20 +1563,28 @@ function cancelMessageEdit() {
 
 async function saveMessageEdit() {
   if (!currSessionId.value || !editingMessage.value) return;
+  const sessionId = currSessionId.value;
+  const target = editingMessage.value;
   savingMessageEdit.value = true;
   try {
-    const target = editingMessage.value;
     const result = await editMessage(
-      currSessionId.value,
+      sessionId,
       target,
       messageEditDraft.value,
     );
+    if (
+      currSessionId.value !== sessionId ||
+      !activeMessages.value.includes(target)
+    ) {
+      cancelMessageEdit();
+      return;
+    }
     cancelMessageEdit();
 
     if (result.needsRegenerate && result.truncatedAfterMessage) {
       const selection = getSelectedProviderSelection();
       continueEditedMessage({
-        sessionId: currSessionId.value,
+        sessionId,
         sourceRecord: target,
         enableStreaming: enableStreaming.value,
         selectedProvider: selection?.providerId || "",
@@ -1659,6 +1725,64 @@ function openReasoningPanel(payload: {
   reasoningPanelOpen.value = true;
 }
 
+async function loadReasoningForMessage(message: ChatRecord) {
+  const sessionId = currSessionId.value;
+  const messageId = message.id == null ? "" : String(message.id);
+  try {
+    await loadMessageReasoning(message);
+    if (
+      currSessionId.value !== sessionId ||
+      !activeMessages.value.includes(message) ||
+      message.id == null ||
+      String(message.id) !== messageId
+    ) {
+      return;
+    }
+    // Lazy history omits block boundaries, so show all hydrated thinking parts.
+    openReasoningPanel({ message, blockIndex: -1 });
+  } catch (error) {
+    console.error("Failed to load message reasoning:", error);
+  }
+}
+
+async function loadEarlierWithAnchor() {
+  const sessionId = currSessionId.value;
+  if (!sessionId || activeSessionPagination.value?.loading) return;
+  const container = messagesContainer.value;
+  const firstMessage = activeMessages.value[0];
+  const firstId = firstMessage?.id == null ? "" : String(firstMessage.id);
+  const beforeTop = firstId
+    ? container?.querySelector<HTMLElement>(
+        `[data-message-id="${CSS.escape(firstId)}"]`,
+      )?.getBoundingClientRect().top
+    : undefined;
+  suppressAutoScroll.value = true;
+  try {
+    await loadEarlierMessages(sessionId);
+    if (currSessionId.value !== sessionId) return;
+    await nextTick();
+    if (beforeTop == null || !container || !firstId) return;
+    const row = container.querySelector<HTMLElement>(
+      `[data-message-id="${CSS.escape(firstId)}"]`,
+    );
+    if (row) {
+      container.scrollTop += row.getBoundingClientRect().top - beforeTop;
+    }
+  } finally {
+    suppressAutoScroll.value = false;
+  }
+}
+
+async function retryCurrentSessionLoad() {
+  const sessionId = currSessionId.value;
+  if (!sessionId || activeSessionPagination.value?.loading) return;
+  if (activeMessages.value.length && activeSessionPagination.value?.has_more) {
+    await loadEarlierWithAnchor();
+    return;
+  }
+  await loadSessionMessages(sessionId, true, true);
+}
+
 async function deleteThread(thread: ChatThread) {
   if (deletingThread.value) return;
   if (!(await askForConfirmation(tm("thread.confirmDelete"), confirmDialog))) return;
@@ -1730,6 +1854,17 @@ function handleMessagesScroll() {
   const distance =
     container.scrollHeight - container.scrollTop - container.clientHeight;
   shouldStickToBottom.value = distance < 80;
+  maybeLoadEarlierOnScroll(container);
+}
+
+function maybeLoadEarlierOnScroll(container: HTMLElement) {
+  const sessionId = currSessionId.value;
+  const pagination = activeSessionPagination.value;
+  if (!sessionId || !pagination) return;
+  if (!pagination.has_more || pagination.loading) return;
+  if (container.scrollHeight <= container.clientHeight) return;
+  if (container.scrollTop > LOAD_EARLIER_SCROLL_THRESHOLD) return;
+  void loadEarlierWithAnchor();
 }
 
 function scrollToBottom() {
@@ -2311,6 +2446,16 @@ function toggleTheme() {
   align-items: center;
   justify-content: center;
   text-align: center;
+}
+
+.chat-load-error-message {
+  max-width: min(460px, 90%);
+  color: rgb(var(--v-theme-error));
+  line-height: 1.5;
+}
+
+.load-earlier-error {
+  color: rgb(var(--v-theme-error));
 }
 
 .conversation-stack.is-empty .welcome-state {

@@ -269,6 +269,23 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def count_platform_message_history(
+        self,
+        platform_id: str,
+        user_id: str,
+    ) -> int:
+        """Count platform message history records for a scope.
+
+        Args:
+            platform_id: Platform identifier used to partition history.
+            user_id: Platform user or session identifier.
+
+        Returns:
+            Number of records belonging to the platform/user scope.
+        """
+        ...
+
+    @abc.abstractmethod
     async def get_platform_message_history_by_id(
         self,
         message_id: int,
