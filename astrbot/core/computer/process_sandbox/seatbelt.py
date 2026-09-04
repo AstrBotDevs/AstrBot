@@ -5,8 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .base import ProcessSandbox, SandboxSpec
-from .unix import build_resource_limited_argv
+from .base import SandboxSpec
+from .unix import UnixProcessSandbox, build_resource_limited_argv
 
 _PROFILE = """
 (version 1)
@@ -59,7 +59,7 @@ _READ_ONLY_PROFILE = _PROFILE.replace(
 )
 
 
-class SeatbeltProcessSandbox(ProcessSandbox):
+class SeatbeltProcessSandbox(UnixProcessSandbox):
     """macOS restricted-process launcher backed by Seatbelt."""
 
     def _build_command(

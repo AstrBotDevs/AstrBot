@@ -13,7 +13,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 if sys.version_info < (3, 14):
     import python_ripgrep
@@ -132,7 +132,7 @@ class _LocalShellSession:
     creator_id: str
     creator_is_admin: bool
     sandboxed: bool
-    process: SandboxProcess
+    process: SandboxProcess | asyncio.subprocess.Process
     output_path: Path
     started_at: float
     output_event: asyncio.Event
@@ -304,28 +304,14 @@ class LocalShellComponent(ShellComponent):
 
         try:
             if sandboxed:
-                if sys.platform == "win32":
-                    sandbox_argv = [
-                        resolve_windows_shell(),
-                        "-NoLogo",
-                        "-NoProfile",
-                        "-NonInteractive",
-                        "-Command",
-                        command,
-                    ]
-                else:
-                    sandbox_argv = ["/bin/sh", "-c", command]
-                process = await create_process_sandbox().spawn(
-                    sandbox_argv,
+                process = await create_process_sandbox().spawn_shell(
+                    command,
                     SandboxSpec(
                         workspace=working_dir,
                         allow_network=allow_network,
                         filesystem_scope=filesystem_scope,
                     ),
                     env={str(k): str(v) for k, v in (env or {}).items()},
-                    stdin=asyncio.subprocess.PIPE,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.STDOUT,
                 )
             else:
                 run_env = os.environ.copy()
@@ -377,10 +363,7 @@ class LocalShellComponent(ShellComponent):
                         remaining = _LOCAL_SANDBOX_MAX_OUTPUT_BYTES - output_size
                         if remaining <= 0:
                             session.output_limited = True
-                            try:
-                                os.killpg(process.pid, signal.SIGTERM)
-                            except ProcessLookupError:
-                                pass
+                            process.terminate()
                             return
                         if len(chunk) > remaining:
                             chunk = chunk[:remaining]
@@ -390,10 +373,7 @@ class LocalShellComponent(ShellComponent):
                     output_size += len(chunk)
                     output_event.set()
                     if session.output_limited:
-                        try:
-                            os.killpg(process.pid, signal.SIGTERM)
-                        except ProcessLookupError:
-                            pass
+                        process.terminate()
                         return
 
         reader_task = asyncio.create_task(
@@ -731,7 +711,9 @@ class LocalShellComponent(ShellComponent):
             session_id,
         )
         if session.process.returncode is None:
-            if os.name == "nt":
+            if session.sandboxed:
+                cast(SandboxProcess, session.process).interrupt()
+            elif os.name == "nt":
                 session.process.send_signal(
                     getattr(signal, "CTRL_BREAK_EVENT", signal.SIGTERM)
                 )
@@ -853,7 +835,9 @@ class LocalShellComponent(ShellComponent):
         """
         if session.process.returncode is not None:
             return
-        if os.name == "nt":
+        if session.sandboxed:
+            session.process.terminate()
+        elif os.name == "nt":
             try:
                 taskkill_result = await asyncio.to_thread(
                     subprocess.run,
@@ -879,7 +863,7 @@ class LocalShellComponent(ShellComponent):
                 timeout=5,
             )
         except asyncio.TimeoutError:
-            if os.name == "nt":
+            if session.sandboxed or os.name == "nt":
                 session.process.kill()
             else:
                 try:

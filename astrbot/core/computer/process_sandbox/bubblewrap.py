@@ -5,13 +5,13 @@ import shutil
 import sys
 from pathlib import Path
 
-from .base import ProcessSandbox, SandboxSpec
-from .unix import build_resource_limited_argv
+from .base import SandboxSpec
+from .unix import UnixProcessSandbox, build_resource_limited_argv
 
 _TMP_BYTES = 256 * 1024 * 1024
 
 
-class BubblewrapProcessSandbox(ProcessSandbox):
+class BubblewrapProcessSandbox(UnixProcessSandbox):
     """Linux restricted-process launcher backed by bubblewrap."""
 
     def _build_command(

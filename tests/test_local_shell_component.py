@@ -845,7 +845,7 @@ async def test_managed_shell_uses_platform_sandbox(
 
 
 @pytest.mark.asyncio
-async def test_sandboxed_managed_shell_uses_windows_shell(monkeypatch, tmp_path):
+async def test_sandboxed_managed_shell_delegates_launch(monkeypatch, tmp_path):
     calls = []
 
     class FakeStdout:
@@ -867,12 +867,11 @@ async def test_sandboxed_managed_shell_uses_windows_shell(monkeypatch, tmp_path)
             return 0
 
     class FakeSandbox:
-        async def spawn(self, argv, spec, **kwargs):
-            calls.append((argv, spec, kwargs))
+        async def spawn_shell(self, command, spec, **kwargs):
+            calls.append((command, spec, kwargs))
             return FakeProcess()
 
     monkeypatch.setattr(local_booter.sys, "platform", "win32")
-    monkeypatch.setattr(local_booter, "resolve_windows_shell", lambda: "pwsh.exe")
     monkeypatch.setattr(
         local_booter,
         "create_process_sandbox",
@@ -890,15 +889,9 @@ async def test_sandboxed_managed_shell_uses_windows_shell(monkeypatch, tmp_path)
     )
 
     assert result["status"] == "completed"
-    assert calls[0][0] == [
-        "pwsh.exe",
-        "-NoLogo",
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        "Get-ChildItem",
-    ]
+    assert calls[0][0] == "Get-ChildItem"
     assert calls[0][1].workspace == tmp_path.resolve()
+    assert calls[0][2] == {"env": {}}
 
 
 @pytest.mark.asyncio

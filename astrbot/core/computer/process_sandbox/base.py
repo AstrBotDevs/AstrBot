@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import os
 import subprocess
 import sys
@@ -67,6 +66,26 @@ class SandboxSpec:
     limits: SandboxLimits = field(default_factory=SandboxLimits)
 
 
+class SandboxStdin(Protocol):
+    """Writable stream used by managed sandbox processes."""
+
+    def write(self, data: bytes) -> None:
+        """Buffer bytes for the process standard input."""
+        ...
+
+    async def drain(self) -> None:
+        """Flush buffered bytes without blocking the event loop."""
+        ...
+
+
+class SandboxStdout(Protocol):
+    """Readable stream used by managed sandbox processes."""
+
+    async def read(self, n: int = -1) -> bytes:
+        """Read up to ``n`` bytes from the process standard output."""
+        ...
+
+
 class SandboxProcess(Protocol):
     """Process operations used by managed Local shell sessions."""
 
@@ -81,12 +100,12 @@ class SandboxProcess(Protocol):
         ...
 
     @property
-    def stdin(self) -> asyncio.StreamWriter | None:
+    def stdin(self) -> SandboxStdin | None:
         """Return the process standard-input stream when configured."""
         ...
 
     @property
-    def stdout(self) -> asyncio.StreamReader | None:
+    def stdout(self) -> SandboxStdout | None:
         """Return the process standard-output stream when configured."""
         ...
 
@@ -94,16 +113,16 @@ class SandboxProcess(Protocol):
         """Wait for the process to exit."""
         ...
 
-    def send_signal(self, signal: int) -> None:
-        """Send a signal to the process."""
+    def interrupt(self) -> None:
+        """Interrupt the sandbox process tree."""
         ...
 
     def terminate(self) -> None:
-        """Request graceful process termination."""
+        """Request graceful termination of the sandbox process tree."""
         ...
 
     def kill(self) -> None:
-        """Force process termination."""
+        """Force termination of the sandbox process tree."""
         ...
 
 
@@ -181,32 +200,25 @@ class ProcessSandbox(ABC):
             **kwargs,
         )
 
-    async def spawn(
+    @abstractmethod
+    async def spawn_shell(
         self,
-        argv: list[str],
+        command: str,
         spec: SandboxSpec,
         *,
         env: dict[str, str] | None = None,
-        **kwargs: Any,
     ) -> SandboxProcess:
-        """Start a restricted process asynchronously.
+        """Start a managed shell command asynchronously.
 
         Args:
-            argv: Command and arguments to execute inside the sandbox.
+            command: Shell command to execute inside the sandbox.
             spec: Filesystem and network access granted to the process.
             env: Additional environment variables exposed inside the sandbox.
-            **kwargs: Extra keyword arguments passed to the asyncio launcher.
 
         Returns:
             Running restricted process.
         """
-        return await asyncio.create_subprocess_exec(
-            *self.build_command(argv, spec, env=env),
-            cwd=spec.workspace.resolve(),
-            env={"PATH": os.defpath},
-            start_new_session=True,
-            **kwargs,
-        )
+        raise NotImplementedError
 
     @abstractmethod
     def _build_command(
