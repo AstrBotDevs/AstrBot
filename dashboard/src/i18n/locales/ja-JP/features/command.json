@@ -1,0 +1,97 @@
+{
+  "title": "コマンド管理",
+  "summary": {
+    "total": "表示中のコマンド数",
+    "disabled": "無効",
+    "conflicts": "競合あり"
+  },
+  "conflictAlert": {
+    "title": "コマンドの競合を検出しました",
+    "description": "現在 {count} 組のコマンドが競合しています。競合するコマンドは複数のプラグインを同時に実行するため、意図しない動作が発生する可能性があります。",
+    "hint": "「名前を変更」ボタンをクリックして競合するコマンドの名前を変更し、競合を解消してください。"
+  },
+  "table": {
+    "headers": {
+      "command": "コマンド",
+      "type": "種類",
+      "plugin": "所属プラグイン",
+      "description": "説明",
+      "permission": "権限",
+      "status": "状態",
+      "actions": "操作"
+    }
+  },
+  "type": {
+    "command": "コマンド",
+    "group": "コマンドグループ",
+    "subCommand": "サブコマンド"
+  },
+  "status": {
+    "enabled": "有効",
+    "disabled": "無効",
+    "pluginDisabled": "プラグイン無効",
+    "conflict": "競合あり"
+  },
+  "permission": {
+    "everyone": "すべてのユーザー",
+    "admin": "管理者"
+  },
+  "tooltips": {
+    "enable": "コマンドを有効にする",
+    "disable": "コマンドを無効にする",
+    "rename": "コマンド名を変更する",
+    "viewDetails": "詳細を見る",
+    "pluginInactive": "先に所属プラグインを有効にしてください"
+  },
+  "dialogs": {
+    "rename": {
+      "title": "コマンド名を変更",
+      "newName": "新しいコマンド名",
+      "aliases": "エイリアスを管理",
+      "addAlias": "エイリアスを追加",
+      "cancel": "キャンセル",
+      "confirm": "確定"
+    },
+    "details": {
+      "title": "コマンド詳細",
+      "type": "コマンドの種類",
+      "handler": "ハンドラー関数",
+      "module": "モジュールパス",
+      "originalCommand": "元のコマンド",
+      "effectiveCommand": "実行コマンド",
+      "parentGroup": "所属コマンドグループ",
+      "subCommands": "サブコマンド一覧",
+      "aliases": "エイリアス",
+      "permission": "必要な権限",
+      "conflictStatus": "競合状態"
+    }
+  },
+  "messages": {
+    "toggleSuccess": "コマンドの状態を更新しました",
+    "toggleFailed": "コマンドの状態を更新できませんでした",
+    "renameSuccess": "コマンド名を変更しました",
+    "renameFailed": "名前を変更できませんでした",
+    "loadFailed": "コマンド一覧を読み込めませんでした",
+    "updateSuccess": "更新しました",
+    "updateFailed": "更新できませんでした"
+  },
+  "search": {
+    "placeholder": "コマンドを検索…"
+  },
+  "empty": {
+    "noCommands": "コマンドはありません",
+    "noCommandsDesc": "現在の絞り込み条件に一致するコマンドはありません"
+  },
+  "filters": {
+    "all": "すべて",
+    "enabled": "有効",
+    "disabled": "無効",
+    "conflict": "競合あり",
+    "byPlugin": "プラグインで絞り込む",
+    "byType": "種類で絞り込む",
+    "byPermission": "権限で絞り込む",
+    "byStatus": "状態で絞り込む",
+    "showSystemPlugins": "システムプラグインのコマンドを表示",
+    "systemPluginConflictHint": "システムプラグインに関する競合があります。非表示にするには、先に競合を解消してください"
+  }
+}

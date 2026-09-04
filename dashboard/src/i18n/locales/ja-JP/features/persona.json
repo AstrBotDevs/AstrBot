@@ -1,0 +1,160 @@
+{
+  "page": {
+    "description": "ペルソナ設定を管理"
+  },
+  "buttons": {
+    "create": "ペルソナを作成",
+    "createFirst": "最初のペルソナを作成",
+    "edit": "編集",
+    "delete": "削除",
+    "cancel": "キャンセル",
+    "save": "保存",
+    "move": "移動",
+    "addDialogPair": "会話ペアを追加",
+    "export": "エクスポート",
+    "import": "ペルソナをインポート",
+    "more": "その他の操作"
+  },
+  "labels": {
+    "presetDialogs": "プリセット会話（{count} 組）",
+    "createdAt": "作成日時",
+    "updatedAt": "更新日時"
+  },
+  "form": {
+    "personaId": "ペルソナ ID",
+    "systemPrompt": "システムプロンプト",
+    "customErrorMessage": "カスタムエラー応答メッセージ（省略可）",
+    "customErrorMessageHelp": "このペルソナの LLM リクエストが失敗した場合（接続失敗など）、このエラー応答を優先して送信します。空欄の場合はデフォルトのエラーメッセージを送信します。",
+    "presetDialogs": "プリセット会話",
+    "presetDialogsHelp": "ボットが役割設定をより深く理解できるように、プリセット会話を追加します。",
+    "userMessage": "ユーザーメッセージ",
+    "assistantMessage": "AI の応答",
+    "capabilities": "ペルソナの能力",
+    "capabilitiesHelp": "ソースごとに、このペルソナで利用できるツールとスキルを選択します。歯車ボタンをクリックすると、個別の能力を選択できます。",
+    "tools": "ツール / MCP ツールの選択",
+    "toolsHelp": "このペルソナで利用できる外部ツールを選択します。外部ツールを使用すると、AI は検索、計算、情報取得などを通じて外部環境とやり取りできます。",
+    "toolsSelection": "ツール選択の操作",
+    "selectAllTools": "すべてのツールを選択",
+    "clearAllTools": "選択をクリア",
+    "allSelected": "すべて選択済み",
+    "mcpServersQuickSelect": "MCP サーバーのクイック選択",
+    "searchTools": "ツールを検索",
+    "selectedTools": "選択済みのツール",
+    "builtinToolDisabledHint": "現在、ここでは組み込みツールを有効または無効にできません。設定ファイルで各ツールに対応する設定項目を有効または無効にしてください。",
+    "noToolsAvailable": "利用可能なツールがありません",
+    "noToolsFound": "一致するツールが見つかりませんでした",
+    "loadingTools": "ツールを読み込み中…",
+    "allToolsAvailable": "利用可能なすべてのツールを使用",
+    "noToolsSelected": "ツールが選択されていません",
+    "skills": "スキルの選択",
+    "skillsHelp": "このペルソナで利用できるスキルを選択します。スキルは AI に再利用可能な手順とガイドラインを提供します。",
+    "skillsAllAvailable": "デフォルトですべてのスキルを使用",
+    "skillsSelectSpecific": "指定したスキルを選択",
+    "searchSkills": "スキルを検索",
+    "selectedSkills": "選択済みのスキル",
+    "noSkillsAvailable": "利用可能なスキルがありません",
+    "noSkillsFound": "一致するスキルが見つかりませんでした",
+    "loadingSkills": "スキルを読み込み中…",
+    "allSkillsAvailable": "利用可能なすべてのスキルを使用",
+    "noSkillsSelected": "スキルが選択されていません",
+    "skillsRuntimeNoneWarning": "Computer Use の実行環境が「none」に設定されています。実行環境が無効なため、エージェントがスキルを正しく実行できない可能性があります。",
+    "createInFolder": "「{folder}」に作成します",
+    "rootFolder": "すべてのペルソナ"
+  },
+  "dialog": {
+    "create": {
+      "title": "新しいペルソナを作成"
+    },
+    "edit": {
+      "title": "ペルソナを編集"
+    }
+  },
+  "empty": {
+    "title": "ペルソナが設定されていません",
+    "description": "ペルソナを作成してみましょう！",
+    "folderEmpty": "このフォルダーは空です",
+    "folderEmptyDescription": "新しいペルソナまたはフォルダーを作成して始めましょう"
+  },
+  "validation": {
+    "required": "この項目は必須です",
+    "minLength": "{min} 文字以上で入力してください",
+    "alphanumeric": "英字、数字、アンダースコア、ハイフンのみ使用できます",
+    "dialogRequired": "{type} は空にできません",
+    "personaIdExists": "このペルソナ名はすでに存在します"
+  },
+  "messages": {
+    "loadError": "ペルソナ一覧の読み込みに失敗しました",
+    "saveSuccess": "保存しました",
+    "saveError": "保存に失敗しました",
+    "deleteConfirm": "ペルソナ「{id}」を削除してもよろしいですか？この操作は元に戻せません。",
+    "deleteSuccess": "削除しました",
+    "deleteError": "削除に失敗しました",
+    "exportConfirm": "エクスポートにはシステムプロンプトとプリセット会話のみが含まれ、ツールとスキルの設定は含まれません。続行しますか？",
+    "exportSuccess": "エクスポートしました",
+    "exportError": "エクスポートに失敗しました：{error}",
+    "importSuccess": "ペルソナをインポートしました。ツールとスキルは手動で設定してください。",
+    "importError": "インポートに失敗しました：{error}",
+    "importFormatError": "ファイル形式が正しくありません。有効なペルソナのエクスポートファイルを選択してください",
+    "importMissingPrompt": "ファイルの内容が不完全で、システムプロンプトがありません",
+    "importIdExists": "ペルソナ名がすでに存在するため、「{id}」に変更しました"
+  },
+  "persona": {
+    "personasTitle": "ペルソナ",
+    "toolsCount": "個のツール",
+    "skillsCount": "個のスキル",
+    "contextMenu": {
+      "moveTo": "移動先…"
+    },
+    "messages": {
+      "moveSuccess": "ペルソナを移動しました",
+      "moveError": "ペルソナの移動に失敗しました"
+    }
+  },
+  "folder": {
+    "sidebarTitle": "フォルダー",
+    "rootFolder": "ルート",
+    "foldersTitle": "フォルダー",
+    "noFolders": "フォルダーがありません",
+    "createButton": "フォルダーを作成",
+    "searchPlaceholder": "フォルダーを検索…",
+    "form": {
+      "name": "フォルダー名",
+      "description": "説明（省略可）"
+    },
+    "validation": {
+      "nameRequired": "フォルダー名を入力してください"
+    },
+    "contextMenu": {
+      "open": "開く",
+      "rename": "名前を変更",
+      "moveTo": "移動先…",
+      "delete": "削除"
+    },
+    "createDialog": {
+      "title": "新しいフォルダーを作成",
+      "createButton": "作成"
+    },
+    "renameDialog": {
+      "title": "フォルダー名を変更"
+    },
+    "deleteDialog": {
+      "title": "フォルダーを削除",
+      "message": "フォルダー「{name}」を削除してもよろしいですか？",
+      "warning": "フォルダー内のすべてのペルソナはルートフォルダーに移動されます。"
+    },
+    "messages": {
+      "createSuccess": "フォルダーを作成しました",
+      "createError": "フォルダーの作成に失敗しました",
+      "renameSuccess": "フォルダー名を変更しました",
+      "renameError": "フォルダー名の変更に失敗しました",
+      "deleteSuccess": "フォルダーを削除しました",
+      "deleteError": "フォルダーの削除に失敗しました"
+    }
+  },
+  "moveDialog": {
+    "title": "フォルダーに移動",
+    "description": "「{name}」の移動先フォルダーを選択してください",
+    "success": "移動しました",
+    "error": "移動に失敗しました"
+  }
+}

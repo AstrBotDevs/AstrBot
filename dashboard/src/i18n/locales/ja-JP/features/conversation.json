@@ -1,0 +1,159 @@
+{
+  "title": "会話管理",
+  "subtitle": "ユーザーの会話履歴を管理・確認",
+  "filters": {
+    "title": "絞り込み条件",
+    "platform": "ボット ID",
+    "type": "種類",
+    "search": "検索キーワード",
+    "reset": "リセット"
+  },
+  "history": {
+    "title": "会話履歴",
+    "refresh": "再読み込み"
+  },
+  "batch": {
+    "deleteSelected": "選択項目を削除（{count}）",
+    "exportSelected": "選択項目をエクスポート（{count}）"
+  },
+  "pagination": {
+    "itemsPerPage": "1 ページあたり",
+    "showingItems": "{start}～{end} 件を表示（全 {total} 件）"
+  },
+  "table": {
+    "headers": {
+      "title": "タイトル",
+      "platform": "ボット ID",
+      "type": "メッセージの種類",
+      "cid": "会話 ID",
+      "umo": "メッセージ送信元（UMO）",
+      "sessionId": "セッション ID",
+      "createdAt": "作成日時",
+      "updatedAt": "更新日時",
+      "actions": "操作"
+    },
+    "umoDisplay": {
+      "parsed": "解析済み",
+      "raw": "UMO"
+    }
+  },
+  "actions": {
+    "view": "表示",
+    "edit": "編集",
+    "delete": "削除"
+  },
+  "messageTypes": {
+    "group": "グループチャット",
+    "friend": "個別チャット",
+    "unknown": "不明"
+  },
+  "status": {
+    "noTitle": "無題の会話",
+    "unknown": "不明",
+    "noData": "会話履歴がありません",
+    "emptyContent": "会話内容が空です",
+    "audioNotSupported": "お使いのブラウザーは音声再生に対応していません。"
+  },
+  "dialogs": {
+    "view": {
+      "title": "会話詳細",
+      "editMode": "会話を編集",
+      "previewMode": "プレビューモード",
+      "saveChanges": "変更を保存",
+      "close": "閉じる",
+      "confirmClose": "保存していない変更があります。閉じてもよろしいですか？"
+    },
+    "edit": {
+      "title": "会話情報を編集",
+      "titleLabel": "会話タイトル",
+      "titlePlaceholder": "会話タイトルを入力",
+      "cancel": "キャンセル",
+      "save": "保存"
+    },
+    "delete": {
+      "title": "削除の確認",
+      "message": "会話 {title} を削除してもよろしいですか？この操作は元に戻せません。",
+      "cancel": "キャンセル",
+      "confirm": "削除"
+    },
+    "batchDelete": {
+      "title": "一括削除の確認",
+      "message": "選択した {count} 件の会話を削除してもよろしいですか？この操作は元に戻せません。",
+      "andMore": "ほか {count} 件",
+      "cancel": "キャンセル",
+      "confirm": "一括削除",
+      "warning": "警告：この操作は元に戻せません。"
+    }
+  },
+  "messages": {
+    "fetchError": "会話一覧の取得に失敗しました",
+    "saveSuccess": "保存しました",
+    "saveError": "保存に失敗しました",
+    "deleteSuccess": "削除しました",
+    "deleteError": "削除に失敗しました",
+    "historyError": "会話履歴の取得に失敗しました",
+    "historySaveSuccess": "会話履歴を保存しました",
+    "historySaveError": "会話履歴の保存に失敗しました",
+    "invalidJson": "JSON 形式が無効です",
+    "noItemSelected": "削除する会話を先に選択してください",
+    "batchDeleteSuccess": "{count} 件の会話を削除しました",
+    "batchDeleteError": "一括削除に失敗しました",
+    "batchDeletePartial": "削除完了：成功 {deleted} 件、失敗 {failed} 件",
+    "exportSuccess": "エクスポートしました",
+    "exportError": "エクスポートに失敗しました",
+    "noItemSelectedForExport": "エクスポートする会話を先に選択してください",
+    "copySuccess": "コピーしました",
+    "copyError": "コピーに失敗しました"
+  },
+  "workspace": {
+    "legacy": "旧バージョンに戻る",
+    "newVersion": "新バージョンを使用",
+    "filters": {
+      "title": "絞り込み",
+      "keyword": "検索キーワード",
+      "keywordPlaceholder": "タイトルまたはメッセージ内容を検索",
+      "robots": "ボット ID",
+      "robotEmpty": "会話履歴のあるボットがありません",
+      "types": "会話の種類",
+      "umo": "UMO",
+      "umoPlaceholder": "完全または一部の UMO を入力",
+      "sort": "並び順",
+      "reset": "絞り込みをクリア",
+      "close": "絞り込みを閉じる",
+      "done": "完了",
+      "updatedDesc": "更新日時が新しい順",
+      "createdDesc": "作成日時が新しい順",
+      "updatedAsc": "更新日時が古い順",
+      "createdAsc": "作成日時が古い順"
+    },
+    "list": {
+      "title": "会話",
+      "total": "全 {count} 件",
+      "sessionTotal": "全 {count} セッション",
+      "selected": "{count} 件を選択中",
+      "groupBySession": "セッションごとにグループ化",
+      "conversationCount": "{count} 件の会話",
+      "selectPage": "現在のページを選択",
+      "empty": "会話がありません",
+      "filteredEmpty": "絞り込み条件に一致する会話がありません",
+      "previous": "前のページ",
+      "next": "次のページ",
+      "page": "{page} / {total} ページ"
+    },
+    "preview": {
+      "title": "会話プレビュー",
+      "close": "プレビューを閉じる",
+      "loading": "会話を読み込み中",
+      "empty": "この会話にはまだメッセージがありません",
+      "copyUmo": "UMO をコピー",
+      "rawData": "生データ",
+      "copyRawData": "生データをコピー"
+    },
+    "actions": {
+      "editTitle": "タイトルを編集",
+      "export": "エクスポート",
+      "delete": "削除",
+      "refresh": "再読み込み"
+    }
+  }
+}

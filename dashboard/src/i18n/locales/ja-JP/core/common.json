@@ -1,0 +1,144 @@
+{
+  "save": "保存",
+  "cancel": "キャンセル",
+  "close": "閉じる",
+  "copy": "コピー",
+  "copied": "コピーしました",
+  "copyFailed": "コピーに失敗しました",
+  "delete": "削除",
+  "edit": "編集",
+  "add": "追加",
+  "confirm": "確認",
+  "loading": "読み込み中…",
+  "success": "成功",
+  "error": "エラー",
+  "warning": "警告",
+  "info": "情報",
+  "name": "名前",
+  "description": "説明",
+  "author": "開発者",
+  "status": "ステータス",
+  "actions": "操作",
+  "enable": "有効にする",
+  "disable": "無効にする",
+  "enabled": "有効",
+  "disabled": "無効",
+  "reload": "再読み込み",
+  "configure": "設定",
+  "install": "インストール",
+  "uninstall": "アンインストール",
+  "update": "更新",
+  "language": "言語",
+  "settings": "設定",
+  "locale": "ja-JP",
+  "type": "種類",
+  "press": "押す",
+  "longPress": "長押し",
+  "yes": "はい",
+  "no": "いいえ",
+  "imagePreview": "画像プレビュー",
+  "autoDetect": "自動検出",
+  "restoreDefault": "デフォルトに戻す",
+  "dialog": {
+    "confirmTitle": "操作の確認",
+    "confirmMessage": "この操作を実行してもよろしいですか？",
+    "confirmButton": "確認",
+    "cancelButton": "キャンセル"
+  },
+  "restart": {
+    "waiting": "AstrBot の再起動を待っています…",
+    "maxRetriesReached": "ステータスの確認回数が上限に達しました。手動で確認してください。"
+  },
+  "upgradeRecovery": {
+    "title": "アップグレードが完了していません",
+    "description": "WebUI は {dashboardVersion} に更新されていますが、AstrBot Core はまだ {coreVersion} です。通常、アップグレード中にページを更新したことで再起動処理が中断された場合に発生します。再起動しても解決しない場合は、AstrBot のランタイムディレクトリにある data/dist フォルダーを削除してから、AstrBot を再起動してください。",
+    "hint": "アップグレードを完了するにはバックエンドを再起動してください。再起動後、ページは自動的に更新されます。",
+    "restartButton": "今すぐバックエンドを再起動",
+    "laterButton": "後で対応",
+    "restarting": "バックエンドの再起動を要求しています…",
+    "waiting": "再起動を開始しました。バックエンドの復旧を待っています…",
+    "failed": "再起動の要求に失敗しました。AstrBot を手動で再起動してください。"
+  },
+  "readme": {
+    "title": "プラグインのドキュメント",
+    "buttons": {
+      "viewOnGithub": "GitHub でリポジトリを表示",
+      "refresh": "ドキュメントを再読み込み"
+    },
+    "loading": "README を読み込んでいます…",
+    "errors": {
+      "fetchFailed": "README の取得に失敗しました",
+      "fetchError": "README の取得中にエラーが発生しました"
+    },
+    "empty": {
+      "title": "このプラグインにはドキュメントのリンクまたは GitHub リポジトリの URL がありません。",
+      "subtitle": "詳しくはプラグインマーケットを確認するか、プラグインの開発者にお問い合わせください。"
+    }
+  },
+  "changelog": {
+    "title": "変更履歴",
+    "loading": "変更履歴を読み込んでいます…",
+    "empty": {
+      "title": "このプラグインには変更履歴がありません",
+      "subtitle": "開発者はプラグインディレクトリに CHANGELOG.md ファイルを追加して、変更履歴を提供できます"
+    }
+  },
+  "editor": {
+    "fullscreen": "全画面で編集",
+    "editingTitle": "内容を編集中"
+  },
+  "templateList": {
+    "addEntry": "項目を追加",
+    "empty": "項目がありません。テンプレートを選択して追加してください",
+    "missingTemplate": "対応するテンプレートが見つかりません。削除してから追加し直してください。",
+    "unknownTemplate": "テンプレートが指定されていません"
+  },
+  "list": {
+    "addItemPlaceholder": "新しい項目を入力し、Enter キーで追加",
+    "addButton": "追加",
+    "addMore": "さらに追加",
+    "batchImport": "一括インポート",
+    "batchImportTitle": "一括インポート",
+    "batchImportLabel": "1 行に 1 項目",
+    "batchImportPlaceholder": "例：\n項目 1\n項目 2\n項目 3\n項目 4",
+    "batchImportHint": "各行が個別の項目として扱われ、空行は自動的に無視されます",
+    "batchImportButton": "{count} 件をインポート",
+    "noItems": "項目がありません",
+    "noItemsHint": "項目がありません。上の入力欄に入力し、Enter キーで追加してください",
+    "inputPlaceholder": "入力し、Enter キーで追加",
+    "editTitle": "リスト項目を編集",
+    "modifyButton": "変更"
+  },
+  "itemCard": {
+    "enabled": "有効",
+    "disabled": "無効",
+    "delete": "削除",
+    "edit": "編集",
+    "copy": "コピー",
+    "noData": "データがありません"
+  },
+  "objectEditor": {
+    "dialogTitle": "キーと値のペアを編集",
+    "noItems": "項目がありません",
+    "noParams": "パラメーターがありません",
+    "presets": "プリセット",
+    "newKeyLabel": "新しいキー",
+    "valueTypeLabel": "値の型",
+    "keyExists": "キーはすでに存在します",
+    "invalidJson": "JSON の形式が正しくありません",
+    "placeholders": {
+      "keyName": "キー",
+      "stringValue": "文字列値",
+      "numberValue": "数値",
+      "jsonValue": "JSON"
+    }
+  },
+  "firstNotice": {
+    "title": "初回のお知らせ",
+    "loading": "初回のお知らせを読み込んでいます…",
+    "empty": {
+      "title": "初回のお知らせはありません",
+      "subtitle": "FIRST_NOTICE.md が見つからないか、ファイルが空です。"
+    }
+  }
+}
