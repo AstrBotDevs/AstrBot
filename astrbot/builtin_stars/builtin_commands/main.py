@@ -61,6 +61,11 @@ class Main(star.Star):
         """Show token usage statistics for the current conversation"""
         await self.conversation_c.stats(message)
 
+    @filter.command("compact")
+    async def compact(self, message: AstrMessageEvent) -> None:
+        """Compress the current conversation context"""
+        await self.conversation_c.compact(message)
+
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("provider")
     async def provider(

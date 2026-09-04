@@ -3982,6 +3982,15 @@ CONFIG_METADATA_3 = {
                         },
                         "hint": "普通会话历史仅在超过“压缩前最多保留对话轮数”后执行该策略；请求发送前也会在上下文 token 接近模型窗口时使用同一策略保护本次请求。",
                     },
+                    "agent_runner.config.compression.enable_manual_context_compression": {
+                        "description": "手动上下文压缩（实验性）",
+                        "type": "bool",
+                        "hint": "启用后，/compact 将使用 LLM 摘要当前上下文。摘要可能遗漏细节、角色状态或叙事事实；压缩失败时将保留原历史。",
+                        "condition": {
+                            "agent_runner.config.compression.overflow_strategy": "llm_compress",
+                            "agent_runner.runner_type": "local",
+                        },
+                    },
                     "agent_runner.config.compression.instruction": {
                         "description": "上下文压缩提示词",
                         "type": "text",

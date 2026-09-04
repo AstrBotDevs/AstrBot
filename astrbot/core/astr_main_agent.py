@@ -1310,30 +1310,32 @@ def _apply_web_search_citation_prompt(
     req.system_prompt = f"{system_prompt}\n{WEB_SEARCH_CITATION_PROMPT}\n"
 
 
-async def _get_compress_provider(
-    config: MainAgentBuildConfig,
+async def get_context_compression_provider(
+    context_limit_reached_strategy: str,
+    llm_compress_provider_id: str,
     plugin_context: Context,
     event: AstrMessageEvent | None = None,
 ) -> Provider | None:
     """Resolve the provider used for context compression.
 
     Args:
-        config: Main agent build configuration.
+        context_limit_reached_strategy: Configured context handling strategy.
+        llm_compress_provider_id: Optional dedicated compression provider ID.
         plugin_context: Plugin context used to resolve providers.
         event: Optional event used for session-specific fallback selection.
 
     Returns:
         Compression provider, or None if compression is disabled or unavailable.
     """
-    if config.context_limit_reached_strategy != "llm_compress":
+    if context_limit_reached_strategy != "llm_compress":
         return None
-    if config.llm_compress_provider_id:
-        provider = plugin_context.get_provider_by_id(config.llm_compress_provider_id)
+    if llm_compress_provider_id:
+        provider = plugin_context.get_provider_by_id(llm_compress_provider_id)
         if provider and isinstance(provider, Provider):
             return provider
         logger.warning(
-            "指定的上下文压缩模型 %s 不可用",
-            config.llm_compress_provider_id,
+            "Configured context compression provider %s is unavailable.",
+            llm_compress_provider_id,
         )
     # fallback: use current chat provider for this session
     if event:
@@ -1728,8 +1730,9 @@ async def build_main_agent(
         streaming=config.streaming_response,
         llm_compress_instruction=config.llm_compress_instruction,
         llm_compress_keep_recent_ratio=config.llm_compress_keep_recent_ratio,
-        llm_compress_provider=await _get_compress_provider(
-            config,
+        llm_compress_provider=await get_context_compression_provider(
+            config.context_limit_reached_strategy,
+            config.llm_compress_provider_id,
             plugin_context,
             event,
         ),

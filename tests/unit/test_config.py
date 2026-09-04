@@ -4,11 +4,12 @@ import asyncio
 import json
 import os
 import threading
+from pathlib import Path
 
 import pytest
 
 from astrbot.core.config.astrbot_config import AstrBotConfig, RateLimitStrategy
-from astrbot.core.config.default import DEFAULT_VALUE_MAP
+from astrbot.core.config.default import CONFIG_METADATA_3, DEFAULT_VALUE_MAP
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.utils.auth_password import (
     DEFAULT_DASHBOARD_PASSWORD,
@@ -912,6 +913,46 @@ class TestConfigSchemaToDefault:
 
 class TestConfigMetadataI18n:
     """Tests for i18n utils."""
+
+    @pytest.mark.parametrize("locale", ["en-US", "zh-CN", "ru-RU"])
+    def test_manual_compression_metadata_uses_translated_runner_config_keys(
+        self,
+        locale: str,
+    ):
+        """Verify the embedded manual compression field and its translations."""
+        field_key = (
+            "agent_runner.config.compression.enable_manual_context_compression"
+        )
+        metadata_item = CONFIG_METADATA_3["ai_group"]["metadata"][
+            "truncate_and_compress"
+        ]["items"][field_key]
+
+        assert metadata_item["type"] == "bool"
+        assert metadata_item["condition"] == {
+            "agent_runner.config.compression.overflow_strategy": "llm_compress",
+            "agent_runner.runner_type": "local",
+        }
+
+        converted_item = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)[
+            "ai_group"
+        ]["metadata"]["truncate_and_compress"]["items"][field_key]
+        locale_path = (
+            Path(__file__).parents[2]
+            / "dashboard"
+            / "src"
+            / "i18n"
+            / "locales"
+            / locale
+            / "features"
+            / "config-metadata.json"
+        )
+        translations = json.loads(locale_path.read_text(encoding="utf-8"))
+        for attribute in ("description", "hint"):
+            translated_value = translations
+            for segment in converted_item[attribute].split("."):
+                translated_value = translated_value[segment]
+            assert isinstance(translated_value, str)
+            assert translated_value
 
     def test_get_i18n_key(self):
         """Test generating i18n key."""

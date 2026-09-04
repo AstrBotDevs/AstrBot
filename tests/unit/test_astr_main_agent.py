@@ -350,6 +350,89 @@ class TestSelectProvider:
         )
 
 
+class TestGetContextCompressionProvider:
+    """Tests for context compression provider resolution."""
+
+    @pytest.mark.asyncio
+    async def test_non_llm_strategy_returns_none(self, mock_event, mock_context):
+        """Do not resolve a provider for non-LLM compression strategies."""
+        result = await ama.get_context_compression_provider(
+            "truncate_by_turns",
+            "dedicated-provider",
+            mock_context,
+            mock_event,
+        )
+
+        assert result is None
+        mock_context.get_provider_by_id.assert_not_called()
+        mock_context.get_using_provider_async.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_returns_valid_dedicated_provider(
+        self,
+        mock_event,
+        mock_context,
+        mock_provider,
+    ):
+        """Prefer a valid explicitly configured compression provider."""
+        mock_context.get_provider_by_id.return_value = mock_provider
+
+        result = await ama.get_context_compression_provider(
+            "llm_compress",
+            "dedicated-provider",
+            mock_context,
+            mock_event,
+        )
+
+        assert result is mock_provider
+        mock_context.get_provider_by_id.assert_called_once_with("dedicated-provider")
+        mock_context.get_using_provider_async.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_invalid_dedicated_provider_falls_back_by_event_umo(
+        self,
+        mock_event,
+        mock_context,
+        mock_provider,
+    ):
+        """Use the event-scoped chat provider when the dedicated one is invalid."""
+        mock_context.get_provider_by_id.return_value = "not-a-provider"
+        mock_context.get_using_provider_async = AsyncMock(return_value=mock_provider)
+
+        result = await ama.get_context_compression_provider(
+            "llm_compress",
+            "invalid-provider",
+            mock_context,
+            mock_event,
+        )
+
+        assert result is mock_provider
+        mock_context.get_provider_by_id.assert_called_once_with("invalid-provider")
+        mock_context.get_using_provider_async.assert_awaited_once_with(
+            umo=mock_event.unified_msg_origin
+        )
+
+    @pytest.mark.asyncio
+    async def test_fallback_value_error_returns_none(self, mock_event, mock_context):
+        """Treat an invalid event-scoped fallback provider as unavailable."""
+        mock_context.get_using_provider_async = AsyncMock(
+            side_effect=ValueError("invalid provider type")
+        )
+
+        result = await ama.get_context_compression_provider(
+            "llm_compress",
+            "",
+            mock_context,
+            mock_event,
+        )
+
+        assert result is None
+        mock_context.get_provider_by_id.assert_not_called()
+        mock_context.get_using_provider_async.assert_awaited_once_with(
+            umo=mock_event.unified_msg_origin
+        )
+
+
 @pytest.mark.asyncio
 async def test_provider_manager_async_selection_uses_session_preference(monkeypatch):
     preferred_provider = object()
