@@ -70,7 +70,9 @@ def test_initialize_user_templates_migrates_only_unmodified_defaults(
     user_dir = data_root / "t2i_templates"
     if user_content is not None:
         user_dir.mkdir(parents=True)
-        (user_dir / "base.html").write_text(user_content, encoding="utf-8")
+        # Write exact bytes: text mode would translate line feeds to
+        # os.linesep on Windows and corrupt the CRLF test case.
+        (user_dir / "base.html").write_bytes(user_content.encode("utf-8"))
 
     legacy_hash = hashlib.sha256(LEGACY_TEMPLATE.encode()).hexdigest()
     monkeypatch.setattr(

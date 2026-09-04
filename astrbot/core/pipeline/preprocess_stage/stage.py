@@ -1,5 +1,6 @@
 import asyncio
 import random
+import re
 import traceback
 from collections.abc import AsyncGenerator
 from pathlib import Path
@@ -82,7 +83,16 @@ class PreProcessStage(Stage):
             for idx, component in enumerate(message_chain):
                 if isinstance(component, Record | Image) and component.url:
                     for mapping in mappings:
-                        from_, to_ = mapping.split(":")
+                        # ":" is ambiguous for Windows absolute paths
+                        # ("C:\from:C:\to"); parse drive-lettered mappings by
+                        # regex and fall back to a plain colon split.
+                        drive_mapping = re.fullmatch(
+                            r"([A-Za-z]:.+):([A-Za-z]:.+)", mapping
+                        )
+                        if drive_mapping:
+                            from_, to_ = drive_mapping.groups()
+                        else:
+                            from_, to_ = mapping.split(":")
                         from_ = from_.removesuffix("/")
                         to_ = to_.removesuffix("/")
 

@@ -654,7 +654,9 @@ def test_is_file_uri_uses_parsed_file_scheme(value, expected):
 def test_file_uri_to_path_supports_localhost_and_encoded_paths(tmp_path):
     media_path = tmp_path / "voice note.wav"
     media_path.write_bytes(b"audio")
-    file_uri = f"file://localhost{quote(media_path.as_posix())}"
+    # Keep a "/" between the host and the path so the URI stays well-formed
+    # on Windows, where as_posix() yields "C:/..." without a leading slash.
+    file_uri = "file://localhost/" + quote(media_path.as_posix().lstrip("/"))
 
     assert media_utils.file_uri_to_path(file_uri) == str(media_path)
 

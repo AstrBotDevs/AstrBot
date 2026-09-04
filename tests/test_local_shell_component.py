@@ -33,8 +33,13 @@ class _FakeTaskkillResult:
 
 def _python_command(code: str) -> str:
     """Build a shell-safe Python command for the current operating system."""
-    args = [sys.executable, "-u", "-c", code]
-    return subprocess.list2cmdline(args) if os.name == "nt" else shlex.join(args)
+    if os.name == "nt":
+        # PowerShell re-parses the whole command text, so keep the executable
+        # bare and wrap the code argument in double quotes (list2cmdline would
+        # leave a space-free code argument unquoted, which PowerShell then
+        # splits apart).
+        return f"{sys.executable} -u -c \"{code}\""
+    return shlex.join([sys.executable, "-u", "-c", code])
 
 
 def test_local_shell_component_decodes_utf8_output(monkeypatch):

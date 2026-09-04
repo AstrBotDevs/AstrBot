@@ -111,6 +111,22 @@ def temp_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def require_symlink(tmp_path: Path) -> Path:
+    """Skip the test when symlink creation is denied by the OS.
+
+    Windows only allows symbolic links with admin or developer-mode
+    privileges, so tests that build symlink fixtures cannot run there.
+    """
+    probe = tmp_path / ".symlink_probe"
+    try:
+        probe.symlink_to(tmp_path)
+    except OSError:
+        pytest.skip("symlink creation is not permitted on this platform")
+    probe.unlink()
+    return tmp_path
+
+
+@pytest.fixture
 def event_queue() -> Queue:
     """Create a shared asyncio queue fixture for tests."""
     return Queue()

@@ -94,7 +94,10 @@ def _decode_bytes_with_fallback(
 
 
 def _decode_shell_output(output: bytes | None) -> str:
-    return _decode_bytes_with_fallback(output, preferred_encoding="utf-8")
+    # Normalize CRLF so tool text output is identical across platforms.
+    return _decode_bytes_with_fallback(output, preferred_encoding="utf-8").replace(
+        "\r\n", "\n"
+    )
 
 
 @dataclass
