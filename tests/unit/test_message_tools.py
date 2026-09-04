@@ -15,6 +15,7 @@ def _make_context(
     role="admin",
     require_admin=True,
     runtime="local",
+    local_permissions=None,
 ):
     """Build a minimal ContextWrapper for SendMessageToUserTool."""
     cfg = {
@@ -23,6 +24,10 @@ def _make_context(
             "computer_use_runtime": runtime,
         }
     }
+    if local_permissions is not None:
+        cfg["provider_settings"]["computer_use_local_permissions"] = (
+            local_permissions
+        )
     extras = {}
     event = SimpleNamespace(
         unified_msg_origin=current_session,
@@ -327,6 +332,30 @@ async def test_non_admin_cannot_send_arbitrary_local_absolute_file(tmp_path):
     assert "error: Local file send is restricted for this user" in result
     assert str(secret_path) in result
     ctx.context.context.send_message.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_member_with_host_scope_can_send_local_absolute_file(tmp_path):
+    """Host filesystem scope should cover the local file-send bridge."""
+    permissions = {
+        "member": {
+            "allow_execution": False,
+            "allow_network": False,
+            "filesystem_scope": "host",
+        }
+    }
+    tool = SendMessageToUserTool()
+    ctx = _make_context(role="member", local_permissions=permissions)
+    file_path = tmp_path / "result.txt"
+    file_path.write_text("result", encoding="utf-8")
+
+    result = await tool.call(
+        ctx,
+        messages=[{"type": "file", "path": str(file_path)}],
+    )
+
+    assert "Message sent to session" in result
+    ctx.context.context.send_message.assert_called_once()
 
 
 @pytest.mark.asyncio

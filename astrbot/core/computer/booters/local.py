@@ -12,15 +12,22 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 if sys.version_info < (3, 14):
+    import python_ripgrep
     from python_ripgrep import search
 
 from astrbot.api import logger
 from astrbot.core.computer.file_read_utils import (
     detect_text_encoding,
     read_local_text_range_sync,
+)
+from astrbot.core.computer.process_sandbox import (
+    SandboxProcess,
+    SandboxSpec,
+    SandboxTimeoutError,
+    create_process_sandbox,
 )
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_root,
@@ -46,6 +53,25 @@ _BLOCKED_COMMAND_PATTERNS = [
     " kill -9 ",
     " killall ",
 ]
+_LOCAL_SANDBOX_MAX_OUTPUT_BYTES = 10 * 1024 * 1024
+_SANDBOXED_PYTHON_RIPGREP = """
+import sys
+
+sys.path.insert(0, sys.argv[1])
+from python_ripgrep import search
+
+after_context = int(sys.argv[5]) if sys.argv[5] else None
+before_context = int(sys.argv[6]) if sys.argv[6] else None
+results = search(
+    patterns=[sys.argv[2]],
+    paths=[sys.argv[3]] if sys.argv[3] else None,
+    globs=[sys.argv[4]] if sys.argv[4] else None,
+    after_context=after_context,
+    before_context=before_context,
+    line_number=True,
+)
+sys.stdout.write("".join(results))
+"""
 
 
 def _is_safe_command(command: str) -> bool:
@@ -106,7 +132,7 @@ class _LocalShellSession:
     creator_id: str
     creator_is_admin: bool
     sandboxed: bool
-    process: asyncio.subprocess.Process
+    process: SandboxProcess | asyncio.subprocess.Process
     output_path: Path
     started_at: float
     output_event: asyncio.Event
@@ -116,6 +142,7 @@ class _LocalShellSession:
     cursor: int = 0
     timed_out: bool = False
     terminated: bool = False
+    output_limited: bool = False
 
 
 @dataclass
@@ -226,6 +253,8 @@ class LocalShellComponent(ShellComponent):
         creator_id: str,
         creator_is_admin: bool,
         sandboxed: bool,
+        allow_network: bool = False,
+        filesystem_scope: str = "workspace",
         cwd: str | None = None,
         env: dict[str, str] | None = None,
         timeout: int | None = None,
@@ -240,6 +269,8 @@ class LocalShellComponent(ShellComponent):
             creator_id: Sender ID that created the session.
             creator_is_admin: Whether the creator was an administrator.
             sandboxed: Whether the process is isolated from the host.
+            allow_network: Whether an isolated process may access the network.
+            filesystem_scope: Filesystem scope applied to an isolated process.
             cwd: Working directory for the process.
             env: Additional environment variables.
             timeout: Hard process lifetime in seconds. None disables it.
@@ -251,6 +282,7 @@ class LocalShellComponent(ShellComponent):
 
         Raises:
             PermissionError: If the command matches a blocked pattern.
+            RuntimeError: If the requested platform sandbox is unavailable.
             ValueError: If a timing or output limit is invalid.
         """
         if not _is_safe_command(command):
@@ -262,9 +294,6 @@ class LocalShellComponent(ShellComponent):
         if max_output_chars < 1:
             raise ValueError("`max_output_chars` must be greater than 0.")
 
-        run_env = os.environ.copy()
-        if env:
-            run_env.update({str(k): str(v) for k, v in env.items()})
         working_dir = Path(cwd).resolve() if cwd else Path(get_astrbot_root()).resolve()
         session_id = f"sh_{uuid.uuid4().hex[:16]}"
         owner_digest = hashlib.sha256(owner_id.encode("utf-8")).hexdigest()[:16]
@@ -273,40 +302,51 @@ class LocalShellComponent(ShellComponent):
         output_path = output_dir / f"{session_id}.log"
         output_path.touch()
 
-        process_kwargs: dict[str, Any] = {}
-        if sys.platform == "win32":
-            process_kwargs["creationflags"] = getattr(
-                subprocess,
-                "CREATE_NEW_PROCESS_GROUP",
-                0,
-            )
-        else:
-            process_kwargs["start_new_session"] = True
-
         try:
-            if sys.platform == "win32":
-                process_factory = asyncio.create_subprocess_exec
-                shell_executable = resolve_windows_shell()
-                process_args = (
-                    shell_executable,
-                    "-NoLogo",
-                    "-NoProfile",
-                    "-NonInteractive",
-                    "-Command",
+            if sandboxed:
+                process = await create_process_sandbox().spawn_shell(
                     command,
+                    SandboxSpec(
+                        workspace=working_dir,
+                        allow_network=allow_network,
+                        filesystem_scope=filesystem_scope,
+                    ),
+                    env={str(k): str(v) for k, v in (env or {}).items()},
                 )
             else:
-                process_factory = asyncio.create_subprocess_shell
-                process_args = (command,)
-            process = await process_factory(
-                *process_args,
-                cwd=working_dir,
-                env=run_env,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
-                **process_kwargs,
-            )
+                run_env = os.environ.copy()
+                if env:
+                    run_env.update({str(k): str(v) for k, v in env.items()})
+                process_kwargs: dict[str, Any] = {}
+                if sys.platform == "win32":
+                    process_factory = asyncio.create_subprocess_exec
+                    shell_executable = resolve_windows_shell()
+                    process_args = (
+                        shell_executable,
+                        "-NoLogo",
+                        "-NoProfile",
+                        "-NonInteractive",
+                        "-Command",
+                        command,
+                    )
+                    process_kwargs["creationflags"] = getattr(
+                        subprocess,
+                        "CREATE_NEW_PROCESS_GROUP",
+                        0,
+                    )
+                else:
+                    process_factory = asyncio.create_subprocess_shell
+                    process_args = (command,)
+                    process_kwargs["start_new_session"] = True
+                process = await process_factory(
+                    *process_args,
+                    cwd=working_dir,
+                    env=run_env,
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.STDOUT,
+                    **process_kwargs,
+                )
         except Exception:
             output_path.unlink(missing_ok=True)
             raise
@@ -316,11 +356,25 @@ class LocalShellComponent(ShellComponent):
         async def _capture_output() -> None:
             if process.stdout is None:
                 return
+            output_size = 0
             with output_path.open("ab") as output_file:
                 while chunk := await process.stdout.read(8192):
+                    if sandboxed:
+                        remaining = _LOCAL_SANDBOX_MAX_OUTPUT_BYTES - output_size
+                        if remaining <= 0:
+                            session.output_limited = True
+                            process.terminate()
+                            return
+                        if len(chunk) > remaining:
+                            chunk = chunk[:remaining]
+                            session.output_limited = True
                     output_file.write(chunk)
                     output_file.flush()
+                    output_size += len(chunk)
                     output_event.set()
+                    if session.output_limited:
+                        process.terminate()
+                        return
 
         reader_task = asyncio.create_task(
             _capture_output(),
@@ -430,9 +484,13 @@ class LocalShellComponent(ShellComponent):
                     "timed_out"
                     if session.timed_out
                     else (
-                        "terminated"
-                        if session.terminated
-                        else ("completed" if exit_code == 0 else "failed")
+                        "output_limited"
+                        if session.output_limited
+                        else (
+                            "terminated"
+                            if session.terminated
+                            else ("completed" if exit_code == 0 else "failed")
+                        )
                     )
                 )
             )
@@ -555,9 +613,13 @@ class LocalShellComponent(ShellComponent):
                 "timed_out"
                 if session.timed_out
                 else (
-                    "terminated"
-                    if session.terminated
-                    else ("completed" if exit_code == 0 else "failed")
+                    "output_limited"
+                    if session.output_limited
+                    else (
+                        "terminated"
+                        if session.terminated
+                        else ("completed" if exit_code == 0 else "failed")
+                    )
                 )
             )
         )
@@ -649,7 +711,9 @@ class LocalShellComponent(ShellComponent):
             session_id,
         )
         if session.process.returncode is None:
-            if os.name == "nt":
+            if session.sandboxed:
+                cast(SandboxProcess, session.process).interrupt()
+            elif os.name == "nt":
                 session.process.send_signal(
                     getattr(signal, "CTRL_BREAK_EVENT", signal.SIGTERM)
                 )
@@ -771,7 +835,9 @@ class LocalShellComponent(ShellComponent):
         """
         if session.process.returncode is not None:
             return
-        if os.name == "nt":
+        if session.sandboxed:
+            session.process.terminate()
+        elif os.name == "nt":
             try:
                 taskkill_result = await asyncio.to_thread(
                     subprocess.run,
@@ -797,7 +863,7 @@ class LocalShellComponent(ShellComponent):
                 timeout=5,
             )
         except asyncio.TimeoutError:
-            if os.name == "nt":
+            if session.sandboxed or os.name == "nt":
                 session.process.kill()
             else:
                 try:
@@ -842,29 +908,82 @@ class LocalPythonComponent(PythonComponent):
         timeout: int = 30,
         silent: bool = False,
         cwd: str | None = None,
+        sandboxed: bool = False,
+        allow_network: bool = False,
+        filesystem_scope: str = "workspace",
     ) -> dict[str, Any]:
+        """Execute Python locally, optionally inside the platform sandbox.
+
+        Args:
+            code: Python source to execute.
+            kernel_id: Reserved kernel identifier for protocol compatibility.
+            timeout: Hard execution timeout in seconds.
+            silent: Whether to suppress standard output.
+            cwd: Working directory for the process.
+            sandboxed: Whether to isolate execution with the platform sandbox.
+            allow_network: Whether an isolated process may access the network.
+            filesystem_scope: Filesystem scope applied to an isolated process.
+
+        Returns:
+            Python output and error data in the computer component format.
+        """
+
         def _run() -> dict[str, Any]:
             try:
-                working_dir = os.path.abspath(cwd) if cwd else get_astrbot_root()
-                result = subprocess.run(
-                    [os.environ.get("PYTHON", sys.executable), "-c", code],
-                    timeout=timeout,
-                    capture_output=True,
-                    cwd=working_dir,
+                working_dir = (
+                    Path(cwd).resolve() if cwd else Path(get_astrbot_root()).resolve()
                 )
-                stdout = "" if silent else _decode_shell_output(result.stdout)
-                stderr = (
-                    _decode_shell_output(result.stderr)
-                    if result.returncode != 0
+                if sandboxed:
+                    sandbox = create_process_sandbox()
+                    result = sandbox.run(
+                        [sys.executable, "-c", code],
+                        SandboxSpec(
+                            workspace=working_dir,
+                            allow_network=allow_network,
+                            filesystem_scope=filesystem_scope,
+                        ),
+                        timeout=timeout,
+                        output_limit=_LOCAL_SANDBOX_MAX_OUTPUT_BYTES,
+                        discard_stdout=silent,
+                    )
+                    stdout = _decode_shell_output(result.stdout)
+                    stderr = _decode_shell_output(result.stderr)
+                    stdout_limited = result.stdout_limited
+                    stderr_limited = result.stderr_limited
+                else:
+                    run_command = [
+                        os.environ.get("PYTHON", sys.executable),
+                        "-c",
+                        code,
+                    ]
+                    result = subprocess.run(
+                        run_command,
+                        timeout=timeout,
+                        capture_output=True,
+                        cwd=working_dir,
+                    )
+                    stdout = "" if silent else _decode_shell_output(result.stdout)
+                    stderr = _decode_shell_output(result.stderr)
+                    stdout_limited = False
+                    stderr_limited = False
+                if stdout_limited or stderr_limited:
+                    limit_error = (
+                        "Execution output exceeded "
+                        f"{_LOCAL_SANDBOX_MAX_OUTPUT_BYTES} bytes."
+                    )
+                    stderr = f"{stderr}\n{limit_error}".strip()
+                execution_error = (
+                    stderr
+                    if result.returncode != 0 or stdout_limited or stderr_limited
                     else ""
                 )
                 return {
                     "data": {
                         "output": {"text": stdout, "images": []},
-                        "error": stderr,
+                        "error": execution_error,
                     }
                 }
-            except subprocess.TimeoutExpired:
+            except (SandboxTimeoutError, subprocess.TimeoutExpired):
                 return {
                     "data": {
                         "output": {"text": "", "images": []},
@@ -923,9 +1042,11 @@ class LocalFileSystemComponent(FileSystemComponent):
         glob: str | None = None,
         after_context: int | None = None,
         before_context: int | None = None,
+        sandboxed: bool = False,
+        sandbox_root: str | None = None,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            if sys.version_info < (3, 14):
+            if not sandboxed and sys.version_info < (3, 14):
                 results = search(
                     patterns=[pattern],
                     paths=[path] if path else None,
@@ -939,34 +1060,78 @@ class LocalFileSystemComponent(FileSystemComponent):
                     "content": _truncate_long_lines("".join(results)),
                 }
 
-            rg_path = shutil.which("rg")
-            if not rg_path:
-                return {
-                    "success": False,
-                    "content": "",
-                    "error": (
-                        "The ripgrep (rg) executable is required for file search on "
-                        "Python 3.14 or later because python-ripgrep 0.0.8 is "
-                        "incompatible."
-                    ),
-                }
+            if sandboxed and sys.version_info < (3, 14):
+                site_packages = str(
+                    Path(python_ripgrep.__file__).resolve().parent.parent
+                )
+                command = [
+                    sys.executable,
+                    "-I",
+                    "-S",
+                    "-c",
+                    _SANDBOXED_PYTHON_RIPGREP,
+                    site_packages,
+                    pattern,
+                    path or "",
+                    glob or "",
+                    "" if after_context is None else str(after_context),
+                    "" if before_context is None else str(before_context),
+                ]
+            else:
+                rg_path = shutil.which("rg")
+                if not rg_path:
+                    return {
+                        "success": False,
+                        "content": "",
+                        "error": (
+                            "The ripgrep (rg) executable is required for file search "
+                            "on Python 3.14 or later because python-ripgrep 0.0.8 is "
+                            "incompatible."
+                        ),
+                    }
 
-            command = [rg_path, "--color=never", "-n", "-e", pattern]
-            if glob:
-                command.extend(["-g", glob])
-            if after_context is not None:
-                command.extend(["-A", str(after_context)])
-            if before_context is not None:
-                command.extend(["-B", str(before_context)])
-            command.extend(["--", path or "."])
+                command = [
+                    str(Path(rg_path).resolve()) if sandboxed else rg_path,
+                    "--color=never",
+                    "-n",
+                    "-e",
+                    pattern,
+                ]
+                if glob:
+                    command.extend(["-g", glob])
+                if after_context is not None:
+                    command.extend(["-A", str(after_context)])
+                if before_context is not None:
+                    command.extend(["-B", str(before_context)])
+                command.extend(["--", path or "."])
+            sandbox_workspace: Path | None = None
+            if sandboxed:
+                if not sandbox_root:
+                    return {
+                        "success": False,
+                        "content": "",
+                        "error": "A sandbox root is required for restricted Local search.",
+                    }
+                sandbox_workspace = Path(sandbox_root)
 
             try:
-                result = subprocess.run(
-                    command,
-                    capture_output=True,
-                    timeout=30,
-                )
-            except subprocess.TimeoutExpired:
+                if sandboxed:
+                    assert sandbox_workspace is not None
+                    result = create_process_sandbox().run(
+                        command,
+                        SandboxSpec(
+                            workspace=sandbox_workspace,
+                            workspace_writable=False,
+                        ),
+                        timeout=30,
+                    )
+                else:
+                    result = subprocess.run(
+                        command,
+                        capture_output=True,
+                        timeout=30,
+                    )
+            except (SandboxTimeoutError, subprocess.TimeoutExpired):
                 return {
                     "success": False,
                     "content": "",
@@ -1009,24 +1174,43 @@ class LocalFileSystemComponent(FileSystemComponent):
         new_string: str,
         replace_all: bool = False,
         encoding: str = "utf-8",
+        file_descriptor: int | None = None,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             abs_path = os.path.abspath(path)
-            with open(abs_path, encoding=encoding) as f:
-                content = f.read()
-            occurrences = content.count(old_string)
-            if occurrences == 0:
-                return {
-                    "success": False,
-                    "error": "old string not found in file",
-                    "replacements": 0,
-                }
-            if replace_all:
-                updated = content.replace(old_string, new_string)
-                replacements = occurrences
+            if file_descriptor is None:
+                file_obj = open(abs_path, encoding=encoding)
             else:
-                updated = content.replace(old_string, new_string, 1)
-                replacements = 1
+                file_obj = os.fdopen(
+                    os.dup(file_descriptor),
+                    mode="r+",
+                    encoding=encoding,
+                )
+                file_obj.seek(0)
+            with file_obj as f:
+                content = f.read()
+                occurrences = content.count(old_string)
+                if occurrences == 0:
+                    return {
+                        "success": False,
+                        "error": "old string not found in file",
+                        "replacements": 0,
+                    }
+                if replace_all:
+                    updated = content.replace(old_string, new_string)
+                    replacements = occurrences
+                else:
+                    updated = content.replace(old_string, new_string, 1)
+                    replacements = 1
+                if file_descriptor is not None:
+                    f.seek(0)
+                    f.truncate()
+                    f.write(updated)
+                    return {
+                        "success": True,
+                        "path": abs_path,
+                        "replacements": replacements,
+                    }
             with open(abs_path, "w", encoding=encoding) as f:
                 f.write(updated)
             return {
@@ -1038,12 +1222,30 @@ class LocalFileSystemComponent(FileSystemComponent):
         return await asyncio.to_thread(_run)
 
     async def write_file(
-        self, path: str, content: str, mode: str = "w", encoding: str = "utf-8"
+        self,
+        path: str,
+        content: str,
+        mode: str = "w",
+        encoding: str = "utf-8",
+        file_descriptor: int | None = None,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             abs_path = os.path.abspath(path)
-            os.makedirs(os.path.dirname(abs_path), exist_ok=True)
-            with open(abs_path, mode, encoding=encoding) as f:
+            if file_descriptor is None:
+                os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+                file_obj = open(abs_path, mode, encoding=encoding)
+            else:
+                file_obj = os.fdopen(
+                    os.dup(file_descriptor),
+                    mode=mode,
+                    encoding=encoding,
+                )
+                if mode == "w":
+                    file_obj.seek(0)
+                    file_obj.truncate()
+                elif mode == "a":
+                    file_obj.seek(0, os.SEEK_END)
+            with file_obj as f:
                 f.write(content)
             return {"success": True, "path": abs_path}
 
@@ -1082,7 +1284,7 @@ class LocalBooter(ComputerBooter):
     async def boot(self, session_id: str) -> None:
         logger.info(f"Local computer booter initialized for session: {session_id}")
 
-    async def shutdown(self) -> None:
+    async def shutdown(self, **_kwargs: Any) -> None:
         await self._shell.shutdown_sessions()
         logger.info("Local computer booter shutdown complete.")
 

@@ -198,6 +198,39 @@ class TestLogComputerConfigChanges:
         mock_logger.info.assert_not_called()
 
     @patch("astrbot.dashboard.services.config_service.logger")
+    def test_logs_local_permission_change(self, mock_logger) -> None:
+        """Role permission changes are included in the computer audit log."""
+        old = {
+            "provider_settings": {
+                "computer_use_local_permissions": {
+                    "member": {
+                        "allow_execution": False,
+                        "allow_network": False,
+                        "filesystem_scope": "workspace",
+                    }
+                }
+            }
+        }
+        new = {
+            "provider_settings": {
+                "computer_use_local_permissions": {
+                    "member": {
+                        "allow_execution": True,
+                        "allow_network": False,
+                        "filesystem_scope": "workspace",
+                    }
+                }
+            }
+        }
+
+        _log_computer_config_changes(old, new)
+
+        assert any(
+            call.args[1:3] == ("member", "allow_execution")
+            for call in mock_logger.info.call_args_list
+        )
+
+    @patch("astrbot.dashboard.services.config_service.logger")
     def test_logs_sandbox_key_change(self, mock_logger) -> None:
         """Detects sandbox sub-key change."""
         old = {"provider_settings": {"sandbox": {"booter": "shipyard"}}}

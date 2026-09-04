@@ -327,6 +327,23 @@ def _log_computer_config_changes(
             new_runtime,
         )
 
+    old_permissions = old_ps.get("computer_use_local_permissions", {})
+    new_permissions = new_ps.get("computer_use_local_permissions", {})
+    for role in ("member", "admin"):
+        old_role = old_permissions.get(role, {})
+        new_role = new_permissions.get(role, {})
+        for key in ("allow_execution", "allow_network", "filesystem_scope"):
+            old_value = old_role.get(key)
+            new_value = new_role.get(key)
+            if old_value != new_value:
+                log_info(
+                    "[Computer] Config changed: local_permissions.%s.%s %s -> %s",
+                    role,
+                    key,
+                    old_value,
+                    new_value,
+                )
+
     old_sandbox = old_ps.get("sandbox", {})
     new_sandbox = new_ps.get("sandbox", {})
     all_keys = set(old_sandbox.keys()) | set(new_sandbox.keys())

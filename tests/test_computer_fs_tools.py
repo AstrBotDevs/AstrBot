@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import base64
+import builtins
 import io
 import os
+import sys
 import zipfile
 from types import SimpleNamespace
 from typing import Any
@@ -25,14 +27,16 @@ def _make_context(
     role: str = "admin",
     runtime: str = "local",
     umo: str = "qq:friend:user-1",
+    local_permissions: dict[str, Any] | None = None,
 ) -> ContextWrapper:
+    provider_settings = {
+        "computer_use_require_admin": require_admin,
+        "computer_use_runtime": runtime,
+    }
+    if local_permissions is not None:
+        provider_settings["computer_use_local_permissions"] = local_permissions
     config_holder = SimpleNamespace(
-        get_config=lambda umo=None: {
-            "provider_settings": {
-                "computer_use_require_admin": require_admin,
-                "computer_use_runtime": runtime,
-            }
-        }
+        get_config=lambda umo=None: {"provider_settings": provider_settings}
     )
     event = SimpleNamespace(
         role=role,
@@ -376,6 +380,48 @@ async def test_restricted_local_member_can_read_plugin_skill_inventory_even_if_p
 
 
 @pytest.mark.asyncio
+async def test_local_member_stays_restricted_when_admin_requirement_is_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    _setup_local_fs_tools(monkeypatch, tmp_path)
+    outside_file = tmp_path / "outside.txt"
+    outside_file.write_text("host secret\n", encoding="utf-8")
+
+    result = await fs_tools.FileReadTool().call(
+        _make_context(role="member", require_admin=False),
+        path=str(outside_file),
+    )
+
+    assert "Read access is restricted for this user." in result
+    assert "host secret" not in result
+
+
+@pytest.mark.asyncio
+async def test_local_filesystem_scope_can_grant_member_host_access(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    _setup_local_fs_tools(monkeypatch, tmp_path)
+    outside_file = tmp_path / "outside.txt"
+    outside_file.write_text("host data\n", encoding="utf-8")
+    permissions = {
+        "member": {
+            "allow_execution": False,
+            "allow_network": False,
+            "filesystem_scope": "host",
+        }
+    }
+
+    result = await fs_tools.FileReadTool().call(
+        _make_context(role="member", local_permissions=permissions),
+        path=str(outside_file),
+    )
+
+    assert result == "host data\n"
+
+
+@pytest.mark.asyncio
 async def test_restricted_local_member_cannot_write_plugin_provided_skill(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -493,6 +539,194 @@ async def test_restricted_local_member_rejects_workspace_hardlink_alias(
     assert "multiple hard links" in write_result
     assert "may alias content outside allowed directories" in write_result
     assert outside_file.read_text(encoding="utf-8") == "outside-secret\n"
+
+
+@pytest.mark.asyncio
+async def test_restricted_local_write_fails_closed_without_safe_file_access(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+
+    def unavailable_file_access(*_args, **_kwargs):
+        raise RuntimeError("Restricted file access is unavailable.")
+
+    monkeypatch.setattr(
+        fs_tools,
+        "open_file_in_allowed_roots",
+        unavailable_file_access,
+    )
+
+    result = await fs_tools.FileWriteTool().call(
+        _make_context(role="member"),
+        path="blocked.txt",
+        content="must not be written\n",
+    )
+
+    assert "Restricted file access is unavailable" in result
+    assert not (workspace / "blocked.txt").exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    not (sys.platform.startswith("linux") or sys.platform == "darwin"),
+    reason="Descriptor-safe Local access is POSIX-only.",
+)
+async def test_restricted_local_read_keeps_checked_file_after_ancestor_swap(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    checked_dir = workspace / "checked"
+    checked_dir.mkdir()
+    checked_file = checked_dir / "target.txt"
+    checked_file.write_text("workspace-content\n", encoding="utf-8")
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    (outside_dir / "target.txt").write_text("host-secret\n", encoding="utf-8")
+    moved_dir = workspace / "checked-original"
+    original_read = fs_tools.read_file_tool_result
+
+    async def _swap_then_read(*args, **kwargs):
+        checked_dir.rename(moved_dir)
+        checked_dir.symlink_to(outside_dir, target_is_directory=True)
+        return await original_read(*args, **kwargs)
+
+    monkeypatch.setattr(fs_tools, "read_file_tool_result", _swap_then_read)
+
+    result = await fs_tools.FileReadTool().call(
+        _make_context(role="member"),
+        path="checked/target.txt",
+    )
+
+    assert result == "workspace-content\n"
+    assert "host-secret" not in result
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    not (sys.platform.startswith("linux") or sys.platform == "darwin"),
+    reason="Descriptor-safe Local access is POSIX-only.",
+)
+async def test_restricted_local_write_keeps_checked_file_after_ancestor_swap(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    checked_dir = workspace / "checked"
+    checked_dir.mkdir()
+    checked_file = checked_dir / "target.txt"
+    checked_file.write_text("workspace-old\n", encoding="utf-8")
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    outside_file = outside_dir / "target.txt"
+    outside_file.write_text("host-old\n", encoding="utf-8")
+    moved_dir = workspace / "checked-original"
+    original_write = LocalBooter().fs.write_file
+
+    async def _swap_then_write(*args, **kwargs):
+        checked_dir.rename(moved_dir)
+        checked_dir.symlink_to(outside_dir, target_is_directory=True)
+        return await original_write(*args, **kwargs)
+
+    booter = LocalBooter()
+    monkeypatch.setattr(booter.fs, "write_file", _swap_then_write)
+
+    async def _fake_get_booter(_ctx, _umo):
+        return booter
+
+    monkeypatch.setattr(fs_tools, "get_booter", _fake_get_booter)
+
+    result = await fs_tools.FileWriteTool().call(
+        _make_context(role="member"),
+        path="checked/target.txt",
+        content="workspace-new\n",
+    )
+
+    assert "File written successfully" in result
+    assert (moved_dir / "target.txt").read_text(encoding="utf-8") == "workspace-new\n"
+    assert outside_file.read_text(encoding="utf-8") == "host-old\n"
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    not (sys.platform.startswith("linux") or sys.platform == "darwin"),
+    reason="Descriptor-safe Local access is POSIX-only.",
+)
+async def test_restricted_local_edit_reuses_first_opened_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    checked_dir = workspace / "checked"
+    checked_dir.mkdir()
+    checked_file = checked_dir / "target.txt"
+    checked_file.write_text("workspace-old\n", encoding="utf-8")
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    outside_file = outside_dir / "target.txt"
+    outside_file.write_text("host-old\n", encoding="utf-8")
+    moved_dir = workspace / "checked-original"
+    original_open = builtins.open
+    target_path = str(checked_file)
+    target_opens = 0
+
+    def _swap_before_second_open(file, *args, **kwargs):
+        nonlocal target_opens
+        if os.fspath(file) == target_path:
+            target_opens += 1
+            if target_opens == 2:
+                checked_dir.rename(moved_dir)
+                checked_dir.symlink_to(outside_dir, target_is_directory=True)
+        return original_open(file, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", _swap_before_second_open)
+
+    result = await fs_tools.FileEditTool().call(
+        _make_context(role="member"),
+        path="checked/target.txt",
+        old="workspace-old",
+        new="workspace-new",
+    )
+
+    assert "Replaced 1 occurrence" in result
+    updated_file = (
+        moved_dir / "target.txt" if moved_dir.exists() else checked_dir / "target.txt"
+    )
+    assert updated_file.read_text(encoding="utf-8") == "workspace-new\n"
+    assert outside_file.read_text(encoding="utf-8") == "host-old\n"
+
+
+@pytest.mark.asyncio
+async def test_restricted_local_grep_requests_read_only_os_sandbox(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    (workspace / "target.txt").write_text("needle\n", encoding="utf-8")
+    calls = []
+
+    class _RecordingFileSystem:
+        async def search_files(self, **kwargs):
+            calls.append(kwargs)
+            return {"success": True, "content": "target.txt:1:needle\n"}
+
+    booter = SimpleNamespace(fs=_RecordingFileSystem())
+
+    async def _fake_get_booter(_ctx, _umo):
+        return booter
+
+    monkeypatch.setattr(fs_tools, "get_booter", _fake_get_booter)
+
+    result = await fs_tools.GrepTool().call(
+        _make_context(role="member"),
+        pattern="needle",
+        path="target.txt",
+    )
+
+    assert "needle" in result
+    assert calls[0]["sandboxed"] is True
+    assert calls[0]["sandbox_root"] == str(workspace)
 
 
 def test_detect_text_encoding_allows_utf8_probe_cut_mid_character():
@@ -692,6 +926,39 @@ async def test_file_read_tool_stores_long_converted_document_in_workspace(
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    not (sys.platform.startswith("linux") or sys.platform == "darwin"),
+    reason="Descriptor-safe Local access is POSIX-only.",
+)
+async def test_restricted_local_document_conversion_rejects_symlinked_output_dir(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    pdf_path = workspace / "manual.pdf"
+    pdf_path.write_bytes(b"%PDF-1.7\nfake\n")
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+
+    async def _fake_parse_pdf(_file_bytes: bytes, _file_name: str) -> str:
+        (workspace / "converted_files").symlink_to(
+            outside_dir,
+            target_is_directory=True,
+        )
+        return _make_large_text()
+
+    monkeypatch.setattr(file_read_utils, "_parse_local_pdf_text", _fake_parse_pdf)
+
+    result = await fs_tools.FileReadTool().call(
+        _make_context(role="member"),
+        path="manual.pdf",
+    )
+
+    assert "symbolic link" in result
+    assert list(outside_dir.rglob("text.txt")) == []
+
+
+@pytest.mark.asyncio
 async def test_grep_tool_applies_result_limit(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -704,7 +971,15 @@ async def test_grep_tool_applies_result_limit(
     )
 
     result = await fs_tools.GrepTool().call(
-        _make_context(),
+        _make_context(
+            local_permissions={
+                "admin": {
+                    "allow_execution": True,
+                    "allow_network": True,
+                    "filesystem_scope": "host",
+                }
+            }
+        ),
         pattern="match",
         path="grep.txt",
         result_limit=2,

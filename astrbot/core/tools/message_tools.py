@@ -21,6 +21,7 @@ from astrbot.core.platform.message_type import MessageType
 from astrbot.core.tools.computer_tools.fs import _remote_basename
 from astrbot.core.tools.computer_tools.util import (
     check_admin_permission,
+    get_local_permission_policy,
     is_local_runtime,
     workspace_root,
     workspace_root_for_context,
@@ -53,14 +54,9 @@ def _is_path_within(path: Path, roots: tuple[Path, ...]) -> bool:
 
 
 def _is_restricted_local_env(context: ContextWrapper[AstrAgentContext]) -> bool:
-    if not is_local_runtime(context):
-        return False
-    cfg = context.context.context.get_config(
-        umo=context.context.event.unified_msg_origin
+    return is_local_runtime(context) and (
+        get_local_permission_policy(context).filesystem_scope == "workspace"
     )
-    provider_settings = cfg.get("provider_settings", {})
-    require_admin = provider_settings.get("computer_use_require_admin", True)
-    return require_admin and context.context.event.role != "admin"
 
 
 def _can_send_local_file(
