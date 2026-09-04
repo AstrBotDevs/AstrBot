@@ -5,60 +5,90 @@ import os
 import subprocess
 import sys
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
-_MAX_CPU_SECONDS = 300
-_MAX_FILE_BYTES = 100 * 1024 * 1024
-_MAX_MEMORY_BYTES = 1024 * 1024 * 1024
-_MAX_OPEN_FILES = 256
-_MAX_PROCESSES = 256
-_RESOURCE_LIMIT_WRAPPER_CODE = f"""
-import os
-import resource
-import sys
 
-limits = [
-    (resource.RLIMIT_CPU, {_MAX_CPU_SECONDS}),
-    (resource.RLIMIT_FSIZE, {_MAX_FILE_BYTES}),
-    (resource.RLIMIT_NOFILE, {_MAX_OPEN_FILES}),
-    (resource.RLIMIT_CORE, 0),
-]
-if sys.platform.startswith("linux"):
-    # macOS RLIMIT_NPROC counts every process owned by the host user, and its
-    # Python process starts above this virtual-address limit.
-    limits.extend(
-        (
-            (resource.RLIMIT_NPROC, {_MAX_PROCESSES}),
-            (resource.RLIMIT_AS, {_MAX_MEMORY_BYTES}),
-        )
-    )
-for kind, requested in limits:
-    _, hard = resource.getrlimit(kind)
-    value = requested if hard == resource.RLIM_INFINITY else min(requested, hard)
-    resource.setrlimit(kind, (value, value))
-os.execvpe(sys.argv[1], sys.argv[1:], os.environ)
-"""
+@dataclass(frozen=True, slots=True)
+class SandboxLimits:
+    """Resource ceilings applied to a sandboxed process tree.
+
+    Args:
+        cpu_seconds: Maximum CPU time in seconds.
+        file_size_bytes: Maximum size of a file created by one process.
+        memory_bytes: Maximum address space or job memory in bytes.
+        open_files: Maximum number of open file descriptors or handles when
+            supported by the platform.
+        processes: Maximum number of processes in the sandbox.
+    """
+
+    cpu_seconds: int = 300
+    file_size_bytes: int = 100 * 1024 * 1024
+    memory_bytes: int = 1024 * 1024 * 1024
+    open_files: int = 256
+    processes: int = 256
+
+    def __post_init__(self) -> None:
+        """Validate that every resource ceiling is a positive integer.
+
+        Raises:
+            ValueError: If a resource ceiling is not a positive integer.
+        """
+        for name in (
+            "cpu_seconds",
+            "file_size_bytes",
+            "memory_bytes",
+            "open_files",
+            "processes",
+        ):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ValueError(f"Sandbox limit `{name}` must be a positive integer.")
 
 
 @dataclass(frozen=True, slots=True)
 class SandboxSpec:
-    """Permissions and workspace exposed to a sandboxed process."""
+    """Permissions, workspace, and limits for a sandboxed process.
+
+    Args:
+        workspace: Directory exposed as the process working directory.
+        workspace_writable: Whether the process may modify the workspace.
+        allow_network: Whether the process may access the network.
+        filesystem_scope: Whether the process sees only its workspace or the
+            host filesystem.
+        limits: Resource ceilings enforced by the platform backend.
+    """
 
     workspace: Path
     workspace_writable: bool = True
     allow_network: bool = False
     filesystem_scope: str = "workspace"
+    limits: SandboxLimits = field(default_factory=SandboxLimits)
 
 
 class SandboxProcess(Protocol):
     """Process operations used by managed Local shell sessions."""
 
-    pid: int
-    returncode: int | None
-    stdin: asyncio.StreamWriter | None
-    stdout: asyncio.StreamReader | None
+    @property
+    def pid(self) -> int:
+        """Return the process identifier."""
+        ...
+
+    @property
+    def returncode(self) -> int | None:
+        """Return the exit status, or ``None`` while the process is running."""
+        ...
+
+    @property
+    def stdin(self) -> asyncio.StreamWriter | None:
+        """Return the process standard-input stream when configured."""
+        ...
+
+    @property
+    def stdout(self) -> asyncio.StreamReader | None:
+        """Return the process standard-output stream when configured."""
+        ...
 
     async def wait(self) -> int:
         """Wait for the process to exit."""

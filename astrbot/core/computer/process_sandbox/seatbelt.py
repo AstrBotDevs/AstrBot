@@ -5,7 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .base import _RESOURCE_LIMIT_WRAPPER_CODE, ProcessSandbox, SandboxSpec
+from .base import ProcessSandbox, SandboxSpec
+from .unix import build_resource_limited_argv
 
 _PROFILE = """
 (version 1)
@@ -130,12 +131,7 @@ class SeatbeltProcessSandbox(ProcessSandbox):
             "/usr/bin/env",
             "-i",
             *environment,
-            sandbox_python,
-            "-I",
-            "-S",
-            "-c",
-            _RESOURCE_LIMIT_WRAPPER_CODE,
-            *argv,
+            *build_resource_limited_argv(argv, spec.limits),
         ]
 
     def _executable_read_paths(self, executable_path: Path) -> tuple[Path, ...]:

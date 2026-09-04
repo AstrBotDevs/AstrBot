@@ -304,8 +304,19 @@ class LocalShellComponent(ShellComponent):
 
         try:
             if sandboxed:
+                if sys.platform == "win32":
+                    sandbox_argv = [
+                        resolve_windows_shell(),
+                        "-NoLogo",
+                        "-NoProfile",
+                        "-NonInteractive",
+                        "-Command",
+                        command,
+                    ]
+                else:
+                    sandbox_argv = ["/bin/sh", "-c", command]
                 process = await create_process_sandbox().spawn(
-                    ["/bin/sh", "-c", command],
+                    sandbox_argv,
                     SandboxSpec(
                         workspace=working_dir,
                         allow_network=allow_network,
@@ -1138,6 +1149,7 @@ class LocalFileSystemComponent(FileSystemComponent):
                 "capture_output": True,
                 "timeout": 30,
             }
+            sandbox_workspace: Path | None = None
             if sandboxed:
                 if not sandbox_root:
                     return {
@@ -1145,13 +1157,15 @@ class LocalFileSystemComponent(FileSystemComponent):
                         "content": "",
                         "error": "A sandbox root is required for restricted Local search.",
                     }
+                sandbox_workspace = Path(sandbox_root)
 
             try:
                 if sandboxed:
+                    assert sandbox_workspace is not None
                     result = create_process_sandbox().run(
                         command,
                         SandboxSpec(
-                            workspace=Path(sandbox_root),
+                            workspace=sandbox_workspace,
                             workspace_writable=False,
                         ),
                         **run_kwargs,
@@ -1311,7 +1325,7 @@ class LocalBooter(ComputerBooter):
     async def boot(self, session_id: str) -> None:
         logger.info(f"Local computer booter initialized for session: {session_id}")
 
-    async def shutdown(self) -> None:
+    async def shutdown(self, **_kwargs: Any) -> None:
         await self._shell.shutdown_sessions()
         logger.info("Local computer booter shutdown complete.")
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 
-from .base import ProcessSandbox, SandboxProcess, SandboxSpec
+from .base import ProcessSandbox, SandboxLimits, SandboxProcess, SandboxSpec
 from .bubblewrap import BubblewrapProcessSandbox
 from .seatbelt import SeatbeltProcessSandbox
 
@@ -27,6 +27,7 @@ def create_process_sandbox() -> ProcessSandbox:
 
 __all__ = (
     "ProcessSandbox",
+    "SandboxLimits",
     "SandboxProcess",
     "SandboxSpec",
     "create_process_sandbox",

@@ -5,7 +5,8 @@ import shutil
 import sys
 from pathlib import Path
 
-from .base import _RESOURCE_LIMIT_WRAPPER_CODE, ProcessSandbox, SandboxSpec
+from .base import ProcessSandbox, SandboxSpec
+from .unix import build_resource_limited_argv
 
 _TMP_BYTES = 256 * 1024 * 1024
 
@@ -135,12 +136,7 @@ class BubblewrapProcessSandbox(ProcessSandbox):
                 "LANG",
                 "C.UTF-8",
                 "--",
-                str(Path(sys.executable).resolve()),
-                "-I",
-                "-S",
-                "-c",
-                _RESOURCE_LIMIT_WRAPPER_CODE,
-                *argv,
+                *build_resource_limited_argv(argv, spec.limits),
             )
         )
         return command

@@ -52,6 +52,7 @@ def _build_sandbox_command(
     workspace_writable: bool = True,
     allow_network: bool = False,
     filesystem_scope: str = "workspace",
+    limits: process_sandbox.SandboxLimits | None = None,
 ) -> list[str]:
     """Build the current platform sandbox command for tests.
 
@@ -62,6 +63,7 @@ def _build_sandbox_command(
         workspace_writable: Whether the workspace may be modified.
         allow_network: Whether the host network is exposed.
         filesystem_scope: Filesystem scope exposed to the process.
+        limits: Optional resource ceilings applied to the command.
 
     Returns:
         Platform sandbox command and arguments.
@@ -73,6 +75,7 @@ def _build_sandbox_command(
             workspace_writable=workspace_writable,
             allow_network=allow_network,
             filesystem_scope=filesystem_scope,
+            limits=limits or process_sandbox.SandboxLimits(),
         ),
         env=env,
     )
@@ -352,6 +355,36 @@ def test_linux_bwrap_command_applies_network_and_filesystem_permissions(
     root_bind = host_without_network.index("--bind")
     assert host_without_network[root_bind : root_bind + 3] == ["--bind", "/", "/"]
     assert "--tmpfs" not in host_without_network
+
+
+def test_process_sandbox_exposes_resource_limits(monkeypatch, tmp_path):
+    monkeypatch.setattr(local_booter.sys, "platform", "linux")
+    monkeypatch.setattr(local_booter.shutil, "which", lambda name: f"/usr/bin/{name}")
+    limits = process_sandbox.SandboxLimits(
+        cpu_seconds=17,
+        file_size_bytes=18,
+        memory_bytes=19,
+        open_files=20,
+        processes=21,
+    )
+
+    command = _build_sandbox_command(
+        ["/bin/sh", "-c", "pwd"],
+        workspace=tmp_path,
+        limits=limits,
+    )
+    wrapper_code = command[command.index("-I") + 3]
+
+    assert "(resource.RLIMIT_CPU, 17)" in wrapper_code
+    assert "(resource.RLIMIT_FSIZE, 18)" in wrapper_code
+    assert "(resource.RLIMIT_AS, 19)" in wrapper_code
+    assert "(resource.RLIMIT_NOFILE, 20)" in wrapper_code
+    assert "(resource.RLIMIT_NPROC, 21)" in wrapper_code
+
+
+def test_sandbox_limits_reject_nonpositive_values():
+    with pytest.raises(ValueError, match="cpu_seconds"):
+        process_sandbox.SandboxLimits(cpu_seconds=0)
 
 
 def test_linux_bwrap_command_fails_closed_when_bwrap_is_missing(
@@ -809,6 +842,63 @@ async def test_managed_shell_uses_platform_sandbox(
     assert calls[0][0][-3:] == ("/bin/sh", "-c", "pwd")
     assert calls[0][1]["env"] == {"PATH": os.defpath}
     assert calls[0][1]["start_new_session"] is True
+
+
+@pytest.mark.asyncio
+async def test_sandboxed_managed_shell_uses_windows_shell(monkeypatch, tmp_path):
+    calls = []
+
+    class FakeStdout:
+        def __init__(self):
+            self.chunks = [b"done\n", b""]
+
+        async def read(self, _limit):
+            return self.chunks.pop(0)
+
+    class FakeProcess:
+        def __init__(self):
+            self.pid = 12345
+            self.returncode = None
+            self.stdout = FakeStdout()
+            self.stdin = None
+
+        async def wait(self):
+            self.returncode = 0
+            return 0
+
+    class FakeSandbox:
+        async def spawn(self, argv, spec, **kwargs):
+            calls.append((argv, spec, kwargs))
+            return FakeProcess()
+
+    monkeypatch.setattr(local_booter.sys, "platform", "win32")
+    monkeypatch.setattr(local_booter, "resolve_windows_shell", lambda: "pwsh.exe")
+    monkeypatch.setattr(
+        local_booter,
+        "create_process_sandbox",
+        lambda: FakeSandbox(),
+    )
+
+    result = await LocalShellComponent().exec_managed(
+        "Get-ChildItem",
+        owner_id="owner-a",
+        creator_id="member-a",
+        creator_is_admin=False,
+        cwd=str(tmp_path),
+        yield_time_ms=5_000,
+        sandboxed=True,
+    )
+
+    assert result["status"] == "completed"
+    assert calls[0][0] == [
+        "pwsh.exe",
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "Get-ChildItem",
+    ]
+    assert calls[0][1].workspace == tmp_path.resolve()
 
 
 @pytest.mark.asyncio
