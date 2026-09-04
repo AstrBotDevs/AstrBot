@@ -19,6 +19,7 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.db.po import Conversation
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
@@ -327,6 +328,7 @@ class CapturingToolLoopProvider(MockProvider):
         super().__init__()
         self.tool_name = tool_name
         self.received_contexts = []
+        self.first_response_usage = TokenUsage(input_other=10, output=5)
 
     async def text_chat(self, **kwargs) -> LLMResponse:
         self.call_count += 1
@@ -345,7 +347,7 @@ class CapturingToolLoopProvider(MockProvider):
             tools_call_name=[self.tool_name],
             tools_call_args=[{"query": "test"}],
             tools_call_ids=["call_context_refresh"],
-            usage=TokenUsage(input_other=10, output=5),
+            usage=self.first_response_usage,
         )
 
 
@@ -610,11 +612,153 @@ async def test_tool_loop_next_request_includes_tool_result(
         pass
 
     assert provider.call_count == 2
+    assert (
+        runner.request_context_manager.token_counter.count_tokens(
+            provider.received_contexts[0]
+        )
+        < 820
+    )
     second_contexts = provider.received_contexts[1]
     tool_messages = [msg for msg in second_contexts if msg.role == "tool"]
     assert len(tool_messages) == 1
     assert tool_messages[0].tool_call_id == "call_context_refresh"
     assert "工具执行结果" in tool_messages[0].content
+
+
+@pytest.mark.asyncio
+async def test_context_compression_ignores_persisted_conversation_token_usage(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    """A previous request's usage must not compress a small current context."""
+    mock_provider.provider_config["max_context_tokens"] = 1_000_000
+    mock_provider.should_call_tools = False
+    provider_request.contexts = [
+        {"role": "user", "content": "x" * 320_000},
+        {"role": "assistant", "content": "important historical answer"},
+    ]
+    provider_request.prompt = "current question"
+    provider_request.conversation = Conversation(
+        platform_id="webchat",
+        user_id="user",
+        cid="conversation-id",
+        token_usage=3_879_963,
+    )
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    original_messages = list(runner.run_context.messages)
+    estimated_tokens = runner.request_context_manager.token_counter.count_tokens(
+        original_messages
+    )
+    assert estimated_tokens < 820_000
+
+    legacy_messages = await runner.request_context_manager.process(
+        original_messages,
+        trusted_token_usage=provider_request.conversation.token_usage,
+    )
+    assert "current question" not in [
+        message.content
+        for message in legacy_messages
+        if isinstance(message.content, str)
+    ]
+
+    async for _ in runner.step_until_done(1):
+        pass
+
+    contents = [
+        message.content
+        for message in runner.run_context.messages
+        if isinstance(message.content, str)
+    ]
+    assert "important historical answer" in contents
+    assert "current question" in contents
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_uses_current_run_context_usage_snapshot(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    """Use the last matching provider prompt to guard the next tool-loop request."""
+    provider = CapturingToolLoopProvider("test_tool")
+    provider.provider_config["max_context_tokens"] = 1_000
+    provider.first_response_usage = TokenUsage(input_other=900, output=10)
+    provider_request.contexts = [
+        {"role": "user", "content": "previous question"},
+        {"role": "assistant", "content": "important historical answer"},
+    ]
+    provider_request.prompt = "current question"
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert provider.call_count == 2
+    second_contexts = provider.received_contexts[1]
+    second_contents = [
+        message.content
+        for message in second_contexts
+        if isinstance(message.content, str)
+    ]
+    assert "important historical answer" not in second_contents
+    assert "current question" in second_contents
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mutation", ["message", "tool_schema"])
+async def test_tool_loop_reestimates_after_in_place_request_mutation(
+    runner, provider_request, mock_tool_executor, mutation
+):
+    """Do not reuse prompt usage after a hook mutates the request in place."""
+
+    class MutatingHooks(MockHooks):
+        async def on_tool_end(self, run_context, tool, tool_args, tool_result):
+            await super().on_tool_end(run_context, tool, tool_args, tool_result)
+            if mutation == "message":
+                run_context.messages[0].content = "changed historical question"
+            else:
+                tool.parameters["properties"]["extra"] = {"type": "string"}
+
+    provider = CapturingToolLoopProvider("test_tool")
+    provider.first_response_usage = TokenUsage(input_other=900, output=10)
+    mutating_hooks = MutatingHooks()
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mutating_hooks,
+        streaming=False,
+    )
+
+    trusted_token_usages = []
+
+    async def capture_context_processing(messages, trusted_token_usage=0):
+        trusted_token_usages.append(trusted_token_usage)
+        return list(messages)
+
+    runner.request_context_manager.process = capture_context_processing
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert provider.call_count == 2
+    assert trusted_token_usages == [0, 0]
 
 
 @pytest.mark.asyncio
