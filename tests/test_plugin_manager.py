@@ -3,7 +3,7 @@ import functools
 import json
 import os
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from typing import Any, cast
 
 import pytest
@@ -75,6 +75,67 @@ def _write_local_test_plugin(plugin_path: Path, repo_url: str, version: str = "1
         f.write("@StarManager.register\n")
         f.write("class HelloWorld(Star):\n")
         f.write("    def __init__(self, context: Context): ...\n")
+
+
+def _write_startup_test_plugin(
+    plugin_manager: PluginManager,
+    plugin_name: str,
+    source: str,
+    *,
+    astrbot_version: str | None = None,
+) -> Path:
+    """Write one isolated plugin used by startup lifecycle tests.
+
+    Args:
+        plugin_manager: Plugin manager whose test store receives the plugin.
+        plugin_name: Importable plugin directory name.
+        source: Python source for the plugin's main module.
+        astrbot_version: Optional AstrBot compatibility constraint.
+
+    Returns:
+        Path to the created plugin directory.
+    """
+    plugin_path = Path(plugin_manager.plugin_store_path) / plugin_name
+    plugin_path.mkdir(parents=True)
+    metadata = {
+        "name": plugin_name,
+        "author": "AstrBot Team",
+        "desc": "Startup lifecycle test plugin",
+        "version": "1.0.0",
+    }
+    if astrbot_version is not None:
+        metadata["astrbot_version"] = astrbot_version
+    (plugin_path / "metadata.yaml").write_text(
+        yaml.dump(metadata),
+        encoding="utf-8",
+    )
+    (plugin_path / "main.py").write_text(source, encoding="utf-8")
+    return plugin_path
+
+
+def _mock_plugin_preferences(monkeypatch, preferences: dict) -> None:
+    """Replace persistent plugin preferences and command synchronization.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+        preferences: Values returned for persistent preference keys.
+
+    Returns:
+        None.
+    """
+
+    async def mock_global_get(key, default=None):
+        return preferences.get(key, default)
+
+    async def mock_sync_command_configs():
+        return None
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(
+        star_manager_module,
+        "sync_command_configs",
+        mock_sync_command_configs,
+    )
 
 
 def _write_requirements(plugin_path: Path):
@@ -992,6 +1053,1053 @@ async def test_load_reports_unregistered_plugin_without_index_error(
     assert "未通过 Star 注册" in error
     assert "list index out of range" not in error
     assert plugin_name in plugin_manager_pm.failed_plugin_dict
+
+
+@pytest.mark.asyncio
+async def test_startup_loads_plugin_provider_before_star_initialization(
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+):
+    """A plugin Star can query its configured Provider during initialize()."""
+    from astrbot.core.provider.manager import ProviderManager
+    from astrbot.core.provider.register import provider_cls_map, provider_registry
+
+    _clear_star_runtime_state()
+    registry_before = list(provider_registry)
+    map_before = dict(provider_cls_map)
+    plugin_name = "startup_provider_plugin"
+    consumer_plugin_name = "startup_provider_consumer_plugin"
+    module_path = f"data.plugins.{plugin_name}.main"
+    provider_type = "startup_plugin_provider"
+    provider_id = "provider-target"
+    _write_startup_test_plugin(
+        plugin_manager_pm,
+        plugin_name,
+        f"""from astrbot.api.star import Star
+from astrbot.core.provider.provider import Provider
+from astrbot.core.provider.register import register_provider_adapter
+
+
+@register_provider_adapter("{provider_type}", "Startup test provider")
+class StartupProvider(Provider):
+    def get_current_key(self):
+        return ""
+
+    def set_key(self, key):
+        pass
+
+    async def get_models(self):
+        return []
+
+    async def text_chat(self, *args, **kwargs):
+        raise NotImplementedError
+
+
+class Main(Star):
+    pass
+""",
+    )
+    _write_startup_test_plugin(
+        plugin_manager_pm,
+        consumer_plugin_name,
+        f"""from astrbot.api.star import Star
+
+
+class Main(Star):
+    async def initialize(self):
+        self.context.provider_seen_during_plugin_initialize = (
+            self.context.get_provider_by_id("{provider_id}")
+        )
+""",
+    )
+    preferences = {
+        "inactivated_plugins": [],
+        "inactivated_llm_tools": [],
+        "alter_cmd": {},
+        star_manager_module.PLUGIN_TOOL_STATE_MIGRATION_KEY: True,
+    }
+    _mock_plugin_preferences(monkeypatch, preferences)
+    monkeypatch.syspath_prepend(
+        str(Path(plugin_manager_pm.plugin_store_path).parents[1])
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_get_plugin_modules",
+        lambda: [
+            {"pname": plugin_name, "module": "main"},
+            {"pname": consumer_plugin_name, "module": "main"},
+        ],
+    )
+
+    provider_manager = ProviderManager.__new__(ProviderManager)
+    provider_manager.provider_sources_config = []
+    provider_manager.provider_settings = {}
+    provider_manager.default_chat_provider_id = provider_id
+    provider_manager.provider_insts = []
+    provider_manager.stt_provider_insts = []
+    provider_manager.tts_provider_insts = []
+    provider_manager.embedding_provider_insts = []
+    provider_manager.rerank_provider_insts = []
+    provider_manager.inst_map = {}
+    provider_manager.curr_provider_inst = None
+    provider_manager.curr_stt_provider_inst = None
+    provider_manager.curr_tts_provider_inst = None
+
+    context = cast(Any, plugin_manager_pm.context)
+    context.provider_manager = provider_manager
+    context.get_provider_by_id = provider_manager.inst_map.get
+
+    async def initialize_provider():
+        assert provider_type in provider_cls_map
+        metadata = star_manager_module.star_map[module_path]
+        assert metadata.activated is False
+        assert metadata.star_cls is None
+        await provider_manager.load_provider(
+            {
+                "id": provider_id,
+                "type": provider_type,
+                "provider_type": "chat_completion",
+                "enable": True,
+                "key": [],
+            }
+        )
+
+    try:
+        success, error = await plugin_manager_pm.initialize_plugins(
+            before_plugin_activation=initialize_provider,
+        )
+
+        assert success is True
+        assert error is None
+        target_provider = provider_manager.inst_map[provider_id]
+        assert context.provider_seen_during_plugin_initialize is target_provider
+    finally:
+        plugin_manager_pm._cleanup_plugin_state(plugin_name)
+        plugin_manager_pm._cleanup_plugin_state(consumer_plugin_name)
+        provider_registry[:] = registry_before
+        provider_cls_map.clear()
+        provider_cls_map.update(map_before)
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_startup_loads_providers_registered_during_star_initialization(
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+):
+    """Late Provider registration is loaded incrementally and idempotently."""
+    from astrbot.core.provider import manager as provider_manager_module
+    from astrbot.core.provider.manager import ProviderManager
+    from astrbot.core.provider.register import provider_cls_map, provider_registry
+
+    _clear_star_runtime_state()
+    registry_before = list(provider_registry)
+    map_before = dict(provider_cls_map)
+    plugin_name = "startup_late_provider_plugin"
+    module_path = f"data.plugins.{plugin_name}.main"
+    failing_provider_type = "startup_late_failing_provider"
+    provider_type = "startup_late_provider"
+    failing_provider_id = "provider-late-failing"
+    provider_id = "provider-late-target"
+    fallback_provider_id = "provider-late-fallback"
+    _write_startup_test_plugin(
+        plugin_manager_pm,
+        plugin_name,
+        f"""from astrbot.api.star import Star
+from astrbot.core.provider.provider import Provider
+from astrbot.core.provider.register import register_provider_adapter
+
+
+class FailingProvider(Provider):
+    creation_attempts = 0
+
+    def __init__(self, provider_config, provider_settings):
+        type(self).creation_attempts += 1
+        raise RuntimeError("provider initialization failed")
+
+    def get_current_key(self):
+        return ""
+
+    def set_key(self, key):
+        pass
+
+    async def get_models(self):
+        return []
+
+    async def text_chat(self, *args, **kwargs):
+        raise NotImplementedError
+
+
+class LateProvider(Provider):
+    creation_count = 0
+    initialization_count = 0
+
+    def __init__(self, provider_config, provider_settings):
+        super().__init__(provider_config, provider_settings)
+        type(self).creation_count += 1
+
+    async def initialize(self):
+        type(self).initialization_count += 1
+
+    def get_current_key(self):
+        return ""
+
+    def set_key(self, key):
+        pass
+
+    async def get_models(self):
+        return []
+
+    async def text_chat(self, *args, **kwargs):
+        raise NotImplementedError
+
+
+class Main(Star):
+    async def initialize(self):
+        register_provider_adapter(
+            "{failing_provider_type}",
+            "Failing late Provider",
+        )(FailingProvider)
+        register_provider_adapter(
+            "{provider_type}",
+            "Late Provider",
+        )(LateProvider)
+        self.context.late_provider_registration_completed = True
+""",
+    )
+    preferences = {
+        "inactivated_plugins": [],
+        "inactivated_llm_tools": [],
+        "alter_cmd": {},
+        star_manager_module.PLUGIN_TOOL_STATE_MIGRATION_KEY: True,
+    }
+    _mock_plugin_preferences(monkeypatch, preferences)
+    monkeypatch.syspath_prepend(
+        str(Path(plugin_manager_pm.plugin_store_path).parents[1])
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_get_plugin_modules",
+        lambda: [{"pname": plugin_name, "module": "main"}],
+    )
+
+    async def get_provider_selection(scope, scope_id, key, default=None):
+        assert (scope, scope_id) == ("global", "global")
+        if key == "curr_provider":
+            return provider_id
+        return default
+
+    monkeypatch.setattr(
+        provider_manager_module.sp,
+        "get_async",
+        get_provider_selection,
+    )
+
+    fallback_provider = SimpleNamespace(
+        provider_config={"id": fallback_provider_id, "type": "test_fallback"},
+    )
+    provider_manager = ProviderManager.__new__(ProviderManager)
+    provider_manager.providers_config = [
+        {
+            "id": failing_provider_id,
+            "type": failing_provider_type,
+            "provider_type": "chat_completion",
+            "enable": True,
+            "key": [],
+        },
+        {
+            "id": provider_id,
+            "type": provider_type,
+            "provider_type": "chat_completion",
+            "enable": True,
+            "key": [],
+        },
+    ]
+    provider_manager.provider_sources_config = []
+    provider_manager.provider_settings = {}
+    provider_manager.provider_stt_settings = {}
+    provider_manager.provider_tts_settings = {}
+    provider_manager.default_chat_provider_id = ""
+    provider_manager.provider_insts = [fallback_provider]
+    provider_manager.stt_provider_insts = []
+    provider_manager.tts_provider_insts = []
+    provider_manager.embedding_provider_insts = []
+    provider_manager.rerank_provider_insts = []
+    provider_manager.inst_map = {fallback_provider_id: fallback_provider}
+    provider_manager.curr_provider_inst = fallback_provider
+    provider_manager.curr_stt_provider_inst = None
+    provider_manager.curr_tts_provider_inst = None
+
+    context = cast(Any, plugin_manager_pm.context)
+    context.provider_manager = provider_manager
+    callback_order = []
+
+    async def initialize_providers_before_activation():
+        callback_order.append("before")
+        assert failing_provider_type not in provider_cls_map
+        assert provider_type not in provider_cls_map
+        assert provider_id not in provider_manager.inst_map
+        assert star_manager_module.star_map[module_path].activated is False
+
+    async def initialize_providers_after_activation():
+        callback_order.append("after")
+        assert context.late_provider_registration_completed is True
+        assert failing_provider_type in provider_cls_map
+        assert provider_type in provider_cls_map
+        await provider_manager.initialize_pending_registered_providers()
+
+    try:
+        success, error = await plugin_manager_pm.initialize_plugins(
+            before_plugin_activation=initialize_providers_before_activation,
+            after_plugin_activation=initialize_providers_after_activation,
+        )
+
+        assert success is True
+        assert error is None
+        assert callback_order == ["before", "after"]
+        assert failing_provider_id not in provider_manager.inst_map
+        provider = provider_manager.inst_map[provider_id]
+        assert provider_manager.curr_provider_inst is provider
+        assert provider_manager.provider_insts == [fallback_provider, provider]
+
+        failing_provider_cls = provider_cls_map[failing_provider_type].cls_type
+        provider_cls = provider_cls_map[provider_type].cls_type
+        assert failing_provider_cls.creation_attempts == 1
+        assert provider_cls.creation_count == 1
+        assert provider_cls.initialization_count == 1
+
+        await provider_manager.initialize_pending_registered_providers()
+
+        assert provider_manager.inst_map[provider_id] is provider
+        assert provider_manager.provider_insts == [fallback_provider, provider]
+        assert failing_provider_cls.creation_attempts == 2
+        assert provider_cls.creation_count == 1
+        assert provider_cls.initialization_count == 1
+    finally:
+        plugin_manager_pm._cleanup_plugin_state(plugin_name)
+        provider_registry[:] = registry_before
+        provider_cls_map.clear()
+        provider_cls_map.update(map_before)
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_startup_isolates_incompatible_plugin_before_provider_callback(
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+):
+    """Version rejection rolls back one plugin without blocking later activation."""
+    from astrbot.core.provider.register import provider_cls_map, provider_registry
+
+    _clear_star_runtime_state()
+    registry_before = list(provider_registry)
+    map_before = dict(provider_cls_map)
+    bad_plugin = "startup_incompatible_plugin"
+    good_plugin = "startup_healthy_plugin"
+    bad_type = "startup_incompatible_provider"
+    good_type = "startup_healthy_provider"
+    bad_module = f"data.plugins.{bad_plugin}.main"
+    good_module = f"data.plugins.{good_plugin}.main"
+    _write_startup_test_plugin(
+        plugin_manager_pm,
+        bad_plugin,
+        f"""from astrbot.api.star import Star
+from astrbot.core.provider.register import register_provider_adapter
+
+
+@register_provider_adapter("{bad_type}", "Incompatible provider")
+class IncompatibleProvider:
+    pass
+
+
+class Main(Star):
+    async def initialize(self):
+        self.context.incompatible_plugin_initialized = True
+""",
+        astrbot_version=">=9999",
+    )
+    _write_startup_test_plugin(
+        plugin_manager_pm,
+        good_plugin,
+        f"""from astrbot.api.star import Star
+from astrbot.core.provider.register import register_provider_adapter
+
+
+@register_provider_adapter("{good_type}", "Healthy provider")
+class HealthyProvider:
+    pass
+
+
+class Main(Star):
+    async def initialize(self):
+        self.context.healthy_plugin_initialized = True
+""",
+    )
+    preferences = {
+        "inactivated_plugins": [],
+        "inactivated_llm_tools": [],
+        "alter_cmd": {},
+        star_manager_module.PLUGIN_TOOL_STATE_MIGRATION_KEY: True,
+    }
+    _mock_plugin_preferences(monkeypatch, preferences)
+    monkeypatch.syspath_prepend(
+        str(Path(plugin_manager_pm.plugin_store_path).parents[1])
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_get_plugin_modules",
+        lambda: [
+            {"pname": bad_plugin, "module": "main"},
+            {"pname": good_plugin, "module": "main"},
+        ],
+    )
+    callback_called = False
+
+    async def initialize_providers():
+        nonlocal callback_called
+        callback_called = True
+        assert bad_type not in provider_cls_map
+        assert bad_module not in star_manager_module.star_map
+        assert good_type in provider_cls_map
+        assert star_manager_module.star_map[good_module].activated is False
+
+    try:
+        success, error = await plugin_manager_pm.initialize_plugins(
+            before_plugin_activation=initialize_providers,
+        )
+
+        assert success is False
+        assert error is not None
+        assert "does not satisfy plugin astrbot_version" in error
+        assert callback_called is True
+        assert not getattr(
+            plugin_manager_pm.context,
+            "incompatible_plugin_initialized",
+            False,
+        )
+        assert plugin_manager_pm.context.healthy_plugin_initialized is True
+        assert good_module in star_manager_module.star_map
+        assert star_manager_module.star_map[good_module].activated is True
+        assert bad_plugin in plugin_manager_pm.failed_plugin_dict
+    finally:
+        plugin_manager_pm._cleanup_plugin_state(bad_plugin)
+        plugin_manager_pm._cleanup_plugin_state(good_plugin)
+        provider_registry[:] = registry_before
+        provider_cls_map.clear()
+        provider_cls_map.update(map_before)
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_startup_keeps_disabled_plugin_adapter_without_activating_star(
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+):
+    """Disabled plugins preserve adapter registration but never initialize a Star."""
+    from astrbot.core.provider.register import provider_cls_map, provider_registry
+
+    _clear_star_runtime_state()
+    registry_before = list(provider_registry)
+    map_before = dict(provider_cls_map)
+    plugin_name = "startup_disabled_provider_plugin"
+    module_path = f"data.plugins.{plugin_name}.main"
+    provider_type = "startup_disabled_provider"
+    _write_startup_test_plugin(
+        plugin_manager_pm,
+        plugin_name,
+        f"""from astrbot.api.star import Star
+from astrbot.core.provider.register import register_provider_adapter
+
+
+@register_provider_adapter("{provider_type}", "Disabled provider")
+class DisabledProvider:
+    pass
+
+
+class Main(Star):
+    async def initialize(self):
+        self.context.disabled_plugin_initialized = True
+""",
+    )
+    preferences = {
+        "inactivated_plugins": [module_path],
+        "inactivated_llm_tools": [],
+        "alter_cmd": {},
+        star_manager_module.PLUGIN_TOOL_STATE_MIGRATION_KEY: True,
+    }
+    _mock_plugin_preferences(monkeypatch, preferences)
+    monkeypatch.syspath_prepend(
+        str(Path(plugin_manager_pm.plugin_store_path).parents[1])
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_get_plugin_modules",
+        lambda: [{"pname": plugin_name, "module": "main"}],
+    )
+
+    async def initialize_providers():
+        assert provider_type in provider_cls_map
+        assert star_manager_module.star_map[module_path].activated is False
+
+    try:
+        success, error = await plugin_manager_pm.initialize_plugins(
+            before_plugin_activation=initialize_providers,
+        )
+
+        assert success is True
+        assert error is None
+        assert provider_type in provider_cls_map
+        metadata = star_manager_module.star_map[module_path]
+        assert metadata.activated is False
+        assert metadata.star_cls is None
+        assert not getattr(
+            plugin_manager_pm.context,
+            "disabled_plugin_initialized",
+            False,
+        )
+    finally:
+        plugin_manager_pm._cleanup_plugin_state(plugin_name)
+        provider_registry[:] = registry_before
+        provider_cls_map.clear()
+        provider_cls_map.update(map_before)
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_startup_activation_failure_reconciles_live_plugin_provider(
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+):
+    """A failed Star activation removes its adapter instance and restores fallback."""
+    from astrbot.core.provider.manager import ProviderManager
+    from astrbot.core.provider.register import (
+        provider_cls_map,
+        provider_registry,
+        register_provider_adapter,
+    )
+
+    _clear_star_runtime_state()
+    registry_before = list(provider_registry)
+    map_before = dict(provider_cls_map)
+    plugin_name = "startup_failing_activation_plugin"
+    consumer_plugin_name = "startup_after_failed_activation_plugin"
+    consumer_module = f"data.plugins.{consumer_plugin_name}.main"
+    provider_type = "startup_failing_activation_provider"
+    fallback_type = "startup_activation_fallback_provider"
+    provider_id = "startup-failing-provider"
+    fallback_id = "startup-fallback-provider"
+
+    class FallbackProvider:
+        pass
+
+    FallbackProvider.__module__ = "astrbot.core.provider.sources.test_fallback"
+    register_provider_adapter(fallback_type, "Activation fallback")(FallbackProvider)
+    _write_startup_test_plugin(
+        plugin_manager_pm,
+        plugin_name,
+        f"""from astrbot.api.star import Star
+from astrbot.core.provider.register import register_provider_adapter
+
+
+@register_provider_adapter("{provider_type}", "Failing activation provider")
+class FailingProvider:
+    def __init__(self):
+        self.provider_config = {{"id": "{provider_id}", "type": "{provider_type}"}}
+        self.terminated = False
+
+    async def terminate(self):
+        self.terminated = True
+        raise RuntimeError("provider terminate failed")
+
+
+class Main(Star):
+    async def initialize(self):
+        raise RuntimeError("plugin initialize failed")
+""",
+    )
+    _write_startup_test_plugin(
+        plugin_manager_pm,
+        consumer_plugin_name,
+        f"""from astrbot.api.star import Star
+
+
+class Main(Star):
+    async def initialize(self):
+        self.context.failed_provider_seen_by_later_plugin = (
+            self.context.provider_manager.inst_map.get("{provider_id}")
+        )
+""",
+    )
+    preferences = {
+        "inactivated_plugins": [],
+        "inactivated_llm_tools": [],
+        "alter_cmd": {},
+        star_manager_module.PLUGIN_TOOL_STATE_MIGRATION_KEY: True,
+    }
+    _mock_plugin_preferences(monkeypatch, preferences)
+    monkeypatch.syspath_prepend(
+        str(Path(plugin_manager_pm.plugin_store_path).parents[1])
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_get_plugin_modules",
+        lambda: [
+            {"pname": plugin_name, "module": "main"},
+            {"pname": consumer_plugin_name, "module": "main"},
+        ],
+    )
+
+    fallback_provider = SimpleNamespace(
+        provider_config={"id": fallback_id, "type": fallback_type},
+    )
+    provider_manager = ProviderManager.__new__(ProviderManager)
+    provider_manager.provider_insts = [fallback_provider]
+    provider_manager.stt_provider_insts = []
+    provider_manager.tts_provider_insts = []
+    provider_manager.embedding_provider_insts = []
+    provider_manager.rerank_provider_insts = []
+    provider_manager.inst_map = {fallback_id: fallback_provider}
+    provider_manager.curr_provider_inst = fallback_provider
+    provider_manager.curr_stt_provider_inst = None
+    provider_manager.curr_tts_provider_inst = None
+    plugin_manager_pm.context.provider_manager = provider_manager
+    provider_inst = None
+    after_activation_callback_called = False
+
+    async def initialize_providers():
+        nonlocal provider_inst
+        provider_inst = provider_cls_map[provider_type].cls_type()
+        provider_manager.inst_map[provider_id] = provider_inst
+        provider_manager.provider_insts.append(provider_inst)
+        provider_manager.curr_provider_inst = provider_inst
+
+    async def initialize_pending_providers():
+        nonlocal after_activation_callback_called
+        after_activation_callback_called = True
+        assert provider_type not in provider_cls_map
+        assert provider_id not in provider_manager.inst_map
+        assert star_manager_module.star_map[consumer_module].activated is True
+
+    try:
+        success, error = await plugin_manager_pm.initialize_plugins(
+            before_plugin_activation=initialize_providers,
+            after_plugin_activation=initialize_pending_providers,
+        )
+
+        assert success is False
+        assert error is not None
+        assert "plugin initialize failed" in error
+        assert provider_type not in provider_cls_map
+        assert provider_inst is not None
+        assert provider_inst.terminated is True
+        assert provider_id not in provider_manager.inst_map
+        assert provider_inst not in provider_manager.provider_insts
+        assert provider_manager.provider_insts == [fallback_provider]
+        assert provider_manager.curr_provider_inst is fallback_provider
+        assert plugin_manager_pm.context.failed_provider_seen_by_later_plugin is None
+        assert star_manager_module.star_map[consumer_module].activated is True
+        assert after_activation_callback_called is True
+    finally:
+        plugin_manager_pm._cleanup_plugin_state(plugin_name)
+        plugin_manager_pm._cleanup_plugin_state(consumer_plugin_name)
+        provider_registry[:] = registry_before
+        provider_cls_map.clear()
+        provider_cls_map.update(map_before)
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_startup_keeps_plugin_tools_inactive_until_star_activation(
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+):
+    """Plain and handoff tools become callable only after their Star is bound."""
+    _clear_star_runtime_state()
+    plugin_name = "startup_tool_plugin"
+    module_path = f"data.plugins.{plugin_name}.main"
+    plain_tool_name = "startup_plain_tool"
+    agent_name = "startup_helper"
+    handoff_tool_name = f"transfer_to_{agent_name}"
+    agent_tool_name = "startup_agent_tool"
+    plugin_path = _write_startup_test_plugin(
+        plugin_manager_pm,
+        plugin_name,
+        "from astrbot.api.star import Star\nfrom . import tools\n\n\nclass Main(Star):\n    pass\n",
+    )
+    (plugin_path / "tools.py").write_text(
+        f'''from astrbot.core.star.register.star_handler import register_agent, register_llm_tool
+
+
+@register_llm_tool(name="{plain_tool_name}")
+async def plain_tool(self):
+    """A plain plugin tool."""
+
+
+@register_agent(name="{agent_name}", instruction="Help with startup tests")
+async def helper_agent(self):
+    pass
+
+
+@helper_agent.llm_tool(name="{agent_tool_name}")
+async def agent_tool(self):
+    """A nested plugin tool."""
+''',
+        encoding="utf-8",
+    )
+    preferences = {
+        "inactivated_plugins": [],
+        "inactivated_llm_tools": [plain_tool_name, agent_tool_name],
+        "alter_cmd": {},
+        star_manager_module.PLUGIN_TOOL_STATE_MIGRATION_KEY: True,
+    }
+    _mock_plugin_preferences(monkeypatch, preferences)
+    monkeypatch.syspath_prepend(
+        str(Path(plugin_manager_pm.plugin_store_path).parents[1])
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_get_plugin_modules",
+        lambda: [{"pname": plugin_name, "module": "main"}],
+    )
+    llm_tools = cast(Any, star_manager_module.llm_tools)
+    original_func_list = llm_tools.func_list
+    llm_tools.func_list = list(original_func_list)
+    discovered_tools: dict[str, Any] = {}
+
+    async def initialize_providers():
+        for func_tool in llm_tools.func_list:
+            if func_tool.name == plain_tool_name:
+                discovered_tools[plain_tool_name] = func_tool
+            if func_tool.name == handoff_tool_name:
+                discovered_tools[handoff_tool_name] = func_tool
+                discovered_tools[agent_tool_name] = next(
+                    tool
+                    for tool in func_tool.agent.tools
+                    if tool.name == agent_tool_name
+                )
+
+        assert set(discovered_tools) == {
+            plain_tool_name,
+            handoff_tool_name,
+            agent_tool_name,
+        }
+        for tool in discovered_tools.values():
+            assert tool.handler_module_path == module_path
+            assert tool.active is False
+
+    try:
+        success, error = await plugin_manager_pm.initialize_plugins(
+            before_plugin_activation=initialize_providers,
+        )
+
+        assert success is True
+        assert error is None
+        assert discovered_tools[plain_tool_name].active is False
+        assert discovered_tools[handoff_tool_name].active is True
+        assert discovered_tools[agent_tool_name].active is False
+        metadata = star_manager_module.star_map[module_path]
+        assert metadata.activated is True
+        for tool in discovered_tools.values():
+            assert tool.handler_module_path == module_path
+            assert isinstance(tool.handler, functools.partial)
+            assert tool.handler.args == (metadata.star_cls,)
+    finally:
+        plugin_manager_pm._cleanup_plugin_state(plugin_name)
+        llm_tools.func_list = original_func_list
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_partial_import_rolls_back_only_its_provider_registration(
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+):
+    """A failed import removes only registrations owned by that plugin."""
+    from astrbot.core.provider.register import (
+        provider_cls_map,
+        provider_registry,
+        register_provider_adapter,
+    )
+
+    _clear_star_runtime_state()
+    registry_before = list(provider_registry)
+    map_before = dict(provider_cls_map)
+    plugin_name = "partial_provider_plugin"
+    provider_type = "partial_provider_adapter"
+    core_provider_type = "partial_provider_core_sentinel"
+    sibling_provider_type = "partial_provider_sibling_sentinel"
+    plugin_root = Path(plugin_manager_pm.plugin_store_path).parents[1]
+    plugin_path = Path(plugin_manager_pm.plugin_store_path) / plugin_name
+    plugin_path.mkdir(parents=True)
+    (plugin_path / "metadata.yaml").write_text(
+        yaml.dump(
+            {
+                "name": plugin_name,
+                "author": "AstrBot Team",
+                "desc": "Partial provider test plugin",
+                "version": "1.0.0",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (plugin_path / "main.py").write_text(
+        f"""from astrbot.core.provider.register import register_provider_adapter
+
+
+@register_provider_adapter("{provider_type}", "Partial test provider")
+class PartialProvider:
+    pass
+
+
+raise RuntimeError("import failed after registration")
+""",
+        encoding="utf-8",
+    )
+
+    class CoreSentinel:
+        pass
+
+    class SiblingSentinel:
+        pass
+
+    CoreSentinel.__module__ = "astrbot.core.provider.sources.test_sentinel"
+    SiblingSentinel.__module__ = f"data.plugins.{plugin_name}_extra.main"
+    register_provider_adapter(core_provider_type, "Core sentinel")(CoreSentinel)
+    register_provider_adapter(sibling_provider_type, "Sibling sentinel")(
+        SiblingSentinel
+    )
+    core_metadata = provider_cls_map[core_provider_type]
+    sibling_metadata = provider_cls_map[sibling_provider_type]
+
+    async def mock_global_get(key, default=None):
+        del key
+        return default
+
+    async def mock_sync_command_configs():
+        return None
+
+    monkeypatch.syspath_prepend(str(plugin_root))
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(
+        star_manager_module,
+        "sync_command_configs",
+        mock_sync_command_configs,
+    )
+
+    try:
+        success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
+
+        assert success is False
+        assert error is not None
+        assert "import failed after registration" in error
+        assert provider_type not in provider_cls_map
+        assert all(metadata.type != provider_type for metadata in provider_registry)
+        assert provider_cls_map[core_provider_type] is core_metadata
+        assert provider_cls_map[sibling_provider_type] is sibling_metadata
+        assert plugin_name in plugin_manager_pm.failed_plugin_dict
+
+        (plugin_path / "main.py").write_text(
+            f"""from astrbot.api.star import Star
+from astrbot.core.provider.register import register_provider_adapter
+
+
+@register_provider_adapter("{provider_type}", "Partial test provider")
+class PartialProvider:
+    pass
+
+
+class Main(Star):
+    pass
+""",
+            encoding="utf-8",
+        )
+
+        success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
+
+        assert success is True
+        assert error is None
+        assert sum(md.type == provider_type for md in provider_registry) == 1
+        assert plugin_name not in plugin_manager_pm.failed_plugin_dict
+    finally:
+        plugin_manager_pm._cleanup_plugin_state(plugin_name)
+        provider_registry[:] = registry_before
+        provider_cls_map.clear()
+        provider_cls_map.update(map_before)
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_dependency_recovery_reimports_partial_decorators_once(
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+):
+    """An in-process dependency retry first rolls back decorator side effects."""
+    from astrbot.core.provider.register import provider_cls_map, provider_registry
+
+    _clear_star_runtime_state()
+    registry_before = list(provider_registry)
+    map_before = dict(provider_cls_map)
+    plugin_name = "dependency_recovery_provider_plugin"
+    provider_type = "dependency_recovery_provider_adapter"
+    missing_dependency = "astrbot_test_recovered_dependency"
+    plain_tool_name = "dependency_recovery_plain_tool"
+    agent_name = "dependency_recovery_agent"
+    agent_tool_name = "dependency_recovery_agent_tool"
+    module_path = f"data.plugins.{plugin_name}.main"
+    plugin_root = Path(plugin_manager_pm.plugin_store_path).parents[1]
+    plugin_path = Path(plugin_manager_pm.plugin_store_path) / plugin_name
+    plugin_path.mkdir(parents=True)
+    (plugin_path / "metadata.yaml").write_text(
+        yaml.dump(
+            {
+                "name": plugin_name,
+                "author": "AstrBot Team",
+                "desc": "Provider dependency recovery test plugin",
+                "version": "1.0.0",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (plugin_path / "requirements.txt").write_text(
+        f"{missing_dependency}\n",
+        encoding="utf-8",
+    )
+    (plugin_path / "tools.py").write_text(
+        f"""from astrbot.core.star.register.star_handler import register_agent, register_llm_tool
+
+
+@register_llm_tool(name="{plain_tool_name}")
+async def plain_tool(self):
+    pass
+
+
+@register_agent(name="{agent_name}", instruction="Recovery helper")
+async def helper_agent(self):
+    pass
+
+
+@helper_agent.llm_tool(name="{agent_tool_name}")
+async def agent_tool(self):
+    pass
+""",
+        encoding="utf-8",
+    )
+    (plugin_path / "main.py").write_text(
+        f"""from astrbot.api.star import Star
+from astrbot.core.provider.register import register_provider_adapter
+
+
+@register_provider_adapter("{provider_type}", "Recovered provider")
+class RecoveredProvider:
+    pass
+
+
+from . import tools
+import {missing_dependency}
+
+
+class Main(Star):
+    pass
+""",
+        encoding="utf-8",
+    )
+    llm_tools = cast(Any, star_manager_module.llm_tools)
+    original_func_list = llm_tools.func_list
+    llm_tools.func_list = list(original_func_list)
+
+    async def unrelated_dynamic_tool():
+        return None
+
+    unrelated_dynamic_tool.__module__ = "external.runtime_tools"
+    unrelated_tool = star_manager_module.FunctionTool(
+        name="unrelated_dynamic_tool",
+        description="Registered outside the plugin import",
+        parameters={"type": "object", "properties": {}},
+        handler=unrelated_dynamic_tool,
+    )
+    llm_tools.func_list.append(unrelated_tool)
+    dependency_installed = False
+
+    async def mock_global_get(key, default=None):
+        del key
+        return default
+
+    async def mock_sync_command_configs():
+        return None
+
+    async def mock_check_plugin_dept_update(*, target_plugin=None):
+        nonlocal dependency_installed
+        assert target_plugin == plugin_name
+        dependency_installed = True
+        monkeypatch.setitem(
+            star_manager_module.sys.modules,
+            missing_dependency,
+            ModuleType(missing_dependency),
+        )
+
+    recovery_state = star_manager_module.ImportDependencyRecoveryState(
+        star_manager_module.ImportDependencyRecoveryMode.REINSTALL_ON_FAILURE,
+        MissingRequirementsPlan(
+            missing_names=frozenset({missing_dependency}),
+            install_lines=(missing_dependency,),
+            version_mismatch_names=frozenset({missing_dependency}),
+        ),
+    )
+
+    monkeypatch.syspath_prepend(str(plugin_root))
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(
+        star_manager_module,
+        "sync_command_configs",
+        mock_sync_command_configs,
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_resolve_import_dependency_recovery_state",
+        lambda *args, **kwargs: recovery_state,
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_check_plugin_dept_update",
+        mock_check_plugin_dept_update,
+    )
+
+    try:
+        success, error = await plugin_manager_pm.load(specified_dir_name=plugin_name)
+
+        assert success is True
+        assert error is None
+        assert dependency_installed is True
+        assert sum(md.type == provider_type for md in provider_registry) == 1
+        plain_tools = [
+            tool for tool in llm_tools.func_list if tool.name == plain_tool_name
+        ]
+        handoff_tools = [
+            tool
+            for tool in llm_tools.func_list
+            if tool.name == f"transfer_to_{agent_name}"
+        ]
+        assert len(plain_tools) == 1
+        assert len(handoff_tools) == 1
+        nested_tools = [
+            tool
+            for tool in handoff_tools[0].agent.tools
+            if tool.name == agent_tool_name
+        ]
+        assert len(nested_tools) == 1
+        for tool in [plain_tools[0], handoff_tools[0], nested_tools[0]]:
+            assert tool.handler_module_path == module_path
+            assert isinstance(tool.handler, functools.partial)
+            assert tool.handler.func.__module__ == f"data.plugins.{plugin_name}.tools"
+        assert unrelated_tool.handler_module_path is None
+        assert unrelated_tool.active is True
+    finally:
+        plugin_manager_pm._cleanup_plugin_state(plugin_name)
+        provider_registry[:] = registry_before
+        provider_cls_map.clear()
+        provider_cls_map.update(map_before)
+        llm_tools.func_list = original_func_list
+        _clear_star_runtime_state()
 
 
 @pytest.mark.asyncio

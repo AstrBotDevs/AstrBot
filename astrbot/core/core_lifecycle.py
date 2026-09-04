@@ -257,12 +257,18 @@ class AstrBotCoreLifecycle:
         # 初始化插件管理器
         self.plugin_manager = PluginManager(self.star_context, self.astrbot_config)
 
-        # 扫描、注册插件、实例化插件类
-        await self.plugin_manager.reload()
-
-        # 根据配置实例化各个 Provider
         self._default_chat_provider_warning_emitted = False
-        await self.provider_manager.initialize()
+        # Discover plugin-provided Provider adapters, initialize configured
+        # Providers, activate plugin instances, then load any adapters registered
+        # from their initialize() methods.
+        await self.plugin_manager.initialize_plugins(
+            before_plugin_activation=self.provider_manager.initialize,
+            after_plugin_activation=(
+                self.provider_manager.initialize_pending_registered_providers
+            ),
+        )
+
+        # Check after plugin activation so the warning reflects final state.
         self._warn_about_unset_default_chat_provider()
 
         await self.kb_manager.initialize()

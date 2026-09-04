@@ -11,7 +11,7 @@ import os
 import sys
 import tempfile
 import traceback
-from collections.abc import Iterable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
@@ -31,7 +31,10 @@ from astrbot.core.agent.handoff import FunctionTool, HandoffTool
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import VERSION
 from astrbot.core.platform.register import unregister_platform_adapters_by_module
-from astrbot.core.provider.register import llm_tools
+from astrbot.core.provider.register import (
+    llm_tools,
+    unregister_provider_adapters_by_module,
+)
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
     get_astrbot_path,
@@ -217,6 +220,7 @@ class PluginManager:
         """加载失败插件的信息，用于后续可能的热重载"""
 
         self.failed_plugin_info = ""
+        self._last_discovered_plugin_module_paths: set[str] = set()
         if os.getenv("ASTRBOT_RELOAD", "0") == "1":
             asyncio.create_task(self._watch_plugins_changes())
 
@@ -455,6 +459,9 @@ class PluginManager:
         try:
             return __import__(path, fromlist=[module_str])
         except ModuleNotFoundError as import_exc:
+            # The failed import may already have executed decorators. Clear only
+            # this plugin's partial registrations before retrying in-process.
+            self._cleanup_plugin_state(root_dir_name, reserved)
             if recovery_state.mode in {
                 ImportDependencyRecoveryMode.PRELOAD_AND_RECOVER,
                 ImportDependencyRecoveryMode.RECOVER_ON_FAILURE,
@@ -468,6 +475,7 @@ class PluginManager:
                 )
                 if recovered_module is not None:
                     return recovered_module
+                self._cleanup_plugin_state(root_dir_name, reserved)
             elif (
                 recovery_state.mode is ImportDependencyRecoveryMode.REINSTALL_ON_FAILURE
             ):
@@ -480,6 +488,7 @@ class PluginManager:
                 )
 
             await self._check_plugin_dept_update(target_plugin=root_dir_name)
+            self._cleanup_plugin_state(root_dir_name, reserved)
             return __import__(path, fromlist=[module_str])
 
     @staticmethod
@@ -555,6 +564,77 @@ class PluginManager:
             )
 
         return metadata
+
+    @staticmethod
+    def _apply_plugin_metadata_yaml(
+        metadata: StarMetadata,
+        plugin_dir_path: str,
+        root_dir_name: str,
+    ) -> None:
+        """Apply optional YAML metadata to decorator-registered metadata.
+
+        Args:
+            metadata: Decorator-registered plugin metadata to update.
+            plugin_dir_path: Plugin directory containing the metadata file.
+            root_dir_name: Plugin directory name used in warning messages.
+
+        Returns:
+            None.
+        """
+        try:
+            metadata_yaml = PluginManager._load_plugin_metadata(
+                plugin_path=plugin_dir_path,
+            )
+            if not metadata_yaml:
+                return
+            for field_name in (
+                "name",
+                "author",
+                "desc",
+                "short_desc",
+                "version",
+                "repo",
+                "display_name",
+                "support_platforms",
+                "astrbot_version",
+                "pages",
+                "i18n",
+            ):
+                setattr(metadata, field_name, getattr(metadata_yaml, field_name))
+        except Exception as e:
+            logger.warning(
+                f"Failed to load metadata for plugin {root_dir_name}: "
+                f"{e!s}. Using default metadata.",
+            )
+
+    @staticmethod
+    def _ensure_supported_plugin_version(
+        metadata: StarMetadata,
+        ignore_version_check: bool,
+    ) -> None:
+        """Reject plugin metadata incompatible with this AstrBot version.
+
+        Args:
+            metadata: Plugin metadata containing the version constraint.
+            ignore_version_check: Whether to skip constraint validation.
+
+        Returns:
+            None.
+
+        Raises:
+            PluginVersionUnsupportedError: If the version constraint is invalid
+                or does not include the running AstrBot version.
+        """
+        if ignore_version_check:
+            return
+        is_valid, error_message = PluginManager._validate_astrbot_version_specifier(
+            metadata.astrbot_version,
+        )
+        if not is_valid:
+            raise PluginVersionUnsupportedError(
+                error_message
+                or "The plugin does not support the current AstrBot version."
+            )
 
     @staticmethod
     def _load_plugin_i18n(plugin_path: str) -> dict[str, dict]:
@@ -731,6 +811,25 @@ class PluginManager:
             )
         )
 
+    @staticmethod
+    def _plugin_root_module_path(plugin_module_path: str) -> str:
+        """Return the import prefix shared by every module in one plugin.
+
+        Args:
+            plugin_module_path: Plugin main or child module path.
+
+        Returns:
+            Plugin package import prefix.
+        """
+        parts = plugin_module_path.split(".")
+        for marker in ("plugins", "builtin_stars"):
+            if marker not in parts:
+                continue
+            marker_index = parts.index(marker)
+            if marker_index + 1 < len(parts):
+                return ".".join(parts[: marker_index + 2])
+        return plugin_module_path
+
     def _purge_modules(
         self,
         module_patterns: list[str] | None = None,
@@ -802,13 +901,18 @@ class PluginManager:
 
         # 清理工具
         for tool in list(llm_tools.func_list):
-            handler_module_path = getattr(tool, "handler_module_path", None)
-            if self._is_plugin_module_path(handler_module_path, module_prefix):
+            if any(
+                self._is_plugin_llm_tool(concrete_tool, module_prefix)
+                for concrete_tool in self._iter_concrete_llm_tools(tool)
+            ):
                 llm_tools.func_list.remove(tool)
                 logger.info(f"Removed tool: {tool.name}")
 
         for adapter_name in unregister_platform_adapters_by_module(module_prefix):
             logger.info(f"Removed platform adapter: {adapter_name}")
+
+        for adapter_name in unregister_provider_adapters_by_module(module_prefix):
+            logger.info(f"Removed provider adapter: {adapter_name}")
 
     def _build_failed_plugin_record(
         self,
@@ -877,14 +981,15 @@ class PluginManager:
 
     @staticmethod
     def _iter_concrete_llm_tools(func_tool: FunctionTool) -> Iterable[FunctionTool]:
-        """Return concrete function tools that may belong to a plugin.
+        """Return a registered tool and any tools nested in a handoff.
 
         Args:
             func_tool: A registered function tool, possibly a handoff tool.
 
         Returns:
-            The concrete function tools to inspect for plugin ownership.
+            Function tools to inspect for plugin ownership.
         """
+        yield func_tool
         if isinstance(func_tool, HandoffTool):
             agent = getattr(func_tool, "agent", None)
             tools = getattr(agent, "tools", None) if agent else None
@@ -892,10 +997,10 @@ class PluginManager:
                 if isinstance(tool, FunctionTool):
                     yield tool
             return
-        yield func_tool
 
-    @staticmethod
+    @classmethod
     def _is_plugin_llm_tool(
+        cls,
         func_tool: FunctionTool,
         plugin_module_path: str | None,
     ) -> bool:
@@ -909,15 +1014,55 @@ class PluginManager:
             Whether the tool belongs to the plugin module.
         """
         module_path = getattr(func_tool, "handler_module_path", None)
+        raw_handler = (
+            func_tool.handler.func
+            if isinstance(func_tool.handler, functools.partial)
+            else func_tool.handler
+        )
+        raw_handler_module_path = getattr(raw_handler, "__module__", None)
         return bool(
             plugin_module_path
-            and module_path
             and (
-                module_path == plugin_module_path
-                or module_path.startswith(f"{plugin_module_path}.")
+                cls._is_plugin_module_path(module_path, plugin_module_path)
+                or cls._is_plugin_module_path(
+                    raw_handler_module_path,
+                    plugin_module_path,
+                )
             )
-            and not module_path.endswith(("astrbot.builtin_stars", "data.plugins"))
+            and not (module_path or "").endswith(
+                ("astrbot.builtin_stars", "data.plugins")
+            )
         )
+
+    @classmethod
+    def _claim_llm_tools_for_plugin(
+        cls,
+        plugin_module_path: str,
+    ) -> None:
+        """Assign plugin-owned tools to the plugin's canonical Star module.
+
+        Args:
+            plugin_module_path: Canonical Star module path for the plugin.
+
+        Returns:
+            None.
+        """
+        module_prefix = cls._plugin_root_module_path(plugin_module_path)
+        for func_tool in llm_tools.func_list:
+            for tool in cls._iter_concrete_llm_tools(func_tool):
+                raw_handler = (
+                    tool.handler.func
+                    if isinstance(tool.handler, functools.partial)
+                    else tool.handler
+                )
+                if cls._is_plugin_module_path(
+                    getattr(raw_handler, "__module__", None),
+                    module_prefix,
+                ) or cls._is_plugin_module_path(
+                    tool.handler_module_path,
+                    module_prefix,
+                ):
+                    tool.handler_module_path = plugin_module_path
 
     @classmethod
     def _iter_plugin_llm_tools(
@@ -938,6 +1083,21 @@ class PluginManager:
             for concrete_tool in cls._iter_concrete_llm_tools(func_tool):
                 if cls._is_plugin_llm_tool(concrete_tool, plugin_module_path):
                     yield concrete_tool
+
+    async def _reconcile_startup_provider_rollback(self) -> None:
+        """Remove live Providers whose startup plugin adapter rolled back.
+
+        Returns:
+            None.
+        """
+        provider_manager = getattr(self.context, "provider_manager", None)
+        reconcile = getattr(
+            provider_manager,
+            "terminate_unregistered_providers",
+            None,
+        )
+        if callable(reconcile):
+            await reconcile()
 
     async def _migrate_legacy_plugin_tool_inactivation_state(
         self,
@@ -1007,6 +1167,66 @@ class PluginManager:
             else:
                 return False, error
 
+    async def initialize_plugins(
+        self,
+        before_plugin_activation: Callable[[], Awaitable[None]],
+        after_plugin_activation: Callable[[], Awaitable[None]] | None = None,
+    ) -> tuple[bool, str | None]:
+        """Initialize plugins around the Provider startup boundary.
+
+        Args:
+            before_plugin_activation: Callback that initializes configured
+                Providers after plugin modules register their adapters.
+            after_plugin_activation: Optional callback that incrementally loads
+                adapters registered from plugin activation code.
+
+        Returns:
+            Plugin initialization success and an optional aggregated error message.
+        """
+        async with self._pm_lock:
+            # Startup normally begins with empty registries. Clear any stale state
+            # left by an earlier lifecycle in the same process before discovery.
+            for metadata in list(star_registry):
+                try:
+                    await self._terminate_plugin(metadata)
+                except Exception as e:
+                    logger.warning(traceback.format_exc())
+                    logger.warning(
+                        f"Plugin {metadata.name} did not terminate cleanly: {e!s}. "
+                        "The plugin may not work correctly.",
+                    )
+                if metadata.root_dir_name:
+                    self._cleanup_plugin_state(
+                        metadata.root_dir_name,
+                        metadata.reserved,
+                    )
+
+            star_handlers_registry.clear()
+            star_map.clear()
+            star_registry.clear()
+
+            discovery_result = await self.load(discover_only=True)
+            discovered_module_paths = set(
+                self._last_discovered_plugin_module_paths,
+            )
+
+            # Provider initialization intentionally runs even if one plugin failed
+            # discovery: valid plugins and their adapters remain usable.
+            await before_plugin_activation()
+
+            activation_result = await self.load(
+                activation_module_paths=discovered_module_paths,
+            )
+            if after_plugin_activation is not None:
+                await after_plugin_activation()
+
+            if discovery_result[0] and activation_result[0]:
+                return True, None
+            return (
+                False,
+                self.failed_plugin_info or discovery_result[1] or activation_result[1],
+            )
+
     async def reload(self, specified_plugin_name=None):
         """重新加载插件
 
@@ -1070,6 +1290,9 @@ class PluginManager:
         specified_module_path=None,
         specified_dir_name=None,
         ignore_version_check: bool = False,
+        *,
+        discover_only: bool = False,
+        activation_module_paths: set[str] | None = None,
     ):
         """载入插件。
         当 specified_module_path 或者 specified_dir_name 不为 None 时，只载入指定的插件。
@@ -1077,6 +1300,11 @@ class PluginManager:
         Args:
             specified_module_path (str, optional): 指定要加载的插件模块路径。例如: "data.plugins.my_plugin.main"
             specified_dir_name (str, optional): 指定要加载的插件目录名。例如: "my_plugin"
+            ignore_version_check: Whether to skip the AstrBot version constraint.
+            discover_only: Import modules and register declarations without
+                creating or initializing plugin instances.
+            activation_module_paths: Optional set produced by discovery. When set,
+                only successfully discovered modules may activate.
 
         Returns:
             tuple: (success, error_message)
@@ -1087,6 +1315,9 @@ class PluginManager:
         inactivated_plugins = await sp.global_get("inactivated_plugins", [])
         inactivated_llm_tools = await sp.global_get("inactivated_llm_tools", [])
         alter_cmd = await sp.global_get("alter_cmd", {})
+
+        if discover_only:
+            self._last_discovered_plugin_module_paths = set()
 
         plugin_modules = self._get_plugin_modules()
         if plugin_modules is None:
@@ -1119,18 +1350,26 @@ class PluginManager:
                     continue
                 if specified_dir_name and root_dir_name != specified_dir_name:
                     continue
+                if (
+                    activation_module_paths is not None
+                    and path not in activation_module_paths
+                ):
+                    continue
 
                 logger.info("Loading plugin %s ...", root_dir_name)
 
                 # 尝试导入模块
                 try:
-                    module = await self._import_plugin_with_dependency_recovery(
-                        path=path,
-                        module_str=module_str,
-                        root_dir_name=root_dir_name,
-                        requirements_path=requirements_path,
-                        reserved=reserved,
-                    )
+                    try:
+                        module = await self._import_plugin_with_dependency_recovery(
+                            path=path,
+                            module_str=module_str,
+                            root_dir_name=root_dir_name,
+                            requirements_path=requirements_path,
+                            reserved=reserved,
+                        )
+                    finally:
+                        self._claim_llm_tools_for_plugin(path)
                 except Exception as e:
                     error_trace = traceback.format_exc()
                     logger.error(error_trace)
@@ -1146,6 +1385,47 @@ class PluginManager:
                         )
                     )
                     self._cleanup_plugin_state(root_dir_name, reserved)
+                    if activation_module_paths is not None:
+                        await self._reconcile_startup_provider_rollback()
+                    continue
+
+                if discover_only:
+                    metadata = star_map.get(path)
+                    if metadata is not None:
+                        self._apply_plugin_metadata_yaml(
+                            metadata,
+                            plugin_dir_path,
+                            root_dir_name,
+                        )
+                    else:
+                        classes = self._get_classes(module)
+                        if not classes:
+                            raise Exception(
+                                f"插件 {root_dir_name} 未通过 Star 注册，也没有找到旧版插件类。"
+                                "请确认插件主类继承 astrbot.api.star.Star，或类名以 Plugin 结尾 / 命名为 Main。",
+                            )
+                        metadata = self._load_plugin_metadata(
+                            plugin_path=plugin_dir_path,
+                        )
+                        if not metadata:
+                            raise Exception(
+                                f"无法找到插件 {plugin_dir_path} 的元数据。"
+                            )
+
+                    self._ensure_supported_plugin_version(
+                        metadata,
+                        ignore_version_check,
+                    )
+
+                    # Imported declarations must not be callable before their Star
+                    # instance exists. Disabled plugins stay imported so their
+                    # adapter registration keeps its existing startup semantics.
+                    registered_metadata = star_map.get(path)
+                    if registered_metadata is not None:
+                        registered_metadata.activated = False
+                    for func_tool in self._iter_plugin_llm_tools(path):
+                        func_tool.active = False
+                    self._last_discovered_plugin_module_paths.add(path)
                     continue
 
                 # 检查 _conf_schema.json
@@ -1169,40 +1449,15 @@ class PluginManager:
                     # 通过 __init__subclass__ 注册插件
                     metadata = star_map[path]
 
-                    try:
-                        # yaml 文件的元数据优先
-                        metadata_yaml = self._load_plugin_metadata(
-                            plugin_path=plugin_dir_path,
-                        )
-                        if metadata_yaml:
-                            metadata.name = metadata_yaml.name
-                            metadata.author = metadata_yaml.author
-                            metadata.desc = metadata_yaml.desc
-                            metadata.short_desc = metadata_yaml.short_desc
-                            metadata.version = metadata_yaml.version
-                            metadata.repo = metadata_yaml.repo
-                            metadata.display_name = metadata_yaml.display_name
-                            metadata.support_platforms = metadata_yaml.support_platforms
-                            metadata.astrbot_version = metadata_yaml.astrbot_version
-                            metadata.pages = metadata_yaml.pages
-                            metadata.i18n = metadata_yaml.i18n
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to load metadata for plugin {root_dir_name}: "
-                            f"{e!s}. Using default metadata.",
-                        )
-
-                    if not ignore_version_check:
-                        is_valid, error_message = (
-                            self._validate_astrbot_version_specifier(
-                                metadata.astrbot_version,
-                            )
-                        )
-                        if not is_valid:
-                            raise PluginVersionUnsupportedError(
-                                error_message
-                                or "The plugin does not support the current AstrBot version."
-                            )
+                    self._apply_plugin_metadata_yaml(
+                        metadata,
+                        plugin_dir_path,
+                        root_dir_name,
+                    )
+                    self._ensure_supported_plugin_version(
+                        metadata,
+                        ignore_version_check,
+                    )
 
                     logger.info(metadata)
                     metadata.config = plugin_config
@@ -1273,19 +1528,21 @@ class PluginManager:
                     # Apply the same idempotent binding lifecycle to LLM tools.
                     for func_tool in llm_tools.func_list:
                         for ft in self._iter_concrete_llm_tools(func_tool):
-                            if ft.handler and (
-                                getattr(ft.handler, "__module__", None)
-                                == metadata.module_path
-                                or (
-                                    isinstance(ft.handler, functools.partial)
-                                    and ft.handler_module_path == metadata.module_path
+                            raw_handler = (
+                                ft.handler.func
+                                if isinstance(ft.handler, functools.partial)
+                                else ft.handler
+                            )
+                            if raw_handler and (
+                                self._is_plugin_module_path(
+                                    getattr(raw_handler, "__module__", None),
+                                    metadata.module_path,
+                                )
+                                or self._is_plugin_llm_tool(
+                                    ft,
+                                    metadata.module_path,
                                 )
                             ):
-                                raw_handler = (
-                                    ft.handler.func
-                                    if isinstance(ft.handler, functools.partial)
-                                    else ft.handler
-                                )
                                 ft.handler_module_path = metadata.module_path
                                 ft.handler = raw_handler
                                 if (
@@ -1342,17 +1599,10 @@ class PluginManager:
                     if not metadata:
                         raise Exception(f"无法找到插件 {plugin_dir_path} 的元数据。")
 
-                    if not ignore_version_check:
-                        is_valid, error_message = (
-                            self._validate_astrbot_version_specifier(
-                                metadata.astrbot_version,
-                            )
-                        )
-                        if not is_valid:
-                            raise PluginVersionUnsupportedError(
-                                error_message
-                                or "The plugin does not support the current AstrBot version."
-                            )
+                    self._ensure_supported_plugin_version(
+                        metadata,
+                        ignore_version_check,
+                    )
 
                     metadata.star_cls = obj
                     metadata.config = plugin_config
@@ -1430,6 +1680,8 @@ class PluginManager:
                     except Exception:
                         logger.error(traceback.format_exc())
 
+                self.failed_plugin_dict.pop(root_dir_name, None)
+
             except BaseException as e:
                 logger.error(f"----- Failed to load plugin {root_dir_name} -----")
                 errors = traceback.format_exc()
@@ -1447,6 +1699,14 @@ class PluginManager:
                     )
                 )
                 self._cleanup_plugin_state(root_dir_name, reserved)
+                if activation_module_paths is not None:
+                    await self._reconcile_startup_provider_rollback()
+
+        if discover_only:
+            self._rebuild_failed_plugin_info()
+            if has_load_error:
+                return False, self.failed_plugin_info
+            return True, None
 
         if not specified_module_path and not specified_dir_name:
             inactivated_llm_tools = (
@@ -1905,11 +2165,9 @@ class PluginManager:
         # llm_tools 中移除该插件的工具函数绑定
         to_remove = []
         for func_tool in llm_tools.func_list:
-            mp = func_tool.handler_module_path
-            if (
-                mp
-                and mp.startswith(plugin_module_path)
-                and not mp.endswith(("astrbot.builtin_stars", "data.plugins"))
+            if any(
+                self._is_plugin_llm_tool(tool, plugin_module_path)
+                for tool in self._iter_concrete_llm_tools(func_tool)
             ):
                 to_remove.append(func_tool)
         for func_tool in to_remove:
