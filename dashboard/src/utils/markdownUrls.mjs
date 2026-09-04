@@ -10,8 +10,9 @@ const ABSOLUTE_URL_PATTERN = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
  * repository instead, mirroring GitHub's own rendering: images point to
  * raw.githubusercontent.com, links point to github.com blob pages, both under
  * the HEAD symbolic ref which follows the default branch. When the document
- * was fetched from a remote URL (`docUrl`), that URL is used as the base for
- * everything instead.
+ * was fetched from a remote URL (`docUrl`), it is used as the source instead:
+ * directory-relative references resolve against the document location, while
+ * leading-slash references resolve against the origin host root.
  *
  * @param {HTMLElement} root Rendered markdown container.
  * @param {object} options
@@ -36,8 +37,14 @@ export function resolveRelativeUrls(root, { repoUrl = "", docUrl = "" } = {}) {
     const base = documentUrl || repoBase;
     if (!base) return value;
     try {
-      // Leading slashes are repo-root-relative, not host-relative.
-      return new URL(url.replace(/^\/+/, ""), base).href;
+      if (url.startsWith("/")) {
+        // Leading slashes are origin/repo-root-relative, not document-relative.
+        if (documentUrl) return new URL(url, new URL(documentUrl).origin).href;
+        // With a GitHub repo base, strip the slash so the path lands at the
+        // repository root (the base already ends with the default-branch ref).
+        return new URL(url.replace(/^\/+/, ""), repoBase).href;
+      }
+      return new URL(url, base).href;
     } catch {
       return value;
     }

@@ -77,22 +77,29 @@ test('leaves anchor, absolute, and protocol-relative URLs unchanged', () => {
   assert.equal(protocolRelative.attr('src'), '//example.com/a.png');
 });
 
-test('uses docUrl as the base for everything when provided', () => {
+test('docUrl: relative references resolve against the document directory', () => {
   const img = createNode({ src: 'docs/demo.png' });
   const link = createNode({ href: 'CHANGELOG.md' });
   resolveRelativeUrls(createRoot({ images: [img], links: [link] }), {
-    repoUrl: GITHUB_REPO,
-    docUrl: 'https://raw.githubusercontent.com/someone/other/main/README.md',
+    docUrl: 'https://example.com/docs/README.md',
   });
 
   assert.equal(
     img.attr('src'),
-    'https://raw.githubusercontent.com/someone/other/main/docs/demo.png',
+    'https://example.com/docs/docs/demo.png',
   );
-  assert.equal(
-    link.attr('href'),
-    'https://raw.githubusercontent.com/someone/other/main/CHANGELOG.md',
-  );
+  assert.equal(link.attr('href'), 'https://example.com/docs/CHANGELOG.md');
+});
+
+test('docUrl: leading-slash references resolve against the origin host root', () => {
+  const img = createNode({ src: '/images/logo.png' });
+  const link = createNode({ href: '/CHANGELOG.md' });
+  resolveRelativeUrls(createRoot({ images: [img], links: [link] }), {
+    docUrl: 'https://example.com/docs/README.md',
+  });
+
+  assert.equal(img.attr('src'), 'https://example.com/images/logo.png');
+  assert.equal(link.attr('href'), 'https://example.com/CHANGELOG.md');
 });
 
 test('leaves relative URLs untouched for a non-GitHub repo', () => {
