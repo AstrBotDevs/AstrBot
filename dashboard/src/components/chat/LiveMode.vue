@@ -44,6 +44,11 @@
                     1000).toFixed(0) }}ms</span>
                 <span v-if="metrics.wav_to_tts_total_time">Speak -> End: {{ (metrics.wav_to_tts_total_time *
                     1000).toFixed(0) }}ms</span>
+                <span v-if="metrics.stt_total_time">STT Total Latency: {{ (metrics.stt_total_time *
+                    1000).toFixed(0) }}ms</span>
+                <span v-if="metrics.stt_audio_duration">STT Audio Duration: {{ (metrics.stt_audio_duration *
+                    1000).toFixed(0) }}ms</span>
+                <span v-if="metrics.stt_rtf">STT RTF: {{ metrics.stt_rtf.toFixed(2) }}</span>
                 <span v-if="metrics.stt">STT Provider: {{ metrics.stt }}</span>
                 <span v-if="metrics.tts">TTS Provider: {{ metrics.tts }}</span>
                 <span v-if="metrics.chat_model">Chat Model: {{ metrics.chat_model }}</span>
@@ -108,6 +113,9 @@ interface LiveMetrics {
     tts_first_frame_time?: number;
     tts_total_time?: number;
     wav_to_tts_total_time?: number;
+    stt_total_time?: number;
+    stt_audio_duration?: number;
+    stt_rtf?: number;
     stt?: string;
     tts?: string;
     chat_model?: string;
