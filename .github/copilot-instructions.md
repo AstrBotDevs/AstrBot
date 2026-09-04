@@ -7,7 +7,7 @@ Always reference these instructions first and fallback to search or bash command
 ## Working Effectively
 
 ### Bootstrap and Install Dependencies
-- **Python 3.10+ required** - Check `.python-version` file
+- **Python 3.12+ required** - Check `.python-version` file
 - Install UV package manager: `pip install uv`
 - Install project dependencies: `uv sync` -- takes 6-7 minutes. NEVER CANCEL. Set timeout to 10+ minutes.
 - Create required directories: `mkdir -p data/plugins data/config data/temp`
