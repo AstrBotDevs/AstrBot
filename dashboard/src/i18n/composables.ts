@@ -11,6 +11,9 @@ const translations = ref<Record<string, any>>({});
  */
 export async function initI18n(locale: Locale = 'zh-CN') {
   currentLocale.value = locale;
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = locale;
+  }
 
   // 加载静态翻译数据
   loadTranslations(locale);
@@ -85,6 +88,9 @@ export function useI18n() {
   const setLocale = async (newLocale: Locale) => {
     if (newLocale !== currentLocale.value) {
       currentLocale.value = newLocale;
+      if (typeof document !== 'undefined') {
+        document.documentElement.lang = newLocale;
+      }
       loadTranslations(newLocale);
 
       // 保存到localStorage
@@ -103,7 +109,7 @@ export function useI18n() {
   const locale = computed(() => currentLocale.value);
 
   // 获取可用语言列表
-  const availableLocales: Locale[] = ['zh-CN', 'en-US', 'ru-RU'];
+  const availableLocales: Locale[] = ['zh-CN', 'en-US', 'ru-RU', 'ja-JP'];
 
   // 检查是否已加载
   const isLoaded = computed(() => Object.keys(translations.value).length > 0);
@@ -159,7 +165,8 @@ export function useLanguageSwitcher() {
   const languageOptions = computed(() => [
     { value: 'zh-CN', label: '简体中文', flag: '🇨🇳' },
     { value: 'en-US', label: 'English', flag: '🇺🇸' },
-    { value: 'ru-RU', label: 'Русский', flag: '🇷🇺' }
+    { value: 'ru-RU', label: 'Русский', flag: '🇷🇺' },
+    { value: 'ja-JP', label: '日本語', flag: '🇯🇵' }
   ]);
 
   const currentLanguage = computed(() => {
@@ -221,7 +228,7 @@ function deepMerge(target: Record<string, any>, source: Record<string, any>) {
 export async function setupI18n() {
   // 从localStorage获取保存的语言设置
   const savedLocale = localStorage.getItem('astrbot-locale') as Locale;
-  const initialLocale = savedLocale && ['zh-CN', 'en-US', 'ru-RU'].includes(savedLocale)
+  const initialLocale = savedLocale && ['zh-CN', 'en-US', 'ru-RU', 'ja-JP'].includes(savedLocale)
     ? savedLocale
     : 'zh-CN';
 

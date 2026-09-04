@@ -1,0 +1,73 @@
+{
+  "title": "ナレッジベース管理",
+  "subtitle": "ナレッジベースの内容を一元管理・検索",
+  "list": {
+    "title": "ナレッジベース",
+    "subtitle": "すべてのナレッジベースを管理",
+    "create": "ナレッジベースを作成",
+    "refresh": "一覧を再読み込み",
+    "empty": "ナレッジベースがありません",
+    "loading": "読み込み中…",
+    "documents": "ドキュメント",
+    "chunks": "チャンク",
+    "sessionConfig": "セッション設定",
+    "initError": "初期化に失敗しました",
+    "retry": "再試行",
+    "noDescription": "説明なし",
+    "switchLegacy": "旧版のナレッジベースに切り替える"
+  },
+  "card": {
+    "edit": "編集",
+    "delete": "削除",
+    "open": "開く",
+    "docCount": "{count} 件のドキュメント",
+    "chunkCount": "{count} 件のチャンク"
+  },
+  "create": {
+    "title": "ナレッジベースを作成",
+    "nameLabel": "ナレッジベース名",
+    "namePlaceholder": "ナレッジベース名を入力",
+    "descriptionLabel": "説明",
+    "descriptionPlaceholder": "このナレッジベースの用途を簡潔に説明…",
+    "emojiLabel": "アイコン",
+    "embeddingModelLabel": "埋め込みモデル（Embedding Model）",
+    "rerankModelLabel": "リランキングモデル（Rerank Model、省略可）",
+    "providerInfo": "プロバイダー：{id}、次元数：{dimensions}",
+    "rerankProviderInfo": "プロバイダー：{id}",
+    "cancel": "キャンセル",
+    "submit": "作成",
+    "nameRequired": "ナレッジベース名を入力してください",
+    "nameChangeHint": "後からナレッジベース名を変更する場合は、設定ファイル側も更新してください。",
+    "embeddingLockedHint": "埋め込みモデルは選択後に変更できません。別のモデルを使用する場合は、新しいナレッジベースを作成してください。"
+  },
+  "edit": {
+    "title": "ナレッジベースを編集",
+    "submit": "保存"
+  },
+  "delete": {
+    "title": "ナレッジベースを削除",
+    "confirmText": "ナレッジベース「{name}」を削除してもよろしいですか？",
+    "warning": "この操作は元に戻せません。すべてのドキュメント、チャンク、関連設定が完全に削除されます。",
+    "cancel": "キャンセル",
+    "confirm": "削除"
+  },
+  "emoji": {
+    "title": "アイコンを選択",
+    "close": "閉じる",
+    "categories": {
+      "books": "書籍とドキュメント",
+      "emotions": "表情と感情",
+      "objects": "物とツール",
+      "symbols": "記号と標識"
+    }
+  },
+  "messages": {
+    "createSuccess": "ナレッジベースを作成しました",
+    "createFailed": "作成に失敗しました",
+    "updateSuccess": "ナレッジベースを更新しました",
+    "updateFailed": "更新に失敗しました",
+    "deleteSuccess": "ナレッジベースを削除しました",
+    "deleteFailed": "削除に失敗しました",
+    "loadError": "ナレッジベース一覧の読み込みに失敗しました"
+  }
+}

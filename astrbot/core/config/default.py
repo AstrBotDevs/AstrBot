@@ -3241,12 +3241,13 @@ CONFIG_METADATA_2 = {
 
 
 """
-v4.7.0 之后，name, description, hint 等字段已经实现 i18n 国际化。国际化资源文件位于：
+Since v4.7.0, fields such as name, description, and hint support i18n.
+Their resources are stored in:
 
-- dashboard/src/i18n/locales/en-US/features/config-metadata.json
-- dashboard/src/i18n/locales/zh-CN/features/config-metadata.json
+- dashboard/src/i18n/locales/<locale>/features/config-metadata.json
 
-如果在此文件中添加了新的配置字段，请务必同步更新上述两个国际化资源文件。
+When adding configuration fields here, update this file for every supported
+Dashboard locale.
 """
 CONFIG_METADATA_3 = {
     "ai_group": {

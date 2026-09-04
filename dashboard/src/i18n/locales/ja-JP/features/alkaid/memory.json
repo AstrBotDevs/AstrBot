@@ -1,0 +1,97 @@
+{
+  "title": "長期記憶",
+  "subtitle": "AI アシスタントの長期記憶を管理",
+  "memories": {
+    "title": "記憶一覧",
+    "content": "記憶内容",
+    "importance": "重要度",
+    "createTime": "作成日時",
+    "lastAccess": "最終アクセス",
+    "category": "カテゴリ"
+  },
+  "categories": {
+    "personal": "個人情報",
+    "preferences": "ユーザーの好み",
+    "conversations": "会話履歴",
+    "facts": "事実情報",
+    "skills": "スキル・知識"
+  },
+  "importance": {
+    "high": "高",
+    "medium": "中",
+    "low": "低"
+  },
+  "actions": {
+    "view": "詳細を表示",
+    "edit": "編集",
+    "delete": "削除",
+    "pin": "固定",
+    "unpin": "固定を解除"
+  },
+  "filters": {
+    "all": "すべて",
+    "category": "カテゴリ別",
+    "importance": "重要度別",
+    "dateRange": "期間別",
+    "title": "絞り込み",
+    "userIdLabel": "ユーザー ID で絞り込む",
+    "filterButton": "絞り込む",
+    "resetButton": "絞り込みをリセット",
+    "refreshButton": "グラフを再読み込み"
+  },
+  "search": {
+    "title": "記憶を検索",
+    "userIdLabel": "ユーザー ID",
+    "queryLabel": "キーワードを入力",
+    "searchButton": "検索",
+    "resultsTitle": "検索結果",
+    "noResults": "関連する記憶が見つかりませんでした",
+    "similarity": "関連度",
+    "noTextContent": "テキスト内容なし"
+  },
+  "addMemory": {
+    "title": "記憶データを追加",
+    "textLabel": "テキスト内容を入力",
+    "userIdLabel": "ユーザー ID",
+    "summarizeLabel": "要約する",
+    "addButton": "データを追加"
+  },
+  "nodeDetails": {
+    "title": "ノード詳細",
+    "id": "ID",
+    "type": "種類",
+    "name": "名前",
+    "userId": "ユーザー ID",
+    "timestamp": "タイムスタンプ"
+  },
+  "graphStats": {
+    "title": "グラフ統計",
+    "nodeCount": "ノード数",
+    "edgeCount": "エッジ数"
+  },
+  "factDialog": {
+    "title": "記憶情報",
+    "id": "ID",
+    "docId": "ドキュメント ID",
+    "createdAt": "作成日時",
+    "updatedAt": "更新日時",
+    "metadata": "メタデータ",
+    "metadataKey": "キー",
+    "metadataValue": "値",
+    "loading": "読み込み中…",
+    "close": "閉じる",
+    "noValue": "なし",
+    "unknown": "不明"
+  },
+  "messages": {
+    "searchQueryRequired": "検索キーワードを入力してください",
+    "searchSuccess": "関連する記憶が {count} 件見つかりました",
+    "searchNoResults": "関連する記憶が見つかりませんでした",
+    "searchError": "検索に失敗しました",
+    "addSuccess": "記憶データを追加しました",
+    "addError": "記憶データの追加に失敗しました",
+    "factDetailsError": "記憶の詳細の取得に失敗しました",
+    "metadataParseError": "メタデータを解析できません",
+    "relationNoMemoryData": "この関係には関連する記憶データがありません"
+  }
+}

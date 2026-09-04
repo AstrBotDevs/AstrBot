@@ -1,0 +1,167 @@
+{
+  "title": "モデルプロバイダー",
+  "subtitle": "「チャット」で会話モデルを設定できます。「Agent Runner」では、Dify、Coze、Alibaba Cloud Bailian アプリケーションなどのサードパーティーサービスと連携できます。",
+  "providers": {
+    "title": "モデルプロバイダー",
+    "settings": "設定",
+    "addProvider": "モデルプロバイダーを追加",
+    "deleteProvider": "モデルプロバイダーを削除",
+    "selectHint": "モデルプロバイダーを選択してください",
+    "providerType": "プロバイダータイプ",
+    "tabs": {
+      "all": "すべて",
+      "chatCompletion": "チャット",
+      "speechToText": "音声認識",
+      "textToSpeech": "音声合成",
+      "embedding": "埋め込み",
+      "rerank": "リランキング"
+    },
+    "empty": {
+      "all": "モデルプロバイダーがありません。「モデルプロバイダーを追加」をクリックして追加してください",
+      "typed": "{type}タイプのモデルプロバイダーがありません。「モデルプロバイダーを追加」をクリックして追加してください"
+    },
+    "description": {
+      "openai": "OpenAI API と互換性のあるすべてのモデルプロバイダーにも対応しています。",
+      "kimi_code": "Kimi Code の会話モデルを設定します。",
+      "vllm_rerank": "Jina AI、Cohere、PPIO などのプロバイダーにも対応しています。",
+      "default": ""
+    }
+  },
+  "availability": {
+    "title": "モデルプロバイダーの可用性",
+    "subtitle": "モデルとの対話をテストして可用性を確認します。API 利用料金が発生する場合があります。",
+    "refresh": "可用性を再確認",
+    "noData": "「可用性を再確認」ボタンをクリックして、モデルプロバイダーの可用性を取得してください。",
+    "available": "利用可能",
+    "unavailable": "利用不可",
+    "pending": "確認中…",
+    "errorMessage": "エラー情報",
+    "test": "テスト"
+  },
+  "logs": {
+    "title": "サービスログ",
+    "expand": "展開",
+    "collapse": "折りたたむ"
+  },
+  "dialogs": {
+    "addProvider": {
+      "title": "モデルプロバイダー",
+      "tabs": {
+        "basic": "チャット",
+        "speechToText": "音声認識",
+        "textToSpeech": "音声合成",
+        "embedding": "埋め込み",
+        "rerank": "リランキング"
+      },
+      "noTemplates": "このタイプのプロバイダーテンプレートはありません"
+    },
+    "config": {
+      "addTitle": "追加",
+      "editTitle": "編集",
+      "provider": "モデルプロバイダー",
+      "cancel": "キャンセル",
+      "save": "保存"
+    },
+    "settings": {
+      "title": "モデルプロバイダー設定",
+      "sessionSeparation": {
+        "title": "プロバイダーのセッション分離を有効にする",
+        "description": "セッションごとに、テキスト生成、TTS、STT などのモデルプロバイダーを個別に選択できます。"
+      },
+      "close": "閉じる"
+    }
+  },
+  "messages": {
+    "success": {
+      "update": "更新しました",
+      "add": "追加しました",
+      "delete": "削除しました",
+      "statusUpdate": "ステータスを更新しました",
+      "sessionSeparation": "セッション分離設定を更新しました"
+    },
+    "error": {
+      "sessionSeparation": "セッション分離設定の取得に失敗しました",
+      "fetchStatus": "モデルプロバイダーのステータス取得に失敗しました",
+      "testError": "{id} のテストに失敗しました: {error}"
+    },
+    "confirm": {
+      "delete": "モデルプロバイダー {id} を削除してもよろしいですか？"
+    }
+  },
+  "providerTypes": {
+    "title": "プロバイダータイプ"
+  },
+  "providerSources": {
+    "title": "プロバイダーソース",
+    "add": "追加",
+    "delete": "プロバイダーソースを削除",
+    "empty": "プロバイダーソースがありません",
+    "selectHint": "プロバイダーソースを選択してください",
+    "selectCreated": "作成済みのプロバイダーソースを選択",
+    "save": "設定を保存",
+    "saveAndFetchModels": "保存してモデルを取得",
+    "fetchModels": "モデル一覧を取得",
+    "getApiKey": "API Key を取得",
+    "saveSuccess": "プロバイダーソースを保存しました",
+    "saveError": "プロバイダーソースの保存に失敗しました",
+    "deleteConfirm": "プロバイダーソース {id} を削除してもよろしいですか？関連するすべてのモデル設定も削除されます。",
+    "deleteSuccess": "プロバイダーソースを削除しました",
+    "deleteError": "プロバイダーソースの削除に失敗しました",
+    "enabled": "有効",
+    "disabled": "無効",
+    "advancedConfig": "詳細設定…",
+    "fields": {
+      "name": "名前",
+      "apiKey": "API Key",
+      "baseUrl": "Base URL"
+    },
+    "hints": {
+      "id": "プロバイダーソースの一意な ID（プロバイダー ID ではありません）",
+      "key": "認証用の API Key",
+      "apiBase": "カスタム API エンドポイント URL",
+      "proxy": "HTTP/HTTPS プロキシアドレス（例: http://127.0.0.1:7890）。このプロバイダーの API リクエストにのみ適用され、Docker の内部ネットワーク通信には影響しません。"
+    },
+    "labels": {
+      "proxy": "プロキシアドレス"
+    }
+  },
+  "models": {
+    "title": "モデル",
+    "available": "利用可能なモデル",
+    "configured": "設定済みのモデル",
+    "empty": "設定済みのモデルがありません。上の「モデル一覧を取得」をクリックして追加してください",
+    "noModelsFound": "利用可能なモデルが見つかりません",
+    "fetchError": "モデル一覧の取得に失敗しました",
+    "addSuccess": "モデル {model} を追加しました",
+    "deleteConfirm": "モデル {id} を削除してもよろしいですか？",
+    "deleteSuccess": "モデルを削除しました",
+    "deleteError": "モデルの削除に失敗しました",
+    "testSuccess": "モデル {id} のテストに成功しました",
+    "testSuccessWithLatency": "モデル {id} のテストに成功しました。レイテンシー：{latency} ms",
+    "testError": "モデルのテストに失敗しました",
+    "searchPlaceholder": "モデルまたは ID を検索",
+    "manualAddButton": "カスタムモデル",
+    "manualDialogTitle": "カスタムモデルを追加",
+    "manualDialogModelLabel": "モデル ID（例：gpt-4.1-mini）",
+    "manualDialogPreviewLabel": "表示用 ID（自動生成）",
+    "manualDialogPreviewHint": "生成ルール：sourceId/modelId",
+    "manualModelRequired": "モデル ID を入力してください",
+    "manualModelExists": "このモデルはすでに存在します",
+    "configure": "設定",
+    "testButton": "モデルをテスト",
+    "metadata": {
+      "image": "画像入力",
+      "audio": "音声入力",
+      "toolUse": "ツール使用",
+      "reasoning": "推論",
+      "context": "{tokens} トークンのコンテキストウィンドウ",
+      "available": "モデルのメタデータによると、{capability} に対応しています",
+      "enabled": "{capability} が有効です",
+      "supportedDisabled": "モデルのメタデータによると {capability} に対応していますが、現在のプロバイダーではこの機能が有効になっていません。"
+    },
+    "tooltips": {
+      "providerId": "プロバイダー ID",
+      "modelId": "モデル ID"
+    }
+  }
+}

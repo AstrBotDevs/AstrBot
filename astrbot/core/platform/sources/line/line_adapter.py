@@ -63,6 +63,16 @@ LINE_I18N_RESOURCES = {
             "hint": "Used to verify LINE webhook signatures.",
         },
     },
+    "ja-JP": {
+        "channel_access_token": {
+            "description": "LINE チャネルアクセストークン",
+            "hint": "LINE Messaging API のチャネルアクセストークンです。",
+        },
+        "channel_secret": {
+            "description": "LINE チャネルシークレット",
+            "hint": "LINE Webhook の署名検証に使用します。",
+        },
+    },
 }
 
 
