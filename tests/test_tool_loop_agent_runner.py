@@ -142,6 +142,28 @@ class MockMixedContentToolExecutor:
         return generator()
 
 
+class MockUnrecognizedContentToolExecutor:
+    """Tool executor returning a content type the dispatch does not recognize."""
+
+    @classmethod
+    def execute(cls, tool, run_context, **tool_args):
+        async def generator():
+            from mcp.types import AudioContent, CallToolResult
+
+            result = CallToolResult(
+                content=[
+                    AudioContent(
+                        type="audio",
+                        data="dGVzdA==",
+                        mimeType="audio/wav",
+                    ),
+                ]
+            )
+            yield result
+
+        return generator()
+
+
 class VaryingUsageProvider(MockProvider):
     """Return distinct token usage values for each tool-loop request."""
 
@@ -970,6 +992,46 @@ async def test_tool_result_includes_all_calltoolresult_content(
             "mime_type": "image/png",
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_tool_result_falls_back_for_unrecognized_content(
+    runner, mock_provider, provider_request, mock_hooks
+):
+    """A tool result must still pair with its tool_call when no content item is recognized."""
+
+    mock_provider.should_call_tools = True
+    mock_provider.max_calls_before_normal_response = 1
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=MockUnrecognizedContentToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    tool_messages = [
+        m for m in runner.run_context.messages if getattr(m, "role", None) == "tool"
+    ]
+    requested_tool_call_ids = {
+        tool_call.id
+        for m in runner.run_context.messages
+        if getattr(m, "role", None) == "assistant"
+        for tool_call in (getattr(m, "tool_calls", None) or [])
+    }
+    answered_tool_call_ids = {m.tool_call_id for m in tool_messages}
+
+    assert requested_tool_call_ids
+    assert requested_tool_call_ids == answered_tool_call_ids
+    assert len(tool_messages) == 1
+    assert "The tool has returned a data type that is not supported." in str(
+        tool_messages[0].content
+    )
 
 
 @pytest.mark.asyncio
