@@ -4,6 +4,7 @@ import copy
 import logging
 import os
 import random
+import re
 from pathlib import Path
 from typing import cast
 
@@ -320,6 +321,59 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         ret_id = getattr(ret, "id", None)
         return str(ret_id) if ret_id is not None else None
 
+    # QQ 官方单条消息文本长度上限，超出会被平台截断（错误码 40054007）
+    QQ_MAX_LENGTH = 4000
+
+    _SPLIT_PATTERNS = {
+        "paragraph": re.compile(r"\n\n"),
+        "line": re.compile(r"\n"),
+        "sentence": re.compile(r"[.!?。！？]"),
+        "word": re.compile(r"\s"),
+    }
+
+    @classmethod
+    def _split_message(cls, text: str) -> list[str]:
+        """按段落 → 行 → 句子 → 词回退切分超长文本，对齐 Telegram 的 _split_message。"""
+        if len(text) <= cls.QQ_MAX_LENGTH:
+            return [text]
+
+        chunks = []
+        remaining = text
+        while remaining:
+            if len(remaining) <= cls.QQ_MAX_LENGTH:
+                chunks.append(remaining)
+                break
+
+            split_point = cls.QQ_MAX_LENGTH
+            segment = remaining[: cls.QQ_MAX_LENGTH]
+            for _, pattern in cls._SPLIT_PATTERNS.items():
+                if matches := list(pattern.finditer(segment)):
+                    split_point = matches[-1].end()
+                    break
+
+            chunks.append(remaining[:split_point])
+            remaining = remaining[split_point:]
+
+        return chunks
+
+    @classmethod
+    def _split_message_chain_by_length(
+        cls, message_chains: list[MessageChain]
+    ) -> list[MessageChain]:
+        """按 QQ 单条消息长度限制拆分消息链，防止长文本被平台截断。"""
+        result: list[MessageChain] = []
+        for chain in message_chains:
+            text = "".join(c.text for c in chain.chain if isinstance(c, Plain))
+            if len(text) <= cls.QQ_MAX_LENGTH:
+                result.append(chain)
+                continue
+            parts = cls._split_message(text)
+            non_plain = [c for c in chain.chain if not isinstance(c, Plain)]
+            # 首个分片保留非 Plain 组件（如图片），保证含媒体消息的超长文本也被拆分
+            result.append(chain.derive([*non_plain, Plain(parts[0])]))
+            result.extend(chain.derive([Plain(part)]) for part in parts[1:])
+        return result
+
     @staticmethod
     def _split_message_chain_by_media(message: MessageChain) -> list[MessageChain]:
         chunks: list[MessageChain] = []
@@ -358,11 +412,15 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             return None
 
         message_chains = self._split_message_chain_by_media(self.send_buffer)
-        stream_for_chain = stream if len(message_chains) == 1 else None
+        message_chains = self._split_message_chain_by_length(message_chains)
 
         ret = None
-        for message_chain in message_chains:
-            ret = await self._post_send_one(message_chain, stream_for_chain)
+        # C2C 流式一次调用是同一消息的连续分片；buffer 被拆成多段时，
+        # 只有最后一段携带 stream 载荷（保证流会话 id 连续、最终 state=10 正常结束），
+        # 其余段降级为非流式发送。
+        for index, message_chain in enumerate(message_chains):
+            chain_stream = stream if index == len(message_chains) - 1 else None
+            ret = await self._post_send_one(message_chain, chain_stream)
 
         self.send_buffer = None
 
