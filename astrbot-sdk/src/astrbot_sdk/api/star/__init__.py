@@ -1,0 +1,7 @@
+"""Namespaced bridge for ``astrbot.api.star``."""
+
+from __future__ import annotations
+
+from ..._api_bridge import export_public_api
+
+__all__ = export_public_api("astrbot.api.star", globals())
