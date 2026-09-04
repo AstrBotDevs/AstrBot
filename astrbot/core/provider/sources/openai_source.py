@@ -31,6 +31,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
+    normalize_image_for_provider,
     resolve_media_ref_to_base64_data,
 )
 from astrbot.core.utils.network_utils import (
@@ -174,7 +175,16 @@ class ProviderOpenAIOfficial(Provider):
             return True
         if "download attachment" in error_text and "404" in error_text:
             return True
+        if "unsupported image" in error_text:
+            return True
         return False
+
+    def _is_payload_too_large_error(self, error: Exception) -> bool:
+        """判断异常是否为请求体过大（HTTP 413）。"""
+        if hasattr(error, "status_code") and error.status_code == 413:
+            return True
+        error_text = str(error).lower()
+        return "413" in error_text or "request entity too large" in error_text
 
     async def _image_ref_to_data_url(
         self,
@@ -195,11 +205,18 @@ class ProviderOpenAIOfficial(Provider):
         *,
         image_detail: str | None = None,
     ) -> dict | None:
-        image_data = await self._image_ref_to_data_url(image_url, mode="safe")
-        if not image_data:
-            logger.warning("图片预处理结果为空，将忽略。")
+        image_data = await resolve_media_ref_to_base64_data(
+            image_url,
+            media_type="image",
+            strict=False,
+        )
+        normalized = normalize_image_for_provider(image_data)
+        if normalized is None:
+            logger.warning(
+                "Image preprocessing returned no usable image; skipping image_url part."
+            )
             return None
-        image_payload = {"url": image_data}
+        image_payload = {"url": normalized.to_data_url()}
 
         if image_detail:
             image_payload["detail"] = image_detail
@@ -281,13 +298,20 @@ class ProviderOpenAIOfficial(Provider):
                 )
             except Exception as exc:
                 logger.warning(
-                    "图片 %s 预处理失败，将保留原始内容。错误: %s",
+                    "Image %s preprocessing failed; replacing with text placeholder: %s",
                     url,
                     exc,
                 )
-                return part
+                return {"type": "text", "text": "[image omitted]"}
 
-            return resolved_part or part
+            if resolved_part is None:
+                logger.warning(
+                    "Image %s cannot be converted to a supported format; "
+                    "replacing with text placeholder.",
+                    url,
+                )
+                return {"type": "text", "text": "[image omitted]"}
+            return resolved_part
 
         if part.get("type") == "audio_url":
             audio_ref = self._extract_audio_part_info(part)
@@ -1128,6 +1152,21 @@ class ProviderOpenAIOfficial(Provider):
                 available_api_keys,
                 func_tool,
                 "model_not_vlm",
+                image_fallback_used=True,
+            )
+        if self._is_payload_too_large_error(e):
+            if image_fallback_used or not self._context_contains_image(context_query):
+                raise e
+            logger.warning(
+                "检测到请求体过大（413），已移除图片并重试（保留文本内容）。"
+            )
+            return await self._fallback_to_text_only_and_retry(
+                payloads,
+                context_query,
+                chosen_key,
+                available_api_keys,
+                func_tool,
+                "request_too_large",
                 image_fallback_used=True,
             )
         if self._is_content_moderated_upload_error(e):

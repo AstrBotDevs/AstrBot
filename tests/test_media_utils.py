@@ -871,3 +871,60 @@ async def test_wav_to_tencent_silk_skips_resample_for_supported_rate(
 
     assert len(fake.calls) == 1
     assert fake.calls[0]["sample_rate"] == 24000
+
+
+def test_normalize_image_for_provider_converts_bmp_to_jpeg():
+    from PIL import Image as PILImage
+
+    buffer = BytesIO()
+    PILImage.new("RGB", (2, 2), (255, 0, 0)).save(buffer, format="BMP")
+    data = media_utils.ResolvedMediaData(
+        base64_data=base64.b64encode(buffer.getvalue()).decode("ascii"),
+        mime_type="image/bmp",
+        format=None,
+    )
+
+    normalized = media_utils.normalize_image_for_provider(data)
+
+    assert normalized is not None
+    assert normalized.mime_type == "image/jpeg"
+    with PILImage.open(BytesIO(normalized.to_bytes())) as image:
+        assert image.format == "JPEG"
+
+
+def test_normalize_image_for_provider_returns_none_for_unparseable_image():
+    data = media_utils.ResolvedMediaData(
+        base64_data=base64.b64encode(b"not-an-image").decode("ascii"),
+        mime_type="image/svg+xml",
+        format=None,
+    )
+
+    assert media_utils.normalize_image_for_provider(data) is None
+
+
+def test_normalize_image_for_provider_rejects_invalid_supported_mime():
+    data = media_utils.ResolvedMediaData(
+        base64_data=base64.b64encode(b"not-an-image").decode("ascii"),
+        mime_type="image/png",
+        format=None,
+    )
+
+    assert media_utils.normalize_image_for_provider(data) is None
+
+
+def test_normalize_image_for_provider_preserves_supported_mime():
+    from PIL import Image as PILImage
+
+    buffer = BytesIO()
+    PILImage.new("RGB", (2, 2), (1, 2, 3)).save(buffer, format="PNG")
+    data = media_utils.ResolvedMediaData(
+        base64_data=base64.b64encode(buffer.getvalue()).decode("ascii"),
+        mime_type="image/jpg",  # Mislabeled alias should be corrected.
+        format=None,
+    )
+
+    normalized = media_utils.normalize_image_for_provider(data)
+
+    assert normalized is not None
+    assert normalized.mime_type == "image/png"
+    assert normalized.base64_data == data.base64_data
