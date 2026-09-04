@@ -52,8 +52,8 @@ class _version_info:
 
 
 def test_check_env(monkeypatch):
-    version_info_correct = _version_info(3, 10)
-    version_info_wrong = _version_info(3, 9)
+    version_info_correct = _version_info(3, 12)
+    version_info_wrong = _version_info(3, 11)
     monkeypatch.setattr(sys, "version_info", version_info_correct)
     with mock.patch("os.makedirs") as mock_makedirs:
         check_env()
