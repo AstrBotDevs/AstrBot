@@ -21,12 +21,14 @@ class WecomAIBotLongConnectionClient:
         ws_url: str,
         heartbeat_interval: int,
         message_handler: Callable[[dict[str, Any]], Awaitable[None]],
+        max_concurrent_callbacks: int = 20,
     ) -> None:
         self.bot_id = bot_id
         self.secret = secret
         self.ws_url = ws_url
         self.heartbeat_interval = max(5, int(heartbeat_interval))
         self.message_handler = message_handler
+        self.max_concurrent_callbacks = max(1, int(max_concurrent_callbacks))
 
         self._session: aiohttp.ClientSession | None = None
         self._ws: aiohttp.ClientWebSocketResponse | None = None
@@ -35,6 +37,8 @@ class WecomAIBotLongConnectionClient:
         self._command_lock = asyncio.Lock()
         self._response_waiters: dict[str, asyncio.Future[dict[str, Any]]] = {}
         self._message_handler_tasks: set[asyncio.Task[None]] = set()
+        self._active_callback_count = 0
+        self._callback_slots = asyncio.BoundedSemaphore(self.max_concurrent_callbacks)
 
     @staticmethod
     def gen_req_id() -> str:
@@ -141,7 +145,15 @@ class WecomAIBotLongConnectionClient:
         if cmd in {"aibot_msg_callback", "aibot_event_callback"}:
             # Keep the receive loop available for command acknowledgements sent by
             # the callback handler, such as the configured initial response.
-            task = asyncio.create_task(self.message_handler(payload))
+            if self._active_callback_count >= self.max_concurrent_callbacks:
+                logger.warning(
+                    "[WecomAI][LongConn] Callback dropped due to concurrency limit: limit=%s",
+                    self.max_concurrent_callbacks,
+                )
+                return
+            await self._callback_slots.acquire()
+            self._active_callback_count += 1
+            task = asyncio.create_task(self._run_message_handler(payload))
             self._message_handler_tasks.add(task)
             task.add_done_callback(self._on_message_handler_done)
             return
@@ -163,6 +175,14 @@ class WecomAIBotLongConnectionClient:
                 "[WecomAI][LongConn] 处理回调消息失败",
                 exc_info=exception,
             )
+
+    async def _run_message_handler(self, payload: dict[str, Any]) -> None:
+        """Run one callback while keeping the receive loop responsive."""
+        try:
+            await self.message_handler(payload)
+        finally:
+            self._active_callback_count -= 1
+            self._callback_slots.release()
 
     async def send_command(
         self,
@@ -243,6 +263,18 @@ class WecomAIBotLongConnectionClient:
 
     async def shutdown(self) -> None:
         self._shutdown_event.set()
+        handler_tasks = list(self._message_handler_tasks)
+        for task in handler_tasks:
+            task.cancel()
+        if handler_tasks:
+            await asyncio.gather(*handler_tasks, return_exceptions=True)
+        self._message_handler_tasks.clear()
+        self._active_callback_count = 0
+
+        for waiter in self._response_waiters.values():
+            if not waiter.done():
+                waiter.cancel()
+        self._response_waiters.clear()
         ws = self._ws
         if ws is not None and not ws.closed:
             await ws.close()

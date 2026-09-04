@@ -104,10 +104,10 @@ async def test_http_image_without_suffix_uses_detected_image_suffix(
     image_buffer = BytesIO()
     PILImage.new("RGBA", (1, 1), (255, 0, 0, 128)).save(image_buffer, format="PNG")
 
-    async def fake_download_file(_url: str, target_path: str) -> None:
+    async def fake_download_file(_url: str, target_path: Path, *, policy) -> None:
         Path(target_path).write_bytes(image_buffer.getvalue())
 
-    monkeypatch.setattr(media_utils, "download_file", fake_download_file)
+    monkeypatch.setattr(media_utils, "download_public_url", fake_download_file)
 
     image_path = await media_utils.MediaResolver(
         "https://example.com/image?id=123",
@@ -510,11 +510,11 @@ async def test_media_resolver_cleans_http_target_when_download_fails(
 ):
     monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
 
-    async def fail_download(url: str, target_path: str) -> None:
+    async def fail_download(url: str, target_path: Path, *, policy) -> None:
         Path(target_path).write_bytes(b"partial")
         raise RuntimeError("download failed")
 
-    monkeypatch.setattr(media_utils, "download_file", fail_download)
+    monkeypatch.setattr(media_utils, "download_public_url", fail_download)
 
     with pytest.raises(RuntimeError, match="download failed"):
         await media_utils.MediaResolver(

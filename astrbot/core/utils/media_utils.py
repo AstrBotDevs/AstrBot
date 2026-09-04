@@ -25,7 +25,11 @@ from PIL import Image as PILImage
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
-from astrbot.core.utils.io import download_file
+from astrbot.core.utils.safe_http import (
+    RemoteFetchPolicy,
+    download_public_url,
+    parse_private_target_rules,
+)
 from astrbot.core.utils.tencent_record_helper import (
     tencent_silk_to_wav,
     wav_to_tencent_silk,
@@ -35,6 +39,8 @@ IMAGE_COMPRESS_DEFAULT_MAX_SIZE = 1280
 IMAGE_COMPRESS_DEFAULT_QUALITY = 95
 IMAGE_COMPRESS_DEFAULT_OPTIMIZE = True
 IMAGE_COMPRESS_DEFAULT_MIN_FILE_SIZE_MB = 1.0
+REMOTE_MEDIA_MAX_BYTES = 32 * 1024 * 1024
+REMOTE_IMAGE_MAX_BYTES = 16 * 1024 * 1024
 
 MEDIA_MIME_EXTENSIONS = {
     "audio/wav": ".wav",
@@ -455,7 +461,26 @@ async def _materialize_media_ref(
             target_path = _temp_media_path(media_type, target_suffix)
         cleanup_paths.append(target_path)
         try:
-            await download_file(media_ref, str(target_path))
+            from astrbot.core import astrbot_config
+
+            outbound = astrbot_config.get("security", {}).get("outbound_fetch", {})
+            rules = parse_private_target_rules(
+                outbound.get("media_private_targets", [])
+            )
+            await download_public_url(
+                media_ref,
+                target_path,
+                policy=RemoteFetchPolicy(
+                    max_bytes=(
+                        REMOTE_IMAGE_MAX_BYTES
+                        if media_type == "image"
+                        else REMOTE_MEDIA_MAX_BYTES
+                    ),
+                    total_timeout_seconds=30,
+                    max_redirects=3,
+                    allow_private_targets=rules,
+                ),
+            )
         except Exception:
             _cleanup_paths(cleanup_paths)
             raise
@@ -735,6 +760,29 @@ class MediaResolver:
         )
         resolved.detach()
         return str(resolved.path.resolve())
+
+    async def to_path_with_cleanup(
+        self,
+        *,
+        target_format: str | None = None,
+        preserve_mp3: bool = False,
+    ) -> tuple[str, list[str]]:
+        """Return a persistent path together with all resolver-owned temp paths.
+
+        Args:
+            target_format: Optional destination media format.
+            preserve_mp3: Whether an existing MP3 should remain MP3.
+
+        Returns:
+            Final path and temporary paths that the caller must clean up.
+        """
+        resolved = await self._resolve_path(
+            target_format=target_format,
+            preserve_mp3=preserve_mp3,
+        )
+        cleanup_paths = [str(path.resolve()) for path in resolved.cleanup_paths]
+        resolved.detach()
+        return str(resolved.path.resolve()), cleanup_paths
 
     async def to_bytes(
         self,

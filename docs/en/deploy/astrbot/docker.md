@@ -35,9 +35,10 @@ Deployment method:
 ```bash
 git clone https://github.com/AstrBotDevs/AstrBot
 cd AstrBot
-# Modify the environment variable configuration in the compose-with-shipyard.yml file, such as Shipyard's access token, etc.
+# Run Shipyard Bay on a dedicated host, then provide its HTTPS endpoint and token.
+export SHIPYARD_ENDPOINT=https://shipyard.example.com
+export SHIPYARD_ACCESS_TOKEN='<high-entropy-token>'
 docker compose -f compose-with-shipyard.yml up -d
-docker pull soulter/shipyard-ship:latest
 ```
 
 For configuration and usage details, see the [Agent Sandbox Environment](/en/use/astrbot-agent-sandbox.md) documentation.
@@ -49,14 +50,14 @@ For configuration and usage details, see the [Agent Sandbox Environment](/en/use
 ```bash
 mkdir astrbot
 cd astrbot
-sudo docker run -itd -p 6185:6185 -p 6199:6199 -v $PWD/data:/AstrBot/data -v /etc/localtime:/etc/localtime:ro -v /etc/timezone:/etc/timezone:ro --name astrbot soulter/astrbot:latest
+sudo docker run -itd -p 127.0.0.1:6185:6185 -e ASTRBOT_DASHBOARD_HOST=0.0.0.0 -e ASTRBOT_DASHBOARD_ACCESS_MODE=container_loopback -v $PWD/data:/AstrBot/data -v /etc/localtime:/etc/localtime:ro -v /etc/timezone:/etc/timezone:ro --name astrbot soulter/astrbot:latest
 ```
 
 > [!TIP]
 > If your network environment is in mainland China, the above command will not pull properly. Please use the following command to pull the image:
 >
 > ```bash
-> sudo docker run -itd -p 6185:6185 -p 6199:6199 -v $PWD/data:/AstrBot/data -v /etc/localtime:/etc/localtime:ro -v /etc/timezone:/etc/timezone:ro --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
+> sudo docker run -itd -p 127.0.0.1:6185:6185 -e ASTRBOT_DASHBOARD_HOST=0.0.0.0 -e ASTRBOT_DASHBOARD_ACCESS_MODE=container_loopback -v $PWD/data:/AstrBot/data -v /etc/localtime:/etc/localtime:ro -v /etc/timezone:/etc/timezone:ro --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
 > ```
 >
 > (Thanks to DaoCloud ❤️)
@@ -83,13 +84,13 @@ sudo docker logs -f astrbot
 Set `TZ` to the standard IANA time zone format (Region/City). Use `Asia/Shanghai` for China.
 
 ```bash
-docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "%cd%\data:/AstrBot/data" --name astrbot soulter/astrbot:latest
+docker run -itd -p 127.0.0.1:6185:6185 -e ASTRBOT_DASHBOARD_HOST=0.0.0.0 -e ASTRBOT_DASHBOARD_ACCESS_MODE=container_loopback -e TZ=Asia/Shanghai -v "%cd%\data:/AstrBot/data" --name astrbot soulter/astrbot:latest
 ```
 > [!TIP]
 > If your network environment is in mainland China, the above command will not pull properly. Please use the following command to pull the image:
 >
 > ```bash
-> docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "%cd%\data:/AstrBot/data" --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
+> docker run -itd -p 127.0.0.1:6185:6185 -e ASTRBOT_DASHBOARD_HOST=0.0.0.0 -e ASTRBOT_DASHBOARD_ACCESS_MODE=container_loopback -e TZ=Asia/Shanghai -v "%cd%\data:/AstrBot/data" --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
 > ```
 >
 > (Thanks to DaoCloud ❤️)
@@ -99,13 +100,13 @@ docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "%cd%\data:/Ast
 Set `TZ` to the standard IANA time zone format (Region/City). Use `Asia/Shanghai` for China.
 
 ```powershell
-docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "${PWD}\data:/AstrBot/data" --name astrbot soulter/astrbot:latest
+docker run -itd -p 127.0.0.1:6185:6185 -e ASTRBOT_DASHBOARD_HOST=0.0.0.0 -e ASTRBOT_DASHBOARD_ACCESS_MODE=container_loopback -e TZ=Asia/Shanghai -v "${PWD}\data:/AstrBot/data" --name astrbot soulter/astrbot:latest
 ```
 > [!TIP]
 > If your network environment is in mainland China, the above command will not pull properly. Please use the following command to pull the image:
 >
 > ```powershell
-> docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "${PWD}\data:/AstrBot/data" --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
+> docker run -itd -p 127.0.0.1:6185:6185 -e ASTRBOT_DASHBOARD_HOST=0.0.0.0 -e ASTRBOT_DASHBOARD_ACCESS_MODE=container_loopback -e TZ=Asia/Shanghai -v "${PWD}\data:/AstrBot/data" --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
 > ```
 >
 > (Thanks to DaoCloud ❤️)
@@ -117,10 +118,10 @@ If everything goes well, you will see logs printed by AstrBot.
 If there are no errors, you will see a log message similar to `🌈 Dashboard started, accessible at` with several links. Open one of the links to access the AstrBot dashboard.
 
 > [!TIP]
-> Since Docker isolates the network environment, you cannot use `localhost` to access the dashboard.
+> The default mapping is intentionally limited to `http://localhost:6185`. Use a TLS reverse proxy or the built-in HTTPS configuration for remote access.
 >
 > New users must use the random password printed in the startup logs to log in for the first time. Use the username shown in the logs (usually `astrbot`) and change the password after first login.
 >
-> If deployed on a cloud server, you need to open ports `6180-6200` and `11451` in the cloud provider's console.
+> Do not expose ports 6185 or 6199 directly to the Internet. OneBot requires a non-empty token and should use a private network.
 
 Next, you need to deploy any messaging platform to use AstrBot on that platform.

@@ -16,6 +16,8 @@ jobs:
     name: Run pytest suite
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      UV_LOCKED: "1"
 
     steps:
       - name: Checkout
@@ -30,6 +32,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install uv
+
+      - name: Verify dependency lock
+        run: uv lock --check
 
       - name: Run tests
         run: |

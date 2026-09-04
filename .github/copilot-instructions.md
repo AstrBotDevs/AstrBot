@@ -7,9 +7,9 @@ Always reference these instructions first and fallback to search or bash command
 ## Working Effectively
 
 ### Bootstrap and Install Dependencies
-- **Python 3.10+ required** - Check `.python-version` file
+- **Python 3.12–3.14 required** - Check `.python-version` file
 - Install UV package manager: `pip install uv`
-- Install project dependencies: `uv sync` -- takes 6-7 minutes. NEVER CANCEL. Set timeout to 10+ minutes.
+- Install project dependencies: `uv sync --locked` -- takes 6-7 minutes. NEVER CANCEL. Set timeout to 10+ minutes.
 - Create required directories: `mkdir -p data/plugins data/config data/temp`
 
 ### Running the Application
@@ -17,10 +17,10 @@ Always reference these instructions first and fallback to search or bash command
 - Application creates WebUI on http://localhost:6185 (default credentials: `astrbot`/`astrbot`)
 
 ### Dashboard Build (Vue.js/Node.js)
-- **Prerequisites**: Node.js 20+ and npm 10+ required
+- **Prerequisites**: Node.js 24.13.0 and pnpm 10.28.2 required
 - Navigate to dashboard: `cd dashboard`
-- Install dashboard dependencies: `npm install` -- takes 2-3 minutes. NEVER CANCEL. Set timeout to 5+ minutes.
-- Build dashboard: `npm run build` -- takes 25-30 seconds. NEVER CANCEL.
+- Install dashboard dependencies: `corepack pnpm@10.28.2 install --frozen-lockfile` -- takes 2-3 minutes. NEVER CANCEL. Set timeout to 5+ minutes.
+- Build dashboard: `corepack pnpm@10.28.2 run build` -- takes 25-30 seconds. NEVER CANCEL.
 - Dashboard creates optimized production build in `dashboard/dist/`
 
 ### Testing
@@ -41,7 +41,7 @@ Always reference these instructions first and fallback to search or bash command
 ### Common Issues and Workarounds
 - **Dashboard download fails**: Known issue with "division by zero" error - application still works
 - **Import errors in tests**: Ensure `uv run` is used to run tests in proper environment
-=- **Build timeouts**: Always set appropriate timeouts (10+ minutes for uv sync, 5+ minutes for npm install)
+- **Build timeouts**: Always set appropriate timeouts (10+ minutes for `uv sync --locked`, 5+ minutes for frozen pnpm installs)
 
 ## CI/CD Integration
 - GitHub Actions workflows in `.github/workflows/`

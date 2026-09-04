@@ -103,15 +103,17 @@ Manage configuration profiles, system configuration, and shared configuration, e
 - **Includes:** `bot`, `provider`
 
 - **Sensitive sub-scope `config:edit_admin`:** Allow a `config`-scoped key to change `admins_id`. This sub-scope must be granted explicitly.
+- **Sensitive sub-scope `config:secrets`:** Allow a `config`-scoped key to replace or clear write-only business secrets. Secret values are never returned by configuration reads.
+- **Sensitive sub-scope `config:security`:** Allow a `config`-scoped key to change dashboard exposure and outbound network security policy.
 
 | Method | Endpoint | Conditional sensitive sub-scope |
 | --- | --- | --- |
 | `POST` | `/api/v1/bot-types/{bot_type}/registration` | — |
 | `GET` | `/api/v1/config-profiles` | — |
-| `POST` | `/api/v1/config-profiles` | `config:edit_admin` |
+| `POST` | `/api/v1/config-profiles` | `config:edit_admin`, `config:secrets`, `config:security` |
 | `GET` | `/api/v1/config-profiles/schema` | — |
 | `GET` | `/api/v1/config-profiles/{config_id}` | — |
-| `PUT` | `/api/v1/config-profiles/{config_id}` | `config:edit_admin` |
+| `PUT` | `/api/v1/config-profiles/{config_id}` | `config:edit_admin`, `config:secrets`, `config:security` |
 | `PATCH` | `/api/v1/config-profiles/{config_id}` | — |
 | `DELETE` | `/api/v1/config-profiles/{config_id}` | — |
 | `GET` | `/api/v1/config-routes` | — |
@@ -122,7 +124,7 @@ Manage configuration profiles, system configuration, and shared configuration, e
 | `GET` | `/api/v1/subagents/config` | — |
 | `PUT` | `/api/v1/subagents/config` | — |
 | `GET` | `/api/v1/system-config` | — |
-| `PUT` | `/api/v1/system-config` | `config:edit_admin` |
+| `PUT` | `/api/v1/system-config` | `config:edit_admin`, `config:secrets`, `config:security` |
 | `GET` | `/api/v1/system-config/runtime` | — |
 | `GET` | `/api/v1/system-config/schema` | — |
 | `GET` | `/api/v1/t2i/templates` | — |

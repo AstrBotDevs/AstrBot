@@ -1,12 +1,12 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: astrbot-service-nodeport
+  name: astrbot-service
   namespace: astrbot-ns
   labels:
     app: astrbot-stack
 spec:
-  type: NodePort
+  type: ClusterIP
   selector:
     app: astrbot-stack
   ports:

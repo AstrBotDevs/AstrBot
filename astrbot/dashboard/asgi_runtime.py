@@ -15,6 +15,8 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.responses import StreamingResponse
 
+from astrbot.dashboard.body_limits import DEFAULT_MULTIPART_LIMIT
+
 _request_var: contextvars.ContextVar[DashboardRequest] = contextvars.ContextVar(
     "dashboard_request"
 )
@@ -99,18 +101,44 @@ class RequestUploadFile:
         except (TypeError, ValueError):
             return None
 
-    async def save(self, destination: str | Path) -> None:
+    async def save(
+        self,
+        destination: str | Path,
+        *,
+        max_bytes: int = DEFAULT_MULTIPART_LIMIT,
+    ) -> int:
+        """Stream an upload to disk with a second byte-limit check.
+
+        Args:
+            destination: Final output path.
+            max_bytes: Maximum bytes written.
+
+        Returns:
+            Number of bytes written.
+
+        Raises:
+            ValueError: If the upload exceeds ``max_bytes``.
+        """
         path = Path(destination)
+        written = 0
         try:
             await self._upload_file.seek(0)
         except Exception:
             pass
-        with path.open("wb") as output:
-            while True:
-                chunk = await self._upload_file.read(1024 * 1024)
-                if not chunk:
-                    break
-                output.write(chunk)
+        try:
+            with path.open("wb") as output:
+                while True:
+                    chunk = await self._upload_file.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    written += len(chunk)
+                    if written > max_bytes:
+                        raise ValueError("Uploaded file exceeds the byte limit")
+                    output.write(chunk)
+        except Exception:
+            path.unlink(missing_ok=True)
+            raise
+        return written
 
     def __getattr__(self, key: str):
         return getattr(self._upload_file, key)

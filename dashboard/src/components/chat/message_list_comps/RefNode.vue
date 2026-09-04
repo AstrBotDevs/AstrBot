@@ -1,12 +1,13 @@
 <template>
   <v-chip
-    v-if="resultData"
+    v-if="resultData && url"
     class="ref-chip"
     size="x-small"
     variant="flat"
     :style="chipStyle"
     :href="url"
     target="_blank"
+    rel="noopener noreferrer"
     clickable
   >
     <v-icon start size="x-small" color>mdi-link-variant</v-icon>
@@ -16,6 +17,7 @@
 
 <script setup>
 import { computed, inject, unref, useSlots } from "vue";
+import { normalizeExternalHttpUrl } from "@/utils/requestPolicy.mjs";
 
 const props = defineProps({
   node: {
@@ -44,7 +46,7 @@ const resultData = computed(() => {
   return results?.[refIndex.value] || null;
 });
 
-const url = computed(() => resultData.value?.url || "");
+const url = computed(() => normalizeExternalHttpUrl(resultData.value?.url) || "");
 
 const domain = computed(() => {
   if (!url.value) return "";

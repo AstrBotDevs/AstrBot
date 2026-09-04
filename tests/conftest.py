@@ -6,7 +6,9 @@ AstrBot 测试配置
 
 import json
 import os
+import shutil
 import sys
+import tempfile
 from asyncio import Queue
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -21,9 +23,16 @@ PROJECT_ROOT = Path(__file__).parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# 设置测试环境变量
-os.environ.setdefault("TESTING", "true")
-os.environ.setdefault("ASTRBOT_TEST_MODE", "true")
+# Every pytest process owns an isolated runtime root.  Set this before any
+# AstrBot import so path helpers cannot resolve to the checkout's data/ tree.
+TEST_WORKER = os.environ.get("PYTEST_XDIST_WORKER", "main")
+TEST_ASTRBOT_ROOT = Path(
+    tempfile.mkdtemp(prefix=f"astrbot-pytest-{TEST_WORKER}-")
+).resolve()
+os.environ["TESTING"] = "true"
+os.environ["ASTRBOT_TEST_MODE"] = "true"
+os.environ["ASTRBOT_ROOT"] = str(TEST_ASTRBOT_ROOT)
+sys.path.insert(0, str(TEST_ASTRBOT_ROOT))
 
 
 # ============================================================
@@ -97,6 +106,16 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "db: 数据库相关测试")
     config.addinivalue_line("markers", "tier_c: C-tier tests (optional / non-blocking)")
     config.addinivalue_line("markers", "tier_d: D-tier tests (extended / integration)")
+
+
+def pytest_sessionfinish(session, exitstatus):  # noqa: ARG001
+    """Remove the per-process AstrBot runtime root after the test session."""
+    shutil.rmtree(TEST_ASTRBOT_ROOT, ignore_errors=True)
+    if TEST_ASTRBOT_ROOT.exists():
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+        raise RuntimeError(
+            f"Could not remove isolated test runtime root: {TEST_ASTRBOT_ROOT}"
+        )
 
 
 # ============================================================

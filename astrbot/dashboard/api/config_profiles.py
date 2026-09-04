@@ -12,7 +12,11 @@ from astrbot.dashboard.schemas import (
     ConfigRouteUpsertRequest,
     RenameRequest,
 )
-from astrbot.dashboard.services.auth_service import CONFIG_EDIT_ADMIN_SCOPE
+from astrbot.dashboard.services.auth_service import (
+    CONFIG_EDIT_ADMIN_SCOPE,
+    CONFIG_SECRETS_SCOPE,
+    CONFIG_SECURITY_SCOPE,
+)
 from astrbot.dashboard.services.config_service import (
     ConfigDisplayService,
     ConfigFileService,
@@ -82,6 +86,43 @@ def _can_edit_admin_ids(auth: AuthContext) -> bool:
     )
 
 
+def _can_change_secrets(auth: AuthContext) -> bool:
+    """Return whether the caller may replace write-only configuration values.
+
+    Args:
+        auth: Authentication context for the current request.
+
+    Returns:
+        True for dashboard users and API keys with config:secrets.
+    """
+    return (
+        auth.via != "api_key"
+        or "*" in auth.scopes
+        or CONFIG_SECRETS_SCOPE in auth.scopes
+    )
+
+
+def _can_change_security_policy(auth: AuthContext) -> bool:
+    """Return whether the caller may change outbound and exposure policy.
+
+    Args:
+        auth: Authentication context for the current request.
+
+    Returns:
+        True for dashboard users and API keys with config:security.
+    """
+    return (
+        auth.via != "api_key"
+        or "*" in auth.scopes
+        or CONFIG_SECURITY_SCOPE in auth.scopes
+    )
+
+
+def _can_change_totp_secret(auth: AuthContext) -> bool:
+    """Only an interactive Dashboard session may change TOTP state."""
+    return auth.via != "api_key"
+
+
 @router.get("/config-profiles/schema")
 async def get_config_profile_schema(
     _auth: AuthContext = Depends(require_config_scope),
@@ -112,6 +153,8 @@ async def create_config_profile(
             payload.name,
             payload.config,
             allow_admin_id_change=_can_edit_admin_ids(auth),
+            allow_secret_change=_can_change_secrets(auth),
+            allow_security_policy_change=_can_change_security_policy(auth),
         ),
         "创建成功",
     )
@@ -142,6 +185,9 @@ async def update_config_profile(
         _model_dict(payload),
         two_factor_code=request.headers.get("X-2FA-Code"),
         allow_admin_id_change=_can_edit_admin_ids(auth),
+        allow_secret_change=_can_change_secrets(auth),
+        allow_security_policy_change=_can_change_security_policy(auth),
+        allow_totp_secret_change=_can_change_totp_secret(auth),
     )
     return ok(message=message or "保存成功")
 
@@ -206,13 +252,16 @@ async def update_system_config(
         _model_dict(payload),
         two_factor_code=request.headers.get("X-2FA-Code"),
         allow_admin_id_change=_can_edit_admin_ids(auth),
+        allow_secret_change=_can_change_secrets(auth),
+        allow_security_policy_change=_can_change_security_policy(auth),
+        allow_totp_secret_change=_can_change_totp_secret(auth),
     )
     return ok(message=message or "保存成功")
 
 
 @router.get("/config-routes")
 async def list_config_routes(
-    _auth: AuthContext = Depends(require_config_scope),
+    auth: AuthContext = Depends(require_config_scope),
     service: ConfigRoutingService = Depends(get_routing_service),
 ):
     return ok(service.list_routes())
@@ -278,6 +327,8 @@ async def create_dashboard_alias_config_profile(
                 body.get("name"),
                 body.get("config"),
                 allow_admin_id_change=_can_edit_admin_ids(auth),
+                allow_secret_change=_can_change_secrets(auth),
+                allow_security_policy_change=_can_change_security_policy(auth),
             ),
             "创建成功",
         )
@@ -355,6 +406,9 @@ async def update_dashboard_alias_astrbot_config(
             config,
             two_factor_code=request.headers.get("X-2FA-Code"),
             allow_admin_id_change=_can_edit_admin_ids(auth),
+            allow_secret_change=_can_change_secrets(auth),
+            allow_security_policy_change=_can_change_security_policy(auth),
+            allow_totp_secret_change=_can_change_totp_secret(auth),
         )
         return ok(message=message or "保存成功~")
     except ValueError as exc:
@@ -377,7 +431,7 @@ async def get_dashboard_alias_configs(
 async def update_dashboard_alias_plugin_configs(
     request: Request,
     plugin_name: str = Query(default="unknown"),
-    _auth: AuthContext = Depends(require_config_scope),
+    auth: AuthContext = Depends(require_config_scope),
     service: ConfigFileService = Depends(get_file_service),
 ):
     body = await _json_or_empty(request)
@@ -385,6 +439,7 @@ async def update_dashboard_alias_plugin_configs(
         message = await service.save_plugin_configs_from_dashboard_payload(
             body,
             plugin_name=plugin_name,
+            allow_secret_change=_can_change_secrets(auth),
         )
         return ok(message=message)
     except ValueError as exc:

@@ -313,6 +313,21 @@ def render_scope_reference(spec: dict[str, Any], *, language: str) -> str:
     return "\n".join(lines)
 
 
+def display_path(path: Path) -> str:
+    """Return a repository-relative path when possible.
+
+    Args:
+        path: Path to display in command output.
+
+    Returns:
+        A repository-relative path or the absolute path for external outputs.
+    """
+    try:
+        return str(path.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
+
+
 def main() -> int:
     args = parse_args()
     spec_path = args.spec.resolve()
@@ -338,10 +353,10 @@ def main() -> int:
         encoding="utf-8",
     )
     print(
-        f"Updated {output_path.relative_to(REPO_ROOT)}, "
-        f"{zh_scope_output_path.relative_to(REPO_ROOT)}, and "
-        f"{en_scope_output_path.relative_to(REPO_ROOT)} from "
-        f"{spec_path.relative_to(REPO_ROOT)}"
+        f"Updated {display_path(output_path)}, "
+        f"{display_path(zh_scope_output_path)}, and "
+        f"{display_path(en_scope_output_path)} from "
+        f"{display_path(spec_path)}"
     )
     return 0
 

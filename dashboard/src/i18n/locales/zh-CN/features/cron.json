@@ -148,7 +148,19 @@
     "session": "投递到（可选）",
     "noUmos": "暂无可用会话",
     "timezone": "时区（可选，如 Asia/Shanghai）",
-    "enabled": "启用"
+    "enabled": "启用",
+    "privilegedExecution": "允许管理员级副作用",
+    "privilegedExecutionHint": "定时任务运行时可获得仅管理员可用的工具，包括本地或沙箱计算机工具。"
+  },
+  "privileged": {
+    "confirmTitle": "启用特权执行？",
+    "confirmDescription": "此任务运行时可能使用管理员级副作用工具。只有在完全信任该任务时才启用。",
+    "confirmAction": "启用特权执行",
+    "totpTitle": "验证特权执行",
+    "totpDescription": "请输入当前验证器代码以启用此任务。",
+    "totpCode": "验证器代码",
+    "totpConfirm": "验证并保存",
+    "totpError": "需要当前验证器代码。"
   },
   "messages": {
     "loadFailed": "获取任务失败",

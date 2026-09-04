@@ -1,23 +1,21 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: astrbot-standalone-nodeport
+  name: astrbot-standalone
   namespace: astrbot-standalone-ns
   labels:
     app: astrbot-standalone
 spec:
-  type: NodePort
+  type: ClusterIP
   selector:
     app: astrbot-standalone
   ports:
     - name: webui
       port: 6185
       targetPort: 6185
-      nodePort: 30185
     - name: qq-ws
       port: 6199
       targetPort: 6199
-      nodePort: 30199
     # - name: wecom-wh
     #   port: 6195
     #   targetPort: 6195

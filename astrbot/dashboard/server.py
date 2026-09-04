@@ -7,7 +7,6 @@ import time
 from pathlib import Path
 from typing import Any, Protocol, cast
 
-import jwt
 import psutil
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -25,6 +24,11 @@ from astrbot.core.utils.io import get_local_ip_addresses
 from astrbot.dashboard.asgi_runtime import (
     DashboardRequestState,
     FastAPIAppAdapter,
+)
+from astrbot.dashboard.auth_tokens import (
+    DashboardTokenError,
+    decode_dashboard_session_token,
+    decode_plugin_asset_token,
 )
 from astrbot.dashboard.responses import error
 
@@ -186,11 +190,12 @@ class AstrBotDashboard:
         self.data_path = str(dashboard_dist) if dashboard_dist else None
 
         self._rate_limiter_registry = _RateLimiterRegistry()
-        self._init_jwt_secret()
+        self._init_auth_secrets()
         self.asgi_app = create_dashboard_asgi_app(
             core_lifecycle=core_lifecycle,
             db=db,
             jwt_secret=self._jwt_secret,
+            plugin_asset_jwt_secret=self._plugin_asset_jwt_secret,
             static_folder=self.data_path,
         )
         self.app = FastAPIAppAdapter(self.asgi_app, static_folder=self.data_path)
@@ -198,9 +203,6 @@ class AstrBotDashboard:
         self.app._dashboard_server = self
         global APP
         APP = self.app
-        self.app.config["MAX_CONTENT_LENGTH"] = (
-            128 * 1024 * 1024
-        )  # 将 Flask 允许的最大上传文件体大小设置为 128 MB
 
         @self.asgi_app.middleware("http")
         async def dashboard_auth_middleware(request_, call_next):
@@ -292,23 +294,23 @@ class AstrBotDashboard:
             present only when the token is valid for the current request path.
         """
         try:
-            payload = jwt.decode(token, self._jwt_secret, algorithms=["HS256"])
-        except jwt.ExpiredSignatureError:
-            return None, "Token 过期"
-        except jwt.InvalidTokenError:
+            if PluginPageAuth.is_protected_path(path):
+                try:
+                    payload = decode_plugin_asset_token(
+                        token, secret=self._plugin_asset_jwt_secret
+                    )
+                except DashboardTokenError:
+                    username = decode_dashboard_session_token(
+                        token, secret=self._jwt_secret
+                    )
+                    return {"username": username}, ""
+                if not PluginPageAuth.is_scope_valid(payload, path):
+                    return None, "Token 无效"
+                return payload, ""
+            username = decode_dashboard_session_token(token, secret=self._jwt_secret)
+            return {"username": username}, ""
+        except DashboardTokenError:
             return None, "Token 无效"
-
-        if PluginPageAuth.is_asset_token(payload) and not PluginPageAuth.is_scope_valid(
-            payload,
-            path,
-        ):
-            return None, "Token 无效"
-
-        username = payload.get("username")
-        if not isinstance(username, str) or not username.strip():
-            return None, "Token 无效"
-
-        return payload, ""
 
     async def _apply_auth_rate_limit(
         self,
@@ -342,7 +344,25 @@ class AstrBotDashboard:
         return None
 
     def _get_request_client_ip(self, current_request) -> str:
-        if bool(self.config.get("dashboard", {}).get("trust_proxy_headers", False)):
+        dashboard_config = self.config.get("dashboard", {})
+        remote_addr = (
+            str(current_request.client.host).strip()
+            if current_request.client is not None
+            else ""
+        )
+        trusted_proxy = False
+        if remote_addr and dashboard_config.get("access_mode") == "reverse_proxy":
+            try:
+                peer = ipaddress.ip_address(remote_addr)
+                trusted_proxy = any(
+                    peer in ipaddress.ip_network(str(network), strict=False)
+                    for network in dashboard_config.get("reverse_proxy", {}).get(
+                        "trusted_proxy_cidrs", []
+                    )
+                )
+            except ValueError:
+                trusted_proxy = False
+        if trusted_proxy:
             forwarded_for = str(
                 current_request.headers.get("X-Forwarded-For", "")
             ).strip()
@@ -361,11 +381,6 @@ class AstrBotDashboard:
                 except ValueError:
                     pass
 
-        remote_addr = (
-            str(current_request.client.host).strip()
-            if current_request.client is not None
-            else ""
-        )
         if remote_addr:
             try:
                 return str(ipaddress.ip_address(remote_addr))
@@ -429,14 +444,21 @@ class AstrBotDashboard:
         except Exception as e:
             return f"获取进程信息失败: {e!s}"
 
-    def _init_jwt_secret(self) -> None:
-        if not self.config.get("dashboard", {}).get("jwt_secret", None):
-            # 如果没有设置 JWT 密钥，则生成一个新的密钥
-            jwt_secret = os.urandom(32).hex()
-            self.config["dashboard"]["jwt_secret"] = jwt_secret
+    def _init_auth_secrets(self) -> None:
+        """Initialize separate dashboard-session and plugin-asset signing secrets."""
+        dashboard = self.config.setdefault("dashboard", {})
+        changed = False
+        if not dashboard.get("jwt_secret"):
+            dashboard["jwt_secret"] = os.urandom(32).hex()
+            changed = True
+        if not dashboard.get("plugin_asset_jwt_secret"):
+            dashboard["plugin_asset_jwt_secret"] = os.urandom(32).hex()
+            changed = True
+        if changed:
             self.config.save_config()
-            logger.info("Initialized random JWT secret for dashboard.")
-        self._jwt_secret = self.config["dashboard"]["jwt_secret"]
+            logger.info("Initialized dashboard authentication signing secrets.")
+        self._jwt_secret = dashboard["jwt_secret"]
+        self._plugin_asset_jwt_secret = dashboard["plugin_asset_jwt_secret"]
 
     def _build_dashboard_credentials_display(self) -> str:
         username = self.config["dashboard"].get("username", "astrbot")
@@ -518,8 +540,10 @@ class AstrBotDashboard:
         host = (
             os.environ.get("DASHBOARD_HOST")
             or os.environ.get("ASTRBOT_DASHBOARD_HOST")
-            or dashboard_config.get("host", "0.0.0.0")
+            or dashboard_config.get("host", "127.0.0.1")
         )
+        access_mode_env = os.environ.get("ASTRBOT_DASHBOARD_ACCESS_MODE")
+        access_mode = access_mode_env or dashboard_config.get("access_mode", "local")
         enable = dashboard_config.get("enable", True)
         ssl_config = dashboard_config.get("ssl", {})
         if not isinstance(ssl_config, dict):
@@ -539,6 +563,47 @@ class AstrBotDashboard:
         if not enable:
             logger.info("WebUI disabled.")
             return None
+
+        normalized_host = str(host).strip().lower()
+        host_is_loopback = normalized_host == "localhost"
+        try:
+            host_is_loopback = (
+                host_is_loopback or ipaddress.ip_address(normalized_host).is_loopback
+            )
+        except ValueError:
+            pass
+        if access_mode == "container_loopback":
+            if access_mode_env != "container_loopback":
+                raise RuntimeError(
+                    "container_loopback is accepted only through "
+                    "ASTRBOT_DASHBOARD_ACCESS_MODE"
+                )
+        elif access_mode == "local":
+            if not host_is_loopback:
+                raise RuntimeError(
+                    "dashboard.access_mode=local requires a loopback host"
+                )
+        elif access_mode == "direct_tls":
+            if not ssl_enable:
+                raise RuntimeError(
+                    "dashboard.access_mode=direct_tls requires a valid TLS certificate"
+                )
+        elif access_mode == "reverse_proxy":
+            reverse_proxy = dashboard_config.get("reverse_proxy", {})
+            public_url = str(reverse_proxy.get("public_url") or "").strip()
+            trusted_cidrs = reverse_proxy.get("trusted_proxy_cidrs", [])
+            if not public_url.startswith("https://") or not trusted_cidrs:
+                raise RuntimeError(
+                    "dashboard.access_mode=reverse_proxy requires an HTTPS public_url "
+                    "and trusted_proxy_cidrs"
+                )
+            try:
+                for network in trusted_cidrs:
+                    ipaddress.ip_network(str(network), strict=False)
+            except ValueError as exc:
+                raise RuntimeError("Invalid dashboard reverse proxy CIDR") from exc
+        else:
+            raise RuntimeError(f"Unknown dashboard access mode: {access_mode}")
 
         logger.info("Starting WebUI at %s://%s:%s", scheme, host, port)
         if host == "0.0.0.0":

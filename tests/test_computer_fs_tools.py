@@ -442,8 +442,8 @@ async def test_restricted_local_member_cannot_modify_locally_installed_skill(
     assert "Write access is restricted for this user." in edit_result
     assert "data/skills" not in write_result
     assert installed_skill.read_text(encoding="utf-8") == "# Demo Skill\n"
-    assert workspace_result == f"File written successfully: {workspace_skill}"
-    assert workspace_skill.read_text(encoding="utf-8") == "# Workspace Skill\n"
+    assert "workspace prompts, skills, and approval metadata" in workspace_result
+    assert not workspace_skill.exists()
 
 
 @pytest.mark.asyncio

@@ -9,6 +9,8 @@ import {
   scanUsedIcons,
   parseIconCodepoints,
   resolveUsedIcons,
+  assertNoMissingIcons,
+  MissingMdiIconsError,
   extractUtilityCss,
   ICON_CLASS_PATTERN,
   REQUIRED_ICONS,
@@ -190,6 +192,14 @@ test('resolveUsedIcons returns all missing when iconMap is empty', () => {
   assert.equal(resolvedIcons.length, 0);
   assert.deepEqual(missingIcons, ['mdi-home']);
   assert.equal(subsetChars.length, 0);
+});
+
+test('assertNoMissingIcons fails the build for unresolved icon names', () => {
+  assert.throws(
+    () => assertNoMissingIcons(['mdi-not-real', 'mdi-also-not-real']),
+    (error) => error instanceof MissingMdiIconsError
+      && error.message === 'Icons not found in MDI CSS: mdi-also-not-real, mdi-not-real',
+  );
 });
 
 // ── extractUtilityCss ───────────────────────────────────────────────────────

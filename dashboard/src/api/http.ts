@@ -3,15 +3,19 @@ import axios, {
   type AxiosInstance,
   type InternalAxiosRequestConfig,
 } from 'axios';
+import { isSameOriginRequest, resolveRequestUrl } from '@/utils/requestPolicy.mjs';
 
 const AUTH_HEADER = 'Authorization';
 const LOCALE_HEADER = 'Accept-Language';
 
 let configured = false;
-let originalFetch: typeof window.fetch | null = null;
 
-export const httpClient = axios;
+// The generated OpenAPI client still declares AxiosStatic even though it only
+// consumes AxiosInstance methods. Keep that compatibility while ensuring this
+// is a private instance rather than the global Axios singleton.
+export const httpClient = axios.create({ baseURL: '/' }) as unknown as typeof axios;
 export const apiV1Client = axios.create({ baseURL: '/api/v1' });
+export const externalHttpClient = axios.create();
 
 function getToken(): string | null {
   return localStorage.getItem('token');
@@ -34,6 +38,15 @@ function setAxiosHeader(
 }
 
 function attachAxiosHeaders(config: InternalAxiosRequestConfig) {
+  const dashboardOrigin = window.location.origin;
+  const requestBase = config.baseURL
+    ? resolveRequestUrl(config.baseURL, dashboardOrigin)?.href || dashboardOrigin
+    : dashboardOrigin;
+  const requestUrl = resolveRequestUrl(config.url || '/', requestBase);
+  if (!requestUrl || !isSameOriginRequest(requestUrl, dashboardOrigin)) {
+    return config;
+  }
+
   const token = getToken();
   if (token) {
     setAxiosHeader(config.headers, AUTH_HEADER, `Bearer ${token}`);
@@ -112,7 +125,10 @@ function installAxiosInterceptors(instance: AxiosInstance) {
 }
 
 export function fetchWithAuth(input: RequestInfo | URL, init?: RequestInit) {
-  const fetchImpl = originalFetch ?? window.fetch.bind(window);
+  const fetchImpl = window.fetch.bind(window);
+  if (!isSameOriginRequest(input, window.location.origin)) {
+    return fetchImpl(input, init);
+  }
   const token = getToken();
   const locale = getLocale();
 
@@ -141,11 +157,8 @@ export function setupHttpClient() {
     return;
   }
 
-  installAxiosInterceptors(axios);
+  installAxiosInterceptors(httpClient);
   installAxiosInterceptors(apiV1Client);
-
-  originalFetch = window.fetch.bind(window);
-  window.fetch = fetchWithAuth;
 
   configured = true;
 }

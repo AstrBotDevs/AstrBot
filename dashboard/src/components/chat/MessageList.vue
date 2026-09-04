@@ -276,7 +276,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref } from "vue";
-import axios from "axios";
+import { externalHttpClient, httpClient } from "@/api/http";
 import {
   CHAT_MARKDOWN_CUSTOM_TAGS,
   registerChatMarkdownComponents,
@@ -305,6 +305,7 @@ import type {
 } from "@/composables/useMessages";
 import { useModuleI18n } from "@/i18n/composables";
 import { copyToClipboard } from "@/utils/clipboard";
+import { normalizeExternalHttpUrl } from "@/utils/requestPolicy.mjs";
 
 const props = withDefaults(
   defineProps<{
@@ -455,9 +456,9 @@ function normalizeRefItems(items: unknown[]) {
     .map((item: any) => ({
       index: item?.index,
       title: item?.title || item?.url || tm("refs.title"),
-      url: item?.url,
+      url: normalizeExternalHttpUrl(item?.url),
       snippet: item?.snippet,
-      favicon: item?.favicon,
+      favicon: normalizeExternalHttpUrl(item?.favicon),
     }))
     .filter((item) => item.url);
 }
@@ -511,7 +512,10 @@ async function downloadPart(part: MessagePart) {
   if (!key) return;
   downloadingFiles.value = new Set(downloadingFiles.value).add(key);
   try {
-    const response = await axios.get(partUrl(part), { responseType: "blob" });
+    const client = part.embedded_url || part.embedded_file?.url
+      ? externalHttpClient
+      : httpClient;
+    const response = await client.get(partUrl(part), { responseType: "blob" });
     const url = URL.createObjectURL(response.data);
     const anchor = document.createElement("a");
     anchor.href = url;

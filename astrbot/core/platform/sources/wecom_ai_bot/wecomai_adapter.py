@@ -115,6 +115,13 @@ class WecomAIBotAdapter(Platform):
         self.long_connection_heartbeat_interval = int(
             self.config.get("wecomaibot_heartbeat_interval", 30),
         )
+        self.long_connection_max_concurrent_callbacks = max(
+            1,
+            min(
+                100,
+                int(self.config.get("wecomaibot_max_concurrent_callbacks", 20)),
+            ),
+        )
 
         # 平台元数据
         self.metadata = PlatformMetadata(
@@ -139,6 +146,7 @@ class WecomAIBotAdapter(Platform):
                 ws_url=self.long_connection_ws_url,
                 heartbeat_interval=self.long_connection_heartbeat_interval,
                 message_handler=self._process_long_connection_payload,
+                max_concurrent_callbacks=self.long_connection_max_concurrent_callbacks,
             )
         else:
             self.api_client = WecomAIBotAPIClient(self.token, self.encoding_aes_key)

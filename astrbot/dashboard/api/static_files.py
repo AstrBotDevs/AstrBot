@@ -8,20 +8,43 @@ from astrbot.dashboard.services.static_file_service import StaticFileService
 router = APIRouter(include_in_schema=False)
 service = StaticFileService()
 
+_DASHBOARD_HTML_SECURITY_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob: https:; "
+        "font-src 'self' data:; "
+        "connect-src 'self' https: ws: wss:; "
+        "media-src 'self' blob:; "
+        "worker-src 'self' blob:; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "frame-ancestors 'self'"
+    ),
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "X-Content-Type-Options": "nosniff",
+}
+
 
 def _static_folder(request: Request) -> str | None:
     return getattr(request.app.state, "dashboard_static_folder", None)
 
 
 def _not_found_response() -> HTMLResponse:
-    return HTMLResponse(service.get_not_found_message(), status_code=404)
+    return HTMLResponse(
+        service.get_not_found_message(),
+        status_code=404,
+        headers=_DASHBOARD_HTML_SECURITY_HEADERS,
+    )
 
 
 async def serve_index(request: Request):
     index_file = service.resolve_index_file(_static_folder(request))
     if index_file is None:
         return _not_found_response()
-    return FileResponse(index_file)
+    return FileResponse(index_file, headers=_DASHBOARD_HTML_SECURITY_HEADERS)
 
 
 async def serve_static_file(request: Request, static_path: str):

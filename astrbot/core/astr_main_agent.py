@@ -9,6 +9,7 @@ import platform
 import zoneinfo
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 
 from astrbot.core import logger
@@ -80,6 +81,7 @@ from astrbot.core.tools.computer_tools import (
     ShellSessionTool,
     SyncSkillReleaseTool,
 )
+from astrbot.core.tools.computer_tools.util import resolve_computer_use_runtime
 from astrbot.core.tools.cron_tools import FutureTaskTool
 from astrbot.core.tools.knowledge_base_tools import (
     KnowledgeBaseQueryTool,
@@ -128,6 +130,7 @@ from astrbot.core.workspace import (
     normalize_umo_for_workspace,
     resolve_workspace_root_for_umo,
 )
+from astrbot.core.workspace_control import is_workspace_control_artifact_approved
 
 LLM_ERROR_MESSAGE_EXTRA_KEY = "_llm_error_message"
 WEEKDAY_NAMES = (
@@ -155,6 +158,14 @@ WEB_SEARCH_CITATION_PROMPT = (
     "Use the exact citation format <ref>index</ref> (e.g. <ref>abcd.3</ref>) "
     "after the sentence that uses the information. Do not invent citations."
 )
+
+
+class AgentCapabilityMode(StrEnum):
+    """Capability boundary used when constructing a main agent."""
+
+    NORMAL = "normal"
+    SCHEDULED = "scheduled"
+    BACKGROUND_DELIVERY = "background_delivery"
 
 
 @dataclass(slots=True)
@@ -205,7 +216,7 @@ class MainAgentBuildConfig:
     """This will inject healthy and safe system prompt into the main agent,
     to prevent LLM output harmful information"""
     safety_mode_strategy: str = "system_prompt"
-    computer_use_runtime: str = "local"
+    computer_use_runtime: str = "none"
     """The runtime for agent computer use: none, local, or sandbox."""
     sandbox_cfg: dict = field(default_factory=dict)
     add_cron_tools: bool = True
@@ -217,6 +228,7 @@ class MainAgentBuildConfig:
     timezone: str | None = None
     max_quoted_fallback_images: int = 20
     """Maximum number of images injected from quoted-message fallback extraction."""
+    capability_mode: AgentCapabilityMode = AgentCapabilityMode.NORMAL
 
 
 @dataclass(slots=True)
@@ -416,7 +428,9 @@ async def _apply_workspace_extra_prompt(
     )
     extra_prompts: list[str] = []
     extra_prompt_path = workspace_root / "EXTRA_PROMPT.md"
-    if extra_prompt_path.is_file():
+    if extra_prompt_path.is_file() and is_workspace_control_artifact_approved(
+        workspace_root, "EXTRA_PROMPT.md"
+    ):
         try:
             extra_prompt = extra_prompt_path.read_text(encoding="utf-8").strip()
         except Exception as exc:  # noqa: BLE001
@@ -578,7 +592,17 @@ async def _ensure_persona_and_skills(
             event.unified_msg_origin,
             plugin_context,
         )
-        workspace_skills.extend(skill_manager.list_workspace_skills(workspace_root))
+        workspace_skills.extend(
+            skill
+            for skill in skill_manager.list_workspace_skills(workspace_root)
+            if is_workspace_control_artifact_approved(
+                workspace_root,
+                Path(skill.path)
+                .resolve(strict=False)
+                .relative_to(workspace_root.resolve(strict=False))
+                .as_posix(),
+            )
+        )
 
     if skills or workspace_skills:
         if persona and persona.get("skills") is not None:
@@ -1427,6 +1451,16 @@ async def build_main_agent(
 
     If apply_reset is False, will not call reset on the agent runner.
     """
+    # Validate the already-resolved build option. Callers derive this value from
+    # provider settings; using the field here also preserves explicit, tested
+    # construction without silently replacing it from an unrelated empty map.
+    config.computer_use_runtime = resolve_computer_use_runtime(
+        {"computer_use_runtime": config.computer_use_runtime}
+    )
+    if config.capability_mode == AgentCapabilityMode.BACKGROUND_DELIVERY:
+        config.computer_use_runtime = "none"
+        config.add_cron_tools = False
+
     provider = provider or await _select_provider(event, plugin_context)
     if provider is None:
         logger.info("未找到任何对话模型（提供商），跳过 LLM 请求处理。")
@@ -1610,15 +1644,18 @@ async def build_main_agent(
         else:
             return None
 
-    await _decorate_llm_request(event, req, plugin_context, config, provider=provider)
-
-    await _apply_kb(event, req, plugin_context, config)
+    if config.capability_mode != AgentCapabilityMode.BACKGROUND_DELIVERY:
+        await _decorate_llm_request(
+            event, req, plugin_context, config, provider=provider
+        )
 
     if not req.session_id:
         req.session_id = event.unified_msg_origin
 
-    _plugin_tool_fix(event, req)
-    await _apply_web_search_tools(event, req, plugin_context)
+    if config.capability_mode != AgentCapabilityMode.BACKGROUND_DELIVERY:
+        await _apply_kb(event, req, plugin_context, config)
+        _plugin_tool_fix(event, req)
+        await _apply_web_search_tools(event, req, plugin_context)
 
     if config.llm_safety_mode:
         _apply_llm_safety_mode(config, req)
@@ -1637,7 +1674,14 @@ async def build_main_agent(
     if config.add_cron_tools:
         _proactive_cron_job_tools(req, plugin_context)
 
-    if event.platform_meta.support_proactive_message:
+    if config.capability_mode == AgentCapabilityMode.BACKGROUND_DELIVERY:
+        req.func_tool = ToolSet()
+        req.func_tool.add_tool(
+            plugin_context.get_llm_tool_manager().get_builtin_tool(
+                SendMessageToUserTool
+            )
+        )
+    elif event.platform_meta.support_proactive_message:
         if req.func_tool is None:
             req.func_tool = ToolSet()
         req.func_tool.add_tool(

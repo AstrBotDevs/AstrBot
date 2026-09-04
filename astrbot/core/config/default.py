@@ -63,9 +63,10 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
 
 # 默认配置
 DEFAULT_CONFIG = {
-    "config_version": 3,
+    "config_version": 4,
     "platform_settings": {
         "unique_session": False,
+        "event_queue_maxsize": 1000,
         "rate_limit": {
             "time": 60,
             "count": 30,
@@ -242,7 +243,13 @@ DEFAULT_CONFIG = {
         "password_storage_upgraded": False,
         "password_change_required": False,
         "jwt_secret": "",
-        "host": "0.0.0.0",
+        "plugin_asset_jwt_secret": "",
+        "host": "127.0.0.1",
+        "access_mode": "local",
+        "reverse_proxy": {
+            "public_url": "",
+            "trusted_proxy_cidrs": [],
+        },
         "port": 6185,
         "disable_access_log": True,
         "trust_proxy_headers": False,
@@ -264,6 +271,12 @@ DEFAULT_CONFIG = {
         },
     },
     "platform": [],
+    "security": {
+        "outbound_fetch": {
+            "plugin_registry_private_targets": [],
+            "media_private_targets": [],
+        },
+    },
     "platform_specific": {
         # 平台特异配置：按平台分类，平台下按功能分组
         "lark": {
@@ -344,7 +357,7 @@ CONFIG_METADATA_2 = {
                         "id": "default",
                         "type": "aiocqhttp",
                         "enable": True,
-                        "ws_reverse_host": "0.0.0.0",
+                        "ws_reverse_host": "127.0.0.1",
                         "ws_reverse_port": 6199,
                         "ws_reverse_token": "",
                     },

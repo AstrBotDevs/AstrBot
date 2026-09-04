@@ -8,6 +8,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
+from astrbot import logger
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.metrics import Metric
 
@@ -144,9 +145,26 @@ class Platform(abc.ABC):
             Metric.upload(msg_event_tick=1, adapter_name=self.meta().name)
         )
 
-    def commit_event(self, event: AstrMessageEvent) -> None:
-        """提交一个事件到事件队列。"""
-        self._event_queue.put_nowait(event)
+    def commit_event(self, event: AstrMessageEvent) -> bool:
+        """Submit an event without allowing platform ingress to exhaust memory.
+
+        Returns:
+            ``True`` when the event was queued, otherwise ``False`` when the
+            shared queue is saturated.
+        """
+        try:
+            self._event_queue.put_nowait(event)
+            return True
+        except asyncio.QueueFull:
+            event.cleanup_temporary_local_files()
+            logger.warning(
+                "Platform event dropped due to queue saturation: platform=%s "
+                "event_type=%s queue_size=%s",
+                self.meta().id,
+                type(event).__name__,
+                self._event_queue.qsize(),
+            )
+            return False
 
     def create_event(self, message: AstrBotMessage) -> AstrMessageEvent:
         """Creates a message event for this platform.

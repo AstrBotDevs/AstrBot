@@ -10,6 +10,7 @@ from astrbot.core import DEMO_MODE, LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.log import LogManager
+from astrbot.dashboard.body_limits import RequestBodyLimitMiddleware
 from astrbot.dashboard.responses import ApiError, error
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.auth_service import AuthService
@@ -86,6 +87,7 @@ def create_dashboard_asgi_app(
     core_lifecycle: AstrBotCoreLifecycle,
     db: BaseDatabase,
     jwt_secret: str,
+    plugin_asset_jwt_secret: str | None = None,
     static_folder: str | None = None,
 ) -> FastAPI:
     app = FastAPI(
@@ -95,9 +97,11 @@ def create_dashboard_asgi_app(
         docs_url=f"{API_V1_PREFIX}/docs",
         redoc_url=f"{API_V1_PREFIX}/redoc",
     )
+    app.add_middleware(RequestBodyLimitMiddleware)
     app.state.core_lifecycle = core_lifecycle
     app.state.db = db
     app.state.jwt_secret = jwt_secret
+    app.state.plugin_asset_jwt_secret = plugin_asset_jwt_secret or ""
     app.state.dashboard_static_folder = static_folder
     log_broker = getattr(core_lifecycle, "log_broker", None) or LogBroker()
     app.state.services = SimpleNamespace(

@@ -89,6 +89,10 @@ spec:
           env:
             - name: TZ
               value: "Asia/Shanghai"
+            - name: ASTRBOT_DASHBOARD_HOST
+              value: "0.0.0.0"
+            - name: ASTRBOT_DASHBOARD_ACCESS_MODE
+              value: "container_loopback"
           ports:
             - containerPort: 6185
               name: astrbot-web

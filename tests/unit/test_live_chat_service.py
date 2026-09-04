@@ -7,7 +7,11 @@ import pytest
 from starlette.websockets import WebSocketDisconnect
 
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
-from astrbot.dashboard.services.live_chat_service import LiveChatService
+from astrbot.dashboard.auth_tokens import issue_plugin_asset_token
+from astrbot.dashboard.services.live_chat_service import (
+    LiveChatAuthError,
+    LiveChatService,
+)
 
 
 def _service() -> LiveChatService:
@@ -17,6 +21,21 @@ def _service() -> LiveChatService:
         platform_message_history_manager=SimpleNamespace(),
     )
     return LiveChatService(SimpleNamespace(), core_lifecycle)
+
+
+def test_live_chat_rejects_plugin_asset_token():
+    """A page-scoped asset token must not authenticate a chat WebSocket."""
+    service = _service()
+    token = issue_plugin_asset_token(
+        username="alice",
+        plugin_name="demo",
+        page_name="index",
+        locale="en-US",
+        secret="test-secret",
+    )
+
+    with pytest.raises(LiveChatAuthError, match="Invalid token"):
+        service.authenticate_token(token)
 
 
 @pytest.mark.asyncio

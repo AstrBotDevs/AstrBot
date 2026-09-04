@@ -176,3 +176,69 @@ async def test_satori_get_group_respects_declared_unsupported_features():
     assert group is not None
     assert group.group_name == "Event Name"
     adapter.send_http_request.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_satori_conversion_error_removes_materialized_media(
+    tmp_path, monkeypatch
+):
+    """A conversion failure before event creation must not leak temp media."""
+    adapter = SatoriPlatformAdapter(
+        {"id": "satori-test"},
+        {},
+        asyncio.Queue(),
+    )
+    temporary = tmp_path / "materialized.wav"
+    temporary.write_bytes(b"audio")
+
+    async def fail_after_materializing(_content, cleanup_paths):
+        cleanup_paths.append(str(temporary))
+        raise RuntimeError("conversion failed")
+
+    monkeypatch.setattr(adapter, "parse_satori_elements", fail_after_materializing)
+
+    message = await adapter.convert_satori_message(
+        {"id": "message-1", "content": "<audio/>"},
+        {"id": "user-1", "name": "Alice"},
+        {"id": "channel-1", "name": "general"},
+        None,
+        {"platform": "discord", "user": {"id": "bot-1"}},
+    )
+
+    assert message is None
+    assert not temporary.exists()
+
+
+@pytest.mark.asyncio
+async def test_satori_conversion_cancellation_removes_materialized_media(
+    tmp_path, monkeypatch
+):
+    """Task cancellation must clean media and retain cancellation semantics."""
+    adapter = SatoriPlatformAdapter(
+        {"id": "satori-test"},
+        {},
+        asyncio.Queue(),
+    )
+    temporary = tmp_path / "cancelled.wav"
+    temporary.write_bytes(b"audio")
+
+    async def cancel_after_materializing(_content, cleanup_paths):
+        cleanup_paths.append(str(temporary))
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(
+        adapter,
+        "parse_satori_elements",
+        cancel_after_materializing,
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await adapter.convert_satori_message(
+            {"id": "message-1", "content": "<audio/>"},
+            {"id": "user-1", "name": "Alice"},
+            {"id": "channel-1", "name": "general"},
+            None,
+            {"platform": "discord", "user": {"id": "bot-1"}},
+        )
+
+    assert not temporary.exists()

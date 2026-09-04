@@ -153,7 +153,7 @@ class ChatThreadMessageRequest(OpenModel):
 
 
 class CronJobRequest(OpenModel):
-    pass
+    allow_privileged_execution: bool | None = None
 
 
 class CommandUpdateRequest(BaseModel):

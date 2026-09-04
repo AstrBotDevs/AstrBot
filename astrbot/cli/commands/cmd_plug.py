@@ -1,5 +1,6 @@
 import re
 import shutil
+import tempfile
 from pathlib import Path
 
 import click
@@ -13,6 +14,7 @@ from ..utils import (
     install_local_plugin,
     manage_plugin,
 )
+from ..utils.plugin import _validate_plugin_dir_name
 
 
 @click.group()
@@ -51,7 +53,12 @@ def display_plugins(plugins, title=None, color=None) -> None:
 def new(name: str) -> None:
     """Create a new plugin"""
     base_path = _get_data_path()
-    plug_path = base_path / "plugins" / name
+    name = _validate_plugin_dir_name(name, Path("<cli>"))
+    plugins_root = (base_path / "plugins").resolve()
+    plugins_root.mkdir(parents=True, exist_ok=True)
+    plug_path = (plugins_root / name).resolve()
+    if not plug_path.is_relative_to(plugins_root):
+        raise click.ClickException("Plugin name must stay within the plugins directory")
 
     if plug_path.exists():
         raise click.ClickException(f"Plugin {name} already exists")
@@ -65,40 +72,42 @@ def new(name: str) -> None:
     if not repo.startswith("http"):
         raise click.ClickException("Repository URL must start with http")
 
-    click.echo("Downloading plugin template...")
-    download_repository(
-        "https://github.com/Soulter/helloworld",
-        plug_path,
-    )
+    staging_path = Path(tempfile.mkdtemp(prefix=f".{name}.staging-", dir=plugins_root))
+    shutil.rmtree(staging_path)
+    try:
+        click.echo("Downloading plugin template...")
+        download_repository(
+            "https://github.com/Soulter/helloworld",
+            staging_path,
+        )
 
-    click.echo("Rewriting plugin metadata...")
-    # Rewrite metadata.yaml
-    with open(plug_path / "metadata.yaml", "w", encoding="utf-8") as f:
-        f.write(
+        click.echo("Rewriting plugin metadata...")
+        (staging_path / "metadata.yaml").write_text(
             f"name: {name}\n"
             f"desc: {desc}\n"
             f"version: {version}\n"
             f"author: {author}\n"
             f"repo: {repo}\n",
+            encoding="utf-8",
         )
 
-    # Rewrite README.md
-    with open(plug_path / "README.md", "w", encoding="utf-8") as f:
-        f.write(
-            f"# {name}\n\n{desc}\n\n# Support\n\n[Documentation](https://docs.astrbot.app)\n"
+        (staging_path / "README.md").write_text(
+            f"# {name}\n\n{desc}\n\n# Support\n\n[Documentation](https://docs.astrbot.app)\n",
+            encoding="utf-8",
         )
 
-    # Rewrite main.py
-    with open(plug_path / "main.py", encoding="utf-8") as f:
-        content = f.read()
+        content = (staging_path / "main.py").read_text(encoding="utf-8")
 
-    new_content = content.replace(
-        '@register("helloworld", "YourName", "一个简单的 Hello World 插件", "1.0.0")',
-        f'@register("{name}", "{author}", "{desc}", "{version}")',
-    )
+        new_content = content.replace(
+            '@register("helloworld", "YourName", "一个简单的 Hello World 插件", "1.0.0")',
+            f'@register("{name}", "{author}", "{desc}", "{version}")',
+        )
 
-    with open(plug_path / "main.py", "w", encoding="utf-8") as f:
-        f.write(new_content)
+        (staging_path / "main.py").write_text(new_content, encoding="utf-8")
+        staging_path.replace(plug_path)
+    except Exception:
+        shutil.rmtree(staging_path, ignore_errors=True)
+        raise
 
     click.echo(f"Plugin {name} created successfully")
 

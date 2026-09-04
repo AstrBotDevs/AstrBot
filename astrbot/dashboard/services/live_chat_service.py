@@ -11,7 +11,6 @@ import wave
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-import jwt
 from starlette.websockets import WebSocketDisconnect
 
 from astrbot import logger
@@ -29,6 +28,10 @@ from astrbot.core.platform.sources.webchat.request_flags import (
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id, to_utc_isoformat
+from astrbot.dashboard.auth_tokens import (
+    DashboardTokenError,
+    decode_dashboard_session_token,
+)
 from astrbot.dashboard.services.chat_service import (
     BotMessageAccumulator,
     build_bot_history_content,
@@ -146,11 +149,8 @@ class LiveChatService:
             raise LiveChatAuthError("Missing authentication token")
         jwt_secret = jwt_secret or self.config["dashboard"].get("jwt_secret")
         try:
-            payload = jwt.decode(token, jwt_secret, algorithms=["HS256"])
-            return payload["username"]
-        except jwt.ExpiredSignatureError as exc:
-            raise LiveChatAuthError("Token expired") from exc
-        except jwt.InvalidTokenError as exc:
+            return decode_dashboard_session_token(token, secret=jwt_secret)
+        except DashboardTokenError as exc:
             raise LiveChatAuthError("Invalid token") from exc
 
     def create_session(self, username: str) -> LiveChatSession:

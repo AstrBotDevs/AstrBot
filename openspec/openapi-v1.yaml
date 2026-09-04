@@ -9,8 +9,9 @@ info:
     endpoints.
     Developer API keys currently support these scopes only: bot, provider,
     persona, im, config, chat, data, file, plugin, mcp, skill, plus the sensitive
-    config:edit_admin and chat:admin sub-scopes. The config scope also grants bot
-    and provider access, but no parent scope grants a sensitive sub-scope.
+    config:edit_admin, config:secrets, config:security, and chat:admin
+    sub-scopes. The config scope also grants bot and provider access, but no
+    parent scope grants a sensitive sub-scope.
 x-astrbot-scope-definitions:
   bot:
     description: Manage bot and platform configurations.
@@ -31,6 +32,16 @@ x-astrbot-scope-definitions:
   "config:edit_admin":
     description: Allow a `config`-scoped key to change `admins_id`. This sub-scope must be granted explicitly.
     description_zh: 允许具有 `config` 权限的 Key 修改 `admins_id`。该子权限必须显式授予。
+    parent: config
+    sensitive: true
+  "config:secrets":
+    description: Allow a `config`-scoped key to replace or clear write-only business secrets. Secret values are never returned by configuration reads.
+    description_zh: 允许具有 `config` 权限的 Key 替换或清除仅可写的业务密钥。配置读取永不返回密钥原文。
+    parent: config
+    sensitive: true
+  "config:security":
+    description: Allow a `config`-scoped key to change dashboard exposure and outbound network security policy.
+    description_zh: 允许具有 `config` 权限的 Key 修改 Dashboard 暴露方式和出站网络安全策略。
     parent: config
     sensitive: true
   chat:
@@ -257,7 +268,7 @@ paths:
       summary: Replace the system configuration
       operationId: updateSystemConfig
       x-astrbot-scope: config
-      x-astrbot-sensitive-scopes: ["config:edit_admin"]
+      x-astrbot-sensitive-scopes: ["config:edit_admin", "config:secrets", "config:security"]
       requestBody:
         required: true
         content:
@@ -302,7 +313,7 @@ paths:
       summary: Create a configuration profile
       operationId: createConfigProfile
       x-astrbot-scope: config
-      x-astrbot-sensitive-scopes: ["config:edit_admin"]
+      x-astrbot-sensitive-scopes: ["config:edit_admin", "config:secrets", "config:security"]
       requestBody:
         required: true
         content:
@@ -329,7 +340,7 @@ paths:
       summary: Replace a configuration profile
       operationId: updateConfigProfileContent
       x-astrbot-scope: config
-      x-astrbot-sensitive-scopes: ["config:edit_admin"]
+      x-astrbot-sensitive-scopes: ["config:edit_admin", "config:secrets", "config:security"]
       parameters:
         - $ref: "#/components/parameters/ConfigId"
       requestBody:
@@ -4804,9 +4815,13 @@ paths:
           $ref: "#/components/responses/Ok"
     post:
       tags: [Cron]
-      summary: Create a cron job
+      summary: Create a cron job (Dashboard session required for privileged execution)
       operationId: createCronJob
       x-astrbot-scope: system
+      x-astrbot-sensitive-scopes: ["dashboard_session"]
+      x-astrbot-privileged-field: allow_privileged_execution
+      parameters:
+        - $ref: "#/components/parameters/TwoFactorCode"
       requestBody:
         required: true
         content:
@@ -4820,15 +4835,18 @@ paths:
   /api/v1/cron/jobs/{job_id}:
     patch:
       tags: [Cron]
-      summary: Update a cron job
+      summary: Update a cron job (Dashboard session required for privileged execution)
       operationId: updateCronJob
       x-astrbot-scope: system
+      x-astrbot-sensitive-scopes: ["dashboard_session"]
+      x-astrbot-privileged-field: allow_privileged_execution
       parameters:
         - name: job_id
           in: path
           required: true
           schema:
             type: string
+        - $ref: "#/components/parameters/TwoFactorCode"
       requestBody:
         required: true
         content:
@@ -5275,6 +5293,15 @@ components:
       required: true
       schema:
         type: string
+    TwoFactorCode:
+      name: X-2FA-Code
+      in: header
+      required: false
+      description: Required when enabling privileged cron execution and Dashboard TOTP is enabled. Recovery codes are not accepted.
+      schema:
+        type: string
+        minLength: 6
+        maxLength: 6
     ToolId:
       name: tool_id
       in: path
@@ -6268,6 +6295,10 @@ components:
         run_at:
           type: string
           format: date-time
+        allow_privileged_execution:
+          type: boolean
+          default: false
+          description: Enables administrator-level side-effect tools for an active-agent job. This field is accepted only for Dashboard-session requests and requires X-2FA-Code when Dashboard TOTP is enabled.
         payload:
           type: object
           additionalProperties: true

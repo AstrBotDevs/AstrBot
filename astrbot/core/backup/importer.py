@@ -12,7 +12,7 @@ import os
 import shutil
 import zipfile
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -21,6 +21,10 @@ from sqlalchemy import delete
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.db import BaseDatabase
+from astrbot.core.utils.archive_limits import (
+    BACKUP_ARCHIVE_POLICY,
+    validate_zip_archive,
+)
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
     get_astrbot_knowledge_base_path,
@@ -37,6 +41,39 @@ from .constants import (
 
 if TYPE_CHECKING:
     from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+
+ZIP_COPY_CHUNK_BYTES = 1024 * 1024
+MANIFEST_JSON_MAX_BYTES = 1024 * 1024
+CONFIG_JSON_MAX_BYTES = 16 * 1024 * 1024
+DATABASE_JSON_MAX_BYTES = 128 * 1024 * 1024
+
+
+def _read_json_member(
+    archive: zipfile.ZipFile,
+    member_name: str,
+    *,
+    max_bytes: int,
+) -> Any:
+    """Read one structured member in bounded chunks and decode its JSON.
+
+    Binary backup members may legitimately approach the archive-wide per-file
+    limit and are streamed directly to disk. Structured JSON must be materialized
+    for the existing import model, so it receives a substantially smaller,
+    explicit memory bound that is enforced against both metadata and bytes read.
+    """
+    member = archive.getinfo(member_name)
+    if member.file_size > max_bytes:
+        raise ValueError(f"Backup JSON member exceeds byte limit: {member_name}")
+
+    payload = bytearray()
+    with archive.open(member) as source:
+        while chunk := source.read(ZIP_COPY_CHUNK_BYTES):
+            if len(payload) + len(chunk) > max_bytes:
+                raise ValueError(
+                    f"Backup JSON member exceeds byte limit: {member_name}"
+                )
+            payload.extend(chunk)
+    return json.loads(payload)
 
 
 def _get_major_version(version_str: str) -> str:
@@ -270,10 +307,14 @@ class AstrBotImporter:
 
         try:
             with zipfile.ZipFile(zip_path, "r") as zf:
+                validate_zip_archive(zf, policy=BACKUP_ARCHIVE_POLICY)
                 # 读取 manifest
                 try:
-                    manifest_data = zf.read("manifest.json")
-                    manifest = json.loads(manifest_data)
+                    manifest = _read_json_member(
+                        zf,
+                        "manifest.json",
+                        max_bytes=MANIFEST_JSON_MAX_BYTES,
+                    )
                 except KeyError:
                     result.error = "备份文件缺少 manifest.json，不是有效的 AstrBot 备份"
                     return result
@@ -387,13 +428,21 @@ class AstrBotImporter:
 
         try:
             with zipfile.ZipFile(zip_path, "r") as zf:
+                # `pre_check()` is only a UX aid and can be skipped or raced by
+                # callers. Revalidate the exact archive before reading any
+                # member or mutating databases/files.
+                validate_zip_archive(zf, policy=BACKUP_ARCHIVE_POLICY)
+
                 # 1. 读取并验证 manifest
                 if progress_callback:
                     await progress_callback("validate", 0, 100, "正在验证备份文件...")
 
                 try:
-                    manifest_data = zf.read("manifest.json")
-                    manifest = json.loads(manifest_data)
+                    manifest = _read_json_member(
+                        zf,
+                        "manifest.json",
+                        max_bytes=MANIFEST_JSON_MAX_BYTES,
+                    )
                 except KeyError:
                     result.add_error("备份文件缺少 manifest.json")
                     return result
@@ -416,8 +465,11 @@ class AstrBotImporter:
                     await progress_callback("main_db", 0, 100, "正在导入主数据库...")
 
                 try:
-                    main_data_content = zf.read("databases/main_db.json")
-                    main_data = json.loads(main_data_content)
+                    main_data = _read_json_member(
+                        zf,
+                        "databases/main_db.json",
+                        max_bytes=DATABASE_JSON_MAX_BYTES,
+                    )
 
                     if mode == "replace":
                         await self._clear_main_db()
@@ -440,8 +492,11 @@ class AstrBotImporter:
                         await progress_callback("kb", 0, 100, "正在导入知识库...")
 
                     try:
-                        kb_meta_content = zf.read("databases/kb_metadata.json")
-                        kb_meta_data = json.loads(kb_meta_content)
+                        kb_meta_data = _read_json_member(
+                            zf,
+                            "databases/kb_metadata.json",
+                            max_bytes=DATABASE_JSON_MAX_BYTES,
+                        )
 
                         if mode == "replace":
                             await self._clear_kb_data()
@@ -459,14 +514,25 @@ class AstrBotImporter:
 
                 if "config/cmd_config.json" in zf.namelist():
                     try:
-                        config_content = zf.read("config/cmd_config.json")
                         # 备份现有配置
                         if os.path.exists(self.config_path):
                             backup_path = f"{self.config_path}.bak"
                             shutil.copy2(self.config_path, backup_path)
 
-                        with open(self.config_path, "wb") as f:
-                            f.write(config_content)
+                        config_info = zf.getinfo("config/cmd_config.json")
+                        if config_info.file_size > CONFIG_JSON_MAX_BYTES:
+                            raise ValueError(
+                                "Backup config member exceeds the byte limit"
+                            )
+                        with (
+                            zf.open(config_info) as src,
+                            open(self.config_path, "wb") as dst,
+                        ):
+                            shutil.copyfileobj(
+                                src,
+                                dst,
+                                length=ZIP_COPY_CHUNK_BYTES,
+                            )
                         result.imported_files["config"] = 1
                     except Exception as e:
                         result.add_warning(f"导入配置文件失败: {e}")
@@ -690,9 +756,9 @@ class AstrBotImporter:
         if isinstance(value, datetime):
             dt = value
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             else:
-                dt = dt.astimezone(timezone.utc)
+                dt = dt.astimezone(UTC)
             return dt.isoformat()
         if isinstance(value, str):
             timestamp = value.strip()
@@ -703,9 +769,9 @@ class AstrBotImporter:
             try:
                 dt = datetime.fromisoformat(timestamp)
                 if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
+                    dt = dt.replace(tzinfo=UTC)
                 else:
-                    dt = dt.astimezone(timezone.utc)
+                    dt = dt.astimezone(UTC)
                 return dt.isoformat()
             except ValueError:
                 return None
@@ -755,8 +821,11 @@ class AstrBotImporter:
             doc_path = f"databases/kb_{kb_id}/documents.json"
             if doc_path in zf.namelist():
                 try:
-                    doc_content = zf.read(doc_path)
-                    doc_data = json.loads(doc_content)
+                    doc_data = _read_json_member(
+                        zf,
+                        doc_path,
+                        max_bytes=DATABASE_JSON_MAX_BYTES,
+                    )
 
                     # 导入到文档存储数据库
                     await self._import_kb_documents(kb_id, doc_data)
@@ -769,7 +838,7 @@ class AstrBotImporter:
                 try:
                     target_path = kb_dir / "index.faiss"
                     with zf.open(faiss_path) as src, open(target_path, "wb") as dst:
-                        dst.write(src.read())
+                        shutil.copyfileobj(src, dst, length=ZIP_COPY_CHUNK_BYTES)
                 except Exception as e:
                     result.add_warning(f"导入知识库 {kb_id} 的 FAISS 索引失败: {e}")
 
@@ -786,7 +855,11 @@ class AstrBotImporter:
                             continue
                         target_path.parent.mkdir(parents=True, exist_ok=True)
                         with zf.open(name) as src, open(target_path, "wb") as dst:
-                            dst.write(src.read())
+                            shutil.copyfileobj(
+                                src,
+                                dst,
+                                length=ZIP_COPY_CHUNK_BYTES,
+                            )
                     except Exception as e:
                         result.add_warning(f"导入媒体文件 {name} 失败: {e}")
 
@@ -853,7 +926,7 @@ class AstrBotImporter:
 
                     target_path.parent.mkdir(parents=True, exist_ok=True)
                     with zf.open(name) as src, open(target_path, "wb") as dst:
-                        dst.write(src.read())
+                        shutil.copyfileobj(src, dst, length=ZIP_COPY_CHUNK_BYTES)
                     count += 1
                 except Exception as e:
                     logger.warning(f"导入附件 {name} 失败: {e}")
@@ -940,7 +1013,11 @@ class AstrBotImporter:
                         target_path.parent.mkdir(parents=True, exist_ok=True)
 
                         with zf.open(name) as src, open(target_path, "wb") as dst:
-                            dst.write(src.read())
+                            shutil.copyfileobj(
+                                src,
+                                dst,
+                                length=ZIP_COPY_CHUNK_BYTES,
+                            )
                         file_count += 1
                     except Exception as e:
                         result.add_warning(f"导入文件 {name} 失败: {e}")

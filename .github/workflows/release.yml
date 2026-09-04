@@ -6,57 +6,60 @@ on:
       - "v*"
   workflow_dispatch:
     inputs:
-      ref:
-        description: "Git ref to build (branch/tag/SHA)"
-        required: false
-        default: "master"
       tag:
-        description: "Release tag to publish assets to (for example: v4.14.6)"
-        required: false
+        description: "Existing release tag to build and publish (for example: v4.14.6)"
+        required: true
+        type: string
 
 permissions:
   contents: write
+
+concurrency:
+  group: astrbot-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   build-dashboard:
     name: Build Dashboard
     if: github.repository == 'AstrBotDevs/AstrBot'
     runs-on: ubuntu-24.04
-    env:
-      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
       - name: Resolve tag
         id: tag
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
+          if [ "$EVENT_NAME" = "push" ]; then
             tag="${GITHUB_REF_NAME}"
-          elif [ -n "${{ inputs.tag }}" ]; then
-            tag="${{ inputs.tag }}"
           else
-            tag="$(git describe --tags --abbrev=0)"
+            tag="$INPUT_TAG"
           fi
-          if [ -z "$tag" ]; then
-            echo "Failed to resolve tag." >&2
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+            echo "Release tag must be a safe semantic version: $tag" >&2
+            exit 1
+          fi
+          git fetch --force --tags origin "refs/tags/$tag:refs/tags/$tag"
+          if [ "$(git rev-list -n1 "$tag")" != "$(git rev-parse HEAD)" ]; then
+            echo "Checked out commit does not match release tag $tag." >&2
             exit 1
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6.0.10
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           version: 10.28.2
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24.13.0'
           cache: "pnpm"
@@ -81,25 +84,42 @@ jobs:
             HEAD
 
       - name: Upload dashboard artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: Dashboard-${{ steps.tag.outputs.tag }}
           if-no-files-found: error
           path: dashboard/AstrBot-${{ steps.tag.outputs.tag }}-dashboard.zip
 
       - name: Upload release packages to Cloudflare R2
-        if: ${{ env.R2_ACCOUNT_ID != '' && env.R2_ACCESS_KEY_ID != '' && env.R2_SECRET_ACCESS_KEY != '' }}
         env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET_NAME: "astrbot"
           DASHBOARD_LATEST_OBJECT_NAME: "astrbot-webui-latest.zip"
           CORE_LATEST_OBJECT_NAME: "astrbot-core-latest.zip"
           VERSION_TAG: ${{ steps.tag.outputs.tag }}
+          RCLONE_VERSION: "1.70.3"
+          RCLONE_SHA256: "7d69057e69385f6514a9684c7eaa424d972096b130284bb34dd967c4ed4f9dad"
         shell: bash
         run: |
-          curl https://rclone.org/install.sh | sudo bash
+          set -euo pipefail
+          if [ -z "$R2_ACCOUNT_ID" ] || [ -z "$R2_ACCESS_KEY_ID" ] || [ -z "$R2_SECRET_ACCESS_KEY" ]; then
+            echo "R2 credentials are not configured; skipping R2 upload."
+            exit 0
+          fi
+          rclone_archive="rclone-v${RCLONE_VERSION}-linux-amd64.zip"
+          curl --fail --location --silent --show-error \
+            --output "$rclone_archive" \
+            "https://downloads.rclone.org/v${RCLONE_VERSION}/${rclone_archive}"
+          echo "${RCLONE_SHA256}  ${rclone_archive}" | sha256sum --check --strict
+          unzip -q "$rclone_archive"
+          rclone_bin="$PWD/rclone-v${RCLONE_VERSION}-linux-amd64/rclone"
+          chmod 0755 "$rclone_bin"
 
-          mkdir -p ~/.config/rclone
-          cat <<EOF > ~/.config/rclone/rclone.conf
+          rclone_config="$RUNNER_TEMP/rclone.conf"
+          umask 077
+          cat <<EOF > "$rclone_config"
           [r2]
           type = s3
           provider = Cloudflare
@@ -108,17 +128,40 @@ jobs:
           endpoint = https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
           EOF
 
+          refuse_existing_object() {
+            object_name="$1"
+            if ! listing="$(
+              "$rclone_bin" --config "$rclone_config" lsf "r2:${R2_BUCKET_NAME}" \
+                --recursive --files-only --include "/${object_name}"
+            )"; then
+              echo "Unable to verify whether R2 object exists: ${object_name}" >&2
+              exit 1
+            fi
+            if printf '%s\n' "$listing" | grep -Fqx -- "$object_name"; then
+              echo "Refusing to overwrite immutable R2 object: ${object_name}" >&2
+              exit 1
+            fi
+          }
+
+          refuse_existing_object "astrbot-webui-${VERSION_TAG}.zip"
+          refuse_existing_object "astrbot-core-${VERSION_TAG}.zip"
+          refuse_existing_object "astrbot-core/${VERSION_TAG}/source.zip"
+          refuse_existing_object "download/astrbot-core/${VERSION_TAG}/source.zip"
+
           cp "dashboard/AstrBot-${VERSION_TAG}-dashboard.zip" "dashboard/${DASHBOARD_LATEST_OBJECT_NAME}"
-          rclone copy "dashboard/${DASHBOARD_LATEST_OBJECT_NAME}" "r2:${R2_BUCKET_NAME}" --progress
-          cp "dashboard/AstrBot-${VERSION_TAG}-dashboard.zip" "dashboard/astrbot-webui-${VERSION_TAG}.zip"
-          rclone copy "dashboard/astrbot-webui-${VERSION_TAG}.zip" "r2:${R2_BUCKET_NAME}" --progress
+          "$rclone_bin" --config "$rclone_config" copy "dashboard/${DASHBOARD_LATEST_OBJECT_NAME}" "r2:${R2_BUCKET_NAME}" --progress
+          "$rclone_bin" --config "$rclone_config" copyto "dashboard/AstrBot-${VERSION_TAG}-dashboard.zip" "r2:${R2_BUCKET_NAME}/astrbot-webui-${VERSION_TAG}.zip" --progress
 
           cp "AstrBot-${VERSION_TAG}-core.zip" "${CORE_LATEST_OBJECT_NAME}"
-          rclone copy "${CORE_LATEST_OBJECT_NAME}" "r2:${R2_BUCKET_NAME}" --progress
-          cp "AstrBot-${VERSION_TAG}-core.zip" "astrbot-core-${VERSION_TAG}.zip"
-          rclone copy "astrbot-core-${VERSION_TAG}.zip" "r2:${R2_BUCKET_NAME}" --progress
-          rclone copyto "AstrBot-${VERSION_TAG}-core.zip" "r2:${R2_BUCKET_NAME}/astrbot-core/${VERSION_TAG}/source.zip" --progress
-          rclone copyto "AstrBot-${VERSION_TAG}-core.zip" "r2:${R2_BUCKET_NAME}/download/astrbot-core/${VERSION_TAG}/source.zip" --progress
+          "$rclone_bin" --config "$rclone_config" copy "${CORE_LATEST_OBJECT_NAME}" "r2:${R2_BUCKET_NAME}" --progress
+          "$rclone_bin" --config "$rclone_config" copyto "AstrBot-${VERSION_TAG}-core.zip" "r2:${R2_BUCKET_NAME}/astrbot-core-${VERSION_TAG}.zip" --progress
+          "$rclone_bin" --config "$rclone_config" copyto "AstrBot-${VERSION_TAG}-core.zip" "r2:${R2_BUCKET_NAME}/astrbot-core/${VERSION_TAG}/source.zip" --progress
+          "$rclone_bin" --config "$rclone_config" copyto "AstrBot-${VERSION_TAG}-core.zip" "r2:${R2_BUCKET_NAME}/download/astrbot-core/${VERSION_TAG}/source.zip" --progress
+
+      - name: Remove temporary R2 configuration
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/rclone.conf"
 
   publish-release:
     name: Publish GitHub Release
@@ -128,30 +171,31 @@ jobs:
       - build-dashboard
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
       - name: Resolve tag
         id: tag
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
+          if [ "$EVENT_NAME" = "push" ]; then
             tag="${GITHUB_REF_NAME}"
-          elif [ -n "${{ inputs.tag }}" ]; then
-            tag="${{ inputs.tag }}"
           else
-            tag="$(git describe --tags --abbrev=0)"
+            tag="$INPUT_TAG"
           fi
-          if [ -z "$tag" ]; then
-            echo "Failed to resolve tag." >&2
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+            echo "Release tag must be a safe semantic version: $tag" >&2
             exit 1
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Download dashboard artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: Dashboard-${{ steps.tag.outputs.tag }}
           path: release-assets
@@ -178,27 +222,33 @@ jobs:
             gh release create "$tag" --title "$tag" --notes-file "${{ steps.notes.outputs.file }}"
           fi
 
-      - name: Remove stale assets from release
+      - name: Refuse to overwrite immutable release asset
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
         shell: bash
         run: |
-          tag="${{ steps.tag.outputs.tag }}"
-          while IFS= read -r asset; do
-            case "$asset" in
-              *.AppImage|*.dmg|*.zip|*.exe|*.blockmap)
-                gh release delete-asset "$tag" "$asset" -y || true
-                ;;
-            esac
-          done < <(gh release view "$tag" --json assets --jq '.assets[].name')
+          set -euo pipefail
+          shopt -s nullglob
+          assets=(release-assets/*)
+          if [ "${#assets[@]}" -ne 1 ]; then
+            echo "Expected exactly one dashboard release asset." >&2
+            exit 1
+          fi
+          asset_name="$(basename "${assets[0]}")"
+          if gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' \
+            | grep -Fqx -- "$asset_name"; then
+            echo "Refusing to overwrite immutable GitHub release asset: $asset_name" >&2
+            exit 1
+          fi
 
       - name: Upload assets to release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
         shell: bash
         run: |
-          tag="${{ steps.tag.outputs.tag }}"
-          gh release upload "$tag" release-assets/* --clobber
+          gh release upload "$RELEASE_TAG" release-assets/*
 
   publish-pypi:
     name: Publish PyPI
@@ -208,30 +258,31 @@ jobs:
       - publish-release
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
       - name: Resolve tag
         id: tag
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
+          if [ "$EVENT_NAME" = "push" ]; then
             tag="${GITHUB_REF_NAME}"
-          elif [ -n "${{ inputs.tag }}" ]; then
-            tag="${{ inputs.tag }}"
           else
-            tag="$(git describe --tags --abbrev=0)"
+            tag="$INPUT_TAG"
           fi
-          if [ -z "$tag" ]; then
-            echo "Failed to resolve tag." >&2
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+            echo "Release tag must be a safe semantic version: $tag" >&2
             exit 1
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Download dashboard artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: Dashboard-${{ steps.tag.outputs.tag }}
           path: dashboard-artifact
@@ -244,19 +295,21 @@ jobs:
           cp -r dashboard-artifact/unpacked/dist/. astrbot/dashboard/dist/
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          python-version: "3.10"
+          python-version: "3.12"
 
       - name: Install uv
         shell: bash
-        run: python -m pip install uv
+        run: python -m pip install uv==0.11.19
 
       - name: Build package
         shell: bash
         # Dashboard assets are already in astrbot/dashboard/dist/;
         # ASTRBOT_BUILD_DASHBOARD is intentionally unset so the hatch hook skips npm.
-        run: uv build
+        run: |
+          uv lock --check
+          uv build
 
       - name: Publish to PyPI
         env:

@@ -870,42 +870,38 @@ class ProviderManager:
         return self.provider_insts
 
     async def terminate_provider(self, provider_id: str) -> None:
-        if provider_id in self.inst_map:
+        provider = self.inst_map.pop(provider_id, None)
+        if provider is not None:
             logger.info(
                 f"Terminating provider adapter {provider_id} "
                 f"({len(self.provider_insts)}, {len(self.stt_provider_insts)}, "
                 f"{len(self.tts_provider_insts)}) ...",
             )
 
-            if self.inst_map[provider_id] in self.provider_insts:
-                prov_inst = self.inst_map[provider_id]
-                if isinstance(prov_inst, Provider):
-                    self.provider_insts.remove(prov_inst)
-            if self.inst_map[provider_id] in self.stt_provider_insts:
-                prov_inst = self.inst_map[provider_id]
-                if isinstance(prov_inst, STTProvider):
-                    self.stt_provider_insts.remove(prov_inst)
-            if self.inst_map[provider_id] in self.tts_provider_insts:
-                prov_inst = self.inst_map[provider_id]
-                if isinstance(prov_inst, TTSProvider):
-                    self.tts_provider_insts.remove(prov_inst)
+            for providers in (
+                self.provider_insts,
+                self.stt_provider_insts,
+                self.tts_provider_insts,
+                self.embedding_provider_insts,
+                self.rerank_provider_insts,
+            ):
+                providers[:] = [item for item in providers if item is not provider]
 
-            if self.inst_map[provider_id] == self.curr_provider_inst:
+            if provider is self.curr_provider_inst:
                 self.curr_provider_inst = None
-            if self.inst_map[provider_id] == self.curr_stt_provider_inst:
+            if provider is self.curr_stt_provider_inst:
                 self.curr_stt_provider_inst = None
-            if self.inst_map[provider_id] == self.curr_tts_provider_inst:
+            if provider is self.curr_tts_provider_inst:
                 self.curr_tts_provider_inst = None
 
-            if getattr(self.inst_map[provider_id], "terminate", None):
-                await self.inst_map[provider_id].terminate()  # type: ignore
+            if getattr(provider, "terminate", None):
+                await provider.terminate()  # type: ignore
 
             logger.info(
                 f"Provider adapter {provider_id} terminated "
                 f"({len(self.provider_insts)}, {len(self.stt_provider_insts)}, "
                 f"{len(self.tts_provider_insts)})",
             )
-            del self.inst_map[provider_id]
 
     async def delete_provider(
         self, provider_id: str | None = None, provider_source_id: str | None = None
@@ -981,9 +977,24 @@ class ProviderManager:
             except asyncio.CancelledError:
                 pass
 
-        for provider_inst in self.provider_insts:
+        providers = list(
+            {id(provider): provider for provider in self.inst_map.values()}.values()
+        )
+        self.inst_map.clear()
+        self.provider_insts.clear()
+        self.stt_provider_insts.clear()
+        self.tts_provider_insts.clear()
+        self.embedding_provider_insts.clear()
+        self.rerank_provider_insts.clear()
+        self.curr_provider_inst = None
+        self.curr_stt_provider_inst = None
+        self.curr_tts_provider_inst = None
+        for provider_inst in providers:
             if hasattr(provider_inst, "terminate"):
-                await provider_inst.terminate()  # type: ignore
+                try:
+                    await provider_inst.terminate()  # type: ignore
+                except Exception:
+                    logger.error("Error while terminating provider", exc_info=True)
         try:
             await self.llm_tools.disable_mcp_server()
         except Exception:

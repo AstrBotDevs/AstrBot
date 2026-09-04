@@ -133,11 +133,12 @@
 
     <v-text-field
       v-else-if="itemMeta?.type === 'string'"
-      :model-value="modelValue"
+      :model-value="displayModelValue"
       @update:model-value="emitUpdate"
       :type="stringInputType"
       :append-inner-icon="secretToggleIcon"
       :autocomplete="itemMeta?.secret ? 'new-password' : undefined"
+      :placeholder="secretPlaceholder"
       @click:append-inner="secretVisible = !secretVisible"
       density="compact"
       variant="outlined"
@@ -177,7 +178,7 @@
 
     <v-textarea
       v-else-if="itemMeta?.type === 'text'"
-      :model-value="modelValue"
+      :model-value="displayModelValue"
       @update:model-value="emitUpdate"
       variant="outlined"
       rows="3"
@@ -226,11 +227,12 @@
 
     <v-text-field
       v-else
-      :model-value="modelValue"
+      :model-value="displayModelValue"
       @update:model-value="emitUpdate"
       :type="stringInputType"
       :append-inner-icon="secretToggleIcon"
       :autocomplete="itemMeta?.secret ? 'new-password' : undefined"
+      :placeholder="secretPlaceholder"
       @click:append-inner="secretVisible = !secretVisible"
       density="compact"
       variant="outlined"
@@ -254,6 +256,7 @@ import DashboardTotpManager from './DashboardTotpManager.vue'
 import { computed, ref } from 'vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 import { usePluginI18n } from '@/utils/pluginI18n'
+import { isSecretSentinel, secretDisplayValue } from '@/utils/configSecrets'
 
 const numericTemp = ref(null)
 const listSearchText = ref('')
@@ -311,6 +314,17 @@ function emitUpdate(val) {
   }
   emit('update:modelValue', val)
 }
+
+const displayModelValue = computed(() => {
+  if (!props.itemMeta?.secret) return props.modelValue
+  return secretDisplayValue(props.modelValue)
+})
+
+const secretPlaceholder = computed(() =>
+  props.itemMeta?.secret && isSecretSentinel(props.modelValue)
+    ? 'Configured; enter a new value to replace it'
+    : undefined
+)
 
 const listSelectItems = computed(() =>
   props.itemMeta?.type === 'list' && props.itemMeta?.options

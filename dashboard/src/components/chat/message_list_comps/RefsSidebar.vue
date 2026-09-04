@@ -45,6 +45,7 @@
 
 <script>
 import { useModuleI18n } from "@/i18n/composables";
+import { normalizeExternalHttpUrl } from "@/utils/requestPolicy.mjs";
 
 export default {
   name: "RefsSidebar",
@@ -84,9 +85,9 @@ export default {
         .map((ref) => ({
           index: ref?.index,
           title: ref?.title || ref?.url || "Reference",
-          url: ref?.url,
+          url: normalizeExternalHttpUrl(ref?.url),
           snippet: ref?.snippet,
-          favicon: ref?.favicon,
+          favicon: normalizeExternalHttpUrl(ref?.favicon),
         }))
         .filter((ref) => ref.url);
     },
@@ -112,9 +113,10 @@ export default {
     },
 
     openLink(url) {
-      if (url) {
-        window.open(url, "_blank");
-      }
+      const target = normalizeExternalHttpUrl(url);
+      if (!target) return;
+      const opened = window.open(target, "_blank", "noopener,noreferrer");
+      if (opened) opened.opener = null;
     },
   },
 };

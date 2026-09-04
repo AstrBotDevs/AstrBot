@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import jwt
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 from astrbot.core.workspace import API_KEY_USERNAME_PREFIX
+from astrbot.dashboard.auth_tokens import (
+    DashboardTokenError,
+    decode_dashboard_session_token,
+)
 from astrbot.dashboard.responses import ApiError
 from astrbot.dashboard.schemas import (
     AccountUpdateRequest,
@@ -113,20 +116,11 @@ async def require_dashboard_user(request: Request) -> str:
         raise ApiError("未授权", status_code=401)
 
     try:
-        payload = jwt.decode(
-            token,
-            request.app.state.jwt_secret,
-            algorithms=["HS256"],
+        return decode_dashboard_session_token(
+            token, secret=request.app.state.jwt_secret
         )
-    except jwt.ExpiredSignatureError as exc:
-        raise ApiError("Token 过期", status_code=401) from exc
-    except jwt.InvalidTokenError as exc:
+    except DashboardTokenError as exc:
         raise ApiError("Token 无效", status_code=401) from exc
-
-    username = payload.get("username")
-    if not isinstance(username, str) or not username.strip():
-        raise ApiError("Token 无效", status_code=401)
-    return username
 
 
 async def _require_api_key_scope(
@@ -173,14 +167,10 @@ async def require_scope(request: Request, scope: str) -> AuthContext:
     if not token:
         raise ApiError("Missing API key", status_code=401)
     try:
-        payload = jwt.decode(
-            token,
-            request.app.state.jwt_secret,
-            algorithms=["HS256"],
+        username = decode_dashboard_session_token(
+            token, secret=request.app.state.jwt_secret
         )
-    except jwt.ExpiredSignatureError as exc:
-        raise ApiError("Token expired", status_code=401) from exc
-    except jwt.InvalidTokenError as exc:
+    except DashboardTokenError as exc:
         auth_header = request.headers.get("Authorization", "").strip()
         if auth_header.startswith("Bearer "):
             try:
@@ -188,10 +178,6 @@ async def require_scope(request: Request, scope: str) -> AuthContext:
             except ApiError as api_key_exc:
                 raise api_key_exc from exc
         raise ApiError("Invalid token", status_code=401) from exc
-
-    username = payload.get("username")
-    if not isinstance(username, str) or not username.strip():
-        raise ApiError("Invalid token", status_code=401)
     return AuthContext(username=username, scopes=["*"], via="jwt")
 
 

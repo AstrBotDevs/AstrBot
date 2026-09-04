@@ -5,7 +5,6 @@ import datetime
 import os
 from dataclasses import dataclass
 
-import jwt
 import pyotp
 
 from astrbot import logger
@@ -43,6 +42,7 @@ from astrbot.core.utils.totp import (
     set_rotation_verified,
     verify_configured_2fa_code,
 )
+from astrbot.dashboard.auth_tokens import issue_dashboard_session_token
 from astrbot.dashboard.password_state import (
     get_dashboard_password_hash,
     is_password_change_required,
@@ -54,6 +54,8 @@ from astrbot.dashboard.password_state import (
 
 CHAT_ADMIN_SCOPE = "chat:admin"
 CONFIG_EDIT_ADMIN_SCOPE = "config:edit_admin"
+CONFIG_SECRETS_SCOPE = "config:secrets"
+CONFIG_SECURITY_SCOPE = "config:security"
 
 DEFAULT_OPEN_API_SCOPES = (
     "bot",
@@ -73,10 +75,14 @@ ALL_OPEN_API_SCOPES = (
     *DEFAULT_OPEN_API_SCOPES,
     CHAT_ADMIN_SCOPE,
     CONFIG_EDIT_ADMIN_SCOPE,
+    CONFIG_SECRETS_SCOPE,
+    CONFIG_SECURITY_SCOPE,
 )
 
 OPEN_API_SCOPE_INCLUDES = {
     "config": ("bot", "provider"),
+    CONFIG_SECRETS_SCOPE: ("config",),
+    CONFIG_SECURITY_SCOPE: ("config",),
 }
 
 DASHBOARD_JWT_COOKIE_NAME = "astrbot_dashboard_jwt"
@@ -445,17 +451,16 @@ class AuthService:
         return AuthServiceResult(message="Updated account successfully")
 
     def generate_jwt(self, username: str, *, auth_source: str = "password"):
-        payload = {
-            "username": username,
-            "exp": datetime.datetime.now(datetime.timezone.utc)
-            + datetime.timedelta(days=7),
-        }
-        if auth_source != "password":
-            payload["auth_source"] = auth_source
-        jwt_token = self.config["dashboard"].get("jwt_secret", None)
-        if not jwt_token:
+        jwt_secret = self.config["dashboard"].get("jwt_secret", None)
+        if not jwt_secret:
             raise ValueError("JWT secret is not set in the cmd_config.")
-        return jwt.encode(payload, jwt_token, algorithm="HS256")
+        return issue_dashboard_session_token(
+            username=username,
+            secret=jwt_secret,
+            expires_at=datetime.datetime.now(datetime.timezone.utc)
+            + datetime.timedelta(days=7),
+            auth_source=auth_source,
+        )
 
     async def is_setup_required(self) -> bool:
         if self.demo_mode:

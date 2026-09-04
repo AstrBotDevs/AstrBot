@@ -274,14 +274,15 @@ async def test_get_dashboard_version_uses_bundled_dist_when_data_dist_is_missing
 
 
 @pytest.mark.asyncio
-async def test_check_dashboard_files_with_webui_dir_arg(monkeypatch):
+async def test_check_dashboard_files_with_webui_dir_arg(monkeypatch, tmp_path):
     """Tests that providing a valid webui_dir skips all checks."""
-    valid_dir = "/tmp/my-custom-webui"
-    monkeypatch.setattr(os.path, "exists", lambda path: path == valid_dir)
+    valid_dir = tmp_path / "my-custom-webui"
+    valid_dir.mkdir()
+    (valid_dir / "index.html").write_text("<html></html>", encoding="utf-8")
     updater = mock.Mock()
     monkeypatch.setattr("main.AstrBotUpdater", updater)
 
     result = await check_dashboard_files(webui_dir=valid_dir)
 
-    assert result == valid_dir
+    assert result == str(valid_dir.resolve())
     updater.assert_not_called()

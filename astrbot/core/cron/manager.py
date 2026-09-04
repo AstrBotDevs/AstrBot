@@ -18,8 +18,10 @@ from astrbot.core.db.po import CronJob
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entites import ProviderRequest
+from astrbot.core.tools.computer_tools.util import resolve_computer_use_runtime
 from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.history_saver import persist_agent_history
+from astrbot.core.utils.session_lock import session_lock_manager
 
 if TYPE_CHECKING:
     from astrbot.core.star.context import Context
@@ -182,6 +184,9 @@ class CronJobManager:
         persistent: bool = True,
         run_once: bool = False,
         run_at: datetime | None = None,
+        allow_privileged_execution: bool = False,
+        created_by: str | None = None,
+        created_via: str = "legacy",
     ) -> CronJob:
         # If run_once with run_at, store run_at in payload for later reference.
         if run_once and run_at:
@@ -196,6 +201,9 @@ class CronJobManager:
             enabled=enabled,
             persistent=persistent,
             run_once=run_once,
+            allow_privileged_execution=allow_privileged_execution,
+            created_by=created_by,
+            created_via=created_via,
         )
         if enabled:
             self._schedule_job(job)
@@ -384,6 +392,7 @@ class CronJobManager:
                 "session": delivery_session_str,
             },
             "cron_payload": payload,
+            "allow_privileged_execution": bool(job.allow_privileged_execution),
         }
 
         await self._woke_main_agent(
@@ -403,6 +412,7 @@ class CronJobManager:
     ) -> None:
         """Woke the main agent to handle the cron job message."""
         from astrbot.core.astr_main_agent import (
+            AgentCapabilityMode,
             MainAgentBuildConfig,
             _get_session_conv,
             build_main_agent,
@@ -430,16 +440,13 @@ class CronJobManager:
             message_type=session.message_type,
         )
 
-        # judge user's role
+        # Scheduled jobs run with member permissions unless the persisted job
+        # explicitly opted into privileged execution through the Dashboard.
         umo = cron_event.unified_msg_origin
         cfg = self.ctx.get_config(umo=umo)
-        cron_payload = extras.get("cron_payload", {}) if extras else {}
-        sender_id = cron_payload.get("sender_id")
-        admin_ids = cfg.get("admins_id", [])
-        if admin_ids:
-            cron_event.role = "admin" if sender_id in admin_ids else "member"
-        if cron_payload.get("origin", "tool") == "api":
-            cron_event.role = "admin"
+        cron_event.role = (
+            "admin" if extras.get("allow_privileged_execution") else "member"
+        )
 
         provider_settings = cfg.get("provider_settings", {}) or {}
         tool_call_timeout = (
@@ -462,59 +469,56 @@ class CronJobManager:
             llm_safety_mode=False,
             streaming_response=False,
             provider_settings=provider_settings,
+            computer_use_runtime=resolve_computer_use_runtime(provider_settings),
+            capability_mode=AgentCapabilityMode.SCHEDULED,
         )
         req = ProviderRequest()
-        conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
-        req.conversation = conv
-        req.contexts = json.loads(conv.history)
-        cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
-        req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
-            cron_job=cron_job_str
-        )
-        req.prompt = (
-            "You are now responding to a scheduled task. "
-            "Proceed according to your system instructions. "
-            "Output using same language as previous conversation. "
-            "After completing your task, summarize and output your actions and results."
-        )
-        if delivery_session_str:
-            if not req.func_tool:
-                req.func_tool = ToolSet()
-            req.func_tool.add_tool(
-                self.ctx.get_llm_tool_manager().get_builtin_tool(SendMessageToUserTool)
+        async with session_lock_manager.acquire_lock(umo):
+            conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
+            req.conversation = conv
+            req.contexts = json.loads(conv.history)
+            cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
+            req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
+                cron_job=cron_job_str
             )
-
-        result = await build_main_agent(
-            event=cron_event, plugin_context=self.ctx, config=config, req=req
-        )
-        if not result:
-            logger.error("Failed to build main agent for cron job.")
-            return
-
-        runner = result.agent_runner
-        async for _ in runner.step_until_done(agent_max_step):
-            # agent will send message to user via using tools
-            pass
-        llm_resp = runner.get_final_llm_resp()
-        cron_meta = extras.get("cron_job", {}) if extras else {}
-        summary_note = (
-            f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
-            f" triggered at {cron_meta.get('run_started_at', 'unknown time')}, "
-        )
-        if llm_resp and llm_resp.role == "assistant":
-            summary_note += (
-                f"I finished this job, here is the result: {llm_resp.completion_text}"
+            req.prompt = (
+                "You are now responding to a scheduled task. Proceed according to your "
+                "system instructions and summarize your actions and results."
             )
-
-        await persist_agent_history(
-            self.ctx.conversation_manager,
-            event=cron_event,
-            req=req,
-            summary_note=summary_note,
-        )
-        if not llm_resp:
-            logger.warning("Cron job agent got no response")
-            return
+            if delivery_session_str:
+                if not req.func_tool:
+                    req.func_tool = ToolSet()
+                req.func_tool.add_tool(
+                    self.ctx.get_llm_tool_manager().get_builtin_tool(
+                        SendMessageToUserTool
+                    )
+                )
+            result = await build_main_agent(
+                event=cron_event, plugin_context=self.ctx, config=config, req=req
+            )
+            if not result:
+                logger.error("Failed to build main agent for cron job.")
+                return
+            runner = result.agent_runner
+            async for _ in runner.step_until_done(agent_max_step):
+                pass
+            llm_resp = runner.get_final_llm_resp()
+            cron_meta = extras.get("cron_job", {}) if extras else {}
+            summary_note = (
+                f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: "
+                f"{cron_meta.get('description', '')} triggered at "
+                f"{cron_meta.get('run_started_at', 'unknown time')}, "
+            )
+            if llm_resp and llm_resp.role == "assistant":
+                summary_note += f"I finished this job, here is the result: {llm_resp.completion_text}"
+            await persist_agent_history(
+                self.ctx.conversation_manager,
+                event=cron_event,
+                req=req,
+                summary_note=summary_note,
+            )
+            if not llm_resp:
+                logger.warning("Cron job agent got no response")
 
 
 __all__ = ["CronJobManager"]

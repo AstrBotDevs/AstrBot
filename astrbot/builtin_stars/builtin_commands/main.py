@@ -10,6 +10,7 @@ from .commands import (
     ProviderCommands,
     SetUnsetCommands,
     SIDCommand,
+    WorkspaceControlCommands,
 )
 
 
@@ -24,6 +25,7 @@ class Main(star.Star):
         self.provider_c = ProviderCommands(self.context)
         self.setunset_c = SetUnsetCommands(self.context)
         self.sid_c = SIDCommand(self.context)
+        self.workspace_control_c = WorkspaceControlCommands(self.context)
 
     @filter.command("help")
     async def help(self, event: AstrMessageEvent) -> None:
@@ -77,6 +79,23 @@ class Main(star.Star):
     async def update_dashboard(self, event: AstrMessageEvent) -> None:
         """Update AstrBot WebUI"""
         await self.admin_c.update_dashboard(event)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("workspace-control")
+    async def workspace_control(
+        self,
+        event: AstrMessageEvent,
+        action: str = "",
+        relative_path: str = "",
+        expected_sha256: str = "",
+    ) -> None:
+        """Approve or revoke workspace prompt and Skill instructions."""
+        await self.workspace_control_c.workspace_control(
+            event,
+            action,
+            relative_path,
+            expected_sha256,
+        )
 
     @filter.command("set")
     async def set_variable(self, event: AstrMessageEvent, key: str, value: str) -> None:

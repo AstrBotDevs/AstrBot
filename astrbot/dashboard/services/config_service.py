@@ -5,7 +5,7 @@ import copy
 import inspect
 import os
 import traceback
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -24,6 +24,7 @@ from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.platform.register import platform_cls_map, platform_registry
+from astrbot.core.platform.security_validation import validate_platform_security_config
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
@@ -35,6 +36,11 @@ from astrbot.core.utils.totp import (
 )
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 from astrbot.dashboard.async_utils import run_maybe_async
+from astrbot.dashboard.config_secrets import (
+    ConfigSecretPermissionError,
+    merge_secret_fields,
+    redact_config_for_response,
+)
 from astrbot.dashboard.responses import ApiError
 
 PROTECTED_2FA_CONFIG_PATHS = (
@@ -467,13 +473,15 @@ class ConfigProfileService:
 
     def get_profile_schema(self) -> dict:
         return {
-            "config": DEFAULT_CONFIG,
+            "config": redact_config_for_response(DEFAULT_CONFIG, CONFIG_METADATA_3),
             "metadata": ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3),
         }
 
     def get_system_schema(self) -> dict:
         return {
-            "config": self.acm.confs["default"],
+            "config": redact_config_for_response(
+                self.acm.confs["default"], CONFIG_METADATA_3_SYSTEM
+            ),
             "metadata": ConfigMetadataI18n.convert_to_i18n_keys(
                 CONFIG_METADATA_3_SYSTEM
             ),
@@ -487,7 +495,7 @@ class ConfigProfileService:
             effective UTC offset in minutes.
         """
         data = self.get_system_schema()
-        server_utc_time = datetime.now(timezone.utc)
+        server_utc_time = datetime.now(UTC)
         timezone_name = str(data["config"].get("timezone") or "").strip()
         if timezone_name:
             try:
@@ -511,7 +519,9 @@ class ConfigProfileService:
         name: str | None,
         config: dict | None,
         *,
-        allow_admin_id_change: bool = True,
+        allow_admin_id_change: bool = False,
+        allow_secret_change: bool = False,
+        allow_security_policy_change: bool = False,
     ) -> dict:
         """Create a config profile with explicit admin-ID permission.
 
@@ -519,6 +529,8 @@ class ConfigProfileService:
             name: Display name for the new profile.
             config: Optional initial config content.
             allow_admin_id_change: Whether caller may define non-default admin IDs.
+            allow_secret_change: Whether caller may set write-only secrets.
+            allow_security_policy_change: Whether caller may change security policy.
 
         Returns:
             Identifier of the created config profile.
@@ -536,7 +548,16 @@ class ConfigProfileService:
                 "config:edit_admin scope is required to change admins_id",
                 status_code=403,
             )
-        profile_config = copy.deepcopy(config or DEFAULT_CONFIG)
+        try:
+            profile_config = merge_secret_fields(
+                config or DEFAULT_CONFIG,
+                DEFAULT_CONFIG,
+                CONFIG_METADATA_3,
+                allow_secret_change=allow_secret_change,
+                allow_security_policy_change=allow_security_policy_change,
+            )
+        except ConfigSecretPermissionError as exc:
+            raise ApiError(str(exc), status_code=403) from exc
         if "agent_runner" in profile_config:
             profile_config["agent_runner"] = normalize_agent_runner(
                 profile_config["agent_runner"]
@@ -561,7 +582,9 @@ class ConfigProfileService:
         if config_id not in self.acm.confs:
             raise ValueError(f"Config file {config_id} does not exist")
         return {
-            "config": self.acm.confs[config_id],
+            "config": redact_config_for_response(
+                self.acm.confs[config_id], CONFIG_METADATA_3
+            ),
             "metadata": ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3),
         }
 
@@ -592,7 +615,10 @@ class ConfigProfileService:
         config: dict,
         *,
         two_factor_code: str | None = None,
-        allow_admin_id_change: bool = True,
+        allow_admin_id_change: bool = False,
+        allow_secret_change: bool = False,
+        allow_security_policy_change: bool = False,
+        allow_totp_secret_change: bool = False,
     ) -> str | None:
         """Update a config profile with explicit admin-ID permission.
 
@@ -601,6 +627,10 @@ class ConfigProfileService:
             config: Complete replacement config content.
             two_factor_code: Optional TOTP code for protected dashboard changes.
             allow_admin_id_change: Whether caller may change administrator IDs.
+            allow_secret_change: Whether caller may replace write-only secrets.
+            allow_security_policy_change: Whether caller may change security policy.
+            allow_totp_secret_change: Whether a Dashboard session may submit a
+                TOTP secret change for the separate current-code check below.
 
         Returns:
             Success message, optionally including a connectivity warning.
@@ -618,6 +648,17 @@ class ConfigProfileService:
                 config[key] = default_conf.get(key, [])
 
         current_config = self.acm.confs[config_id]
+        try:
+            config = merge_secret_fields(
+                config,
+                current_config,
+                CONFIG_METADATA_3,
+                allow_secret_change=allow_secret_change,
+                allow_security_policy_change=allow_security_policy_change,
+                allow_totp_secret_change=allow_totp_secret_change,
+            )
+        except ConfigSecretPermissionError as exc:
+            raise ApiError(str(exc), status_code=403) from exc
         if (
             not allow_admin_id_change
             and "admins_id" in config
@@ -846,7 +887,7 @@ class ConfigDisplayService:
 
         return {
             "metadata": metadata,
-            "config": self.config,
+            "config": redact_config_for_response(self.config, metadata),
             "platform_i18n_translations": platform_i18n_translations,
         }
 
@@ -858,7 +899,9 @@ class ConfigDisplayService:
                 continue
             if not plugin_md.config:
                 break
-            result["config"] = plugin_md.config
+            result["config"] = redact_config_for_response(
+                plugin_md.config, getattr(plugin_md.config, "schema", {})
+            )
             result["metadata"] = {
                 plugin_name: {
                     "description": f"{plugin_name} 配置",
@@ -999,6 +1042,8 @@ class ConfigFileService:
         self,
         post_configs: dict,
         plugin_name: str,
+        *,
+        allow_secret_change: bool = True,
     ) -> None:
         metadata = self.get_plugin_metadata_by_name(plugin_name)
         if not metadata:
@@ -1006,6 +1051,15 @@ class ConfigFileService:
         if not metadata.config:
             raise ValueError(f"插件 {plugin_name} 没有注册配置")
 
+        try:
+            post_configs = merge_secret_fields(
+                post_configs,
+                metadata.config,
+                getattr(metadata.config, "schema", {}),
+                allow_secret_change=allow_secret_change,
+            )
+        except ConfigSecretPermissionError as exc:
+            raise ApiError(str(exc), status_code=403) from exc
         errors, post_configs = validate_config(
             post_configs,
             getattr(metadata.config, "schema", {}),
@@ -1021,9 +1075,12 @@ class ConfigFileService:
         payload: object,
         *,
         plugin_name: str,
+        allow_secret_change: bool = True,
     ) -> str:
         post_configs = payload if isinstance(payload, dict) else {}
-        await self.save_plugin_configs(post_configs, plugin_name)
+        await self.save_plugin_configs(
+            post_configs, plugin_name, allow_secret_change=allow_secret_change
+        )
         return f"保存插件 {plugin_name} 成功~ 机器人正在热重载插件。"
 
     async def upload_config_file(
@@ -1076,7 +1133,7 @@ class ConfigFileService:
                 continue
 
             save_path.parent.mkdir(parents=True, exist_ok=True)
-            await file.save(str(save_path))
+            await file.save(str(save_path), max_bytes=MAX_FILE_BYTES)
             if save_path.is_file() and save_path.stat().st_size > MAX_FILE_BYTES:
                 save_path.unlink()
                 errors.append(f"File too large: {filename}")
@@ -1254,14 +1311,30 @@ class BotConfigService:
                 continue
             if type_ and bot.get("type") != type_:
                 continue
-            bots.append(copy.deepcopy(bot))
+            metadata = next(
+                (
+                    platform.config_metadata
+                    for platform in platform_registry
+                    if platform.name == bot.get("type")
+                ),
+                {},
+            )
+            bots.append(redact_config_for_response(bot, metadata))
         return {"bots": bots}
 
     def get_bot(self, bot_id: str) -> dict:
         bot = self._find_bot(bot_id)
         if bot is None:
             raise ValueError(f"Bot {bot_id} not found")
-        return {"bot": copy.deepcopy(bot)}
+        metadata = next(
+            (
+                platform.config_metadata
+                for platform in platform_registry
+                if platform.name == bot.get("type")
+            ),
+            {},
+        )
+        return {"bot": redact_config_for_response(bot, metadata)}
 
     def get_bot_stats(self) -> dict:
         return self.core_lifecycle.platform_manager.get_all_stats()
@@ -1272,6 +1345,7 @@ class BotConfigService:
             raise ValueError("Bot config must have an 'id' field")
         if self._find_bot(bot_id) is not None:
             raise ValueError(f"Bot {bot_id} already exists")
+        validate_platform_security_config(config)
         ensure_platform_webhook_config(config)
         self.config["platform"].append(config)
         save_config(self.config, self.config, is_core=True)
@@ -1280,6 +1354,24 @@ class BotConfigService:
     async def update_bot(self, bot_id: str, config: dict) -> None:
         if config.get("id") != bot_id:
             raise ValueError("Bot id cannot be changed")
+        current_bot = self._find_bot(bot_id)
+        if current_bot is None:
+            raise ValueError(f"Bot {bot_id} not found")
+        metadata = next(
+            (
+                platform.config_metadata
+                for platform in platform_registry
+                if platform.name == current_bot.get("type")
+            ),
+            {},
+        )
+        config = merge_secret_fields(
+            config,
+            current_bot,
+            metadata,
+            allow_secret_change=True,
+        )
+        validate_platform_security_config(config)
         ensure_platform_webhook_config(config)
         for idx, bot in enumerate(self.config.get("platform", [])):
             if bot.get("id") == bot_id:
@@ -1412,23 +1504,31 @@ class ProviderConfigService:
             model_id = provider.get("model")
             if isinstance(model_id, str) and model_id in LLM_METADATAS:
                 model_metadata[model_id] = LLM_METADATAS[model_id]
+        safe_configs = redact_config_for_response(
+            {
+                "provider": providers,
+                "provider_sources": self.config.get("provider_sources", []),
+            },
+            CONFIG_METADATA_2,
+        )
         return {
             "config_schema": config_schema,
-            "providers": providers,
-            "provider_sources": self.config.get("provider_sources", []),
+            "providers": safe_configs["provider"],
+            "provider_sources": safe_configs["provider_sources"],
             "model_metadata": model_metadata,
         }
 
     def list_provider_sources(self) -> dict:
-        return {
-            "provider_sources": copy.deepcopy(self.config.get("provider_sources", []))
-        }
+        return redact_config_for_response(
+            {"provider_sources": self.config.get("provider_sources", [])},
+            CONFIG_METADATA_2,
+        )
 
     def get_provider_source(self, source_id: str) -> dict:
         source = self._find_provider_source(source_id)
         if source is None:
             raise ValueError(f"Provider source {source_id} not found")
-        return {"provider_source": copy.deepcopy(source)}
+        return {"provider_source": redact_config_for_response(source)}
 
     async def upsert_provider_source(self, source_id: str, config: dict) -> None:
         config = copy.deepcopy(config)
@@ -1437,6 +1537,14 @@ class ProviderConfigService:
             raise ValueError("Provider source config must have an 'id' field")
         config["id"] = next_source_id
         sources = self.config.setdefault("provider_sources", [])
+
+        existing_source = self._find_provider_source(source_id)
+        if existing_source is not None:
+            config = merge_secret_fields(
+                config,
+                existing_source,
+                allow_secret_change=True,
+            )
 
         for source in sources:
             if source.get("id") == next_source_id and next_source_id != source_id:
@@ -1692,7 +1800,7 @@ class ProviderConfigService:
             model_id = provider_response.get("model")
             if isinstance(model_id, str) and model_id in LLM_METADATAS:
                 model_metadata[model_id] = LLM_METADATAS[model_id]
-            providers.append(provider_response)
+            providers.append(redact_config_for_response(provider_response))
         return {"providers": providers, "model_metadata": model_metadata}
 
     def list_providers_for_dashboard_types(
@@ -1731,7 +1839,10 @@ class ProviderConfigService:
         model_metadata = {}
         if isinstance(model_id, str) and model_id in LLM_METADATAS:
             model_metadata[model_id] = LLM_METADATAS[model_id]
-        return {"provider": provider_response, "model_metadata": model_metadata}
+        return {
+            "provider": redact_config_for_response(provider_response),
+            "model_metadata": model_metadata,
+        }
 
     async def create_provider(self, config: dict, source_id: str | None = None) -> None:
         config = copy.deepcopy(config)
@@ -1742,6 +1853,17 @@ class ProviderConfigService:
 
     async def update_provider(self, provider_id: str, config: dict) -> None:
         config = copy.deepcopy(config)
+        current_provider = self.provider_manager.get_provider_config_by_id(
+            provider_id,
+            merged=False,
+        )
+        if current_provider is None:
+            raise ValueError(f"Provider {provider_id} not found")
+        config = merge_secret_fields(
+            config,
+            current_provider,
+            allow_secret_change=True,
+        )
         if not config.get("id"):
             config["id"] = provider_id
         self._strip_legacy_reasoning_metadata(config)
