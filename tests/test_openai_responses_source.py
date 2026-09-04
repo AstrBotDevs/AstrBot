@@ -57,6 +57,8 @@ def test_responses_provider_templates_are_independent_and_stateless():
 
     assert templates["OpenAI Responses"]["type"] == "openai_responses"
     assert templates["OpenAI Responses"]["api_base"] == "https://api.openai.com/v1"
+    assert templates["OpenAI Responses"]["responses_web_search"] is False
+    assert templates["OpenAI Responses"]["responses_tool_choice"] == "auto"
     assert templates["DeepSeek Responses"]["type"] == "openai_responses"
     assert templates["DeepSeek Responses"]["api_base"] == "https://api.deepseek.com/v1"
     assert templates["xAI"]["type"] == "openai_responses"
@@ -292,6 +294,153 @@ async def test_query_flattens_tools_and_enforces_stateless_body(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_query_combines_astrbot_and_responses_native_tools(monkeypatch):
+    provider = _make_provider(
+        {
+            "responses_web_search": True,
+            "custom_extra_body": {
+                "tool_choice": {"type": "function", "name": "weather"},
+            },
+            "responses_web_search_context_size": "high",
+            "responses_web_search_allowed_domains": [" example.com ", "   "],
+            "responses_file_search_vector_store_ids": [" vs_1 "],
+            "responses_code_interpreter": True,
+            "responses_image_generation": True,
+            "responses_tool_choice": "required",
+        }
+    )
+    captured: dict = {}
+
+    async def fake_create(**kwargs):
+        captured.update(kwargs)
+        return _make_response(
+            [
+                {
+                    "type": "message",
+                    "id": "msg_1",
+                    "status": "completed",
+                    "role": "assistant",
+                    "content": [
+                        {"type": "output_text", "text": "done", "annotations": []},
+                    ],
+                }
+            ]
+        )
+
+    monkeypatch.setattr(provider.client.responses, "create", fake_create)
+    tools = SimpleNamespace(
+        openai_schema=lambda: [
+            {
+                "type": "function",
+                "function": {
+                    "name": "weather",
+                    "description": "Get weather",
+                    "parameters": {"type": "object"},
+                },
+            }
+        ]
+    )
+
+    await provider._query({"model": "gpt-test", "input": "hi"}, tools)
+
+    assert captured["tool_choice"] == "required"
+    assert captured["tools"] == [
+        {
+            "type": "function",
+            "name": "weather",
+            "description": "Get weather",
+            "parameters": {"type": "object"},
+        },
+        {
+            "type": "web_search",
+            "search_context_size": "high",
+            "filters": {"allowed_domains": ["example.com"]},
+        },
+        {"type": "file_search", "vector_store_ids": ["vs_1"]},
+        {"type": "code_interpreter", "container": {"type": "auto"}},
+        {"type": "image_generation"},
+    ]
+
+
+@pytest.mark.parametrize(
+    ("request_tool_choice", "custom_tool_choice", "expected_tool_choice"),
+    [
+        (
+            None,
+            {"type": "function", "name": "custom_weather"},
+            {"type": "function", "name": "custom_weather"},
+        ),
+        (
+            {"type": "function", "name": "request_weather"},
+            {"type": "function", "name": "custom_weather"},
+            {"type": "function", "name": "request_weather"},
+        ),
+    ],
+)
+def test_prepare_response_request_preserves_custom_tool_choice(
+    request_tool_choice,
+    custom_tool_choice,
+    expected_tool_choice,
+):
+    provider = _make_provider(
+        {
+            "responses_web_search": True,
+            "custom_extra_body": {"tool_choice": custom_tool_choice},
+        }
+    )
+    payloads = {"model": "gpt-test", "input": "hi"}
+    if request_tool_choice is not None:
+        payloads["tool_choice"] = request_tool_choice
+
+    provider._prepare_response_request(payloads, None)
+
+    assert payloads["tool_choice"] == expected_tool_choice
+
+
+def test_build_response_tools_deduplicates_configured_and_custom_tools():
+    provider = _make_provider(
+        {
+            "responses_web_search": True,
+            "responses_file_search_vector_store_ids": ["vs_1"],
+            "responses_code_interpreter": True,
+            "responses_image_generation": True,
+        }
+    )
+    tools = SimpleNamespace(
+        openai_schema=lambda: [
+            {
+                "type": "function",
+                "function": {
+                    "name": "weather",
+                    "parameters": {"type": "object"},
+                },
+            }
+        ]
+    )
+
+    response_tools = provider._build_response_tools(
+        tools,
+        [
+            {"type": "function", "name": "weather", "parameters": {}},
+            {"type": "web_search", "search_context_size": "high"},
+            {"type": "file_search", "vector_store_ids": ["vs_custom"]},
+            {"type": "code_interpreter", "container": {"type": "auto"}},
+            {"type": "image_generation"},
+            {"type": "computer_use", "display_width": 1024},
+        ],
+    )
+
+    assert response_tools == [
+        {"type": "function", "name": "weather", "parameters": {"type": "object"}},
+        {"type": "web_search", "search_context_size": "medium"},
+        {"type": "file_search", "vector_store_ids": ["vs_1"]},
+        {"type": "code_interpreter", "container": {"type": "auto"}},
+        {"type": "image_generation"},
+        {"type": "computer_use", "display_width": 1024},
+    ]
+
+
+@pytest.mark.asyncio
 async def test_parse_response_extracts_text_reasoning_usage_and_replay_state():
     provider = _make_provider()
     response = _make_response(
@@ -331,6 +480,78 @@ async def test_parse_response_extracts_text_reasoning_usage_and_replay_state():
     assert state["items"][0]["content"] == [
         {"text": "thinking", "type": "reasoning_text"}
     ]
+
+
+@pytest.mark.asyncio
+async def test_parse_response_keeps_web_citations_and_generated_images():
+    provider = _make_provider()
+    response = _make_response(
+        [
+            {
+                "type": "message",
+                "id": "msg_1",
+                "status": "completed",
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": "The answer has a source.",
+                        "annotations": [
+                            {
+                                "type": "url_citation",
+                                "start_index": 18,
+                                "end_index": 24,
+                                "url": "https://example.com/source",
+                                "title": "Example source",
+                            },
+                            {
+                                "type": "file_citation",
+                                "file_id": "file_1",
+                                "filename": "notes.pdf",
+                                "index": 0,
+                            },
+                        ],
+                    }
+                ],
+            },
+            {
+                "type": "image_generation_call",
+                "id": "img_1",
+                "status": "completed",
+                "result": "aGVsbG8=",
+            },
+        ]
+    )
+
+    result = await provider._parse_response(response, tools=None)
+
+    assert "The answer has a source." in result.completion_text
+    assert "Example source: https://example.com/source" in result.completion_text
+    assert "notes.pdf (file_1)" in result.completion_text
+    assert len(result.result_chain.chain) == 3
+    assert result.result_chain.chain[1].type == "Image"
+
+
+@pytest.mark.asyncio
+async def test_parse_response_keeps_generated_images_as_non_empty_output():
+    provider = _make_provider()
+    response = _make_response(
+        [
+            {
+                "type": "image_generation_call",
+                "id": "img_1",
+                "status": "completed",
+                "result": "aGVsbG8=",
+            }
+        ]
+    )
+
+    result = await provider._parse_response(response, tools=None)
+
+    assert result.completion_text == "[Image]"
+    assert len(result.result_chain.chain) == 2
+    assert result.result_chain.chain[0].type == "Plain"
+    assert result.result_chain.chain[1].type == "Image"
 
 
 @pytest.mark.asyncio
