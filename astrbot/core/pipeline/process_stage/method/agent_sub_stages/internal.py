@@ -473,7 +473,10 @@ class InternalAgentSubStage(Stage):
             if message.role == "system" and not skipped_initial_system:
                 skipped_initial_system = True
                 continue
-            if message.role in ["assistant", "user"] and message._no_save:
+            # _no_save is role-agnostic: temp-injected messages (including the
+            # tool message of a fake tool-call pair) are never persisted, so no
+            # dangling tool message remains in history.
+            if message._no_save:
                 continue
             messages_to_save.append(message)
 
