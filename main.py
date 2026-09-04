@@ -59,7 +59,7 @@ logo_tmpl = r"""
 
 
 def check_env() -> None:
-    if not (sys.version_info.major == 3 and sys.version_info.minor >= 12):
+    if sys.version_info < (3, 12):
         logger.error("Please run this project with Python 3.12 or later.")
         raise SystemExit(1)
 
