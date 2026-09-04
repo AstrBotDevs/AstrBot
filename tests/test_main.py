@@ -65,8 +65,9 @@ def test_check_env(monkeypatch):
             assert call_args[1].get("exist_ok") is True
 
     monkeypatch.setattr(sys, "version_info", version_info_wrong)
-    with pytest.raises(SystemExit):
+    with pytest.raises(SystemExit) as exc_info:
         check_env()
+    assert exc_info.value.code == 1
 
 
 def test_apply_startup_env_flags_sets_reset_password_env(monkeypatch):
