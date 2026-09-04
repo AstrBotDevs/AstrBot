@@ -34,11 +34,9 @@ class _FakeTaskkillResult:
 def _python_command(code: str) -> str:
     """Build a shell-safe Python command for the current operating system."""
     if os.name == "nt":
-        # PowerShell re-parses the whole command text, so keep the executable
-        # bare and wrap the code argument in double quotes (list2cmdline would
-        # leave a space-free code argument unquoted, which PowerShell then
-        # splits apart).
-        return f"{sys.executable} -u -c \"{code}\""
+        # PowerShell re-parses the whole command text: invoke the executable
+        # through the call operator (&) so quoted paths with spaces survive.
+        return f"& '{sys.executable}' -u -c \"{code}\""
     return shlex.join([sys.executable, "-u", "-c", code])
 
 
@@ -414,7 +412,8 @@ async def test_managed_shell_allows_creator_and_conversation_admin():
         creator_id="user-a",
         creator_is_admin=False,
         sandboxed=True,
-        yield_time_ms=200,
+        # Cold-starting PowerShell + Python on CI runners exceeds 200ms.
+        yield_time_ms=5_000,
     )
 
     try:

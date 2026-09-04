@@ -120,8 +120,12 @@ def require_symlink(tmp_path: Path) -> Path:
     probe = tmp_path / ".symlink_probe"
     try:
         probe.symlink_to(tmp_path)
-    except OSError:
-        pytest.skip("symlink creation is not permitted on this platform")
+    except OSError as exc:
+        # 1314 (ERROR_PRIVILEGE_NOT_HELD): Windows requires admin or
+        # developer mode. Anything else is a real error and must fail.
+        if getattr(exc, "winerror", None) == 1314:
+            pytest.skip("symlink creation is not permitted on this platform")
+        raise
     probe.unlink()
     return tmp_path
 

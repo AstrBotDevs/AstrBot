@@ -171,9 +171,11 @@ class TestLocalShellComponent:
             ),
         ):
             # Use python to read the file with PowerShell/bash compatible
-            # quoting (single-quoted raw path inside a double-quoted argument).
+            # quoting: call operator for a possibly space-containing
+            # executable, single-quoted raw path inside the double-quoted
+            # code argument.
             result = await shell.exec(
-                f"{sys.executable} -c \"print(open(r'{test_file}').read())\"",
+                f"& '{sys.executable}' -c \"print(open(r'{test_file}').read())\"",
                 cwd=str(tmp_path),
             )
             assert result["exit_code"] == 0
@@ -183,7 +185,7 @@ class TestLocalShellComponent:
         """Test command execution with custom environment variables."""
         shell = LocalShellComponent()
         result = await shell.exec(
-            f"{sys.executable} -c \"import os; print(os.environ.get('TEST_VAR', ''))\"",
+            f"& '{sys.executable}' -c \"import os; print(os.environ.get('TEST_VAR', ''))\"",
             env={"TEST_VAR": "test_value"},
         )
         assert result["exit_code"] == 0
