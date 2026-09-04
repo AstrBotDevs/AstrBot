@@ -282,6 +282,17 @@ class KBHelper:
                     parse_result = await parser.parse(file_content, file_name)
                 except KnowledgeBaseUploadError:
                     raise
+                except ModuleNotFoundError as exc:
+                    if exc.name == "markitdown_no_magika":
+                        raise KnowledgeBaseUploadError(
+                            stage="parsing",
+                            user_message=(
+                                "文档解析失败：缺少解析该文件格式所需的依赖"
+                                " markitdown-no-magika，请安装后重试。"
+                            ),
+                            details={"file_name": file_name},
+                        ) from exc
+                    raise
                 except Exception as exc:
                     raise KnowledgeBaseUploadError(
                         stage="parsing",
