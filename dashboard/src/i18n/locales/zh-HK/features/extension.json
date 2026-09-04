@@ -1,0 +1,371 @@
+{
+  "title": "插件管理",
+  "subtitle": "管理與設定系統插件",
+  "tabs": {
+    "installedPlugins": "AstrBot 插件",
+    "market": "AstrBot 插件市場",
+    "installedMcpServers": "MCP",
+    "skills": "Skills",
+    "handlersOperation": "管理行為 (Handler)"
+  },
+  "titles": {
+    "installedAstrBotPlugins": "已安裝的 AstrBot 插件",
+    "pinnedPlugins": "已釘選的插件"
+  },
+  "failedPlugins": {
+    "title": "載入失敗的插件（{count}）",
+    "hint": "這些插件無法載入，可以嘗試重新載入或直接解除安裝。",
+    "columns": {
+      "plugin": "插件",
+      "error": "錯誤"
+    }
+  },
+  "search": {
+    "placeholder": "搜尋插件...",
+    "marketPlaceholder": "搜尋市場插件..."
+  },
+  "filters": {
+    "all": "全部"
+  },
+  "views": {
+    "card": "卡片檢視",
+    "list": "列表檢視"
+  },
+  "buttons": {
+    "showSystemPlugins": "顯示系統插件",
+    "hideSystemPlugins": "隱藏系統插件",
+    "install": "安裝",
+    "uninstall": "解除安裝",
+    "update": "更新",
+    "reload": "重新載入",
+    "enable": "啟用",
+    "disable": "停用",
+    "configure": "設定",
+    "viewInfo": "Handler",
+    "viewDocs": "文件",
+    "viewRepo": "Repo",
+    "close": "關閉",
+    "save": "儲存",
+    "saveAndClose": "儲存並關閉",
+    "cancel": "取消",
+    "actions": "操作",
+    "back": "返回",
+    "selectFile": "選擇檔案",
+    "refresh": "重新整理",
+    "updateAll": "更新所有插件",
+    "deleteSource": "刪除來源",
+    "pin": "釘選",
+    "unpin": "取消釘選",
+    "reshuffle": "隨機抽取"
+  },
+  "status": {
+    "enabled": "已啟用",
+    "disabled": "已停用",
+    "system": "系統",
+    "loading": "載入中...",
+    "installed": "已安裝",
+    "unknown": "未知"
+  },
+  "tooltips": {
+    "enable": "點擊以啟用",
+    "disable": "點擊以停用",
+    "reload": "重新載入",
+    "configure": "設定",
+    "viewInfo": "Handler",
+    "viewDocs": "文件",
+    "update": "更新",
+    "uninstall": "解除安裝"
+  },
+  "table": {
+    "headers": {
+      "name": "名稱",
+      "description": "描述",
+      "version": "版本",
+      "author": "作者",
+      "status": "狀態",
+      "actions": "操作",
+      "stars": "Star 數量",
+      "lastUpdate": "最近更新",
+      "tags": "標籤",
+      "eventType": "Handler 類型",
+      "specificType": "具體類型",
+      "trigger": "觸發方式"
+    }
+  },
+  "empty": {
+    "noPlugins": "暫無插件",
+    "noPluginsDesc": "請嘗試安裝插件或顯示系統插件"
+  },
+  "market": {
+    "recommended": "🥳 推薦",
+    "allPlugins": "📦 全部插件",
+    "category": "分類",
+    "categories": {
+      "all": "全部",
+      "ai_tools": "AI 增強",
+      "entertainment": "娛樂",
+      "productivity": "生產力",
+      "integrations": "外部整合",
+      "utilities": "生活實用",
+      "other": "其他"
+    },
+    "showFullName": "全名",
+    "devDocs": "插件開發文件",
+    "submitRepo": "提交插件 Repo",
+    "customSource": "自訂插件來源",
+    "source": "插件來源",
+    "availableSources": "可用來源",
+    "sourceManagement": "插件來源管理",
+    "addSource": "新增插件來源",
+    "sourceName": "來源名稱",
+    "sourceUrl": "來源 URL",
+    "defaultSource": "預設插件來源",
+    "removeSource": "刪除插件來源",
+    "confirmRemoveSource": "確定要刪除此插件來源？",
+    "sourceAdded": "已新增插件來源",
+    "sourceRemoved": "已刪除插件來源",
+    "sourceError": "操作失敗",
+    "selectSource": "選擇插件來源",
+    "currentSource": "目前插件來源",
+    "editSource": "編輯插件來源",
+    "sourceUpdated": "插件來源更新成功",
+    "defaultOfficialSource": "預設官方來源",
+    "sourceExists": "此插件來源已經存在",
+    "installPlugin": "安裝插件",
+    "randomPlugins": "🎲 隨機插件",
+    "showRandomPlugins": "顯示隨機插件",
+    "hideRandomPlugins": "隱藏隨機插件",
+    "sourceSafetyWarning": "即使是預設插件來源，我們也無法完全保證插件的穩定性與安全性，使用前請謹慎檢查。"
+  },
+  "sort": {
+    "by": "排序方式",
+    "default": "預設排序",
+    "installTime": "最後修改時間",
+    "name": "名稱",
+    "stars": "Star 數量",
+    "author": "作者名稱",
+    "updated": "更新時間",
+    "updateStatus": "更新狀態",
+    "ascending": "遞增",
+    "descending": "遞減"
+  },
+  "tags": {
+    "danger": "危險"
+  },
+  "dialogs": {
+    "error": {
+      "title": "錯誤訊息",
+      "checkConsole": "詳情請查看平台日誌"
+    },
+    "config": {
+      "title": "插件設定",
+      "noConfig": "此插件無設定選項"
+    },
+    "loading": {
+      "title": "載入中...",
+      "logs": "日誌"
+    },
+    "uninstall": {
+      "title": "確認刪除",
+      "message": "確定要刪除目前的插件？",
+      "deleteConfig": "同時刪除插件設定檔",
+      "deleteData": "同時刪除插件持久化資料",
+      "configHint": "設定檔位於 data/config 目錄",
+      "dataHint": "刪除 data/plugin_data 與 data/plugins_data 目錄內的資料"
+    },
+    "install": {
+      "title": "安裝插件",
+      "fromFile": "由檔案安裝",
+      "fromUrl": "由連結安裝",
+      "supportPlatformsCount": "支援 {count} 個平台"
+    },
+    "danger_warning": {
+      "title": "警告",
+      "message": "此插件可能包含不安全的程式碼或功能，可能會導致系統崩潰或資料遺失。確定要繼續安裝？",
+      "confirm": "繼續",
+      "cancel": "取消"
+    },
+    "versionCompatibility": {
+      "title": "版本相容性警告",
+      "message": "此插件宣告的 AstrBot 版本範圍與目前版本不符。你可以無視警告繼續安裝，但可能無法正常運行。",
+      "confirm": "無視警告，繼續安裝",
+      "cancel": "取消安裝"
+    },
+    "forceUpdate": {
+      "title": "未偵測到新版本",
+      "message": "目前插件未偵測到新版本，是否強制重新安裝？這將會從遠端 Repo 拉取最新的程式碼。",
+      "confirm": "強制更新"
+    },
+    "updateAllConfirm": {
+      "title": "確認更新全部插件",
+      "message": "確定要更新全部 {count} 個插件？此操作可能需要一些時間。",
+      "confirm": "確認更新"
+    }
+  },
+  "messages": {
+    "uninstalling": "正在解除安裝",
+    "refreshing": "正在重新整理插件列表...",
+    "refreshSuccess": "插件列表已重新整理！",
+    "refreshFailed": "重新整理插件列表時發生錯誤",
+    "operationFailed": "操作失敗",
+    "reloadSuccess": "重新載入成功",
+    "reloadFailed": "重新載入失敗",
+    "updateSuccess": "更新成功！",
+    "addSuccess": "新增成功！",
+    "saveSuccess": "儲存成功！",
+    "deleteSuccess": "刪除成功！",
+    "installing": "正在由檔案安裝插件",
+    "installingFromUrl": "正在由連結安裝插件...",
+    "installFailed": "安裝插件失敗：",
+    "getMarketDataFailed": "獲取插件市場資料失敗：",
+    "hasUpdate": "有新版本：",
+    "confirmDelete": "確定要刪除插件？",
+    "fillUrlOrFile": "請填寫插件連結或上載插件檔案",
+    "dontFillBoth": "請勿同時填寫插件連結與上載檔案",
+    "supportedFormats": "支援 .zip 格式的插件檔案",
+    "updateAllSuccess": "所有可更新的插件已更新完畢！",
+    "updateAllFailed": "有 {failed}/{total} 個插件更新失敗：",
+    "fillSourceNameAndUrl": "請填妥插件來源名稱與 URL",
+    "invalidUrl": "請輸入有效的 URL",
+    "enterJsonUrl": "請輸入會回傳插件列表 JSON 資料的 URL"
+  },
+  "upload": {
+    "fromFile": "由檔案安裝",
+    "fromUrl": "由連結安裝",
+    "selectFile": "選擇檔案",
+    "enterUrl": "輸入插件 Repo 連結"
+  },
+  "skills": {
+    "modeLocal": "Local Skills",
+    "modeNeo": "Neo Skills",
+    "actions": "操作",
+    "upload": "上載 Skills",
+    "refresh": "重新整理",
+    "empty": "暫無 Skills",
+    "emptyHint": "請上載 Skills 的 Zip 檔案",
+    "uploadDialogTitle": "上載 Skills",
+    "uploadHint": "支援批次上載 zip 技能包，亦支援拖曳批次上載。系統會自動驗證目錄結構，並顯示個別檔案的結果。",
+    "structureRequirement": "支援 Zip 檔案內包含多個 skills 資料夾。",
+    "abilityMultiple": "支援一次上載多個 zip 檔案",
+    "abilityValidate": "自動驗證 `SKILL.md`",
+    "abilitySkip": "自動略過重複檔案",
+    "selectFile": "選擇檔案",
+    "selectFiles": "選擇檔案（可多選）",
+    "dropzoneTitle": "將多個 zip 檔案拖曳至此處",
+    "dropzoneAction": "或點擊後從資料夾中選擇多個檔案",
+    "dropzoneHint": "支援批次上載，系統會自動驗證目錄結構",
+    "fileListTitle": "等待處理的檔案",
+    "fileListEmpty": "選擇檔案後將在此顯示驗證結果與上載狀態",
+    "uploading": "正在上載...",
+    "batchResultTitle": "批次上載結果",
+    "batchResultSummary": "合共 {total} 個檔案，成功 {success} 個",
+    "batchSuccessList": "上載成功",
+    "batchFailedList": "上載失敗",
+    "confirm": "確認",
+    "confirmUpload": "開始上載",
+    "cancel": "取消",
+    "statusWaiting": "等待上載",
+    "statusUploading": "正在上載",
+    "statusSuccess": "已上載",
+    "statusError": "驗證失敗",
+    "statusSkipped": "已略過",
+    "summaryTotal": "合共 {count} 個檔案",
+    "summaryReady": "等待處理 {count}",
+    "summarySuccess": "成功 {count}",
+    "summaryFailed": "失敗 {count}",
+    "summarySkipped": "已略過 {count}",
+    "validationReady": "等待上載，上載時會自動驗證目錄結構",
+    "validationZipOnly": "僅支援 zip 技能包",
+    "validationDuplicate": "同名檔案已在列表中，已略過",
+    "validationUploading": "正在驗證與上載...",
+    "validationUploadFailed": "上載失敗，請重試",
+    "validationUploadedAs": "已安裝為 {name}",
+    "validationNoResult": "無法取得驗證結果，請檢查平台日誌",
+    "noDescription": "無描述",
+    "path": "路徑",
+    "uploadSuccess": "上載成功",
+    "uploadFailed": "上載失敗",
+    "download": "下載",
+    "downloadSuccess": "下載成功",
+    "downloadFailed": "下載失敗",
+    "loadFailed": "載入 Skills 失敗",
+    "updateSuccess": "更新成功",
+    "updateFailed": "更新失敗",
+    "deleteTitle": "確認刪除",
+    "deleteMessage": "確定要刪除此 Skill？",
+    "deleteSuccess": "刪除成功",
+    "deleteFailed": "刪除失敗",
+    "neoSkillKey": "skill_key 篩選",
+    "neoStatus": "候選狀態 (Candidate Status)",
+    "neoStage": "發佈階段 (Release Stage)",
+    "neoFilterHint": "篩選候選與發佈紀錄",
+    "neoAll": "全部",
+    "neoCandidates": "Neo Candidates",
+    "neoReleases": "Neo Releases",
+    "neoLoadFailed": "載入 Neo Skills 資料失敗",
+    "neoPass": "通過",
+    "neoReject": "拒絕",
+    "neoEvaluateSuccess": "評估更新成功",
+    "neoEvaluateFailed": "評估更新失敗",
+    "neoPromoteSuccess": "發佈成功",
+    "neoPromoteFailed": "發佈失敗",
+    "neoRollback": "復原",
+    "neoRollbackSuccess": "復原成功",
+    "neoRollbackFailed": "復原失敗",
+    "neoDeactivate": "停用",
+    "neoDeactivateSuccess": "停用成功",
+    "neoDeactivateFailed": "停用失敗",
+    "neoSync": "同步",
+    "neoSyncSuccess": "同步成功",
+    "neoSyncFailed": "同步失敗",
+    "neoDelete": "刪除",
+    "neoDeleteSuccess": "刪除成功",
+    "neoDeleteFailed": "刪除失敗",
+    "neoPayloadTitle": "Neo Payload 詳情",
+    "neoPayloadFailed": "讀取 Payload 失敗",
+    "runtimeNoneWarning": "Computer Use 的執行環境未設定，Skills 可能無法讓 Agent 正常運行，因為未啟用 Runtime。",
+    "runtimeHint": "需要在設定檔的「使用電腦能力」中將運行環境設定為「local」或「sandbox」，才能讓 AstrBot 正常使用你提供的Skills。",
+    "neoRuntimeRequired": "Neo Skills 僅在運行環境為 sandbox 且 Sandbox Driver 為 shipyard_neo 時才可使用。",
+    "sourceLocalOnly": "本機 Skill",
+    "sourceSandboxOnly": "Sandbox 預置 Skill",
+    "sourceBoth": "本機 + Sandbox",
+    "sandboxDiscoveryPending": "尚未發現 Sandbox 預設 Skill。請最少啟動一次 Sandbox 工作階段後再查看。",
+    "sandboxPresetReadonly": "Sandbox 預設 Skill 在此為唯讀狀態，無法於本機 Skills 頁面中刪除或啟用/停用。"
+  },
+  "card": {
+    "actions": {
+      "pluginConfig": "插件設定",
+      "uninstallPlugin": "解除安裝插件",
+      "reloadPlugin": "重新載入插件",
+      "togglePlugin": "插件",
+      "viewHandlers": "查看 Handler",
+      "updateTo": "更新至",
+      "reinstall": "重新安裝"
+    },
+    "status": {
+      "hasUpdate": "有新版本可更新",
+      "disabled": "此插件已停用",
+      "handlersCount": "個 Handler",
+      "supportPlatform": "支援平台",
+      "supportPlatformsCount": "支援 {count} 個平台",
+      "astrbotVersion": "AstrBot 版本要求"
+    },
+    "alt": {
+      "logo": "logo",
+      "extensionIcon": "Extension Icon"
+    },
+    "errors": {
+      "confirmNotRegistered": "$confirm 未正確註冊"
+    }
+  },
+  "conflicts": {
+    "title": "偵測到指令衝突",
+    "message": "這會導致部分指令運作不正常，建議前往【指令管理】面板進行處理。",
+    "pairs": "對衝突指令",
+    "goToManage": "前往處理",
+    "later": "稍後處理"
+  },
+  "pluginChangelog": {
+    "menuTitle": "查看更新日誌"
+  }
+}

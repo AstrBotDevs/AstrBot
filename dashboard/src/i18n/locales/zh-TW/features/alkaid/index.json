@@ -1,0 +1,44 @@
+{
+  "title": "Alkaid 實驗室",
+  "subtitle": "探索前沿 AI 功能",
+  "comingSoon": "前面的世界，以後再來探索吧！",
+  "page": {
+    "title": "The Alkaid Project.",
+    "subtitle": "AstrBot Alpha 專案",
+    "navigation": {
+      "knowledgeBase": "知識庫 (擴充套件)",
+      "longTermMemory": "長期記憶層",
+      "other": "..."
+    }
+  },
+  "features": {
+    "knowledgeBase": "知識庫",
+    "longTermMemory": "長期記憶",
+    "advancedChat": "進階對話",
+    "multiModal": "多模態互動"
+  },
+  "status": {
+    "experimental": "實驗性",
+    "beta": "測試版",
+    "stable": "穩定版",
+    "deprecated": "已棄用"
+  },
+  "sigma": {
+    "subtitle": "AstrBot 實驗性專案",
+    "visualization": "視覺化",
+    "filterUserId": "篩選使用者 ID",
+    "filter": "篩選",
+    "resetFilter": "重設篩選",
+    "refreshGraph": "重新整理圖形",
+    "nodeDetails": "節點詳情",
+    "id": "ID",
+    "type": "類型",
+    "name": "名稱",
+    "userId": "使用者 ID",
+    "timestamp": "時間戳記",
+    "graphStats": "圖形統計",
+    "nodeCount": "節點數",
+    "edgeCount": "邊數",
+    "inDevelopment": "功能開發中"
+  }
+} 
