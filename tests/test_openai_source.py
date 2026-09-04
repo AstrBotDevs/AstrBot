@@ -5,7 +5,11 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-from openai.types.chat.chat_completion import ChatCompletion
+from openai.types.chat.chat_completion import (
+    ChatCompletion,
+    ChatCompletionMessage,
+    Choice,
+)
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from PIL import Image as PILImage
 
@@ -398,6 +402,127 @@ async def test_groq_payload_drops_reasoning_content_from_assistant_history():
         assert "reasoning" not in assistant_message
     finally:
         await provider.terminate()
+
+
+def _make_reasoning_completion(
+    thinking_field: str,
+) -> ChatCompletion:
+    kwargs = {thinking_field: "thoughts"}
+    message = ChatCompletionMessage(role="assistant", content="answer", **kwargs)
+    return ChatCompletion(
+        id="chatcmpl-reasoning-test",
+        choices=[Choice(index=0, finish_reason="stop", message=message)],
+        created=1,
+        model="test-model",
+        object="chat.completion",
+    )
+
+
+@pytest.mark.asyncio
+async def test_reasoning_key_configurable_extracts_alias_field():
+    """reasoning_key 可配置：按配置字段名提取思考内容 (#9783)"""
+    provider = _make_provider({"reasoning_key": "reasoning"})
+    try:
+        completion = _make_reasoning_completion("reasoning")
+        assert provider._extract_reasoning_content(completion) == "thoughts"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_reasoning_key_default_keeps_reasoning_content_behavior():
+    """默认 key 仍为 reasoning_content，不取 reasoning 别名（行为不回归）"""
+    provider = _make_provider()
+    try:
+        aliased = _make_reasoning_completion("reasoning")
+        assert provider._extract_reasoning_content(aliased) is None
+        standard = _make_reasoning_completion("reasoning_content")
+        assert provider._extract_reasoning_content(standard) == "thoughts"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_reasoning_key_applied_to_assistant_history_payload():
+    """配置 reasoning_key 后，历史 think 内容写入配置的字段名 (#9783)"""
+    provider = _make_provider({"reasoning_key": "reasoning"})
+    try:
+        payloads = {
+            "model": "test-model",
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "think", "think": "step 1"},
+                        {"type": "text", "text": "final answer"},
+                    ],
+                }
+            ],
+        }
+
+        provider._finally_convert_payload(payloads)
+
+        assistant_message = payloads["messages"][0]
+        assert assistant_message["reasoning"] == "step 1"
+        assert "reasoning_content" not in assistant_message
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_sanitize_assistant_messages_uses_configured_reasoning_key():
+    """reasoning_key='reasoning' 时，think-only 历史不被误删为空消息 (#9783, PR #9829 review)"""
+    provider = _make_provider({"reasoning_key": "reasoning"})
+    try:
+        payloads = {
+            "model": "test-model",
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [{"type": "think", "think": "step 1"}],
+                }
+            ],
+        }
+
+        provider._finally_convert_payload(payloads)
+        provider._sanitize_assistant_messages(payloads, provider.reasoning_key)
+
+        assert len(payloads["messages"]) == 1
+        assistant_message = payloads["messages"][0]
+        assert assistant_message["reasoning"] == "step 1"
+        assert assistant_message["content"] == ""
+    finally:
+        await provider.terminate()
+
+
+def test_sanitize_assistant_messages_keeps_custom_key_only_history():
+    """自定义 reasoning_key 下：该字段或默认字段的思考历史都保留，真空消息仍丢弃"""
+    payloads = {
+        "messages": [
+            {
+                "role": "assistant",
+                "content": None,
+                "reasoning": "thinking under custom key",
+            },
+            {
+                "role": "assistant",
+                "content": None,
+                "reasoning_content": "legacy thinking under default key",
+            },
+            {"role": "assistant", "content": None},
+        ]
+    }
+
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads, "reasoning")
+
+    assert len(payloads["messages"]) == 2
+    assert payloads["messages"][0]["reasoning"] == "thinking under custom key"
+    assert payloads["messages"][0]["content"] == ""
+    assert (
+        payloads["messages"][1]["reasoning_content"]
+        == "legacy thinking under default key"
+    )
+    assert payloads["messages"][1]["content"] == ""
 
 
 @pytest.mark.asyncio
