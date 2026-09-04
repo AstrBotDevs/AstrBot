@@ -1406,6 +1406,20 @@
           "Tool use"
         ]
       },
+      "image_formats": {
+        "description": "Supported image formats",
+        "hint": "Image formats allowed when sending to this provider; incompatible formats are converted automatically. Selecting \"Unrestricted\" overrides all other options.",
+        "labels": [
+          "JPEG",
+          "PNG",
+          "WebP",
+          "GIF",
+          "BMP",
+          "HEIC",
+          "HEIF",
+          "Unrestricted"
+        ]
+      },
       "custom_headers": {
         "description": "Custom request headers",
         "hint": "Key/value pairs added here are merged into the OpenAI SDK default_headers for custom HTTP headers. Values must be strings."

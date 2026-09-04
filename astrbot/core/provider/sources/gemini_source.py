@@ -20,7 +20,9 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.media_utils import (
+    VENDOR_IMAGE_FORMATS,
     describe_media_ref,
+    resolve_image_ref_to_images,
     resolve_media_ref_to_base64_data,
 )
 from astrbot.core.utils.network_utils import is_connection_error, log_connection_failure
@@ -44,6 +46,9 @@ logging.getLogger("google_genai.types").addFilter(SuppressNonTextPartsWarning())
     "Google Gemini Chat Completion 提供商适配器",
 )
 class ProviderGoogleGenAI(Provider):
+    supported_image_formats = VENDOR_IMAGE_FORMATS["google"]
+    """Formats accepted by the official Gemini vision API."""
+
     CATEGORY_MAPPING = {
         "harassment": types.HarmCategory.HARM_CATEGORY_HARASSMENT,
         "hate_speech": types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
@@ -1000,18 +1005,23 @@ class ProviderGoogleGenAI(Provider):
     ):
         """组装上下文。"""
 
-        async def resolve_image_part(image_url: str) -> dict | None:
-            image_data = await resolve_media_ref_to_base64_data(
+        async def resolve_image_part(image_url: str) -> list[dict]:
+            montage_max_size = self.get_animated_montage_max_size()
+            image_datas = await resolve_image_ref_to_images(
                 image_url,
-                media_type="image",
+                allowed_mime_types=self.resolve_allowed_image_formats(),
+                montage_max_size=montage_max_size,
             )
-            if not image_data:
+            if not image_datas:
                 logger.warning("Image preprocessing returned no data; ignoring it.")
-                return None
-            return {
-                "type": "image_url",
-                "image_url": {"url": image_data.to_data_url()},
-            }
+                return []
+            return [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": image_data.to_data_url()},
+                }
+                for image_data in image_datas
+            ]
 
         async def resolve_audio_part(audio_path: str) -> dict | None:
             try:
@@ -1055,9 +1065,8 @@ class ProviderGoogleGenAI(Provider):
                 if isinstance(part, TextPart):
                     content_blocks.append({"type": "text", "text": part.text})
                 elif isinstance(part, ImageURLPart):
-                    image_part = await resolve_image_part(part.image_url.url)
-                    if image_part:
-                        content_blocks.append(image_part)
+                    image_parts = await resolve_image_part(part.image_url.url)
+                    content_blocks.extend(image_parts)
                 elif isinstance(part, AudioURLPart):
                     audio_part = await resolve_audio_part(part.audio_url.url)
                     if audio_part:
@@ -1070,9 +1079,8 @@ class ProviderGoogleGenAI(Provider):
         # 3. 图片内容
         if image_urls:
             for image_url in image_urls:
-                image_part = await resolve_image_part(image_url)
-                if image_part:
-                    content_blocks.append(image_part)
+                image_parts = await resolve_image_part(image_url)
+                content_blocks.extend(image_parts)
 
         if audio_urls:
             for audio_path in audio_urls:
@@ -1096,16 +1104,18 @@ class ProviderGoogleGenAI(Provider):
 
     async def encode_image_bs64(self, image_url: str) -> str:
         """将图片转换为 base64"""
-        image_data = await resolve_media_ref_to_base64_data(
+        montage_max_size = self.get_animated_montage_max_size()
+        image_datas = await resolve_image_ref_to_images(
             image_url,
-            media_type="image",
+            allowed_mime_types=self.resolve_allowed_image_formats(),
+            montage_max_size=montage_max_size,
             strict=True,
         )
-        if image_data is None:
+        if not image_datas:
             raise RuntimeError(
                 f"Failed to encode image data: {describe_media_ref(image_url)}"
             )
-        return image_data.to_data_url()
+        return image_datas[0].to_data_url()
 
     async def _close_httpx_client(self, client: httpx.AsyncClient | None) -> None:
         """Safely close an httpx.AsyncClient, swallowing errors for idempotency."""

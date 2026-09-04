@@ -79,6 +79,8 @@ export interface ProviderSchemaData {
   providers?: OpenConfig[];
   provider_sources?: OpenConfig[];
   model_metadata?: Record<string, unknown>;
+  provider_type_image_formats?: Record<string, string[] | null>;
+  provider_brand_image_formats?: Record<string, string[]>;
 }
 
 export interface ProviderListData {

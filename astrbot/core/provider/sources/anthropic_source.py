@@ -17,8 +17,10 @@ from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.media_utils import (
+    VENDOR_IMAGE_FORMATS,
     describe_media_ref,
-    resolve_media_ref_to_base64_data,
+    detect_image_mime_type,
+    resolve_image_ref_to_images,
 )
 from astrbot.core.utils.network_utils import (
     create_proxy_client,
@@ -36,6 +38,9 @@ from .request_retry import retry_provider_request, retry_provider_request_contex
 )
 class ProviderAnthropic(Provider):
     _PROMPT_CACHE_CONTROL = {"type": "ephemeral"}
+
+    supported_image_formats = VENDOR_IMAGE_FORMATS["anthropic"]
+    """Formats accepted by the official Anthropic vision API."""
 
     @staticmethod
     def _ensure_usable_response(
@@ -273,19 +278,32 @@ class ProviderAnthropic(Provider):
                                     _, base64_data = url.split(",", 1)
                                     # Detect actual image format from binary data
                                     image_bytes = base64.b64decode(base64_data)
-                                    media_type = self._detect_image_mime_type(
-                                        image_bytes
+                                    media_type = detect_image_mime_type(
+                                        image_bytes,
+                                        default_mime_type=None,
                                     )
-                                    converted_content.append(
-                                        {
-                                            "type": "image",
-                                            "source": {
-                                                "type": "base64",
-                                                "media_type": media_type,
-                                                "data": base64_data,
-                                            },
-                                        }
+                                    allowed_formats = (
+                                        self.resolve_allowed_image_formats()
                                     )
+                                    if media_type and (
+                                        allowed_formats is None
+                                        or media_type in allowed_formats
+                                    ):
+                                        converted_content.append(
+                                            {
+                                                "type": "image",
+                                                "source": {
+                                                    "type": "base64",
+                                                    "media_type": media_type,
+                                                    "data": base64_data,
+                                                },
+                                            }
+                                        )
+                                    else:
+                                        logger.warning(
+                                            "Skipping context image with unsupported or undetectable format: %s...",
+                                            url[:50],
+                                        )
                                 except ValueError:
                                     logger.warning(
                                         f"Failed to parse image data URI: {url[:50]}..."
@@ -899,17 +917,15 @@ class ProviderAnthropic(Provider):
         ):
             yield llm_response
 
-    def _detect_image_mime_type(self, data: bytes) -> str:
-        """根据图片二进制数据的 magic bytes 检测 MIME 类型"""
-        if data[:8] == b"\x89PNG\r\n\x1a\n":
-            return "image/png"
-        if data[:2] == b"\xff\xd8":
-            return "image/jpeg"
-        if data[:6] in (b"GIF87a", b"GIF89a"):
-            return "image/gif"
-        if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
-            return "image/webp"
-        return "image/jpeg"
+    async def _image_ref_to_images(self, image_ref: str, *, strict: bool = False):
+        """Resolve an image ref with this provider's format adaptation applied."""
+        montage_max_size = self.get_animated_montage_max_size()
+        return await resolve_image_ref_to_images(
+            image_ref,
+            allowed_mime_types=self.resolve_allowed_image_formats(),
+            montage_max_size=montage_max_size,
+            strict=strict,
+        )
 
     async def assemble_context(
         self,
@@ -920,23 +936,23 @@ class ProviderAnthropic(Provider):
     ):
         """组装上下文，支持文本和图片"""
 
-        async def resolve_image_url(image_url: str) -> dict | None:
-            image_data = await resolve_media_ref_to_base64_data(
-                image_url,
-                media_type="image",
-            )
-            if not image_data:
+        async def resolve_image_url(image_url: str) -> list[dict]:
+            image_datas = await self._image_ref_to_images(image_url)
+            if not image_datas:
                 logger.warning("图片预处理结果为空，将忽略。")
-                return None
+                return []
 
-            return {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": image_data.mime_type,
-                    "data": image_data.base64_data,
-                },
-            }
+            return [
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": image_data.mime_type,
+                        "data": image_data.base64_data,
+                    },
+                }
+                for image_data in image_datas
+            ]
 
         content = []
 
@@ -958,9 +974,7 @@ class ProviderAnthropic(Provider):
                 if isinstance(block, TextPart):
                     content.append({"type": "text", "text": block.text})
                 elif isinstance(block, ImageURLPart):
-                    image_dict = await resolve_image_url(block.image_url.url)
-                    if image_dict:
-                        content.append(image_dict)
+                    content.extend(await resolve_image_url(block.image_url.url))
                 elif isinstance(block, AudioURLPart):
                     content.append({"type": "text", "text": "[Audio]"})
                 else:
@@ -969,9 +983,7 @@ class ProviderAnthropic(Provider):
         # 3. 图片内容
         if image_urls:
             for image_url in image_urls:
-                image_dict = await resolve_image_url(image_url)
-                if image_dict:
-                    content.append(image_dict)
+                content.extend(await resolve_image_url(image_url))
         if audio_urls:
             for _audio_path in audio_urls:
                 content.append({"type": "text", "text": "[Audio]"})
@@ -992,15 +1004,12 @@ class ProviderAnthropic(Provider):
 
     async def encode_image_bs64(self, image_url: str) -> tuple[str, str]:
         """将图片转换为 base64，同时检测实际 MIME 类型"""
-        image_data = await resolve_media_ref_to_base64_data(
-            image_url,
-            media_type="image",
-            strict=True,
-        )
-        if image_data is None:
+        image_datas = await self._image_ref_to_images(image_url, strict=True)
+        if not image_datas:
             raise RuntimeError(
                 f"Failed to encode image data: {describe_media_ref(image_url)}"
             )
+        image_data = image_datas[0]
         return image_data.to_data_url(), image_data.mime_type
 
     def get_current_key(self) -> str:

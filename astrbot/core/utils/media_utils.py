@@ -7,12 +7,14 @@ probing, and image compression helpers.
 import asyncio
 import base64
 import binascii
+import hashlib
 import io
 import mimetypes
 import os
 import shutil
 import subprocess
-from collections.abc import AsyncIterator
+import tempfile
+from collections.abc import AsyncIterator, Collection
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -68,6 +70,101 @@ IMAGE_FORMAT_MIME_TYPES = {
     "BMP": "image/bmp",
     "TIFF": "image/tiff",
     "AVIF": "image/avif",
+}
+
+IMAGE_SHORT_MIME_TYPES = {
+    "jpeg": "image/jpeg",
+    "jpg": "image/jpeg",
+    "png": "image/png",
+    "gif": "image/gif",
+    "webp": "image/webp",
+    "bmp": "image/bmp",
+    "tif": "image/tiff",
+    "tiff": "image/tiff",
+    "avif": "image/avif",
+    "heic": "image/heic",
+    "heif": "image/heif",
+}
+"""User-facing short image format names mapped to MIME types."""
+
+IMAGE_MIME_SHORT_NAMES = {
+    "image/jpeg": "jpeg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "image/bmp": "bmp",
+    "image/tiff": "tiff",
+    "image/avif": "avif",
+    "image/heic": "heic",
+    "image/heif": "heif",
+}
+"""Canonical short display name for each known image MIME type."""
+
+_MINIMAX_IMAGE_FORMATS = frozenset(
+    {"image/jpeg", "image/png", "image/webp", "image/gif"}
+)
+_XIAOMI_IMAGE_FORMATS = frozenset(
+    {"image/jpeg", "image/png", "image/webp", "image/gif", "image/bmp"}
+)
+_MOONSHOT_IMAGE_FORMATS = frozenset(
+    {
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/gif",
+        "image/bmp",
+        "image/heic",
+        "image/heif",
+    }
+)
+
+VENDOR_IMAGE_FORMATS = {
+    "openai": frozenset({"image/jpeg", "image/png", "image/webp", "image/gif"}),
+    "azure": frozenset({"image/jpeg", "image/png", "image/webp", "image/gif"}),
+    "xai": frozenset({"image/jpeg", "image/png"}),
+    "deepseek": frozenset({"image/jpeg", "image/png", "image/gif", "image/webp"}),
+    "anthropic": frozenset({"image/jpeg", "image/png", "image/gif", "image/webp"}),
+    "google": frozenset(
+        {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
+    ),
+    "zhipu": frozenset({"image/jpeg", "image/png"}),
+    # NVIDIA NIM VLM docs list JPG/JPEG/PNG for most models (a few also take GIF).
+    "nvidia": frozenset({"image/jpeg", "image/png"}),
+    # Groq docs only demonstrate JPEG; PNG is the other reliably referenced type.
+    "groq": frozenset({"image/jpeg", "image/png"}),
+    "moonshot": _MOONSHOT_IMAGE_FORMATS,
+    "kimi-code": _MOONSHOT_IMAGE_FORMATS,
+    "minimax": _MINIMAX_IMAGE_FORMATS,
+    "minimax-token-plan": _MINIMAX_IMAGE_FORMATS,
+    "xiaomi": _XIAOMI_IMAGE_FORMATS,
+    "xiaomi-token-plan": _XIAOMI_IMAGE_FORMATS,
+}
+"""Image MIME types officially documented by each vendor (brand key from provider
+source templates). Absent brand = no vendor-level opinion; the adapter class
+declaration then governs."""
+
+ANIMATED_MONTAGE_GRID = 3
+"""Animated images become a grid x grid frame montage (contact sheet)."""
+
+ANIMATED_MONTAGE_FRAME_COUNT = ANIMATED_MONTAGE_GRID * ANIMATED_MONTAGE_GRID
+
+CONVERT_CACHE_DIR_NAME = "media_convert_cache"
+"""Cache directory (under the AstrBot temp dir) for converted images and frames."""
+
+_MIME_PIL_FORMAT = {
+    "image/jpeg": "JPEG",
+    "image/png": "PNG",
+    "image/webp": "WEBP",
+    "image/gif": "GIF",
+    "image/bmp": "BMP",
+}
+
+_MIME_FILE_SUFFIX = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+    "image/bmp": ".bmp",
 }
 
 AUDIO_FORMAT_MIME_TYPES = {
@@ -894,7 +991,259 @@ async def resolve_image_ref_to_base64_data(
     assembly can skip bad image refs without failing the whole request.
     """
 
-    return await MediaResolver(
+    images = await resolve_image_ref_to_images(
+        image_ref,
+        strict=strict,
+        default_mime_type=default_mime_type,
+    )
+    return images[0] if images else None
+
+
+def _image_convert_cache_dir() -> Path:
+    cache_dir = Path(get_astrbot_temp_path()) / CONVERT_CACHE_DIR_NAME
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+
+def _image_convert_cache_key(source_bytes: bytes, params: str) -> str:
+    """Build a content-addressed cache key for a converted image or frame set."""
+    source_digest = hashlib.sha256(source_bytes).hexdigest()[:32]
+    params_digest = hashlib.sha256(params.encode()).hexdigest()[:8]
+    return f"{source_digest}_{params_digest}"
+
+
+def _image_has_alpha(image: PILImage.Image) -> bool:
+    return image.mode in {"RGBA", "LA"} or (
+        image.mode == "P" and "transparency" in image.info
+    )
+
+
+def _inspect_image(image_bytes: bytes) -> tuple[bool, int]:
+    """Inspect decodable image bytes.
+
+    Args:
+        image_bytes: Encoded image bytes.
+
+    Returns:
+        Tuple of ``(has_alpha, frame_count)``.
+
+    Raises:
+        Exception: Raised by Pillow when the bytes are not a decodable image.
+    """
+    with PILImage.open(io.BytesIO(image_bytes)) as image:
+        return _image_has_alpha(image), getattr(image, "n_frames", 1)
+
+
+def _pick_target_image_mime_type(
+    has_alpha: bool,
+    allowed_mime_types: Collection[str] | None,
+) -> str:
+    """Pick the best Pillow-savable target MIME type within the allowed set.
+
+    Alpha images prefer PNG to preserve transparency; opaque images prefer JPEG.
+    """
+    preferred = ["image/png"] if has_alpha else ["image/jpeg"]
+    preferred += ["image/jpeg", "image/png", "image/webp"]
+    for mime_type in preferred:
+        if allowed_mime_types is None or mime_type in allowed_mime_types:
+            return mime_type
+    for mime_type in allowed_mime_types or ():
+        if mime_type in _MIME_PIL_FORMAT:
+            return mime_type
+    return "image/png"
+
+
+def _save_current_image_frame(
+    image: PILImage.Image,
+    target_mime_type: str,
+    output_path: Path,
+) -> None:
+    """Save the currently selected frame of an opened image."""
+    working: PILImage.Image | None = None
+    try:
+        frame = image
+        if target_mime_type == "image/jpeg" and image.mode != "RGB":
+            working = image.convert("RGB")
+            frame = working
+        elif (
+            target_mime_type == "image/png"
+            and image.mode == "P"
+            and "transparency" in image.info
+        ):
+            working = image.convert("RGBA")
+            frame = working
+        save_kwargs: dict[str, int] = {}
+        if target_mime_type == "image/jpeg":
+            save_kwargs = {
+                "quality": IMAGE_COMPRESS_DEFAULT_QUALITY,
+                "subsampling": 0,
+            }
+        frame.save(output_path, _MIME_PIL_FORMAT[target_mime_type], **save_kwargs)
+    finally:
+        if working is not None:
+            working.close()
+
+
+def _save_image_frame_atomic(
+    image: PILImage.Image,
+    target_mime_type: str,
+    output_path: Path,
+) -> None:
+    """Save via a unique temp file then atomically replace the cache entry.
+
+    Concurrent readers never observe a partially written cache file.
+    """
+    fd, tmp_name = tempfile.mkstemp(dir=output_path.parent, suffix=".tmp")
+    os.close(fd)
+    tmp_path = Path(tmp_name)
+    try:
+        _save_current_image_frame(image, target_mime_type, tmp_path)
+        os.replace(tmp_path, output_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
+def _convert_image_bytes_sync(
+    source_bytes: bytes,
+    target_mime_type: str,
+) -> Path:
+    """Convert image bytes to the target format, cached under the temp dir.
+
+    Args:
+        source_bytes: Encoded source image bytes.
+        target_mime_type: Target MIME type; must be Pillow-savable.
+
+    Returns:
+        Path of the converted (or previously cached) image.
+    """
+    cache_key = _image_convert_cache_key(source_bytes, f"convert|{target_mime_type}")
+    output_path = _image_convert_cache_dir() / (
+        cache_key + _MIME_FILE_SUFFIX[target_mime_type]
+    )
+    if output_path.exists():
+        return output_path
+    with PILImage.open(io.BytesIO(source_bytes)) as image:
+        _save_image_frame_atomic(image, target_mime_type, output_path)
+    return output_path
+
+
+def _even_frame_indices(total_frames: int, max_frames: int) -> list[int]:
+    """Pick up to ``max_frames`` frame indices evenly spaced over the animation."""
+    count = min(max_frames, total_frames)
+    if count <= 1:
+        return [0]
+    return sorted({round(i * (total_frames - 1) / (count - 1)) for i in range(count)})
+
+
+def _extract_animation_montage_sync(
+    source_bytes: bytes,
+    target_mime_type: str,
+    max_size: int,
+) -> tuple[Path, bool]:
+    """Tile evenly spaced frames of an animated image into one grid montage.
+
+    Frame sampling includes the first and last frames; grid cells beyond the
+    available frames stay blank (white). The montage is flattened onto a white
+    background and its longest edge is capped at ``max_size`` (never upscaled).
+
+    Args:
+        source_bytes: Encoded animated image bytes.
+        target_mime_type: MIME type the montage is saved as.
+        max_size: Longest edge of the montage in pixels.
+
+    Returns:
+        Tuple of the montage path and whether extraction actually ran
+        (``False`` when the cached montage was served).
+    """
+    suffix = _MIME_FILE_SUFFIX[target_mime_type]
+    cache_key = _image_convert_cache_key(
+        source_bytes, f"montage|{target_mime_type}|s={max_size}"
+    )
+    output_path = _image_convert_cache_dir() / (cache_key + suffix)
+    if output_path.exists():
+        return output_path, False
+    with PILImage.open(io.BytesIO(source_bytes)) as image:
+        total_frames = getattr(image, "n_frames", 1)
+        frame_indices = _even_frame_indices(total_frames, ANIMATED_MONTAGE_FRAME_COUNT)
+        # Floor the per-cell scale so the montage never exceeds max_size.
+        longest_edge = max(image.size) * ANIMATED_MONTAGE_GRID
+        scale = min(1.0, max(max_size, 1) / longest_edge)
+        cell_size = (
+            max(1, int(image.size[0] * scale)),
+            max(1, int(image.size[1] * scale)),
+        )
+        canvas = PILImage.new(
+            "RGB",
+            (
+                cell_size[0] * ANIMATED_MONTAGE_GRID,
+                cell_size[1] * ANIMATED_MONTAGE_GRID,
+            ),
+            (255, 255, 255),
+        )
+        try:
+            for out_index, frame_index in enumerate(frame_indices):
+                image.seek(frame_index)
+                frame = image.convert("RGBA")
+                if frame.size != cell_size:
+                    frame = frame.resize(cell_size, PILImage.Resampling.LANCZOS)
+                # Paste with the alpha band as mask so transparency shows white.
+                canvas.paste(
+                    frame,
+                    (
+                        (out_index % ANIMATED_MONTAGE_GRID) * cell_size[0],
+                        (out_index // ANIMATED_MONTAGE_GRID) * cell_size[1],
+                    ),
+                    frame,
+                )
+                frame.close()
+            _save_image_frame_atomic(canvas, target_mime_type, output_path)
+        finally:
+            canvas.close()
+    return output_path, True
+
+
+async def _path_to_resolved_media_data(path: Path, mime_type: str) -> ResolvedMediaData:
+    data = await asyncio.to_thread(path.read_bytes)
+    return ResolvedMediaData(
+        base64_data=base64.b64encode(data).decode("utf-8"),
+        mime_type=mime_type,
+    )
+
+
+async def resolve_image_ref_to_images(
+    image_ref: MediaRefStr,
+    *,
+    allowed_mime_types: Collection[str] | None = None,
+    montage_max_size: int = IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
+    strict: bool = False,
+    default_mime_type: str | None = "image/jpeg",
+) -> list[ResolvedMediaData]:
+    """Resolve an image reference into provider-ready images.
+
+    Applies per-provider format adaptation: still images whose detected MIME type
+    is not in ``allowed_mime_types`` are converted via Pillow (cached under the
+    AstrBot temp directory, so a source is only converted once until the cache is
+    cleaned), and animated images are tiled into one frame-grid montage. Single
+    frame animated images fall through to the still-image path. Compatible
+    images are returned untouched without any conversion or cache write.
+
+    Args:
+        image_ref: Image reference in any form accepted by ``MediaResolver``.
+        allowed_mime_types: MIME types accepted by the target provider. ``None``
+            or a collection containing ``"*"`` disables adaptation.
+        montage_max_size: Longest edge in pixels of the animated-image montage.
+        strict: Raise on invalid or undecodable images instead of skipping them.
+        default_mime_type: Fallback MIME type for legacy base64 payloads.
+
+    Returns:
+        List of resolved images; empty when the reference is invalid and
+        ``strict`` is False.
+
+    Raises:
+        ValueError: Raised in strict mode when the image is invalid or cannot be
+            decoded by Pillow.
+    """
+    media_data = await MediaResolver(
         image_ref,
         media_type="image",
         default_suffix=".bin",
@@ -902,6 +1251,62 @@ async def resolve_image_ref_to_base64_data(
         strict=strict,
         default_mime_type=default_mime_type,
     )
+    if media_data is None:
+        return []
+
+    image_bytes = media_data.to_bytes()
+    unrestricted = allowed_mime_types is None or "*" in allowed_mime_types
+    try:
+        has_alpha, frame_count = await asyncio.to_thread(_inspect_image, image_bytes)
+    except Exception as exc:
+        # Pillow cannot decode some provider-supported formats (e.g. HEIC without
+        # pillow-heif); pass them through when the provider accepts them.
+        if unrestricted or (
+            media_data.mime_type and media_data.mime_type in allowed_mime_types
+        ):
+            return [media_data]
+        if strict:
+            raise ValueError(
+                f"Invalid image file: {describe_media_ref(image_ref)}"
+            ) from exc
+        logger.warning(
+            "Image %s cannot be decoded and will be skipped.",
+            describe_media_ref(image_ref),
+        )
+        return []
+
+    if frame_count > 1:
+        # Montage cells are flattened onto white, so alpha no longer matters
+        # when picking the target format.
+        target_mime_type = _pick_target_image_mime_type(
+            False,
+            None if unrestricted else allowed_mime_types,
+        )
+        montage_path, extracted = await asyncio.to_thread(
+            _extract_animation_montage_sync,
+            image_bytes,
+            target_mime_type,
+            max(int(montage_max_size), 1),
+        )
+        if extracted:
+            logger.info(
+                "Animated image %s tiled into a %dx%d frame montage for the provider.",
+                describe_media_ref(image_ref),
+                ANIMATED_MONTAGE_GRID,
+                ANIMATED_MONTAGE_GRID,
+            )
+        return [await _path_to_resolved_media_data(montage_path, target_mime_type)]
+
+    if unrestricted or media_data.mime_type in allowed_mime_types:
+        return [media_data]
+
+    target_mime_type = _pick_target_image_mime_type(has_alpha, allowed_mime_types)
+    converted_path = await asyncio.to_thread(
+        _convert_image_bytes_sync,
+        image_bytes,
+        target_mime_type,
+    )
+    return [await _path_to_resolved_media_data(converted_path, target_mime_type)]
 
 
 async def resolve_audio_ref_to_base64_data(

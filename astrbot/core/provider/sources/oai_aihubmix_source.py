@@ -6,6 +6,9 @@ from .openai_source import ProviderOpenAIOfficial
     "aihubmix_chat_completion", "AIHubMix Chat Completion Provider Adapter"
 )
 class ProviderAIHubMix(ProviderOpenAIOfficial):
+    # Aggregator gateway: do not inherit the official OpenAI format set.
+    supported_image_formats = None
+
     def __init__(
         self,
         provider_config: dict,

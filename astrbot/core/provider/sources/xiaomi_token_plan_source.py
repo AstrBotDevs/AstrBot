@@ -1,5 +1,6 @@
 from astrbot import logger
 from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
+from astrbot.core.utils.media_utils import VENDOR_IMAGE_FORMATS
 
 from ..register import register_provider_adapter
 
@@ -14,6 +15,7 @@ XIAOMI_TOKEN_PLAN_MODELS = [
 
 @register_provider_adapter("xiaomi_token_plan", "Xiaomi Token Plan 提供商适配器")
 class ProviderXiaomiTokenPlan(ProviderAnthropic):
+    supported_image_formats = VENDOR_IMAGE_FORMATS["xiaomi-token-plan"]
     """Xiaomi Token Plan provider.
 
     The Token Plan API uses Anthropic-compatible endpoint with Bearer token auth.

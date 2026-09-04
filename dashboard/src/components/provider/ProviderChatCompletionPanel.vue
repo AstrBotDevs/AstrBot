@@ -222,6 +222,8 @@ const {
   testingProviders,
   isSourceModified,
   configSchema,
+  providerTypeImageFormats,
+  providerBrandImageFormats,
   providerSourceSchema,
   manualModelId,
   modelSearch,
@@ -281,6 +283,8 @@ const {
 } = useProviderModelConfigDialog({
   selectedProviderSource,
   configSchema,
+  providerTypeImageFormats,
+  providerBrandImageFormats,
   buildModelProviderConfig,
   modelAlreadyConfigured,
   loadConfig,

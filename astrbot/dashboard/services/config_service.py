@@ -24,6 +24,7 @@ from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.platform.register import platform_cls_map, platform_registry
+from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
@@ -1404,7 +1405,12 @@ class ProviderConfigService:
             for provider in self.config.get("provider", [])
             if provider.get("provider_type") != "agent_runner"
         ]
+        from astrbot.core.provider.register import provider_cls_map
         from astrbot.core.utils.llm_metadata import LLM_METADATAS
+        from astrbot.core.utils.media_utils import (
+            IMAGE_MIME_SHORT_NAMES,
+            VENDOR_IMAGE_FORMATS,
+        )
 
         model_metadata = {}
         for provider in providers:
@@ -1412,11 +1418,52 @@ class ProviderConfigService:
             model_id = provider.get("model")
             if isinstance(model_id, str) and model_id in LLM_METADATAS:
                 model_metadata[model_id] = LLM_METADATAS[model_id]
+        # Officially declared image format sets per chat provider type,
+        # so the dashboard can display and pre-fill them. Adapters are imported
+        # lazily, so import every chat template type before reading the classes.
+        for tmpl in provider_default_tmpl.values():
+            if (
+                not isinstance(tmpl, dict)
+                or tmpl.get("provider_type") != "chat_completion"
+            ):
+                continue
+            adapter_type = tmpl.get("type")
+            if not adapter_type or adapter_type in provider_cls_map:
+                continue
+            try:
+                self.provider_manager.dynamic_import_provider(adapter_type)
+            except Exception as exc:
+                logger.debug(
+                    f"Skip image format introspection for {adapter_type}: {exc}"
+                )
+        provider_type_image_formats = {}
+        for provider in provider_registry:
+            if provider.provider_type != ProviderType.CHAT_COMPLETION:
+                continue
+            declared = getattr(provider.cls_type, "supported_image_formats", None)
+            if declared is None:
+                provider_type_image_formats[provider.type] = None
+            else:
+                provider_type_image_formats[provider.type] = [
+                    short
+                    for mime, short in IMAGE_MIME_SHORT_NAMES.items()
+                    if mime in declared
+                ]
+        provider_brand_image_formats = {
+            brand: [
+                short
+                for mime, short in IMAGE_MIME_SHORT_NAMES.items()
+                if mime in formats
+            ]
+            for brand, formats in VENDOR_IMAGE_FORMATS.items()
+        }
         return {
             "config_schema": config_schema,
             "providers": providers,
             "provider_sources": self.config.get("provider_sources", []),
             "model_metadata": model_metadata,
+            "provider_type_image_formats": provider_type_image_formats,
+            "provider_brand_image_formats": provider_brand_image_formats,
         }
 
     def list_provider_sources(self) -> dict:

@@ -1427,6 +1427,20 @@
           "工具使用"
         ]
       },
+      "image_formats": {
+        "description": "图片格式支持",
+        "hint": "发送给该提供商前允许的图片格式，不兼容的格式会自动转换。勾选「不限制」时其他选项不生效。",
+        "labels": [
+          "JPEG",
+          "PNG",
+          "WebP",
+          "GIF",
+          "BMP",
+          "HEIC",
+          "HEIF",
+          "不限制"
+        ]
+      },
       "custom_headers": {
         "description": "自定义请求头",
         "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。"

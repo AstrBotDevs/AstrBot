@@ -1,3 +1,5 @@
+from astrbot.core.utils.media_utils import VENDOR_IMAGE_FORMATS
+
 from ..register import register_provider_adapter
 from .anthropic_source import ProviderAnthropic
 
@@ -11,6 +13,8 @@ KIMI_CODE_USER_AGENT = "claude-code/0.1.0"
     "Kimi Code Provider Adapter",
 )
 class ProviderKimiCode(ProviderAnthropic):
+    supported_image_formats = VENDOR_IMAGE_FORMATS["kimi-code"]
+
     def __init__(
         self,
         provider_config: dict,

@@ -718,21 +718,21 @@ async def test_prepare_chat_payload_materializes_context_http_image_urls(monkeyp
     provider = _make_provider()
     try:
 
-        async def fake_resolve_media_ref_to_base64_data(
-            media_ref: str,
+        async def fake_resolve_image_ref_to_images(
+            image_ref: str,
             *,
-            media_type: str,
+            allowed_mime_types=None,
+            montage_max_size: int = 1280,
             strict: bool = False,
-        ) -> ResolvedMediaData:
-            assert media_ref == "https://example.com/quoted.png"
-            assert media_type == "image"
+        ) -> list[ResolvedMediaData]:
+            assert image_ref == "https://example.com/quoted.png"
             assert strict is False
-            return ResolvedMediaData(base64_data="abcd", mime_type="image/png")
+            return [ResolvedMediaData(base64_data="abcd", mime_type="image/png")]
 
         monkeypatch.setattr(
             openai_source_module,
-            "resolve_media_ref_to_base64_data",
-            fake_resolve_media_ref_to_base64_data,
+            "resolve_image_ref_to_images",
+            fake_resolve_image_ref_to_images,
         )
 
         contexts = [
@@ -935,7 +935,7 @@ async def test_resolve_image_part_rejects_invalid_local_file(tmp_path):
         invalid_file = tmp_path / "not-image.txt"
         invalid_file.write_text("not an image")
 
-        assert await provider._resolve_image_part(str(invalid_file)) is None
+        assert await provider._resolve_image_parts(str(invalid_file)) == []
     finally:
         await provider.terminate()
 
@@ -947,7 +947,7 @@ async def test_resolve_image_part_rejects_invalid_file_uri(tmp_path):
         invalid_file = tmp_path / "not-image.txt"
         invalid_file.write_text("not an image")
 
-        assert await provider._resolve_image_part(invalid_file.as_uri()) is None
+        assert await provider._resolve_image_parts(invalid_file.as_uri()) == []
     finally:
         await provider.terminate()
 
@@ -994,15 +994,17 @@ async def test_materialize_context_image_parts_returns_new_messages(monkeypatch)
         async def fake_resolve(image_url: str, *, image_detail: str | None = None):
             assert image_url == "https://example.com/quoted.png"
             assert image_detail == "high"
-            return {
-                "type": "image_url",
-                "image_url": {
-                    "url": "data:image/png;base64,abcd",
-                    "detail": "high",
-                },
-            }
+            return [
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": "data:image/png;base64,abcd",
+                        "detail": "high",
+                    },
+                }
+            ]
 
-        monkeypatch.setattr(provider, "_resolve_image_part", fake_resolve)
+        monkeypatch.setattr(provider, "_resolve_image_parts", fake_resolve)
 
         materialized = await provider._materialize_context_image_parts(context_query)
 
@@ -1077,10 +1079,12 @@ async def test_encode_image_bs64_supports_file_uri(tmp_path):
 async def test_resolve_image_part_supports_base64_scheme():
     provider = _make_provider()
     try:
-        assert await provider._resolve_image_part("base64://abcd") == {
-            "type": "image_url",
-            "image_url": {"url": "data:image/jpeg;base64,abcd"},
-        }
+        assert await provider._resolve_image_parts("base64://abcd") == [
+            {
+                "type": "image_url",
+                "image_url": {"url": "data:image/jpeg;base64,abcd"},
+            }
+        ]
     finally:
         await provider.terminate()
 
@@ -1096,12 +1100,14 @@ async def test_resolve_image_part_preserves_base64_png_mime_type():
         )
         image_base64 = base64.b64encode(image_buffer.getvalue()).decode("ascii")
 
-        image_part = await provider._resolve_image_part(f"base64://{image_base64}")
+        image_parts = await provider._resolve_image_parts(f"base64://{image_base64}")
 
-        assert image_part == {
-            "type": "image_url",
-            "image_url": {"url": f"data:image/png;base64,{image_base64}"},
-        }
+        assert image_parts == [
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{image_base64}"},
+            }
+        ]
     finally:
         await provider.terminate()
 

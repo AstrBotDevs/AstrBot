@@ -1,3 +1,5 @@
+from astrbot.core.utils.media_utils import VENDOR_IMAGE_FORMATS
+
 from ..register import register_provider_adapter
 from .openai_source import ProviderOpenAIOfficial
 
@@ -6,6 +8,8 @@ from .openai_source import ProviderOpenAIOfficial
     "groq_chat_completion", "Groq Chat Completion Provider Adapter"
 )
 class ProviderGroq(ProviderOpenAIOfficial):
+    supported_image_formats = VENDOR_IMAGE_FORMATS["groq"]
+
     def __init__(
         self,
         provider_config: dict,
